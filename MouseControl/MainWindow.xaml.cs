@@ -28,11 +28,16 @@ namespace MouseControl
         private readonly MouseHookListener _MouseHookManager = new MouseHookListener(new GlobalHooker());
 
         private double _mouseSpeed = Mouse.MouseSpeed;
+        private Notify _notify = new Notify();
         public MainWindow()
         {
             _MouseHookManager.MouseMoveExt += _MouseHookManager_MouseMoveExt;
             _MouseHookManager.Enabled = true;
             InitializeComponent();
+
+            _notify.Click += _notify_Click;
+
+            this.ShowInTaskbar = false;
 
                 text.Text = "";
             foreach (Screen s in Screen.AllScreens)
@@ -47,13 +52,23 @@ namespace MouseControl
             // tu peux coller un rectangle, mais j'ai fais des fonctions dans Screen qui renvoient 
             // toute la zone à coté 
 
-            Zones.Add(new Zone(Screen.GetScreen(3), Screen.GetScreen(3).LeftRect, Screen.GetScreen(2).Bounds, Math.Round(10.0 * 102.0 /185.0,0),1));
-            Zones.Add(new Zone(Screen.GetScreen(2), Screen.GetScreen(2).RightRect, Screen.GetScreen(3).Bounds, 10.0,3));
+            Zones.Add(new Zone(Screen.getScreen(3), Screen.getScreen(3).LeftRect, Screen.getScreen(2).Bounds, Math.Round(10.0 * 102.0 /185.0,0),1));
+            Zones.Add(new Zone(Screen.getScreen(2), Screen.getScreen(2).RightRect, Screen.getScreen(3).Bounds, 10.0,3));
 
-            Zones.Add(new Zone(Screen.GetScreen(3), Screen.GetScreen(3).RightRect, Screen.GetScreen(1).Bounds,Math.Round(10.0 * 96.0/185.0,0),1));
-            Zones.Add(new Zone(Screen.GetScreen(1), Screen.GetScreen(1).LeftRect, Screen.GetScreen(3).Bounds, 10.0,3));
+            Zones.Add(new Zone(Screen.getScreen(3), Screen.getScreen(3).RightRect, Screen.getScreen(1).Bounds,Math.Round(10.0 * 96.0/185.0,0),1));
+            Zones.Add(new Zone(Screen.getScreen(1), Screen.getScreen(1).LeftRect, Screen.getScreen(3).Bounds, 10.0,3));
         }
 
+        private void _notify_Click(object sender, EventArgs e)
+        {
+            if (this.Visibility==Visibility.Hidden)
+            {
+                this.Visibility = Visibility.Visible;
+                this.Activate();
+            }
+            else    this.Hide();
+            
+        }
 
         public List<Zone> Zones = new List<Zone>();
 
@@ -124,6 +139,11 @@ namespace MouseControl
         private void Window_Closed(object sender, EventArgs e)
         {
             Mouse.MouseSpeed = _mouseSpeed;
+        }
+
+        private void Window_StateChanged(object sender, EventArgs e)
+        {
+
         }
     }
 }

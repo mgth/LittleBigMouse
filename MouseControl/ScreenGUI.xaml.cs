@@ -20,22 +20,71 @@ namespace MouseControl
     /// </summary>
     public partial class ScreenGUI : UserControl
     {
+        private double xRatio;
+        private double yRatio;
         private Screen _screen;
         public Screen Screen {
             get { return _screen; }
             set { _screen = value;
-                txtTop.Text = value.Bounds.Top.ToString();
-                txtBottom.Text = value.Bounds.Bottom.ToString();
-                txtLeft.Text = value.Bounds.Left.ToString();
-                txtRight.Text = value.Bounds.Right.ToString();
+                txtTop.Text = value.PhysicalBounds.Top.ToString();
+                txtBottom.Text = value.PhysicalBounds.Bottom.ToString();
+                txtLeft.Text = value.PhysicalBounds.Left.ToString();
+                txtRight.Text = value.PhysicalBounds.Right.ToString();
+
+                lblDPI.Text = value.DPI.ToString();
 
                 lblName.Content = value.DeviceName;
 
+                _screen.PhysicalSizeChanged += _screen_PhysicalSizeChanged;
             }
         }
+
+        public double XRatio
+        {
+            get
+            {
+                return xRatio;
+            }
+
+            set
+            {
+                xRatio = value;
+                setRenderSize();
+            }
+        }
+
+        public double YRatio
+        {
+            get
+            {
+                return yRatio;
+            }
+
+            set
+            {
+                yRatio = value;
+                setRenderSize();
+            }
+        }
+
+        private void setRenderSize()
+        {
+            this.RenderSize = new Size(_screen.PhysicalBounds.Width * xRatio, _screen.PhysicalBounds.Height * yRatio);
+        }
+
+        private void _screen_PhysicalSizeChanged(object sender, EventArgs e)
+        {
+            setRenderSize();
+        }
+
         public ScreenGUI()
         {
             InitializeComponent();
+        }
+
+        private void lblDPI_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _screen.DPI = double.Parse(lblDPI.Text);
         }
     }
 }

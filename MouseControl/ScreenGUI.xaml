@@ -7,7 +7,7 @@
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300">
     <Grid Background="AliceBlue">
-        <Border BorderThickness="5" BorderBrush="Azure"></Border>
+        <Border BorderThickness="5" BorderBrush="#FF415E97"></Border>
         <TextBox x:Name="txtTop" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" TextWrapping="Wrap" Text="TextBox" VerticalAlignment="Top" Width="60"/>
         <TextBox x:Name="txtBottom" Margin="0,0,0,5" TextWrapping="Wrap" Text="TextBox" Height="23" VerticalAlignment="Bottom" Width="60"/>
         <TextBox x:Name="txtLeft" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" TextWrapping="Wrap" Text="TextBox" VerticalAlignment="Center" Width="60"/>
@@ -16,7 +16,7 @@
         
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
         <Label x:Name="lblName" HorizontalAlignment="Center" Content="Label" FontSize="21" />   
-        <TextBox x:Name="lblDPI" HorizontalAlignment="Center" Width="60" Text="96"/>   
+        <TextBox x:Name="lblDPI" HorizontalAlignment="Center" Width="60" Text="" TextChanged="lblDPI_TextChanged"/>   
         </StackPanel>
     </Grid>
 </UserControl>

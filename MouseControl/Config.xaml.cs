@@ -66,7 +66,7 @@ namespace MouseControl
                     foreach (Screen s in Screen.AllScreens)
                     {
                         double minoffset = 10;
-                        // recherche gauche avec droite
+                        
                         double offset = s.PhysicalBounds.Right - left;
                         if (Math.Abs(offset) < minoffset)
                         {
@@ -80,8 +80,6 @@ namespace MouseControl
                             pNear = new Point(newPosition.X + offset, newPosition.Y);
                             minoffset = Math.Abs(offset);
                         }
-
-
                     }
 
                     newPosition = pNear;

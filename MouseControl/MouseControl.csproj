@@ -68,7 +68,6 @@
     <Compile Include="ScreenGUI.xaml.cs">
       <DependentUpon>ScreenGUI.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Zone.cs" />
     <Page Include="Config.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

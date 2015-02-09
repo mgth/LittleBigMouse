@@ -71,7 +71,6 @@ namespace MouseControl
             
         }
 
-        public List<Zone> Zones = new List<Zone>();
 
         private Screen _screen = null;
 

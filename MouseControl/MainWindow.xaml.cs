@@ -94,7 +94,7 @@ namespace MouseControl
         }
 
 
-
+        private Point _oldPoint; 
 
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
@@ -106,7 +106,11 @@ namespace MouseControl
 
             if (Screen == null ) Screen = Screen.FromPoint(pIn);
 
-            if (Screen.Bounds.Contains(pIn)) return;
+            if (Screen.Bounds.Contains(pIn))
+            {
+                _oldPoint = pIn;
+                return;
+            }
 
             Point pOutPhysical = Screen.PixelToPhysical(pIn);
 
@@ -120,8 +124,23 @@ namespace MouseControl
 
                 Screen = Screen.FromPoint(pOut);
 
-                e.Handled = true;
+                if (Screen.DPI > 110)
+                {
+                    if (Screen.DPI > 138)
+                        Mouse.setCursorAero(3);
+                    else Mouse.setCursorAero(2);
+                } else Mouse.setCursorAero(1);
+
+                Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * Screen.DPI,0);
+
+                _oldPoint = pIn;
             }
+            else
+            {
+                Mouse.SetCursorPos((int)_oldPoint.X,(int)_oldPoint.Y);
+            }
+
+            e.Handled = true;
             /*
                         foreach(Zone z in Zones)
                         {
@@ -149,12 +168,13 @@ namespace MouseControl
 
         private void Window_Unloaded(object sender, RoutedEventArgs e)
         {
-            Mouse.MouseSpeed = _mouseSpeed;
+
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            Mouse.MouseSpeed = _mouseSpeed;
+            Mouse.MouseSpeed = 10.0;
+            Mouse.setCursorAero(1);
         }
 
         private void Window_StateChanged(object sender, EventArgs e)

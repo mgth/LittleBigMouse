@@ -73,6 +73,7 @@ namespace MouseControl
             else
             {
                 Mouse.SetCursorPos((int)_oldPoint.X, (int)_oldPoint.Y);
+                e.Handled = true;
             }
 
         }

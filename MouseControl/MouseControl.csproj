@@ -52,10 +52,14 @@
   <PropertyGroup>
     <ApplicationIcon>MainIcon.ico</ApplicationIcon>
   </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>MouseControl.App</StartupObject>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Remoting" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
@@ -70,12 +74,12 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
-    <ApplicationDefinition Include="App.xaml">
+    <Page Include="App.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
-    </ApplicationDefinition>
-    <Compile Include="Config.xaml.cs">
-      <DependentUpon>Config.xaml</DependentUpon>
+    </Page>
+    <Compile Include="FormConfig.xaml.cs">
+      <DependentUpon>FormConfig.xaml</DependentUpon>
     </Compile>
     <Compile Include="Edid.cs" />
     <Compile Include="Mouse.cs" />
@@ -85,7 +89,8 @@
     <Compile Include="ScreenGUI.xaml.cs">
       <DependentUpon>ScreenGUI.xaml</DependentUpon>
     </Compile>
-    <Page Include="Config.xaml">
+    <Compile Include="SingleInstance.cs" />
+    <Page Include="FormConfig.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

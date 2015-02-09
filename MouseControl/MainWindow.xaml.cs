@@ -61,7 +61,7 @@ namespace MouseControl
 
             scr.RegistryChanged += Scr_RegistryChanged;
 
-            Config cfg = new Config(scr);
+            FormConfig cfg = new FormConfig(scr);
             cfg.ShowDialog();
         }
 

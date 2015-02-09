@@ -17,10 +17,10 @@ namespace MouseControl
     /// <summary>
     /// Interaction logic for Config.xaml
     /// </summary>
-    public partial class Config : Window
+    public partial class FormConfig : Window
     {
         private ScreenConfig _config;
-        public Config(ScreenConfig config)
+        public FormConfig(ScreenConfig config)
         {
             _config = config;
 
@@ -224,7 +224,7 @@ namespace MouseControl
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)
         {
-            Close();
+            this.Close();
         }
     }
 }

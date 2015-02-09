@@ -31,7 +31,7 @@ namespace MouseControl
                 txtLeft.Text = value.PhysicalBounds.Left.ToString();
                 txtRight.Text = value.PhysicalBounds.Right.ToString();
 
-                lblDPI.Text = value.DPI.ToString();
+                lblDPI.Text = value.DpiAvg.ToString();
 
                 lblName.Content = value.DeviceName;
 
@@ -67,7 +67,8 @@ namespace MouseControl
 
         private void lblDPI_TextChanged(object sender, TextChangedEventArgs e)
         {
-            _screen.DPI = double.Parse(lblDPI.Text);
+           // _screen.DpiX = double.Parse(lblDPI.Text);
+           // _screen.DpiY = double.Parse(lblDPI.Text);
         }
     }
 }

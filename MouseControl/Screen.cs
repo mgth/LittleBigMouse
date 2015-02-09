@@ -42,13 +42,6 @@ namespace MouseControl
             }
         }
 
-        public static Screen GetScreenFrom(Window window)
-        {
-            WindowInteropHelper windowInteropHelper = new WindowInteropHelper(window);
-            System.Windows.Forms.Screen screen = System.Windows.Forms.Screen.FromHandle(windowInteropHelper.Handle);
-            Screen wpfScreen = getScreen(screen);
-            return wpfScreen;
-        }
         public static Screen getScreen(int nb)
         {
             foreach(Screen s in AllScreens)
@@ -84,7 +77,8 @@ namespace MouseControl
             _screen = screen;
             //DPI = LogPixelSx;
 
-            _pitch = Edid.GetSizeForDevID(screen.DeviceName).Width / screen.Bounds.Width;
+            _pitch_X = Edid.GetSizeForDevID(screen.DeviceName).Width / screen.Bounds.Width;
+            _pitch_Y = Edid.GetSizeForDevID(screen.DeviceName).Height / screen.Bounds.Height;
 
             _physicalLocation = new Point(Bounds.Left * _overallPitch, Bounds.Top * _overallPitch);
         }
@@ -108,7 +102,7 @@ namespace MouseControl
         {
             get
             {
-                return new Rect(PhysicalLocation, new Size(Bounds.Width*_pitch, Bounds.Height*_pitch));
+                return new Rect(PhysicalLocation, new Size(Bounds.Width*_pitch_X, Bounds.Height*_pitch_Y));
             }
         }
 
@@ -137,22 +131,6 @@ namespace MouseControl
             }
         }
 
-        public Rect LeftRect
-        {
-            get { return new Rect(OverallBounds.Left, Bounds.Top, Bounds.Left-OverallBounds.Left, Bounds.Height); }
-        }
-        public Rect RightRect
-        {
-            get { return new Rect(Bounds.Right, Bounds.Top, OverallBounds.Right-Bounds.Right, Bounds.Height); }
-        }
-        public Rect TopRect
-        {
-            get { return new Rect(Bounds.Left, OverallBounds.Top, Bounds.Width, Bounds.Top); }
-        }
-        public Rect BottomRect
-        {
-            get { return new Rect(Bounds.Left, Bounds.Bottom, Bounds.Width, OverallBounds.Bottom-Bounds.Bottom); }
-        }
         public Rect WorkingArea
         {
             get { return this.getRect(_screen.WorkingArea); }
@@ -181,16 +159,38 @@ namespace MouseControl
         }
 
         private static double _overallPitch = 25.4/96.0; 
-        private double _pitch = 25.4 / 96.0;
-        public double DPI
+        private double _pitch_X = 25.4 / 96.0;
+        public double DpiX
         {
-            get { return 25.4/_pitch; }
+            get { return 25.4/_pitch_X; }
             set {
 
-                _pitch = 25.4/value;
+                _pitch_X = 25.4/value;
                 shrinkX();
                 if (PhysicalSizeChanged != null)
                     PhysicalSizeChanged(this,new EventArgs());
+            }
+        }
+
+        private double _pitch_Y = 25.4 / 96.0;
+        public double DpiY
+        {
+            get { return 25.4 / _pitch_Y; }
+            set
+            {
+
+                _pitch_Y = 25.4 / value;
+                //shrinkX();
+                if (PhysicalSizeChanged != null)
+                    PhysicalSizeChanged(this, new EventArgs());
+            }
+        }
+
+        public double DpiAvg
+        {
+            get {
+                double pitch = Math.Sqrt((_pitch_X * _pitch_X) + (_pitch_Y * _pitch_Y)) / Math.Sqrt(2);
+                return 25.4 / pitch;
             }
         }
 
@@ -202,31 +202,6 @@ namespace MouseControl
         private static extern Int32 GetDeviceCaps(IntPtr hdc, Int32 capindex);
         private const int LOGPIXELSX = 88;
 
-
-        private double GraphicsDPI
-        {
-            get
-            {
-                IntPtr hdc = CreateDC(null, _screen.DeviceName, null, IntPtr.Zero);
-                System.Drawing.Graphics gfx = System.Drawing.Graphics.FromHdc(hdc);
-                double dpi = gfx.DpiX;
-                gfx.Dispose();
-                DeleteDC(hdc);
-                return dpi;
-            }
-        }
-        private double LogPixelSx
-        {
-            get
-            {
-                IntPtr hdc = CreateDC("DISPLAY", _screen.DeviceName, null, IntPtr.Zero);
-                double dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-                DeleteDC(hdc);
-                return dpi;
-            }
-        }
-
-        
 
         public static void shrinkX()
         {
@@ -332,15 +307,15 @@ namespace MouseControl
 
         public Point PixelToPhysical(Point p)
         {
-            double x = (p.X - Bounds.X) * _pitch + PhysicalLocation.X;
-            double y = (p.Y - Bounds.Y) * _pitch + PhysicalLocation.Y;
+            double x = (p.X - Bounds.X) * _pitch_X + PhysicalLocation.X;
+            double y = (p.Y - Bounds.Y) * _pitch_Y + PhysicalLocation.Y;
             return new Point(x, y);
         }
 
         public Point PhysicalToPixel(Point p)
         {
-            double x = ((p.X - PhysicalLocation.X) / _pitch) + Bounds.X;
-            double y = ((p.Y - PhysicalLocation.Y) / _pitch) + Bounds.Y;
+            double x = ((p.X - PhysicalLocation.X) / _pitch_X) + Bounds.X;
+            double y = ((p.Y - PhysicalLocation.Y) / _pitch_Y) + Bounds.Y;
             return new Point(x, y);
         }
     }

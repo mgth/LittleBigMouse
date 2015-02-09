@@ -39,25 +39,9 @@ namespace MouseControl
 
             this.ShowInTaskbar = false;
 
-                text.Text = "";
+            text.Text = "";
             foreach (Screen s in Screen.AllScreens)
                 text.Text += s.DeviceName + " : " + s.Bounds.Left + "-" + s.Bounds.Right + " , " + s.Bounds.Top + "-" + s.Bounds.Bottom + " : " + s.Bounds.Width + "-" + s.Bounds.Height + "\n";
-
-            // c'est la qu'il faut creer les zones : 
-            // - L'ecran d'où on vient
-            // - Le rectangle dans lequelle on rentre
-            // - Le rectangle vers lequelle deplacer la souris
-            // - La vitesse de la souris
-            // - La taille de pointeur : 1 2 ou 3
-            // tu peux coller un rectangle, mais j'ai fais des fonctions dans Screen qui renvoient 
-            // toute la zone à coté 
-            /*
-                        Zones.Add(new Zone(Screen.getScreen(3), Screen.getScreen(3).LeftRect, Screen.getScreen(2).Bounds, Math.Round(10.0 * 102.0 /185.0,0),1));
-                        Zones.Add(new Zone(Screen.getScreen(2), Screen.getScreen(2).RightRect, Screen.getScreen(3).Bounds, 10.0,3));
-
-                        Zones.Add(new Zone(Screen.getScreen(3), Screen.getScreen(3).RightRect, Screen.getScreen(1).Bounds,Math.Round(10.0 * 96.0/185.0,0),1));
-                        Zones.Add(new Zone(Screen.getScreen(1), Screen.getScreen(1).LeftRect, Screen.getScreen(3).Bounds, 10.0,3));
-            */
         }
 
         private void _notify_Click(object sender, EventArgs e)
@@ -67,13 +51,10 @@ namespace MouseControl
                 this.Visibility = Visibility.Visible;
                 this.Activate();
             }
-            else    this.Hide();
-            
+            else    this.Hide();          
         }
 
-
         private Screen _screen = null;
-
         public Screen Screen
         {
             get { return _screen; }
@@ -84,17 +65,7 @@ namespace MouseControl
             }
         }
 
-        private Screen getScreen(Point p)
-        {
-            Screen s = Screen.FromPoint(p);
-            if (s.Bounds.Contains(p)) return s; 
-            
-            return null;
-        }
-
-
         private Point _oldPoint; 
-
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
             // TODO : remove
@@ -123,14 +94,14 @@ namespace MouseControl
 
                 Screen = Screen.FromPoint(pOut);
 
-                if (Screen.DPI > 110)
+                if (Screen.DpiAvg > 110)
                 {
-                    if (Screen.DPI > 138)
+                    if (Screen.DpiAvg > 138)
                         Mouse.setCursorAero(3);
                     else Mouse.setCursorAero(2);
                 } else Mouse.setCursorAero(1);
 
-                Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * Screen.DPI,0);
+                Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * Screen.DpiAvg,0);
 
                 _oldPoint = pIn;
             }
@@ -140,23 +111,6 @@ namespace MouseControl
             }
 
             e.Handled = true;
-            /*
-                        foreach(Zone z in Zones)
-                        {
-                            if (z.Screen.DeviceName==Screen.DeviceName && z.Contains(pIn))
-                            {
-                                Point pOut = z.Translate(pIn);
-                                Screen = Screen.FromPoint(pOut);
-                                //System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)Math.Round(pOut.X,0), (int)Math.Round(pOut.Y, 0));
-                                Mouse.SetCursorPos((int)Math.Round(pOut.X, 0), (int)Math.Round(pOut.Y, 0));
-                                Mouse.MouseSpeed = z.Speed;
-                                Mouse.setCursorAero(z.Size);
-                                //labelSpeed.Content = z.DpiRatio.ToString();
-                                labelSpeed.Content = Mouse.MouseSpeed.ToString();
-                                e.Handled = true;
-                                return;
-                            }
-                        }*/
         }
 
         private void button_Click(object sender, RoutedEventArgs e)

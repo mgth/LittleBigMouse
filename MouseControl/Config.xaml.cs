@@ -19,12 +19,15 @@ namespace MouseControl
     /// </summary>
     public partial class Config : Window
     {
-        public Config()
+        private ScreenConfig _config;
+        public Config(ScreenConfig config)
         {
+            _config = config;
+
             InitializeComponent();
-            foreach(Screen s in Screen.AllScreens)
+            foreach(Screen s in _config.AllScreens)
             {
-                ScreenGUI sgui = new ScreenGUI { Screen = s };
+                ScreenGUI sgui = new ScreenGUI(s);
                 grid.Children.Add(sgui);
                 sgui.DragLeave += Sgui_DragLeave;
                 sgui.MouseMove += Sgui_MouseMove;
@@ -33,6 +36,7 @@ namespace MouseControl
             grid.SizeChanged += Grid_SizeChanged;
         }
 
+ 
         private Point oldPosition;
         private Point dragStartPosition;
 
@@ -42,12 +46,11 @@ namespace MouseControl
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
 
-            label.Content=gui.Screen.DeviceName;
             if (e.LeftButton == MouseButtonState.Pressed)
             {
                 if (moving == false)
                 {
-                    oldPosition = Screen.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
+                    oldPosition = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
                     dragStartPosition = gui.Screen.PhysicalLocation;
                     moving = true;
 
@@ -57,55 +60,87 @@ namespace MouseControl
                 }
                 else
                 {
-                    Point newPosition = Screen.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
+                    Point newPosition = _config.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
 
                     double left = dragStartPosition.X - oldPosition.X + newPosition.X;
                     double right = left+gui.Screen.PhysicalBounds.Width;
 
                     Point pNear = newPosition;
-                    foreach (Screen s in Screen.AllScreens)
+                    foreach (Screen s in _config.AllScreens)
                     {
-                        double minoffset = 10;
+                        if (s == gui.Screen) continue;
+
+                        double minOffset = 10;
                         
                         double offset = s.PhysicalBounds.Right - left;
-                        if (Math.Abs(offset) < minoffset)
+                        if (Math.Abs(offset) < minOffset)
                         {
                             pNear = new Point(newPosition.X + offset, newPosition.Y);
-                            minoffset = Math.Abs(offset);
+                            minOffset = Math.Abs(offset);
                         }
 
                         offset = s.PhysicalBounds.Left - left;
-                        if (Math.Abs(offset) < minoffset)
+                        if (Math.Abs(offset) < minOffset)
                         {
                             pNear = new Point(newPosition.X + offset, newPosition.Y);
-                            minoffset = Math.Abs(offset);
+                            minOffset = Math.Abs(offset);
+                        }
+
+                        offset = s.PhysicalBounds.Right - right;
+                        if (Math.Abs(offset) < minOffset)
+                        {
+                            pNear = new Point(newPosition.X + offset, newPosition.Y);
+                            minOffset = Math.Abs(offset);
+                        }
+
+                        offset = s.PhysicalBounds.Left - right;
+                        if (Math.Abs(offset) < minOffset)
+                        {
+                            pNear = new Point(newPosition.X + offset, newPosition.Y);
+                            minOffset = Math.Abs(offset);
                         }
                     }
 
                     newPosition = pNear;
                     double top = dragStartPosition.Y - oldPosition.Y + newPosition.Y;
                     double bottom = top + gui.Screen.PhysicalBounds.Height;
-                    foreach (Screen s in Screen.AllScreens)
+                    foreach (Screen s in _config.AllScreens)
                     {
-                        double minoffset = 10;
+                        if (s == gui.Screen) continue;
+
+                        double minOffset = 10;
                         double offset = s.PhysicalBounds.Bottom - top;
-                        if (Math.Abs(offset) < minoffset)
+                        if (Math.Abs(offset) < minOffset)
                         {
                             pNear = new Point(newPosition.X , newPosition.Y + offset);
-                            minoffset = Math.Abs(offset);
+                            minOffset = Math.Abs(offset);
                         }
 
                         offset = s.PhysicalBounds.Bottom - bottom;
-                        if (Math.Abs(offset) < minoffset)
+                        if (Math.Abs(offset) < minOffset)
                         {
                             pNear = new Point(newPosition.X, newPosition.Y + offset);
-                            minoffset = Math.Abs(offset);
+                            minOffset = Math.Abs(offset);
+                        }
+
+                        offset = s.PhysicalBounds.Top - top;
+                        if (Math.Abs(offset) < minOffset)
+                        {
+                            pNear = new Point(newPosition.X, newPosition.Y + offset);
+                            minOffset = Math.Abs(offset);
+                        }
+
+                        offset = s.PhysicalBounds.Top - bottom;
+                        if (Math.Abs(offset) < minOffset)
+                        {
+                            pNear = new Point(newPosition.X, newPosition.Y + offset);
+                            minOffset = Math.Abs(offset);
                         }
 
                     }
                     newPosition = pNear;
 
-                    Point p = Screen.PhysicalToUI(
+                    Point p = _config.PhysicalToUI(
                         new Size(grid.ActualWidth, grid.ActualHeight),
                         new Point(
                             dragStartPosition.X - oldPosition.X + newPosition.X,
@@ -126,28 +161,13 @@ namespace MouseControl
             {
                 if (moving)
                 {
-                    Point p = Screen.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
+                    Point p = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
 
                     double xOffset = p.X - gui.Screen.PhysicalLocation.X;
                     double yOffset = p.Y - gui.Screen.PhysicalLocation.Y;
 
-                    if (gui.Screen.Primary)
-                    {
+                    gui.Screen.PhysicalLocation = new Point(gui.Screen.PhysicalLocation.X + xOffset, gui.Screen.PhysicalLocation.Y + yOffset);
 
-                        foreach (Screen s in Screen.AllScreens)
-                        {
-                            if (!s.Primary)
-                            {
-                                s.PhysicalLocation = new Point(s.PhysicalLocation.X - xOffset, s.PhysicalLocation.Y - yOffset);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        gui.Screen.PhysicalLocation = new Point(gui.Screen.PhysicalLocation.X + xOffset, gui.Screen.PhysicalLocation.Y + yOffset);
-                    }
-
-                    //Screen.shrinkX();
                     moving = false;
                     ResizeAll();
                 }
@@ -169,7 +189,7 @@ namespace MouseControl
         {
             foreach(UIElement element in grid.Children)
             {
-                Rect all = Screen.PhysicalOverallBounds;
+                Rect all = _config.PhysicalOverallBounds;
 
 
                 ScreenGUI gui = element as ScreenGUI;
@@ -189,6 +209,22 @@ namespace MouseControl
                     gui.Height = r.Height;
                 }
             }
+        }
+
+        private void cmdOk_Click(object sender, RoutedEventArgs e)
+        {
+            _config.Save();
+            this.Close();
+        }
+
+        private void cmdApply_Click(object sender, RoutedEventArgs e)
+        {
+            _config.Save();
+        }
+
+        private void cmdCancel_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
         }
     }
 }

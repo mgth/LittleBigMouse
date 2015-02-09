@@ -10,7 +10,7 @@ using System.Windows;
 [assembly: AssemblyTitle("MouseControl")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Mgth")]
 [assembly: AssemblyProduct("MouseControl")]
 [assembly: AssemblyCopyright("Copyright ©  2015")]
 [assembly: AssemblyTrademark("")]

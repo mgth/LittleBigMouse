@@ -6,8 +6,18 @@
         xmlns:local="clr-namespace:MouseControl"
         mc:Ignorable="d"
         Title="Config" Height="300" Width="300">
-    <Grid x:Name="grid">
-        <Label x:Name="label" Content="Label" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top"/>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="Auto"></RowDefinition>
+        </Grid.RowDefinitions>
+        <Grid x:Name="grid">
 
+        </Grid>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Height="25" HorizontalAlignment="Right" >
+            <Button x:Name="cmdOk" Width="75" Margin="5,0,0,0" Click="cmdOk_Click">Ok</Button>
+            <Button x:Name="cmdApply" Width="75" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
+            <Button x:Name="cmdCancel" Width="75" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
+        </StackPanel>
     </Grid>
 </Window>

@@ -25,22 +25,22 @@ namespace MouseControl
     /// </summary>
     public partial class MainWindow : Window
     {
-        private readonly MouseHookListener _MouseHookManager = new MouseHookListener(new GlobalHooker());
+        private ScreenConfig _config;
 
         private double _mouseSpeed = Mouse.MouseSpeed;
         private Notify _notify = new Notify();
         public MainWindow()
         {
-            _MouseHookManager.MouseMoveExt += _MouseHookManager_MouseMoveExt;
-            _MouseHookManager.Enabled = true;
             InitializeComponent();
+
+            LoadConfig();
 
             _notify.Click += _notify_Click;
 
             this.ShowInTaskbar = false;
 
             text.Text = "";
-            foreach (Screen s in Screen.AllScreens)
+            foreach (Screen s in _config.AllScreens)
                 text.Text += s.DeviceName + " : " + s.Bounds.Left + "-" + s.Bounds.Right + " , " + s.Bounds.Top + "-" + s.Bounds.Bottom + " : " + s.Bounds.Width + "-" + s.Bounds.Height + "\n";
         }
 
@@ -54,69 +54,27 @@ namespace MouseControl
             else    this.Hide();          
         }
 
-        private Screen _screen = null;
-        public Screen Screen
-        {
-            get { return _screen; }
-            set
-            {
-                _screen = value;
-                labelScreenName.Content = _screen.DeviceName;
-            }
-        }
-
-        private Point _oldPoint; 
-        private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
-        {
-            // TODO : remove
-            labelX.Content = e.X;
-            labelY.Content = e.Y;
-
-            Point pIn = new Point(e.X, e.Y);
-
-            if (Screen == null ) Screen = Screen.FromPoint(pIn);
-
-            if (Screen.Bounds.Contains(pIn))
-            {
-                _oldPoint = pIn;
-                return;
-            }
-
-            Point pOutPhysical = Screen.PixelToPhysical(pIn);
-
-            Screen screenOut = Screen.FromPhysicalPoint(pOutPhysical);
-
-            if (screenOut!=null)
-            {
-                Point pOut = screenOut.PhysicalToPixel(pOutPhysical);
-
-                Mouse.SetCursorPos((int)pOut.X, (int)pOut.Y);
-
-                Screen = Screen.FromPoint(pOut);
-
-                if (Screen.DpiAvg > 110)
-                {
-                    if (Screen.DpiAvg > 138)
-                        Mouse.setCursorAero(3);
-                    else Mouse.setCursorAero(2);
-                } else Mouse.setCursorAero(1);
-
-                Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * Screen.DpiAvg,0);
-
-                _oldPoint = pIn;
-            }
-            else
-            {
-                Mouse.SetCursorPos((int)_oldPoint.X,(int)_oldPoint.Y);
-            }
-
-            e.Handled = true;
-        }
 
         private void button_Click(object sender, RoutedEventArgs e)
         {
-            Config cfg = new Config();
+            ScreenConfig scr = ScreenConfig.Load();
+
+            scr.RegistryChanged += Scr_RegistryChanged;
+
+            Config cfg = new Config(scr);
             cfg.ShowDialog();
+        }
+
+        private void LoadConfig()
+        {
+            if (_config != null) _config.Disable();
+            _config=ScreenConfig.Load();
+            _config.Enable();
+        }
+
+        private void Scr_RegistryChanged(object sender, EventArgs e)
+        {
+            LoadConfig();
         }
 
         private void Window_Unloaded(object sender, RoutedEventArgs e)

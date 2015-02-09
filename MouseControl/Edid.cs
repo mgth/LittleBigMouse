@@ -75,7 +75,7 @@ namespace MouseControl
         private const Int32 NAME_SIZE = 128;
         private const UInt32 ERROR_SUCCESS = 0;
 
-        static public Size GetMonitorSizeFromEDID(IntPtr hDevRegKey)
+        private void GetEdid(IntPtr hDevRegKey)
         {
             UInt32 dwType = NAME_SIZE;
             UInt32 AcutalValueNameLength = NAME_SIZE;
@@ -98,57 +98,88 @@ namespace MouseControl
                 if (retValue != ERROR_SUCCESS || valueName.ToString() != "EDID")
                     continue;
 
-                int w = ((EDIDdata[68] & 0xF0) << 4) + EDIDdata[66];
-                int h = ((EDIDdata[68] & 0x0F) << 8) + EDIDdata[67];
-
-                return new Size(w,h); // valid EDID found
+                _rawData = EDIDdata; // valid EDID found
             }
+       }
 
-            return new Size(); // EDID not found
-        }
+        private byte[] _rawData = new byte[0];
 
-        public static Size GetSizeForDevID(String TargetDevID)
-    {
-        IntPtr devInfo = SetupDiGetClassDevsEx(
-        ref GUID_CLASS_MONITOR, //class GUID
-        null, //enumerator
-        IntPtr.Zero, //HWND
-        DIGCF_PRESENT, // Flags //DIGCF_ALLCLASSES|
-        IntPtr.Zero, // device info, create a new one.
-        null, // machine name, local machine
-        IntPtr.Zero);// reserved
-
-        if (devInfo == IntPtr.Zero)
-            return new Size(0, 0);
-
-        Size size = new Size();
-
-        for (uint i = 0; ERROR_NO_MORE_ITEMS != GetLastError(); ++i)
+        public Edid(int DevId)
         {
+            IntPtr devInfo = SetupDiGetClassDevsEx(
+            ref GUID_CLASS_MONITOR, //class GUID
+            null, //enumerator
+            IntPtr.Zero, //HWND
+            DIGCF_PRESENT, // Flags //DIGCF_ALLCLASSES|
+            IntPtr.Zero, // device info, create a new one.
+            null, // machine name, local machine
+            IntPtr.Zero);// reserved
 
-            SP_DEVINFO_DATA devInfoData = new SP_DEVINFO_DATA();
-            //memset(&devInfoData, 0, sizeof(devInfoData));
-            devInfoData.cbSize = (uint)Marshal.SizeOf(devInfoData);
-
-            if (SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
+            if (devInfo != IntPtr.Zero)
             {
-                    IntPtr hDevRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                    DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+//                for (uint i = 0; ERROR_NO_MORE_ITEMS != GetLastError(); ++i)
+                {
 
-                if (hDevRegKey==IntPtr.Zero || (hDevRegKey.ToInt32() == -1))
-                    continue;
+                    SP_DEVINFO_DATA devInfoData = new SP_DEVINFO_DATA();
+                    //memset(&devInfoData, 0, sizeof(devInfoData));
+                    devInfoData.cbSize = (uint)Marshal.SizeOf(devInfoData);
 
-                size = GetMonitorSizeFromEDID(hDevRegKey);
+                    if (SetupDiEnumDeviceInfo(devInfo, (uint)DevId, ref devInfoData))
+                    {
 
-                RegCloseKey(hDevRegKey);
+                        IntPtr hDevRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+
+                        if (hDevRegKey!=IntPtr.Zero && (hDevRegKey.ToInt32() != -1))
+                        {
+                            GetEdid(hDevRegKey);
+                            RegCloseKey(hDevRegKey);
+                        }
+                    }
+                }
+                SetupDiDestroyDeviceInfoList(devInfo);
             }
         }
-        SetupDiDestroyDeviceInfoList(devInfo);
-        return size;
+
+
+        //TODO : implement correctly
+        public bool IsValid
+        {
+            get
+            {
+                if (_rawData.Length > 0) return true;
+                return false;
+            }
+        }
+
+        public Size PhysicalSize
+        {
+            get
+            {
+                if (_rawData.Length>=68)
+                {
+                    int w = ((_rawData[68] & 0xF0) << 4) + _rawData[66];
+                    int h = ((_rawData[68] & 0x0F) << 8) + _rawData[67];
+                    return new Size(w,h);
+                }
+                else
+                {
+                    // TODO: ???
+                    return new Size();
+                }
+
+            }
+        }
+
+        public int ProductCode
+        {
+            get { return _rawData[10] + (_rawData[11] << 8); }
+        }
+
+        public int Serial
+        {
+            get { return _rawData[12] + (_rawData[13] << 8) + (_rawData[14] << 16) + (_rawData[15] << 24); }
+        }
     }
-}
-
-
 }
 
 

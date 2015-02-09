@@ -1,86 +1,86 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
 
+[assembly:InternalsVisibleTo("ScreenConfig")]
 namespace MouseControl
 {
     public class Screen
     {
-        public event EventHandler PhysicalSizeChanged;
-        public event EventHandler PhysicalPositionChanged;
+        public event EventHandler PhysicalChanged;
 
-        private static List<Screen> _allScreens = new List<Screen>();
-        private static Screen getScreen(System.Windows.Forms.Screen screen)
+        private void OnPhysicalChanged()
         {
-            Screen wpfScreen = null;
-            foreach(Screen s in _allScreens)
-            {
-                if (s._screen.DeviceName == screen.DeviceName) { wpfScreen = s; break; }
-            }
-            if (wpfScreen == null)
-            {
-                wpfScreen = new Screen(screen);
-            }
-
-            return wpfScreen;
+            if (PhysicalChanged != null) PhysicalChanged(this, new EventArgs());
         }
+
+        public static RegistryKey RootKey = Registry.CurrentUser.CreateSubKey("SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name);
+
+        internal System.Windows.Forms.Screen _screen;
+        internal ScreenConfig _config = null;
+        internal Edid _edid;
         // TODO : Microsoft.Win32.SystemEvents.DisplaySettingsChanged
-        public static List<Screen> AllScreens
+
+        internal Screen(ScreenConfig config, System.Windows.Forms.Screen screen)
+        {
+            _config = config;
+            _screen = screen;
+            _edid = new Edid(int.Parse(screen.DeviceName.Substring(11))-1);
+        }
+
+        public int ProductCode
+        {
+            get { return _edid.ProductCode; }
+        }
+
+        public int Serial
+        {
+            get { return _edid.Serial; }
+        }
+
+        public String ID
         {
             get
             {
-                foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
-                {
-                    getScreen(screen);
-                }
-                return _allScreens;
+                return ProductCode.ToString() + "_" + Serial.ToString() + "_" + Bounds.Width + "x" + Bounds.Height;
             }
         }
 
-        public static Screen getScreen(int nb)
+        public void Save()
         {
-            foreach(Screen s in AllScreens)
+            RegistryKey k = RootKey.CreateSubKey(ID);
+
+            k.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
+            k.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
+
+            k.Close();
+        }
+        public bool Load()
+        {
+            RegistryKey k = RootKey.OpenSubKey(ID);
+
+            Point p = new Point(_config.PhysicalOverallBounds.Right, 0);
+
+            if (k != null)
             {
-                if (s.DeviceName.EndsWith(nb.ToString())) return s;
+                p = new Point(
+                    double.Parse(k.GetValue("X", RegistryValueKind.String).ToString()),
+                    double.Parse(k.GetValue("Y", RegistryValueKind.String).ToString())
+                );
             }
-            return null;
-        }
 
-        public static Screen FromPoint(Point point)
-        {
-            int x = (int)Math.Round(point.X);
-            int y = (int)Math.Round(point.Y);
+            PhysicalLocation = p;
 
-            // are x,y device-independent-pixels ??
-            System.Drawing.Point drawingPoint = new System.Drawing.Point(x, y);
-            System.Windows.Forms.Screen screen = System.Windows.Forms.Screen.FromPoint(drawingPoint);
-            Screen wpfScreen = getScreen(screen);
+            k.Close();
 
-            return wpfScreen;
-        }
-
-        public static Screen PrimaryScreen
-        {
-            get { return getScreen(System.Windows.Forms.Screen.PrimaryScreen); }
-        }
-
-        private System.Windows.Forms.Screen _screen;
-
-        internal Screen(System.Windows.Forms.Screen screen)
-        {
-            _allScreens.Add(this);
-            _screen = screen;
-            //DPI = LogPixelSx;
-
-            _pitch_X = Edid.GetSizeForDevID(screen.DeviceName).Width / screen.Bounds.Width;
-            _pitch_Y = Edid.GetSizeForDevID(screen.DeviceName).Height / screen.Bounds.Height;
-
-            _physicalLocation = new Point(Bounds.Left * _overallPitch, Bounds.Top * _overallPitch);
+            return true;
         }
 
         public Rect Bounds
@@ -94,7 +94,26 @@ namespace MouseControl
             get { return _physicalLocation; }
             set
             {
-                _physicalLocation = value;
+                if(Primary)
+                {
+                    foreach (Screen s in _config.AllScreens)
+                    {
+                        if(!s.Primary)
+                        {
+                            s.PhysicalLocation = new Point
+                                (
+                                s.PhysicalLocation.X - value.X,
+                                s.PhysicalLocation.Y - value.Y
+                                );
+                        }
+                    }
+                    _physicalLocation = new Point(0, 0);
+                }
+                else
+                {
+                    _physicalLocation = value;
+                    OnPhysicalChanged();
+                }
             }
         }
 
@@ -102,34 +121,10 @@ namespace MouseControl
         {
             get
             {
-                return new Rect(PhysicalLocation, new Size(Bounds.Width*_pitch_X, Bounds.Height*_pitch_Y));
+                return new Rect(PhysicalLocation, new Size(Bounds.Width*PitchX, Bounds.Height*PitchY));
             }
         }
 
-        public static Rect OverallBounds
-        {
-            get
-            {
-                Rect r = Screen.PrimaryScreen.Bounds;
-                foreach (Screen s in Screen.AllScreens)
-                {
-                    r.Union(s.Bounds);
-                }
-                return r;
-            }
-        }
-        public static Rect PhysicalOverallBounds
-        {
-            get
-            {
-                Rect r = Screen.PrimaryScreen.PhysicalBounds;
-                foreach (Screen s in Screen.AllScreens)
-                {
-                    r.Union(s.PhysicalBounds);
-                }
-                return r;
-            }
-        }
 
         public Rect WorkingArea
         {
@@ -150,46 +145,45 @@ namespace MouseControl
 
         public bool Primary
         {
-            get { return this._screen.Primary; }
+            get { return _screen.Primary; }
         }
 
         public string DeviceName
         {
-            get { return this._screen.DeviceName; }
+            get { return _screen.DeviceName; }
         }
 
-        private static double _overallPitch = 25.4/96.0; 
-        private double _pitch_X = 25.4 / 96.0;
+        public double PitchX
+        {
+            get
+            {
+                if (_edid.IsValid) return _edid.PhysicalSize.Width / Bounds.Width;
+                else return 25.4 / 96.0;
+            }
+        }
+        
         public double DpiX
         {
-            get { return 25.4/_pitch_X; }
-            set {
-
-                _pitch_X = 25.4/value;
-                shrinkX();
-                if (PhysicalSizeChanged != null)
-                    PhysicalSizeChanged(this,new EventArgs());
-            }
+            get { return 25.4/PitchX; }
         }
 
-        private double _pitch_Y = 25.4 / 96.0;
+        public double PitchY
+        {
+            get
+            {
+                if (_edid.IsValid) return _edid.PhysicalSize.Height / Bounds.Height;
+                else return 25.4 / 96.0;
+            }
+        }
         public double DpiY
         {
-            get { return 25.4 / _pitch_Y; }
-            set
-            {
-
-                _pitch_Y = 25.4 / value;
-                //shrinkX();
-                if (PhysicalSizeChanged != null)
-                    PhysicalSizeChanged(this, new EventArgs());
-            }
+            get { return 25.4 / PitchY; }
         }
 
         public double DpiAvg
         {
             get {
-                double pitch = Math.Sqrt((_pitch_X * _pitch_X) + (_pitch_Y * _pitch_Y)) / Math.Sqrt(2);
+                double pitch = Math.Sqrt((PitchX * PitchX) + (PitchY * PitchY)) / Math.Sqrt(2);
                 return 25.4 / pitch;
             }
         }
@@ -203,119 +197,36 @@ namespace MouseControl
         private const int LOGPIXELSX = 88;
 
 
-        public static void shrinkX()
-        {
-            double x = PhysicalOverallBounds.X;
-
-            List<Screen> done = new List<Screen>();
-
-            while (AllScreens.Except(done).Count() > 0)
-            {
-                bool loop = true;
-                while(loop)
-                {
-                    loop = false;
-                    foreach (Screen s in AllScreens.Except(done))
-                    {
-                        if (s.PhysicalBounds.X<=x)
-                        {
-                            done.Add(s);
-                            if (s.PhysicalBounds.Right > x)
-                            {
-                                x = s.PhysicalBounds.Right;
-                                loop = true;
-                            }
-                        }
-                    }
-                }
-
-                Screen minScreen = null;
-                foreach (Screen s in AllScreens.Except(done))
-                {
-                    if (minScreen== null || s.PhysicalBounds.X < minScreen.PhysicalBounds.X)
-                    {
-                        minScreen = s;
-                    }
-                }
-                if (minScreen!=null)
-                {
-                    minScreen.PhysicalLocation = new Point(x, minScreen.PhysicalLocation.Y);
-                    done.Add(minScreen);
-                    x = minScreen.PhysicalBounds.Right;
-                }
-            }
-            // search max continuous X
-
-        }
         public Rect ToUI(Size s)
         {
-                Rect all = Screen.PhysicalOverallBounds;
+                Rect all = _config.PhysicalOverallBounds;
 
                 double ratio = Math.Min(
                     s.Width / all.Width,
                     s.Height / all.Height
                     );
 
-            return new Rect(
-                (PhysicalBounds.Left - all.Left) * ratio,
-                (PhysicalBounds.Top - all.Top) * ratio,
-                PhysicalBounds.Width * ratio,
-                PhysicalBounds.Height * ratio
-                );
+                return new Rect(
+                    (PhysicalBounds.Left - all.Left) * ratio,
+                    (PhysicalBounds.Top - all.Top) * ratio,
+                    PhysicalBounds.Width * ratio,
+                    PhysicalBounds.Height * ratio
+                    );
         }
 
-        public static Point PhysicalToUI(Size s, Point p)
-        {
-            Rect all = Screen.PhysicalOverallBounds;
 
-            double ratio = Math.Min(
-                s.Width / all.Width,
-                s.Height / all.Height
-                );
-
-            return new Point(
-                (p.X - all.Left) * ratio,
-                (p.Y - all.Top) * ratio
-                );
-
-        }
-
-        static public Point FromUI(Size s, Point p)
-        {
-            Rect all = Screen.PhysicalOverallBounds;
-
-            double ratio = Math.Min(
-                s.Width / all.Width,
-                s.Height / all.Height
-                );
-
-            return new Point(
-                (p.X/ratio)+all.Left,
-                (p.Y/ratio)+all.Top
-                );
-        }
-
-        public Screen FromPhysicalPoint(Point p)
-        {
-            foreach(Screen s in AllScreens)
-            {
-                if (s.PhysicalBounds.Contains(p))
-                    return s;
-            }
-            return null;
-        }
 
         public Point PixelToPhysical(Point p)
         {
-            double x = (p.X - Bounds.X) * _pitch_X + PhysicalLocation.X;
-            double y = (p.Y - Bounds.Y) * _pitch_Y + PhysicalLocation.Y;
+            double x = (p.X - Bounds.X) * PitchX + PhysicalLocation.X;
+            double y = (p.Y - Bounds.Y) * PitchY + PhysicalLocation.Y;
             return new Point(x, y);
         }
 
         public Point PhysicalToPixel(Point p)
         {
-            double x = ((p.X - PhysicalLocation.X) / _pitch_X) + Bounds.X;
-            double y = ((p.Y - PhysicalLocation.Y) / _pitch_Y) + Bounds.Y;
+            double x = ((p.X - PhysicalLocation.X) / PitchX) + Bounds.X;
+            double y = ((p.Y - PhysicalLocation.Y) / PitchY) + Bounds.Y;
             return new Point(x, y);
         }
     }

@@ -20,49 +20,37 @@ namespace MouseControl
     /// </summary>
     public partial class ScreenGUI : UserControl
     {
-        private double _ratio;
-
         private Screen _screen;
         public Screen Screen {
             get { return _screen; }
-            set { _screen = value;
-                txtTop.Text = value.PhysicalBounds.Top.ToString();
-                txtBottom.Text = value.PhysicalBounds.Bottom.ToString();
-                txtLeft.Text = value.PhysicalBounds.Left.ToString();
-                txtRight.Text = value.PhysicalBounds.Right.ToString();
-
-                lblDPI.Text = value.DpiAvg.ToString();
-
-                lblName.Content = value.DeviceName;
-
-                _screen.PhysicalSizeChanged += _screen_PhysicalSizeChanged;
+            set {
+                _screen = value;
+                _screen.PhysicalChanged += _screen_PhysicalChanged;
+                UpdateValues();
             }
         }
 
-
-        public double Ratio
+        private void _screen_PhysicalChanged(object sender, EventArgs e)
         {
-            get  { return _ratio;  }
-            set
-            {
-                _ratio = value;
-                setRenderSize();
-            }
+            UpdateValues();
         }
 
-        private void setRenderSize()
+        public void UpdateValues()
         {
-            this.RenderSize = new Size(_screen.PhysicalBounds.Width * _ratio, _screen.PhysicalBounds.Height * _ratio);
+                txtTop.Text = _screen.PhysicalBounds.Top.ToString();
+                txtBottom.Text = _screen.PhysicalBounds.Bottom.ToString();
+                txtLeft.Text = _screen.PhysicalBounds.Left.ToString();
+                txtRight.Text = _screen.PhysicalBounds.Right.ToString();
+
+                lblDPI.Text = _screen.DpiAvg.ToString();
+
+                lblName.Content = _screen.DeviceName;
         }
 
-        private void _screen_PhysicalSizeChanged(object sender, EventArgs e)
-        {
-            setRenderSize();
-        }
-
-        public ScreenGUI()
+         public ScreenGUI(Screen s)
         {
             InitializeComponent();
+            Screen = s;
         }
 
         private void lblDPI_TextChanged(object sender, TextChangedEventArgs e)

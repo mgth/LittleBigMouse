@@ -20,8 +20,8 @@ namespace MouseControl
     /// </summary>
     public partial class ScreenGUI : UserControl
     {
-        private double xRatio;
-        private double yRatio;
+        private double _ratio;
+
         private Screen _screen;
         public Screen Screen {
             get { return _screen; }
@@ -39,37 +39,20 @@ namespace MouseControl
             }
         }
 
-        public double XRatio
-        {
-            get
-            {
-                return xRatio;
-            }
 
+        public double Ratio
+        {
+            get  { return _ratio;  }
             set
             {
-                xRatio = value;
-                setRenderSize();
-            }
-        }
-
-        public double YRatio
-        {
-            get
-            {
-                return yRatio;
-            }
-
-            set
-            {
-                yRatio = value;
+                _ratio = value;
                 setRenderSize();
             }
         }
 
         private void setRenderSize()
         {
-            this.RenderSize = new Size(_screen.PhysicalBounds.Width * xRatio, _screen.PhysicalBounds.Height * yRatio);
+            this.RenderSize = new Size(_screen.PhysicalBounds.Width * _ratio, _screen.PhysicalBounds.Height * _ratio);
         }
 
         private void _screen_PhysicalSizeChanged(object sender, EventArgs e)

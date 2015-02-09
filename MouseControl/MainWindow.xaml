@@ -11,7 +11,7 @@
         <Label x:Name="labelY" Content="Label" HorizontalAlignment="Left" Margin="10,41,0,0" VerticalAlignment="Top"/>
         <TextBlock x:Name="text" HorizontalAlignment="Left" Margin="0,144,0,0" TextWrapping="Wrap" Text="TextBlock" VerticalAlignment="Top" Height="133" Width="389"/>
         <Label x:Name="labelScreenName" Content="Label" HorizontalAlignment="Left" Margin="10,72,0,0" VerticalAlignment="Top"/>
-        <Button x:Name="button" Content="Button" HorizontalAlignment="Left" Margin="403,274,0,0" VerticalAlignment="Top" Width="75" Click="button_Click"/>
+        <Button x:Name="button" Content="Config" HorizontalAlignment="Left" Margin="403,274,0,0" VerticalAlignment="Top" Width="75" Click="button_Click"/>
         <Label x:Name="labelSpeed" Content="Label" HorizontalAlignment="Left" Margin="10,103,0,0" VerticalAlignment="Top"/>
 
     </Grid>

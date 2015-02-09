@@ -271,8 +271,77 @@ namespace MouseControl
             }
             // search max continuous X
 
+        }
+        public Rect ToUI(Size s)
+        {
+                Rect all = Screen.PhysicalOverallBounds;
 
+                double ratio = Math.Min(
+                    s.Width / all.Width,
+                    s.Height / all.Height
+                    );
 
+            return new Rect(
+                (PhysicalBounds.Left - all.Left) * ratio,
+                (PhysicalBounds.Top - all.Top) * ratio,
+                PhysicalBounds.Width * ratio,
+                PhysicalBounds.Height * ratio
+                );
+        }
+
+        public static Point PhysicalToUI(Size s, Point p)
+        {
+            Rect all = Screen.PhysicalOverallBounds;
+
+            double ratio = Math.Min(
+                s.Width / all.Width,
+                s.Height / all.Height
+                );
+
+            return new Point(
+                (p.X - all.Left) * ratio,
+                (p.Y - all.Top) * ratio
+                );
+
+        }
+
+        static public Point FromUI(Size s, Point p)
+        {
+            Rect all = Screen.PhysicalOverallBounds;
+
+            double ratio = Math.Min(
+                s.Width / all.Width,
+                s.Height / all.Height
+                );
+
+            return new Point(
+                (p.X/ratio)+all.Left,
+                (p.Y/ratio)+all.Top
+                );
+        }
+
+        public Screen FromPhysicalPoint(Point p)
+        {
+            foreach(Screen s in AllScreens)
+            {
+                if (s.PhysicalBounds.Contains(p))
+                    return s;
+            }
+            return null;
+        }
+
+        public Point PixelToPhysical(Point p)
+        {
+            double x = (p.X - Bounds.X) * _pitch + PhysicalLocation.X;
+            double y = (p.Y - Bounds.Y) * _pitch + PhysicalLocation.Y;
+            return new Point(x, y);
+        }
+
+        public Point PhysicalToPixel(Point p)
+        {
+            double x = ((p.X - PhysicalLocation.X) / _pitch) + Bounds.X;
+            double y = ((p.Y - PhysicalLocation.Y) / _pitch) + Bounds.Y;
+            return new Point(x, y);
         }
     }
 }

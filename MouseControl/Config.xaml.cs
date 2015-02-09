@@ -34,6 +34,8 @@ namespace MouseControl
         }
 
         private Point oldPosition;
+        private Point dragStartPosition;
+
         bool moving = false;
         private void Sgui_MouseMove(object sender, MouseEventArgs e)
         {
@@ -45,29 +47,111 @@ namespace MouseControl
             {
                 if (moving == false)
                 {
-                    oldPosition = e.GetPosition(grid);
+                    oldPosition = Screen.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
+                    dragStartPosition = gui.Screen.PhysicalLocation;
                     moving = true;
+
+                    // bring element to front so we can move it over the others
+                    grid.Children.Remove(gui);
+                    grid.Children.Add(gui);
                 }
                 else
                 {
-                    Point newPosition = e.GetPosition(grid);
+                    Point newPosition = Screen.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
+
+                    double left = dragStartPosition.X - oldPosition.X + newPosition.X;
+                    double right = left+gui.Screen.PhysicalBounds.Width;
+
+                    Point pNear = newPosition;
+                    foreach (Screen s in Screen.AllScreens)
+                    {
+                        double minoffset = 10;
+                        // recherche gauche avec droite
+                        double offset = s.PhysicalBounds.Right - left;
+                        if (Math.Abs(offset) < minoffset)
+                        {
+                            pNear = new Point(newPosition.X + offset, newPosition.Y);
+                            minoffset = Math.Abs(offset);
+                        }
+
+                        offset = s.PhysicalBounds.Left - left;
+                        if (Math.Abs(offset) < minoffset)
+                        {
+                            pNear = new Point(newPosition.X + offset, newPosition.Y);
+                            minoffset = Math.Abs(offset);
+                        }
+
+
+                    }
+
+                    newPosition = pNear;
+                    double top = dragStartPosition.Y - oldPosition.Y + newPosition.Y;
+                    double bottom = top + gui.Screen.PhysicalBounds.Height;
+                    foreach (Screen s in Screen.AllScreens)
+                    {
+                        double minoffset = 10;
+                        double offset = s.PhysicalBounds.Bottom - top;
+                        if (Math.Abs(offset) < minoffset)
+                        {
+                            pNear = new Point(newPosition.X , newPosition.Y + offset);
+                            minoffset = Math.Abs(offset);
+                        }
+
+                        offset = s.PhysicalBounds.Bottom - bottom;
+                        if (Math.Abs(offset) < minoffset)
+                        {
+                            pNear = new Point(newPosition.X, newPosition.Y + offset);
+                            minoffset = Math.Abs(offset);
+                        }
+
+                    }
+                    newPosition = pNear;
+
+                    Point p = Screen.PhysicalToUI(
+                        new Size(grid.ActualWidth, grid.ActualHeight),
+                        new Point(
+                            dragStartPosition.X - oldPosition.X + newPosition.X,
+                            dragStartPosition.Y - oldPosition.Y + newPosition.Y
+                            )
+                        );
 
                     gui.Margin = new Thickness(
-                        gui.Margin.Left - oldPosition.X + newPosition.X,
-                        gui.Margin.Top - oldPosition.Y + newPosition.Y,
+                        p.X,
+                        p.Y,
                         0,
                         0);
 
-                    oldPosition = newPosition;
+                    //oldPosition = newPosition;
                 }
             }
             else
             {
                 if (moving)
                 {
-                    gui.Screen.PhysicalLocation = new Point((double)gui.Margin.Left / xRatio, (double)gui.Margin.Top / yRatio);
-                    Screen.shrinkX();
+                    Point p = Screen.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
+
+                    double xOffset = p.X - gui.Screen.PhysicalLocation.X;
+                    double yOffset = p.Y - gui.Screen.PhysicalLocation.Y;
+
+                    if (gui.Screen.Primary)
+                    {
+
+                        foreach (Screen s in Screen.AllScreens)
+                        {
+                            if (!s.Primary)
+                            {
+                                s.PhysicalLocation = new Point(s.PhysicalLocation.X - xOffset, s.PhysicalLocation.Y - yOffset);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        gui.Screen.PhysicalLocation = new Point(gui.Screen.PhysicalLocation.X + xOffset, gui.Screen.PhysicalLocation.Y + yOffset);
+                    }
+
+                    //Screen.shrinkX();
                     moving = false;
+                    ResizeAll();
                 }
             }
         }
@@ -77,17 +161,18 @@ namespace MouseControl
             
         }
 
-        private double xRatio = 1.0;
-        private double yRatio = 1.0;
 
         private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            ResizeAll();
+        }
+
+        private void ResizeAll() 
         {
             foreach(UIElement element in grid.Children)
             {
                 Rect all = Screen.PhysicalOverallBounds;
 
-                xRatio = grid.ActualWidth / all.Width;
-                yRatio = grid.ActualHeight / all.Height;
 
                 ScreenGUI gui = element as ScreenGUI;
                 if (gui!=null)
@@ -95,15 +180,15 @@ namespace MouseControl
                     gui.HorizontalAlignment = HorizontalAlignment.Left;
                     gui.VerticalAlignment = VerticalAlignment.Top;
 
-                    gui.XRatio = xRatio;
-                    gui.YRatio = yRatio;
+                    Rect r = gui.Screen.ToUI(new Size(grid.ActualWidth,grid.ActualHeight));
 
                     gui.Margin = new Thickness(
-                        (gui.Screen.PhysicalBounds.Left - all.Left) * xRatio,
-                        (gui.Screen.PhysicalBounds.Top - all.Top) * yRatio,
+                        r.X,
+                        r.Y,
                         0, 0);
-                    gui.Width = gui.Screen.PhysicalBounds.Width * xRatio;
-                    gui.Height = gui.Screen.PhysicalBounds.Height * yRatio;
+
+                    gui.Width = r.Width;
+                    gui.Height = r.Height;
                 }
             }
         }

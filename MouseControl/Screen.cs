@@ -74,11 +74,10 @@ namespace MouseControl
                     double.Parse(k.GetValue("X", RegistryValueKind.String).ToString()),
                     double.Parse(k.GetValue("Y", RegistryValueKind.String).ToString())
                 );
+                k.Close();
             }
 
             PhysicalLocation = p;
-
-            k.Close();
 
             return true;
         }

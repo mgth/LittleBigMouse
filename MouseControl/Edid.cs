@@ -117,17 +117,18 @@ namespace MouseControl
 
             if (devInfo != IntPtr.Zero)
             {
-//                for (uint i = 0; ERROR_NO_MORE_ITEMS != GetLastError(); ++i)
+                for (uint i = 0; ERROR_NO_MORE_ITEMS != GetLastError(); ++i)
                 {
 
                     SP_DEVINFO_DATA devInfoData = new SP_DEVINFO_DATA();
                     //memset(&devInfoData, 0, sizeof(devInfoData));
                     devInfoData.cbSize = (uint)Marshal.SizeOf(devInfoData);
 
-                    if (SetupDiEnumDeviceInfo(devInfo, (uint)DevId, ref devInfoData))
+                    if (SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                     {
 
                         IntPtr hDevRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+
 
                         if (hDevRegKey!=IntPtr.Zero && (hDevRegKey.ToInt32() != -1))
                         {

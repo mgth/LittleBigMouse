@@ -5,8 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MouseControl"
         mc:Ignorable="d"
-        Title="Config" Height="300" Width="600">
-    <Grid>
+        Title="Config" Height="300" Width="600" Closing="Window_Closing">
+    <Grid Margin="5">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
@@ -15,7 +15,9 @@
 
         </Grid>
         <StackPanel Grid.Row="1" Orientation="Horizontal" Height="25" HorizontalAlignment="Right" >
-            <Button x:Name="cmdOk" Width="75" Margin="5,0,0,0" Click="cmdOk_Click">Ok</Button>
+            <CheckBox x:Name="chkLoadAtStartup" Content="Load at startup"/>
+            <Button x:Name="cmdUnload" Width="60" Margin="5,0,0,0" Click="cmdUnload_Click">Unload</Button>
+            <Button x:Name="cmdOk" Width="75" Margin="10,0,0,0" Click="cmdOk_Click">Ok</Button>
             <Button x:Name="cmdApply" Width="75" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
             <Button x:Name="cmdCancel" Width="75" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
         </StackPanel>

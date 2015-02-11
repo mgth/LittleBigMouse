@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace MouseControl
 {
-    public class Notify
+    public class Notify : IDisposable
     {
         private System.Windows.Forms.NotifyIcon _notify = new System.Windows.Forms.NotifyIcon
         {
@@ -24,5 +24,11 @@ namespace MouseControl
         }
 
         public event EventHandler Click;
+
+        public void Dispose()
+        {
+            _notify.Visible = false;
+            _notify.Dispose();
+        }
     }
 }

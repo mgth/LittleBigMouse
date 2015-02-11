@@ -6,17 +6,27 @@
              xmlns:local="clr-namespace:MouseControl"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300">
-    <Grid Background="AliceBlue">
-        <Border BorderThickness="5" BorderBrush="#FF415E97"></Border>
-        <TextBox x:Name="txtTop" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" TextWrapping="Wrap" Text="TextBox" VerticalAlignment="Top" Width="60"/>
-        <TextBox x:Name="txtBottom" Margin="0,0,0,5" TextWrapping="Wrap" Text="TextBox" Height="23" VerticalAlignment="Bottom" Width="60"/>
-        <TextBox x:Name="txtLeft" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" TextWrapping="Wrap" Text="TextBox" VerticalAlignment="Center" Width="60"/>
-        <TextBox x:Name="txtRight" HorizontalAlignment="Right" Height="23" Margin="0,0,5,0" TextWrapping="Wrap" Text="TextBox" VerticalAlignment="Center" Width="60"/>
+    <Grid x:Name="grid" SizeChanged="Grid_SizeChanged">
         
-        
+            
+        <Border BorderThickness="5" x:Name="selectColor" BorderBrush="#FFE4E2E0">
+        <Border.Background>
+                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                  <GradientStop Color="#FF7288C0" Offset="0.0" />
+                  <GradientStop Color="#FF52669D" Offset="1" />
+                </LinearGradientBrush>       
+       </Border.Background>
+        </Border>
+        <Label x:Name="txtTop" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" VerticalAlignment="Top"/>
+        <Label x:Name="txtBottom" HorizontalAlignment="Center"  Margin="0,0,0,5" Height="23" VerticalAlignment="Bottom"/>
+        <Label x:Name="txtLeft" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" VerticalAlignment="Center"/>
+        <Label x:Name="txtRight" HorizontalAlignment="Right" Height="23" Margin="0,0,5,0" VerticalAlignment="Center" />
+
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-        <Label x:Name="lblName" HorizontalAlignment="Center" Content="Label" FontSize="21" />   
-        <TextBox x:Name="lblDPI" HorizontalAlignment="Center" Width="60" Text="" TextChanged="lblDPI_TextChanged"/>   
+            <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="#FF333E9A" BorderBrush="#FFD9DCEC">
+            <Label x:Name="lblName" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />   
+            </Border>
+        <Label x:Name="lblDPI" HorizontalAlignment="Center" Foreground="White"/>   
         </StackPanel>
     </Grid>
 </UserControl>

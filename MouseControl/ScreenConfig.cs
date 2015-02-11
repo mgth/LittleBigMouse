@@ -103,6 +103,8 @@ namespace MouseControl
             foreach (Screen s in AllScreens)
                 s.Save();
 
+
+
             if (RegistryChanged != null) RegistryChanged(this, new EventArgs());
         }
 

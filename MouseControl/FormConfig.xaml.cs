@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -25,22 +26,81 @@ namespace MouseControl
             _config = config;
 
             InitializeComponent();
-            foreach(Screen s in _config.AllScreens)
+
+            RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+            String startup = rk.GetValue(System.Windows.Forms.Application.ProductName, "").ToString();
+            if (startup == System.Windows.Forms.Application.ExecutablePath.ToString())
+                chkLoadAtStartup.IsChecked = true;
+            else
+                chkLoadAtStartup.IsChecked = false;
+
+            foreach (Screen s in _config.AllScreens)
             {
-                ScreenGUI sgui = new ScreenGUI(s);
+                ScreenGUI sgui = new ScreenGUI(s,grid);
                 grid.Children.Add(sgui);
                 sgui.DragLeave += Sgui_DragLeave;
                 sgui.MouseMove += Sgui_MouseMove;
+                sgui.MouseLeftButtonDown += Sgui_MouseLeftButtonDown;
+                sgui.MouseLeftButtonUp += Sgui_MouseLeftButtonUp;
             }
 
             grid.SizeChanged += Grid_SizeChanged;
         }
 
- 
         private Point oldPosition;
         private Point dragStartPosition;
+        private bool moving = false;
 
-        bool moving = false;
+        private void Sgui_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            ScreenGUI gui = sender as ScreenGUI;
+            if (sender == null) return;
+
+            if (moving)
+            {
+
+                Point p = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
+
+                double xOffset = p.X - gui.Screen.PhysicalLocation.X;
+                double yOffset = p.Y - gui.Screen.PhysicalLocation.Y;
+
+                gui.Screen.PhysicalLocation = new Point(gui.Screen.PhysicalLocation.X + xOffset, gui.Screen.PhysicalLocation.Y + yOffset);
+
+                moving = false;
+                ResizeAll();
+
+                foreach(UIElement el in grid.Children)
+                {
+                    ScreenGUI el_gui = el as ScreenGUI;
+                    if (el_gui != null && el_gui!=gui) el_gui.HideSizers();
+                }
+                gui.ShowSizers();
+            }
+            else
+            {
+                foreach (UIElement el in grid.Children)
+                {
+                    ScreenGUI el_gui = el as ScreenGUI;
+                    if (el_gui != null && el_gui != gui) el_gui.HideSizers();
+                }
+                gui.SwitchSizers();
+            }
+        }
+
+        private void Sgui_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            ScreenGUI gui = sender as ScreenGUI;
+            if (sender == null) return;
+
+            oldPosition = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
+            dragStartPosition = gui.Screen.PhysicalLocation;
+
+            // bring element to front so we can move it over the others
+            grid.Children.Remove(gui);
+            grid.Children.Add(gui);
+        }
+
+
         private void Sgui_MouseMove(object sender, MouseEventArgs e)
         {
             ScreenGUI gui = sender as ScreenGUI;
@@ -48,19 +108,9 @@ namespace MouseControl
 
             if (e.LeftButton == MouseButtonState.Pressed)
             {
-                if (moving == false)
-                {
-                    oldPosition = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
-                    dragStartPosition = gui.Screen.PhysicalLocation;
-                    moving = true;
+                moving = true;
 
-                    // bring element to front so we can move it over the others
-                    grid.Children.Remove(gui);
-                    grid.Children.Add(gui);
-                }
-                else
-                {
-                    Point newPosition = _config.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
+                Point newPosition = _config.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
 
                     double left = dragStartPosition.X - oldPosition.X + newPosition.X;
                     double right = left+gui.Screen.PhysicalBounds.Width;
@@ -156,22 +206,6 @@ namespace MouseControl
 
                     //oldPosition = newPosition;
                 }
-            }
-            else
-            {
-                if (moving)
-                {
-                    Point p = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
-
-                    double xOffset = p.X - gui.Screen.PhysicalLocation.X;
-                    double yOffset = p.Y - gui.Screen.PhysicalLocation.Y;
-
-                    gui.Screen.PhysicalLocation = new Point(gui.Screen.PhysicalLocation.X + xOffset, gui.Screen.PhysicalLocation.Y + yOffset);
-
-                    moving = false;
-                    ResizeAll();
-                }
-            }
         }
 
         private void Sgui_DragLeave(object sender, DragEventArgs e)
@@ -211,20 +245,48 @@ namespace MouseControl
             }
         }
 
-        private void cmdOk_Click(object sender, RoutedEventArgs e)
+        private void Save()
         {
             _config.Save();
-            this.Close();
+
+            RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+
+            if (chkLoadAtStartup.IsChecked==true)
+            {
+                rk.SetValue(System.Windows.Forms.Application.ProductName, System.Windows.Forms.Application.ExecutablePath.ToString());
+            }
+            else rk.DeleteValue(System.Windows.Forms.Application.ProductName, false);
+        }
+
+        private void cmdOk_Click(object sender, RoutedEventArgs e)
+        {
+            Save();
+            Close();
         }
 
         private void cmdApply_Click(object sender, RoutedEventArgs e)
         {
-            _config.Save();
+            Save();
         }
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)
         {
-            this.Close();
+            Close();
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            foreach (UIElement el in grid.Children)
+            {
+                ScreenGUI el_gui = el as ScreenGUI;
+                if (el_gui != null) el_gui.HideSizers();
+            }
+
+        }
+
+        private void cmdUnload_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
         }
     }
 }

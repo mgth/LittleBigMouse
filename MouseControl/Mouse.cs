@@ -120,7 +120,7 @@ namespace MouseControl
             setCursor("SizeNESW", "%SystemRoot%\\cursors\\aero_nesw" + suffix + ".cur");
             setCursor("SizeNS", "%SystemRoot%\\cursors\\aero_ns" + suffix + ".cur");
             setCursor("SizeNWSE", "%SystemRoot%\\cursors\\aero_nwse" + suffix + ".cur");
-            setCursor("SizeWE", "%SystemRoot%\\cursors\\aero_we" + suffix + ".cur");
+            setCursor("SizeWE", "%SystemRoot%\\cursors\\aero_ew" + suffix + ".cur");
             setCursor("UpArrow", "%SystemRoot%\\cursors\\aero_up" + suffix + ".cur");
             setCursor("Wait", "%SystemRoot%\\cursors\\aero_busy" + suffix + ".cur");
 

@@ -24,7 +24,7 @@
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="#FF333E9A" BorderBrush="#FFD9DCEC">
-            <Label x:Name="lblName" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />   
+            <Label Margin="0,-7,0,-5" x:Name="lblName" Content ="0" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />   
             </Border>
         <Label x:Name="lblDPI" HorizontalAlignment="Center" Foreground="White"/>   
         </StackPanel>

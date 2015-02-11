@@ -129,7 +129,7 @@ namespace MouseControl
                     Point left_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
                     Point left_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
 
-                    Width = (_drawOn.Bounds.Width*_drawOn.WpfRatioX) / 4;   
+                    Width = (_drawOn.Bounds.Width*_drawOn.WpfRatioX) / 16;   
 
                     Left = left_top.X - Width;
                     Top = left_top.Y;
@@ -146,7 +146,7 @@ namespace MouseControl
                     Point right_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
                     Point right_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
 
-                    Width = (_drawOn.Bounds.Width*_drawOn.WpfRatioX) / 4;   
+                    Width = (_drawOn.Bounds.Width*_drawOn.WpfRatioX) / 16;   
 
                     Left = right_top.X;
                     Top = right_top.Y;
@@ -163,7 +163,7 @@ namespace MouseControl
                     Point top_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
                     Point top_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
 
-                    Height = (_drawOn.Bounds.Height * _drawOn.WpfRatioY) / 4;
+                    Height = (_drawOn.Bounds.Height * _drawOn.WpfRatioY) / 8;
 
                     Left = top_left.X;
                     Top = top_left.Y - Height;
@@ -181,7 +181,7 @@ namespace MouseControl
                     Point bottom_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
                     Point bottom_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
 
-                    Height = (_drawOn.Bounds.Height * _drawOn.WpfRatioY) / 4;
+                    Height = (_drawOn.Bounds.Height * _drawOn.WpfRatioY) / 8;
 
                     Left = bottom_left.X;
                     Top = bottom_left.Y;

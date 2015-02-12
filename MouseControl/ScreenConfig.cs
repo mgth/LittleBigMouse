@@ -59,7 +59,7 @@ namespace MouseControl
 
             if (_currentScreen == null) _currentScreen = FromPoint(pIn);
 
-            if (_currentScreen.Bounds.Contains(pIn))
+            if (_currentScreen.InsideBounds.Contains(pIn))
             {
                 _oldPoint = pIn;
                 return;
@@ -88,14 +88,13 @@ namespace MouseControl
                 Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * _currentScreen.DpiAvg, 0);
 
                 _oldPoint = pIn;
-                e.Handled = true;
             }
             else
             {
                 Mouse.SetCursorPos((int)_oldPoint.X, (int)_oldPoint.Y);
-                e.Handled = true;
             }
 
+            e.Handled = true;
         }
 
 

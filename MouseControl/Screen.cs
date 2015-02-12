@@ -107,12 +107,18 @@ namespace MouseControl
             get { return getRect(_screen.Bounds); }
         }
 
+        public Rect InsideBounds
+        {
+            get { return new Rect(Bounds.TopLeft,new Point(Bounds.BottomRight.X-1.0,Bounds.BottomRight.Y-1.0)); }
+        }
+
         private Point _physicalLocation;
         public Point PhysicalLocation
         {
             get { return _physicalLocation; }
             set
             {
+                // Do not move primary screen but all others
                 if(Primary)
                 {
                     foreach (Screen s in Config.AllScreens)
@@ -130,8 +136,7 @@ namespace MouseControl
                 }
                 else
                 {
-                    _physicalLocation = value;
-                    
+                    _physicalLocation = value;           
                 }
                 OnPhysicalChanged();
             }
@@ -141,7 +146,7 @@ namespace MouseControl
         {
             get
             {
-                return new Rect(PhysicalLocation, new Size(Bounds.Width*PitchX, Bounds.Height*PitchY));
+                return new Rect(PhysicalLocation, PixelToPhysical(Bounds.BottomRight));
             }
         }
 
@@ -480,7 +485,12 @@ namespace MouseControl
             double y = Math.Truncate(p.Y - Bounds.Y) * PitchY + PhysicalLocation.Y;
             return new Point(x, y);
         }
-
+        public Size PixelToPhysical(Size s)
+        {
+            double x = Math.Truncate(s.Width) * PitchX + PhysicalLocation.X;
+            double y = Math.Truncate(s.Height) * PitchY + PhysicalLocation.Y;
+            return new Size(x, y);
+        }
         public Point PhysicalToPixel(Point p)
         {
             double x = Math.Truncate((p.X - PhysicalLocation.X) / PitchX) + Bounds.X;

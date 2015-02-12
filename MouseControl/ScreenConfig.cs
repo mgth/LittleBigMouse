@@ -49,12 +49,9 @@ namespace MouseControl
             _MouseHookManager.MouseMoveExt -= _MouseHookManager_MouseMoveExt;
             _MouseHookManager.Enabled = false;
         }
+
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
-            // TODO : remove
-            //labelX.Content = e.X;
-            //labelY.Content = e.Y;
-
             Point pIn = new Point(e.X, e.Y);
 
             if (_currentScreen == null) _currentScreen = FromPoint(pIn);

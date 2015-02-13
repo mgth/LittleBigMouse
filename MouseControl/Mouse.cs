@@ -100,7 +100,7 @@ namespace MouseControl
 
             set
             {
-                SystemParametersInfo(SPI_SETMOUSESPEED, 0, (uint)value, 0);
+                SystemParametersInfo(SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
             }
         }
         public static void setCursor(String name, String fileName)

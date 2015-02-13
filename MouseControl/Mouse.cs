@@ -112,8 +112,10 @@ namespace MouseControl
         {
             setCursor("AppStarting", "%SystemRoot%\\cursors\\aero_working" + suffix + ".ani");
             setCursor("Arrow", "%SystemRoot%\\cursors\\aero_arrow" + suffix + ".cur");
+            setCursor("Crosshair", "");//
             setCursor("Hand", "%SystemRoot%\\cursors\\aero_link" + suffix + ".cur");
             setCursor("Help", "%SystemRoot%\\cursors\\aero_helpsel" + suffix + ".cur");
+            setCursor("IBeam", "");//
             setCursor("No", "%SystemRoot%\\cursors\\aero_unavail" + suffix + ".cur");
             setCursor("NWPen", "%SystemRoot%\\cursors\\aero_pen" + suffix + ".cur");
             setCursor("SizeAll", "%SystemRoot%\\cursors\\aero_move" + suffix + ".cur");
@@ -122,7 +124,7 @@ namespace MouseControl
             setCursor("SizeNWSE", "%SystemRoot%\\cursors\\aero_nwse" + suffix + ".cur");
             setCursor("SizeWE", "%SystemRoot%\\cursors\\aero_ew" + suffix + ".cur");
             setCursor("UpArrow", "%SystemRoot%\\cursors\\aero_up" + suffix + ".cur");
-            setCursor("Wait", "%SystemRoot%\\cursors\\aero_busy" + suffix + ".cur");
+            setCursor("Wait", "%SystemRoot%\\cursors\\aero_busy" + suffix + ".ani");
 
             SystemParametersInfo(SPI_SETCURSORS, 0, 0, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
         }

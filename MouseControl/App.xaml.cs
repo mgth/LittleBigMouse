@@ -27,6 +27,7 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Linq;
+using System.ServiceProcess;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -35,15 +36,25 @@ namespace MouseControl
     /// <summary>
     /// Interaction logic for App.xaml
     /// </summary>
-    public partial class App : Application, ISingleInstanceApp
+    public partial class App : Application//, ISingleInstanceApp
     {
         private const string Unique = "MgthMouseControlApp";
 
         [STAThread]
         public static void Main()
         {
+            if (Environment.GetCommandLineArgs().Contains("/service"))
+            {
+                ServiceBase[] ServicesToRun;
+                ServicesToRun = new ServiceBase[]
+                {
+                new Service()
+                };
+                ServiceBase.Run(ServicesToRun);
 
-            if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
+            }
+            else
+            //            if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
             {
                 var application = new App();
                 application.InitializeComponent();
@@ -54,7 +65,7 @@ namespace MouseControl
                 application.Run();
 
                 // Allow single instance code to perform cleanup operations
-                SingleInstance<App>.Cleanup();
+//                SingleInstance<App>.Cleanup();
 
                 Mouse.MouseSpeed = 10.0;
                 Mouse.setCursorAero(1);

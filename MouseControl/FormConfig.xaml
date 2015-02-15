@@ -16,10 +16,11 @@
         </Grid>
         <StackPanel Grid.Row="1" Orientation="Horizontal" Height="25" HorizontalAlignment="Right" >
             <CheckBox x:Name="chkLoadAtStartup" Content="Load at startup"/>
-            <Button x:Name="cmdUnload" Width="60" Margin="5,0,0,0" Click="cmdUnload_Click">Unload</Button>
-            <Button x:Name="cmdOk" Width="75" Margin="10,0,0,0" Click="cmdOk_Click">Ok</Button>
-            <Button x:Name="cmdApply" Width="75" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
-            <Button x:Name="cmdCancel" Width="75" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
+            <Button x:Name="cmdInstallService" MinWidth="50" Margin="5,0,0,0" Click="cmdInstallService_Click">Install Service</Button>
+            <Button x:Name="cmdUnload" MinWidth="50" Margin="5,0,0,0" Click="cmdUnload_Click">Unload</Button>
+            <Button x:Name="cmdOk" MinWidth="50" Margin="10,0,0,0" Click="cmdOk_Click">Ok</Button>
+            <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
+            <Button x:Name="cmdCancel" MinWidth="50" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
         </StackPanel>
     </Grid>
 </Window>

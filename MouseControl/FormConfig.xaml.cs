@@ -262,7 +262,7 @@ namespace MouseControl
 
         private void Save()
         {
-            _config.Save();
+            _config.Save(Registry.CurrentUser);
 
             RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
 
@@ -303,34 +303,11 @@ namespace MouseControl
         {
             Application.Current.Shutdown();
         }
-        private static bool IsAdministrator()
-        {
-            WindowsIdentity identity = WindowsIdentity.GetCurrent();
-            WindowsPrincipal principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
-        }
 
         private void cmdInstallService_Click(object sender, RoutedEventArgs e)
         {
-            if (IsAdministrator() == false)
-            {
-                // Restart program and run as admin
-                var exeName = Process.GetCurrentProcess().MainModule.FileName;
-                ProcessStartInfo startInfo = new ProcessStartInfo(exeName);
-                startInfo.Verb = "runas";
-                startInfo.Arguments = "/InstallService";
-                Process.Start(startInfo);
-                Application.Current.Shutdown();
-                return;
-            }
-            else
-            {
-                ServiceInstaller.InstallAndStart(
-                    System.Windows.Forms.Application.ProductName,
-                    System.Windows.Forms.Application.ProductName,
-                    System.Windows.Forms.Application.ExecutablePath.ToString()+" /service"
-                    );
-            }
+            App.InstallService();
+
         }
     }
 }

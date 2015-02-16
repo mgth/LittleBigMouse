@@ -39,7 +39,7 @@ namespace MouseControl
             if (PhysicalChanged != null) PhysicalChanged(this, new EventArgs());
         }
 
-        public static RegistryKey RootKey = Registry.CurrentUser.CreateSubKey("SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name);
+
 
         internal System.Windows.Forms.Screen _screen;
         private ScreenConfig _config = null;
@@ -50,7 +50,8 @@ namespace MouseControl
         {
             _config = config;
             _screen = screen;
-            _edid = new Edid(int.Parse(screen.DeviceName.Substring(11))-1);
+            //_edid = new Edid(int.Parse(screen.DeviceName.Substring(11))-1);
+            // TODO : do not work in service mode
         }
 
         public int ProductCode
@@ -73,28 +74,33 @@ namespace MouseControl
             }
         }
 
-        public void Save()
+        public void Save(RegistryKey baseKey)
         {
-            RegistryKey k = RootKey.CreateSubKey(ID);
+            App.log("1");
 
-            k.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
-            k.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
+            App.log("2");
+            RegistryKey key = baseKey.CreateSubKey(ID);
+            App.log("3");
 
-            k.Close();
+            key.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
+            key.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
+            App.log("4");
+
+            key.Close();
         }
-        public bool Load()
+        public bool Load(RegistryKey baseKey)
         {
-            RegistryKey k = RootKey.OpenSubKey(ID);
+            RegistryKey key = baseKey.OpenSubKey(ID);
 
             Point p = new Point(Config.PhysicalOverallBounds.Right, 0);
 
-            if (k != null)
+            if (key != null)
             {
                 p = new Point(
-                    double.Parse(k.GetValue("X", RegistryValueKind.String).ToString()),
-                    double.Parse(k.GetValue("Y", RegistryValueKind.String).ToString())
+                    double.Parse(key.GetValue("X", RegistryValueKind.String).ToString()),
+                    double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString())
                 );
-                k.Close();
+                key.Close();
             }
 
             PhysicalLocation = p;

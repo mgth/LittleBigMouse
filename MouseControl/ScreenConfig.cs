@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using Microsoft.Win32;
 using MouseKeyboardActivityMonitor;
 using MouseKeyboardActivityMonitor.WinApi;
 using System;
@@ -31,6 +32,12 @@ namespace MouseControl
 {
     public class ScreenConfig
     {
+        RegistryKey _key;
+        public ScreenConfig(RegistryKey key)
+        {
+            _key = key;
+        }
+
         public event EventHandler RegistryChanged;
 
         private List<Screen> _allScreens = new List<Screen>();
@@ -103,9 +110,14 @@ namespace MouseControl
             }
         }
 
-        public static ScreenConfig Load()
+
+        private static String RootKey = "SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name;
+
+        public static ScreenConfig Load(RegistryKey baseKey)
         {
-            ScreenConfig config = new ScreenConfig();
+            RegistryKey key = baseKey.OpenSubKey(RootKey);
+
+            ScreenConfig config = new ScreenConfig(key);
 
             foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
             {
@@ -114,31 +126,40 @@ namespace MouseControl
             return config;
         }
 
-        public void Save()
+        public void Save(RegistryKey baseKey)
         {
+
+            RegistryKey key = baseKey.CreateSubKey(RootKey);
+
             foreach (Screen s in AllScreens)
-                s.Save();
-
-
+                s.Save(key);
 
             if (RegistryChanged != null) RegistryChanged(this, new EventArgs());
         }
 
         private Screen getScreen(System.Windows.Forms.Screen screen)
         {
+            App.log("_1");
             Screen wpfScreen = null;
-            foreach(Screen s in AllScreens)
+            App.log("_2");
+            foreach (Screen s in AllScreens)
             {
+                App.log("_3");
                 if (s._screen.DeviceName == screen.DeviceName) { wpfScreen = s; break; }
             }
             if (wpfScreen == null)
             {
+                App.log("_4");
                 wpfScreen = new Screen(this,screen);
+                App.log("_5");
 
-                wpfScreen.Load();
+                wpfScreen.Load(_key);
+                App.log("_6");
 
-               AllScreens.Add(wpfScreen);
+                AllScreens.Add(wpfScreen);
+                App.log("_7");
             }
+            App.log("_8");
             return wpfScreen;
         }
 

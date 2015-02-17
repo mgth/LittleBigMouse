@@ -23,8 +23,6 @@
 
 using Microsoft.Win32;
 using System;
-using System.Diagnostics;
-using System.Security.Principal;
 using System.Windows;
 using System.Windows.Input;
 
@@ -48,9 +46,6 @@ namespace MouseControl
 
             InitializeComponent();
 
-            //RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-            //String startup = rk.GetValue(System.Windows.Forms.Application.ProductName, "").ToString();
-            //if (startup == System.Windows.Forms.Application.ExecutablePath.ToString())
             if (App.Scheduled) 
                 chkLoadAtStartup.IsChecked = true;
             else
@@ -65,10 +60,9 @@ namespace MouseControl
             {
                 ScreenGUI sgui = new ScreenGUI(s,grid);
                 grid.Children.Add(sgui);
-                sgui.DragLeave += Sgui_DragLeave;
-                sgui.MouseMove += Sgui_MouseMove;
-                sgui.MouseLeftButtonDown += Sgui_MouseLeftButtonDown;
-                sgui.MouseLeftButtonUp += Sgui_MouseLeftButtonUp;
+                sgui.MouseMove += _gui_MouseMove;
+                sgui.MouseLeftButtonDown += _gui_MouseLeftButtonDown;
+                sgui.MouseLeftButtonUp += _gui_MouseLeftButtonUp;
             }
 
             grid.SizeChanged += Grid_SizeChanged;
@@ -83,7 +77,7 @@ namespace MouseControl
         private Point dragStartPosition;
         private bool moving = false;
 
-        private void Sgui_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private void _gui_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
@@ -119,7 +113,7 @@ namespace MouseControl
             }
         }
 
-        private void Sgui_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void _gui_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
@@ -133,7 +127,7 @@ namespace MouseControl
         }
 
 
-        private void Sgui_MouseMove(object sender, MouseEventArgs e)
+        private void _gui_MouseMove(object sender, MouseEventArgs e)
         {
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
@@ -240,12 +234,6 @@ namespace MouseControl
                 }
         }
 
-        private void Sgui_DragLeave(object sender, DragEventArgs e)
-        {
-            
-        }
-
-
         private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             ResizeAll();
@@ -277,18 +265,6 @@ namespace MouseControl
             }
         }
 
-        //private void Save()
-        //{
-        //    _config.Save(Registry.CurrentUser);
-
-        //    RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-
-        //    if (chkLoadAtStartup.IsChecked==true)
-        //    {
-        //        rk.SetValue(System.Windows.Forms.Application.ProductName, System.Windows.Forms.Application.ExecutablePath.ToString());
-        //    }
-        //    else rk.DeleteValue(System.Windows.Forms.Application.ProductName, false);
-        //}
         private void Save()
         {
             _newConfig.Save(Registry.CurrentUser);
@@ -334,10 +310,6 @@ namespace MouseControl
             Application.Current.Shutdown();
         }
 
-        private void cmdInstallService_Click(object sender, RoutedEventArgs e)
-        {
-            App.InstallService();
-        }
 
         private void chkLiveUpdate_Checked(object sender, RoutedEventArgs e)
         {

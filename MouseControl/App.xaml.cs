@@ -62,38 +62,15 @@ namespace MouseControl
 
             foreach (string s in args)
             {
-                log(s);
-                if (s == "--service")
+                if (s == "--schedule")
                 {
-                    ServiceBase.Run(new ServiceBase[] { new Service() });
+                    Schedule();
                     nbarg++;
                     break;
                 }
-
-                if (s == "--install")
+                if (s == "--unschedule")
                 {
-                    InstallService();
-                    nbarg++;
-                    break;
-                }
-
-                if (s == "--start")
-                {
-                    StartService();
-                    nbarg++;
-                    break;
-                }
-
-                if (s == "--stop")
-                {
-                    StopService();
-                    nbarg++;
-                    break;
-                }
-
-                if (s == "--restart")
-                {
-                    RestartService();
+                    Unschedule();
                     nbarg++;
                     break;
                 }
@@ -145,7 +122,6 @@ namespace MouseControl
             startInfo.Verb = "runas";
             startInfo.Arguments = cmd;
             Process.Start(startInfo);
-            //                Application.Current.Shutdown();
             return;
         }
 
@@ -200,79 +176,5 @@ namespace MouseControl
             }
             else AdminCommand("--unschedule");
         }
-
-        public static void InstallService()
-        {
-            if (IsAdministrator)
-            {
-                ConfigService();
-
-                if (ServiceInstaller.ServiceIsInstalled(ServiceName))
-                    ServiceInstaller.Uninstall(ServiceName);
-
-                    ServiceInstaller.InstallAndStart(
-                        ServiceName,
-                        ServiceName,
-                        System.Windows.Forms.Application.ExecutablePath.ToString() + " --service"
-                        );
-            }
-            else AdminCommand("--install");
-        }
-
-        public static void ConfigService()
-        {
-            try
-            {
-                ScreenConfig cfg = ScreenConfig.Load(Registry.CurrentUser);
-                cfg.Save(Registry.LocalMachine);
-            }
-            catch (ApplicationException e)
-            {
-                log(e.ToString());
-            }
-        }
-
-        public static void StartService()
-        {
-            if (IsAdministrator)
-            {
-                ConfigService();
-
-                ServiceController service = ServiceController.GetServices().FirstOrDefault(i => i.ServiceName.Contains(ServiceName));
-
-                if (service.Status != ServiceControllerStatus.Running)
-                {
-                    service.Start();
-                    service.WaitForStatus(ServiceControllerStatus.Running);
-                }
-            }
-            else AdminCommand("--start");
-        }
-
-        public static void StopService()
-        {
-            if (IsAdministrator)
-            {
-                ServiceController service = ServiceController.GetServices().FirstOrDefault(i => i.ServiceName.Contains(ServiceName));
-
-                if (service.Status == ServiceControllerStatus.Running)
-                {
-                    service.Stop();
-                    service.WaitForStatus(ServiceControllerStatus.Stopped);
-                }
-            }
-            else AdminCommand("--stop");
-        }
-
-        public static void RestartService()
-        {
-            if (IsAdministrator)
-            {
-                StopService();
-                StartService();
-            }
-            else AdminCommand("--restart");
-        }
-
     }
 }

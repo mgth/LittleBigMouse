@@ -23,6 +23,7 @@
 
 using Microsoft.Shell;
 using Microsoft.Win32;
+using Microsoft.Win32.TaskScheduler;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -59,24 +60,24 @@ namespace MouseControl
 
             log("main");
 
-            foreach(string s in args)
+            foreach (string s in args)
             {
                 log(s);
-                if (s=="--service")
+                if (s == "--service")
                 {
-                    ServiceBase.Run( new ServiceBase[] { new Service() });
+                    ServiceBase.Run(new ServiceBase[] { new Service() });
                     nbarg++;
                     break;
                 }
 
-                if (s=="--install")
+                if (s == "--install")
                 {
                     InstallService();
                     nbarg++;
                     break;
                 }
 
-                if (s=="--start")
+                if (s == "--start")
                 {
                     StartService();
                     nbarg++;
@@ -98,9 +99,11 @@ namespace MouseControl
                 }
             }
 
-            if (nbarg==0 && SingleInstance<App>.InitializeAsFirstInstance(Unique))
+            if (nbarg == 0 && SingleInstance<App>.InitializeAsFirstInstance(Unique))
             {
                 var application = new AppConfig();
+
+                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 //application.InitializeComponent();
 
                 application.Start();
@@ -109,7 +112,6 @@ namespace MouseControl
 
                 // Allow single instance code to perform cleanup operations
                 SingleInstance<App>.Cleanup();
-
             }
         }
 
@@ -137,14 +139,66 @@ namespace MouseControl
 
         private static void AdminCommand(String cmd)
         {
-                // Restart program and run as admin
-                var exeName = Process.GetCurrentProcess().MainModule.FileName;
-                ProcessStartInfo startInfo = new ProcessStartInfo(exeName);
-                startInfo.Verb = "runas";
-                startInfo.Arguments = cmd;
-                Process.Start(startInfo);
-                //                Application.Current.Shutdown();
-                return;
+            // Restart program and run as admin
+            var exeName = Process.GetCurrentProcess().MainModule.FileName;
+            ProcessStartInfo startInfo = new ProcessStartInfo(exeName);
+            startInfo.Verb = "runas";
+            startInfo.Arguments = cmd;
+            Process.Start(startInfo);
+            //                Application.Current.Shutdown();
+            return;
+        }
+
+        public static bool Scheduled
+        {
+            get
+            {
+                using (TaskService ts = new TaskService())
+                {
+                    Microsoft.Win32.TaskScheduler.Task t = ts.FindTask(ServiceName);
+                    if (t == null) return false;
+                    if (t.Enabled) return true;
+                }
+                return false;
+            }
+        }
+
+        public static void Schedule()
+        {
+            if (IsAdministrator)
+            {
+                using (TaskService ts = new TaskService())
+                {
+                    ts.RootFolder.DeleteTask(ServiceName,false);
+
+                    TaskDefinition td = ts.NewTask();
+                    td.RegistrationInfo.Description = "Multi-dpi monitors mouse control";
+                    td.Triggers.Add(new LogonTrigger());
+                    td.Actions.Add(
+                        new ExecAction(System.Windows.Forms.Application.ExecutablePath.ToString())
+                        );
+
+                    td.Principal.RunLevel = TaskRunLevel.Highest;
+                    td.Settings.DisallowStartIfOnBatteries = false;
+                    td.Settings.DisallowStartOnRemoteAppSession = true;
+                    td.Settings.StopIfGoingOnBatteries = false;
+                    td.Settings.ExecutionTimeLimit = TimeSpan.Zero;
+
+                    ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
+                }
+            }
+            else AdminCommand("--schedule");
+        }
+        public static void Unschedule()
+        {
+            if (IsAdministrator)
+            {
+                using (TaskService ts = new TaskService())
+                {
+                    ts.RootFolder.DeleteTask(ServiceName, false);
+                }
+            }
+            else AdminCommand("--unschedule");
         }
 
         public static void InstallService()
@@ -169,11 +223,8 @@ namespace MouseControl
         {
             try
             {
-                log("a");
                 ScreenConfig cfg = ScreenConfig.Load(Registry.CurrentUser);
-                log("b");
                 cfg.Save(Registry.LocalMachine);
-                log("c");
             }
             catch (ApplicationException e)
             {
@@ -191,7 +242,7 @@ namespace MouseControl
 
                 if (service.Status != ServiceControllerStatus.Running)
                 {
-                    service.Start();//  /// Cannot open SERVICENAME service on computer '.'. 
+                    service.Start();
                     service.WaitForStatus(ServiceControllerStatus.Running);
                 }
             }
@@ -206,7 +257,7 @@ namespace MouseControl
 
                 if (service.Status == ServiceControllerStatus.Running)
                 {
-                    service.Stop();//  /// Cannot open SERVICENAME service on computer '.'. 
+                    service.Stop();
                     service.WaitForStatus(ServiceControllerStatus.Stopped);
                 }
             }

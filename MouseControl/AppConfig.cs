@@ -27,11 +27,8 @@ namespace MouseControl
         }
         private static void _notify_Click(object sender, EventArgs e)
         {
-            ScreenConfig scr = ScreenConfig.Load(Registry.CurrentUser);
-
-            scr.RegistryChanged += Scr_RegistryChanged;
-
-            FormConfig cfg = new FormConfig(scr);
+            FormConfig cfg = new FormConfig(_config);
+            cfg.RegistryChanged += Scr_RegistryChanged;
             cfg.Show();
         }
         

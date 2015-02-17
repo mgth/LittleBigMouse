@@ -39,8 +39,6 @@ namespace MouseControl
             if (PhysicalChanged != null) PhysicalChanged(this, new EventArgs());
         }
 
-
-
         internal System.Windows.Forms.Screen _screen;
         private ScreenConfig _config = null;
         internal Edid _edid;
@@ -76,15 +74,10 @@ namespace MouseControl
 
         public void Save(RegistryKey baseKey)
         {
-            App.log("1");
-
-            App.log("2");
             RegistryKey key = baseKey.CreateSubKey(ID);
-            App.log("3");
 
             key.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
             key.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
-            App.log("4");
 
             key.Close();
         }

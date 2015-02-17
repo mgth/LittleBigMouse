@@ -14,9 +14,17 @@
         <Grid x:Name="grid">
 
         </Grid>
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Height="25" HorizontalAlignment="Right" >
-            <CheckBox x:Name="chkLoadAtStartup" Content="Load at startup"/>
-            <Button x:Name="cmdInstallService" MinWidth="50" Margin="5,0,0,0" Click="cmdInstallService_Click">Install Service</Button>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
+            <StackPanel Orientation="Vertical" Margin="5,0,0,0">
+                <CheckBox x:Name="chkEnabled" Content="Enabled" Checked="chkEnabled_Checked" Unchecked="chkEnabled_Unchecked"/>
+                <CheckBox x:Name="chkLiveUpdate" Content="Live Update" Checked="chkLiveUpdate_Checked" Unchecked="chkLiveUpdate_Unchecked"/>
+            </StackPanel>
+            <StackPanel Orientation="Vertical" Margin="5,0,0,0">
+                <CheckBox x:Name="chkAdjustSpeed" Content="Adjust Speed" Checked="chkAdjustSpeed_Checked" Unchecked="chkAdjustSpeed_Unchecked"/>
+                <CheckBox x:Name="chkAdjustPointer" Content="Adjust Pointer" Checked="chkAdjustPointer_Checked" Unchecked="chkAdjustPointer_Unchecked"/>
+            </StackPanel>
+            <CheckBox x:Name="chkLoadAtStartup" Content="Load at startup" Margin="5,0,0,0"/>
+            <!--<Button x:Name="cmdInstallService" MinWidth="50" Margin="5,0,0,0" Click="cmdInstallService_Click">Install Service</Button>-->
             <Button x:Name="cmdUnload" MinWidth="50" Margin="5,0,0,0" Click="cmdUnload_Click">Unload</Button>
             <Button x:Name="cmdOk" MinWidth="50" Margin="10,0,0,0" Click="cmdOk_Click">Ok</Button>
             <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>

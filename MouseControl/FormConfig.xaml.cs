@@ -35,21 +35,33 @@ namespace MouseControl
     /// </summary>
     public partial class FormConfig : Window
     {
-        private ScreenConfig _config;
+        private ScreenConfig _newConfig;
+        private ScreenConfig _currentConfig;
+
+        public event EventHandler RegistryChanged;
         public FormConfig(ScreenConfig config)
         {
-            _config = config;
+            _currentConfig = config;
+            _newConfig = ScreenConfig.Load(Registry.CurrentUser);
+
+            _newConfig.RegistryChanged += _newConfig_RegistryChanged;
 
             InitializeComponent();
 
-            RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-            String startup = rk.GetValue(System.Windows.Forms.Application.ProductName, "").ToString();
-            if (startup == System.Windows.Forms.Application.ExecutablePath.ToString())
+            //RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+            //String startup = rk.GetValue(System.Windows.Forms.Application.ProductName, "").ToString();
+            //if (startup == System.Windows.Forms.Application.ExecutablePath.ToString())
+            if (App.Scheduled) 
                 chkLoadAtStartup.IsChecked = true;
             else
                 chkLoadAtStartup.IsChecked = false;
 
-            foreach (Screen s in _config.AllScreens)
+            chkAdjustPointer.IsChecked = _newConfig.AdjustPointer;
+            chkAdjustSpeed.IsChecked = _newConfig.AdjustSpeed;
+            chkEnabled.IsChecked = _newConfig.Enabled;
+
+
+            foreach (Screen s in _newConfig.AllScreens)
             {
                 ScreenGUI sgui = new ScreenGUI(s,grid);
                 grid.Children.Add(sgui);
@@ -60,6 +72,11 @@ namespace MouseControl
             }
 
             grid.SizeChanged += Grid_SizeChanged;
+        }
+
+        private void _newConfig_RegistryChanged(object sender, EventArgs e)
+        {
+            if (RegistryChanged != null) RegistryChanged(sender, e);
         }
 
         private Point oldPosition;
@@ -74,7 +91,7 @@ namespace MouseControl
             if (moving)
             {
 
-                Point p = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
+                Point p = _newConfig.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
 
                 double xOffset = p.X - gui.Screen.PhysicalLocation.X;
                 double yOffset = p.Y - gui.Screen.PhysicalLocation.Y;
@@ -107,7 +124,7 @@ namespace MouseControl
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
 
-            oldPosition = _config.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
+            oldPosition = _newConfig.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
             dragStartPosition = gui.Screen.PhysicalLocation;
 
             // bring element to front so we can move it over the others
@@ -125,13 +142,13 @@ namespace MouseControl
             {
                 moving = true;
 
-                Point newPosition = _config.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
+                Point newPosition = _newConfig.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
 
                     double left = dragStartPosition.X - oldPosition.X + newPosition.X;
                     double right = left+gui.Screen.PhysicalBounds.Width;
 
                     Point pNear = newPosition;
-                    foreach (Screen s in _config.AllScreens)
+                    foreach (Screen s in _newConfig.AllScreens)
                     {
                         if (s == gui.Screen) continue;
 
@@ -169,7 +186,7 @@ namespace MouseControl
                     newPosition = pNear;
                     double top = dragStartPosition.Y - oldPosition.Y + newPosition.Y;
                     double bottom = top + gui.Screen.PhysicalBounds.Height;
-                    foreach (Screen s in _config.AllScreens)
+                    foreach (Screen s in _newConfig.AllScreens)
                     {
                         if (s == gui.Screen) continue;
 
@@ -205,7 +222,7 @@ namespace MouseControl
                     }
                     newPosition = pNear;
 
-                    Point p = _config.PhysicalToUI(
+                    Point p = _newConfig.PhysicalToUI(
                         new Size(grid.ActualWidth, grid.ActualHeight),
                         new Point(
                             dragStartPosition.X - oldPosition.X + newPosition.X,
@@ -238,7 +255,7 @@ namespace MouseControl
         {
             foreach(UIElement element in grid.Children)
             {
-                Rect all = _config.PhysicalOverallBounds;
+                Rect all = _newConfig.PhysicalOverallBounds;
 
 
                 ScreenGUI gui = element as ScreenGUI;
@@ -260,32 +277,45 @@ namespace MouseControl
             }
         }
 
+        //private void Save()
+        //{
+        //    _config.Save(Registry.CurrentUser);
+
+        //    RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+
+        //    if (chkLoadAtStartup.IsChecked==true)
+        //    {
+        //        rk.SetValue(System.Windows.Forms.Application.ProductName, System.Windows.Forms.Application.ExecutablePath.ToString());
+        //    }
+        //    else rk.DeleteValue(System.Windows.Forms.Application.ProductName, false);
+        //}
         private void Save()
         {
-            _config.Save(Registry.CurrentUser);
+            _newConfig.Save(Registry.CurrentUser);
 
-            RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-
-            if (chkLoadAtStartup.IsChecked==true)
-            {
-                rk.SetValue(System.Windows.Forms.Application.ProductName, System.Windows.Forms.Application.ExecutablePath.ToString());
-            }
-            else rk.DeleteValue(System.Windows.Forms.Application.ProductName, false);
+            if (chkLoadAtStartup.IsChecked == true)
+                App.Schedule();
+            else
+                App.Unschedule();
         }
 
         private void cmdOk_Click(object sender, RoutedEventArgs e)
         {
+            _newConfig.Disable();
             Save();
             Close();
         }
 
         private void cmdApply_Click(object sender, RoutedEventArgs e)
         {
+            _newConfig.Disable();
             Save();
         }
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)
         {
+            _newConfig.Disable();
+            _currentConfig.Enable();
             Close();
         }
 
@@ -307,7 +337,48 @@ namespace MouseControl
         private void cmdInstallService_Click(object sender, RoutedEventArgs e)
         {
             App.InstallService();
+        }
 
+        private void chkLiveUpdate_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_currentConfig != null) _currentConfig.Disable();
+            _newConfig.Enable();
+        }
+
+        private void chkLiveUpdate_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.Disable();
+            if (_currentConfig != null) _currentConfig.Enable();
+        }
+
+        private void chkEnabled_Checked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.Enabled = true;
+        }
+
+        private void chkEnabled_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.Enabled = false;
+        }
+
+        private void chkAdjustSpeed_Checked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.AdjustSpeed = true;
+        }
+
+        private void chkAdjustPointer_Checked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.AdjustPointer = true;
+        }
+
+        private void chkAdjustSpeed_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.AdjustSpeed = false;
+        }
+
+        private void chkAdjustPointer_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.AdjustPointer = false;
         }
     }
 }

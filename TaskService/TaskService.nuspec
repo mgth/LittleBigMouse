@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<package>
+  <metadata>
+	<id>TaskScheduler</id>
+	<version>2.3.1</version>
+	<title>Task Scheduler Managed Wrapper</title>
+	<authors>David Hall</authors>
+	<description>Provides a single assembly wrapper for the 1.0 and 2.0 versions of Task Scheduler found in all Microsoft operating systems post Windows 98. It simplifies the coding, aggregates the multiple versions and allows for localization support.</description>
+	<language>en-US</language>
+	<licenseUrl>http://taskscheduler.codeplex.com/license</licenseUrl>
+	<projectUrl>http://taskscheduler.codeplex.com/</projectUrl>
+	<iconUrl>http://download.codeplex.com/Project/Download/FileDownload.aspx?ProjectName=taskscheduler&amp;DownloadId=104367&amp;Build=17672</iconUrl>    
+	<tags>task interop taskscheduler</tags>
+  </metadata>
+  <files>
+	<file src="bin\Release\v2.0\*.dll" target="lib\2" />
+	<file src="bin\Release\v2.0\*.xml" target="lib\2" />
+	<file src="bin\Release\v2.0\**\Microsoft.Win32.TaskScheduler.resources.dll" target="lib\2" />
+	<file src="bin\Release\v4.0\*.dll" target="lib\4" />
+	<file src="bin\Release\v4.0\*.xml" target="lib\4" />
+	<file src="bin\Release\v4.0\**\Microsoft.Win32.TaskScheduler.resources.dll" target="lib\4" />
+  </files>
+</package>

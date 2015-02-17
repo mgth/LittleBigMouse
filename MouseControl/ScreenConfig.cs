@@ -45,11 +45,17 @@ namespace MouseControl
 
         private Screen _currentScreen=null;
         private Point _oldPoint;
+        private bool _enabled;
+        private bool _adjustPointer;
+        private bool _adjustSpeed;
 
         public void Enable()
         {
-            _MouseHookManager.MouseMoveExt += _MouseHookManager_MouseMoveExt;
-            _MouseHookManager.Enabled = true;
+            if (Enabled)
+            {
+                _MouseHookManager.MouseMoveExt += _MouseHookManager_MouseMoveExt;
+                _MouseHookManager.Enabled = true;
+            }
         }
         public void Disable()
         {
@@ -81,15 +87,21 @@ namespace MouseControl
 
                 _currentScreen = screenOut;
 
-                if (_currentScreen.DpiAvg > 110)
+                if (AdjustPointer)
                 {
-                    if (_currentScreen.DpiAvg > 138)
-                        Mouse.setCursorAero(3);
-                    else Mouse.setCursorAero(2);
+                    if (_currentScreen.DpiAvg > 110)
+                    {
+                        if (_currentScreen.DpiAvg > 138)
+                            Mouse.setCursorAero(3);
+                        else Mouse.setCursorAero(2);
+                    }
+                    else Mouse.setCursorAero(1);
                 }
-                else Mouse.setCursorAero(1);
 
-                Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * _currentScreen.DpiAvg, 0);
+                if (AdjustSpeed)
+                {
+                    Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * _currentScreen.DpiAvg, 0);
+                }
 
                 _oldPoint = pIn;
             }
@@ -117,7 +129,13 @@ namespace MouseControl
         {
             RegistryKey key = baseKey.OpenSubKey(RootKey);
 
-            ScreenConfig config = new ScreenConfig(key);
+            ScreenConfig config = new ScreenConfig(key)
+            {
+                Enabled = (key.GetValue("Enabled","0").ToString() == "1"),
+                AdjustPointer = (key.GetValue("AdjustPointer", "0").ToString() == "1"),
+                AdjustSpeed = (key.GetValue("AdjustSpeed", "0").ToString() == "1"),
+            }
+                ;
 
             foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
             {
@@ -128,8 +146,10 @@ namespace MouseControl
 
         public void Save(RegistryKey baseKey)
         {
-
             RegistryKey key = baseKey.CreateSubKey(RootKey);
+            key.SetValue("Enabled", Enabled ? "1" : "0");
+            key.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
+            key.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
 
             foreach (Screen s in AllScreens)
                 s.Save(key);
@@ -139,27 +159,17 @@ namespace MouseControl
 
         private Screen getScreen(System.Windows.Forms.Screen screen)
         {
-            App.log("_1");
             Screen wpfScreen = null;
-            App.log("_2");
             foreach (Screen s in AllScreens)
             {
-                App.log("_3");
                 if (s._screen.DeviceName == screen.DeviceName) { wpfScreen = s; break; }
             }
             if (wpfScreen == null)
             {
-                App.log("_4");
                 wpfScreen = new Screen(this,screen);
-                App.log("_5");
-
                 wpfScreen.Load(_key);
-                App.log("_6");
-
                 AllScreens.Add(wpfScreen);
-                App.log("_7");
             }
-            App.log("_8");
             return wpfScreen;
         }
 
@@ -216,6 +226,45 @@ namespace MouseControl
                         r.Union(s.PhysicalBounds);
                 }
                 return r;
+            }
+        }
+
+        public bool Enabled
+        {
+            get
+            {
+                return _enabled;
+            }
+
+            set
+            {
+                _enabled = value;
+            }
+        }
+
+        public bool AdjustPointer
+        {
+            get
+            {
+                return _adjustPointer;
+            }
+
+            set
+            {
+                _adjustPointer = value;
+            }
+        }
+
+        public bool AdjustSpeed
+        {
+            get
+            {
+                return _adjustSpeed;
+            }
+
+            set
+            {
+                _adjustSpeed = value;
             }
         }
 

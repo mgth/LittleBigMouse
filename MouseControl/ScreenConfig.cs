@@ -109,32 +109,17 @@ namespace MouseControl
             }
             else
             {
-                Point intersect = new Segment(_oldPoint, pIn).Intersect(_currentScreen.InsideBounds)??_oldPoint;
-                if (intersect== _oldPoint)
-                {
-                    intersect = new Segment(_oldPoint, pIn).Intersect(_currentScreen.InsideBounds) ?? _oldPoint;
-                }
-                
-                {
-                    pOut = new Point((int)pIn.X,(int)intersect.Y);
-                    if (!_currentScreen.InsideBounds.Contains(pOut))
-                    {
-                        pOut = new Point((int)intersect.X, (int)pIn.Y);
-                        if (!_currentScreen.InsideBounds.Contains(pOut))
-                        {
-                            Point intersect2 = new Segment(intersect, new Point((int)intersect.X, (int)pIn.Y)).Intersect(_currentScreen.InsideBounds) ?? intersect;
-                            if (intersect2 == intersect)
-                            {
-                                intersect2 = new Segment(intersect, new Point((int)pIn.X,(int)intersect.Y )).Intersect(_currentScreen.InsideBounds) ?? intersect;
-                            }
+                double x = pIn.X;
+                double y = pIn.Y;
 
-                            pOut = intersect2;
-                        }
-                    }
-                }
+                x = Math.Max(x, _currentScreen.InsideBounds.Left);
+                x = Math.Min(x, _currentScreen.InsideBounds.Right);
+                y = Math.Max(y, _currentScreen.InsideBounds.Top);
+                y = Math.Min(y, _currentScreen.InsideBounds.Bottom);
 
+                Mouse.SetCursorPos((int)x,(int)y);
 
-                Mouse.SetCursorPos((int)pOut.X, (int)pOut.Y);
+                _oldPoint = new Point(x, y);
             }
 
             e.Handled = true;

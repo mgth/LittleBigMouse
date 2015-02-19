@@ -145,7 +145,7 @@ namespace MouseControl
         {
             get
             {
-                return new Rect(PhysicalLocation, PixelToPhysical(Bounds.BottomRight));
+                return new Rect(PhysicalLocation, PixelToPhysical(InsideBounds.BottomRight));
             }
         }
 

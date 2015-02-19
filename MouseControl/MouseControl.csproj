@@ -80,6 +80,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppConfig.cs" />
+    <Compile Include="Geo.cs" />
     <Compile Include="Service.cs">
       <SubType>Component</SubType>
     </Compile>

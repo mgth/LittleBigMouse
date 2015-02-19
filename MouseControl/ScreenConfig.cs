@@ -66,6 +66,7 @@ namespace MouseControl
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
             Point pIn = new Point(e.X, e.Y);
+            Point pOut;
 
             if (_currentScreen == null) _currentScreen = FromPoint(pIn);
 
@@ -79,9 +80,10 @@ namespace MouseControl
 
             Screen screenOut = FromPhysicalPoint(pOutPhysical);
 
+            // if new position is within another screen
             if (screenOut != null)
             {
-                Point pOut = screenOut.PhysicalToPixel(pOutPhysical);
+                pOut = screenOut.PhysicalToPixel(pOutPhysical);
 
                 Mouse.SetCursorPos((int)pOut.X, (int)pOut.Y);
 
@@ -107,21 +109,39 @@ namespace MouseControl
             }
             else
             {
-                Mouse.SetCursorPos((int)_oldPoint.X, (int)_oldPoint.Y);
+                Point intersect = new Segment(_oldPoint, pIn).Intersect(_currentScreen.InsideBounds)??_oldPoint;
+                if (intersect== _oldPoint)
+                {
+                    intersect = new Segment(_oldPoint, pIn).Intersect(_currentScreen.InsideBounds) ?? _oldPoint;
+                }
+                
+                {
+                    pOut = new Point((int)pIn.X,(int)intersect.Y);
+                    if (!_currentScreen.InsideBounds.Contains(pOut))
+                    {
+                        pOut = new Point((int)intersect.X, (int)pIn.Y);
+                        if (!_currentScreen.InsideBounds.Contains(pOut))
+                        {
+                            Point intersect2 = new Segment(intersect, new Point((int)intersect.X, (int)pIn.Y)).Intersect(_currentScreen.InsideBounds) ?? intersect;
+                            if (intersect2 == intersect)
+                            {
+                                intersect2 = new Segment(intersect, new Point((int)pIn.X,(int)intersect.Y )).Intersect(_currentScreen.InsideBounds) ?? intersect;
+                            }
+
+                            pOut = intersect2;
+                        }
+                    }
+                }
+
+
+                Mouse.SetCursorPos((int)pOut.X, (int)pOut.Y);
             }
 
             e.Handled = true;
         }
 
 
-        public List<Screen> AllScreens
-        {
-            get
-            {
-                return _allScreens;
-            }
-        }
-
+        public List<Screen> AllScreens { get { return _allScreens; } }
 
         private static String RootKey = "SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name;
 
@@ -134,8 +154,7 @@ namespace MouseControl
                 Enabled = (key.GetValue("Enabled","0").ToString() == "1"),
                 AdjustPointer = (key.GetValue("AdjustPointer", "0").ToString() == "1"),
                 AdjustSpeed = (key.GetValue("AdjustSpeed", "0").ToString() == "1"),
-            }
-                ;
+            };
 
             foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
             {
@@ -231,41 +250,20 @@ namespace MouseControl
 
         public bool Enabled
         {
-            get
-            {
-                return _enabled;
-            }
-
-            set
-            {
-                _enabled = value;
-            }
+            get { return _enabled; }
+            set { _enabled = value; }
         }
 
         public bool AdjustPointer
         {
-            get
-            {
-                return _adjustPointer;
-            }
-
-            set
-            {
-                _adjustPointer = value;
-            }
+            get { return _adjustPointer; }
+            set { _adjustPointer = value; }
         }
 
         public bool AdjustSpeed
         {
-            get
-            {
-                return _adjustSpeed;
-            }
-
-            set
-            {
-                _adjustSpeed = value;
-            }
+            get { return _adjustSpeed; }
+            set { _adjustSpeed = value; }
         }
 
         public Point PhysicalToUI(Size s, Point p)

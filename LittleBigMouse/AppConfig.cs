@@ -20,14 +20,16 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+using Microsoft.Shell;
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.Windows;
 
 namespace LittleBigMouse
 {
 
-    public class AppConfig : Application
+    public class AppConfig : Application, ISingleInstanceApp
     {
         private static ScreenConfig _config;
 
@@ -61,6 +63,12 @@ namespace LittleBigMouse
             Mouse.setCursorAero(1);
 
             _notify.Dispose();
+        }
+        public bool SignalExternalCommandLineArgs(IList<string> args)
+        {
+            if (args[0]=="--exit")
+                Application.Current.Shutdown();
+            return true;
         }
     }
 

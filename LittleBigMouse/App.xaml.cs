@@ -41,7 +41,7 @@ namespace LittleBigMouse
     /// <summary>
     /// Interaction logic for App.xaml
     /// </summary>
-    public partial class App : Application, ISingleInstanceApp
+    public partial class App : Application
     {
         private const string Unique = "MgthLittleBigMouseApp";
 
@@ -66,7 +66,7 @@ namespace LittleBigMouse
                 }
             }
 
-            if (nbarg == 0 && SingleInstance<App>.InitializeAsFirstInstance(Unique))
+            if (nbarg == 0 && SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique))
             {
                 var application = new AppConfig();
 
@@ -78,14 +78,10 @@ namespace LittleBigMouse
                 application.Run();
 
                 // Allow single instance code to perform cleanup operations
-                SingleInstance<App>.Cleanup();
+                SingleInstance<AppConfig>.Cleanup();
             }
         }
 
-        public bool SignalExternalCommandLineArgs(IList<string> args)
-        {
-            return true;
-        }
 
 
 

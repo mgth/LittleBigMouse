@@ -7,7 +7,7 @@ DefaultGroupName=Little Big Mouse
 UninstallDisplayIcon={app}\LittleBigMouse.exe
 Compression=lzma2
 SolidCompression=yes
-OutputDir=userdocs:Inno Setup Examples Output
+OutputDir="."
 ArchitecturesInstallIn64BitMode=x64
 
 [Files]
@@ -22,4 +22,8 @@ Source: "..\bin\x86\Release\MouseKeyboardActivityMonitor.dll"; DestDir: "{app}";
 Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse.exe"
 
 [Run]
-Filename: {app}\LittleBigMouse.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser 
+Filename: {app}\LittleBigMouse.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
+
+[UninstallRun]
+Filename: "{app}\LittleBigMouse.exe"; Parameters: "--exit"
+Filename: "{app}\LittleBigMouse.exe"; Parameters: "--unschedule"

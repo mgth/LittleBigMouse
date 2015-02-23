@@ -1,7 +1,10 @@
 ; -- LittleBigMouse.iss --
+;#define AppVer GetFileVersion('..\bin\x64\Release\LittleBigMouse.exe')
+#define AppVer '1.0RC2'
+
 [Setup]
 AppName=Little Big Mouse
-AppVersion=1.0
+AppVersion=AppVer
 DefaultDirName={pf}\LittleBigMouse
 DefaultGroupName=Little Big Mouse
 UninstallDisplayIcon={app}\LittleBigMouse.exe
@@ -9,6 +12,7 @@ Compression=lzma2
 SolidCompression=yes
 OutputDir="."
 ArchitecturesInstallIn64BitMode=x64
+OutputBaseFilename=LittleBigMouse_{#AppVer}
 
 [Files]
 Source: "..\bin\x64\Release\LittleBigMouse.exe"; DestDir: "{app}"; Check: Is64BitInstallMode

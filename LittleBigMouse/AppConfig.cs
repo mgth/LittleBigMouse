@@ -31,31 +31,52 @@ namespace LittleBigMouse
 
     public class AppConfig : Application, ISingleInstanceApp
     {
-        private static ScreenConfig _config;
+        private ScreenConfig _config;
 
-        private static double _mouseSpeed = Mouse.MouseSpeed;
-        private static Notify _notify = new Notify();
-        private static void LoadConfig()
+        private double _mouseSpeed = Mouse.MouseSpeed;
+        private Notify _notify = new Notify();
+        private void LoadConfig()
         {
             if (_config != null) _config.Disable();
             _config = ScreenConfig.Load(Registry.CurrentUser);
             _config.Enable();
         }
-        private static void Scr_RegistryChanged(object sender, EventArgs e)
+        private void _formConfig_RegistryChanged(object sender, EventArgs e)
         {
             LoadConfig();
         }
-        private static void _notify_Click(object sender, EventArgs e)
+        private void _notify_Click(object sender, EventArgs e)
         {
-            FormConfig cfg = new FormConfig(_config);
-            cfg.RegistryChanged += Scr_RegistryChanged;
-            cfg.Show();
+            ShowConfig();
         }
-        
-        public void Start()
+
+        private FormConfig _formConfig = null;
+        private void ShowConfig()
+        {
+            if (_formConfig==null)
+            {
+                _formConfig = new FormConfig(_config);
+                _formConfig.RegistryChanged += _formConfig_RegistryChanged;
+                _formConfig.Closed += _formConfig_Closed;
+                _formConfig.Show();
+            }
+            else
+            {
+                _formConfig.Activate();
+            }
+        }
+
+        private void _formConfig_Closed(object sender, EventArgs e)
+        {
+            _formConfig = null;
+        }
+
+        public void Start(bool silent)
         {
             LoadConfig();
+            if (!silent) { ShowConfig(); }
             _notify.Click += _notify_Click;
+            Exit += AppConfig_Exit;
         }
         public void Stop()
         {
@@ -69,14 +90,20 @@ namespace LittleBigMouse
                 if (_config.AdjustPointer)
                     Mouse.setCursorAero(1);
             }
-            _notify.Dispose();
+            if (_notify!=null)
+                _notify.Dispose();
         }
+
+        private void AppConfig_Exit(object sender, ExitEventArgs e)
+        {
+            Stop();
+        }
+
         public bool SignalExternalCommandLineArgs(IList<string> args)
         {
             if (args[0]=="--exit")
             {
-                Stop();
-                Application.Current.Shutdown();
+                Shutdown();
             }
             return true;
         }

@@ -22,18 +22,10 @@
 */
 
 using Microsoft.Shell;
-using Microsoft.Win32;
 using Microsoft.Win32.TaskScheduler;
 using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Data;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Security.Principal;
-using System.ServiceProcess;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace LittleBigMouse
@@ -49,6 +41,7 @@ namespace LittleBigMouse
         public static void Main(string[] args)
         {
             int nbarg = 0;
+            bool silent = false;
 
             foreach (string s in args)
             {
@@ -64,6 +57,11 @@ namespace LittleBigMouse
                     nbarg++;
                     break;
                 }
+                if (s == "--silent")
+                {
+                    silent=true;
+                    break;
+                }
             }
 
             if (nbarg == 0 && SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique))
@@ -71,13 +69,11 @@ namespace LittleBigMouse
                 var application = new AppConfig();
 
                 application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                //application.InitializeComponent();
 
-                application.Start();
+                application.Start(silent);
 
                 application.Run();
 
-                // Allow single instance code to perform cleanup operations
                 SingleInstance<AppConfig>.Cleanup();
             }
         }
@@ -137,7 +133,7 @@ namespace LittleBigMouse
                     td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
                     td.Triggers.Add(new LogonTrigger());
                     td.Actions.Add(
-                        new ExecAction(System.Windows.Forms.Application.ExecutablePath.ToString())
+                        new ExecAction(System.Windows.Forms.Application.ExecutablePath.ToString(),"--silent")
                         );
 
                     td.Principal.RunLevel = TaskRunLevel.Highest;

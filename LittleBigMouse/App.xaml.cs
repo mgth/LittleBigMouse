@@ -43,22 +43,12 @@ namespace LittleBigMouse
     /// </summary>
     public partial class App : Application, ISingleInstanceApp
     {
-        private const string Unique = "MgthMouseControlApp";
-
-        public static void log(String s)
-        {
-            using (StreamWriter w = File.AppendText("F:\\docs\\_docs_\\_projets\\MouseControl\\MouseControl\\bin\\Release\\log.txt"))
-            {
-                w.WriteLine(s);
-            }
-        }
+        private const string Unique = "MgthLittleBigMouseApp";
 
         [STAThread]
         public static void Main(string[] args)
         {
             int nbarg = 0;
-
-            log("main");
 
             foreach (string s in args)
             {
@@ -148,7 +138,7 @@ namespace LittleBigMouse
                     ts.RootFolder.DeleteTask(ServiceName,false);
 
                     TaskDefinition td = ts.NewTask();
-                    td.RegistrationInfo.Description = "Multi-dpi monitors mouse control";
+                    td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
                     td.Triggers.Add(new LogonTrigger());
                     td.Actions.Add(
                         new ExecAction(System.Windows.Forms.Application.ExecutablePath.ToString())

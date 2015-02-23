@@ -7,8 +7,8 @@
     <ProjectGuid>{C88D721C-8874-49B1-A231-224869EA7E5A}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MouseControl</RootNamespace>
-    <AssemblyName>MouseControl</AssemblyName>
+    <RootNamespace>LittleBigMouse</RootNamespace>
+    <AssemblyName>LittleBigMouse</AssemblyName>
     <TargetFrameworkVersion>v4.5.3</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
@@ -53,7 +53,7 @@
     <ApplicationIcon>MainIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
-    <StartupObject>MouseControl.App</StartupObject>
+    <StartupObject>LittleBigMouse.App</StartupObject>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -81,13 +81,6 @@
   <ItemGroup>
     <Compile Include="AppConfig.cs" />
     <Compile Include="Geo.cs" />
-    <Compile Include="Service.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Include="Service.Designer.cs">
-      <DependentUpon>Service.cs</DependentUpon>
-    </Compile>
-    <Compile Include="ServiceInstaller.cs" />
     <Compile Include="Sizer.xaml.cs">
       <DependentUpon>Sizer.xaml</DependentUpon>
     </Compile>

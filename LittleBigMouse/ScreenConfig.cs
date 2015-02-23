@@ -133,6 +133,10 @@ namespace LittleBigMouse
         public static ScreenConfig Load(RegistryKey baseKey)
         {
             RegistryKey key = baseKey.OpenSubKey(RootKey);
+            if (key==null)
+            {
+                key = baseKey.CreateSubKey(RootKey);
+            }
 
             ScreenConfig config = new ScreenConfig(key)
             {

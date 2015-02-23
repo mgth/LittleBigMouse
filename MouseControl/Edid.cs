@@ -26,7 +26,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
     public class Edid
     {

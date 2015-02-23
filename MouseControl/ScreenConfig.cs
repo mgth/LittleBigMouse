@@ -28,7 +28,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
     public class ScreenConfig
     {

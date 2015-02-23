@@ -26,7 +26,7 @@ using System;
 using System.Windows;
 using System.Windows.Input;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
     /// <summary>
     /// Interaction logic for Config.xaml

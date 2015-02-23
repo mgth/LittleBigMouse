@@ -25,7 +25,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
     public class Mouse
     {

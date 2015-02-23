@@ -23,7 +23,7 @@
 using System.Windows;
 using System.Windows.Input;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
     /// <summary>
     /// Logique d'interaction pour Sizer.xaml

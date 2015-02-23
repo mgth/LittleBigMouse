@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace MouseControl.Properties {
+namespace LittleBigMouse.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]

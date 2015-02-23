@@ -26,7 +26,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
     /// <summary>
     /// Interaction logic for ScreenGUI.xaml

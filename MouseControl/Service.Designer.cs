@@ -1,4 +1,4 @@
-﻿namespace MouseControl
+﻿namespace LittleBigMouse
 {
     partial class Service
     {

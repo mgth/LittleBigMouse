@@ -28,7 +28,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 
 [assembly: InternalsVisibleTo("ScreenConfig")]
-namespace MouseControl
+namespace LittleBigMouse
 {
     public class Screen
     {

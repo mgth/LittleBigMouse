@@ -36,7 +36,7 @@ using System.ServiceProcess;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
     /// <summary>
     /// Interaction logic for App.xaml

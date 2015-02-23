@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace MouseControl
+namespace LittleBigMouse
 {
 
     public class AppConfig : Application

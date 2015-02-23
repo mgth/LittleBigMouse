@@ -4410,8 +4410,8 @@ namespace System.Diagnostics.Eventing.Reader
 			return str;
 		}
 
-		[SecurityTreatAsSafe]
-		public IEnumerable<string> GetKeywordDisplayNames(string ProviderName, [SecurityTreatAsSafe] EventLogHandle eventHandle)
+		[SecuritySafeCritical]
+		public IEnumerable<string> GetKeywordDisplayNames(string ProviderName, EventLogHandle eventHandle)
 		{
 			lock (this)
 			{
@@ -4420,8 +4420,8 @@ namespace System.Diagnostics.Eventing.Reader
 			}
 		}
 
-		[SecurityTreatAsSafe]
-		public string GetLevelDisplayName(string ProviderName, [SecurityTreatAsSafe] EventLogHandle eventHandle)
+		[SecuritySafeCritical]
+		public string GetLevelDisplayName(string ProviderName, EventLogHandle eventHandle)
 		{
 			lock (this)
 			{
@@ -4430,8 +4430,8 @@ namespace System.Diagnostics.Eventing.Reader
 			}
 		}
 
-		[SecurityTreatAsSafe]
-		public string GetOpcodeDisplayName(string ProviderName, [SecurityTreatAsSafe] EventLogHandle eventHandle)
+		[SecuritySafeCritical]
+		public string GetOpcodeDisplayName(string ProviderName, EventLogHandle eventHandle)
 		{
 			lock (this)
 			{
@@ -4440,8 +4440,8 @@ namespace System.Diagnostics.Eventing.Reader
 			}
 		}
 
-		[SecurityTreatAsSafe]
-		public string GetTaskDisplayName(string ProviderName, [SecurityTreatAsSafe] EventLogHandle eventHandle)
+		[SecuritySafeCritical]
+		public string GetTaskDisplayName(string ProviderName, EventLogHandle eventHandle)
 		{
 			lock (this)
 			{

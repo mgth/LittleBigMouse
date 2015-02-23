@@ -59,15 +59,25 @@ namespace LittleBigMouse
         }
         public void Stop()
         {
-            Mouse.MouseSpeed = 10.0;
-            Mouse.setCursorAero(1);
+            if (_config!=null)
+            {
+                _config.Disable();
 
+                if (_config.AdjustSpeed)
+                    Mouse.MouseSpeed = 10.0;
+
+                if (_config.AdjustPointer)
+                    Mouse.setCursorAero(1);
+            }
             _notify.Dispose();
         }
         public bool SignalExternalCommandLineArgs(IList<string> args)
         {
             if (args[0]=="--exit")
+            {
+                Stop();
                 Application.Current.Shutdown();
+            }
             return true;
         }
     }

@@ -48,7 +48,7 @@ namespace LittleBigMouse
         {
             _config = config;
             _screen = screen;
-            //_edid = new Edid(int.Parse(screen.DeviceName.Substring(11))-1);
+            _edid = new Edid(screen.DeviceName);
             // TODO : do not work in service mode
         }
 

@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<asmv1:assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv1="urn:schemas-microsoft-com:asm.v1" xmlns:asmv2="urn:schemas-microsoft-com:asm.v2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <assemblyIdentity version="1.0.0.0" name="LittleBigMouse.app" />
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <!-- Options du manifeste de contrôle de compte d'utilisateur
+             Si vous souhaitez modifier le niveau du contrôle de compte d'utilisateur Windows, remplacez le nœud 
+             requestedExecutionLevel par l'une des propositions suivantes.
+
+        <requestedExecutionLevel  level="asInvoker" uiAccess="false" />
+        <requestedExecutionLevel  level="requireAdministrator" uiAccess="false" />
+        <requestedExecutionLevel  level="highestAvailable" uiAccess="false" />
+
+            La spécification du nœud requestedExecutionLevel désactivera la virtualisation de fichiers et du Registre.
+            Si vous souhaitez utiliser la virtualisation de fichiers et du Registre pour la compatibilité 
+            descendante, supprimez le noeud requestedExecutionLevel.
+        -->
+        <requestedExecutionLevel level="highestAvailable" uiAccess="false" />
+      </requestedPrivileges>
+      <applicationRequestMinimum>
+        <PermissionSet Unrestricted="true" ID="Custom" SameSite="site" />
+        <defaultAssemblyRequest permissionSetReference="Custom" />
+      </applicationRequestMinimum>
+    </security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Liste de toutes les versions de Windows avec lesquelles cette application peut fonctionner. 
+      Windows sélectionnera automatiquement l'environnement le plus compatible.-->
+      <!-- Si votre application est conçue pour fonctionner avec Windows Vista, supprimez les commentaires du nœud supportedOS suivant-->
+      <!--<supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"></supportedOS>-->
+      <!-- Si votre application est conçue pour fonctionner avec Windows 7, supprimez les commentaires du nœud supportedOS suivant-->
+      <!--<supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>-->
+      <!-- Si votre application est conçue pour fonctionner avec Windows 8, supprimez les commentaires du nœud supportedOS suivant-->
+      <!--<supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"></supportedOS>-->
+      <!-- Si votre application est conçue pour fonctionner avec Windows 8.1, supprimez les commentaires du nœud supportedOS suivant-->
+      <!--<supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>-->
+    </application>
+  </compatibility>
+  <!-- Activer les thèmes pour les contrôles et boîtes de dialogue communes de Windows (Windows XP et version ultérieure) -->
+  <!-- <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+          type="win32"
+          name="Microsoft.Windows.Common-Controls"
+          version="6.0.0.0"
+          processorArchitecture="*"
+          publicKeyToken="6595b64144ccf1df"
+          language="*"
+        />
+    </dependentAssembly>
+  </dependency>-->
+</asmv1:assembly>

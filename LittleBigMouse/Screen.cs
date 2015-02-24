@@ -44,7 +44,6 @@ namespace LittleBigMouse
         internal System.Windows.Forms.Screen _screen;
         private ScreenConfig _config = null;
         internal Edid _edid;
-        // TODO : Microsoft.Win32.SystemEvents.DisplaySettingsChanged
 
         internal Screen(ScreenConfig config, System.Windows.Forms.Screen screen)
         {

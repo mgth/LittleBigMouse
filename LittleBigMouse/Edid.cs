@@ -85,11 +85,11 @@ namespace LittleBigMouse
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct RECT
+        public struct RectStruct
         {
             public int Left, Top, Right, Bottom;
 
-            public RECT(int left, int top, int right, int bottom)
+            public RectStruct(int left, int top, int right, int bottom)
             {
                 Left = left;
                 Top = top;
@@ -97,7 +97,7 @@ namespace LittleBigMouse
                 Bottom = bottom;
             }
 
-            public RECT(System.Drawing.Rectangle r) : this(r.Left, r.Top, r.Right, r.Bottom) { }
+            public RectStruct(System.Drawing.Rectangle r) : this(r.Left, r.Top, r.Right, r.Bottom) { }
 
             public int X
             {
@@ -135,37 +135,37 @@ namespace LittleBigMouse
                 set { Width = value.Width; Height = value.Height; }
             }
 
-            public static implicit operator System.Drawing.Rectangle(RECT r)
+            public static implicit operator System.Drawing.Rectangle(RectStruct r)
             {
                 return new System.Drawing.Rectangle(r.Left, r.Top, r.Width, r.Height);
             }
 
-            public static implicit operator RECT(System.Drawing.Rectangle r)
+            public static implicit operator RectStruct(System.Drawing.Rectangle r)
             {
-                return new RECT(r);
+                return new RectStruct(r);
             }
 
-            public static bool operator ==(RECT r1, RECT r2)
+            public static bool operator ==(RectStruct r1, RectStruct r2)
             {
                 return r1.Equals(r2);
             }
 
-            public static bool operator !=(RECT r1, RECT r2)
+            public static bool operator !=(RectStruct r1, RectStruct r2)
             {
                 return !r1.Equals(r2);
             }
 
-            public bool Equals(RECT r)
+            public bool Equals(RectStruct r)
             {
                 return r.Left == Left && r.Top == Top && r.Right == Right && r.Bottom == Bottom;
             }
 
             public override bool Equals(object obj)
             {
-                if (obj is RECT)
-                    return Equals((RECT)obj);
+                if (obj is RectStruct)
+                    return Equals((RectStruct)obj);
                 else if (obj is System.Drawing.Rectangle)
-                    return Equals(new RECT((System.Drawing.Rectangle)obj));
+                    return Equals(new RectStruct((System.Drawing.Rectangle)obj));
                 return false;
             }
 
@@ -183,8 +183,8 @@ namespace LittleBigMouse
         private struct MonitorInfo
         {
             public int cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
+            public RectStruct rcMonitor;
+            public RectStruct rcWork;
             public uint dwFlags;
         }
         // size of a device name string
@@ -241,39 +241,6 @@ namespace LittleBigMouse
             }
         }
 
-        /// <summary>
-        /// The RECT structure defines the coordinates of the upper-left and lower-right corners of a rectangle.
-        /// </summary>
-        /// <see cref="http://msdn.microsoft.com/en-us/library/dd162897%28VS.85%29.aspx"/>
-        /// <remarks>
-        /// By convention, the right and bottom edges of the rectangle are normally considered exclusive. 
-        /// In other words, the pixel whose coordinates are ( right, bottom ) lies immediately outside of the the rectangle. 
-        /// For example, when RECT is passed to the FillRect function, the rectangle is filled up to, but not including, 
-        /// the right column and bottom row of pixels. This structure is identical to the RECTL structure.
-        /// </remarks>
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RectStruct
-        {
-            /// <summary>
-            /// The x-coordinate of the upper-left corner of the rectangle.
-            /// </summary>
-            public int Left;
-
-            /// <summary>
-            /// The y-coordinate of the upper-left corner of the rectangle.
-            /// </summary>
-            public int Top;
-
-            /// <summary>
-            /// The x-coordinate of the lower-right corner of the rectangle.
-            /// </summary>
-            public int Right;
-
-            /// <summary>
-            /// The y-coordinate of the lower-right corner of the rectangle.
-            /// </summary>
-            public int Bottom;
-        }
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfoEx lpmi);
         [DllImport("user32.dll")]
@@ -366,16 +333,6 @@ namespace LittleBigMouse
         public static extern int RegCloseKey(
             IntPtr hKey);
 
-        [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        static extern bool SetupDiGetDeviceInstanceId(
-           IntPtr DeviceInfoSet,
-           ref SP_DEVINFO_DATA DeviceInfoData,
-           StringBuilder DeviceInstanceId,
-           int DeviceInstanceIdSize,
-           out int RequiredSize
-        );
-
-
         [StructLayout(LayoutKind.Sequential)]
         internal struct SP_DEVICE_INTERFACE_DATA
         {
@@ -384,13 +341,6 @@ namespace LittleBigMouse
             public Int32 flags;
             private UIntPtr reserved;
         }
-
-        [DllImport("Setupapi", CharSet = CharSet.Auto, SetLastError = true)]
-        internal static extern IntPtr SetupDiOpenDeviceInterfaceRegKey(
-            IntPtr hDeviceInfoSet,
-            ref SP_DEVICE_INTERFACE_DATA deviceInfoData,
-            int Reserved,
-            int samDesired);
 
 
         const int MAX_DEVICE_ID_LEN = 200;
@@ -452,13 +402,14 @@ namespace LittleBigMouse
 
 
             IntPtr devInfo = SetupDiGetClassDevsEx(
-        ref GUID_CLASS_MONITOR, //class GUID
-        null, //enumerator
-        IntPtr.Zero, //HWND
-        DIGCF_PRESENT | DIGCF_PROFILE, // Flags //DIGCF_ALLCLASSES|
-        IntPtr.Zero, // device info, create a new one.
-        null, // machine name, local machine
-        IntPtr.Zero);// reserved
+                    ref GUID_CLASS_MONITOR, //class GUID
+                    null, //enumerator
+                    IntPtr.Zero, //HWND
+                    DIGCF_PRESENT | DIGCF_PROFILE, // Flags //DIGCF_ALLCLASSES|
+                    IntPtr.Zero, // device info, create a new one.
+                    null, // machine name, local machine
+                    IntPtr.Zero
+                );// reserved
 
             if (devInfo == IntPtr.Zero)
                 return;
@@ -466,7 +417,6 @@ namespace LittleBigMouse
             for (uint i = 0; ERROR_NO_MORE_ITEMS != GetLastError(); ++i)
             {
                 SP_DEVINFO_DATA devInfoData = new SP_DEVINFO_DATA();
-                //memset(&devInfoData, 0, sizeof(devInfoData));
                 devInfoData.cbSize = (uint)Marshal.SizeOf(devInfoData);
 
                 SP_DEVICE_INTERFACE_DATA InterfaceData = new SP_DEVICE_INTERFACE_DATA();
@@ -474,21 +424,15 @@ namespace LittleBigMouse
 
                 if (SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                 {
-                    //StringBuilder Instance = new StringBuilder(MAX_DEVICE_ID_LEN);
-                    //int reqSize = 0;
-                    //SetupDiGetDeviceInstanceId(devInfo, ref devInfoData, Instance, MAX_PATH, out reqSize);
 
-                    IntPtr hEDIDRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+                    IntPtr hEDIDRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
 
                     if (hEDIDRegKey == IntPtr.Zero || (hEDIDRegKey.ToInt32() == -1))
-                              continue;
+                        continue;
 
                     RegistryKey key = GetKeyFromPath( GetHKeyName(hEDIDRegKey) , 1 );
 
                     String id = ((String[])key.GetValue("HardwareID"))[0].ToString() + "\\" + key.GetValue("Driver").ToString();
-
-                    //String sInstance = Instance.ToString();
 
                     if (id != dd.DeviceID)
                         continue;
@@ -582,124 +526,3 @@ namespace LittleBigMouse
         }
     }
 }
-
-
-
-/*
-# include <atlstr.h>
-# include <SetupApi.h>
-#pragma comment(lib, "setupapi.lib")
-
-#define NAME_SIZE 128
-
-const GUID GUID_CLASS_MONITOR = { 0x4d36e96e, 0xe325, 0x11ce, 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18 };
-
-// Assumes hDevRegKey is valid
-bool GetMonitorSizeFromEDID(const HKEY hDevRegKey, short& WidthMm, short& HeightMm)
-{
-    DWORD dwType, AcutalValueNameLength = NAME_SIZE;
-    TCHAR valueName[NAME_SIZE];
-
-    BYTE EDIDdata[1024];
-    DWORD edidsize = sizeof(EDIDdata);
-
-    for (LONG i = 0, retValue = ERROR_SUCCESS; retValue != ERROR_NO_MORE_ITEMS; ++i)
-    {
-        retValue = RegEnumValue(hDevRegKey, i, &valueName[0],
-            &AcutalValueNameLength, NULL, &dwType,
-            EDIDdata, // buffer
-            &edidsize); // buffer size
-
-        if (retValue != ERROR_SUCCESS || 0 != _tcscmp(valueName, _T("EDID")))
-            continue;
-
-        WidthMm = ((EDIDdata[68] & 0xF0) << 4) + EDIDdata[66];
-        HeightMm = ((EDIDdata[68] & 0x0F) << 8) + EDIDdata[67];
-
-        return true; // valid EDID found
-    }
-
-    return false; // EDID not found
-}
-
-bool GetSizeForDevID(const CString& TargetDevID, short& WidthMm, short& HeightMm)
-{
-    HDEVINFO devInfo = SetupDiGetClassDevsEx(
-        &GUID_CLASS_MONITOR, //class GUID
-        NULL, //enumerator
-        NULL, //HWND
-        DIGCF_PRESENT, // Flags //DIGCF_ALLCLASSES|
-        NULL, // device info, create a new one.
-        NULL, // machine name, local machine
-        NULL);// reserved
-
-    if (NULL == devInfo)
-        return false;
-
-    bool bRes = false;
-
-    for (ULONG i = 0; ERROR_NO_MORE_ITEMS != GetLastError(); ++i)
-    {
-        SP_DEVINFO_DATA devInfoData;
-        memset(&devInfoData, 0, sizeof(devInfoData));
-        devInfoData.cbSize = sizeof(devInfoData);
-
-        if (SetupDiEnumDeviceInfo(devInfo, i, &devInfoData))
-        {
-            HKEY hDevRegKey = SetupDiOpenDevRegKey(devInfo, &devInfoData,
-                DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
-
-            if (!hDevRegKey || (hDevRegKey == INVALID_HANDLE_VALUE))
-                continue;
-
-            bRes = GetMonitorSizeFromEDID(hDevRegKey, WidthMm, HeightMm);
-
-            RegCloseKey(hDevRegKey);
-        }
-    }
-    SetupDiDestroyDeviceInfoList(devInfo);
-    return bRes;
-}
-
-int _tmain(int argc, _TCHAR* argv[])
-{
-    short WidthMm, HeightMm;
-
-    DISPLAY_DEVICE dd;
-    dd.cb = sizeof(dd);
-    DWORD dev = 0; // device index
-    int id = 1; // monitor number, as used by Display Properties > Settings
-
-    CString DeviceID;
-    bool bFoundDevice = false;
-    while (EnumDisplayDevices(0, dev, &dd, 0) && !bFoundDevice)
-    {
-        DISPLAY_DEVICE ddMon;
-        ZeroMemory(&ddMon, sizeof(ddMon));
-        ddMon.cb = sizeof(ddMon);
-        DWORD devMon = 0;
-
-        while (EnumDisplayDevices(dd.DeviceName, devMon, &ddMon, 0) && !bFoundDevice)
-        {
-            if (ddMon.StateFlags & DISPLAY_DEVICE_ACTIVE &&
-                !(ddMon.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER))
-            {
-                DeviceID.Format(L"%s", ddMon.DeviceID);
-                DeviceID = DeviceID.Mid(8, DeviceID.Find(L"\\", 9) - 8);
-
-                bFoundDevice = GetSizeForDevID(DeviceID, WidthMm, HeightMm);
-            }
-            devMon++;
-
-            ZeroMemory(&ddMon, sizeof(ddMon));
-            ddMon.cb = sizeof(ddMon);
-        }
-
-        ZeroMemory(&dd, sizeof(dd));
-        dd.cb = sizeof(dd);
-        dev++;
-    }
-
-    return 0;
-}
-*/

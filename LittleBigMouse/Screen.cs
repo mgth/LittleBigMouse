@@ -32,6 +32,8 @@ namespace LittleBigMouse
 {
     public class Screen
     {
+        bool _loaded = false;
+
         public event EventHandler PhysicalChanged;
 
         private void OnPhysicalChanged()
@@ -66,9 +68,9 @@ namespace LittleBigMouse
         {
             get
             {
-                return DeviceName.Substring(4);
+                //return DeviceName.Substring(4);
                 // TODO : It would be better to save actual screen but edid code is broken
-                //return ProductCode.ToString() + "_" + Serial.ToString() + "_" + Bounds.Width + "x" + Bounds.Height;
+                return ProductCode.ToString() + "_" + Serial.ToString() + "_" + Bounds.Width + "x" + Bounds.Height;
             }
         }
 
@@ -81,24 +83,27 @@ namespace LittleBigMouse
 
             key.Close();
         }
-        public bool Load()
+        public void Load()
         {
-            RegistryKey key = _config.Key.OpenSubKey(ID);
-
-            Point p = new Point(Config.PhysicalOverallBounds.Right, 0);
-
-            if (key != null)
+            if (!_loaded)
             {
-                p = new Point(
-                    double.Parse(key.GetValue("X", RegistryValueKind.String).ToString()),
-                    double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString())
-                );
-                key.Close();
+                RegistryKey key = _config.Key.OpenSubKey(ID);
+
+                Point p = new Point(Config.PhysicalOverallBounds.Right, 0);
+
+                if (key != null)
+                {
+                    p = new Point(
+                        double.Parse(key.GetValue("X", RegistryValueKind.String).ToString()),
+                        double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString())
+                    );
+                    key.Close();
+                }
+
+                PhysicalLocation = p;
+
+                _loaded = true;
             }
-
-            PhysicalLocation = p;
-
-            return true;
         }
 
         public Rect Bounds
@@ -114,7 +119,9 @@ namespace LittleBigMouse
         private Point _physicalLocation;
         public Point PhysicalLocation
         {
-            get { return _physicalLocation; }
+            get {
+                return _physicalLocation;
+            }
             set
             {
                 // Do not move primary screen but all others

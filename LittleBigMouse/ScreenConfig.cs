@@ -134,41 +134,29 @@ namespace LittleBigMouse
         {
             get
             {
-                return Registry.CurrentUser.CreateSubKey(RootKey);
+                RegistryKey k = Registry.CurrentUser.CreateSubKey(RootKey);
+                return k.CreateSubKey(_id);
             }
         }
 
-        private void LoadConfigLocation(RegistryKey baseKey)
-        {
-            RegistryKey key = baseKey.CreateSubKey("ConfigLocation");
-            if (key!=null)
-            {
-                ConfigLocation = new Rect
-                {
-                };
-            }
-            else
-            {
-                Rect s = PrimaryScreen.WorkingArea;
-                ConfigLocation = new Rect
-                {
-                    X = s.X + (3 * s.Width) / 4,
-                    Y = s.Y + (3 * s.Height) / 4,
-                    Width = s.Width / 4,
-                    Height = s.Height / 4,
-                };
-            }
-        }
-
+        private String _id = "";
         public void Load()
         {
+            _id = "";
+
+            foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                Screen s = getScreen(screen);
+                _id += ((_id!="")?"." :"") + s.ID;
+            }
+
             Enabled = Key.GetValue("Enabled", "0").ToString() == "1";
             AdjustPointer = Key.GetValue("AdjustPointer", "0").ToString() == "1";
             AdjustSpeed = Key.GetValue("AdjustSpeed", "0").ToString() == "1";
 
-            foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
+            foreach(Screen s in AllScreens)
             {
-                getScreen(screen);
+                s.Load();
             }
         }
 
@@ -194,7 +182,6 @@ namespace LittleBigMouse
             if (wpfScreen == null)
             {
                 wpfScreen = new Screen(this,screen);
-                wpfScreen.Load();
                 AllScreens.Add(wpfScreen);
             }
             return wpfScreen;

@@ -40,7 +40,7 @@ namespace LittleBigMouse
         public FormConfig(ScreenConfig config)
         {
             _currentConfig = config;
-            _newConfig = ScreenConfig.Load(Registry.CurrentUser);
+            _newConfig = new ScreenConfig();
 
             _newConfig.RegistryChanged += _newConfig_RegistryChanged;
 
@@ -65,7 +65,41 @@ namespace LittleBigMouse
                 sgui.MouseLeftButtonUp += _gui_MouseLeftButtonUp;
             }
 
+            LoadLocation();
+
             grid.SizeChanged += Grid_SizeChanged;
+
+            SizeChanged += FormConfig_SizeChanged;
+            LocationChanged += FormConfig_LocationChanged;
+        }
+        private void LoadLocation()
+        {
+            Rect wa = _currentConfig.PrimaryScreen.WpfWorkingArea;
+
+            RegistryKey key = _currentConfig.Key.CreateSubKey("ConfigLocation");
+
+            Left = double.Parse(key.GetValue("X", wa.X + (2 * wa.Width) / 3).ToString());
+            Top = double.Parse(key.GetValue("Y", wa.Y + (2 * wa.Height) / 3).ToString());
+            Width = double.Parse(key.GetValue("Width", wa.Width / 3).ToString());
+            Height = double.Parse(key.GetValue("Height", wa.Height / 3).ToString());
+        }
+        private void SaveLocation()
+        {
+            RegistryKey key = _currentConfig.Key.CreateSubKey("ConfigLocation");
+            key.SetValue("X", Left.ToString(), RegistryValueKind.String);
+            key.SetValue("Y", Top.ToString(), RegistryValueKind.String);
+            key.SetValue("Width", Width.ToString(), RegistryValueKind.String);
+            key.SetValue("Height", Height.ToString(), RegistryValueKind.String);
+        }
+
+        private void FormConfig_LocationChanged(object sender, EventArgs e)
+        {
+            SaveLocation();
+        }
+
+        private void FormConfig_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            SaveLocation();
         }
 
         private void _newConfig_RegistryChanged(object sender, EventArgs e)
@@ -267,7 +301,7 @@ namespace LittleBigMouse
 
         private void Save()
         {
-            _newConfig.Save(Registry.CurrentUser);
+            _newConfig.Save();
 
             if (chkLoadAtStartup.IsChecked == true)
                 App.Schedule();

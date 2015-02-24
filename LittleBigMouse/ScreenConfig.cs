@@ -32,10 +32,9 @@ namespace LittleBigMouse
 {
     public class ScreenConfig
     {
-        RegistryKey _key;
-        public ScreenConfig(RegistryKey key)
+        public ScreenConfig()
         {
-            _key = key;
+            Load();
         }
 
         public event EventHandler RegistryChanged;
@@ -48,6 +47,7 @@ namespace LittleBigMouse
         private bool _enabled;
         private bool _adjustPointer;
         private bool _adjustSpeed;
+        private Rect _configLocation;
 
         public void Enable()
         {
@@ -130,37 +130,56 @@ namespace LittleBigMouse
 
         private static String RootKey = "SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name;
 
-        public static ScreenConfig Load(RegistryKey baseKey)
+        public RegistryKey Key
         {
-            RegistryKey key = baseKey.OpenSubKey(RootKey);
-            if (key==null)
+            get
             {
-                key = baseKey.CreateSubKey(RootKey);
+                return Registry.CurrentUser.CreateSubKey(RootKey);
             }
+        }
 
-            ScreenConfig config = new ScreenConfig(key)
+        private void LoadConfigLocation(RegistryKey baseKey)
+        {
+            RegistryKey key = baseKey.CreateSubKey("ConfigLocation");
+            if (key!=null)
             {
-                Enabled = (key.GetValue("Enabled","0").ToString() == "1"),
-                AdjustPointer = (key.GetValue("AdjustPointer", "0").ToString() == "1"),
-                AdjustSpeed = (key.GetValue("AdjustSpeed", "0").ToString() == "1"),
-            };
+                ConfigLocation = new Rect
+                {
+                };
+            }
+            else
+            {
+                Rect s = PrimaryScreen.WorkingArea;
+                ConfigLocation = new Rect
+                {
+                    X = s.X + (3 * s.Width) / 4,
+                    Y = s.Y + (3 * s.Height) / 4,
+                    Width = s.Width / 4,
+                    Height = s.Height / 4,
+                };
+            }
+        }
+
+        public void Load()
+        {
+            Enabled = Key.GetValue("Enabled", "0").ToString() == "1";
+            AdjustPointer = Key.GetValue("AdjustPointer", "0").ToString() == "1";
+            AdjustSpeed = Key.GetValue("AdjustSpeed", "0").ToString() == "1";
 
             foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
             {
-                config.getScreen(screen);
+                getScreen(screen);
             }
-            return config;
         }
 
-        public void Save(RegistryKey baseKey)
+        public void Save()
         {
-            RegistryKey key = baseKey.CreateSubKey(RootKey);
-            key.SetValue("Enabled", Enabled ? "1" : "0");
-            key.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
-            key.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
+            Key.SetValue("Enabled", Enabled ? "1" : "0");
+            Key.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
+            Key.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
 
             foreach (Screen s in AllScreens)
-                s.Save(key);
+                s.Save(Key);
 
             if (RegistryChanged != null) RegistryChanged(this, new EventArgs());
         }
@@ -175,7 +194,7 @@ namespace LittleBigMouse
             if (wpfScreen == null)
             {
                 wpfScreen = new Screen(this,screen);
-                wpfScreen.Load(_key);
+                wpfScreen.Load();
                 AllScreens.Add(wpfScreen);
             }
             return wpfScreen;
@@ -253,6 +272,12 @@ namespace LittleBigMouse
         {
             get { return _adjustSpeed; }
             set { _adjustSpeed = value; }
+        }
+
+        public Rect ConfigLocation
+        {
+            get { return _configLocation; }
+            set { _configLocation = value; }
         }
 
         public Point PhysicalToUI(Size s, Point p)

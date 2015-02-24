@@ -81,9 +81,9 @@ namespace LittleBigMouse
 
             key.Close();
         }
-        public bool Load(RegistryKey baseKey)
+        public bool Load()
         {
-            RegistryKey key = baseKey.OpenSubKey(ID);
+            RegistryKey key = _config.Key.OpenSubKey(ID);
 
             Point p = new Point(Config.PhysicalOverallBounds.Right, 0);
 
@@ -152,7 +152,12 @@ namespace LittleBigMouse
 
         public Rect WorkingArea
         {
-            get { return this.getRect(_screen.WorkingArea); }
+            get { return getRect(_screen.WorkingArea); }
+        }
+
+        public Rect WpfWorkingArea
+        {
+            get { return PixelToWpf(WorkingArea); }
         }
 
         private Rect getRect(System.Drawing.Rectangle value)
@@ -187,8 +192,8 @@ namespace LittleBigMouse
             get
             {
                 return DeviceCapsPhysicalSize.Width / Bounds.Width;
-//                if (_edid.IsValid) return _edid.PhysicalSize.Width / Bounds.Width;
-//                else return 25.4 / 96.0;
+                //                if (_edid.IsValid) return _edid.PhysicalSize.Width / Bounds.Width;
+                //                else return 25.4 / 96.0;
             }
         }
         
@@ -503,6 +508,12 @@ namespace LittleBigMouse
             double y = Math.Truncate(p.Y) * WpfRatioY;
             return new Point(x,y);
         }
+
+        public Rect PixelToWpf(Rect r)
+        {
+            return new Rect(PixelToWpf(r.TopLeft), PixelToWpf(r.BottomRight));
+        }
+
         public Point WpfToPixel(Point p)
         {
             double x = Math.Truncate(p.X / WpfRatioX);

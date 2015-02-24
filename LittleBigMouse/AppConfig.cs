@@ -29,7 +29,7 @@ using System.Windows;
 namespace LittleBigMouse
 {
 
-    public class AppConfig : Application, ISingleInstanceApp
+    public class AppConfig : Application, ISingleInstanceApp, IDisposable
     {
         private ScreenConfig _config;
 
@@ -38,7 +38,7 @@ namespace LittleBigMouse
         private void LoadConfig()
         {
             if (_config != null) _config.Disable();
-            _config = ScreenConfig.Load(Registry.CurrentUser);
+            _config = new ScreenConfig();
             _config.Enable();
         }
         private void _formConfig_RegistryChanged(object sender, EventArgs e)
@@ -57,7 +57,9 @@ namespace LittleBigMouse
             {
                 _formConfig = new FormConfig(_config);
                 _formConfig.RegistryChanged += _formConfig_RegistryChanged;
+
                 _formConfig.Closed += _formConfig_Closed;
+
                 _formConfig.Show();
             }
             else
@@ -65,6 +67,7 @@ namespace LittleBigMouse
                 _formConfig.Activate();
             }
         }
+
 
         private void _formConfig_Closed(object sender, EventArgs e)
         {
@@ -76,7 +79,6 @@ namespace LittleBigMouse
             LoadConfig();
             if (!silent) { ShowConfig(); }
             _notify.Click += _notify_Click;
-            Exit += AppConfig_Exit;
         }
         public void Stop()
         {
@@ -94,10 +96,6 @@ namespace LittleBigMouse
                 _notify.Dispose();
         }
 
-        private void AppConfig_Exit(object sender, ExitEventArgs e)
-        {
-            Stop();
-        }
 
         public bool SignalExternalCommandLineArgs(IList<string> args)
         {
@@ -106,6 +104,11 @@ namespace LittleBigMouse
                 Shutdown();
             }
             return true;
+        }
+
+        public void Dispose()
+        {
+            Stop();
         }
     }
 

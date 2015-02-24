@@ -66,13 +66,16 @@ namespace LittleBigMouse
 
             if (nbarg == 0 && SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique))
             {
-                var application = new AppConfig();
+                
 
-                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                using (AppConfig application = new AppConfig())
+                {
+                    application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-                application.Start(silent);
+                    application.Start(silent);
 
-                application.Run();
+                    application.Run();
+                }
 
                 SingleInstance<AppConfig>.Cleanup();
             }

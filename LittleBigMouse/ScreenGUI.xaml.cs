@@ -134,7 +134,8 @@ namespace LittleBigMouse
             center.Width =  center.Height;
             center.CornerRadius = new CornerRadius(center.Height / 2);
 
-            lblName.FontSize = center.Height / 2;
+            if (center.Height>0)
+                lblName.FontSize = center.Height / 2;
         }
     }
 }

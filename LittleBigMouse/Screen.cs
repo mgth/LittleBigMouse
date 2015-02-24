@@ -51,7 +51,6 @@ namespace LittleBigMouse
             _config = config;
             _screen = screen;
             _edid = new Edid(screen.DeviceName);
-            // TODO : do not work in service mode
         }
 
         public int ProductCode

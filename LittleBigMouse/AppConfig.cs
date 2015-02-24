@@ -76,10 +76,17 @@ namespace LittleBigMouse
 
         public void Start(bool silent)
         {
+            SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
             LoadConfig();
             if (!silent) { ShowConfig(); }
             _notify.Click += _notify_Click;
         }
+
+        private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
+        {
+            LoadConfig();
+        }
+
         public void Stop()
         {
             if (_config!=null)

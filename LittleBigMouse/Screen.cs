@@ -52,12 +52,25 @@ namespace LittleBigMouse
             _edid = new Edid(screen.DeviceName);
         }
 
-        public int ProductCode
+        public String ProductCode
         {
             get { return _edid.ProductCode; }
         }
 
-        public int Serial
+        public String Model
+        {
+            get { return _edid.Block((char)0xFC); }
+        }
+        public String ManufacturerCode
+        {
+            get { return _edid.ManufacturerCode; }
+        }
+        public String SerialNo
+        {
+            get { return _edid.Block((char)0xFF); }
+        }
+
+        public String Serial
         {
             get { return _edid.Serial; }
         }
@@ -68,7 +81,7 @@ namespace LittleBigMouse
             {
                 //return DeviceName.Substring(4);
                 // TODO : It would be better to save actual screen but edid code is broken
-                return ProductCode.ToString() + "_" + Serial.ToString() + "_" + Bounds.Width + "x" + Bounds.Height;
+                return _edid.ManufacturerCode + ProductCode.ToString() + "_" + Serial.ToString() + "_" + Bounds.Width + "x" + Bounds.Height;
             }
         }
 

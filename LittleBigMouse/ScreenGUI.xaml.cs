@@ -51,8 +51,10 @@ namespace LittleBigMouse
                 txtRight.Content = _screen.PhysicalBounds.Right.ToString("0.0");
 
                 lblDPI.Content = _screen.DpiAvg.ToString("0");
-
-                lblName.Content = _screen.DeviceNo.ToString();
+            lblModel.Content = _screen.Model;
+            lblSerial.Content = _screen.SerialNo;
+            lblPNP.Content = _screen.ManufacturerCode+_screen.ProductCode;
+            lblName.Content = _screen.DeviceNo.ToString();
 
                 Rect r = Screen.ToUI(new Size(_grid.ActualWidth, _grid.ActualHeight));
 

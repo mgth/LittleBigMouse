@@ -17,6 +17,8 @@
                 </LinearGradientBrush>       
        </Border.Background>
         </Border>
+        <Label x:Name="lblPNP" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5,5,0,0" Foreground="#FFD9DCEC"/>
+        
         <Label x:Name="txtTop" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" VerticalAlignment="Top"/>
         <Label x:Name="txtBottom" HorizontalAlignment="Center"  Margin="0,0,0,5" Height="23" VerticalAlignment="Bottom"/>
         <Label x:Name="txtLeft" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" VerticalAlignment="Center"/>
@@ -26,7 +28,13 @@
             <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="#FF333E9A" BorderBrush="#FFD9DCEC">
             <Label Margin="0,-7,0,-5" x:Name="lblName" Content ="0" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />   
             </Border>
-        <Label x:Name="lblDPI" HorizontalAlignment="Center" Foreground="White"/>   
+        </StackPanel>
+        
+        <Label x:Name="lblDPI"  Margin="5,5,5,5" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="White"/>
+        
+        <StackPanel  Margin="5,5,5,5" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+        <Label Margin="0,0,0,-10" x:Name="lblModel" HorizontalAlignment="Center" Foreground="White"/>
+        <Label Margin="0,0,0,-5" x:Name="lblSerial" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
         </StackPanel>
     </Grid>
 </UserControl>

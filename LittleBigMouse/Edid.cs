@@ -473,14 +473,48 @@ namespace LittleBigMouse
             }
         }
 
-        public int ProductCode
+        public String ManufacturerCode
         {
-            get { return _rawData[10] + (_rawData[11] << 8); }
+            get
+            {
+                String code ="";
+                code += (char)(64 + ((_rawData[8] >> 2) & 0x1F));
+                code += (char)(64 + (((_rawData[8] << 3) | (_rawData[9] >> 5)) & 0x1F));
+                code += (char)(64 + (_rawData[9] & 0x1F));
+                return code;
+            }
         }
 
-        public int Serial
+        public String ProductCode
         {
-            get { return _rawData[12] + (_rawData[13] << 8) + (_rawData[14] << 16) + (_rawData[15] << 24); }
+            get { return (_rawData[10] + (_rawData[11] << 8)).ToString("X4"); }
+        }
+
+        public String Serial
+        {
+            get {
+                String serial = "";
+                for (int i = 12; i <= 15; i++) serial = (_rawData[i]).ToString("X2") + serial;
+                return serial;
+            }
+        }
+
+        public string Block(char code)
+        {
+            for (int i=54;i<=108;i+=18)
+            {
+                if (_rawData[i]==0 && _rawData[i+1]==0 && _rawData[i+2]==0 && _rawData[i+3]==code)
+                {
+                    String s = "";
+                    for (int j = i + 5; j < i + 18; j++)
+                    { char c = (char)_rawData[j];
+                        if (c == (char)0x0A) break;
+                        s += c;
+                    }
+                    return s;
+                }
+            }
+            return "";
         }
 
         private IntPtr GetHMonitor(String deviceName)

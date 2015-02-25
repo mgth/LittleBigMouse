@@ -10,6 +10,7 @@
         WindowStyle="None"
         Background="Transparent" MouseMove="Window_MouseMove"
         Topmost="True"
+        ShowInTaskbar="False"
         >
     <Border x:Name="border" Opacity="0.5" BorderThickness="0,1" BorderBrush="Red">
         <Border.Background>

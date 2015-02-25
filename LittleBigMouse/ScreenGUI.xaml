@@ -5,11 +5,18 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:LittleBigMouse"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300">
+             d:DesignHeight="300" d:DesignWidth="300"
+             >
     <Grid x:Name="grid" SizeChanged="Grid_SizeChanged">
         
             
-        <Border BorderThickness="5" x:Name="selectColor" BorderBrush="#FFE4E2E0">
+        <Border BorderThickness="5">
+            <Border.BorderBrush>
+                <LinearGradientBrush x:Name="selectColor" StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop x:Name="selectStartColor" Color="Gray" Offset="0.0" />
+                    <GradientStop x:Name="selectStopColor" Color="#FF3F3F3F" Offset="1" />
+                </LinearGradientBrush>
+            </Border.BorderBrush>
         <Border.Background>
                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                   <GradientStop Color="#FF7288C0" Offset="0.0" />

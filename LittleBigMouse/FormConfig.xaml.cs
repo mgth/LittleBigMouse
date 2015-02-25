@@ -132,17 +132,27 @@ namespace LittleBigMouse
                 foreach(UIElement el in grid.Children)
                 {
                     ScreenGUI el_gui = el as ScreenGUI;
-                    if (el_gui != null && el_gui!=gui) el_gui.HideSizers();
+                    if (el_gui != null && el_gui != gui)
+                    {
+                        el_gui.Selected = false;
+                        el_gui.HideSizers();
+                    }
                 }
                 gui.ShowSizers();
+                gui.Selected = true;
             }
-            else
+            else // Its a click
             {
                 foreach (UIElement el in grid.Children)
                 {
                     ScreenGUI el_gui = el as ScreenGUI;
-                    if (el_gui != null && el_gui != gui) el_gui.HideSizers();
+                    if (el_gui != null && el_gui != gui)
+                    {
+                        el_gui.Selected = false;
+                        el_gui.HideSizers();
+                    }
                 }
+                gui.Selected = !gui.Selected;
                 gui.SwitchSizers();
             }
         }

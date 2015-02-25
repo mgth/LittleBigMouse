@@ -25,6 +25,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace LittleBigMouse
 {
@@ -36,6 +37,27 @@ namespace LittleBigMouse
         private Screen _screen;
         public Screen Screen {
             get { return _screen; }
+        }
+
+        private bool _selected = false;
+        public bool Selected
+        {
+            get { return _selected; }
+            set
+            {
+                _selected = value;
+                if (value)
+                {
+
+                    selectStartColor.Color = Colors.Lime;
+                    selectStopColor.Color = Colors.DarkGreen;
+                }
+                else
+                {
+                    selectStartColor.Color = Colors.Gray;
+                    selectStopColor.Color = Colors.Gray;
+                }
+            }
         }
 
         private void _screen_PhysicalChanged(object sender, EventArgs e)

@@ -1,6 +1,6 @@
 ; -- LittleBigMouse.iss --
 ;#define AppVer GetFileVersion('..\bin\x64\Release\LittleBigMouse.exe')
-#define AppVer '1.0RC2'
+#define AppVer '1.0RC3'
 
 [Setup]
 AppName=Little Big Mouse

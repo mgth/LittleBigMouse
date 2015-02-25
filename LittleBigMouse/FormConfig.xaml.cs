@@ -51,10 +51,13 @@ namespace LittleBigMouse
             else
                 chkLoadAtStartup.IsChecked = false;
 
+            // TODO : maybe use data binding;
+            //DataContext = _newConfig;
+
             chkAdjustPointer.IsChecked = _newConfig.AdjustPointer;
             chkAdjustSpeed.IsChecked = _newConfig.AdjustSpeed;
             chkEnabled.IsChecked = _newConfig.Enabled;
-
+            chkAllowToJump.IsChecked = _newConfig.AllowToJump;
 
             foreach (Screen s in _newConfig.AllScreens)
             {
@@ -395,6 +398,16 @@ namespace LittleBigMouse
         private void chkAdjustPointer_Unchecked(object sender, RoutedEventArgs e)
         {
             _newConfig.AdjustPointer = false;
+        }
+
+        private void chkAllowToJump_Checked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.AllowToJump = true;
+        }
+
+        private void chkAllowToJump_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _newConfig.AllowToJump = false;
         }
     }
 }

@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 using System;
+using System.Collections.Generic;
 using System.Windows;
 
 namespace LittleBigMouse
@@ -108,6 +109,31 @@ namespace LittleBigMouse
             }
 
             return new Point(X, Y);
+        }
+
+        public Point? Intersect(Segment s)
+        {
+            Point? p = Intersect(s.Line);
+            if (p!=null && s.Rect.Contains(p??new Point()))
+            {
+                return p;
+            }
+            return null;
+        }
+
+        public IEnumerable<Point> Intersect(Rect r)
+        {
+            Point? p = null;
+
+            p = Intersect(new Segment(r.TopLeft, r.BottomLeft));
+            if (p != null) yield return p.Value;
+            p = Intersect(new Segment(r.TopRight, r.BottomRight));
+            if (p != null) yield return p.Value;
+            p = Intersect(new Segment(r.TopLeft, r.TopRight));
+            if (p != null) yield return p.Value;
+            p = Intersect(new Segment(r.BottomLeft, r.BottomRight));
+            if (p != null) yield return p.Value;
+
         }
 
     }

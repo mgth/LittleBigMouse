@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:LittleBigMouse"
         mc:Ignorable="d"
         Icon="MainIcon.ico"
-        Title="Mouse Control" Height="300" Width="600" Closing="Window_Closing" Topmost="True"
+        Title="Little Big Mouse" Height="300" Width="600" Closing="Window_Closing" Topmost="True"
         BorderBrush="Black"
         >
     <Grid Background="#FF2D2D30">
@@ -18,6 +18,9 @@
 
         </Grid>
         <StackPanel  Margin="5" Grid.Row="1" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
+            <StackPanel Orientation="Vertical" Margin="5,0,0,0">
+                <CheckBox x:Name="chkAllowToJump" Content="Allow to jump" Foreground="LightGray" Checked="chkAllowToJump_Checked" Unchecked="chkAllowToJump_Unchecked"/>
+            </StackPanel>
             <StackPanel Orientation="Vertical" Margin="5,0,0,0">
                 <CheckBox x:Name="chkEnabled" Content="Enabled" Checked="chkEnabled_Checked" Unchecked="chkEnabled_Unchecked" Foreground="LightGray"/>
                 <CheckBox x:Name="chkLiveUpdate" Content="Live Update" Checked="chkLiveUpdate_Checked" Unchecked="chkLiveUpdate_Unchecked" Foreground="LightGray"/>

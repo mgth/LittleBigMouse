@@ -48,6 +48,7 @@ namespace LittleBigMouse
         private bool _adjustPointer;
         private bool _adjustSpeed;
         private Rect _configLocation;
+        private bool _allowToJump;
 
         public void Enable()
         {
@@ -80,6 +81,32 @@ namespace LittleBigMouse
 
             Screen screenOut = FromPhysicalPoint(pOutPhysical);
 
+            if (screenOut==null && AllowToJump)
+            {
+                double dist = double.PositiveInfinity;
+
+                Segment seg = new Segment(_currentScreen.PixelToPhysical(_oldPoint), _currentScreen.PixelToPhysical(pIn));
+                foreach (Screen s in AllScreens)
+                {
+                    if (s!=_currentScreen)
+                    {
+                        foreach (Point p in seg.Line.Intersect(s.PhysicalBounds))
+                        {
+                            Segment travel = new Segment(_currentScreen.PixelToPhysical(_oldPoint), p);
+                            if (travel.Rect.Contains(_currentScreen.PixelToPhysical(pIn)))
+                            {
+                                if (travel.Size < dist)
+                                {
+                                    dist = travel.Size;
+                                    pOutPhysical = p;
+                                    screenOut = s;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // if new position is within another screen
             if (screenOut != null)
             {
@@ -109,6 +136,7 @@ namespace LittleBigMouse
             }
             else
             {
+
                 double x = pIn.X;
                 double y = pIn.Y;
 
@@ -150,10 +178,10 @@ namespace LittleBigMouse
                 _id += ((_id!="")?"." :"") + s.ID;
             }
 
-            Enabled = Key.GetValue("Enabled", "0").ToString() == "1";
-            AdjustPointer = Key.GetValue("AdjustPointer", "0").ToString() == "1";
-            AdjustSpeed = Key.GetValue("AdjustSpeed", "0").ToString() == "1";
-
+            Enabled = Key.GetValue("Enabled", 0).ToString() == "1";
+            AdjustPointer = Key.GetValue("AdjustPointer", 0).ToString() == "1";
+            AdjustSpeed = Key.GetValue("AdjustSpeed", 0).ToString() == "1";
+            AllowToJump = Key.GetValue("AllowToJump", 0).ToString() == "1";
             foreach(Screen s in AllScreens)
             {
                 s.Load();
@@ -165,6 +193,7 @@ namespace LittleBigMouse
             Key.SetValue("Enabled", Enabled ? "1" : "0");
             Key.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
             Key.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
+            Key.SetValue("AllowToJump", AllowToJump ? "1" : "0");
 
             foreach (Screen s in AllScreens)
                 s.Save(Key);
@@ -259,6 +288,11 @@ namespace LittleBigMouse
         {
             get { return _adjustSpeed; }
             set { _adjustSpeed = value; }
+        }
+        public bool AllowToJump
+        {
+            get { return _allowToJump; }
+            set { _allowToJump = value; }
         }
 
         public Rect ConfigLocation

@@ -79,8 +79,6 @@ namespace LittleBigMouse
         {
             get
             {
-                //return DeviceName.Substring(4);
-                // TODO : It would be better to save actual screen but edid code is broken
                 return _edid.ManufacturerCode + ProductCode.ToString() + "_" + Serial.ToString() + "_" + Bounds.Width + "x" + Bounds.Height;
             }
         }

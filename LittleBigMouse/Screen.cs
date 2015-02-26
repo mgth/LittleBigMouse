@@ -23,6 +23,7 @@
 
 using Microsoft.Win32;
 using System;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -30,8 +31,18 @@ using System.Windows;
 [assembly: InternalsVisibleTo("ScreenConfig")]
 namespace LittleBigMouse
 {
-    public class Screen
+    public class Screen : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void changed(String name)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+        }
+        private void changed(Object o,String name)
+        {
+            if (PropertyChanged != null) PropertyChanged(o, new PropertyChangedEventArgs(name));
+        }
+
         bool _loaded = false;
 
         public event EventHandler PhysicalChanged;
@@ -65,6 +76,11 @@ namespace LittleBigMouse
         {
             get { return _edid.ManufacturerCode; }
         }
+        public String PNPCode
+        {
+            get { return ManufacturerCode + ProductCode; }
+        }
+
         public String SerialNo
         {
             get { return _edid.Block((char)0xFF); }
@@ -98,18 +114,19 @@ namespace LittleBigMouse
             {
                 RegistryKey key = _config.Key.OpenSubKey(ID);
 
-                Point p = new Point(Config.PhysicalOverallBounds.Right, 0);
-
                 if (key != null)
                 {
-                    p = new Point(
-                        double.Parse(key.GetValue("X", RegistryValueKind.String).ToString()),
-                        double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString())
-                    );
+                    PhysicalX = double.Parse(key.GetValue("X", RegistryValueKind.String).ToString());
+                    PhysicalY = double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString());
+             
                     key.Close();
                 }
-
-                PhysicalLocation = p;
+                else
+                {
+                    // TODO : try to define position from windows one
+                    PhysicalX = Config.PhysicalOverallBounds.Right;
+                    PhysicalY = 0;
+                }
 
                 _loaded = true;
             }
@@ -125,35 +142,70 @@ namespace LittleBigMouse
             get { return new Rect(Bounds.TopLeft,new Point(Bounds.BottomRight.X-1.0,Bounds.BottomRight.Y-1.0)); }
         }
 
-        private Point _physicalLocation;
+        private double _physicalX = 0;
+        private double _physicalY = 0;
         public Point PhysicalLocation
         {
             get {
-                return _physicalLocation;
+                return new Point(_physicalX,_physicalY);
             }
             set
             {
-                // Do not move primary screen but all others
-                if(Primary)
+                PhysicalX = value.X;
+                PhysicalY = value.Y;
+            }
+        }
+
+        public double PhysicalX
+        {
+            get { return _physicalX; }
+            set
+            {
+                if (Primary)
                 {
                     foreach (Screen s in Config.AllScreens)
                     {
-                        if(!s.Primary)
+                        if (!s.Primary)
                         {
-                            s.PhysicalLocation = new Point
-                                (
-                                s.PhysicalLocation.X - value.X,
-                                s.PhysicalLocation.Y - value.Y
-                                );
+                            s.PhysicalX -= value;
                         }
                     }
-                    _physicalLocation = new Point(0, 0);
+                    _physicalX = 0;
                 }
                 else
                 {
-                    _physicalLocation = value;           
+                    _physicalX = value;
                 }
                 OnPhysicalChanged();
+                changed("PhysicalX");
+                changed("PhysicalLocation");
+                changed("PhysicalBounds");
+            }
+        }
+        public double PhysicalY
+        {
+            get { return _physicalY; }
+            set
+            {
+                if (Primary)
+                {
+                    foreach (Screen s in Config.AllScreens)
+                    {
+                        if (!s.Primary)
+                        {
+                            s.PhysicalY -= value;
+                        }
+                    }
+                    _physicalY = 0;
+                }
+                else
+                {
+                    _physicalY = value;
+                }
+                OnPhysicalChanged();
+                changed("PhysicalY");
+                changed("PhysicalLocation");
+                changed("PhysicalBounds");
             }
         }
 
@@ -203,32 +255,57 @@ namespace LittleBigMouse
             get { return int.Parse(_screen.DeviceName.Substring(11)); }
         }
 
+        double _pitchX = double.NaN;
         public double PitchX
         {
+            set {
+                _pitchX = value;
+                changed("PitchX");
+                changed("DpiX");
+                changed("DpiAvg");
+                changed("PhysicalWidth");
+                changed("PhysicalBounds");
+            }
             get
             {
-                return DeviceCapsPhysicalSize.Width / Bounds.Width;
+                if (double.IsNaN(_pitchX))
+                    return DeviceCapsPhysicalSize.Width / Bounds.Width;
+                else return _pitchX;
                 //                if (_edid.IsValid) return _edid.PhysicalSize.Width / Bounds.Width;
                 //                else return 25.4 / 96.0;
+            }
+        }
+
+        double _pitchY = double.NaN;
+        public double PitchY
+        {
+            set {
+                _pitchY = value;
+                changed("PitchY");
+                changed("DpiY");
+                changed("DpiAvg");
+                changed("PhysicalHeight");
+                changed("PhysicalBounds");
+            }
+            get
+            {
+                if (double.IsNaN(_pitchY))
+                    return DeviceCapsPhysicalSize.Height / Bounds.Height;
+                else return _pitchY;
+//                if (_edid.IsValid) return _edid.PhysicalSize.Height / Bounds.Height;
+//                else return 25.4 / 96.0;
             }
         }
         
         public double DpiX
         {
+            set { PitchX = 25.4 / value; }
             get { return 25.4/PitchX; }
         }
 
-        public double PitchY
-        {
-            get
-            {
-                return DeviceCapsPhysicalSize.Height / Bounds.Height;
-//                if (_edid.IsValid) return _edid.PhysicalSize.Height / Bounds.Height;
-//                else return 25.4 / 96.0;
-            }
-        }
         public double DpiY
         {
+            set { PitchY = 25.4 / value; }
             get { return 25.4 / PitchY; }
         }
 
@@ -238,6 +315,17 @@ namespace LittleBigMouse
                 double pitch = Math.Sqrt((PitchX * PitchX) + (PitchY * PitchY)) / Math.Sqrt(2);
                 return 25.4 / pitch;
             }
+        }
+
+        public double PhysicalWidth
+        {
+            set { PitchX = value / Bounds.Width; }
+            get { return PitchX * Bounds.Width; }
+        }
+        public double PhysicalHeight
+        {
+            set { PitchY = value / Bounds.Height; }
+            get { return PitchY * Bounds.Height; }
         }
 
         [DllImport("gdi32.dll")]

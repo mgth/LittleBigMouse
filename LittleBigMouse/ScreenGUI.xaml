@@ -5,8 +5,9 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:LittleBigMouse"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300"
-             >
+             d:DesignHeight="300" d:DesignWidth="300" SizeChanged="UserControl_SizeChanged"
+             
+             >             
     <Grid x:Name="grid" SizeChanged="Grid_SizeChanged">
         
             
@@ -24,24 +25,24 @@
                 </LinearGradientBrush>       
        </Border.Background>
         </Border>
-        <Label x:Name="lblPNP" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5,5,0,0" Foreground="#FFD9DCEC"/>
+        <Label Content="{Binding Path=Screen.PNPCode}"  HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5,5,0,0" Foreground="#FFD9DCEC"/>
         
-        <Label x:Name="txtTop" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" VerticalAlignment="Top"/>
-        <Label x:Name="txtBottom" HorizontalAlignment="Center"  Margin="0,0,0,5" Height="23" VerticalAlignment="Bottom"/>
-        <Label x:Name="txtLeft" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" VerticalAlignment="Center"/>
-        <Label x:Name="txtRight" HorizontalAlignment="Right" Height="23" Margin="0,0,5,0" VerticalAlignment="Center" />
+        <Label Content="{Binding Path=PhysicalLocation.Y}" ContentStringFormat="#0.#" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" VerticalAlignment="Top"/>
+        <Label Content="{Binding Path=Screen.PhysicalBounds.Bottom}" ContentStringFormat="#0.#" HorizontalAlignment="Center"  Margin="0,0,0,5" Height="23" VerticalAlignment="Bottom"/>
+        <Label Content="{Binding Path=PhysicalLocation.X}" ContentStringFormat="#0.#" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" VerticalAlignment="Center"/>
+        <Label Content="{Binding Path=Screen.PhysicalBounds.Right}" ContentStringFormat="#0.#" HorizontalAlignment="Right" Height="23" Margin="0,0,5,0" VerticalAlignment="Center" />
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="#FF333E9A" BorderBrush="#FFD9DCEC">
-            <Label Margin="0,-7,0,-5" x:Name="lblName" Content ="0" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />   
+            <Label x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />   
             </Border>
         </StackPanel>
         
-        <Label x:Name="lblDPI"  Margin="5,5,5,5" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="White"/>
+        <Label Content="{Binding Path=Screen.DpiAvg}" ContentStringFormat="#0" Margin="5,5,5,5" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="White"/>
         
         <StackPanel  Margin="5,5,5,5" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-        <Label Margin="0,0,0,-10" x:Name="lblModel" HorizontalAlignment="Center" Foreground="White"/>
-        <Label Margin="0,0,0,-5" x:Name="lblSerial" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
+        <Label Margin="0,0,0,-10" Content="{Binding Path=Screen.Model}" HorizontalAlignment="Center" Foreground="White"/>
+        <Label Margin="0,0,0,-5" Content="{Binding Path=Screen.SerialNo}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
         </StackPanel>
     </Grid>
 </UserControl>

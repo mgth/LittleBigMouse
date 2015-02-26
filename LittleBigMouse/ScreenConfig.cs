@@ -301,35 +301,6 @@ namespace LittleBigMouse
             set { _configLocation = value; }
         }
 
-        public Point PhysicalToUI(Size s, Point p)
-        {
-            Rect all = PhysicalOverallBounds;
-
-            double ratio = Math.Min(
-                s.Width / all.Width,
-                s.Height / all.Height
-                );
-
-            return new Point(
-                (p.X - all.Left) * ratio,
-                (p.Y - all.Top) * ratio
-                );
-        }
-
-        public Point FromUI(Size s, Point p)
-        {
-            Rect all = PhysicalOverallBounds;
-
-            double ratio = Math.Min(
-                s.Width / all.Width,
-                s.Height / all.Height
-                );
-
-            return new Point(
-                (p.X / ratio) + all.Left,
-                (p.Y / ratio) + all.Top
-                );
-        }
         public Screen FromPhysicalPoint(Point p)
         {
             foreach(Screen s in AllScreens)

@@ -14,6 +14,10 @@
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"></ColumnDefinition>
+            <ColumnDefinition Width="Auto"></ColumnDefinition>
+        </Grid.ColumnDefinitions>
         <Grid  Margin="5" x:Name="grid" Background="Black">
 
         </Grid>
@@ -30,11 +34,13 @@
                 <CheckBox x:Name="chkAdjustPointer" Content="Adjust Pointer" Checked="chkAdjustPointer_Checked" Unchecked="chkAdjustPointer_Unchecked" Foreground="LightGray"/>
             </StackPanel>
             <CheckBox x:Name="chkLoadAtStartup" Content="Load at startup" Margin="5,0,0,0" Foreground="LightGray"/>
-            <!--<Button x:Name="cmdInstallService" MinWidth="50" Margin="5,0,0,0" Click="cmdInstallService_Click">Install Service</Button>-->
             <Button x:Name="cmdUnload" MinWidth="50" Margin="5,0,0,0" Click="cmdUnload_Click">Unload</Button>
             <Button x:Name="cmdOk" MinWidth="50" Margin="10,0,0,0" Click="cmdOk_Click">Ok</Button>
             <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
             <Button x:Name="cmdCancel" MinWidth="50" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
         </StackPanel>
+            <Grid x:Name="property" Grid.Column="1">
+                
+            </Grid> 
     </Grid>
 </Window>

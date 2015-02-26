@@ -1,0 +1,48 @@
+﻿<UserControl x:Class="LittleBigMouse.ScreenProperties"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LittleBigMouse"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300"
+             Background="Gray"
+             >
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+        <Label Content="X (mm)" Grid.Column="1" Grid.Row="0" HorizontalAlignment="Right"></Label>
+        <Label Content="Y (mm)" Grid.Column="2" Grid.Row="0" HorizontalAlignment="Right"></Label>
+        
+        <Label Content="Location" Grid.Row="1" HorizontalAlignment="Right"></Label>
+        <TextBox Text="{Binding Path=PhysicalX, StringFormat=N1}"  Grid.Row="1" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=PhysicalY, StringFormat=N1}" Grid.Row="1" Grid.Column="2"></TextBox>
+        
+        <Label Content="Size" Grid.Row="2" HorizontalAlignment="Right"></Label>
+        <TextBox Text="{Binding Path=PhysicalWidth, Mode=TwoWay, StringFormat=N1}" Grid.Row="2" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=PhysicalHeight, Mode=TwoWay, StringFormat=N1}" Grid.Row="2" Grid.Column="2"></TextBox>
+        
+        <Label Content="DPI" Grid.Row="3" HorizontalAlignment="Right"></Label>
+        <TextBox Text="{Binding Path=DpiX, Mode=TwoWay, StringFormat=N0}" Grid.Row="3" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=DpiY, Mode=TwoWay, StringFormat=N0}" Grid.Row="3" Grid.Column="2"></TextBox>
+        
+        <Label Content="Pitch" Grid.Row="4" HorizontalAlignment="Right"></Label>
+        <TextBox Text="{Binding Path=PitchX, Mode=TwoWay, StringFormat=N3}" Grid.Row="4" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=PitchY, Mode=TwoWay, StringFormat=N3}" Grid.Row="4" Grid.Column="2"></TextBox>
+        
+    </Grid>
+</UserControl>

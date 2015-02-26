@@ -138,6 +138,9 @@
   <ItemGroup>
     <Compile Include="AppConfig.cs" />
     <Compile Include="Geo.cs" />
+    <Compile Include="ScreenProperties.xaml.cs">
+      <DependentUpon>ScreenProperties.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Sizer.xaml.cs">
       <DependentUpon>Sizer.xaml</DependentUpon>
     </Compile>
@@ -166,6 +169,10 @@
       <SubType>Code</SubType>
     </Compile>
     <Page Include="ScreenGUI.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="ScreenProperties.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

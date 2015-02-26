@@ -22,6 +22,7 @@
 */
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,14 +30,29 @@ using System.Windows.Media;
 
 namespace LittleBigMouse
 {
+    public delegate void ScreenGUISelectedChangedHandler(Screen s, bool selected);
     /// <summary>
     /// Interaction logic for ScreenGUI.xaml
     /// </summary>
-    public partial class ScreenGUI : UserControl
+    public partial class ScreenGUI : UserControl, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void changed(String name)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+        }
         private Screen _screen;
         public Screen Screen {
             get { return _screen; }
+        }
+
+        public event ScreenGUISelectedChangedHandler SelectedChanged; 
+        private void OnSelectedChanged()
+        {
+            if (SelectedChanged!=null)
+            {
+                SelectedChanged(_screen, Selected);
+            }
         }
 
         private bool _selected = false;
@@ -51,39 +67,46 @@ namespace LittleBigMouse
 
                     selectStartColor.Color = Colors.Lime;
                     selectStopColor.Color = Colors.DarkGreen;
+                    ShowSizers();
+                    OnSelectedChanged();
                 }
                 else
                 {
                     selectStartColor.Color = Colors.Gray;
                     selectStopColor.Color = Colors.Gray;
+                    HideSizers();
+                    OnSelectedChanged();
                 }
             }
         }
 
-        private void _screen_PhysicalChanged(object sender, EventArgs e)
+        private Point _physicalLocation=new Point(0,0);
+        public Point PhysicalLocation
         {
-            UpdateValues();
+            set {
+                _physicalLocation = value;
+                UpdateSize();
+                changed("PhysicalLocation");
+            }
+            get { return _physicalLocation; }
         }
 
-        public void UpdateValues()
+        public void UpdateSize()
         {
-                txtTop.Content = _screen.PhysicalBounds.Top.ToString("0.0");
-                txtBottom.Content = _screen.PhysicalBounds.Bottom.ToString("0.0");
-                txtLeft.Content = _screen.PhysicalBounds.Left.ToString("0.0");
-                txtRight.Content = _screen.PhysicalBounds.Right.ToString("0.0");
+            Rect all = Screen.Config.PhysicalOverallBounds;
 
-                lblDPI.Content = _screen.DpiAvg.ToString("0");
-            lblModel.Content = _screen.Model;
-            lblSerial.Content = _screen.SerialNo;
-            lblPNP.Content = _screen.ManufacturerCode+_screen.ProductCode;
-            lblName.Content = _screen.DeviceNo.ToString();
+            double ratio = Math.Min(
+                _grid.ActualWidth / all.Width,
+                _grid.ActualHeight / all.Height
+                );
 
-                Rect r = Screen.ToUI(new Size(_grid.ActualWidth, _grid.ActualHeight));
-
-                Margin = new Thickness(
-                    r.X,
-                    r.Y,
+            Margin = new Thickness(
+                    (PhysicalLocation.X - all.X) * ratio,
+                    (PhysicalLocation.Y - all.Y) * ratio,
                     0, 0);
+
+            Width = Screen.PhysicalWidth * ratio;
+            Height = Screen.PhysicalHeight * ratio;
         }
 
         private Grid _grid;
@@ -91,16 +114,24 @@ namespace LittleBigMouse
         {
             _grid = grid;
             _screen = s;
+            _physicalLocation = s.PhysicalLocation;
+
             InitializeComponent();
 
-            _screen.PhysicalChanged += _screen_PhysicalChanged;
-            UpdateValues();
+            _screen.PropertyChanged += _screen_PropertyChanged;
+            UpdateSize();
+
+            DataContext = this;
         }
 
-        private void lblDPI_TextChanged(object sender, TextChangedEventArgs e)
+        private void _screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-           // _screen.DpiX = double.Parse(lblDPI.Text);
-           // _screen.DpiY = double.Parse(lblDPI.Text);
+            switch(e.PropertyName)
+            {
+                case "PhysicalBounds":
+                    PhysicalLocation = Screen.PhysicalLocation;
+                    break;
+            }
         }
 
         private List<Sizer> _sizers = new List<Sizer>();
@@ -135,24 +166,7 @@ namespace LittleBigMouse
                 _sizers.Clear();
         }
 
-        public void SwitchSizers()
-        {
-            if (_sizers.Count()>0)
-            {
-                HideSizers();
-            }
-            else
-            {
-                ShowSizers();
-            }
-        }
-
-        private void cmdSize_Click(object sender, RoutedEventArgs e)
-        {
-            SwitchSizers();
-        }
-
-        private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
+         private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             center.Height = Math.Min(grid.ActualHeight, grid.ActualWidth)/3;
             center.Width =  center.Height;
@@ -160,6 +174,11 @@ namespace LittleBigMouse
 
             if (center.Height>0)
                 lblName.FontSize = center.Height / 2;
+        }
+
+        private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            changed("PhysicalLocation");
         }
     }
 }

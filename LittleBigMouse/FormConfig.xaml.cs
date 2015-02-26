@@ -66,6 +66,7 @@ namespace LittleBigMouse
                 sgui.MouseMove += _gui_MouseMove;
                 sgui.MouseLeftButtonDown += _gui_MouseLeftButtonDown;
                 sgui.MouseLeftButtonUp += _gui_MouseLeftButtonUp;
+                sgui.SelectedChanged += _gui_SelectedChanged;
             }
 
             LoadLocation();
@@ -75,6 +76,45 @@ namespace LittleBigMouse
             SizeChanged += FormConfig_SizeChanged;
             LocationChanged += FormConfig_LocationChanged;
         }
+        public Point PhysicalToUI(Point p)
+        {
+            Rect all = _newConfig.PhysicalOverallBounds;
+
+            double ratio = Math.Min(
+                grid.Width / all.Width,
+                grid.Height / all.Height
+                );
+
+            return new Point(
+                (p.X - all.Left) * ratio,
+                (p.Y - all.Top) * ratio
+                );
+        }
+
+        public Point UIToPhysical(Point p)
+        {
+            Rect all = _newConfig.PhysicalOverallBounds;
+
+            double ratio = Math.Min(
+                grid.ActualWidth / all.Width,
+                grid.ActualHeight / all.Height
+                );
+
+            return new Point(
+                (p.X / ratio) + all.Left,
+                (p.Y / ratio) + all.Top
+                );
+        }
+
+        private void _gui_SelectedChanged(Screen s, bool selected)
+        {
+            if (selected)
+            {
+                property.Children.Clear();
+                property.Children.Add(new ScreenProperties(s));
+            }
+        }
+
         private void LoadLocation()
         {
             Rect wa = _currentConfig.PrimaryScreen.WpfWorkingArea;
@@ -110,26 +150,21 @@ namespace LittleBigMouse
             if (RegistryChanged != null) RegistryChanged(sender, e);
         }
 
-        private Point oldPosition;
-        private Point dragStartPosition;
-        private bool moving = false;
+        private Point _oldPosition;
+        private Point _dragStartPosition;
+        private bool _moving = false;
 
         private void _gui_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
 
-            if (moving)
+            if (_moving)
             {
 
-                Point p = _newConfig.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), new Point(gui.Margin.Left, gui.Margin.Top));
+                gui.Screen.PhysicalLocation = gui.PhysicalLocation;
 
-                double xOffset = p.X - gui.Screen.PhysicalLocation.X;
-                double yOffset = p.Y - gui.Screen.PhysicalLocation.Y;
-
-                gui.Screen.PhysicalLocation = new Point(gui.Screen.PhysicalLocation.X + xOffset, gui.Screen.PhysicalLocation.Y + yOffset);
-
-                moving = false;
+                _moving = false;
                 ResizeAll();
 
                 foreach(UIElement el in grid.Children)
@@ -138,10 +173,8 @@ namespace LittleBigMouse
                     if (el_gui != null && el_gui != gui)
                     {
                         el_gui.Selected = false;
-                        el_gui.HideSizers();
                     }
                 }
-                gui.ShowSizers();
                 gui.Selected = true;
             }
             else // Its a click
@@ -152,11 +185,9 @@ namespace LittleBigMouse
                     if (el_gui != null && el_gui != gui)
                     {
                         el_gui.Selected = false;
-                        el_gui.HideSizers();
                     }
                 }
                 gui.Selected = !gui.Selected;
-                gui.SwitchSizers();
             }
         }
 
@@ -165,8 +196,8 @@ namespace LittleBigMouse
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
 
-            oldPosition = _newConfig.FromUI(new Size(grid.ActualWidth, grid.ActualHeight), e.GetPosition(grid));
-            dragStartPosition = gui.Screen.PhysicalLocation;
+            _oldPosition = UIToPhysical(e.GetPosition(grid));
+            _dragStartPosition = gui.Screen.PhysicalLocation;
 
             // bring element to front so we can move it over the others
             grid.Children.Remove(gui);
@@ -181,12 +212,12 @@ namespace LittleBigMouse
 
             if (e.LeftButton == MouseButtonState.Pressed)
             {
-                moving = true;
+                _moving = true;
 
-                Point newPosition = _newConfig.FromUI(new Size(grid.ActualWidth,grid.ActualHeight), e.GetPosition(grid));
+                Point newPosition = UIToPhysical(e.GetPosition(grid));
 
-                    double left = dragStartPosition.X - oldPosition.X + newPosition.X;
-                    double right = left+gui.Screen.PhysicalBounds.Width;
+                    double left = _dragStartPosition.X - _oldPosition.X + newPosition.X;
+                    double right = left+gui.Screen.PhysicalWidth;
 
                     Point pNear = newPosition;
                     foreach (Screen s in _newConfig.AllScreens)
@@ -225,7 +256,7 @@ namespace LittleBigMouse
                     }
 
                     newPosition = pNear;
-                    double top = dragStartPosition.Y - oldPosition.Y + newPosition.Y;
+                    double top = _dragStartPosition.Y - _oldPosition.Y + newPosition.Y;
                     double bottom = top + gui.Screen.PhysicalBounds.Height;
                     foreach (Screen s in _newConfig.AllScreens)
                     {
@@ -263,19 +294,13 @@ namespace LittleBigMouse
                     }
                     newPosition = pNear;
 
-                    Point p = _newConfig.PhysicalToUI(
-                        new Size(grid.ActualWidth, grid.ActualHeight),
+                    gui.PhysicalLocation =
                         new Point(
-                            dragStartPosition.X - oldPosition.X + newPosition.X,
-                            dragStartPosition.Y - oldPosition.Y + newPosition.Y
+                            _dragStartPosition.X - _oldPosition.X + newPosition.X,
+                            _dragStartPosition.Y - _oldPosition.Y + newPosition.Y
                             )
-                        );
+                        ;
 
-                    gui.Margin = new Thickness(
-                        p.X,
-                        p.Y,
-                        0,
-                        0);
 
                     //oldPosition = newPosition;
                 }

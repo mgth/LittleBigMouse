@@ -12,7 +12,7 @@
         MouseMove="Window_MouseMove"
         Topmost="True"
         ShowInTaskbar="False"
-        ShowActivated="False"
+        ShowActivated="False" Closing="Window_Closing"
         >
     <Border x:Name="border" Opacity="0.5" BorderThickness="0,1" BorderBrush="Red">
         <Border.Background>

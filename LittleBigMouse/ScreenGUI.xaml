@@ -8,6 +8,8 @@
              d:DesignHeight="300" d:DesignWidth="300" SizeChanged="UserControl_SizeChanged"
              HorizontalAlignment="Left"
              VerticalAlignment="Top"
+             MinHeight="0"
+             MinWidth="0"
              >             
     <Grid x:Name="grid" SizeChanged="Grid_SizeChanged">
         

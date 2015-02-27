@@ -157,13 +157,20 @@ namespace LittleBigMouse
         private InsideRuler _ruler = null;
         private void AddSizer(SizerSide side)
         {
-            Sizer sz = Sizer.getSizer(_screen, side);
-
-            if (sz!=null)
+            foreach (Screen s in Screen.Config.AllScreens)
             {
+                Sizer sz = new Sizer(Screen, s, side);
                 _sizers.Add(sz);
-                sz.Show();
+                //sz.Show();
             }
+
+            //Sizer sz = Sizer.getSizer(_screen, side);
+
+            //if (sz!=null)
+            //{
+            //    _sizers.Add(sz);
+            //    sz.Show();
+            //}
         }
 
         public void ShowSizers()
@@ -174,9 +181,6 @@ namespace LittleBigMouse
             AddSizer(SizerSide.Right);
             AddSizer(SizerSide.Top);
             AddSizer(SizerSide.Bottom);
-
-            _ruler = new InsideRuler(Screen);
-            _ruler.Show();
         }
 
         public void HideSizers()

@@ -49,76 +49,6 @@ namespace LittleBigMouse
 
         SizerSide _side;
 
-        public static Sizer getSizer(Screen screen, SizerSide side)
-        {
-            Screen drawOn = null;
-            switch (side)
-            {
-                case SizerSide.Left:
-                    drawOn = screen.Config.FromPhysicalPoint(
-                        new Point(
-                            screen.PhysicalBounds.Left - 1.0, // TODO : +1 is just a ugly hack to be sure to be in side screen
-                            screen.PhysicalBounds.Top + 1.0
-                        )
-                        );
-                    if (drawOn == null)
-                        drawOn = screen.Config.FromPhysicalPoint(
-                            new Point(
-                            screen.PhysicalBounds.Left - 1.0,
-                            screen.PhysicalBounds.Bottom - 1.0
-                            )
-                            );
-                break;
-                case SizerSide.Right:
-                    drawOn = screen.Config.FromPhysicalPoint(
-                        new Point(
-                            screen.PhysicalBounds.Right + 1.0, // TODO : +1 is just a ugly hack to be sure to be in side screen
-                            screen.PhysicalBounds.Top + 1.0
-                        )
-                        );
-                    if (drawOn == null)
-                        drawOn = screen.Config.FromPhysicalPoint(
-                            new Point(
-                            screen.PhysicalBounds.Right + 1.0,
-                            screen.PhysicalBounds.Bottom - 1.0
-                            )
-                            );
-                    break;
-                case SizerSide.Top:
-                    drawOn = screen.Config.FromPhysicalPoint(
-                        new Point(
-                            screen.PhysicalBounds.Left + 1.0, // TODO : +1 is just a ugly hack to be sure to be in side screen
-                            screen.PhysicalBounds.Top - 1.0
-                        )
-                        );
-                    if (drawOn == null)
-                        drawOn = screen.Config.FromPhysicalPoint(
-                            new Point(
-                            screen.PhysicalBounds.Right - 1.0,
-                            screen.PhysicalBounds.Top - 1.0
-                            )
-                            );
-                    break;
-                case SizerSide.Bottom:
-                    drawOn = screen.Config.FromPhysicalPoint(
-                        new Point(
-                            screen.PhysicalBounds.Left + 1.0, // TODO : +1 is just a ugly hack to be sure to be in side screen
-                            screen.PhysicalBounds.Bottom + 1.0
-                        )
-                        );
-                    if (drawOn == null)
-                        drawOn = screen.Config.FromPhysicalPoint(
-                            new Point(
-                            screen.PhysicalBounds.Right - 1.0,
-                            screen.PhysicalBounds.Bottom + 1.0
-                            )
-                            );
-                    break;
-            }
-
-            if (drawOn != null) return new Sizer(screen, drawOn, side);
-            else return null;
-        }
 
         private void setSize()
         {
@@ -128,36 +58,67 @@ namespace LittleBigMouse
                     Point left_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
                     Point left_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
 
-                    Top = Math.Max(left_top.Y, _drawOn.WpfBounds.Y);
-                    canvas.Margin = new Thickness(0, left_top.Y - Top, 0, 0);
-                    Height = Math.Min(left_bottom.Y, _drawOn.WpfBounds.Bottom) - Top;
+                    if (left_bottom.Y <= _drawOn.WpfBounds.Y || left_top.Y >= _drawOn.WpfBounds.Bottom)
+                    {
+                        Hide();
+                    }
+                    else
+                    {
+                        Top = Math.Max(left_top.Y, _drawOn.WpfBounds.Y);
+                        canvas.Margin = new Thickness(0, left_top.Y - Top, 0, 0);
+                        Height = Math.Max(Math.Min(left_bottom.Y, _drawOn.WpfBounds.Bottom) - Top, 0);
+                        Show();
+                    }
                     break;
 
                 case SizerSide.Right:
                     Point right_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
                     Point right_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
 
-                    Top = Math.Max(right_top.Y, _drawOn.WpfBounds.Y);
-                    canvas.Margin = new Thickness(0,right_top.Y - Top, 0, 0);
-                    Height = Math.Min(right_bottom.Y, _drawOn.WpfBounds.Bottom) - Top;
+                    if (right_bottom.Y <= _drawOn.WpfBounds.Y || right_top.Y >= _drawOn.WpfBounds.Bottom)
+                    {
+                        Hide();
+                    }
+                    else
+                    {
+                        Top = Math.Max(right_top.Y, _drawOn.WpfBounds.Y);
+                        canvas.Margin = new Thickness(0, right_top.Y - Top, 0, 0);
+                        Height = Math.Max(Math.Min(right_bottom.Y, _drawOn.WpfBounds.Bottom) - Top, 0);
+                        Show();
+                    }
                     break;
 
                 case SizerSide.Top:
                     Point top_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
                     Point top_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
 
-                    Left = Math.Max(top_left.X, _drawOn.WpfBounds.X);
-                    canvas.Margin = new Thickness(top_left.X - Left, 0, 0, 0);
-                    Width = Math.Min(top_right.X, _drawOn.WpfBounds.Right) - Left;
+                    if (top_right.X <= _drawOn.WpfBounds.X || top_left.X >= _drawOn.WpfBounds.Right)
+                    {
+                        Hide();
+                    }
+                    else
+                    {
+                        Left = Math.Max(top_left.X, _drawOn.WpfBounds.X);
+                        canvas.Margin = new Thickness(top_left.X - Left, 0, 0, 0);
+                        Width = Math.Max(Math.Min(top_right.X, _drawOn.WpfBounds.Right) - Left, 0);
+                        Show();
+                    }
                     break;
-
                 case SizerSide.Bottom:
                     Point bottom_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
                     Point bottom_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
 
-                    Left = Math.Max(bottom_left.X, _drawOn.WpfBounds.X);
-                    canvas.Margin = new Thickness(bottom_left.X - Left, 0, 0, 0);
-                    Width = Math.Min(bottom_right.X, _drawOn.WpfBounds.Right) - Left;
+                    if (bottom_right.X <= _drawOn.WpfBounds.X || bottom_left.X >= _drawOn.WpfBounds.Right)
+                    {
+                        Hide();
+                    }
+                    else
+                    {
+                        Left = Math.Max(bottom_left.X, _drawOn.WpfBounds.X);
+                        canvas.Margin = new Thickness(bottom_left.X - Left, 0, 0, 0);
+                        Width = Math.Max(Math.Min(bottom_right.X, _drawOn.WpfBounds.Right) - Left, 0);
+                        Show();
+                    }
                     break;
             }
 
@@ -170,15 +131,12 @@ namespace LittleBigMouse
             _drawOn = drawOn;
             _side = side;
 
-            _screen.PropertyChanged += _screen_PropertyChanged;
-
-            setSize();
 
             switch (_side)
             {
                 case SizerSide.Left:
                     Width = _drawOn.WpfBounds.Width / 16;
-                    Left = _drawOn.Bounds.Right - Width;
+                    Left = _drawOn.WpfBounds.Right - Width;
 
                     gradient.StartPoint = new Point(1, 0.5);
                     gradient.EndPoint = new Point(0, 0.5);
@@ -200,7 +158,7 @@ namespace LittleBigMouse
 
                 case SizerSide.Top:
                     Height = _drawOn.WpfBounds.Height  / 8;
-                    Top = _drawOn.WpfBounds.Y - Height;
+                    Top = _drawOn.WpfBounds.Bottom - Height;
 
                     gradient.StartPoint = new Point(0.5, 1);
                     gradient.EndPoint = new Point(0.5, 0);
@@ -210,17 +168,20 @@ namespace LittleBigMouse
                     break;
 
                 case SizerSide.Bottom:
-                    Height = (_drawOn.Bounds.Height * _drawOn.PixelToWpfRatioY) / 8;
-                    Top = _drawOn.Bounds.Y;
+                    Height = _drawOn.WpfBounds.Height / 8;
+                    Top = _drawOn.WpfBounds.Y;
 
                     gradient.StartPoint = new Point(0.5, 0);
                     gradient.EndPoint = new Point(0.5, 1);
 
                     border.BorderThickness = new Thickness(1, 0, 1, 0);
-
                     drawHorizontalRuler(SizerSide.Top);
                     break;
             }
+
+            setSize();
+            _screen.PropertyChanged += _screen_PropertyChanged;
+
         }
 
         private void _screen_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -401,6 +362,11 @@ namespace LittleBigMouse
             {
                 _moving = false;
             }
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            _screen.PropertyChanged -= _screen_PropertyChanged;
         }
     }
 }

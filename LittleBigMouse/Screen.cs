@@ -610,27 +610,27 @@ namespace LittleBigMouse
 
         public Point PixelToPhysical(Point p)
         {
-            double x = Math.Truncate(p.X - Bounds.X) * PitchX + PhysicalLocation.X;
-            double y = Math.Truncate(p.Y - Bounds.Y) * PitchY + PhysicalLocation.Y;
+            double x = (p.X - Bounds.X) * PitchX + PhysicalLocation.X;
+            double y = (p.Y - Bounds.Y) * PitchY + PhysicalLocation.Y;
             return new Point(x, y);
         }
         public Size PixelToPhysical(Size s)
         {
-            double x = Math.Truncate(s.Width) * PitchX + PhysicalLocation.X;
-            double y = Math.Truncate(s.Height) * PitchY + PhysicalLocation.Y;
+            double x = s.Width * PitchX + PhysicalLocation.X;
+            double y = s.Height * PitchY + PhysicalLocation.Y;
             return new Size(x, y);
         }
         public Point PhysicalToPixel(Point p)
         {
-            double x = Math.Truncate((p.X - PhysicalLocation.X) / PitchX) + Bounds.X;
-            double y = Math.Truncate((p.Y - PhysicalLocation.Y) / PitchY) + Bounds.Y;
+            double x = Math.Floor(((p.X - PhysicalLocation.X) / PitchX)+0.5) + Bounds.X;
+            double y = Math.Floor(((p.Y - PhysicalLocation.Y) / PitchY)+0.5) + Bounds.Y;
             return new Point(x, y);
         }
 
         public Point PixelToWpf(Point p)
         {
-            double x = Math.Truncate(p.X) * PixelToWpfRatioX;
-            double y = Math.Truncate(p.Y) * PixelToWpfRatioY;
+            double x = p.X * PixelToWpfRatioX;
+            double y = p.Y * PixelToWpfRatioY;
             return new Point(x,y);
         }
 
@@ -641,8 +641,8 @@ namespace LittleBigMouse
 
         public Point WpfToPixel(Point p)
         {
-            double x = Math.Truncate(p.X / PixelToWpfRatioX);
-            double y = Math.Truncate(p.Y / PixelToWpfRatioY);
+            double x = Math.Floor((p.X / PixelToWpfRatioX)+0.5);
+            double y = Math.Floor((p.Y / PixelToWpfRatioY)+0.5);
             return new Point(x, y);
         }
         public Point PhysicalToWpf(Point p)

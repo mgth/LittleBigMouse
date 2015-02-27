@@ -43,8 +43,6 @@ namespace LittleBigMouse
             if (PropertyChanged != null) PropertyChanged(o, new PropertyChangedEventArgs(name));
         }
 
-        bool _loaded = false;
-
         public event EventHandler PhysicalChanged;
 
         private void OnPhysicalChanged()
@@ -101,12 +99,26 @@ namespace LittleBigMouse
 
         public void Save(RegistryKey baseKey)
         {
-            RegistryKey key = baseKey.CreateSubKey(ID);
+            using (RegistryKey key = baseKey.CreateSubKey(ID))
+            {
+                key.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
+                key.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
 
-            key.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
-            key.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
+                if (double.IsNaN(_pitchX)) {
+                    try { key.DeleteSubKey("PitchX"); }
+                    catch (Exception e) { }
+                     }
+                else { key.SetValue("PitchX", PitchX.ToString(), RegistryValueKind.String); }
 
-            key.Close();
+                if (double.IsNaN(_pitchY)) {
+                    try { key.DeleteSubKey("PitchY"); }
+                    catch (Exception e) { }
+                }
+                else { key.SetValue("PitchY", PitchY.ToString(), RegistryValueKind.String); }
+
+                key.Close();
+            }
+
         }
         public void Load(RegistryKey configkey)
         {
@@ -116,6 +128,12 @@ namespace LittleBigMouse
                 {
                     PhysicalX = double.Parse(key.GetValue("X", RegistryValueKind.String).ToString());
                     PhysicalY = double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString());
+
+                    String pitchX = key.GetValue("PitchX", "NaN").ToString();
+                    if (pitchX!="NaN") PitchX = double.Parse(pitchX);
+
+                    String pitchY = key.GetValue("PitchY", "NaN").ToString();
+                    if (pitchY != "NaN") PitchY = double.Parse(pitchY);
 
                     key.Close();
                 }
@@ -263,12 +281,15 @@ namespace LittleBigMouse
         public double PitchX
         {
             set {
-                _pitchX = value;
-                changed("PitchX");
-                changed("DpiX");
-                changed("DpiAvg");
-                changed("PhysicalWidth");
-                changed("PhysicalBounds");
+                if (value!=PitchX)
+                {
+                    _pitchX = value;
+                    changed("PitchX");
+                    changed("DpiX");
+                    changed("DpiAvg");
+                    changed("PhysicalWidth");
+                    changed("PhysicalBounds");
+                }
             }
             get
             {
@@ -284,12 +305,15 @@ namespace LittleBigMouse
         public double PitchY
         {
             set {
-                _pitchY = value;
-                changed("PitchY");
-                changed("DpiY");
-                changed("DpiAvg");
-                changed("PhysicalHeight");
-                changed("PhysicalBounds");
+                if (value!=PitchY)
+                {
+                    _pitchY = value;
+                    changed("PitchY");
+                    changed("DpiY");
+                    changed("DpiAvg");
+                    changed("PhysicalHeight");
+                    changed("PhysicalBounds");
+                }
             }
             get
             {

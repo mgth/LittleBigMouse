@@ -143,6 +143,13 @@ namespace LittleBigMouse
                 case "PhysicalBounds":
                     PhysicalLocation = Screen.PhysicalLocation;
                     break;
+                case "DpiAvg":
+                    if (Selected)
+                    {
+                        Selected = false;
+                        Selected = true;
+                    }
+                    break;
             }
         }
 

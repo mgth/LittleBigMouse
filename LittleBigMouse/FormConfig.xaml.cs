@@ -388,45 +388,5 @@ namespace LittleBigMouse
             _newConfig.Stop();
             if (_currentConfig != null) _currentConfig.Start();
         }
-
-        private void chkEnabled_Checked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.Enabled = true;
-        }
-
-        private void chkEnabled_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.Enabled = false;
-        }
-
-        private void chkAdjustSpeed_Checked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.AdjustSpeed = true;
-        }
-
-        private void chkAdjustPointer_Checked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.AdjustPointer = true;
-        }
-
-        private void chkAdjustSpeed_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.AdjustSpeed = false;
-        }
-
-        private void chkAdjustPointer_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.AdjustPointer = false;
-        }
-
-        private void chkAllowToJump_Checked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.AllowToJump = true;
-        }
-
-        private void chkAllowToJump_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _newConfig.AllowToJump = false;
-        }
     }
 }

@@ -147,7 +147,7 @@ namespace LittleBigMouse
         }
 
         private List<Sizer> _sizers = new List<Sizer>();
-
+        private InsideRuler _ruler = null;
         private void AddSizer(SizerSide side)
         {
             Sizer sz = Sizer.getSizer(_screen, side);
@@ -167,6 +167,9 @@ namespace LittleBigMouse
             AddSizer(SizerSide.Right);
             AddSizer(SizerSide.Top);
             AddSizer(SizerSide.Bottom);
+
+            _ruler = new InsideRuler(Screen);
+            _ruler.Show();
         }
 
         public void HideSizers()
@@ -176,6 +179,12 @@ namespace LittleBigMouse
                     sz.Close();
                 }
                 _sizers.Clear();
+
+            if (_ruler!=null)
+            {
+                _ruler.Close();
+                _ruler = null;
+            }
         }
 
          private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)

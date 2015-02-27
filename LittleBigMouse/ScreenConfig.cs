@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using LittleBigMouseGeo;
 using Microsoft.Win32;
 using MouseKeyboardActivityMonitor;
 using MouseKeyboardActivityMonitor.WinApi;

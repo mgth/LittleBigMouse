@@ -28,5 +28,11 @@ namespace LittleBigMouse
 
             DataContext = _screen;
         }
+
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            _screen.DpiX = double.NaN;
+            _screen.DpiY = double.NaN;
+        }
     }
 }

@@ -24,7 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 
-namespace LittleBigMouse
+namespace LittleBigMouseGeo
 {
     public class Line
     {

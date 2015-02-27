@@ -138,6 +138,9 @@
   <ItemGroup>
     <Compile Include="AppConfig.cs" />
     <Compile Include="Geo.cs" />
+    <Compile Include="InsideRuler.xaml.cs">
+      <DependentUpon>InsideRuler.xaml</DependentUpon>
+    </Compile>
     <Compile Include="ScreenProperties.xaml.cs">
       <DependentUpon>ScreenProperties.xaml</DependentUpon>
     </Compile>
@@ -168,6 +171,10 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="InsideRuler.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="ScreenGUI.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

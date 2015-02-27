@@ -214,6 +214,13 @@ namespace LittleBigMouse
             }
         }
 
+        public Rect WpfBounds
+        {
+            get
+            {
+                return PixelToWpf(Bounds);
+            }
+        }
 
         public Rect WorkingArea
         {
@@ -520,14 +527,14 @@ namespace LittleBigMouse
             }
         }
 
-        public double WpfRatioX
+        public double PixelToWpfRatioX
         {
             get
             {
                 return 96.0 / GraphicsDpiX;
             }
         }
-        public double WpfRatioY
+        public double PixelToWpfRatioY
         {
             get
             {
@@ -605,8 +612,8 @@ namespace LittleBigMouse
 
         public Point PixelToWpf(Point p)
         {
-            double x = Math.Truncate(p.X) * WpfRatioX;
-            double y = Math.Truncate(p.Y) * WpfRatioY;
+            double x = Math.Truncate(p.X) * PixelToWpfRatioX;
+            double y = Math.Truncate(p.Y) * PixelToWpfRatioY;
             return new Point(x,y);
         }
 
@@ -617,8 +624,8 @@ namespace LittleBigMouse
 
         public Point WpfToPixel(Point p)
         {
-            double x = Math.Truncate(p.X / WpfRatioX);
-            double y = Math.Truncate(p.Y / WpfRatioY);
+            double x = Math.Truncate(p.X / PixelToWpfRatioX);
+            double y = Math.Truncate(p.Y / PixelToWpfRatioY);
             return new Point(x, y);
         }
         public Point PhysicalToWpf(Point p)

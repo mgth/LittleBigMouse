@@ -44,5 +44,6 @@
         <TextBox Text="{Binding Path=PitchX, Mode=TwoWay, StringFormat=N3}" Grid.Row="4" Grid.Column="1"></TextBox>
         <TextBox Text="{Binding Path=PitchY, Mode=TwoWay, StringFormat=N3}" Grid.Row="4" Grid.Column="2"></TextBox>
         
+        <Button Content="Reset" Grid.Column="1" Grid.Row="5" Grid.ColumnSpan="2" Click="Button_Click"/>
     </Grid>
 </UserControl>

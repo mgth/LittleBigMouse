@@ -104,16 +104,10 @@ namespace LittleBigMouse
                 key.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
                 key.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
 
-                if (double.IsNaN(_pitchX)) {
-                    try { key.DeleteSubKey("PitchX"); }
-                    catch (Exception e) { }
-                     }
+                if (double.IsNaN(_pitchX)) { key.DeleteValue("PitchX", false); }
                 else { key.SetValue("PitchX", PitchX.ToString(), RegistryValueKind.String); }
 
-                if (double.IsNaN(_pitchY)) {
-                    try { key.DeleteSubKey("PitchY"); }
-                    catch (Exception e) { }
-                }
+                if (double.IsNaN(_pitchY)) { key.DeleteValue("PitchY",false); }
                 else { key.SetValue("PitchY", PitchY.ToString(), RegistryValueKind.String); }
 
                 key.Close();

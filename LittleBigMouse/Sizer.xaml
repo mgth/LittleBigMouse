@@ -17,9 +17,8 @@
     <Border x:Name="border" Opacity="0.5" BorderThickness="0,1" BorderBrush="Red">
         <Border.Background>
             <LinearGradientBrush x:Name="gradient" StartPoint="0,0.5" EndPoint="1,0.5">
-                <GradientStop Color="#C04080FF" Offset="0"/>
-                <GradientStop Color="#304080FF" Offset="0.5"/>
-                <GradientStop Color="#004080FF" Offset="1"/>
+                <GradientStop Color="#FF4080FF" Offset="0"/>
+                <GradientStop Color="#00808080" Offset="1"/>
             </LinearGradientBrush>
         </Border.Background>
         <Canvas x:Name="canvas">

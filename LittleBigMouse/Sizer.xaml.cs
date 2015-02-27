@@ -20,6 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -119,6 +120,49 @@ namespace LittleBigMouse
             else return null;
         }
 
+        private void setSize()
+        {
+            switch (_side)
+            {
+                case SizerSide.Left:
+                    Point left_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
+                    Point left_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
+
+                    Top = Math.Max(left_top.Y, _drawOn.WpfBounds.Y);
+                    canvas.Margin = new Thickness(0, left_top.Y - Top, 0, 0);
+                    Height = Math.Min(left_bottom.Y, _drawOn.WpfBounds.Bottom) - Top;
+                    break;
+
+                case SizerSide.Right:
+                    Point right_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
+                    Point right_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
+
+                    Top = Math.Max(right_top.Y, _drawOn.WpfBounds.Y);
+                    canvas.Margin = new Thickness(0,right_top.Y - Top, 0, 0);
+                    Height = Math.Min(right_bottom.Y, _drawOn.WpfBounds.Bottom) - Top;
+                    break;
+
+                case SizerSide.Top:
+                    Point top_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
+                    Point top_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
+
+                    Left = Math.Max(top_left.X, _drawOn.WpfBounds.X);
+                    canvas.Margin = new Thickness(top_left.X - Left, 0, 0, 0);
+                    Width = Math.Min(top_right.X, _drawOn.WpfBounds.Right) - Left;
+                    break;
+
+                case SizerSide.Bottom:
+                    Point bottom_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
+                    Point bottom_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
+
+                    Left = Math.Max(bottom_left.X, _drawOn.WpfBounds.X);
+                    canvas.Margin = new Thickness(bottom_left.X - Left, 0, 0, 0);
+                    Width = Math.Min(bottom_right.X, _drawOn.WpfBounds.Right) - Left;
+                    break;
+            }
+
+        }
+
         public Sizer(Screen screen, Screen drawOn, SizerSide side)
         {
             InitializeComponent();
@@ -126,19 +170,17 @@ namespace LittleBigMouse
             _drawOn = drawOn;
             _side = side;
 
-            switch(_side)
+            _screen.PropertyChanged += _screen_PropertyChanged;
+
+            setSize();
+
+            switch (_side)
             {
                 case SizerSide.Left:
-                    Point left_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
-                    Point left_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
+                    Width = _drawOn.WpfBounds.Width / 16;
+                    Left = _drawOn.Bounds.Right - Width;
 
-                    Width = (_drawOn.Bounds.Width*_drawOn.PixelToWpfRatioX) / 16;   
-
-                    Left = left_top.X - Width;
-                    Top = left_top.Y;
-                    Height = left_bottom.Y - left_top.Y;
-
-                    gradient.StartPoint = new Point(1,0.5);
+                    gradient.StartPoint = new Point(1, 0.5);
                     gradient.EndPoint = new Point(0, 0.5);
 
                     border.BorderThickness = new Thickness(0, 1, 0, 1);
@@ -146,14 +188,8 @@ namespace LittleBigMouse
                     break;
 
                 case SizerSide.Right:
-                    Point right_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
-                    Point right_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
-
-                    Width = (_drawOn.Bounds.Width*_drawOn.PixelToWpfRatioX) / 16;   
-
-                    Left = right_top.X;
-                    Top = right_top.Y;
-                    Height = right_bottom.Y - right_top.Y;
+                    Left = _drawOn.WpfBounds.X;
+                    Width = _drawOn.WpfBounds.Width / 16;
 
                     gradient.StartPoint = new Point(0, 0.5);
                     gradient.EndPoint = new Point(1, 0.5);
@@ -163,33 +199,19 @@ namespace LittleBigMouse
                     break;
 
                 case SizerSide.Top:
-                    Point top_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
-                    Point top_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
-
-                    Height = (_drawOn.Bounds.Height * _drawOn.PixelToWpfRatioY) / 8;
-
-                    Left = top_left.X;
-                    Top = top_left.Y - Height;
-                    Width = top_right.X - top_left.X;
+                    Height = _drawOn.WpfBounds.Height  / 8;
+                    Top = _drawOn.WpfBounds.Y - Height;
 
                     gradient.StartPoint = new Point(0.5, 1);
                     gradient.EndPoint = new Point(0.5, 0);
 
                     border.BorderThickness = new Thickness(1, 0, 1, 0);
-
                     drawHorizontalRuler(SizerSide.Bottom);
                     break;
 
-
                 case SizerSide.Bottom:
-                    Point bottom_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
-                    Point bottom_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
-
                     Height = (_drawOn.Bounds.Height * _drawOn.PixelToWpfRatioY) / 8;
-
-                    Left = bottom_left.X;
-                    Top = bottom_left.Y;
-                    Width = bottom_right.X - bottom_left.X;
+                    Top = _drawOn.Bounds.Y;
 
                     gradient.StartPoint = new Point(0.5, 0);
                     gradient.EndPoint = new Point(0.5, 1);
@@ -201,15 +223,28 @@ namespace LittleBigMouse
             }
         }
 
+        private void _screen_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            switch(e.PropertyName)
+            {
+                case "PhysicalBounds":
+                    setSize();
+                    break;
+            }
+        }
+
         private void drawVerticalRuler(SizerSide side)
         {
             double ratioX = _drawOn.PixelToWpfRatioX / _drawOn.PitchX;
             double ratioY = _drawOn.PixelToWpfRatioY / _drawOn.PitchY;
+
+            double height = _screen.PhysicalHeight * ratioY;
+
             int i = 0;
             while (true)
             {
                 double y = i * ratioY;
-                if (y > Height) break;
+                if (y > height) break;
 
                 double x; string text = null;
                 if (i % 100 == 0)
@@ -267,11 +302,13 @@ namespace LittleBigMouse
             double ratioX = _drawOn.PixelToWpfRatioX / _drawOn.PitchX;
             double ratioY = _drawOn.PixelToWpfRatioY / _drawOn.PitchY;
 
+            double width = _screen.PhysicalWidth * ratioX;
+
             int i = 0;
             while (true)
             {
                 double x = i * ratioX;
-                if (x > Width) break;
+                if (x > width) break;
 
                 double y; string text = null;
                 if (i % 100 == 0)
@@ -343,15 +380,13 @@ namespace LittleBigMouse
                     {
                         case SizerSide.Left:
                         case SizerSide.Right:
-                            Top += (newPoint.Y - _oldPoint.Y) * _drawOn.PixelToWpfRatioY;
-                            p = _drawOn.WpfToPhysical(new Point(Left,Top));
-                             _screen.PhysicalLocation = new Point(_screen.PhysicalBounds.X, p.Y);
+                            double offsetY = (newPoint.Y - _oldPoint.Y) * _drawOn.PitchY;
+                             _screen.PhysicalY += offsetY;
                            break;
                         case SizerSide.Top:
                         case SizerSide.Bottom:
-                            Left += (newPoint.X - _oldPoint.X) * _drawOn.PixelToWpfRatioY;
-                            p = _drawOn.WpfToPhysical(new Point(Left,Top));
-                            _screen.PhysicalLocation = new Point(p.X, _screen.PhysicalBounds.Y);
+                            double offsetX = (newPoint.X - _oldPoint.X) * _drawOn.PitchX;
+                            _screen.PhysicalX += offsetX;
                             break;
                     }
                     _oldPoint = newPoint;

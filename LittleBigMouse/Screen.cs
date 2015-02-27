@@ -108,27 +108,24 @@ namespace LittleBigMouse
 
             key.Close();
         }
-        public void Load()
+        public void Load(RegistryKey configkey)
         {
-            if (!_loaded)
+            using (RegistryKey key = configkey.OpenSubKey(ID))
             {
-                RegistryKey key = _config.Key.OpenSubKey(ID);
-
                 if (key != null)
                 {
                     PhysicalX = double.Parse(key.GetValue("X", RegistryValueKind.String).ToString());
                     PhysicalY = double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString());
-             
+
                     key.Close();
                 }
                 else
                 {
-                    // TODO : try to define position from windows one
+                    // TODO : try to define position from Windows one
                     PhysicalX = Config.PhysicalOverallBounds.Right;
                     PhysicalY = 0;
                 }
-
-                _loaded = true;
+                key.Close();
             }
         }
 
@@ -213,7 +210,7 @@ namespace LittleBigMouse
         {
             get
             {
-                return new Rect(PhysicalLocation, PixelToPhysical(InsideBounds.BottomRight));
+                return new Rect(PhysicalLocation, PixelToPhysical(Bounds.BottomRight));
             }
         }
 

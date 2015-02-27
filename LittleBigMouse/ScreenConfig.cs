@@ -26,12 +26,18 @@ using MouseKeyboardActivityMonitor;
 using MouseKeyboardActivityMonitor.WinApi;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Windows;
 
 namespace LittleBigMouse
 {
-    public class ScreenConfig
+    public class ScreenConfig : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void changed(String name)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+        }
         public ScreenConfig()
         {
             Load();
@@ -45,12 +51,13 @@ namespace LittleBigMouse
         private Screen _currentScreen=null;
         private Point _oldPoint;
         private bool _enabled;
+        private bool _loadAtStartup;
         private bool _adjustPointer;
         private bool _adjustSpeed;
         private Rect _configLocation;
         private bool _allowToJump;
 
-        public void Enable()
+        public void Start()
         {
             if (Enabled)
             {
@@ -58,7 +65,7 @@ namespace LittleBigMouse
                 _MouseHookManager.Enabled = true;
             }
         }
-        public void Disable()
+        public void Stop()
         {
             _MouseHookManager.MouseMoveExt -= _MouseHookManager_MouseMoveExt;
             _MouseHookManager.Enabled = false;
@@ -158,13 +165,10 @@ namespace LittleBigMouse
 
         private static String RootKey = "SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name;
 
-        public RegistryKey Key
+        public RegistryKey OpenRegKey()
         {
-            get
-            {
                 RegistryKey k = Registry.CurrentUser.CreateSubKey(RootKey);
                 return k.CreateSubKey(_id);
-            }
         }
 
         private String _id = "";
@@ -178,25 +182,44 @@ namespace LittleBigMouse
                 _id += ((_id!="")?"." :"") + s.ID;
             }
 
-            Enabled = Key.GetValue("Enabled", 0).ToString() == "1";
-            AdjustPointer = Key.GetValue("AdjustPointer", 0).ToString() == "1";
-            AdjustSpeed = Key.GetValue("AdjustSpeed", 0).ToString() == "1";
-            AllowToJump = Key.GetValue("AllowToJump", 0).ToString() == "1";
-            foreach(Screen s in AllScreens)
+            LoadAtStartup = App.Scheduled;
+
+            using (RegistryKey k = OpenRegKey())
             {
-                s.Load();
+                Enabled = k.GetValue("Enabled", 0).ToString() == "1";
+                AdjustPointer = k.GetValue("AdjustPointer", 0).ToString() == "1";
+                AdjustSpeed = k.GetValue("AdjustSpeed", 0).ToString() == "1";
+                AllowToJump = k.GetValue("AllowToJump", 0).ToString() == "1";
+                foreach(Screen s in AllScreens)
+                {
+                    s.Load(k);
+                }
+
+                k.Close();
             }
+
+
         }
 
         public void Save()
         {
-            Key.SetValue("Enabled", Enabled ? "1" : "0");
-            Key.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
-            Key.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
-            Key.SetValue("AllowToJump", AllowToJump ? "1" : "0");
+            if (LoadAtStartup)
+                App.Schedule();
+            else
+                App.Unschedule();
 
-            foreach (Screen s in AllScreens)
-                s.Save(Key);
+            using (RegistryKey k = OpenRegKey())
+            {
+                k.SetValue("Enabled", Enabled ? "1" : "0");
+                k.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
+                k.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
+                k.SetValue("AllowToJump", AllowToJump ? "1" : "0");
+
+                foreach (Screen s in AllScreens)
+                    s.Save(k);
+
+                k.Close();
+            }
 
             if (RegistryChanged != null) RegistryChanged(this, new EventArgs());
         }
@@ -212,18 +235,36 @@ namespace LittleBigMouse
             {
                 wpfScreen = new Screen(this,screen);
                 AllScreens.Add(wpfScreen);
+                changed("PhysicalBounds");
+                changed("OverallPhysicalBounds");
+                wpfScreen.PropertyChanged += Screen_PropertyChanged;
             }
             return wpfScreen;
         }
 
-        public Screen getScreen(int nb)
+        private Rect _physicalOverallBounds = new Rect();
+        private void Screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            foreach (Screen s in AllScreens)
+            switch(e.PropertyName)
             {
-                if (s.DeviceName.EndsWith(nb.ToString())) return s;
+                case "PhysicalBounds":
+                    Rect r = new Rect();
+                    foreach (Screen s in AllScreens)
+                    {
+                        if (r.Width == 0)
+                            r = s.PhysicalBounds;
+                        else
+                            r.Union(s.PhysicalBounds);
+                    }
+                    if (_physicalOverallBounds!=r)
+                    {
+                        _physicalOverallBounds = r;
+                        changed("PhysicalOverallBounds");
+                    }
+                    break;
             }
-            return null;
         }
+
         public Screen FromPoint(Point point)
         {
             int x = (int)Math.Round(point.X);
@@ -246,10 +287,13 @@ namespace LittleBigMouse
         {
             get
             {
-                Rect r = PrimaryScreen.Bounds;
+                Rect r = new Rect();
                 foreach (Screen s in AllScreens)
                 {
-                    r.Union(s.Bounds);
+                    if (r.Width == 0)
+                        r = s.Bounds;
+                    else
+                        r.Union(s.Bounds);
                 }
                 return r;
             }
@@ -260,45 +304,62 @@ namespace LittleBigMouse
         {
             get
             {
-                Rect r = new Rect();
-                foreach (Screen s in AllScreens)
-                {
-                    if (r.Width == 0)
-                        r = s.PhysicalBounds;
-                    else
-                        r.Union(s.PhysicalBounds);
-                }
-                return r;
+                return _physicalOverallBounds;
             }
         }
 
         public bool Enabled
         {
             get { return _enabled; }
-            set { _enabled = value; }
+            set {
+                _enabled = value;
+                changed("Enabled");
+            }
+        }
+
+        public bool LoadAtStartup
+        {
+            get { return _loadAtStartup;  }
+            set
+            {
+                _loadAtStartup = value;
+                changed("LoadAtStartup");
+            }
         }
 
         public bool AdjustPointer
         {
             get { return _adjustPointer; }
-            set { _adjustPointer = value; }
+            set {
+                _adjustPointer = value;
+                changed("AdjustPointer");
+            }
         }
 
         public bool AdjustSpeed
         {
             get { return _adjustSpeed; }
-            set { _adjustSpeed = value; }
+            set {
+                _adjustSpeed = value;
+                changed("AdjustSpeed");
+            }
         }
         public bool AllowToJump
         {
             get { return _allowToJump; }
-            set { _allowToJump = value; }
+            set {
+                _allowToJump = value;
+                changed("AllowToJump");
+            }
         }
 
         public Rect ConfigLocation
         {
             get { return _configLocation; }
-            set { _configLocation = value; }
+            set {
+                _configLocation = value;
+                changed("ConfigLocation");
+            }
         }
 
         public Screen FromPhysicalPoint(Point p)

@@ -93,6 +93,7 @@ namespace LittleBigMouse
 
         public void UpdateSize()
         {
+
             Rect all = Screen.Config.PhysicalOverallBounds;
 
             double ratio = Math.Min(
@@ -119,9 +120,20 @@ namespace LittleBigMouse
             InitializeComponent();
 
             _screen.PropertyChanged += _screen_PropertyChanged;
-            UpdateSize();
+            _grid.SizeChanged += _grid_SizeChanged;
+            _screen.Config.PropertyChanged += Config_PropertyChanged;
 
             DataContext = this;
+        }
+
+        private void Config_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            UpdateSize();
+        }
+
+        private void _grid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateSize();
         }
 
         private void _screen_PropertyChanged(object sender, PropertyChangedEventArgs e)

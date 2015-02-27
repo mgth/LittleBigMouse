@@ -46,18 +46,7 @@ namespace LittleBigMouse
 
             InitializeComponent();
 
-            if (App.Scheduled) 
-                chkLoadAtStartup.IsChecked = true;
-            else
-                chkLoadAtStartup.IsChecked = false;
-
-            // TODO : maybe use data binding;
-            //DataContext = _newConfig;
-
-            chkAdjustPointer.IsChecked = _newConfig.AdjustPointer;
-            chkAdjustSpeed.IsChecked = _newConfig.AdjustSpeed;
-            chkEnabled.IsChecked = _newConfig.Enabled;
-            chkAllowToJump.IsChecked = _newConfig.AllowToJump;
+            DataContext = _newConfig;
 
             foreach (Screen s in _newConfig.AllScreens)
             {
@@ -70,8 +59,6 @@ namespace LittleBigMouse
             }
 
             LoadLocation();
-
-            grid.SizeChanged += Grid_SizeChanged;
 
             SizeChanged += FormConfig_SizeChanged;
             LocationChanged += FormConfig_LocationChanged;
@@ -119,20 +106,33 @@ namespace LittleBigMouse
         {
             Rect wa = _currentConfig.PrimaryScreen.WpfWorkingArea;
 
-            RegistryKey key = _currentConfig.Key.CreateSubKey("ConfigLocation");
-
-            Left = double.Parse(key.GetValue("X", wa.X + (2 * wa.Width) / 3).ToString());
-            Top = double.Parse(key.GetValue("Y", wa.Y + (2 * wa.Height) / 3).ToString());
-            Width = double.Parse(key.GetValue("Width", wa.Width / 3).ToString());
-            Height = double.Parse(key.GetValue("Height", wa.Height / 3).ToString());
+            using (RegistryKey configkey = _currentConfig.OpenRegKey())
+            {
+                using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
+                {
+                    Left = double.Parse(k.GetValue("X", wa.X + (2 * wa.Width) / 3).ToString());
+                    Top = double.Parse(k.GetValue("Y", wa.Y + (2 * wa.Height) / 3).ToString());
+                    Width = double.Parse(k.GetValue("Width", wa.Width / 3).ToString());
+                    Height = double.Parse(k.GetValue("Height", wa.Height / 3).ToString());
+                    k.Close();
+                }
+                configkey.Close();
+            }
         }
         private void SaveLocation()
         {
-            RegistryKey key = _currentConfig.Key.CreateSubKey("ConfigLocation");
-            key.SetValue("X", Left.ToString(), RegistryValueKind.String);
-            key.SetValue("Y", Top.ToString(), RegistryValueKind.String);
-            key.SetValue("Width", Width.ToString(), RegistryValueKind.String);
-            key.SetValue("Height", Height.ToString(), RegistryValueKind.String);
+            using (RegistryKey configkey = _currentConfig.OpenRegKey())
+            {
+                using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
+                {
+                    k.SetValue("X", Left.ToString(), RegistryValueKind.String);
+                    k.SetValue("Y", Top.ToString(), RegistryValueKind.String);
+                    k.SetValue("Width", Width.ToString(), RegistryValueKind.String);
+                    k.SetValue("Height", Height.ToString(), RegistryValueKind.String);
+                    k.Close();
+                }
+                configkey.Close();
+            }
         }
 
         private void FormConfig_LocationChanged(object sender, EventArgs e)
@@ -165,7 +165,6 @@ namespace LittleBigMouse
                 gui.Screen.PhysicalLocation = gui.PhysicalLocation;
 
                 _moving = false;
-                ResizeAll();
 
                 foreach(UIElement el in grid.Children)
                 {
@@ -306,64 +305,59 @@ namespace LittleBigMouse
                 }
         }
 
-        private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            ResizeAll();
-        }
+        //private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
+        //{
+        //    ResizeAll();
+        //}
 
-        private void ResizeAll() 
-        {
-            foreach(UIElement element in grid.Children)
-            {
-                Rect all = _newConfig.PhysicalOverallBounds;
+        //private void ResizeAll() 
+        //{
+        //    foreach(UIElement element in grid.Children)
+        //    {
+        //        Rect all = _newConfig.PhysicalOverallBounds;
 
 
-                ScreenGUI gui = element as ScreenGUI;
-                if (gui!=null)
-                {
-                    gui.HorizontalAlignment = HorizontalAlignment.Left;
-                    gui.VerticalAlignment = VerticalAlignment.Top;
+        //        ScreenGUI gui = element as ScreenGUI;
+        //        if (gui!=null)
+        //        {
+        //            gui.HorizontalAlignment = HorizontalAlignment.Left;
+        //            gui.VerticalAlignment = VerticalAlignment.Top;
 
-                    Rect r = gui.Screen.ToUI(new Size(grid.ActualWidth,grid.ActualHeight));
+        //            Rect r = gui.Screen.ToUI(new Size(grid.ActualWidth,grid.ActualHeight));
 
-                    gui.Margin = new Thickness(
-                        r.X,
-                        r.Y,
-                        0, 0);
+        //            gui.Margin = new Thickness(
+        //                r.X,
+        //                r.Y,
+        //                0, 0);
 
-                    gui.Width = r.Width;
-                    gui.Height = r.Height;
-                }
-            }
-        }
+        //            gui.Width = r.Width;
+        //            gui.Height = r.Height;
+        //        }
+        //    }
+        //}
 
         private void Save()
         {
             _newConfig.Save();
-
-            if (chkLoadAtStartup.IsChecked == true)
-                App.Schedule();
-            else
-                App.Unschedule();
         }
 
         private void cmdOk_Click(object sender, RoutedEventArgs e)
         {
-            _newConfig.Disable();
+            _newConfig.Stop();
             Save();
             Close();
         }
 
         private void cmdApply_Click(object sender, RoutedEventArgs e)
         {
-            _newConfig.Disable();
+            _newConfig.Stop();
             Save();
         }
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)
         {
-            _newConfig.Disable();
-            _currentConfig.Enable();
+            _newConfig.Stop();
+            _currentConfig.Start();
             Close();
         }
 
@@ -385,14 +379,14 @@ namespace LittleBigMouse
 
         private void chkLiveUpdate_Checked(object sender, RoutedEventArgs e)
         {
-            if (_currentConfig != null) _currentConfig.Disable();
-            _newConfig.Enable();
+            if (_currentConfig != null) _currentConfig.Stop();
+            _newConfig.Start();
         }
 
         private void chkLiveUpdate_Unchecked(object sender, RoutedEventArgs e)
         {
-            _newConfig.Disable();
-            if (_currentConfig != null) _currentConfig.Enable();
+            _newConfig.Stop();
+            if (_currentConfig != null) _currentConfig.Start();
         }
 
         private void chkEnabled_Checked(object sender, RoutedEventArgs e)

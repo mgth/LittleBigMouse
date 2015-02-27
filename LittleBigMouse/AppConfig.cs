@@ -37,9 +37,9 @@ namespace LittleBigMouse
         private Notify _notify = new Notify();
         private void LoadConfig()
         {
-            if (_config != null) _config.Disable();
+            if (_config != null) _config.Stop();
             _config = new ScreenConfig();
-            _config.Enable();
+            _config.Start();
         }
         private void _formConfig_RegistryChanged(object sender, EventArgs e)
         {
@@ -91,7 +91,7 @@ namespace LittleBigMouse
         {
             if (_config!=null)
             {
-                _config.Disable();
+                _config.Stop();
 
                 if (_config.AdjustSpeed)
                     Mouse.MouseSpeed = 10.0;

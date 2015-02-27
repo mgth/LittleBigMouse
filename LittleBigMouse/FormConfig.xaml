@@ -23,17 +23,17 @@
         </Grid>
         <StackPanel  Margin="5" Grid.Row="1" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
             <StackPanel Orientation="Vertical" Margin="5,0,0,0">
-                <CheckBox x:Name="chkAllowToJump" Content="Allow to jump" Foreground="LightGray" Checked="chkAllowToJump_Checked" Unchecked="chkAllowToJump_Unchecked"/>
+                <CheckBox Content="Allow to jump" IsChecked="{Binding Path=AllowToJump, Mode=TwoWay}" Foreground="LightGray" />
             </StackPanel>
             <StackPanel Orientation="Vertical" Margin="5,0,0,0">
-                <CheckBox x:Name="chkEnabled" Content="Enabled" Checked="chkEnabled_Checked" Unchecked="chkEnabled_Unchecked" Foreground="LightGray"/>
+                <CheckBox Content="Enabled" IsChecked="{Binding Path=Enabled, Mode=TwoWay}" Foreground="LightGray"/>
                 <CheckBox x:Name="chkLiveUpdate" Content="Live Update" Checked="chkLiveUpdate_Checked" Unchecked="chkLiveUpdate_Unchecked" Foreground="LightGray"/>
             </StackPanel>
             <StackPanel Orientation="Vertical" Margin="5,0,0,0">
-                <CheckBox x:Name="chkAdjustSpeed" Content="Adjust Speed" Checked="chkAdjustSpeed_Checked" Unchecked="chkAdjustSpeed_Unchecked" Foreground="LightGray"/>
-                <CheckBox x:Name="chkAdjustPointer" Content="Adjust Pointer" Checked="chkAdjustPointer_Checked" Unchecked="chkAdjustPointer_Unchecked" Foreground="LightGray"/>
+                <CheckBox Content="Adjust Speed" IsChecked="{Binding Path=AdjustSpeed, Mode=TwoWay}" Foreground="LightGray"/>
+                <CheckBox Content="Adjust Pointer" IsChecked="{Binding Path=AdjustPointer, Mode=TwoWay}" Foreground="LightGray"/>
             </StackPanel>
-            <CheckBox x:Name="chkLoadAtStartup" Content="Load at startup" Margin="5,0,0,0" Foreground="LightGray"/>
+            <CheckBox Content="Load at startup"  IsChecked="{Binding Path=LoadAtStatup, Mode=TwoWay}" Margin="5,0,0,0" Foreground="LightGray"/>
             <Button x:Name="cmdUnload" MinWidth="50" Margin="5,0,0,0" Click="cmdUnload_Click">Unload</Button>
             <Button x:Name="cmdOk" MinWidth="50" Margin="10,0,0,0" Click="cmdOk_Click">Ok</Button>
             <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>

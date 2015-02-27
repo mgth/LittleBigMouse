@@ -6,7 +6,8 @@
              xmlns:local="clr-namespace:LittleBigMouse"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300" SizeChanged="UserControl_SizeChanged"
-             
+             HorizontalAlignment="Left"
+             VerticalAlignment="Top"
              >             
     <Grid x:Name="grid" SizeChanged="Grid_SizeChanged">
         

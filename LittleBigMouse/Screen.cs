@@ -137,7 +137,6 @@ namespace LittleBigMouse
                     PhysicalX = Config.PhysicalOverallBounds.Right;
                     PhysicalY = 0;
                 }
-                key.Close();
             }
         }
 

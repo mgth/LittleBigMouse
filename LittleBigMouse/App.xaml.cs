@@ -40,44 +40,49 @@ namespace LittleBigMouse
         [STAThread]
         public static void Main(string[] args)
         {
-            int nbarg = 0;
             bool silent = false;
+            bool exit = false;
 
             foreach (string s in args)
             {
-                if (s == "--schedule")
+                switch (s)
                 {
-                    Schedule();
-                    nbarg++;
-                    break;
-                }
-                if (s == "--unschedule")
-                {
-                    Unschedule();
-                    nbarg++;
-                    break;
-                }
-                if (s == "--silent")
-                {
-                    silent=true;
-                    break;
+                    case "--schedule":
+                        Schedule();
+                        exit = true;
+                        break;
+
+                    case "--unschedule":
+                        Unschedule();
+                        exit = true;
+                        break;
+
+                    case "--silent":
+                        silent = true;
+                        break;
+
+                    case "--exit":
+                        exit = true;
+                        break;
                 }
             }
 
-            if (nbarg == 0 && SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique))
+            if (SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique))
             {
-                
 
-                using (AppConfig application = new AppConfig())
+                if (!exit)
                 {
-                    application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                    using (AppConfig application = new AppConfig())
+                    {
+                        application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-                    application.Start(silent);
+                        application.Start(silent);
 
-                    application.Run();
+                        application.Run();
+                    }
+
+                    SingleInstance<AppConfig>.Cleanup();
                 }
-
-                SingleInstance<AppConfig>.Cleanup();
             }
         }
 

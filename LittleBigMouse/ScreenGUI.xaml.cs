@@ -181,6 +181,8 @@ namespace LittleBigMouse
             AddSizer(SizerSide.Right);
             AddSizer(SizerSide.Top);
             AddSizer(SizerSide.Bottom);
+
+            foreach (Sizer sz in _sizers) sz.Enabled = true;
         }
 
         public void HideSizers()
@@ -190,12 +192,6 @@ namespace LittleBigMouse
                     sz.Close();
                 }
                 _sizers.Clear();
-
-            if (_ruler!=null)
-            {
-                _ruler.Close();
-                _ruler = null;
-            }
         }
 
          private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)

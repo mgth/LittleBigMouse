@@ -65,9 +65,9 @@ namespace LittleBigMouse
                     else
                     {
                         Top = Math.Max(left_top.Y, _drawOn.WpfBounds.Y);
-                        canvas.Margin = new Thickness(0, left_top.Y - Top, 0, 0);
+                        (border.Child as Canvas).Margin = new Thickness(0, left_top.Y - Top, 0, 0);
                         Height = Math.Max(Math.Min(left_bottom.Y, _drawOn.WpfBounds.Bottom) - Top, 0);
-                        Show();
+                        if (Enabled) Show();
                     }
                     break;
 
@@ -82,9 +82,9 @@ namespace LittleBigMouse
                     else
                     {
                         Top = Math.Max(right_top.Y, _drawOn.WpfBounds.Y);
-                        canvas.Margin = new Thickness(0, right_top.Y - Top, 0, 0);
+                        (border.Child as Canvas).Margin = new Thickness(0, right_top.Y - Top, 0, 0);
                         Height = Math.Max(Math.Min(right_bottom.Y, _drawOn.WpfBounds.Bottom) - Top, 0);
-                        Show();
+                        if (Enabled) Show();
                     }
                     break;
 
@@ -99,9 +99,9 @@ namespace LittleBigMouse
                     else
                     {
                         Left = Math.Max(top_left.X, _drawOn.WpfBounds.X);
-                        canvas.Margin = new Thickness(top_left.X - Left, 0, 0, 0);
+                        (border.Child as Canvas).Margin = new Thickness(top_left.X - Left, 0, 0, 0);
                         Width = Math.Max(Math.Min(top_right.X, _drawOn.WpfBounds.Right) - Left, 0);
-                        Show();
+                        if (Enabled) Show();
                     }
                     break;
                 case SizerSide.Bottom:
@@ -115,13 +115,26 @@ namespace LittleBigMouse
                     else
                     {
                         Left = Math.Max(bottom_left.X, _drawOn.WpfBounds.X);
-                        canvas.Margin = new Thickness(bottom_left.X - Left, 0, 0, 0);
+                        (border.Child as Canvas).Margin = new Thickness(bottom_left.X - Left, 0, 0, 0);
                         Width = Math.Max(Math.Min(bottom_right.X, _drawOn.WpfBounds.Right) - Left, 0);
-                        Show();
+                        if(Enabled) Show();
                     }
                     break;
             }
 
+        }
+
+        bool _enabled = false;
+        public bool Enabled
+        {
+            get { return _enabled; }
+            set {
+                if (_enabled != value)
+                {
+                   _enabled = true;
+                    setSize();
+                }
+             }
         }
 
         public Sizer(Screen screen, Screen drawOn, SizerSide side)
@@ -142,7 +155,7 @@ namespace LittleBigMouse
                     gradient.EndPoint = new Point(0, 0.5);
 
                     border.BorderThickness = new Thickness(0, 1, 0, 1);
-                    drawVerticalRuler(SizerSide.Right);
+                    border.Child = VerticalRuler(SizerSide.Right);
                     break;
 
                 case SizerSide.Right:
@@ -153,7 +166,7 @@ namespace LittleBigMouse
                     gradient.EndPoint = new Point(1, 0.5);
 
                     border.BorderThickness = new Thickness(0, 1, 0, 1);
-                    drawVerticalRuler(SizerSide.Left);
+                    border.Child = VerticalRuler(SizerSide.Left);
                     break;
 
                 case SizerSide.Top:
@@ -164,7 +177,7 @@ namespace LittleBigMouse
                     gradient.EndPoint = new Point(0.5, 0);
 
                     border.BorderThickness = new Thickness(1, 0, 1, 0);
-                    drawHorizontalRuler(SizerSide.Bottom);
+                    border.Child = HorizontalRuler(SizerSide.Bottom);
                     break;
 
                 case SizerSide.Bottom:
@@ -175,7 +188,7 @@ namespace LittleBigMouse
                     gradient.EndPoint = new Point(0.5, 1);
 
                     border.BorderThickness = new Thickness(1, 0, 1, 0);
-                    drawHorizontalRuler(SizerSide.Top);
+                    border.Child = HorizontalRuler(SizerSide.Top);
                     break;
             }
 
@@ -194,8 +207,10 @@ namespace LittleBigMouse
             }
         }
 
-        private void drawVerticalRuler(SizerSide side)
+        private Canvas VerticalRuler(SizerSide side)
         {
+            Canvas canvas = new Canvas();
+
             double ratioX = _drawOn.PixelToWpfRatioX / _drawOn.PitchX;
             double ratioY = _drawOn.PixelToWpfRatioY / _drawOn.PitchY;
 
@@ -255,11 +270,13 @@ namespace LittleBigMouse
                 canvas.Children.Add(l);
                 i++;
             }
-
+            return canvas;
         }
 
-        private void drawHorizontalRuler(SizerSide side)
+        private Canvas HorizontalRuler(SizerSide side)
         {
+            Canvas canvas = new Canvas();
+
             double ratioX = _drawOn.PixelToWpfRatioX / _drawOn.PitchX;
             double ratioY = _drawOn.PixelToWpfRatioY / _drawOn.PitchY;
 
@@ -320,7 +337,7 @@ namespace LittleBigMouse
 
                 i++;
             }
-
+            return canvas;
         }
 
 

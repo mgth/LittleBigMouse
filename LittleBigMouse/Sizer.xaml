@@ -5,14 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:LittleBigMouse"
         mc:Ignorable="d"
-        Height="300" Width="300"
-        AllowsTransparency="True"
         WindowStyle="None"
         Background="Transparent"
         MouseMove="Window_MouseMove"
         Topmost="True"
         ShowInTaskbar="False"
         ShowActivated="False" Closing="Window_Closing"
+        AllowsTransparency="True"
         >
     <Border x:Name="border" Opacity="0.5" BorderThickness="0,1" BorderBrush="Red">
         <Border.Background>
@@ -21,8 +20,5 @@
                 <GradientStop Color="#00808080" Offset="1"/>
             </LinearGradientBrush>
         </Border.Background>
-        <Canvas x:Name="canvas">
-            
-        </Canvas>
     </Border>
 </Window>

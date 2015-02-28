@@ -33,7 +33,7 @@
                 <CheckBox Content="Adjust Speed" IsChecked="{Binding Path=AdjustSpeed, Mode=TwoWay}" Foreground="LightGray"/>
                 <CheckBox Content="Adjust Pointer" IsChecked="{Binding Path=AdjustPointer, Mode=TwoWay}" Foreground="LightGray"/>
             </StackPanel>
-            <CheckBox Content="Load at startup"  IsChecked="{Binding Path=LoadAtStatup, Mode=TwoWay}" Margin="5,0,0,0" Foreground="LightGray"/>
+            <CheckBox Content="Load at startup"  IsChecked="{Binding Path=LoadAtStartup, Mode=TwoWay}" Margin="5,0,0,0" Foreground="LightGray"/>
             <Button x:Name="cmdUnload" MinWidth="50" Margin="5,0,0,0" Click="cmdUnload_Click">Unload</Button>
             <Button x:Name="cmdOk" MinWidth="50" Margin="10,0,0,0" Click="cmdOk_Click">Ok</Button>
             <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>

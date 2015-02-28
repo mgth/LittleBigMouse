@@ -69,7 +69,6 @@ namespace LittleBigMouse
 
             if (SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique))
             {
-
                 if (!exit)
                 {
                     using (AppConfig application = new AppConfig())

@@ -27,6 +27,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
+using WinAPI_User32;
 
 [assembly: InternalsVisibleTo("ScreenConfig")]
 namespace LittleBigMouse
@@ -143,6 +144,27 @@ namespace LittleBigMouse
         public Rect Bounds
         {
             get { return getRect(_screen.Bounds); }
+        }
+
+        public Point Location
+        {
+            get { return Bounds.TopLeft; }
+            set
+            {
+                DEVMODE devmode = new DEVMODE();
+
+                devmode.Position.x = (int)value.X;
+                devmode.Position.y = (int)value.Y;
+                devmode.Fields = DM.Position;
+
+                User32.ChangeDisplaySettingsEx(
+                    DeviceName,
+                    ref devmode,
+                    IntPtr.Zero,
+                    0,
+                    IntPtr.Zero
+                    );
+            }
         }
 
         public Rect InsideBounds

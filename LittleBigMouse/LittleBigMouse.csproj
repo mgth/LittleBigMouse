@@ -141,7 +141,7 @@
     <Compile Include="WinAPI_Kernel32.cs" />
     <Compile Include="WinAPI_Ntdll.cs" />
     <Compile Include="WinAPI_SetupAPI.cs" />
-    <Compile Include="WinAPI_Win32.cs" />
+    <Compile Include="WinAPI_User32.cs" />
     <Compile Include="Geo.cs" />
     <Compile Include="InsideRuler.xaml.cs">
       <DependentUpon>InsideRuler.xaml</DependentUpon>

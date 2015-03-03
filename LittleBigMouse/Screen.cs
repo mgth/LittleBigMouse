@@ -151,19 +151,49 @@ namespace LittleBigMouse
             get { return Bounds.TopLeft; }
             set
             {
-                DEVMODE devmode = new DEVMODE();
+                if (Primary)
+                {
+                    foreach (Screen s in Config.AllScreens)
+                    {
+                        if (!s.Primary)
+                        {
+                            s.Location = new Point(s.Location.X - value.X, s.Location.Y - value.Y);
+                        }
+                    }
+                }
+                else
+                {
+                    DEVMODE devmode = new DEVMODE();
+                    devmode.Size = (short)Marshal.SizeOf(devmode);
 
-                devmode.Position.x = (int)value.X;
-                devmode.Position.y = (int)value.Y;
-                devmode.Fields = DM.Position;
+                    devmode.Position.x = (int)value.X;
+                    devmode.Position.y = (int)value.Y;
+                    devmode.Fields = DM.Position;
 
-                User32.ChangeDisplaySettingsEx(
-                    DeviceName,
-                    ref devmode,
-                    IntPtr.Zero,
-                    0,
-                    IntPtr.Zero
-                    );
+                    DISP_CHANGE result = User32.ChangeDisplaySettingsEx(
+                        DeviceName,
+                        ref devmode,
+                        IntPtr.Zero,
+                        0,
+                        IntPtr.Zero
+                        );
+                }
+            }
+        }
+
+        public void AlignScreens(Point p)
+        {
+            Point phy = PixelToPhysical(p);
+            foreach(Screen s in Config.AllScreens)
+            {
+                if (s!=this && s.PhysicalBounds.Top<PhysicalBounds.Bottom && s.PhysicalBounds.Bottom> PhysicalBounds.Top)
+                {
+                    Point dest = s.PhysicalToPixel(phy);
+
+                    double offset = dest.Y - p.Y;
+
+                    s.Location = new Point(s.Location.X, s.Location.Y + offset);
+                }
             }
         }
 

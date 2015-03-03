@@ -72,6 +72,8 @@ namespace LittleBigMouse
             _MouseHookManager.Enabled = false;
         }
 
+
+
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
             Point pIn = new Point(e.X, e.Y);
@@ -81,6 +83,7 @@ namespace LittleBigMouse
 
             if (_currentScreen.InsideBounds.Contains(pIn))
             {
+                //_currentScreen.AlignScreens(pIn);
                 _oldPoint = pIn;
                 return;
             }

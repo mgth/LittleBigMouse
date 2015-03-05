@@ -97,7 +97,7 @@ namespace LittleBigMouse
 //
             if (screenOut==null && AllowToJump)
             {
-                double dist = double.PositiveInfinity;
+                double dist = 100.0; // double.PositiveInfinity;
                 Segment seg = new Segment(_currentScreen.PixelToPhysical(_oldPoint), _currentScreen.PixelToPhysical(pIn));
                 foreach (Screen s in AllScreens)
                 {

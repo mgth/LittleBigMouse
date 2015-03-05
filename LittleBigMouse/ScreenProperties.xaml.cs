@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,21 +19,41 @@ namespace LittleBigMouse
     /// <summary>
     /// Logique d'interaction pour ScreenProperties.xaml
     /// </summary>
-    public partial class ScreenProperties : UserControl
+    public partial class ScreenProperties : UserControl, PropertyPane, INotifyPropertyChanged
     {
-        private Screen _screen;
-        public ScreenProperties(Screen s)
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void changed(String name)
         {
-            _screen = s;
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+        }
+        private Screen _screen = null;
+        public Screen Screen
+        {
+            get { return _screen; }
+            set {
+                _screen = value;
+                changed("Screen");
+                changed("AllowEdit");
+            }
+        }
+        public ScreenProperties()
+        {
             InitializeComponent();
+            DataContext = this;
+        }
 
-            DataContext = _screen;
+        public bool AllowEdit
+        {
+            get { return _screen != null; }
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            _screen.DpiX = double.NaN;
-            _screen.DpiY = double.NaN;
+            if (Screen!=null)
+            {
+                Screen.DpiX = double.NaN;
+                Screen.DpiY = double.NaN;
+            }
         }
     }
 }

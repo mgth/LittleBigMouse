@@ -11,6 +11,7 @@
         >
     <Grid Background="#FF2D2D30">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
@@ -18,10 +19,14 @@
             <ColumnDefinition Width="*"></ColumnDefinition>
             <ColumnDefinition Width="Auto"></ColumnDefinition>
         </Grid.ColumnDefinitions>
-        <Grid  Margin="5" x:Name="grid" Background="Black">
+        <StackPanel  Margin="5" Grid.Row="0" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Left" >
+            <Button x:Name="cmdLayout" Margin="5" Click="cmdLayout_Click" >Layout</Button>
+            <Button x:Name="cmdPattern" Margin="5">Patterns</Button>
+        </StackPanel>
+        <Grid  Margin="5" x:Name="grid" Background="Black" Grid.Row="1">
 
         </Grid>
-        <StackPanel  Margin="5" Grid.Row="1" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
+        <StackPanel  Margin="5" Grid.Row="2" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
             <StackPanel Orientation="Vertical" Margin="5,0,0,0">
                 <CheckBox Content="Allow to jump" IsChecked="{Binding Path=AllowToJump, Mode=TwoWay}" Foreground="LightGray" />
             </StackPanel>
@@ -39,8 +44,8 @@
             <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
             <Button x:Name="cmdCancel" MinWidth="50" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
         </StackPanel>
-            <Grid x:Name="property" Grid.Column="1">
-                
-            </Grid> 
+                <Grid x:Name="property" Grid.Row="1" Grid.Column="1">
+
+                </Grid>
     </Grid>
 </Window>

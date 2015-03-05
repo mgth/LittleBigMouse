@@ -29,21 +29,21 @@
         <Label Content="Y (mm)" Grid.Column="2" Grid.Row="0" HorizontalAlignment="Right"></Label>
         
         <Label Content="Location" Grid.Row="1" HorizontalAlignment="Right"></Label>
-        <TextBox Text="{Binding Path=PhysicalX, StringFormat=N1}"  Grid.Row="1" Grid.Column="1"></TextBox>
-        <TextBox Text="{Binding Path=PhysicalY, StringFormat=N1}" Grid.Row="1" Grid.Column="2"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PhysicalX, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}"  Grid.Row="1" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PhysicalY, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="1" Grid.Column="2"></TextBox>
         
         <Label Content="Size" Grid.Row="2" HorizontalAlignment="Right"></Label>
-        <TextBox Text="{Binding Path=PhysicalWidth, Mode=TwoWay, StringFormat=N1}" Grid.Row="2" Grid.Column="1"></TextBox>
-        <TextBox Text="{Binding Path=PhysicalHeight, Mode=TwoWay, StringFormat=N1}" Grid.Row="2" Grid.Column="2"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PhysicalWidth, Mode=TwoWay, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="2" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PhysicalHeight, Mode=TwoWay, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="2" Grid.Column="2"></TextBox>
         
         <Label Content="DPI" Grid.Row="3" HorizontalAlignment="Right"></Label>
-        <TextBox Text="{Binding Path=DpiX, Mode=TwoWay, StringFormat=N0}" Grid.Row="3" Grid.Column="1"></TextBox>
-        <TextBox Text="{Binding Path=DpiY, Mode=TwoWay, StringFormat=N0}" Grid.Row="3" Grid.Column="2"></TextBox>
+        <TextBox Text="{Binding Path=Screen.DpiX, Mode=TwoWay, StringFormat=N0}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="3" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=Screen.DpiY, Mode=TwoWay, StringFormat=N0}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="3" Grid.Column="2"></TextBox>
         
         <Label Content="Pitch" Grid.Row="4" HorizontalAlignment="Right"></Label>
-        <TextBox Text="{Binding Path=PitchX, Mode=TwoWay, StringFormat=N3}" Grid.Row="4" Grid.Column="1"></TextBox>
-        <TextBox Text="{Binding Path=PitchY, Mode=TwoWay, StringFormat=N3}" Grid.Row="4" Grid.Column="2"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PitchX, Mode=TwoWay, StringFormat=N3}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="4" Grid.Column="1"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PitchY, Mode=TwoWay, StringFormat=N3}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="4" Grid.Column="2"></TextBox>
         
-        <Button Content="Reset" Grid.Column="1" Grid.Row="5" Grid.ColumnSpan="2" Click="Button_Click"/>
+        <Button Content="Reset"  IsEnabled="{Binding Path=AllowEdit}"  Grid.Column="1" Grid.Row="5" Grid.ColumnSpan="2" Click="Button_Click"/>
     </Grid>
 </UserControl>

@@ -36,6 +36,35 @@ namespace LittleBigMouse
         private ScreenConfig _newConfig;
         private ScreenConfig _currentConfig;
 
+        Screen _selected = null;
+        public Screen Selected
+        {
+            get { return _selected; }
+            set
+            {
+                _selected = value;
+                if (PropertyPane != null)
+                {
+                    PropertyPane.Screen = value;
+                }
+            }
+        }
+
+        PropertyPane _propertyPane = null;
+        PropertyPane PropertyPane
+        {
+            get { return _propertyPane; }
+            set {
+                if (_propertyPane!=null)
+                    property.Children.Clear();
+                _propertyPane = value;
+                property.Children.Add(value as UIElement);
+                value.Screen = Selected;
+            }
+        }
+
+
+
         public event EventHandler RegistryChanged;
         public FormConfig(ScreenConfig config)
         {
@@ -97,8 +126,10 @@ namespace LittleBigMouse
         {
             if (selected)
             {
-                property.Children.Clear();
-                property.Children.Add(new ScreenProperties(s));
+                if (PropertyPane!=null)
+                {
+                    PropertyPane.Screen = s;
+                }
             }
         }
 
@@ -203,13 +234,13 @@ namespace LittleBigMouse
             grid.Children.Add(gui);
         }
 
-
+        private bool _allowMove = false;
         private void _gui_MouseMove(object sender, MouseEventArgs e)
         {
             ScreenGUI gui = sender as ScreenGUI;
             if (sender == null) return;
 
-            if (e.LeftButton == MouseButtonState.Pressed)
+            if (_allowMove && e.LeftButton == MouseButtonState.Pressed)
             {
                 _moving = true;
 
@@ -305,36 +336,6 @@ namespace LittleBigMouse
                 }
         }
 
-        //private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
-        //{
-        //    ResizeAll();
-        //}
-
-        //private void ResizeAll() 
-        //{
-        //    foreach(UIElement element in grid.Children)
-        //    {
-        //        Rect all = _newConfig.PhysicalOverallBounds;
-
-
-        //        ScreenGUI gui = element as ScreenGUI;
-        //        if (gui!=null)
-        //        {
-        //            gui.HorizontalAlignment = HorizontalAlignment.Left;
-        //            gui.VerticalAlignment = VerticalAlignment.Top;
-
-        //            Rect r = gui.Screen.ToUI(new Size(grid.ActualWidth,grid.ActualHeight));
-
-        //            gui.Margin = new Thickness(
-        //                r.X,
-        //                r.Y,
-        //                0, 0);
-
-        //            gui.Width = r.Width;
-        //            gui.Height = r.Height;
-        //        }
-        //    }
-        //}
 
         private void Save()
         {
@@ -387,6 +388,16 @@ namespace LittleBigMouse
         {
             _newConfig.Stop();
             if (_currentConfig != null) _currentConfig.Start();
+        }
+
+        private void ToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void cmdLayout_Click(object sender, RoutedEventArgs e)
+        {
+            PropertyPane = new ScreenProperties();
         }
     }
 }

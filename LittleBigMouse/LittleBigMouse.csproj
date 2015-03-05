@@ -136,6 +136,7 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="PropertyPane.cs" />
     <Compile Include="WinAPI_AdvAPI32.cs" />
     <Compile Include="AppConfig.cs" />
     <Compile Include="WinAPI_Kernel32.cs" />

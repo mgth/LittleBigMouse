@@ -21,7 +21,7 @@
         </Grid.ColumnDefinitions>
         <StackPanel  Margin="5" Grid.Row="0" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Left" >
             <Button x:Name="cmdLayout" Margin="5" Click="cmdLayout_Click" >Layout</Button>
-            <Button x:Name="cmdPattern" Margin="5">Patterns</Button>
+            <Button x:Name="cmdPattern" Margin="5" Click="cmdPattern_Click">Patterns</Button>
         </StackPanel>
         <Grid  Margin="5" x:Name="grid" Background="Black" Grid.Row="1">
 

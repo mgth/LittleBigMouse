@@ -19,7 +19,7 @@ namespace LittleBigMouse
     /// <summary>
     /// Logique d'interaction pour ScreenProperties.xaml
     /// </summary>
-    public partial class ScreenProperties : UserControl, PropertyPane, INotifyPropertyChanged
+    public partial class ScreenProperties : UserControl, PropertyPane
     {
         public event PropertyChangedEventHandler PropertyChanged;
         private void changed(String name)
@@ -31,7 +31,17 @@ namespace LittleBigMouse
         {
             get { return _screen; }
             set {
+                if (cmdSizers.IsChecked??false)
+                {
+                    HideSizers();
+                }
+
                 _screen = value;
+
+                if (_screen != null && (cmdSizers.IsChecked??false))
+                {
+                    ShowSizers();
+                }
                 changed("Screen");
                 changed("AllowEdit");
             }
@@ -54,6 +64,48 @@ namespace LittleBigMouse
                 Screen.DpiX = double.NaN;
                 Screen.DpiY = double.NaN;
             }
+        }
+
+        private List<Sizer> _sizers = new List<Sizer>();
+        private void AddSizer(SizerSide side)
+        {
+            if (Screen == null) return;
+
+            foreach (Screen s in Screen.Config.AllScreens)
+            {
+                Sizer sz = new Sizer(Screen, s, side);
+                _sizers.Add(sz);
+            }
+        }
+
+        public void ShowSizers()
+        {
+            HideSizers();
+
+            AddSizer(SizerSide.Left);
+            AddSizer(SizerSide.Right);
+            AddSizer(SizerSide.Top);
+            AddSizer(SizerSide.Bottom);
+
+            foreach (Sizer sz in _sizers) sz.Enabled = true;
+        }
+        public void HideSizers()
+        {
+                foreach(Sizer sz in _sizers)
+                {
+                    sz.Close();
+                }
+                _sizers.Clear();
+        }
+
+        private void cmdSizers_Checked(object sender, RoutedEventArgs e)
+        {
+            ShowSizers();
+        }
+
+        private void cmdSizers_Unchecked(object sender, RoutedEventArgs e)
+        {
+            HideSizers();
         }
     }
 }

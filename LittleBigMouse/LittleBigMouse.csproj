@@ -136,9 +136,18 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ControlPane.xaml.cs">
+      <DependentUpon>ControlPane.xaml</DependentUpon>
+    </Compile>
     <Compile Include="PropertyPane.cs" />
+    <Compile Include="TestPattern.cs" />
+    <Compile Include="TestPatternWindow.xaml.cs">
+      <DependentUpon>TestPatternWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="WinAPI_AdvAPI32.cs" />
     <Compile Include="AppConfig.cs" />
+    <Compile Include="WinAPI_Dxva2.cs" />
+    <Compile Include="WinAPI_Gdi32.cs" />
     <Compile Include="WinAPI_Kernel32.cs" />
     <Compile Include="WinAPI_Ntdll.cs" />
     <Compile Include="WinAPI_SetupAPI.cs" />
@@ -169,6 +178,10 @@
       <DependentUpon>ScreenGUI.xaml</DependentUpon>
     </Compile>
     <Compile Include="SingleInstance.cs" />
+    <Page Include="ControlPane.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="FormConfig.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -190,6 +203,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Sizer.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="TestPatternWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

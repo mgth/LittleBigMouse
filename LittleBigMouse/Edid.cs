@@ -208,25 +208,6 @@ namespace LittleBigMouse
             return "";
         }
 
-        private IntPtr GetHMonitor(String deviceName)
-        {
-            IntPtr h = IntPtr.Zero;
-
-            User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
-                delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
-                {
-                    MONITORINFOEX mi = new MONITORINFOEX();
-                    mi.Size = Marshal.SizeOf(mi);
-                    bool success = User32.GetMonitorInfo(hMonitor, ref mi);
-                    if (success && mi.DeviceName == deviceName)
-                    {
-                        h = hMonitor;
-                        return true;
-                    }
-                    return false;
-                }, IntPtr.Zero);
-            return h;
-        }
         DISPLAY_DEVICE DisplayDeviceFromHMonitor(IntPtr hMonitor)
         {
             MONITORINFOEX mi = new MONITORINFOEX();

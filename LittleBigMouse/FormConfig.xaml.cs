@@ -364,12 +364,7 @@ namespace LittleBigMouse
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            foreach (UIElement el in grid.Children)
-            {
-                ScreenGUI el_gui = el as ScreenGUI;
-                if (el_gui != null) el_gui.HideSizers();
-            }
-
+            Selected = null;
         }
 
         private void cmdUnload_Click(object sender, RoutedEventArgs e)
@@ -398,6 +393,11 @@ namespace LittleBigMouse
         private void cmdLayout_Click(object sender, RoutedEventArgs e)
         {
             PropertyPane = new ScreenProperties();
+        }
+
+        private void cmdPattern_Click(object sender, RoutedEventArgs e)
+        {
+            PropertyPane = new ControlPane();
         }
     }
 }

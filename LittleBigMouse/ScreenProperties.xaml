@@ -45,5 +45,7 @@
         <TextBox Text="{Binding Path=Screen.PitchY, Mode=TwoWay, StringFormat=N3}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="4" Grid.Column="2"></TextBox>
         
         <Button Content="Reset"  IsEnabled="{Binding Path=AllowEdit}"  Grid.Column="1" Grid.Row="5" Grid.ColumnSpan="2" Click="Button_Click"/>
+  
+        <ToggleButton x:Name="cmdSizers" Grid.Column="2" Grid.Row="6" Checked="cmdSizers_Checked" Unchecked="cmdSizers_Unchecked">Rulers</ToggleButton>
     </Grid>
 </UserControl>

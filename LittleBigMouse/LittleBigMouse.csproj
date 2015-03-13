@@ -136,9 +136,12 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Argyll.cs" />
+    <Compile Include="ColorManagment.cs" />
     <Compile Include="ControlPane.xaml.cs">
       <DependentUpon>ControlPane.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Curve.cs" />
     <Compile Include="PropertyPane.cs" />
     <Compile Include="TestPattern.cs" />
     <Compile Include="TestPatternWindow.xaml.cs">

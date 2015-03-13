@@ -64,16 +64,13 @@ namespace LittleBigMouse
             _screen = screen;
             _edid = new Edid(screen.DeviceName);
 
-            _brightness = new MonitorLevel(this, Dxva2.GetMonitorBrightness, Dxva2.SetMonitorBrightness);
-            _contrast = new MonitorLevel(this, Dxva2.GetMonitorContrast, Dxva2.SetMonitorContrast);
+            _brightness = new MonitorLevel(GetBrightness, SetBrightness);
+            _contrast = new MonitorLevel(GetContrast, SetContrast);
 
-            _redGain = new MonitorLevel(this, Dxva2.GetMonitorRedGreenOrBlueGain, Dxva2.SetMonitorRedGreenOrBlueGain, 0);
-            _greenGain = new MonitorLevel(this, Dxva2.GetMonitorRedGreenOrBlueGain, Dxva2.SetMonitorRedGreenOrBlueGain, 1);
-            _blueGain = new MonitorLevel(this, Dxva2.GetMonitorRedGreenOrBlueGain, Dxva2.SetMonitorRedGreenOrBlueGain, 2);
+            _gain = new MonitorRGBLevel(GetGain, SetGain);
+            _drive = new MonitorRGBLevel(GetDrive, SetDrive);
 
-            _redDrive = new MonitorLevel(this, Dxva2.GetMonitorRedGreenOrBlueDrive, Dxva2.SetMonitorRedGreenOrBlueDrive, 0);
-            _greenDrive = new MonitorLevel(this, Dxva2.GetMonitorRedGreenOrBlueDrive, Dxva2.SetMonitorRedGreenOrBlueDrive, 1);
-            _blueDrive = new MonitorLevel(this, Dxva2.GetMonitorRedGreenOrBlueDrive, Dxva2.SetMonitorRedGreenOrBlueDrive, 2);
+            _probe = new MonitorRGBLevel(GetProbe, SetProbe);
         }
         public IntPtr HMonitor
         {
@@ -608,31 +605,94 @@ namespace LittleBigMouse
         private MonitorLevel _brightness;
         private MonitorLevel _contrast;
 
-        private MonitorLevel _redGain;
-        private MonitorLevel _greenGain;
-        private MonitorLevel _blueGain;
-
-        private MonitorLevel _redDrive;
-        private MonitorLevel _greenDrive;
-        private MonitorLevel _blueDrive;
+        private MonitorRGBLevel _gain;
+        private MonitorRGBLevel _drive;
+        private MonitorRGBLevel _probe;
 
         public MonitorLevel Brightness { get { return _brightness; } }
         public MonitorLevel Contrast { get { return _contrast; } }
 
-        public MonitorLevel RedGain { get { return _redGain; } }
-        public MonitorLevel GreenGain { get { return _greenGain; } }
-        public MonitorLevel BlueGain { get { return _blueGain; } }
+        public MonitorRGBLevel Gain { get { return _gain; } }
+        public MonitorRGBLevel Drive { get { return _drive; } }
+        public MonitorRGBLevel Probe { get { return _probe; } }
 
-        public MonitorLevel RedDrive { get { return _redDrive; } }
-        public MonitorLevel GreenDrive { get { return _greenDrive; } }
-        public MonitorLevel BlueDrive { get { return _blueDrive; } }
+        public bool GetBrightness(ref uint min, ref uint value, ref uint max)
+        {
+            return Dxva2.GetMonitorBrightness(HPhysical, ref min, ref value, ref max);
+        }
+        public bool SetBrightness(uint value)
+        {
+            return Dxva2.SetMonitorBrightness(HPhysical, value);
+        }
+        public bool GetContrast(ref uint min, ref uint value, ref uint max)
+        {
+            return Dxva2.GetMonitorContrast(HPhysical, ref min, ref value, ref max);
+        }
+        public bool SetContrast(uint value)
+        {
+            return Dxva2.SetMonitorContrast(HPhysical, value);
+        }
+        public bool GetGain(uint component, ref uint min, ref uint value, ref uint max)
+        {
+            return Dxva2.GetMonitorRedGreenOrBlueGain(HPhysical, component, ref min, ref value, ref max);
+        }
+        public bool SetGain(uint component, uint value)
+        {
+            return Dxva2.SetMonitorRedGreenOrBlueGain(HPhysical, component, value);
+        }
+        public bool GetDrive(uint component, ref uint min, ref uint value, ref uint max)
+        {
+            return Dxva2.GetMonitorRedGreenOrBlueDrive(HPhysical, component, ref min, ref value, ref max);
+        }
+        public bool SetDrive(uint component, uint value)
+        {
+            return Dxva2.SetMonitorRedGreenOrBlueDrive(HPhysical, component, value);
+        }
+
+        private ProbedColor _probedColor;
+        public ProbedColor ProbedColor {
+            get { return _probedColor;}
+            set { _probedColor = value; changed("ProbedColor"); }
+        }
+        public bool GetProbe(uint component, ref uint min, ref uint value, ref uint max)
+        {
+            return Dxva2.GetMonitorRedGreenOrBlueDrive(HPhysical, component, ref min, ref value, ref max);
+        }
+        public bool SetProbe(uint component, uint value)
+        {
+            return Dxva2.SetMonitorRedGreenOrBlueDrive(HPhysical, component, value);
+        }
     }
 
-    public delegate bool MonitorGetter(IntPtr h, ref uint min, ref uint value, ref uint max);
-    public delegate bool MonitorComponentGetter(IntPtr h, uint component, ref uint min, ref uint value, ref uint max);
-    public delegate bool MonitorSetter(IntPtr h, uint value);
-    public delegate bool MonitorComponentSetter(IntPtr h, uint component, uint value);
+    public delegate bool MonitorGetter(ref uint min, ref uint value, ref uint max);
+    public delegate bool MonitorComponentGetter(uint component, ref uint min, ref uint value, ref uint max);
+    public delegate bool MonitorSetter(uint value);
+    public delegate bool MonitorComponentSetter(uint component, uint value);
 
+    public class MonitorRGBLevel  : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void changed(String name)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+        }
+
+        MonitorComponentSetter _componentSetter = null;
+        MonitorComponentGetter _componentGetter = null;
+
+        private MonitorLevel[] _values = new MonitorLevel[3]; 
+
+        public MonitorRGBLevel(MonitorComponentGetter getter, MonitorComponentSetter setter) {
+            for (uint i = 0; i < 3; i++)
+                _values[i] = new MonitorLevel(getter, setter, i);
+
+        }
+        public MonitorLevel Channel(uint channel) { return _values[channel]; }
+        public MonitorLevel Red { get { return Channel(0); } }
+        public MonitorLevel Green { get { return Channel(1); } }
+        public MonitorLevel Blue { get { return Channel(2); } }
+
+    }
     public class MonitorLevel : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
@@ -641,7 +701,7 @@ namespace LittleBigMouse
             if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
         }
 
-        Screen _screen;
+        //Screen _screen;
 
         uint _value = 0;
         uint _min = 0;
@@ -655,17 +715,18 @@ namespace LittleBigMouse
         MonitorComponentSetter _componentSetter = null;
         MonitorComponentGetter _componentGetter = null;
 
-        public MonitorLevel(Screen screen, MonitorGetter getter, MonitorSetter setter)
+
+        public MonitorLevel(MonitorGetter getter, MonitorSetter setter)
         {
-            _screen = screen;
+            //_screen = screen;
             _setter = setter;
             _getter = getter;
 
            getValueThread();
         }
-        public MonitorLevel(Screen screen, MonitorComponentGetter getter, MonitorComponentSetter setter, uint component)
+        public MonitorLevel(MonitorComponentGetter getter, MonitorComponentSetter setter, uint component)
         {
-            _screen = screen;
+            //_screen = screen;
             _component = component;
             _componentSetter = setter;
             _componentGetter = getter;
@@ -679,31 +740,23 @@ namespace LittleBigMouse
             uint max = 0;
             uint value = 0;
 
-            if (_screen != null)
+//            if (_screen != null)
             {
                 if (_getter != null)
-                    _getter(_screen.HPhysical, ref min, ref value, ref max);
+                    _getter(ref min, ref value, ref max);
                 else if (_componentGetter != null)
-                    _componentGetter(_screen.HPhysical, _component, ref min, ref value, ref max);
-
+                    _componentGetter(_component, ref min, ref value, ref max);
             }
 
             if (min != _min) { _min = min; changed("Min"); }
             if (max != _max) { _max = max; changed("Max"); }
-            if (value != _value) { _value = value; changed("Value"); }
+            if (value != _value) { _value = value; changed("Value"); changed("ValueAsync"); }
         }
         private void getValueThread()
         {
             Thread thread = new Thread(
             new ThreadStart(
-              delegate ()
-              {
-                  getValue();
-                  if (_pendding!=uint.MaxValue && _value!=_pendding)
-                  {
-                      setValueThread();
-                  }
-              }
+              delegate () { getValue(); }
               ));
 
             thread.Start();
@@ -718,25 +771,29 @@ namespace LittleBigMouse
                 new ThreadStart(
                   delegate ()
                   {
-                      if (_pendding!=uint.MaxValue)
+                      uint pendding = _pendding;
+
+                      if (pendding!=uint.MaxValue)
                       {
                           if (_setter != null)
-                              _setter(_screen.HPhysical, _pendding);
+                              _setter(pendding);
                           else if (_componentSetter != null)
-                              _componentSetter(_screen.HPhysical, _component, _pendding);
+                              _componentSetter(_component, pendding);
 
-                          _pendding = uint.MaxValue;
+                          getValue();
                       }
 
-                      getValueThread();
+                      if (_pendding == pendding)
+                          _pendding = uint.MaxValue;
+                      else
+                          setValueThread();
                   }
                   ));
 
                 _threadSetter.Start();
             }
-
         }
-        public uint Value
+        public uint ValueAsync
         {
             get { return _value; }
             set
@@ -745,6 +802,22 @@ namespace LittleBigMouse
                 {
                     _pendding = value;
                     setValueThread();
+                }
+            }
+        }
+        public uint Value
+        {
+            get {
+                while (_pendding < uint.MaxValue) ;
+                return _value;
+            }
+            set
+            {
+                if (_pendding != value)
+                {
+                    _pendding = value;
+                    setValueThread();
+                    while (_pendding < uint.MaxValue) ;
                 }
             }
         }

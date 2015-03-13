@@ -13,6 +13,7 @@ namespace LittleBigMouse
     {
         Solid,
         Gradient,
+        RGBGradient,
         Circle,
         Grid
     }
@@ -69,6 +70,30 @@ namespace LittleBigMouse
             }
         }
 
+        private void DrawGradient(DrawingContext dc, Color color, int count=1, int hpos=0)
+        {
+            double r = (double)color.R / 255;
+            double v = (double)color.G / 255;
+            double b = (double)color.B / 255;
+
+            double w = (ActualWidth / 256.0);
+            double h = (ActualHeight / count);
+
+            for (int i = 0; i < 256; i++)
+            {
+                double wpos = w * i;
+                dc.DrawRectangle(
+                    new SolidColorBrush(
+                        Color.FromRgb(
+                            (byte)(i * r),
+                            (byte)(i * v),
+                            (byte)(i * b)
+                            )
+                        ), null, new Rect(wpos, hpos*h, w + 1.0, h));
+
+            }
+        }
+
         protected override void OnRender(DrawingContext dc)
         {
             switch (_pattern)
@@ -80,18 +105,15 @@ namespace LittleBigMouse
                 // Linear Gradients
                 case TestPatternType.Gradient:
                     {
-                        int r = _color.R / 255;
-                        int v = _color.G / 255;
-                        int b = _color.B / 255;
-
-                        double pos = 0;
-                        for (int i = 0; i <= 255; i++)
-                        {
-                            double posfin = Math.Round(ActualWidth * (double)i / 256.0);
-                            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb((byte)(i * r), (byte)(i * v), (byte)(i * b))), null, new Rect(pos, 0, posfin, ActualHeight));
-                            pos = posfin;
-                        }
+                        DrawGradient(dc, _color);
                     }
+                    break;
+                case TestPatternType.RGBGradient:
+                    DrawGradient(dc, Colors.White,5,0);
+                    DrawGradient(dc, Colors.Red, 5, 1);
+                    DrawGradient(dc, Colors.Lime, 5, 2);
+                    DrawGradient(dc, Colors.Blue, 5, 3);
+                    DrawGradient(dc, Colors.White, 5, 4);
                     break;
 
                 case TestPatternType.Circle:

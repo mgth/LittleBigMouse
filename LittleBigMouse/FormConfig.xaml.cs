@@ -23,6 +23,7 @@
 
 using Microsoft.Win32;
 using System;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 
@@ -56,10 +57,18 @@ namespace LittleBigMouse
             get { return _propertyPane; }
             set {
                 if (_propertyPane!=null)
+                {
                     property.Children.Clear();
+                    _propertyPane.Screen = null;
+                }
+
                 _propertyPane = value;
-                property.Children.Add(value as UIElement);
-                value.Screen = Selected;
+
+                if (value!=null)
+                {
+                    property.Children.Add(value as UIElement);
+                    value.Screen = Selected;
+                }
             }
         }
 
@@ -141,11 +150,19 @@ namespace LittleBigMouse
             {
                 using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
                 {
-                    Left = double.Parse(k.GetValue("X", wa.X + (2 * wa.Width) / 3).ToString());
-                    Top = double.Parse(k.GetValue("Y", wa.Y + (2 * wa.Height) / 3).ToString());
-                    Width = double.Parse(k.GetValue("Width", wa.Width / 3).ToString());
-                    Height = double.Parse(k.GetValue("Height", wa.Height / 3).ToString());
+                    Left = double.Parse(k.GetValue("X", wa.X + (2 * wa.Width) / 3).ToString(),CultureInfo.InvariantCulture);
+                    Top = double.Parse(k.GetValue("Y", wa.Y + (2 * wa.Height) / 3).ToString(), CultureInfo.InvariantCulture);
+                    Width = double.Parse(k.GetValue("Width", wa.Width / 3).ToString(), CultureInfo.InvariantCulture);
+                    Height = double.Parse(k.GetValue("Height", wa.Height / 3).ToString(), CultureInfo.InvariantCulture);
                     k.Close();
+
+                    Screen s = _currentConfig.FromPixelPoint(new Point(Left, Top));
+
+                    if ( s==null)
+                    {
+                        Top = wa.Y + (2 * wa.Height) / 3;
+                        Left =  wa.Y + (2 * wa.Height) / 3;
+                    }
                 }
                 configkey.Close();
             }
@@ -156,10 +173,10 @@ namespace LittleBigMouse
             {
                 using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
                 {
-                    k.SetValue("X", Left.ToString(), RegistryValueKind.String);
-                    k.SetValue("Y", Top.ToString(), RegistryValueKind.String);
-                    k.SetValue("Width", Width.ToString(), RegistryValueKind.String);
-                    k.SetValue("Height", Height.ToString(), RegistryValueKind.String);
+                    k.SetValue("X", Left.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Y", Top.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Width", Width.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Height", Height.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                     k.Close();
                 }
                 configkey.Close();
@@ -392,12 +409,32 @@ namespace LittleBigMouse
 
         private void cmdLayout_Click(object sender, RoutedEventArgs e)
         {
-            PropertyPane = new ScreenProperties();
         }
 
         private void cmdPattern_Click(object sender, RoutedEventArgs e)
         {
+        }
+
+        private void cmdLayout_Checked(object sender, RoutedEventArgs e)
+        {
+            PropertyPane = new ScreenProperties();
+            _allowMove = true;
+        }
+
+        private void cmdLayout_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _allowMove = false;
+            if (PropertyPane.GetType() == typeof(ScreenProperties)) PropertyPane = null;
+        }
+
+        private void cmdPattern_Checked(object sender, RoutedEventArgs e)
+        {
             PropertyPane = new ControlPane();
+        }
+
+        private void cmdPattern_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (PropertyPane.GetType() == typeof(ControlPane)) PropertyPane = null;
         }
     }
 }

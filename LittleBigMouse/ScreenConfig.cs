@@ -79,7 +79,7 @@ namespace LittleBigMouse
             Point pIn = new Point(e.X, e.Y);
             Point pOut;
 
-            if (_currentScreen == null) _currentScreen = FromPoint(pIn);
+            if (_currentScreen == null) _currentScreen = FromPixelPoint(pIn);
 
             if (_currentScreen.InsideBounds.Contains(pIn))
             {
@@ -271,17 +271,22 @@ namespace LittleBigMouse
             }
         }
 
-        public Screen FromPoint(Point point)
+        public Screen FromPixelPoint(Point point)
         {
-            int x = (int)Math.Round(point.X);
-            int y = (int)Math.Round(point.Y);
+            int x = (int)Math.Truncate(point.X);
+            int y = (int)Math.Truncate(point.Y);
 
             // are x,y device-independent-pixels ??
             System.Drawing.Point drawingPoint = new System.Drawing.Point(x, y);
             System.Windows.Forms.Screen screen = System.Windows.Forms.Screen.FromPoint(drawingPoint);
-            Screen wpfScreen = getScreen(screen);
 
-            return wpfScreen;
+            if (screen.Bounds.Contains(drawingPoint))
+            {
+                Screen wpfScreen = getScreen(screen);
+
+                return wpfScreen;
+            }
+            else return null;
         }
         public Screen PrimaryScreen
         {

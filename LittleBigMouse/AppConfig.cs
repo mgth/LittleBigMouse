@@ -64,6 +64,7 @@ namespace LittleBigMouse
             }
             else
             {
+                //_formConfig.Show();
                 _formConfig.Activate();
             }
         }

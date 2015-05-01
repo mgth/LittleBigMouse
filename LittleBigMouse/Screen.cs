@@ -24,6 +24,7 @@
 using Microsoft.Win32;
 using System;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -135,14 +136,14 @@ namespace LittleBigMouse
         {
             using (RegistryKey key = baseKey.CreateSubKey(ID))
             {
-                key.SetValue("X", PhysicalLocation.X.ToString(), RegistryValueKind.String);
-                key.SetValue("Y", PhysicalLocation.Y.ToString(), RegistryValueKind.String);
+                key.SetValue("X", PhysicalLocation.X.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                key.SetValue("Y", PhysicalLocation.Y.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
 
                 if (double.IsNaN(_pitchX)) { key.DeleteValue("PitchX", false); }
-                else { key.SetValue("PitchX", PitchX.ToString(), RegistryValueKind.String); }
+                else { key.SetValue("PitchX", PitchX.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
 
                 if (double.IsNaN(_pitchY)) { key.DeleteValue("PitchY", false); }
-                else { key.SetValue("PitchY", PitchY.ToString(), RegistryValueKind.String); }
+                else { key.SetValue("PitchY", PitchY.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
 
                 key.Close();
             }
@@ -154,14 +155,17 @@ namespace LittleBigMouse
             {
                 if (key != null)
                 {
-                    PhysicalX = double.Parse(key.GetValue("X", RegistryValueKind.String).ToString());
-                    PhysicalY = double.Parse(key.GetValue("Y", RegistryValueKind.String).ToString());
+                    String sX = key.GetValue("X", RegistryValueKind.String).ToString();
+                    PhysicalX = double.Parse(sX, CultureInfo.InvariantCulture);
+
+                    String sY = key.GetValue("Y", RegistryValueKind.String).ToString();
+                    PhysicalY = double.Parse(sY, CultureInfo.InvariantCulture);
 
                     String pitchX = key.GetValue("PitchX", "NaN").ToString();
-                    if (pitchX != "NaN") PitchX = double.Parse(pitchX);
+                    if (pitchX != "NaN") PitchX = double.Parse(pitchX, CultureInfo.InvariantCulture);
 
                     String pitchY = key.GetValue("PitchY", "NaN").ToString();
-                    if (pitchY != "NaN") PitchY = double.Parse(pitchY);
+                    if (pitchY != "NaN") PitchY = double.Parse(pitchY, CultureInfo.InvariantCulture);
 
                     key.Close();
                 }

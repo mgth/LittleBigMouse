@@ -20,8 +20,8 @@
             <ColumnDefinition Width="Auto"></ColumnDefinition>
         </Grid.ColumnDefinitions>
         <StackPanel  Margin="5" Grid.Row="0" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Left" >
-            <Button x:Name="cmdLayout" Margin="5" Click="cmdLayout_Click" >Layout</Button>
-            <Button x:Name="cmdPattern" Margin="5" Click="cmdPattern_Click">Patterns</Button>
+            <RadioButton Style="{StaticResource {x:Type ToggleButton}}" x:Name="cmdLayout" Margin="5" Checked="cmdLayout_Checked" Unchecked="cmdLayout_Unchecked" >Layout</RadioButton>
+            <RadioButton Style="{StaticResource {x:Type ToggleButton}}" x:Name="cmdPattern" Margin="5" Checked="cmdPattern_Checked" Unchecked="cmdPattern_Unchecked">Patterns</RadioButton>
         </StackPanel>
         <Grid  Margin="5" x:Name="grid" Background="Black" Grid.Row="1">
 

@@ -101,7 +101,7 @@ namespace LittleBigMouse
 
                 p.StartInfo.FileName = _ArgyllPath + @"bin\spotread.exe";
 //                p.StartInfo.Arguments = "-N -O -Y A";
-                p.StartInfo.Arguments = "-N -H -O";
+                p.StartInfo.Arguments = "-e -N -H -O";
                 p.StartInfo.UseShellExecute = false;
                 p.StartInfo.RedirectStandardOutput = true;
                 p.StartInfo.RedirectStandardError = true;

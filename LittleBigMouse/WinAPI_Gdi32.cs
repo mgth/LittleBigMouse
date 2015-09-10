@@ -173,11 +173,26 @@ namespace WinAPI_Gdi32
     }
     class Gdi32
     {
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        public struct RAMP
+        {
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
+            public UInt16[] Red;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
+            public UInt16[] Green;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
+            public UInt16[] Blue;
+        }
+
         [DllImport("gdi32.dll")]
         internal static extern IntPtr CreateDC(string lpszDriver, string lpszDevice, string lpszOutput, IntPtr lpInitData);
         [DllImport("gdi32.dll", EntryPoint = "DeleteDC")]
         internal static extern bool DeleteDC([In] IntPtr hdc);
         [DllImport("gdi32.dll", SetLastError = true)]
         internal static extern Int32 GetDeviceCaps(IntPtr hdc, DeviceCap capindex);
+        [DllImport("gdi32.dll")]
+        public static extern int GetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
+        [DllImport("gdi32.dll")]
+        public static extern int SetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
     }
 }

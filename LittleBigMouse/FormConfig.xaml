@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:LittleBigMouse"
         mc:Ignorable="d"
         Icon="MainIcon.ico"
-        Title="Little Big Mouse" Height="300" Width="600" Closing="Window_Closing" Topmost="True"
+        Title="Little Big Mouse" Height="300" Width="1000" Closing="Window_Closing" Topmost="True"
         BorderBrush="Black"
         >
     <Grid Background="#FF2D2D30">
@@ -27,6 +27,10 @@
 
         </Grid>
         <StackPanel  Margin="5" Grid.Row="2" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
+            <StackPanel Orientation="Vertical" Margin="5,0,0,0">
+                <Label Content="{Binding Path=MouseLocation.X, Mode=OneWay}"  Foreground="LightGray"/>
+                <Label Content="{Binding Path=MouseLocation.Y, Mode=OneWay}"  Foreground="LightGray"/>
+            </StackPanel>
             <StackPanel Orientation="Vertical" Margin="5,0,0,0">
                 <CheckBox Content="Allow to jump" IsChecked="{Binding Path=AllowToJump, Mode=TwoWay}" Foreground="LightGray" />
             </StackPanel>

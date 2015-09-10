@@ -24,8 +24,9 @@ namespace LittleBigMouse
         public event PropertyChangedEventHandler PropertyChanged;
         private void changed(String name)
         {
-            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
+
         private Screen _screen = null;
         public Screen Screen
         {
@@ -71,9 +72,8 @@ namespace LittleBigMouse
         {
             if (Screen == null) return;
 
-            foreach (Screen s in Screen.Config.AllScreens)
+            foreach (var sz in Screen.Config.AllScreens.Select(s => new Sizer(Screen, s, side)))
             {
-                Sizer sz = new Sizer(Screen, s, side);
                 _sizers.Add(sz);
             }
         }

@@ -9,6 +9,7 @@ using System.Windows;
 using System.ComponentModel;
 using System.Windows.Threading;
 using System.Globalization;
+using WinAPI_Gdi32;
 
 namespace LittleBigMouse
 {
@@ -101,25 +102,7 @@ namespace LittleBigMouse
 
     class CurveViewer : Grid
     {
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        public struct RAMP
-        {
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public UInt16[] Red;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public UInt16[] Green;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public UInt16[] Blue;
-        }
 
-        [DllImport("gdi32.dll")]
-        public static extern int GetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
-
-        [DllImport("gdi32.dll")]
-        public static extern int SetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
-
-        [DllImport("gdi32.dll")]
-        static extern IntPtr CreateDC(string lpszDriver, string lpszDevice, string lpszOutput, IntPtr lpInitData);
 
         private IntPtr _hdcDevice = IntPtr.Zero;
 
@@ -127,10 +110,10 @@ namespace LittleBigMouse
 
         public void LoadLut(string DeviceName)
         {
-            IntPtr hdcDevice = CreateDC(DeviceName, "", "", IntPtr.Zero);
+            IntPtr hdcDevice = Gdi32.CreateDC(DeviceName, "", "", IntPtr.Zero);
 
-            RAMP TableLut = new RAMP();
-            GetDeviceGammaRamp(hdcDevice, ref TableLut);
+            Gdi32.RAMP TableLut = new Gdi32.RAMP();
+            Gdi32.GetDeviceGammaRamp(hdcDevice, ref TableLut);
 
             _curves.Add(new Curve(TableLut.Red, Colors.Red));
             _curves.Add(new Curve(TableLut.Green, Colors.Red));

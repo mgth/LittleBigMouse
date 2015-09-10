@@ -24,83 +24,63 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using WinAPI_User32;
 
 namespace LittleBigMouse
 {
     public class Mouse
     {
-        const UInt32 SPI_SETCURSORS = 0x0057;
-        const UInt32 SPIF_UPDATEINIFILE = 0x01;
-        const UInt32 SPIF_SENDCHANGE = 0x02;
-        const UInt32 SPI_SETMOUSESPEED = 0x0071;
-        const UInt32 SPI_GETMOUSESPEED = 0x0070;
 
-        [DllImport("user32.dll")]
-        public static extern Boolean SetCursorPos(Int32 x, Int32 y);
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct POINT
-        {
-            public int X;
-            public int Y;
-
-            public POINT(int x, int y)
-            {
-                this.X = x;
-                this.Y = y;
-            }
-
-            public POINT(System.Drawing.Point pt) : this(pt.X, pt.Y) { }
-
-            public static implicit operator Point(POINT p)
-            {
-                return new Point(p.X, p.Y);
-            }
-
-            public static implicit operator POINT(Point p)
-            {
-                return new POINT((int)p.X, (int)p.Y);
-            }
-        }
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool GetCursorPos(out POINT lpPoint);
 
         public static Point CursorPos
         {
             get
             {
-                POINT p=new POINT();
-                GetCursorPos(out p);
+                User32.POINT p=new User32.POINT();
+                User32.GetCursorPos(out p);
                 return p;
             }
+            set
+            {
+                User32.SetCursorPos((int)value.X, (int)value.Y);
+            }
+/*            {
+                InputUnion[] input = new InputUnion[1];
+                input[0] = new InputUnion()
+                {
+                    mi = new MOUSEINPUT()
+                    {
+                        dwFlags =
+            //                WinAPI_User32.MOUSEEVENTF.ABSOLUTE |
+            //                WinAPI_User32.MOUSEEVENTF.VIRTUALDESK |
+                            MOUSEEVENTF.MOVE |
+                            MOUSEEVENTF.MOVE_NOCOALESCE
+                            ,
+                        dx = (int)value.X,
+                        dy = (int)value.Y,
+                    }
+                };  
+
+
+                uint res = User32.SendInput(1, input, Marshal.SizeOf(typeof(WinAPI_User32.MOUSEINPUT)));
+                Console.WriteLine(res);
+
+            }*/
         }
 
-        [DllImport("User32.dll")]
-        static extern Boolean SystemParametersInfo(
-            UInt32 uiAction,
-            UInt32 uiParam,
-            UInt32 pvParam,
-            UInt32 fWinIni);
-
-        [DllImport("User32.dll")]
-        static extern Boolean SystemParametersInfo(
-            UInt32 uiAction,
-            UInt32 uiParam,
-            ref UInt32 pvParam,
-            UInt32 fWinIni);
         static public double MouseSpeed
         {
             get
             {
                 uint speed = 0;
-                SystemParametersInfo(SPI_GETMOUSESPEED, 0, ref speed, 0);
+                User32.SystemParametersInfo(User32.SPI_GETMOUSESPEED, 0, ref speed, 0);
                 return speed;
             }
 
             set
             {
-                SystemParametersInfo(SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
+                User32.SystemParametersInfo(User32.SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
             }
         }
         public static void setCursor(String name, String fileName)
@@ -126,7 +106,7 @@ namespace LittleBigMouse
             setCursor("UpArrow", "%SystemRoot%\\cursors\\aero_up" + suffix + ".cur");
             setCursor("Wait", "%SystemRoot%\\cursors\\aero_busy" + suffix + ".ani");
 
-            SystemParametersInfo(SPI_SETCURSORS, 0, 0, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+            User32.SystemParametersInfo(User32.SPI_SETCURSORS, 0, 0, User32.SPIF_UPDATEINIFILE | User32.SPIF_SENDCHANGE);
         }
 
         public static void setCursorAero(int size)

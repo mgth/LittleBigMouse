@@ -27,14 +27,16 @@ namespace LittleBigMouse
 {
     public class Notify : IDisposable
     {
-        private System.Windows.Forms.NotifyIcon _notify = new System.Windows.Forms.NotifyIcon
-        {
-            Icon = Properties.Resources.MainIcon,
-            Visible = true,
-        }; 
+        private System.Windows.Forms.NotifyIcon _notify;
 
         public Notify()
         {
+            _notify = new System.Windows.Forms.NotifyIcon
+            {
+                Icon = Properties.Resources.MainIcon,
+                Visible = true,
+            };
+
             _notify.Click +=
                 delegate (object sender, EventArgs args)
                 {
@@ -43,11 +45,18 @@ namespace LittleBigMouse
         }
 
         public event EventHandler Click;
-
         public void Dispose()
         {
-            _notify.Visible = false;
-            _notify.Dispose();
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _notify.Visible = false;
+                _notify.Dispose();
+            }
         }
     }
 }

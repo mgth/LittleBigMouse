@@ -114,9 +114,32 @@ namespace LittleBigMouse
             return true;
         }
 
+        private bool _disposed = false;
+        protected virtual void Dispose(bool disposing)
+        {
+            if(!_disposed)
+            {
+                if (disposing)
+                {
+                    Stop();
+                    if (_config != null)
+                    {
+                        _config.Dispose();
+                        _config = null;
+                    }
+                    if (_formConfig != null)
+                    {
+                        _formConfig.Dispose();
+                        _formConfig = null;
+                    }
+
+                }
+                _disposed = true;
+            }
+        }
         public void Dispose()
         {
-            Stop();
+            Dispose(true);
         }
     }
 

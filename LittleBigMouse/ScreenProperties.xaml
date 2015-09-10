@@ -13,6 +13,8 @@
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition/>
             <ColumnDefinition/>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -31,11 +33,15 @@
         <Label Content="Location" Grid.Row="1" HorizontalAlignment="Right"></Label>
         <TextBox Text="{Binding Path=Screen.PhysicalX, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}"  Grid.Row="1" Grid.Column="1"></TextBox>
         <TextBox Text="{Binding Path=Screen.PhysicalY, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="1" Grid.Column="2"></TextBox>
-        
+        <TextBox Text="{Binding Path=Screen.PixelLocation.X, Mode=OneWay, StringFormat=N0 }" IsEnabled="{Binding Path=AllowEdit}"  Grid.Row="1" Grid.Column="3"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PixelLocation.Y, Mode=OneWay, StringFormat=N0}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="1" Grid.Column="4"></TextBox>
+
         <Label Content="Size" Grid.Row="2" HorizontalAlignment="Right"></Label>
         <TextBox Text="{Binding Path=Screen.PhysicalWidth, Mode=TwoWay, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="2" Grid.Column="1"></TextBox>
         <TextBox Text="{Binding Path=Screen.PhysicalHeight, Mode=TwoWay, StringFormat=N1}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="2" Grid.Column="2"></TextBox>
-        
+        <TextBox Text="{Binding Path=Screen.PixelBounds.Width, Mode=OneWay, StringFormat=N0}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="2" Grid.Column="3"></TextBox>
+        <TextBox Text="{Binding Path=Screen.PixelBounds.Height, Mode=OneWay, StringFormat=N0}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="2" Grid.Column="4"></TextBox>
+
         <Label Content="DPI" Grid.Row="3" HorizontalAlignment="Right"></Label>
         <TextBox Text="{Binding Path=Screen.DpiX, Mode=TwoWay, StringFormat=N0}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="3" Grid.Column="1"></TextBox>
         <TextBox Text="{Binding Path=Screen.DpiY, Mode=TwoWay, StringFormat=N0}" IsEnabled="{Binding Path=AllowEdit}" Grid.Row="3" Grid.Column="2"></TextBox>

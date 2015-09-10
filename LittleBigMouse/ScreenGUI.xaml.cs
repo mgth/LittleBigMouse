@@ -30,7 +30,7 @@ using System.Windows.Media;
 
 namespace LittleBigMouse
 {
-    public delegate void ScreenGUISelectedChangedHandler(Screen s, bool selected);
+    public delegate void ScreenGUISelectedChangedHandler(Screen sender, bool selected);
     /// <summary>
     /// Interaction logic for ScreenGUI.xaml
     /// </summary>
@@ -78,8 +78,8 @@ namespace LittleBigMouse
             }
         }
 
-        private Point _physicalLocation=new Point(0,0);
-        public Point PhysicalLocation
+        private PhysicalPoint _physicalLocation = null;
+        public PhysicalPoint PhysicalLocation
         {
             set {
                 _physicalLocation = value;
@@ -98,6 +98,8 @@ namespace LittleBigMouse
                 _grid.ActualWidth / all.Width,
                 _grid.ActualHeight / all.Height
                 );
+
+            if (double.IsNaN(ratio)) return;
 
             Margin = new Thickness(
                     (PhysicalLocation.X - all.X) * ratio,

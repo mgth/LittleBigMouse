@@ -6,11 +6,12 @@
         xmlns:local="clr-namespace:LittleBigMouse"
         mc:Ignorable="d"
         Icon="MainIcon.ico"
-        Title="Little Big Mouse" Height="300" Width="600" Closing="Window_Closing" Topmost="True"
+        Title="Little Big Mouse" Height="300" Width="1000" Closing="Window_Closing" Topmost="True"
         BorderBrush="Black"
         >
     <Grid Background="#FF2D2D30">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
@@ -18,10 +19,18 @@
             <ColumnDefinition Width="*"></ColumnDefinition>
             <ColumnDefinition Width="Auto"></ColumnDefinition>
         </Grid.ColumnDefinitions>
-        <Grid  Margin="5" x:Name="grid" Background="Black">
+        <StackPanel  Margin="5" Grid.Row="0" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Left" >
+            <RadioButton Style="{StaticResource {x:Type ToggleButton}}" x:Name="cmdLayout" Margin="5" Checked="cmdLayout_Checked" Unchecked="cmdLayout_Unchecked" >Layout</RadioButton>
+            <RadioButton Style="{StaticResource {x:Type ToggleButton}}" x:Name="cmdPattern" Margin="5" Checked="cmdPattern_Checked" Unchecked="cmdPattern_Unchecked">Patterns</RadioButton>
+        </StackPanel>
+        <Grid  Margin="5" x:Name="grid" Background="Black" Grid.Row="1">
 
         </Grid>
-        <StackPanel  Margin="5" Grid.Row="1" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
+        <StackPanel  Margin="5" Grid.Row="2" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
+            <StackPanel Orientation="Vertical" Margin="5,0,0,0">
+                <Label Content="{Binding Path=MouseLocation.X, Mode=OneWay}"  Foreground="LightGray"/>
+                <Label Content="{Binding Path=MouseLocation.Y, Mode=OneWay}"  Foreground="LightGray"/>
+            </StackPanel>
             <StackPanel Orientation="Vertical" Margin="5,0,0,0">
                 <CheckBox Content="Allow to jump" IsChecked="{Binding Path=AllowToJump, Mode=TwoWay}" Foreground="LightGray" />
             </StackPanel>
@@ -39,8 +48,8 @@
             <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
             <Button x:Name="cmdCancel" MinWidth="50" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
         </StackPanel>
-            <Grid x:Name="property" Grid.Column="1">
-                
-            </Grid> 
+                <Grid x:Name="property" Grid.Row="1" Grid.Column="1">
+
+                </Grid>
     </Grid>
 </Window>

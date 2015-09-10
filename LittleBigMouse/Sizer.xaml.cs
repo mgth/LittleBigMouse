@@ -50,91 +50,102 @@ namespace LittleBigMouse
         SizerSide _side;
 
 
-        private void setSize()
+        private void SetSize()
         {
             switch (_side)
             {
                 case SizerSide.Left:
-                    Point left_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
-                    Point left_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
+                    var leftTop = new PhysicalPoint(_drawOn,_screen.PhysicalX,_screen.PhysicalY);
+                    var leftBottom = new PhysicalPoint(_drawOn, _screen.PhysicalX, _screen.Bounds.BottomLeft.Physical.Y);
 
-                    if (left_bottom.Y <= _drawOn.WpfBounds.Y || left_top.Y >= _drawOn.WpfBounds.Bottom)
+                    if (leftBottom.Y <= _drawOn.PhysicalY || leftTop.Y >= _drawOn.Bounds.BottomRight.Physical.Y)
                     {
                         Hide();
                     }
                     else
                     {
-                        Top = Math.Max(left_top.Y, _drawOn.WpfBounds.Y);
-                        (border.Child as Canvas).Margin = new Thickness(0, left_top.Y - Top, 0, 0);
-                        Height = Math.Max(Math.Min(left_bottom.Y, _drawOn.WpfBounds.Bottom) - Top, 0);
+                        Top = Math.Max(leftTop.DpiAware.Y, _drawOn.Bounds.TopLeft.DpiAware.Y);
+                        var canvas = border.Child as Canvas;
+                        if (canvas != null)
+                            canvas.Margin = new Thickness(0, leftTop.DpiAware.Y - Top, 0, 0);
+                        Height = Math.Max(Math.Min(leftBottom.DpiAware.Y, _drawOn.Bounds.BottomRight.DpiAware.Y) - Top, 0);
                         if (Enabled) Show();
                     }
                     break;
 
                 case SizerSide.Right:
-                    Point right_top = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
-                    Point right_bottom = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
+                    var rightTop = new PhysicalPoint(_drawOn, _screen.Bounds.TopRight.Physical.X, _screen.Bounds.TopRight.Physical.Y);
+                    var rightBottom = new PhysicalPoint(_drawOn, _screen.Bounds.BottomRight.Physical.X, _screen.Bounds.BottomRight.Physical.Y);
 
-                    if (right_bottom.Y <= _drawOn.WpfBounds.Y || right_top.Y >= _drawOn.WpfBounds.Bottom)
+                    if (rightBottom.Y <= _drawOn.PhysicalY || rightTop.Y >= _drawOn.Bounds.BottomRight.Physical.Y)
                     {
                         Hide();
                     }
                     else
                     {
-                        Top = Math.Max(right_top.Y, _drawOn.WpfBounds.Y);
-                        (border.Child as Canvas).Margin = new Thickness(0, right_top.Y - Top, 0, 0);
-                        Height = Math.Max(Math.Min(right_bottom.Y, _drawOn.WpfBounds.Bottom) - Top, 0);
+                        Top = Math.Max(rightTop.DpiAware.Y, _drawOn.Bounds.TopLeft.DpiAware.Y);
+                        var canvas = border.Child as Canvas;
+                        if (canvas != null)
+                            canvas.Margin = new Thickness(0, rightTop.DpiAware.Y - Top, 0, 0);
+                        Height = Math.Max(Math.Min(rightBottom.DpiAware.Y, _drawOn.Bounds.BottomRight.DpiAware.Y) - Top, 0);
                         if (Enabled) Show();
                     }
                     break;
 
                 case SizerSide.Top:
-                    Point top_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopLeft);
-                    Point top_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.TopRight);
+                    var topLeft = new PhysicalPoint(_drawOn, _screen.PhysicalX, _screen.PhysicalY);
+                    var topRight = new PhysicalPoint(_drawOn, _screen.Bounds.TopRight.Physical.X, _screen.Bounds.TopRight.Physical.Y);
 
-                    if (top_right.X <= _drawOn.WpfBounds.X || top_left.X >= _drawOn.WpfBounds.Right)
+                    if (topRight.X <= _drawOn.PhysicalX || topLeft.X >= _drawOn.Bounds.TopRight.Physical.X)
                     {
                         Hide();
                     }
                     else
                     {
-                        Left = Math.Max(top_left.X, _drawOn.WpfBounds.X);
-                        (border.Child as Canvas).Margin = new Thickness(top_left.X - Left, 0, 0, 0);
-                        Width = Math.Max(Math.Min(top_right.X, _drawOn.WpfBounds.Right) - Left, 0);
+                        Left = Math.Max(topLeft.DpiAware.X, _drawOn.Bounds.TopLeft.DpiAware.X);
+                        var canvas = border.Child as Canvas;
+                        if (canvas != null)
+                            canvas.Margin = new Thickness(topLeft.DpiAware.X - Left, 0, 0, 0);
+                        Width = Math.Max(Math.Min(topRight.DpiAware.X, _drawOn.Bounds.TopRight.DpiAware.X) - Left, 0);
                         if (Enabled) Show();
                     }
                     break;
                 case SizerSide.Bottom:
-                    Point bottom_left = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomLeft);
-                    Point bottom_right = _drawOn.PhysicalToWpf(_screen.PhysicalBounds.BottomRight);
+                    var bottomLeft = new PhysicalPoint(_drawOn, _screen.PhysicalX, _screen.Bounds.BottomLeft.Physical.Y);
+                    var bottomRight = new PhysicalPoint(_drawOn, _screen.Bounds.BottomRight.Physical.X, _screen.Bounds.BottomRight.Physical.Y);
 
-                    if (bottom_right.X <= _drawOn.WpfBounds.X || bottom_left.X >= _drawOn.WpfBounds.Right)
+                    if (bottomRight.X <= _drawOn.PhysicalX || bottomLeft.X >= _drawOn.Bounds.BottomRight.Physical.X)
                     {
                         Hide();
                     }
                     else
                     {
-                        Left = Math.Max(bottom_left.X, _drawOn.WpfBounds.X);
-                        (border.Child as Canvas).Margin = new Thickness(bottom_left.X - Left, 0, 0, 0);
-                        Width = Math.Max(Math.Min(bottom_right.X, _drawOn.WpfBounds.Right) - Left, 0);
+                        Left = Math.Max(bottomLeft.DpiAware.X, _drawOn.Bounds.BottomLeft.DpiAware.X);
+                        var canvas = border.Child as Canvas;
+                        if (canvas != null)
+                            canvas.Margin = new Thickness(bottomLeft.DpiAware.X - Left, 0, 0, 0);
+                        Width = Math.Max(Math.Min(bottomRight.DpiAware.X, _drawOn.Bounds.BottomRight.DpiAware.X) - Left, 0);
                         if(Enabled) Show();
                     }
                     break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
-
         }
 
-        bool _enabled = false;
+        private bool _enabled = false;
+
         public bool Enabled
         {
             get { return _enabled; }
-            set {
+            set
+            {
                 if (_enabled != value)
                 {
-                   _enabled = true;
-                    setSize();
+                    _enabled = true;
+                    SetSize();
                 }
-             }
+            }
         }
 
         public Sizer(Screen screen, Screen drawOn, SizerSide side)
@@ -144,12 +155,11 @@ namespace LittleBigMouse
             _drawOn = drawOn;
             _side = side;
 
-
             switch (_side)
             {
                 case SizerSide.Left:
-                    Width = _drawOn.WpfBounds.Width / 16;
-                    Left = _drawOn.WpfBounds.Right - Width;
+                    Width = (_drawOn.Bounds.BottomRight.DpiAware.X - _drawOn.Bounds.TopLeft.DpiAware.X) / 16;
+                    Left = _drawOn.Bounds.BottomRight.DpiAware.X - Width;
 
                     gradient.StartPoint = new Point(1, 0.5);
                     gradient.EndPoint = new Point(0, 0.5);
@@ -159,8 +169,8 @@ namespace LittleBigMouse
                     break;
 
                 case SizerSide.Right:
-                    Left = _drawOn.WpfBounds.X;
-                    Width = _drawOn.WpfBounds.Width / 16;
+                    Left = _drawOn.Bounds.TopLeft.DpiAware.X;
+                    Width = (_drawOn.Bounds.BottomRight.DpiAware.X - _drawOn.Bounds.TopLeft.DpiAware.X ) / 16;
 
                     gradient.StartPoint = new Point(0, 0.5);
                     gradient.EndPoint = new Point(1, 0.5);
@@ -170,8 +180,8 @@ namespace LittleBigMouse
                     break;
 
                 case SizerSide.Top:
-                    Height = _drawOn.WpfBounds.Height  / 8;
-                    Top = _drawOn.WpfBounds.Bottom - Height;
+                    Height = (_drawOn.Bounds.BottomRight.DpiAware.Y - _drawOn.Bounds.TopLeft.DpiAware.Y) / 8;
+                    Top = _drawOn.Bounds.BottomRight.DpiAware.Y - Height;
 
                     gradient.StartPoint = new Point(0.5, 1);
                     gradient.EndPoint = new Point(0.5, 0);
@@ -181,8 +191,8 @@ namespace LittleBigMouse
                     break;
 
                 case SizerSide.Bottom:
-                    Height = _drawOn.WpfBounds.Height / 8;
-                    Top = _drawOn.WpfBounds.Y;
+                    Height = (_drawOn.Bounds.BottomRight.DpiAware.Y - _drawOn.Bounds.TopLeft.DpiAware.Y) / 8;
+                    Top = _drawOn.Bounds.TopLeft.DpiAware.Y;
 
                     gradient.StartPoint = new Point(0.5, 0);
                     gradient.EndPoint = new Point(0.5, 1);
@@ -192,17 +202,16 @@ namespace LittleBigMouse
                     break;
             }
 
-            setSize();
+            SetSize();
             _screen.PropertyChanged += _screen_PropertyChanged;
-
         }
 
         private void _screen_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            switch(e.PropertyName)
+            switch (e.PropertyName)
             {
                 case "PhysicalBounds":
-                    setSize();
+                    SetSize();
                     break;
             }
         }
@@ -211,61 +220,57 @@ namespace LittleBigMouse
         {
             Canvas canvas = new Canvas();
 
-            double ratioX = _drawOn.PixelToWpfRatioX / _drawOn.PitchX;
-            double ratioY = _drawOn.PixelToWpfRatioY / _drawOn.PitchY;
+            double ratioX =  (1/_drawOn.RatioX)/_drawOn.PitchX;
+            double ratioY =  (1/_drawOn.RatioY)/_drawOn.PitchY;
 
-            double height = _screen.PhysicalHeight * ratioY;
+            double height = _screen.PhysicalHeight*ratioY;
 
             int i = 0;
             while (true)
             {
-                double y = i * ratioY;
+                double y = i*ratioY;
                 if (y > height) break;
 
-                double x; string text = null;
-                if (i % 100 == 0)
+                double x;
+                string text = null;
+                if (i%100 == 0)
                 {
-                    x = 20.0 * ratioX;
-                    if (i > 0) text = (i / 100).ToString();
+                    x = 20.0*ratioX;
+                    if (i > 0) text = (i/100).ToString();
                 }
-                else if (i % 50 == 0)
+                else if (i%50 == 0)
                 {
-                    x = 15.0 * ratioX;
+                    x = 15.0*ratioX;
                     text = "5";
                 }
-                else if (i % 10 == 0)
+                else if (i%10 == 0)
                 {
-                    x = 10.0 * ratioX;
-                    text = ((i % 100) / 10).ToString();
+                    x = 10.0*ratioX;
+                    text = ((i%100)/10).ToString();
                 }
-                else if (i % 5 == 0)
+                else if (i%5 == 0)
                 {
-                    x = 5.0 * ratioX;
+                    x = 5.0*ratioX;
                 }
                 else
                 {
-                    x = 2.5 * ratioX;
+                    x = 2.5*ratioX;
                 }
 
                 if (text != null)
                 {
                     TextBlock t = new TextBlock
                     {
-                        Text = text,
-                        FontSize = x / 3,
+                        Text = text, FontSize = x/3,
                     };
                     t.SetValue(Canvas.TopProperty, y);
-                    t.SetValue(Canvas.LeftProperty, (side == SizerSide.Left)?(x - t.FontSize) : Width - x);
+                    t.SetValue(Canvas.LeftProperty, (side == SizerSide.Left) ? (x - t.FontSize) : Width - x);
                     canvas.Children.Add(t);
                 }
 
                 Line l = new Line
                 {
-                    X1 = (side == SizerSide.Left) ? 0 : Width - x,
-                    X2 = (side == SizerSide.Left) ? x : Width,
-                    Y1 = y,
-                    Y2 = y,
-                    Stroke = new SolidColorBrush(Colors.Black),
+                    X1 = (side == SizerSide.Left) ? 0 : Width - x, X2 = (side == SizerSide.Left) ? x : Width, Y1 = y, Y2 = y, Stroke = new SolidColorBrush(Colors.Black),
                 };
                 canvas.Children.Add(l);
                 i++;
@@ -277,61 +282,57 @@ namespace LittleBigMouse
         {
             Canvas canvas = new Canvas();
 
-            double ratioX = _drawOn.PixelToWpfRatioX / _drawOn.PitchX;
-            double ratioY = _drawOn.PixelToWpfRatioY / _drawOn.PitchY;
+            double ratioX = (1 / _drawOn.RatioX) / _drawOn.PitchX;
+            double ratioY = (1 / _drawOn.RatioY) / _drawOn.PitchY;
 
-            double width = _screen.PhysicalWidth * ratioX;
+            double width = _screen.PhysicalWidth*ratioX;
 
             int i = 0;
             while (true)
             {
-                double x = i * ratioX;
+                double x = i*ratioX;
                 if (x > width) break;
 
-                double y; string text = null;
-                if (i % 100 == 0)
+                double y;
+                string text = null;
+                if (i%100 == 0)
                 {
-                    y = 20.0 * ratioY;
-                    if (i > 0) text = (i / 100).ToString();
+                    y = 20.0*ratioY;
+                    if (i > 0) text = (i/100).ToString();
                 }
-                else if (i % 50 == 0)
+                else if (i%50 == 0)
                 {
-                    y = 15.0 * ratioY;
+                    y = 15.0*ratioY;
                     text = "5";
                 }
-                else if (i % 10 == 0)
+                else if (i%10 == 0)
                 {
-                    y = 10.0 * ratioY;
-                    text = ((i % 100) / 10).ToString();
+                    y = 10.0*ratioY;
+                    text = ((i%100)/10).ToString();
                 }
-                else if (i % 5 == 0)
+                else if (i%5 == 0)
                 {
-                    y = 5.0 * ratioY;
+                    y = 5.0*ratioY;
                 }
                 else
                 {
-                    y = 2.5 * ratioY;
+                    y = 2.5*ratioY;
                 }
 
                 if (text != null)
                 {
                     TextBlock t = new TextBlock
                     {
-                        Text = text,
-                        FontSize = y / 3,
+                        Text = text, FontSize = y/3,
                     };
                     t.SetValue(Canvas.LeftProperty, x);
-                    t.SetValue(Canvas.TopProperty, (side==SizerSide.Top)?(y - t.FontSize) : (Height - y));
+                    t.SetValue(Canvas.TopProperty, (side == SizerSide.Top) ? (y - t.FontSize) : (Height - y));
                     canvas.Children.Add(t);
                 }
 
                 Line l = new Line
                 {
-                    X1 = x,
-                    X2 = x,
-                    Y1 = (side==SizerSide.Top)?0 :(Height - y),
-                    Y2 = (side==SizerSide.Top)?y :Height,
-                    Stroke = new SolidColorBrush(Colors.Black),
+                    X1 = x, X2 = x, Y1 = (side == SizerSide.Top) ? 0 : (Height - y), Y2 = (side == SizerSide.Top) ? y : Height, Stroke = new SolidColorBrush(Colors.Black),
                 };
                 canvas.Children.Add(l);
 
@@ -342,7 +343,7 @@ namespace LittleBigMouse
 
 
         private bool _moving = false;
-        Point _oldPoint = new Point();
+        private Point _oldPoint = new Point();
 
 
         private void Window_MouseMove(object sender, MouseEventArgs e)
@@ -351,19 +352,18 @@ namespace LittleBigMouse
 
             if (e.LeftButton == MouseButtonState.Pressed)
             {
-                if(_moving)
+                if (_moving)
                 {
-                    Point p;
-                    switch(_side)
+                    switch (_side)
                     {
                         case SizerSide.Left:
                         case SizerSide.Right:
-                            double offsetY = (newPoint.Y - _oldPoint.Y) * _drawOn.PitchY;
-                             _screen.PhysicalY += offsetY;
-                           break;
+                            double offsetY = (newPoint.Y - _oldPoint.Y)*_drawOn.PitchY;
+                            _screen.PhysicalY += offsetY;
+                            break;
                         case SizerSide.Top:
                         case SizerSide.Bottom:
-                            double offsetX = (newPoint.X - _oldPoint.X) * _drawOn.PitchX;
+                            double offsetX = (newPoint.X - _oldPoint.X)*_drawOn.PitchX;
                             _screen.PhysicalX += offsetX;
                             break;
                     }

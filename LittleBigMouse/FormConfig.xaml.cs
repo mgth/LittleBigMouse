@@ -23,6 +23,8 @@
 
 using Microsoft.Win32;
 using System;
+using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 
@@ -31,10 +33,47 @@ namespace LittleBigMouse
     /// <summary>
     /// Interaction logic for Config.xaml
     /// </summary>
-    public partial class FormConfig : Window
+    public partial class FormConfig : Window, IDisposable
     {
         private ScreenConfig _newConfig;
         private ScreenConfig _currentConfig;
+
+        Screen _selected = null;
+        public Screen Selected
+        {
+            get { return _selected; }
+            set
+            {
+                _selected = value;
+                if (PropertyPane != null)
+                {
+                    PropertyPane.Screen = value;
+                }
+            }
+        }
+
+        PropertyPane _propertyPane = null;
+        PropertyPane PropertyPane
+        {
+            get { return _propertyPane; }
+            set {
+                if (_propertyPane!=null)
+                {
+                    property.Children.Clear();
+                    _propertyPane.Screen = null;
+                }
+
+                _propertyPane = value;
+
+                if (value!=null)
+                {
+                    property.Children.Add(value as UIElement);
+                    value.Screen = Selected;
+                }
+            }
+        }
+
+
 
         public event EventHandler RegistryChanged;
         public FormConfig(ScreenConfig config)
@@ -97,8 +136,10 @@ namespace LittleBigMouse
         {
             if (selected)
             {
-                property.Children.Clear();
-                property.Children.Add(new ScreenProperties(s));
+                if (PropertyPane!=null)
+                {
+                    PropertyPane.Screen = s;
+                }
             }
         }
 
@@ -110,13 +151,20 @@ namespace LittleBigMouse
             {
                 using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
                 {
-                    Left = double.Parse(k.GetValue("X", wa.X + (2 * wa.Width) / 3).ToString());
-                    Top = double.Parse(k.GetValue("Y", wa.Y + (2 * wa.Height) / 3).ToString());
-                    Width = double.Parse(k.GetValue("Width", wa.Width / 3).ToString());
-                    Height = double.Parse(k.GetValue("Height", wa.Height / 3).ToString());
-                    k.Close();
+                    Left = double.Parse( k.GetValue( "X", (wa.X + (2 * wa.Width) / 3).ToString(CultureInfo.InvariantCulture) ).ToString() ,CultureInfo.InvariantCulture);
+                    Top = double.Parse(k.GetValue("Y", (wa.Y + (2 * wa.Height) / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
+                    Width = double.Parse(k.GetValue("Width", (wa.Width / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
+                    Height = double.Parse(k.GetValue("Height", (wa.Height / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
                 }
-                configkey.Close();
+            }
+
+            //TODO reinplement thet
+            //Screen s = _currentConfig.FromWpfPoint(new PixelPoint(null, Left, Top));
+
+            //if ( s==null)
+            {
+                Top = wa.Y + (2 * wa.Height) / 3;
+                Left =  wa.Y + (2 * wa.Height) / 3;
             }
         }
         private void SaveLocation()
@@ -125,13 +173,11 @@ namespace LittleBigMouse
             {
                 using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
                 {
-                    k.SetValue("X", Left.ToString(), RegistryValueKind.String);
-                    k.SetValue("Y", Top.ToString(), RegistryValueKind.String);
-                    k.SetValue("Width", Width.ToString(), RegistryValueKind.String);
-                    k.SetValue("Height", Height.ToString(), RegistryValueKind.String);
-                    k.Close();
+                    k.SetValue("X", Left.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Y", Top.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Width", Width.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Height", Height.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 }
-                configkey.Close();
             }
         }
 
@@ -147,44 +193,35 @@ namespace LittleBigMouse
 
         private void _newConfig_RegistryChanged(object sender, EventArgs e)
         {
-            if (RegistryChanged != null) RegistryChanged(sender, e);
+            RegistryChanged?.Invoke(sender, e);
         }
 
         private Point _oldPosition;
-        private Point _dragStartPosition;
+        private PhysicalPoint _dragStartPosition;
         private bool _moving = false;
 
         private void _gui_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            ScreenGUI gui = sender as ScreenGUI;
-            if (sender == null) return;
+            var gui = sender as ScreenGUI;
+            if (gui == null) return;
 
             if (_moving)
             {
-
                 gui.Screen.PhysicalLocation = gui.PhysicalLocation;
 
                 _moving = false;
 
-                foreach(UIElement el in grid.Children)
+                foreach (var elGui in grid.Children.Cast<UIElement>().OfType<ScreenGUI>().Where(elGui => !Equals(elGui, gui)))
                 {
-                    ScreenGUI el_gui = el as ScreenGUI;
-                    if (el_gui != null && el_gui != gui)
-                    {
-                        el_gui.Selected = false;
-                    }
+                    elGui.Selected = false;
                 }
                 gui.Selected = true;
             }
             else // Its a click
             {
-                foreach (UIElement el in grid.Children)
+                foreach (var elGui in grid.Children.Cast<UIElement>().OfType<ScreenGUI>().Where(elGui => !Equals(elGui, gui)))
                 {
-                    ScreenGUI el_gui = el as ScreenGUI;
-                    if (el_gui != null && el_gui != gui)
-                    {
-                        el_gui.Selected = false;
-                    }
+                    elGui.Selected = false;
                 }
                 gui.Selected = !gui.Selected;
             }
@@ -192,8 +229,8 @@ namespace LittleBigMouse
 
         private void _gui_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            ScreenGUI gui = sender as ScreenGUI;
-            if (sender == null) return;
+            var gui = sender as ScreenGUI;
+            if (gui == null) return;
 
             _oldPosition = UIToPhysical(e.GetPosition(grid));
             _dragStartPosition = gui.Screen.PhysicalLocation;
@@ -203,138 +240,110 @@ namespace LittleBigMouse
             grid.Children.Add(gui);
         }
 
-
+        private bool _allowMove = false;
         private void _gui_MouseMove(object sender, MouseEventArgs e)
         {
-            ScreenGUI gui = sender as ScreenGUI;
-            if (sender == null) return;
+            var gui = sender as ScreenGUI;
+            if (gui == null) return;
 
-            if (e.LeftButton == MouseButtonState.Pressed)
+            if (!_allowMove || e.LeftButton != MouseButtonState.Pressed) return;
+            _moving = true;
+
+            var newPosition = UIToPhysical(e.GetPosition(grid));
+
+            var left = _dragStartPosition.X - _oldPosition.X + newPosition.X;
+            if (gui.Screen != null)
             {
-                _moving = true;
+                var right = left+gui.Screen.PhysicalWidth;
 
-                Point newPosition = UIToPhysical(e.GetPosition(grid));
+                var pNear = newPosition;
+                foreach (var s in _newConfig.AllScreens)
+                {
+                    if (s == gui.Screen) continue;
 
-                    double left = _dragStartPosition.X - _oldPosition.X + newPosition.X;
-                    double right = left+gui.Screen.PhysicalWidth;
-
-                    Point pNear = newPosition;
-                    foreach (Screen s in _newConfig.AllScreens)
-                    {
-                        if (s == gui.Screen) continue;
-
-                        double minOffset = 10;
+                    double minOffset = 10;
                         
-                        double offset = s.PhysicalBounds.Right - left;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X + offset, newPosition.Y);
-                            minOffset = Math.Abs(offset);
-                        }
-
-                        offset = s.PhysicalBounds.Left - left;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X + offset, newPosition.Y);
-                            minOffset = Math.Abs(offset);
-                        }
-
-                        offset = s.PhysicalBounds.Right - right;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X + offset, newPosition.Y);
-                            minOffset = Math.Abs(offset);
-                        }
-
-                        offset = s.PhysicalBounds.Left - right;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X + offset, newPosition.Y);
-                            minOffset = Math.Abs(offset);
-                        }
-                    }
-
-                    newPosition = pNear;
-                    double top = _dragStartPosition.Y - _oldPosition.Y + newPosition.Y;
-                    double bottom = top + gui.Screen.PhysicalBounds.Height;
-                    foreach (Screen s in _newConfig.AllScreens)
+                    var offset = s.PhysicalBounds.Right - left;
+                    if (Math.Abs(offset) < minOffset)
                     {
-                        if (s == gui.Screen) continue;
-
-                        double minOffset = 10;
-                        double offset = s.PhysicalBounds.Bottom - top;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X , newPosition.Y + offset);
-                            minOffset = Math.Abs(offset);
-                        }
-
-                        offset = s.PhysicalBounds.Bottom - bottom;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X, newPosition.Y + offset);
-                            minOffset = Math.Abs(offset);
-                        }
-
-                        offset = s.PhysicalBounds.Top - top;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X, newPosition.Y + offset);
-                            minOffset = Math.Abs(offset);
-                        }
-
-                        offset = s.PhysicalBounds.Top - bottom;
-                        if (Math.Abs(offset) < minOffset)
-                        {
-                            pNear = new Point(newPosition.X, newPosition.Y + offset);
-                            minOffset = Math.Abs(offset);
-                        }
-
+                        pNear = new Point(newPosition.X + offset, newPosition.Y);
+                        minOffset = Math.Abs(offset);
                     }
-                    newPosition = pNear;
 
-                    gui.PhysicalLocation =
-                        new Point(
-                            _dragStartPosition.X - _oldPosition.X + newPosition.X,
-                            _dragStartPosition.Y - _oldPosition.Y + newPosition.Y
-                            )
-                        ;
+                    offset = s.PhysicalBounds.Left - left;
+                    if (Math.Abs(offset) < minOffset)
+                    {
+                        pNear = new Point(newPosition.X + offset, newPosition.Y);
+                        minOffset = Math.Abs(offset);
+                    }
 
+                    offset = s.PhysicalBounds.Right - right;
+                    if (Math.Abs(offset) < minOffset)
+                    {
+                        pNear = new Point(newPosition.X + offset, newPosition.Y);
+                        minOffset = Math.Abs(offset);
+                    }
 
-                    //oldPosition = newPosition;
+                    offset = s.PhysicalBounds.Left - right;
+                    if (Math.Abs(offset) < minOffset)
+                    {
+                        pNear = new Point(newPosition.X + offset, newPosition.Y);
+                        minOffset = Math.Abs(offset);
+                    }
                 }
+
+                newPosition = pNear;
+                var top = _dragStartPosition.Y - _oldPosition.Y + newPosition.Y;
+                var bottom = top + gui.Screen.PhysicalBounds.Height;
+                foreach (Screen s in _newConfig.AllScreens)
+                {
+                    if (s == gui.Screen) continue;
+
+                    double minOffset = 10;
+                    double offset = s.PhysicalBounds.Bottom - top;
+                    if (Math.Abs(offset) < minOffset)
+                    {
+                        pNear = new Point(newPosition.X , newPosition.Y + offset);
+                        minOffset = Math.Abs(offset);
+                    }
+
+                    offset = s.PhysicalBounds.Bottom - bottom;
+                    if (Math.Abs(offset) < minOffset)
+                    {
+                        pNear = new Point(newPosition.X, newPosition.Y + offset);
+                        minOffset = Math.Abs(offset);
+                    }
+
+                    offset = s.PhysicalBounds.Top - top;
+                    if (Math.Abs(offset) < minOffset)
+                    {
+                        pNear = new Point(newPosition.X, newPosition.Y + offset);
+                        minOffset = Math.Abs(offset);
+                    }
+
+                    offset = s.PhysicalBounds.Top - bottom;
+
+                    if (Math.Abs(offset) < minOffset)
+                    {
+                        pNear = new Point(newPosition.X, newPosition.Y + offset);
+                        minOffset = Math.Abs(offset);
+                    }
+                }
+                newPosition = pNear;
+            }
+
+            gui.PhysicalLocation =
+                new PhysicalPoint(
+                    gui.Screen,
+                    _dragStartPosition.X - _oldPosition.X + newPosition.X,
+                    _dragStartPosition.Y - _oldPosition.Y + newPosition.Y
+                    )
+                ;
+
+
+            //oldPosition = newPosition;
         }
 
-        //private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
-        //{
-        //    ResizeAll();
-        //}
-
-        //private void ResizeAll() 
-        //{
-        //    foreach(UIElement element in grid.Children)
-        //    {
-        //        Rect all = _newConfig.PhysicalOverallBounds;
-
-
-        //        ScreenGUI gui = element as ScreenGUI;
-        //        if (gui!=null)
-        //        {
-        //            gui.HorizontalAlignment = HorizontalAlignment.Left;
-        //            gui.VerticalAlignment = VerticalAlignment.Top;
-
-        //            Rect r = gui.Screen.ToUI(new Size(grid.ActualWidth,grid.ActualHeight));
-
-        //            gui.Margin = new Thickness(
-        //                r.X,
-        //                r.Y,
-        //                0, 0);
-
-        //            gui.Width = r.Width;
-        //            gui.Height = r.Height;
-        //        }
-        //    }
-        //}
 
         private void Save()
         {
@@ -363,12 +372,7 @@ namespace LittleBigMouse
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            foreach (UIElement el in grid.Children)
-            {
-                ScreenGUI el_gui = el as ScreenGUI;
-                if (el_gui != null) el_gui.HideSizers();
-            }
-
+            Selected = null;
         }
 
         private void cmdUnload_Click(object sender, RoutedEventArgs e)
@@ -388,5 +392,84 @@ namespace LittleBigMouse
             _newConfig.Stop();
             if (_currentConfig != null) _currentConfig.Start();
         }
+
+        private void ToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void cmdLayout_Click(object sender, RoutedEventArgs e)
+        {
+        }
+
+        private void cmdPattern_Click(object sender, RoutedEventArgs e)
+        {
+        }
+
+        private void cmdLayout_Checked(object sender, RoutedEventArgs e)
+        {
+            PropertyPane = new ScreenProperties();
+            _allowMove = true;
+        }
+
+        private void cmdLayout_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _allowMove = false;
+            if (PropertyPane.GetType() == typeof(ScreenProperties)) PropertyPane = null;
+        }
+
+        private void cmdPattern_Checked(object sender, RoutedEventArgs e)
+        {
+            PropertyPane = new ControlPane();
+        }
+
+        private void cmdPattern_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (PropertyPane.GetType() == typeof(ControlPane)) PropertyPane = null;
+        }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // To detect redundant calls
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    if (_newConfig != null)
+                    {
+                        _newConfig.Dispose();
+                        _newConfig = null;
+                    }
+                    if (_currentConfig != null)
+                    {
+                        _currentConfig.Dispose();
+                        _currentConfig = null;
+                    }
+                }
+
+                // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
+                // TODO: set large fields to null.
+
+                disposedValue = true;
+            }
+        }
+
+        // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
+        // ~FormConfig() {
+        //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+        //   Dispose(false);
+        // }
+
+        // This code added to correctly implement the disposable pattern.
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(true);
+            // TODO: uncomment the following line if the finalizer is overridden above.
+            // GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }

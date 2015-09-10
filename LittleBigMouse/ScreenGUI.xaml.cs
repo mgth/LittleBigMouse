@@ -30,7 +30,7 @@ using System.Windows.Media;
 
 namespace LittleBigMouse
 {
-    public delegate void ScreenGUISelectedChangedHandler(Screen s, bool selected);
+    public delegate void ScreenGUISelectedChangedHandler(Screen sender, bool selected);
     /// <summary>
     /// Interaction logic for ScreenGUI.xaml
     /// </summary>
@@ -67,21 +67,19 @@ namespace LittleBigMouse
 
                     selectStartColor.Color = Colors.Lime;
                     selectStopColor.Color = Colors.DarkGreen;
-                    ShowSizers();
                     OnSelectedChanged();
                 }
                 else
                 {
                     selectStartColor.Color = Colors.Gray;
                     selectStopColor.Color = Colors.Gray;
-                    HideSizers();
                     OnSelectedChanged();
                 }
             }
         }
 
-        private Point _physicalLocation=new Point(0,0);
-        public Point PhysicalLocation
+        private PhysicalPoint _physicalLocation = null;
+        public PhysicalPoint PhysicalLocation
         {
             set {
                 _physicalLocation = value;
@@ -100,6 +98,8 @@ namespace LittleBigMouse
                 _grid.ActualWidth / all.Width,
                 _grid.ActualHeight / all.Height
                 );
+
+            if (double.IsNaN(ratio)) return;
 
             Margin = new Thickness(
                     (PhysicalLocation.X - all.X) * ratio,
@@ -153,46 +153,8 @@ namespace LittleBigMouse
             }
         }
 
-        private List<Sizer> _sizers = new List<Sizer>();
-        private InsideRuler _ruler = null;
-        private void AddSizer(SizerSide side)
-        {
-            foreach (Screen s in Screen.Config.AllScreens)
-            {
-                Sizer sz = new Sizer(Screen, s, side);
-                _sizers.Add(sz);
-                //sz.Show();
-            }
 
-            //Sizer sz = Sizer.getSizer(_screen, side);
 
-            //if (sz!=null)
-            //{
-            //    _sizers.Add(sz);
-            //    sz.Show();
-            //}
-        }
-
-        public void ShowSizers()
-        {
-            HideSizers();
-
-            AddSizer(SizerSide.Left);
-            AddSizer(SizerSide.Right);
-            AddSizer(SizerSide.Top);
-            AddSizer(SizerSide.Bottom);
-
-            foreach (Sizer sz in _sizers) sz.Enabled = true;
-        }
-
-        public void HideSizers()
-        {
-                foreach(Sizer sz in _sizers)
-                {
-                    sz.Close();
-                }
-                _sizers.Clear();
-        }
 
          private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
         {

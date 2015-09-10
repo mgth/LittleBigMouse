@@ -9,7 +9,7 @@ namespace WinAPI_AdvAPI32
 {
     class AdvAPI32
     {
-        [DllImport("advapi32.dll", SetLastError = true)]
+        [DllImport("advapi32.dll", SetLastError = true, CharSet =CharSet.Unicode)]
         internal static extern uint RegEnumValue(
               IntPtr hKey,
               uint dwIndex,

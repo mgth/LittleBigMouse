@@ -28,29 +28,36 @@ using MouseKeyboardActivityMonitor.WinApi;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Windows;
 
 namespace LittleBigMouse
 {
-    public class ScreenConfig : INotifyPropertyChanged
+    public class ScreenConfig : INotifyPropertyChanged, IDisposable
     {
         public event PropertyChangedEventHandler PropertyChanged;
-        private void changed(String name)
+        private void Changed(string name)
         {
-            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
+
         public ScreenConfig()
         {
+            _allScreens = new List<Screen>();
+            _MouseHookManager = new MouseHookListener(new GlobalHooker());
             Load();
+            MouseLocation = new PixelPoint(this, 0, 0);
         }
 
         public event EventHandler RegistryChanged;
 
-        private List<Screen> _allScreens = new List<Screen>();
-        private readonly MouseHookListener _MouseHookManager = new MouseHookListener(new GlobalHooker());
+        private List<Screen> _allScreens;
+        private readonly MouseHookListener _MouseHookManager;
 
-        private Screen _currentScreen=null;
-        private Point _oldPoint;
+        private PixelPoint _oldPoint;
         private bool _enabled;
         private bool _loadAtStartup;
         private bool _adjustPointer;
@@ -72,46 +79,55 @@ namespace LittleBigMouse
             _MouseHookManager.Enabled = false;
         }
 
-
+        public PixelPoint MouseLocation { get; private set; }
 
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
-            Point pIn = new Point(e.X, e.Y);
-            Point pOut;
-
-            if (_currentScreen == null) _currentScreen = FromPoint(pIn);
-
-            if (_currentScreen.InsideBounds.Contains(pIn))
+            PixelPoint pIn;
+            if (_oldPoint == null)
             {
-                //_currentScreen.AlignScreens(pIn);
+                _oldPoint = new PixelPoint(this, e.X, e.Y);
+                Debug.Print("New:" + (_oldPoint.Screen?.DeviceName??"null"));
+                return;
+            }
+
+            pIn = new PixelPoint(_oldPoint.Screen, e.X, e.Y);
+
+            MouseLocation = pIn; Changed("MouseLocation");
+
+
+            if (pIn.TargetScreen == _oldPoint.Screen)
+            {
                 _oldPoint = pIn;
                 return;
             }
 
-            Point pOutPhysical = _currentScreen.PixelToPhysical(pIn);
+            Screen screenOut = pIn.Physical.TargetScreen;
 
-            Screen screenOut = FromPhysicalPoint(new Point(pOutPhysical.X+0.5,pOutPhysical.Y+0.5));
+            Debug.Print("From:" + _oldPoint.Screen.DeviceName);
+            Debug.Print(" To:" + (screenOut?.DeviceName??"null") + "\n");
 
-//
-// Allow To Jump
-//
+
+            //
+            // Allow To Jump
+            //
             if (screenOut==null && AllowToJump)
             {
-                double dist = double.PositiveInfinity;
-                Segment seg = new Segment(_currentScreen.PixelToPhysical(_oldPoint), _currentScreen.PixelToPhysical(pIn));
+                double dist = 100.0; // double.PositiveInfinity;
+                Segment seg = new Segment(_oldPoint.Physical.Point, pIn.Physical.Point);
                 foreach (Screen s in AllScreens)
                 {
-                    if (s!=_currentScreen)
+                    if (s!=_oldPoint.Screen)
                     {
                         foreach (Point p in seg.Line.Intersect(s.PhysicalBounds))
                         {
-                            Segment travel = new Segment(_currentScreen.PixelToPhysical(_oldPoint), p);
-                            if (travel.Rect.Contains(_currentScreen.PixelToPhysical(pIn)))
+                            Segment travel = new Segment(_oldPoint.Physical.Point, p);
+                            if (travel.Rect.Contains(pIn.Physical.Point))
                             {
                                 if (travel.Size < dist)
                                 {
                                     dist = travel.Size;
-                                    pOutPhysical = p;
+                                    pIn = (new PhysicalPoint(this, p.X, p.Y)).Pixel;
                                     screenOut = s;
                                 }
                             }
@@ -123,17 +139,54 @@ namespace LittleBigMouse
             // if new position is within another screen
             if (screenOut != null)
             {
-                pOut = screenOut.PhysicalToPixel(pOutPhysical);
+                double factor = screenOut.ScaleFactor;
 
-                Mouse.SetCursorPos((int)pOut.X, (int)pOut.Y);
+                Debug.Print(factor.ToString(CultureInfo.InvariantCulture));
 
-                _currentScreen = screenOut;
+                Point p = pIn.Physical.Pixel.DpiAware.Point;
+
+
+                Mouse.CursorPos = p;
+                //Mouse.CursorPos = new Point(
+                //    screenOut.PixelLocation.X + (p.X - screenOut.PixelLocation.X) / (screenOut.DpiX/screenOut.EffectiveDpiX),
+                //    screenOut.PixelLocation.Y + (p.Y - screenOut.PixelLocation.Y) / (screenOut.DpiY / screenOut.EffectiveDpiY)
+                //     );
+
+                Point p2 = screenOut.ScaledPoint(p);
+
+                Debug.Print((screenOut.DpiY / screenOut.EffectiveDpiY).ToString());
+
+
+ //               Mouse.CursorPos = p2;
+
+/*                Mouse.CursorPos = new Point(
+                    screenOut.PixelLocation.X + (p.X - screenOut.PixelLocation.X) / factor,
+                    screenOut.PixelLocation.Y + (p.Y - screenOut.PixelLocation.Y) / factor
+                    );
+                    
+
+                if (_currentScreen.DeviceNo==2 && screenOut.DeviceNo==1)
+                {
+                    pOut.Y /= 2;
+                }
+                if (_currentScreen.DeviceNo == 1 && screenOut.DeviceNo == 2)
+                {
+                    pOut.Y /= 2;
+                }
+  */              
+                //System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)pOut.X,(int)pOut.Y);
+                //_MouseHookManager.Enabled = false;
+                //Mouse.SetCursorPos((int)pOut.X, (int)pOut.Y);
+
+
+                //_MouseHookManager.Enabled = true;
+
 
                 if (AdjustPointer)
                 {
-                    if (_currentScreen.DpiAvg > 110)
+                    if (screenOut.DpiAvg > 110)
                     {
-                        if (_currentScreen.DpiAvg > 138)
+                        if (screenOut.DpiAvg > 138)
                             Mouse.setCursorAero(3);
                         else Mouse.setCursorAero(2);
                     }
@@ -142,28 +195,13 @@ namespace LittleBigMouse
 
                 if (AdjustSpeed)
                 {
-                    Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * _currentScreen.DpiAvg, 0);
+                    Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * screenOut.DpiAvg, 0);
                 }
 
-                _oldPoint = pIn;
-            }
-            else
-            {
-
-                double x = pIn.X;
-                double y = pIn.Y;
-
-                x = Math.Max(x, _currentScreen.InsideBounds.Left);
-                x = Math.Min(x, _currentScreen.InsideBounds.Right);
-                y = Math.Max(y, _currentScreen.InsideBounds.Top);
-                y = Math.Min(y, _currentScreen.InsideBounds.Bottom);
-
-                Mouse.SetCursorPos((int)x,(int)y);
-
-                _oldPoint = new Point(x, y);
+                _oldPoint = new PixelPoint(screenOut,pIn.X,pIn.Y);
+                e.Handled = true;
             }
 
-            e.Handled = true;
         }
 
 
@@ -184,7 +222,7 @@ namespace LittleBigMouse
 
             foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
             {
-                Screen s = getScreen(screen);
+                Screen s = GetScreen(screen);
                 _id += ((_id!="")?"." :"") + s.ID;
             }
 
@@ -200,11 +238,8 @@ namespace LittleBigMouse
                 {
                     s.Load(k);
                 }
-
-                k.Close();
             }
-
-
+            UpdatePhysicalBounds();
         }
 
         public void Save()
@@ -223,70 +258,66 @@ namespace LittleBigMouse
 
                 foreach (Screen s in AllScreens)
                     s.Save(k);
-
-                k.Close();
             }
 
-            if (RegistryChanged != null) RegistryChanged(this, new EventArgs());
+            RegistryChanged?.Invoke(this, new EventArgs());
         }
 
-        private Screen getScreen(System.Windows.Forms.Screen screen)
+        private Screen GetScreen(System.Windows.Forms.Screen screen)
         {
-            Screen wpfScreen = null;
+            foreach (Screen s in AllScreens.Where(s => s._formScreen.DeviceName == screen.DeviceName))
+            {
+                return s;
+            }
+
+            {
+                Screen s = new Screen(this,screen);
+                AllScreens.Add(s);
+                s.PropertyChanged += Screen_PropertyChanged;
+                return s;
+            }
+        }
+
+        private Rect _physicalBounds = new Rect();
+
+        private void UpdatePhysicalBounds()
+        {
+            Rect r = new Rect();
             foreach (Screen s in AllScreens)
             {
-                if (s._screen.DeviceName == screen.DeviceName) { wpfScreen = s; break; }
+                if (r.Width == 0)
+                    r = s.PhysicalBounds;
+                else
+                    r.Union(s.PhysicalBounds);
             }
-            if (wpfScreen == null)
+            if (_physicalBounds != r)
             {
-                wpfScreen = new Screen(this,screen);
-                AllScreens.Add(wpfScreen);
-                changed("PhysicalBounds");
-                changed("OverallPhysicalBounds");
-                wpfScreen.PropertyChanged += Screen_PropertyChanged;
+                _physicalBounds = r;
+                Changed("PhysicalBounds");
             }
-            return wpfScreen;
         }
 
-        private Rect _physicalOverallBounds = new Rect();
         private void Screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             switch(e.PropertyName)
             {
                 case "PhysicalBounds":
-                    Rect r = new Rect();
-                    foreach (Screen s in AllScreens)
-                    {
-                        if (r.Width == 0)
-                            r = s.PhysicalBounds;
-                        else
-                            r.Union(s.PhysicalBounds);
-                    }
-                    if (_physicalOverallBounds!=r)
-                    {
-                        _physicalOverallBounds = r;
-                        changed("PhysicalOverallBounds");
-                    }
+                    UpdatePhysicalBounds();
                     break;
             }
         }
 
-        public Screen FromPoint(Point point)
+        public Screen FromPixelPoint(AbsolutePoint point)
         {
-            int x = (int)Math.Round(point.X);
-            int y = (int)Math.Round(point.Y);
-
-            // are x,y device-independent-pixels ??
-            System.Drawing.Point drawingPoint = new System.Drawing.Point(x, y);
-            System.Windows.Forms.Screen screen = System.Windows.Forms.Screen.FromPoint(drawingPoint);
-            Screen wpfScreen = getScreen(screen);
-
-            return wpfScreen;
+            return AllScreens.FirstOrDefault(s => s.Bounds.Contains(point.Pixel));
         }
-        public Screen PrimaryScreen
+
+        public Screen FromWpfPoint(AbsolutePoint point)
         {
-            get { return getScreen(System.Windows.Forms.Screen.PrimaryScreen); }
+            return FromPixelPoint( point.Wpf );
         }
+
+        public Screen PrimaryScreen => GetScreen(System.Windows.Forms.Screen.PrimaryScreen);
 
 // Original windows locations
         public Rect OverallBounds
@@ -294,32 +325,26 @@ namespace LittleBigMouse
             get
             {
                 Rect r = new Rect();
-                foreach (Screen s in AllScreens)
+                foreach (var s in AllScreens)
                 {
                     if (r.Width == 0)
-                        r = s.Bounds;
+                        r = new Rect(new Point(s.PixelLocation.X,s.PixelLocation.Y),s.PixelSize);
                     else
-                        r.Union(s.Bounds);
+                        r.Union(new Rect(new Point(s.PixelLocation.X, s.PixelLocation.Y), s.PixelSize));
                 }
                 return r;
             }
         }
 
         // Physical Locations
-        public Rect PhysicalOverallBounds
-        {
-            get
-            {
-                return _physicalOverallBounds;
-            }
-        }
+        public Rect PhysicalOverallBounds => _physicalBounds;
 
         public bool Enabled
         {
             get { return _enabled; }
             set {
                 _enabled = value;
-                changed("Enabled");
+                Changed("Enabled");
             }
         }
 
@@ -329,7 +354,7 @@ namespace LittleBigMouse
             set
             {
                 _loadAtStartup = value;
-                changed("LoadAtStartup");
+                Changed("LoadAtStartup");
             }
         }
 
@@ -338,7 +363,7 @@ namespace LittleBigMouse
             get { return _adjustPointer; }
             set {
                 _adjustPointer = value;
-                changed("AdjustPointer");
+                Changed("AdjustPointer");
             }
         }
 
@@ -347,7 +372,7 @@ namespace LittleBigMouse
             get { return _adjustSpeed; }
             set {
                 _adjustSpeed = value;
-                changed("AdjustSpeed");
+                Changed("AdjustSpeed");
             }
         }
         public bool AllowToJump
@@ -355,7 +380,7 @@ namespace LittleBigMouse
             get { return _allowToJump; }
             set {
                 _allowToJump = value;
-                changed("AllowToJump");
+                Changed("AllowToJump");
             }
         }
 
@@ -364,19 +389,45 @@ namespace LittleBigMouse
             get { return _configLocation; }
             set {
                 _configLocation = value;
-                changed("ConfigLocation");
+                Changed("ConfigLocation");
             }
         }
 
-        public Screen FromPhysicalPoint(Point p)
+
+        #region IDisposable Support
+        private bool _disposed = false; // To detect redundant calls
+
+        protected virtual void Dispose(bool disposing)
         {
-            foreach(Screen s in AllScreens)
+            if (!_disposed)
             {
-                if (s.PhysicalBounds.Contains(p))
-                    return s;
+                if (disposing)
+                {
+                    _MouseHookManager.Dispose();
+                }
+
+                // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
+                // TODO: set large fields to null.
+
+                _disposed = true;
             }
-            return null;
         }
+
+        // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
+        // ~ScreenConfig() {
+        //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+        //   Dispose(false);
+        // }
+
+        // This code added to correctly implement the disposable pattern.
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(true);
+            // TODO: uncomment the following line if the finalizer is overridden above.
+            // GC.SuppressFinalize(this);
+        }
+        #endregion
 
     }
 }

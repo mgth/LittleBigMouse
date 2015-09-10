@@ -30,9 +30,9 @@
         </Border>
         <Label Content="{Binding Path=Screen.PNPCode}"  HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5,5,0,0" Foreground="#FFD9DCEC"/>
         
-        <Label Content="{Binding Path=PhysicalLocation.Y}" ContentStringFormat="#0.#" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" VerticalAlignment="Top"/>
+        <Label Content="{Binding Path=PhysicalY}" ContentStringFormat="#0.#" HorizontalAlignment="Center" Height="23" Margin="0,5,0,0" VerticalAlignment="Top"/>
         <Label Content="{Binding Path=Screen.PhysicalBounds.Bottom}" ContentStringFormat="#0.#" HorizontalAlignment="Center"  Margin="0,0,0,5" Height="23" VerticalAlignment="Bottom"/>
-        <Label Content="{Binding Path=PhysicalLocation.X}" ContentStringFormat="#0.#" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" VerticalAlignment="Center"/>
+        <Label Content="{Binding Path=PhysicalX}" ContentStringFormat="#0.#" HorizontalAlignment="Left" Height="23" Margin="5,0,0,0" VerticalAlignment="Center"/>
         <Label Content="{Binding Path=Screen.PhysicalBounds.Right}" ContentStringFormat="#0.#" HorizontalAlignment="Right" Height="23" Margin="0,0,5,0" VerticalAlignment="Center" />
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">

@@ -34,6 +34,6 @@ namespace WinAPI_Ntdll
     class Ntdll
     {
         [DllImport("ntdll.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern int ZwQueryKey(IntPtr hKey, KEY_INFORMATION_CLASS KeyInformationClass, IntPtr lpKeyInformation, int Length, out int ResultLength);
+        public static extern uint ZwQueryKey(IntPtr hKey, KEY_INFORMATION_CLASS KeyInformationClass, IntPtr lpKeyInformation, int Length, out int ResultLength);
     }
 }

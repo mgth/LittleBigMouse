@@ -36,28 +36,28 @@ namespace LittleBigMouse
     public class Edid
     {
 
-        public static String GetHKeyName(IntPtr hKey)
+        public static string GetHKeyName(IntPtr hKey)
         {
-            String result = String.Empty;
-            IntPtr pKNI = IntPtr.Zero;
+            var result = string.Empty;
+            var pKNI = IntPtr.Zero;
 
-            int needed = 0;
-            int status = Ntdll.ZwQueryKey(hKey, KEY_INFORMATION_CLASS.KeyNameInformation, IntPtr.Zero, 0, out needed);
-            if ((UInt32)status == 0xC0000023)   // STATUS_BUFFER_TOO_SMALL
+            var needed = 0;
+            var status = Ntdll.ZwQueryKey(hKey, KEY_INFORMATION_CLASS.KeyNameInformation, IntPtr.Zero, 0, out needed);
+            if (status == 0xC0000023)   // STATUS_BUFFER_TOO_SMALL
             {
-                pKNI = Marshal.AllocHGlobal(sizeof(UInt32) + needed + 4 /*paranoia*/);
+                pKNI = Marshal.AllocHGlobal(cb: sizeof(uint) + needed + 4 /*paranoia*/);
                 status = Ntdll.ZwQueryKey(hKey, KEY_INFORMATION_CLASS.KeyNameInformation, pKNI, needed, out needed);
                 if (status == 0)    // STATUS_SUCCESS
                 {
-                    char[] bytes = new char[2 + needed + 2];
+                    var bytes = new char[2 + needed + 2];
                     Marshal.Copy(pKNI, bytes, 0, needed);
                     // startIndex == 2  skips the NameLength field of the structure (2 chars == 4 bytes)
                     // needed/2         reduces value from bytes to chars
                     //  needed/2 - 2    reduces length to not include the NameLength
-                    result = new String(bytes, 2, (needed / 2) - 2);
+                    result = new string(bytes, 2, (needed / 2) - 2);
                 }
+                Marshal.FreeHGlobal(pKNI);
             }
-            Marshal.FreeHGlobal(pKNI);
             return result;
         }
 

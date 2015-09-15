@@ -1375,8 +1375,7 @@ namespace WinAPI_User32
         public static extern bool GetCursorPos(out POINT lpPoint);
 
         [DllImport("user32.dll")]
-        public static extern Boolean SetCursorPos(Int32 x, Int32 y);
-
+        public static extern bool SetCursorPos(int x, int y);
 
         [DllImport("user32.dll")]
         public static extern int GetWindowLong(IntPtr hwnd, int index);
@@ -1385,11 +1384,11 @@ namespace WinAPI_User32
         public static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
         [DllImport("User32.dll")]
-        public static extern Boolean SystemParametersInfo(
-            UInt32 uiAction,
-            UInt32 uiParam,
-            UInt32 pvParam,
-            UInt32 fWinIni);
+        public static extern bool SystemParametersInfo(
+            uint uiAction,
+            uint uiParam,
+            uint pvParam,
+            uint fWinIni);
 
         [DllImport("User32.dll")]
         public static extern Boolean SystemParametersInfo(

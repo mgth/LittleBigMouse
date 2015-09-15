@@ -46,7 +46,7 @@ namespace LittleBigMouse
 
         public ScreenConfig()
         {
-            _allScreens = new List<Screen>();
+            AllScreens = new List<Screen>();
             _mouseHookManager = new MouseHookListener(new GlobalHooker());
             Load();
             MouseLocation = new PixelPoint(this, 0, 0);
@@ -54,7 +54,6 @@ namespace LittleBigMouse
 
         public event EventHandler RegistryChanged;
 
-        private readonly List<Screen> _allScreens;
         private readonly MouseHookListener _mouseHookManager;
 
         private PixelPoint _oldPoint;
@@ -116,13 +115,9 @@ namespace LittleBigMouse
 
             Screen screenOut = pIn.Physical.TargetScreen;
 
-            if (screenOut == null)
-            {
-                Screen test =  pIn.Physical.TargetScreen;
-            }
 
-            Debug.Print("From:" + _oldPoint.Screen.DeviceName + " X:" + _oldPoint.X + " Y:" + _oldPoint.Y);
-            Debug.Print(" To:" + (screenOut?.DeviceName??"null") + " X:" + pIn.X + " Y:" + pIn.Y + "\n");
+            Debug.WriteLine("From:" + _oldPoint.Screen.DeviceName + " X:" + _oldPoint.X + " Y:" + _oldPoint.Y);
+            Debug.WriteLine(" To:" + (screenOut?.DeviceName??"null") + " X:" + pIn.X + " Y:" + pIn.Y + "\n");
 
 
             //
@@ -156,8 +151,11 @@ namespace LittleBigMouse
                 return;
             }
 
+            // Mouse.CursorPos = screenOut.PixelLocation.Point;
+
             // Actual mouving mouse to new location
-            Mouse.CursorPos = pIn.Physical.Pixel.Inside.DpiAware.Point;
+            Mouse.CursorPos = pIn.Physical.ToScreen(screenOut).Pixel.Inside.DpiAware.Point;
+            //Mouse.CursorPos = pIn.Physical.ToScreen(screenOut).Pixel.Inside.Point;
 
             // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used
             // TODO : deactivate option when screen ratio exed 100%
@@ -185,9 +183,9 @@ namespace LittleBigMouse
         }
 
 
-        public List<Screen> AllScreens { get { return _allScreens; } }
+        public List<Screen> AllScreens { get; }
 
-        private static String RootKey = "SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name;
+        private static readonly string RootKey = "SOFTWARE\\" + System.Windows.Forms.Application.CompanyName + "\\" + Application.ResourceAssembly.GetName().Name;
 
         public RegistryKey OpenRegKey()
         {
@@ -195,7 +193,7 @@ namespace LittleBigMouse
                 return k.CreateSubKey(_id);
         }
 
-        private String _id = "";
+        private string _id = "";
         public void Load()
         {
             _id = "";
@@ -263,27 +261,31 @@ namespace LittleBigMouse
         private void UpdatePhysicalBounds()
         {
             Rect r = new Rect();
+            bool first = true;
             foreach (Screen s in AllScreens)
             {
-                if (r.Width == 0)
+                if (first)
+                {
                     r = s.PhysicalBounds;
-                else
-                    r.Union(s.PhysicalBounds);
+                    first = false;
+                    continue;
+                }
+
+                r.Union(s.PhysicalBounds);
+                     
             }
-            if (_physicalBounds != r)
-            {
-                _physicalBounds = r;
-                Changed("PhysicalBounds");
-            }
+
+            if (_physicalBounds == r) return;
+
+            _physicalBounds = r;
+            Changed("PhysicalBounds");
         }
 
         private void Screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            switch(e.PropertyName)
+            if (e.PropertyName == "PhysicalBounds")
             {
-                case "PhysicalBounds":
-                    UpdatePhysicalBounds();
-                    break;
+                UpdatePhysicalBounds();
             }
         }
 

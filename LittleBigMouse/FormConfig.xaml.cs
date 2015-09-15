@@ -41,10 +41,15 @@ namespace LittleBigMouse
         Screen _selected = null;
         public Screen Selected
         {
-            get { return _selected; }
+            get
+            { return (from ScreenGUI sgui in grid.Children where sgui.Selected select sgui.Screen).FirstOrDefault(); }
             set
             {
-                _selected = value;
+                foreach (ScreenGUI sgui in grid.Children.Cast<ScreenGUI>().Where(sgui => sgui.Screen == value))
+                {
+                    sgui.Selected = true;
+                }
+
                 if (PropertyPane != null)
                 {
                     PropertyPane.Screen = value;
@@ -229,7 +234,7 @@ namespace LittleBigMouse
 
         private void _gui_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var gui = sender as ScreenGUI;
+            ScreenGUI gui = sender as ScreenGUI;
             if (gui == null) return;
 
             _oldPosition = UIToPhysical(e.GetPosition(grid));
@@ -405,6 +410,7 @@ namespace LittleBigMouse
         private void cmdPattern_Click(object sender, RoutedEventArgs e)
         {
         }
+
 
         private void cmdLayout_Checked(object sender, RoutedEventArgs e)
         {

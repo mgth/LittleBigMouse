@@ -30,9 +30,6 @@ namespace LittleBigMouse
 {
     public class Mouse
     {
-
-
-
         public static Point CursorPos
         {
             get
@@ -45,28 +42,27 @@ namespace LittleBigMouse
             {
                 User32.SetCursorPos((int)value.X, (int)value.Y);
             }
-/*            {
-                InputUnion[] input = new InputUnion[1];
-                input[0] = new InputUnion()
-                {
-                    mi = new MOUSEINPUT()
-                    {
-                        dwFlags =
-            //                WinAPI_User32.MOUSEEVENTF.ABSOLUTE |
-            //                WinAPI_User32.MOUSEEVENTF.VIRTUALDESK |
-                            MOUSEEVENTF.MOVE |
-                            MOUSEEVENTF.MOVE_NOCOALESCE
-                            ,
-                        dx = (int)value.X,
-                        dy = (int)value.Y,
-                    }
-                };  
+                      /*{
+                            InputUnion[] input = new InputUnion[1];
+                            input[0] = new InputUnion()
+                            {
+                                mi = new MOUSEINPUT()
+                                {
+                                    dwFlags =
+                        //                WinAPI_User32.MOUSEEVENTF.ABSOLUTE |
+                                        WinAPI_User32.MOUSEEVENTF.VIRTUALDESK |
+                                        MOUSEEVENTF.MOVE
+                                        ,
+                                    dx = (int)value.X,
+                                    dy = (int)value.Y,
+                                }
+                            };  
 
 
-                uint res = User32.SendInput(1, input, Marshal.SizeOf(typeof(WinAPI_User32.MOUSEINPUT)));
-                Console.WriteLine(res);
+                            uint res = User32.SendInput(1, input, Marshal.SizeOf(typeof(WinAPI_User32.MOUSEINPUT)));
+                            Console.WriteLine(res);
 
-            }*/
+                        }*/
         }
 
         static public double MouseSpeed

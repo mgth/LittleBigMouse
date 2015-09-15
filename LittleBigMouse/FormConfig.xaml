@@ -48,8 +48,10 @@
             <Button x:Name="cmdApply" MinWidth="50" Margin="5,0,0,0" Click="cmdApply_Click">Apply</Button>
             <Button x:Name="cmdCancel" MinWidth="50" Margin="5,0,0,0" Click="cmdCancel_Click">Cancel</Button>
         </StackPanel>
-                <Grid x:Name="property" Grid.Row="1" Grid.Column="1">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1" Grid.Column="1">
+            <Grid x:Name="property" >
 
                 </Grid>
+            </ScrollViewer>
     </Grid>
 </Window>

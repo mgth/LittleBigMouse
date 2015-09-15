@@ -298,55 +298,25 @@ namespace LittleBigMouse
         */
 
 
-        public double Physical_X
+        public double PhysicalX
         {
-            get { return _physicalLocation?.X??0; }
+            get { return PhysicalLocation.X; }
             set
             {
-                if (Primary)
-                {
-                    foreach (var s in Config.AllScreens.Where(s => !s.Primary))
-                    {
-                        //s.PhysicalX -= value;
-                    }
-                    //_physicalLocation = new PhysicalPoint(this, 0, PhysicalY);
-                }
-                else
-                {
-                    //_physicalLocation = new PhysicalPoint(this, value, PhysicalY);
-                }
-                OnPhysicalChanged();
-                changed("PhysicalX");
-                changed("PhysicalLocation");
-                changed("PhysicalBounds");
+                PhysicalLocation = new PhysicalPoint(PhysicalLocation.Screen, value, PhysicalLocation.Y);
             }
         }
-        public double Physical_Y
+        public double PhysicalY
         {
-            get { return _physicalLocation?.Y??0; }
+            get { return PhysicalLocation.Y; }
             set
             {
-                if (Primary)
-                {
-                    foreach (Screen s in Config.AllScreens)
-                    {
-                        if (!s.Primary)
-                        {
-                            //s.PhysicalY -= value;
-                        }
-                    }
-                    //_physicalLocation = new PhysicalPoint(this, PhysicalX, 0);
-                }
-                else
-                {
-                    //_physicalLocation = new PhysicalPoint(this, PhysicalX, value);
-                }
-                OnPhysicalChanged();
-                changed("PhysicalY");
-                changed("PhysicalLocation");
-                changed("PhysicalBounds");
+                PhysicalLocation = new PhysicalPoint(PhysicalLocation.Screen, PhysicalLocation.X, value);
             }
         }
+
+        public double PixelWidth => Bounds.BottomRight.Pixel.X - Bounds.TopLeft.Pixel.X;
+        public double PixelHeight => Bounds.BottomRight.Pixel.Y - Bounds.TopLeft.Pixel.Y;
 
         public PhysicalPoint PhysicalLocation
         {
@@ -370,10 +340,10 @@ namespace LittleBigMouse
                             s.PhysicalLocation = new PhysicalPoint(s,x,y);
                         }
                     }
-                    return;
                 }
+                else
+                    _physicalLocation = value;
 
-                _physicalLocation = value;
                 changed("PhysicalLocation");
                 changed("PhysicalBounds");
             }

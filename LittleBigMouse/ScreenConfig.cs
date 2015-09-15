@@ -157,7 +157,7 @@ namespace LittleBigMouse
             }
 
             // Actual mouving mouse to new location
-            Mouse.CursorPos = pIn.Physical.Pixel.DpiAware.Point;
+            Mouse.CursorPos = pIn.Physical.Pixel.Inside.DpiAware.Point;
 
             // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used
             // TODO : deactivate option when screen ratio exed 100%

@@ -86,7 +86,7 @@ namespace LittleBigMouse
                         Top = Math.Max(rightTop.DpiAware.Y, _drawOn.Bounds.TopLeft.DpiAware.Y);
                         var canvas = border.Child as Canvas;
                         if (canvas != null)
-                            canvas.Margin = new Thickness(0, rightTop.DpiAware.Y - Top, 0, 0);
+                            canvas.Margin = new Thickness(0,rightTop.DpiAware.Y -  Top, 0, 0);
                         Height = Math.Max(Math.Min(rightBottom.DpiAware.Y, _drawOn.Bounds.BottomRight.DpiAware.Y) - Top, 0);
                         if (Enabled) Show();
                     }

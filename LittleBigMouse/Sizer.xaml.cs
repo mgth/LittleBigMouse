@@ -55,10 +55,10 @@ namespace LittleBigMouse
             switch (_side)
             {
                 case SizerSide.Left:
-                    var leftTop = new PhysicalPoint(_drawOn,_screen.PhysicalX,_screen.PhysicalY);
-                    var leftBottom = new PhysicalPoint(_drawOn, _screen.PhysicalX, _screen.Bounds.BottomLeft.Physical.Y);
+                    var leftTop = new PhysicalPoint(_drawOn,_screen.PhysicalLocation.X,_screen.PhysicalLocation.Y);
+                    var leftBottom = new PhysicalPoint(_drawOn, _screen.PhysicalLocation.X, _screen.Bounds.BottomLeft.Physical.Y);
 
-                    if (leftBottom.Y <= _drawOn.PhysicalY || leftTop.Y >= _drawOn.Bounds.BottomRight.Physical.Y)
+                    if (leftBottom.Y <= _drawOn.PhysicalLocation.Y || leftTop.Y >= _drawOn.Bounds.BottomRight.Physical.Y)
                     {
                         Hide();
                     }
@@ -77,7 +77,7 @@ namespace LittleBigMouse
                     var rightTop = new PhysicalPoint(_drawOn, _screen.Bounds.TopRight.Physical.X, _screen.Bounds.TopRight.Physical.Y);
                     var rightBottom = new PhysicalPoint(_drawOn, _screen.Bounds.BottomRight.Physical.X, _screen.Bounds.BottomRight.Physical.Y);
 
-                    if (rightBottom.Y <= _drawOn.PhysicalY || rightTop.Y >= _drawOn.Bounds.BottomRight.Physical.Y)
+                    if (rightBottom.Y <= _drawOn.PhysicalLocation.Y || rightTop.Y >= _drawOn.Bounds.BottomRight.Physical.Y)
                     {
                         Hide();
                     }
@@ -93,10 +93,10 @@ namespace LittleBigMouse
                     break;
 
                 case SizerSide.Top:
-                    var topLeft = new PhysicalPoint(_drawOn, _screen.PhysicalX, _screen.PhysicalY);
-                    var topRight = new PhysicalPoint(_drawOn, _screen.Bounds.TopRight.Physical.X, _screen.Bounds.TopRight.Physical.Y);
+                    PhysicalPoint topLeft = _screen.Bounds.TopLeft.ToScreen(_drawOn);
+                    PhysicalPoint topRight = _screen.Bounds.TopRight.ToScreen(_drawOn);
 
-                    if (topRight.X <= _drawOn.PhysicalX || topLeft.X >= _drawOn.Bounds.TopRight.Physical.X)
+                    if (topRight.X <= _drawOn.PhysicalLocation.X || topLeft.X >= _drawOn.Bounds.TopRight.Physical.X)
                     {
                         Hide();
                     }
@@ -111,10 +111,10 @@ namespace LittleBigMouse
                     }
                     break;
                 case SizerSide.Bottom:
-                    var bottomLeft = new PhysicalPoint(_drawOn, _screen.PhysicalX, _screen.Bounds.BottomLeft.Physical.Y);
-                    var bottomRight = new PhysicalPoint(_drawOn, _screen.Bounds.BottomRight.Physical.X, _screen.Bounds.BottomRight.Physical.Y);
+                    PhysicalPoint bottomLeft = _screen.Bounds.BottomLeft.ToScreen(_drawOn);
+                    PhysicalPoint bottomRight = _screen.Bounds.BottomRight.ToScreen(_drawOn);
 
-                    if (bottomRight.X <= _drawOn.PhysicalX || bottomLeft.X >= _drawOn.Bounds.BottomRight.Physical.X)
+                    if (bottomRight.X <= _drawOn.PhysicalLocation.X || bottomLeft.X >= _drawOn.Bounds.BottomRight.Physical.X)
                     {
                         Hide();
                     }
@@ -359,12 +359,12 @@ namespace LittleBigMouse
                         case SizerSide.Left:
                         case SizerSide.Right:
                             double offsetY = (newPoint.Y - _oldPoint.Y)*_drawOn.PitchY;
-                            _screen.PhysicalY += offsetY;
+                            _screen.PhysicalLocation = new PhysicalPoint(_screen,_screen.PhysicalLocation.X,_screen.PhysicalLocation.Y + offsetY);
                             break;
                         case SizerSide.Top:
                         case SizerSide.Bottom:
                             double offsetX = (newPoint.X - _oldPoint.X)*_drawOn.PitchX;
-                            _screen.PhysicalX += offsetX;
+                            _screen.PhysicalLocation = new PhysicalPoint(_screen, _screen.PhysicalLocation.X + offsetX, _screen.PhysicalLocation.Y);
                             break;
                     }
                     _oldPoint = newPoint;

@@ -31,6 +31,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
+using System.Windows.Annotations;
+using System.Windows.Forms;
 using System.Windows.Interop;
 using WinAPI_Dxva2;
 using WinAPI_Gdi32;
@@ -68,8 +70,10 @@ namespace LittleBigMouse
             _edid = new Edid(screen.DeviceName);
 
             // TODO : try to define position from Windows one
-            PhysicalX = PhysicalOveralBoundsWithoutThis.Right;
-            PhysicalY = 0;
+            PhysicalLocation = new PhysicalPoint(
+                this,
+                PhysicalOveralBoundsWithoutThis.Right,
+                0);
 
 
             _brightness = new MonitorLevel(GetBrightness, SetBrightness);
@@ -184,10 +188,12 @@ namespace LittleBigMouse
                 if (key != null)
                 {
                     String sX = key.GetValue("X", RegistryValueKind.String).ToString();
-                    PhysicalX = double.Parse(sX, CultureInfo.InvariantCulture);
+                    double x = double.Parse(sX, CultureInfo.InvariantCulture);
 
                     String sY = key.GetValue("Y", RegistryValueKind.String).ToString();
-                    PhysicalY = double.Parse(sY, CultureInfo.InvariantCulture);
+                    double y = double.Parse(sY, CultureInfo.InvariantCulture);
+
+                    PhysicalLocation = new PhysicalPoint(this,x,y);
 
                     String pitchX = key.GetValue("PitchX", "NaN").ToString();
                     if (pitchX != "NaN") PitchX = double.Parse(pitchX, CultureInfo.InvariantCulture);
@@ -292,7 +298,7 @@ namespace LittleBigMouse
         */
 
 
-        public double PhysicalX
+        public double Physical_X
         {
             get { return _physicalLocation?.X??0; }
             set
@@ -301,13 +307,13 @@ namespace LittleBigMouse
                 {
                     foreach (var s in Config.AllScreens.Where(s => !s.Primary))
                     {
-                        s.PhysicalX -= value;
+                        //s.PhysicalX -= value;
                     }
-                    _physicalLocation = new PhysicalPoint(this, 0, PhysicalY);
+                    //_physicalLocation = new PhysicalPoint(this, 0, PhysicalY);
                 }
                 else
                 {
-                    _physicalLocation = new PhysicalPoint(this, value, PhysicalY);
+                    //_physicalLocation = new PhysicalPoint(this, value, PhysicalY);
                 }
                 OnPhysicalChanged();
                 changed("PhysicalX");
@@ -315,7 +321,7 @@ namespace LittleBigMouse
                 changed("PhysicalBounds");
             }
         }
-        public double PhysicalY
+        public double Physical_Y
         {
             get { return _physicalLocation?.Y??0; }
             set
@@ -326,14 +332,14 @@ namespace LittleBigMouse
                     {
                         if (!s.Primary)
                         {
-                            s.PhysicalY -= value;
+                            //s.PhysicalY -= value;
                         }
                     }
-                    _physicalLocation = new PhysicalPoint(this, PhysicalX, 0);
+                    //_physicalLocation = new PhysicalPoint(this, PhysicalX, 0);
                 }
                 else
                 {
-                    _physicalLocation = new PhysicalPoint(this, PhysicalX, value);
+                    //_physicalLocation = new PhysicalPoint(this, PhysicalX, value);
                 }
                 OnPhysicalChanged();
                 changed("PhysicalY");
@@ -347,9 +353,30 @@ namespace LittleBigMouse
             get
             {
                 GetPixelBounds();
-                return _physicalLocation;
+                return _physicalLocation??new PhysicalPoint(this,0,0);
             }
-            set { _physicalLocation = value; }
+            set
+            {
+                if (value == _physicalLocation) return;
+
+                if (Primary)
+                {
+                    foreach (Screen s in Config.AllScreens)
+                    {
+                        if (!s.Primary)
+                        {
+                            double x = s.PhysicalLocation.X - value.X;
+                            double y = s.PhysicalLocation.Y - value.Y;
+                            s.PhysicalLocation = new PhysicalPoint(s,x,y);
+                        }
+                    }
+                    return;
+                }
+
+                _physicalLocation = value;
+                changed("PhysicalLocation");
+                changed("PhysicalBounds");
+            }
         }
 
         public Rect PhysicalBounds

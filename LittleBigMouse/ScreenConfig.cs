@@ -47,7 +47,7 @@ namespace LittleBigMouse
         public ScreenConfig()
         {
             _allScreens = new List<Screen>();
-            _MouseHookManager = new MouseHookListener(new GlobalHooker());
+            _mouseHookManager = new MouseHookListener(new GlobalHooker());
             Load();
             MouseLocation = new PixelPoint(this, 0, 0);
         }
@@ -55,7 +55,7 @@ namespace LittleBigMouse
         public event EventHandler RegistryChanged;
 
         private List<Screen> _allScreens;
-        private readonly MouseHookListener _MouseHookManager;
+        private readonly MouseHookListener _mouseHookManager;
 
         private PixelPoint _oldPoint;
         private bool _enabled;
@@ -67,16 +67,14 @@ namespace LittleBigMouse
 
         public void Start()
         {
-            if (Enabled)
-            {
-                _MouseHookManager.MouseMoveExt += _MouseHookManager_MouseMoveExt;
-                _MouseHookManager.Enabled = true;
-            }
+            if (!Enabled) return;
+            _mouseHookManager.MouseMoveExt += _MouseHookManager_MouseMoveExt;
+            _mouseHookManager.Enabled = true;
         }
         public void Stop()
         {
-            _MouseHookManager.MouseMoveExt -= _MouseHookManager_MouseMoveExt;
-            _MouseHookManager.Enabled = false;
+            _mouseHookManager.MouseMoveExt -= _MouseHookManager_MouseMoveExt;
+            _mouseHookManager.Enabled = false;
         }
 
         public PixelPoint MouseLocation { get; private set; }
@@ -403,7 +401,7 @@ namespace LittleBigMouse
             {
                 if (disposing)
                 {
-                    _MouseHookManager.Dispose();
+                    _mouseHookManager.Dispose();
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.

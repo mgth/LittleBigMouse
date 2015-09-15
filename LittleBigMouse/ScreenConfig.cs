@@ -256,8 +256,6 @@ namespace LittleBigMouse
             }
         }
 
-        private Rect _physicalBounds = new Rect();
-
         private void UpdatePhysicalBounds()
         {
             Rect r = new Rect();
@@ -275,9 +273,9 @@ namespace LittleBigMouse
                      
             }
 
-            if (_physicalBounds == r) return;
+            if (PhysicalOverallBounds == r) return;
 
-            _physicalBounds = r;
+            PhysicalOverallBounds = r;
             Changed("PhysicalBounds");
         }
 
@@ -294,11 +292,6 @@ namespace LittleBigMouse
             return AllScreens.FirstOrDefault(s => s.Bounds.Contains(point.Pixel));
         }
 
-        public Screen FromWpfPoint(AbsolutePoint point)
-        {
-            return FromPixelPoint( point.Wpf );
-        }
-
         public Screen PrimaryScreen => GetScreen(System.Windows.Forms.Screen.PrimaryScreen);
 
 // Original windows locations
@@ -307,10 +300,14 @@ namespace LittleBigMouse
             get
             {
                 Rect r = new Rect();
+                bool first = true;
                 foreach (var s in AllScreens)
                 {
-                    if (r.Width == 0)
+                    if (first)
+                    {
                         r = new Rect(new Point(s.PixelLocation.X,s.PixelLocation.Y),s.PixelSize);
+                        first = false;
+                    }                        
                     else
                         r.Union(new Rect(new Point(s.PixelLocation.X, s.PixelLocation.Y), s.PixelSize));
                 }
@@ -319,7 +316,7 @@ namespace LittleBigMouse
         }
 
         // Physical Locations
-        public Rect PhysicalOverallBounds => _physicalBounds;
+        public Rect PhysicalOverallBounds { get; private set; } = new Rect();
 
         public bool Enabled
         {

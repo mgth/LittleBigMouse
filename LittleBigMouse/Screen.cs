@@ -360,19 +360,12 @@ namespace LittleBigMouse
             }
         }
 
-        public Rect WpfBounds => new Rect(PixelLocation.Wpf.Point, Bounds.BottomRight.Wpf.Point);
+//        public Rect WpfBounds => new Rect(PixelLocation.Wpf.Point, Bounds.BottomRight.Wpf.Point);
 
-        public Rect WorkingArea
-        {
-            get { return getRect(_formScreen.WorkingArea); }
-        }
+        public Rect WorkingArea => GetRect(_formScreen.WorkingArea);
 
-        public Rect WpfWorkingArea
-        {
-            get { return PixelToWpf(WorkingArea); }
-        }
 
-        private Rect getRect(System.Drawing.Rectangle value)
+        private static Rect GetRect(System.Drawing.Rectangle value)
         {
             return new Rect
             {

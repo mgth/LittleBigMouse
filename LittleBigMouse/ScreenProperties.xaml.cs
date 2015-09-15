@@ -19,7 +19,7 @@ namespace LittleBigMouse
     /// <summary>
     /// Logique d'interaction pour ScreenProperties.xaml
     /// </summary>
-    public partial class ScreenProperties : UserControl, PropertyPane
+    public partial class ScreenProperties : UserControl, IPropertyPane
     {
         public event PropertyChangedEventHandler PropertyChanged;
         private void changed(String name)

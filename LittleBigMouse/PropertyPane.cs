@@ -8,7 +8,7 @@ using System.Windows.Controls;
 
 namespace LittleBigMouse
 {
-    public interface PropertyPane : INotifyPropertyChanged
+    public interface IPropertyPane : INotifyPropertyChanged
     {
         Screen Screen { get; set; }
     }

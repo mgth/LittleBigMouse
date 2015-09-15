@@ -42,10 +42,10 @@ namespace LittleBigMouse
         public Screen Selected
         {
             get
-            { return (from ScreenGUI sgui in grid.Children where sgui.Selected select sgui.Screen).FirstOrDefault(); }
+            { return (from ScreenGui sgui in grid.Children where sgui.Selected select sgui.Screen).FirstOrDefault(); }
             set
             {
-                foreach (ScreenGUI sgui in grid.Children.Cast<ScreenGUI>().Where(sgui => sgui.Screen == value))
+                foreach (ScreenGui sgui in grid.Children.Cast<ScreenGui>().Where(sgui => sgui.Screen == value))
                 {
                     sgui.Selected = true;
                 }
@@ -57,8 +57,8 @@ namespace LittleBigMouse
             }
         }
 
-        PropertyPane _propertyPane = null;
-        PropertyPane PropertyPane
+        IPropertyPane _propertyPane = null;
+        IPropertyPane PropertyPane
         {
             get { return _propertyPane; }
             set {
@@ -70,11 +70,11 @@ namespace LittleBigMouse
 
                 _propertyPane = value;
 
-                if (value!=null)
-                {
-                    property.Children.Add(value as UIElement);
-                    value.Screen = Selected;
-                }
+                UIElement ui = value as UIElement;
+                if (ui == null) return;
+
+                property.Children.Add(ui);
+                value.Screen = Selected;
             }
         }
 
@@ -92,9 +92,8 @@ namespace LittleBigMouse
 
             DataContext = _newConfig;
 
-            foreach (Screen s in _newConfig.AllScreens)
+            foreach (ScreenGui sgui in _newConfig.AllScreens.Select(s => new ScreenGui(s,grid)))
             {
-                ScreenGUI sgui = new ScreenGUI(s,grid);
                 grid.Children.Add(sgui);
                 sgui.MouseMove += _gui_MouseMove;
                 sgui.MouseLeftButtonDown += _gui_MouseLeftButtonDown;
@@ -107,7 +106,7 @@ namespace LittleBigMouse
             SizeChanged += FormConfig_SizeChanged;
             LocationChanged += FormConfig_LocationChanged;
         }
-        public Point PhysicalToUI(Point p)
+        public Point PhysicalToUi(Point p)
         {
             Rect all = _newConfig.PhysicalOverallBounds;
 
@@ -122,7 +121,7 @@ namespace LittleBigMouse
                 );
         }
 
-        public Point UIToPhysical(Point p)
+        public Point UiToPhysical(Point p)
         {
             Rect all = _newConfig.PhysicalOverallBounds;
 
@@ -137,51 +136,73 @@ namespace LittleBigMouse
                 );
         }
 
-        private void _gui_SelectedChanged(Screen s, bool selected)
+        private void _gui_SelectedChanged(object s, bool selected)
         {
-            if (selected)
-            {
-                if (PropertyPane!=null)
-                {
-                    PropertyPane.Screen = s;
-                }
-            }
+            if (!selected) return;
+
+            if (PropertyPane == null) return;
+            
+            PropertyPane.Screen = s as Screen;
         }
 
         private void LoadLocation()
         {
-            Rect wa = _currentConfig.PrimaryScreen.WpfWorkingArea;
+            PhysicalPoint topleft = (new DpiAwarePoint(_currentConfig.PrimaryScreen, _currentConfig.PrimaryScreen.WorkingArea.TopLeft.X, _currentConfig.PrimaryScreen.WorkingArea.TopLeft.Y)).Physical;
+            PhysicalPoint bottomright = (new DpiAwarePoint(_currentConfig.PrimaryScreen, _currentConfig.PrimaryScreen.WorkingArea.BottomRight.X, _currentConfig.PrimaryScreen.WorkingArea.BottomRight.Y)).Physical;
+
+            double left, top, width, height;
 
             using (RegistryKey configkey = _currentConfig.OpenRegKey())
             {
                 using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
                 {
-                    Left = double.Parse( k.GetValue( "X", (wa.X + (2 * wa.Width) / 3).ToString(CultureInfo.InvariantCulture) ).ToString() ,CultureInfo.InvariantCulture);
-                    Top = double.Parse(k.GetValue("Y", (wa.Y + (2 * wa.Height) / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
-                    Width = double.Parse(k.GetValue("Width", (wa.Width / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
-                    Height = double.Parse(k.GetValue("Height", (wa.Height / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
+                    left = double.Parse( k.GetValue( "X", (topleft.X + 2 * (bottomright.X - topleft.X) / 3).ToString(CultureInfo.InvariantCulture) ).ToString() ,CultureInfo.InvariantCulture);
+                    top = double.Parse(k.GetValue("Y", (topleft.Y + 2 * (bottomright.Y - topleft.Y) / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
+                    width = double.Parse(k.GetValue("Width", ((bottomright.X - topleft.X) / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
+                    height = double.Parse(k.GetValue("Height", ((bottomright.Y - topleft.Y) / 3).ToString(CultureInfo.InvariantCulture)).ToString(), CultureInfo.InvariantCulture);
                 }
             }
 
-            //TODO reinplement thet
-            //Screen s = _currentConfig.FromWpfPoint(new PixelPoint(null, Left, Top));
 
-            //if ( s==null)
+            var p1 = new PhysicalPoint(_currentConfig, left,top);
+            var p2 = new PhysicalPoint(_currentConfig, left + width, top + height);
+
+            if ( p1.TargetScreen==null || p2.TargetScreen==null || p1.TargetScreen!=p2.TargetScreen)
             {
-                Top = wa.Y + (2 * wa.Height) / 3;
-                Left =  wa.Y + (2 * wa.Height) / 3;
+                left = topleft.X + 2 * (bottomright.X - topleft.X) / 3;
+                top = topleft.Y + 2 * (bottomright.Y - topleft.Y) / 3;
+                width = (bottomright.X - topleft.X) / 3;
+                height = (bottomright.Y - topleft.Y)/3;
             }
+
+            p1 = new PhysicalPoint(_currentConfig, left, top);
+            p2 = new PhysicalPoint(_currentConfig, left+width, top+height);
+
+            p1 = p1.ToScreen(p1.TargetScreen);
+            p2 = p2.ToScreen(p1.TargetScreen);
+
+            Left = p1.DpiAware.X;
+            Top = p1.DpiAware.Y;
+
+            Width = p2.DpiAware.X - Left;
+            Height = p2.DpiAware.Y - Top;
         }
         private void SaveLocation()
         {
+            Screen s = new PixelPoint(_currentConfig, Left, Top).TargetScreen;
+
+            PhysicalPoint p1 = (new DpiAwarePoint(s, Left, Top)).Physical;
+            PhysicalPoint p2 = (new DpiAwarePoint(s, Left+Width, Top+Height)).Physical;
+
+
             using (RegistryKey configkey = _currentConfig.OpenRegKey())
             {
                 using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
                 {
-                    k.SetValue("X", Left.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
-                    k.SetValue("Y", Top.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
-                    k.SetValue("Width", Width.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
-                    k.SetValue("Height", Height.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("X", p1.X.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Y", p1.X.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Width", (p2.X - p1.X).ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    k.SetValue("Height", (p2.Y - p1.Y).ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 }
             }
         }
@@ -207,7 +228,7 @@ namespace LittleBigMouse
 
         private void _gui_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            var gui = sender as ScreenGUI;
+            var gui = sender as ScreenGui;
             if (gui == null) return;
 
             if (_moving)
@@ -216,7 +237,7 @@ namespace LittleBigMouse
 
                 _moving = false;
 
-                foreach (var elGui in grid.Children.Cast<UIElement>().OfType<ScreenGUI>().Where(elGui => !Equals(elGui, gui)))
+                foreach (var elGui in grid.Children.Cast<UIElement>().OfType<ScreenGui>().Where(elGui => !Equals(elGui, gui)))
                 {
                     elGui.Selected = false;
                 }
@@ -224,7 +245,7 @@ namespace LittleBigMouse
             }
             else // Its a click
             {
-                foreach (var elGui in grid.Children.Cast<UIElement>().OfType<ScreenGUI>().Where(elGui => !Equals(elGui, gui)))
+                foreach (var elGui in grid.Children.Cast<UIElement>().OfType<ScreenGui>().Where(elGui => !Equals(elGui, gui)))
                 {
                     elGui.Selected = false;
                 }
@@ -234,10 +255,10 @@ namespace LittleBigMouse
 
         private void _gui_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            ScreenGUI gui = sender as ScreenGUI;
+            ScreenGui gui = sender as ScreenGui;
             if (gui == null) return;
 
-            _oldPosition = UIToPhysical(e.GetPosition(grid));
+            _oldPosition = UiToPhysical(e.GetPosition(grid));
             _dragStartPosition = gui.Screen.PhysicalLocation;
 
             // bring element to front so we can move it over the others
@@ -248,13 +269,13 @@ namespace LittleBigMouse
         private bool _allowMove = false;
         private void _gui_MouseMove(object sender, MouseEventArgs e)
         {
-            var gui = sender as ScreenGUI;
+            var gui = sender as ScreenGui;
             if (gui == null) return;
 
             if (!_allowMove || e.LeftButton != MouseButtonState.Pressed) return;
             _moving = true;
 
-            var newPosition = UIToPhysical(e.GetPosition(grid));
+            var newPosition = UiToPhysical(e.GetPosition(grid));
 
             var left = _dragStartPosition.X - _oldPosition.X + newPosition.X;
             if (gui.Screen != null)
@@ -388,29 +409,15 @@ namespace LittleBigMouse
 
         private void chkLiveUpdate_Checked(object sender, RoutedEventArgs e)
         {
-            if (_currentConfig != null) _currentConfig.Stop();
+            _currentConfig?.Stop();
             _newConfig.Start();
         }
 
         private void chkLiveUpdate_Unchecked(object sender, RoutedEventArgs e)
         {
             _newConfig.Stop();
-            if (_currentConfig != null) _currentConfig.Start();
+            _currentConfig?.Start();
         }
-
-        private void ToggleButton_Click(object sender, RoutedEventArgs e)
-        {
-
-        }
-
-        private void cmdLayout_Click(object sender, RoutedEventArgs e)
-        {
-        }
-
-        private void cmdPattern_Click(object sender, RoutedEventArgs e)
-        {
-        }
-
 
         private void cmdLayout_Checked(object sender, RoutedEventArgs e)
         {
@@ -435,31 +442,30 @@ namespace LittleBigMouse
         }
 
         #region IDisposable Support
-        private bool disposedValue = false; // To detect redundant calls
+        private bool _disposedValue = false; // To detect redundant calls
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (_disposedValue) return;
+
+            if (disposing)
             {
-                if (disposing)
+                if (_newConfig != null)
                 {
-                    if (_newConfig != null)
-                    {
-                        _newConfig.Dispose();
-                        _newConfig = null;
-                    }
-                    if (_currentConfig != null)
-                    {
-                        _currentConfig.Dispose();
-                        _currentConfig = null;
-                    }
+                    _newConfig.Dispose();
+                    _newConfig = null;
                 }
-
-                // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
-                // TODO: set large fields to null.
-
-                disposedValue = true;
+                if (_currentConfig != null)
+                {
+                    _currentConfig.Dispose();
+                    _currentConfig = null;
+                }
             }
+
+            // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
+            // TODO: set large fields to null.
+
+            _disposedValue = true;
         }
 
         // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.

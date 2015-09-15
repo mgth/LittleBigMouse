@@ -28,7 +28,7 @@ namespace LittleBigMouse
             _screen = screen;
             InitializeComponent();
 
-            Rect r = screen.WpfBounds;
+            Rect r = new Rect(screen.Bounds.TopLeft.DpiAware.Point,screen.Bounds.BottomRight.DpiAware.Point);
 
             Left = r.Left;
             Top = r.Top;

@@ -30,29 +30,24 @@ using System.Windows.Media;
 
 namespace LittleBigMouse
 {
-    public delegate void ScreenGUISelectedChangedHandler(Screen sender, bool selected);
+    public delegate void ScreenGuiSelectedChangedHandler(object sender, bool selected);
     /// <summary>
     /// Interaction logic for ScreenGUI.xaml
     /// </summary>
-    public partial class ScreenGUI : UserControl, INotifyPropertyChanged
+    public partial class ScreenGui : UserControl, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
-        private void changed(String name)
+        private void Changed(string name)
         {
-            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
-        }
-        private Screen _screen;
-        public Screen Screen {
-            get { return _screen; }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
-        public event ScreenGUISelectedChangedHandler SelectedChanged; 
+        public Screen Screen { get; }
+
+        public event ScreenGuiSelectedChangedHandler SelectedChanged; 
         private void OnSelectedChanged()
         {
-            if (SelectedChanged!=null)
-            {
-                SelectedChanged(_screen, Selected);
-            }
+            SelectedChanged?.Invoke(Screen, Selected);
         }
 
         private bool _selected = false;
@@ -84,7 +79,7 @@ namespace LittleBigMouse
             set {
                 _physicalLocation = value;
                 UpdateSize();
-                changed("PhysicalLocation");
+                Changed("PhysicalLocation");
             }
             get { return _physicalLocation; }
         }
@@ -110,18 +105,18 @@ namespace LittleBigMouse
             Height = Screen.PhysicalHeight * ratio;
         }
 
-        private Grid _grid;
-         public ScreenGUI(Screen s, Grid grid)
+        private readonly Grid _grid;
+         public ScreenGui(Screen s, Grid grid)
         {
             _grid = grid;
-            _screen = s;
+            Screen = s;
             _physicalLocation = s.PhysicalLocation;
 
             InitializeComponent();
 
-            _screen.PropertyChanged += _screen_PropertyChanged;
+            Screen.PropertyChanged += _screen_PropertyChanged;
             _grid.SizeChanged += _grid_SizeChanged;
-            _screen.Config.PropertyChanged += Config_PropertyChanged;
+            Screen.Config.PropertyChanged += Config_PropertyChanged;
 
             DataContext = this;
         }
@@ -138,7 +133,7 @@ namespace LittleBigMouse
 
         private void _screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            switch(e.PropertyName)
+            switch (e.PropertyName)
             {
                 case "PhysicalBounds":
                     PhysicalLocation = Screen.PhysicalLocation;
@@ -154,9 +149,7 @@ namespace LittleBigMouse
         }
 
 
-
-
-         private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
+        private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             center.Height = Math.Min(grid.ActualHeight, grid.ActualWidth)/3;
             center.Width =  center.Height;
@@ -168,7 +161,7 @@ namespace LittleBigMouse
 
         private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            changed("PhysicalLocation");
+            Changed("PhysicalLocation");
         }
     }
 }

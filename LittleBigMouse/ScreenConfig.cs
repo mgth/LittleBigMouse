@@ -54,7 +54,7 @@ namespace LittleBigMouse
 
         public event EventHandler RegistryChanged;
 
-        private List<Screen> _allScreens;
+        private readonly List<Screen> _allScreens;
         private readonly MouseHookListener _mouseHookManager;
 
         private PixelPoint _oldPoint;
@@ -77,11 +77,22 @@ namespace LittleBigMouse
             _mouseHookManager.Enabled = false;
         }
 
-        public PixelPoint MouseLocation { get; private set; }
+        private PixelPoint _mouseLocation;
+
+        public PixelPoint MouseLocation
+        {
+            get { return _mouseLocation; }
+            private set
+            {
+                if (value == _mouseLocation) return;
+                _mouseLocation = value;
+                Changed("MouseLocation");
+            }
+        }
 
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
-            PixelPoint pIn;
+
             if (_oldPoint == null)
             {
                 _oldPoint = new PixelPoint(this, e.X, e.Y);
@@ -89,9 +100,12 @@ namespace LittleBigMouse
                 return;
             }
 
-            pIn = new PixelPoint(_oldPoint.Screen, e.X, e.Y);
+            if (e.Clicked) return;
+            if (e.X==(int)_oldPoint.X && e.Y == (int)_oldPoint.Y) return;
 
-            MouseLocation = pIn; Changed("MouseLocation");
+            PixelPoint pIn = new PixelPoint(_oldPoint.Screen, e.X, e.Y);
+
+            MouseLocation = pIn;
 
 
             if (pIn.TargetScreen == _oldPoint.Screen)
@@ -102,8 +116,13 @@ namespace LittleBigMouse
 
             Screen screenOut = pIn.Physical.TargetScreen;
 
-            Debug.Print("From:" + _oldPoint.Screen.DeviceName);
-            Debug.Print(" To:" + (screenOut?.DeviceName??"null") + "\n");
+            if (screenOut == null)
+            {
+                Screen test =  pIn.Physical.TargetScreen;
+            }
+
+            Debug.Print("From:" + _oldPoint.Screen.DeviceName + " X:" + _oldPoint.X + " Y:" + _oldPoint.Y);
+            Debug.Print(" To:" + (screenOut?.DeviceName??"null") + " X:" + pIn.X + " Y:" + pIn.Y + "\n");
 
 
             //
@@ -115,91 +134,54 @@ namespace LittleBigMouse
                 Segment seg = new Segment(_oldPoint.Physical.Point, pIn.Physical.Point);
                 foreach (Screen s in AllScreens)
                 {
-                    if (s!=_oldPoint.Screen)
+                    if (s == _oldPoint.Screen) continue;
+                    foreach (Point p in seg.Line.Intersect(s.PhysicalBounds))
                     {
-                        foreach (Point p in seg.Line.Intersect(s.PhysicalBounds))
-                        {
-                            Segment travel = new Segment(_oldPoint.Physical.Point, p);
-                            if (travel.Rect.Contains(pIn.Physical.Point))
-                            {
-                                if (travel.Size < dist)
-                                {
-                                    dist = travel.Size;
-                                    pIn = (new PhysicalPoint(this, p.X, p.Y)).Pixel;
-                                    screenOut = s;
-                                }
-                            }
-                        }
+                        Segment travel = new Segment(_oldPoint.Physical.Point, p);
+                        if (!travel.Rect.Contains(pIn.Physical.Point)) continue;
+                        if (travel.Size > dist) continue;
+
+                        dist = travel.Size;
+                        pIn = (new PhysicalPoint(this, p.X, p.Y)).Pixel;
+                        screenOut = s;
                     }
                 }
             }
 
-            // if new position is within another screen
-            if (screenOut != null)
+            // if new position is not within another screen
+            if (screenOut == null)
             {
-                double factor = screenOut.ScaleFactor;
-
-                Debug.Print(factor.ToString(CultureInfo.InvariantCulture));
-
-                Point p = pIn.Physical.Pixel.DpiAware.Point;
-
-
-                Mouse.CursorPos = p;
-                //Mouse.CursorPos = new Point(
-                //    screenOut.PixelLocation.X + (p.X - screenOut.PixelLocation.X) / (screenOut.DpiX/screenOut.EffectiveDpiX),
-                //    screenOut.PixelLocation.Y + (p.Y - screenOut.PixelLocation.Y) / (screenOut.DpiY / screenOut.EffectiveDpiY)
-                //     );
-
-                Point p2 = screenOut.ScaledPoint(p);
-
-                Debug.Print((screenOut.DpiY / screenOut.EffectiveDpiY).ToString());
-
-
- //               Mouse.CursorPos = p2;
-
-/*                Mouse.CursorPos = new Point(
-                    screenOut.PixelLocation.X + (p.X - screenOut.PixelLocation.X) / factor,
-                    screenOut.PixelLocation.Y + (p.Y - screenOut.PixelLocation.Y) / factor
-                    );
-                    
-
-                if (_currentScreen.DeviceNo==2 && screenOut.DeviceNo==1)
-                {
-                    pOut.Y /= 2;
-                }
-                if (_currentScreen.DeviceNo == 1 && screenOut.DeviceNo == 2)
-                {
-                    pOut.Y /= 2;
-                }
-  */              
-                //System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)pOut.X,(int)pOut.Y);
-                //_MouseHookManager.Enabled = false;
-                //Mouse.SetCursorPos((int)pOut.X, (int)pOut.Y);
-
-
-                //_MouseHookManager.Enabled = true;
-
-
-                if (AdjustPointer)
-                {
-                    if (screenOut.DpiAvg > 110)
-                    {
-                        if (screenOut.DpiAvg > 138)
-                            Mouse.setCursorAero(3);
-                        else Mouse.setCursorAero(2);
-                    }
-                    else Mouse.setCursorAero(1);
-                }
-
-                if (AdjustSpeed)
-                {
-                    Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * screenOut.DpiAvg, 0);
-                }
-
-                _oldPoint = new PixelPoint(screenOut,pIn.X,pIn.Y);
+                Mouse.CursorPos = pIn.Inside.DpiAware.Point;
                 e.Handled = true;
+                return;
             }
 
+            // Actual mouving mouse to new location
+            Mouse.CursorPos = pIn.Physical.Pixel.DpiAware.Point;
+
+            // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used
+            // TODO : deactivate option when screen ratio exed 100%
+            if (AdjustPointer)
+            {
+                if (screenOut.DpiAvg > 110)
+                {
+                    if (screenOut.DpiAvg > 138)
+                        Mouse.setCursorAero(3);
+                    else Mouse.setCursorAero(2);
+                }
+                else Mouse.setCursorAero(1);
+            }
+
+
+            // Adjust pointer speed to dpi ratio : should not be usefull if windows screen ratio is used
+            // TODO : deactivate option when screen ratio exed 100%
+            if (AdjustSpeed)
+            {
+                Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * screenOut.DpiAvg, 0);
+            }
+
+            _oldPoint = new PixelPoint(screenOut,pIn.X,pIn.Y);
+            e.Handled = true;
         }
 
 

@@ -96,7 +96,7 @@ namespace LittleBigMouse
             if (_oldPoint == null)
             {
                 _oldPoint = new PixelPoint(this, e.X, e.Y);
-                Debug.Print("New:" + (_oldPoint.Screen?.DeviceName??"null"));
+//                Debug.Print("New:" + (_oldPoint.Screen?.DeviceName??"null"));
                 return;
             }
 
@@ -142,7 +142,7 @@ namespace LittleBigMouse
                         if (travel.Size > dist) continue;
 
                         dist = travel.Size;
-                        pIn = (new PhysicalPoint(this, p.X, p.Y)).Pixel;
+                        pIn = (new PhysicalPoint(s, p.X, p.Y)).Pixel.Inside;
                         screenOut = s;
                     }
                 }

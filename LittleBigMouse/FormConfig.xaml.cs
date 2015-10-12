@@ -38,7 +38,6 @@ namespace LittleBigMouse
         private ScreenConfig _newConfig;
         private ScreenConfig _currentConfig;
 
-        Screen _selected = null;
         public Screen Selected
         {
             get
@@ -190,6 +189,7 @@ namespace LittleBigMouse
         private void SaveLocation()
         {
             Screen s = new PixelPoint(_currentConfig, Left, Top).TargetScreen;
+            if (s == null) return;
 
             PhysicalPoint p1 = (new DpiAwarePoint(s, Left, Top)).Physical;
             PhysicalPoint p2 = (new DpiAwarePoint(s, Left+Width, Top+Height)).Physical;
@@ -199,6 +199,7 @@ namespace LittleBigMouse
             {
                 using (RegistryKey k = configkey.CreateSubKey("ConfigLocation"))
                 {
+                    if (k == null) return;
                     k.SetValue("X", p1.X.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                     k.SetValue("Y", p1.X.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                     k.SetValue("Width", (p2.X - p1.X).ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);

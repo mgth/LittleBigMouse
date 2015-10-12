@@ -228,7 +228,7 @@ namespace LittleBigMouse
                         FormattedText formattedText = new FormattedText(_position.ToString() + ":" + c[(uint)_position].ToString(), CultureInfo.CurrentCulture,
                                           FlowDirection.LeftToRight,
                                           new Typeface(new FontFamily("Arial").ToString()),
-                                          6, new SolidColorBrush(c.Color));
+                                          12, new SolidColorBrush(c.Color));
 
                         dc.DrawText(
                             formattedText, 

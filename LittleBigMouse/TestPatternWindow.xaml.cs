@@ -42,5 +42,23 @@ namespace LittleBigMouse
                                                                       //else if( e.Key == Key.Left )
 
         }
+
+        public void ShowOnScreen(Screen s)
+        {
+            if (s != null)
+            {
+                Left = s.Bounds.TopLeft.DpiAware.X;
+                Top = s.Bounds.TopLeft.DpiAware.Y;
+                Width = s.Bounds.BottomRight.DpiAware.X - s.Bounds.TopLeft.DpiAware.X;
+                Height = s.Bounds.BottomRight.DpiAware.Y - s.Bounds.TopLeft.DpiAware.Y;
+
+                Show();
+            }
+            else
+            {
+                Hide();
+            }
+        }
+
     }
 }

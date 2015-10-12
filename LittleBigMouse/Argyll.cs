@@ -15,7 +15,7 @@ namespace LittleBigMouse
 
         class Argyll
         {
-            private string _ArgyllPath = @"F:\bin\Argyll\";
+            private string _ArgyllPath = @"D:\bin\Argyll\";
             private double[] _XYZ = { 0, 0, 0 };
             private double[] _Lab = { 0, 0, 0 };
 

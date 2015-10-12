@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -8,10 +9,19 @@ using System.Windows;
 
 namespace WinAPI_User32
 {
-         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct DISPLAY_DEVICE
         {
-            [MarshalAs(UnmanagedType.U4)]
+        public DISPLAY_DEVICE(bool init)
+        {
+            cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+            DeviceName = "";
+            DeviceString = "";
+            StateFlags = 0;
+            DeviceID = "";
+            DeviceKey = "";
+        }
+        [MarshalAs(UnmanagedType.U4)]
             public int cb;
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
             public string DeviceName;
@@ -338,10 +348,13 @@ namespace WinAPI_User32
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CCHDEVICENAME)]
         public string DeviceName;
 
-        public void Init()
+        public MONITORINFOEX(bool init)
         {
-            this.Size = 40 + 2 * CCHDEVICENAME;
-            this.DeviceName = string.Empty;
+            Size = 40 + 2 * CCHDEVICENAME;
+            DeviceName = string.Empty;
+            Monitor=new RECT();
+            WorkArea=new RECT();
+            Flags = 0;
         }
     }
     [StructLayout(LayoutKind.Sequential)]
@@ -1342,7 +1355,8 @@ namespace WinAPI_User32
         [DllImport("user32.dll")]
         public static extern DISP_CHANGE ChangeDisplaySettingsEx(string lpszDeviceName, ref DEVMODE lpDevMode, IntPtr hwnd, ChangeDisplaySettingsFlags dwflags, IntPtr lParam);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
 
         [DllImport("user32.dll")]

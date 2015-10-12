@@ -1,0 +1,91 @@
+﻿<UserControl x:Class="LittleBigMouse.ControlPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LittleBigMouse"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="300">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Label Foreground="White" Grid.Row="0" Content="Brightness" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Label Foreground="White" Grid.Row="1" Content="Contrast" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Label Foreground="Red" Grid.Row="2" Content="Red Gain" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Label Foreground="Green" Grid.Row="3" Content="Green Gain" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Label Foreground="Blue" Grid.Row="4" Content="Blue Gain" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Label Foreground="Red" Grid.Row="5" Content="Red Drive" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Label Foreground="Green" Grid.Row="6" Content="Green Drive" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Label Foreground="Blue" Grid.Row="7" Content="Blue Drive" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+        <Slider
+            Grid.Row="0" Grid.Column="1" MinWidth="200"
+            Value="{Binding Path=Screen.Brightness.Value}"           
+            SmallChange="1" LargeChange="10"
+            Minimum="{Binding Path=Screen.Brightness.Min}"
+            Maximum="{Binding Path=Screen.Brightness.Max}" 
+            />
+
+        <Slider Grid.Row="1" Value="{Binding Path=Screen.Contrast.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Contrast.Min}" Maximum="{Binding Path=Screen.Contrast.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="2" Value="{Binding Path=Screen.Gain.Red.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Gain.Red.Min}" Maximum="{Binding Path=Screen.Gain.Red.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="3" Value="{Binding Path=Screen.Gain.Green.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Gain.Green.Min}" Maximum="{Binding Path=Screen.Gain.Green.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="4" Value="{Binding Path=Screen.Gain.Blue.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Gain.Blue.Min}" Maximum="{Binding Path=Screen.Gain.Blue.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="5" Value="{Binding Path=Screen.Drive.Red.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Drive.Red.Min}" Maximum="{Binding Path=Screen.Drive.Red.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="6" Value="{Binding Path=Screen.Drive.Green.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Drive.Green.Min}" Maximum="{Binding Path=Screen.Drive.Green.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="7" Value="{Binding Path=Screen.Drive.Blue.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Drive.Blue.Min}" Maximum="{Binding Path=Screen.Drive.Blue.Max}"  MinWidth="200"/>
+        <Label Foreground="White" Grid.Row="0" Grid.Column="2" Content="{Binding Path=Screen.Brightness.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="1" Grid.Column="2" Content="{Binding Path=Screen.Contrast.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="2" Grid.Column="2" Content="{Binding Path=Screen.Gain.Red.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="3" Grid.Column="2" Content="{Binding Path=Screen.Gain.Green.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="4" Grid.Column="2" Content="{Binding Path=Screen.Gain.Blue.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="5" Grid.Column="2" Content="{Binding Path=Screen.Drive.Red.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="6" Grid.Column="2" Content="{Binding Path=Screen.Drive.Green.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="7" Grid.Column="2" Content="{Binding Path=Screen.Drive.Blue.ValueAsync}"/>
+
+            <StackPanel  Margin="5" Grid.Row="8" Grid.Column="1">
+            <local:TestPatternButton PatternColor="Black" PatternType="Solid" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="White" PatternType="Solid" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="White" PatternType="Gradient" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FFFF0000" PatternType="Solid" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FF00FF00" PatternType="Solid" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FF0000FF" PatternType="Solid" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FFFF0000" PatternType="Gradient" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FF00FF00" PatternType="Gradient"  Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FF0000FF" PatternType="Gradient" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FF101010" PatternType="Gradient" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FF0000FF" PatternType="RGBGradient" Click="pattern_Click"/>
+            <local:TestPatternButton PatternColor="#FFFF8000" PatternType="Circle" Click="pattern_Click"/>
+            <local:TestPatternButton PatternType="Grid" Click="pattern_Click"/>
+         </StackPanel>
+
+
+        <StackPanel Grid.Row="9" Grid.Column="1" Margin="5">
+            <ProgressBar Value="{Binding Path=Screen.ProbedColor.NormalisedRed, Mode=OneWay}" Maximum="1.0" Height="12.5" Foreground="Red"/>
+            <ProgressBar Value="{Binding Path=Screen.ProbedColor.NormalisedGreen, Mode=OneWay}" Maximum="1.0"  Height="12.5" Foreground="Lime"/>
+            <ProgressBar Value="{Binding Path=Screen.ProbedColor.NormalisedBlue, Mode=OneWay}" Maximum="1.0"  Height="12.5" Foreground="Blue"/>
+            <Button x:Name="cmdProbe" Click="cmdProbe_Click">Probe</Button>
+            <Button x:Name="cmdProbeBrightness" Click="cmdProbeBrightness_Click">Probe Brigtness</Button>
+            <Button x:Name="cmdProbeContrast" Click="cmdProbeContrast_Click">Probe Contrast</Button>
+            <Button x:Name="cmdProbeRedGain" Click="cmdProbeRedGain_Click">Probe Red Gain</Button>
+            <Button x:Name="cmdProbeGreenGain" Click="cmdProbeGreenGain_Click">Probe Green Gain</Button>
+            <Button x:Name="cmdProbeBlueGain" Click="cmdProbeBlueGain_Click">Probe Blue Gain</Button>
+            <Button x:Name="cmdProbeGrayScale" Click="cmdProbeGrayScale_Click">Probe GrayScale</Button>
+            <local:CurveViewer Width="500" Height="500" x:Name="curve" />
+            <Label x:Name="lblValue">Valeur</Label>
+        </StackPanel>
+    </Grid>
+</UserControl>

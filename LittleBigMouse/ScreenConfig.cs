@@ -201,7 +201,7 @@ namespace LittleBigMouse
             foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
             {
                 Screen s = GetScreen(screen);
-                _id += ((_id!="")?"." :"") + s.ID;
+                _id += ((_id!="")?"." :"") + s.Id;
             }
 
             LoadAtStartup = App.Scheduled;
@@ -243,7 +243,7 @@ namespace LittleBigMouse
 
         private Screen GetScreen(System.Windows.Forms.Screen screen)
         {
-            foreach (Screen s in AllScreens.Where(s => s._formScreen.DeviceName == screen.DeviceName))
+            foreach (Screen s in AllScreens.Where(s => s.FormScreen.DeviceName == screen.DeviceName))
             {
                 return s;
             }

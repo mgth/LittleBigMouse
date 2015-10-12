@@ -35,8 +35,8 @@ namespace LittleBigMouse
             Width = r.Width;
             Height = r.Height;
 
-            double ratioX = screen.PixelToWpfRatioX / screen.PitchX;
-            double ratioY = screen.PixelToWpfRatioY / screen.PitchY;
+            double ratioX = screen.RatioX;
+            double ratioY = screen.RatioY;
 
             int i = 0;
             while (true)

@@ -90,9 +90,9 @@ namespace LittleBigMouse
             return key;
         }
 
-        public Edid(String TargetDevID)
+        public Edid(Screen screen)
         {
-            DISPLAY_DEVICE dd = DisplayDeviceFromID(TargetDevID);
+            DISPLAY_DEVICE dd = DisplayDeviceFromID(screen.DeviceName);
 
 
             IntPtr devInfo = SetupAPI.SetupDiGetClassDevsEx(
@@ -108,30 +108,37 @@ namespace LittleBigMouse
             if (devInfo == IntPtr.Zero)
                 return;
 
-            for (uint i = 0; Kernel32.ERROR_NO_MORE_ITEMS != Kernel32.GetLastError(); ++i)
-            {
-                SP_DEVINFO_DATA devInfoData = new SP_DEVINFO_DATA();
-                devInfoData.cbSize = (uint)Marshal.SizeOf(devInfoData);
+            SP_DEVINFO_DATA devInfoData = new SP_DEVINFO_DATA(true);
 
+//            uint i = 0;
+            string s = screen.DeviceName.Substring(11);
+            uint i = 3-uint.Parse(s);
+
+            //do
+            //{
                 if (SetupAPI.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                 {
 
-                    IntPtr hEDIDRegKey = SetupAPI.SetupDiOpenDevRegKey(devInfo, ref devInfoData, SetupAPI.DICS_FLAG_GLOBAL, 0, SetupAPI.DIREG_DEV, SetupAPI.KEY_READ);
+                    IntPtr hEdidRegKey = SetupAPI.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
+                        SetupAPI.DICS_FLAG_GLOBAL, 0, SetupAPI.DIREG_DEV, SetupAPI.KEY_READ);
 
-                    if (hEDIDRegKey == IntPtr.Zero || (hEDIDRegKey.ToInt32() == -1))
-                        continue;
+                    if (hEdidRegKey != IntPtr.Zero && (hEdidRegKey.ToInt32() != -1))
+                    {
+                        RegistryKey key = GetKeyFromPath(GetHKeyName(hEdidRegKey), 1);
 
-                    RegistryKey key = GetKeyFromPath( GetHKeyName(hEDIDRegKey) , 1 );
+                        string id = ((string[]) key.GetValue("HardwareID"))[0] + "\\" + key.GetValue("Driver");
 
-                    String id = ((String[])key.GetValue("HardwareID"))[0].ToString() + "\\" + key.GetValue("Driver").ToString();
+                        //if (id != dd.DeviceID)
+                        //    continue;
 
-                    if (id != dd.DeviceID)
-                        continue;
+                        GetEdid(GetKeyFromPath(GetHKeyName(hEdidRegKey)));
 
-                    GetEdid(GetKeyFromPath(GetHKeyName(hEDIDRegKey)));
-                    AdvAPI32.RegCloseKey(hEDIDRegKey);
+                        AdvAPI32.RegCloseKey(hEdidRegKey);
+                    }
                 }
-            }
+            //    i++;
+            //} while (Kernel32.ERROR_NO_MORE_ITEMS != Kernel32.GetLastError());
+
             SetupAPI.SetupDiDestroyDeviceInfoList(devInfo);
         }
 
@@ -210,8 +217,7 @@ namespace LittleBigMouse
 
         DISPLAY_DEVICE DisplayDeviceFromHMonitor(IntPtr hMonitor)
         {
-            MONITORINFOEX mi = new MONITORINFOEX();
-            mi.Init();
+            MONITORINFOEX mi = new MONITORINFOEX(true);
             User32.GetMonitorInfo(hMonitor, ref mi);
 
             return DisplayDeviceFromID(mi.DeviceName);
@@ -219,16 +225,25 @@ namespace LittleBigMouse
 
         DISPLAY_DEVICE DisplayDeviceFromID(String id)
         {
-                DISPLAY_DEVICE ddMon = new DISPLAY_DEVICE();
-                ddMon.cb = Marshal.SizeOf(ddMon);
-                uint MonIdx = 0;
+                DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
+                uint devIdx = 0;
 
-                while (User32.EnumDisplayDevices(id, MonIdx, ref ddMon, 0))
+            while (User32.EnumDisplayDevices(null, devIdx, ref ddDev, 0))
+            {
+                if (ddDev.DeviceName == id)
                 {
-                    MonIdx++;
-                    return ddMon; // TODO : we postulate that there is only 1 monitor per display
+                    DISPLAY_DEVICE ddMon = new DISPLAY_DEVICE();
+                    ddMon.cb = Marshal.SizeOf(ddMon);
+                    uint monIdx = 0;
+                    while (User32.EnumDisplayDevices(ddDev.DeviceName, monIdx,ref ddMon, 0))
+                    {
+                        return ddMon;
+                        monIdx++;
+                    }
                 }
-                return ddMon;
+               devIdx++;
+            }
+                return ddDev;
         }
     }
 }

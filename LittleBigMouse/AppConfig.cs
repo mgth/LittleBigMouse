@@ -98,8 +98,7 @@ namespace LittleBigMouse
                 if (_config.AdjustPointer)
                     Mouse.setCursorAero(1);
             }
-            if (_notify!=null)
-                _notify.Dispose();
+            _notify?.Dispose();
         }
 
 

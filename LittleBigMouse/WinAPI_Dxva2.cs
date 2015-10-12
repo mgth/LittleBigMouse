@@ -20,6 +20,11 @@ namespace WinAPI_Dxva2
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
         internal static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, ref uint pdwNumberOfPhysicalMonitors);
 
+        [DllImport("dxva2.dll", EntryPoint = "DestroyPhysicalMonitors")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DestroyPhysicalMonitors(
+            uint dwPhysicalMonitorArraySize, ref PHYSICAL_MONITOR[] pPhysicalMonitorArray);
+
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
         internal static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, uint dwPhysicalMonitorArraySize, [Out] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
 
@@ -46,7 +51,28 @@ namespace WinAPI_Dxva2
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
         internal static extern bool SetMonitorRedGreenOrBlueDrive(IntPtr hMonitor, uint component, uint dwNewContrast);
-        //GetMonitorRedGreenOrBlueGain
 
+
+
+        [DllImport("dxva2.dll", EntryPoint = "GetCapabilitiesStringLength", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetCapabilitiesStringLength(
+            [In] IntPtr hMonitor, ref uint pdwLength);
+
+        [DllImport("dxva2.dll", EntryPoint = "GetCapabilitiesString", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetCapabilitiesString(
+            [In] IntPtr hMonitor, StringBuilder pszString, uint dwLength);
+
+        [DllImport("dxva2.dll", EntryPoint = "GetVCPFeatureAndVCPFeatureReply", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetVCPFeatureAndVCPFeatureReply(
+            [In] IntPtr hMonitor, [In] uint dwVCPCode, uint pvct, ref uint pdwCurrentValue, ref uint pdwMaximumValue);
+
+
+        [DllImport("dxva2.dll", EntryPoint = "SetVCPFeature", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetVCPFeature(
+            [In] IntPtr hMonitor, uint dwVCPCode, uint dwNewValue);
     }
 }

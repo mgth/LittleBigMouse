@@ -192,7 +192,18 @@ namespace WinAPI_Gdi32
         internal static extern Int32 GetDeviceCaps(IntPtr hdc, DeviceCap capindex);
         [DllImport("gdi32.dll")]
         public static extern int GetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
+
         [DllImport("gdi32.dll")]
         public static extern int SetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
+
+        [DllImport("gdi32.dll", EntryPoint = "DDCCIGetCapabilitiesStringLength", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DDCCIGetCapabilitiesStringLength(
+            [In] IntPtr hMonitor, ref uint pdwLength);
+
+        [DllImport("gdi32.dll", EntryPoint = "DDCCIGetCapabilitiesString", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DDCCIGetCapabilitiesString(
+            [In] IntPtr hMonitor, StringBuilder pszString, uint dwLength);
     }
 }

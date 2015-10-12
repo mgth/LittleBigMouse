@@ -15,6 +15,14 @@ namespace WinAPI_SetupAPI
         public Guid classGuid;
         public uint devInst;
         public IntPtr reserved;
+
+        public SP_DEVINFO_DATA(bool init)
+        {
+            cbSize = (uint)Marshal.SizeOf(typeof(SP_DEVINFO_DATA));
+            classGuid = Guid.Empty;
+            devInst = 0;
+            reserved = IntPtr.Zero;
+        }
     }
 
     class SetupAPI

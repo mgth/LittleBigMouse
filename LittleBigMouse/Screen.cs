@@ -24,16 +24,13 @@
 using Microsoft.Win32;
 using System;
 using System.ComponentModel;
-using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows;
-using System.Windows.Annotations;
-using System.Windows.Forms;
-using System.Windows.Interop;
 using WinAPI_Dxva2;
 using WinAPI_Gdi32;
 using WinAPI_User32;
@@ -44,30 +41,31 @@ namespace LittleBigMouse
     public class Screen : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
-        private void changed(String name)
+        private void Changed(string name)
         {
-            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
-        private void changed(Object o, String name)
+
+        private void Changed(object o, string name)
         {
-            if (PropertyChanged != null) PropertyChanged(o, new PropertyChangedEventArgs(name));
+            PropertyChanged?.Invoke(o, new PropertyChangedEventArgs(name));
         }
 
         public event EventHandler PhysicalChanged;
 
         private void OnPhysicalChanged()
         {
-            if (PhysicalChanged != null) PhysicalChanged(this, new EventArgs());
+            PhysicalChanged?.Invoke(this, new EventArgs());
         }
 
-        internal System.Windows.Forms.Screen _formScreen;
-        internal Edid _edid;
+        internal System.Windows.Forms.Screen FormScreen;
+        internal Edid Edid;
 
         internal Screen(ScreenConfig config, System.Windows.Forms.Screen screen)
         {
             Config = config;
-            _formScreen = screen;
-            _edid = new Edid(screen.DeviceName);
+            FormScreen = screen;
+            Edid = new Edid(this);
 
             // TODO : try to define position from Windows one
             PhysicalLocation = new PhysicalPoint(
@@ -76,20 +74,28 @@ namespace LittleBigMouse
                 0);
 
 
-            _brightness = new MonitorLevel(GetBrightness, SetBrightness);
-            _contrast = new MonitorLevel(GetContrast, SetContrast);
+            Brightness = new MonitorLevel(GetBrightness, SetBrightness);
+            Contrast = new MonitorLevel(GetContrast, SetContrast);
 
-            _gain = new MonitorRGBLevel(GetGain, SetGain);
-            _drive = new MonitorRGBLevel(GetDrive, SetDrive);
+            Gain = new MonitorRGBLevel(GetGain, SetGain);
+            Drive = new MonitorRGBLevel(GetDrive, SetDrive);
 
-            _probe = new MonitorRGBLevel(GetProbe, SetProbe);
+            Probe = new MonitorRGBLevel(GetProbe, SetProbe);
         }
 
+        ~Screen()
+        {
+            if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
+                Dxva2.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length,ref _pPhysicalMonitorArray);
+        }
+
+
+        private IntPtr _hmonitor = IntPtr.Zero;
         public IntPtr HMonitor
         {
             get
             {
-                IntPtr h = IntPtr.Zero;
+                if (_hmonitor != IntPtr.Zero) return _hmonitor;
 
                 User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
                     delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
@@ -99,55 +105,66 @@ namespace LittleBigMouse
                         bool success = User32.GetMonitorInfo(hMonitor, ref mi);
                         if (success && mi.DeviceName == DeviceName)
                         {
-                            h = hMonitor;
+                            _hmonitor = hMonitor;
                             return false;
                         }
                         return true;
                     }, IntPtr.Zero);
-                return h;
+                return _hmonitor;
             }
         }
 
-        public String ProductCode
-        {
-            get { return _edid.ProductCode; }
-        }
+        private PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
 
-        public String Model
-        {
-            get { return _edid.Block((char)0xFC); }
-        }
-        public String ManufacturerCode
-        {
-            get { return _edid.ManufacturerCode; }
-        }
-        public String PNPCode
-        {
-            get { return ManufacturerCode + ProductCode; }
-        }
-
-        public String SerialNo
-        {
-            get { return _edid.Block((char)0xFF); }
-        }
-
-        public String Serial
-        {
-            get { return _edid.Serial; }
-        }
-
-        public String ID
+        public IntPtr HPhysical
         {
             get
             {
-                return _edid.ManufacturerCode + ProductCode.ToString() + "_" + Serial.ToString() + "_" + PixelSize.Width + "x" + PixelSize.Height;
+                if (_pPhysicalMonitorArray!=null && _pPhysicalMonitorArray.Length>0) return _pPhysicalMonitorArray[0].hPhysicalMonitor;
+
+                MONITORINFOEX monitorInfoEx = new MONITORINFOEX();
+                monitorInfoEx.Size = (int)Marshal.SizeOf(monitorInfoEx);
+
+                if (!User32.GetMonitorInfo(HMonitor, ref monitorInfoEx)) return IntPtr.Zero;
+
+                uint pdwNumberOfPhysicalMonitors = 0;
+
+                if (!Dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(HMonitor, ref pdwNumberOfPhysicalMonitors))
+                    return IntPtr.Zero;
+
+                // Récupère un handle physique du moniteur
+                _pPhysicalMonitorArray = new PHYSICAL_MONITOR[pdwNumberOfPhysicalMonitors];
+
+                if (Dxva2.GetPhysicalMonitorsFromHMONITOR(HMonitor, pdwNumberOfPhysicalMonitors, _pPhysicalMonitorArray))
+                    return _pPhysicalMonitorArray[0].hPhysicalMonitor;
+                //Nom = pPhysicalMonitorArray[0].szPhysicalMonitorDescription;
+
+                _pPhysicalMonitorArray = null;
+                uint err = WinAPI_Kernel32.Kernel32.GetLastError();
+
+                return IntPtr.Zero;
             }
         }
 
+        public string ProductCode => Edid.ProductCode;
+        public string Model => Edid.Block((char)0xFC);
+
+        public string ManufacturerCode => Edid.ManufacturerCode;
+
+        public string PnpCode => ManufacturerCode + ProductCode;
+
+        public string SerialNo => Edid.Block((char)0xFF);
+
+        public string Serial => Edid.Serial;
+
+        public string Id => Edid.ManufacturerCode + ProductCode + "_" + Serial + "_" + PixelSize.Width + "x" + PixelSize.Height;
+
         public void Save(RegistryKey baseKey)
         {
-            using (RegistryKey key = baseKey.CreateSubKey(ID))
+            using (RegistryKey key = baseKey.CreateSubKey(Id))
             {
+                if (key == null) return;
+
                 key.SetValue("X", PhysicalLocation.X.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 key.SetValue("Y", PhysicalLocation.Y.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
 
@@ -165,15 +182,16 @@ namespace LittleBigMouse
             get
             {
                 Rect r = new Rect();
-                foreach (Screen s in Config.AllScreens)
+                bool first = true;
+                foreach (Screen s in Config.AllScreens.Where(s => s!=this))
                 {
-                    if (s!=this)
+                    if (first)
                     {
-                        if (r.Width == 0)
-                            r = s.PhysicalBounds;
-                        else
-                            r.Union(s.PhysicalBounds);
+                        r = s.PhysicalBounds;
+                        first = false;
                     }
+                    else
+                        r.Union(s.PhysicalBounds);
                 }
 
                 return r;
@@ -183,24 +201,23 @@ namespace LittleBigMouse
 
         public void Load(RegistryKey configkey)
         {
-            using (RegistryKey key = configkey.OpenSubKey(ID))
+            using (RegistryKey key = configkey.OpenSubKey(Id))
             {
-                if (key != null)
-                {
-                    String sX = key.GetValue("X", RegistryValueKind.String).ToString();
-                    double x = double.Parse(sX, CultureInfo.InvariantCulture);
+                if (key == null) return;
 
-                    String sY = key.GetValue("Y", RegistryValueKind.String).ToString();
-                    double y = double.Parse(sY, CultureInfo.InvariantCulture);
+                string sX = key.GetValue("X", RegistryValueKind.String).ToString();
+                double x = double.Parse(sX, CultureInfo.InvariantCulture);
 
-                    PhysicalLocation = new PhysicalPoint(this,x,y);
+                string sY = key.GetValue("Y", RegistryValueKind.String).ToString();
+                double y = double.Parse(sY, CultureInfo.InvariantCulture);
 
-                    String pitchX = key.GetValue("PitchX", "NaN").ToString();
-                    if (pitchX != "NaN") PitchX = double.Parse(pitchX, CultureInfo.InvariantCulture);
+                PhysicalLocation = new PhysicalPoint(this,x,y);
 
-                    String pitchY = key.GetValue("PitchY", "NaN").ToString();
-                    if (pitchY != "NaN") PitchY = double.Parse(pitchY, CultureInfo.InvariantCulture);
-                }
+                string pitchX = key.GetValue("PitchX", "NaN").ToString();
+                if (pitchX != "NaN") PitchX = double.Parse(pitchX, CultureInfo.InvariantCulture);
+
+                string pitchY = key.GetValue("PitchY", "NaN").ToString();
+                if (pitchY != "NaN") PitchY = double.Parse(pitchY, CultureInfo.InvariantCulture);
             }
         }
 
@@ -333,36 +350,28 @@ namespace LittleBigMouse
                 {
                     foreach (Screen s in Config.AllScreens)
                     {
-                        if (!s.Primary)
-                        {
-                            double x = s.PhysicalLocation.X - value.X;
-                            double y = s.PhysicalLocation.Y - value.Y;
-                            s.PhysicalLocation = new PhysicalPoint(s,x,y);
-                        }
+                        if (s.Primary) continue;
+                        double x = s.PhysicalLocation.X - value.X;
+                        double y = s.PhysicalLocation.Y - value.Y;
+                        s.PhysicalLocation = new PhysicalPoint(s,x,y);
                     }
                 }
                 else
                     _physicalLocation = value;
 
-                changed("PhysicalLocation");
-                changed("PhysicalBounds");
+                Changed("PhysicalLocation");
+                Changed("PhysicalBounds");
             }
         }
 
-        public Rect PhysicalBounds
-        {
-            get
-            {
-                return new Rect(
-                    PhysicalLocation.Point,
-                    Bounds.BottomRight.Physical.Point
-                    );
-            }
-        }
+        public Rect PhysicalBounds => new Rect(
+            PhysicalLocation.Point,
+            Bounds.BottomRight.Physical.Point
+            );
 
 //        public Rect WpfBounds => new Rect(PixelLocation.Wpf.Point, Bounds.BottomRight.Wpf.Point);
 
-        public Rect WorkingArea => GetRect(_formScreen.WorkingArea);
+        public Rect WorkingArea => GetRect(FormScreen.WorkingArea);
 
 
         private static Rect GetRect(System.Drawing.Rectangle value)
@@ -376,11 +385,11 @@ namespace LittleBigMouse
             };
         }
 
-        public bool Primary => _formScreen.Primary;
+        public bool Primary => FormScreen.Primary;
 
-        public string DeviceName => _formScreen.DeviceName;
+        public string DeviceName => FormScreen.DeviceName;
 
-        public int DeviceNo => int.Parse(_formScreen.DeviceName.Substring(11));
+        public int DeviceNo => int.Parse(FormScreen.DeviceName.Substring(11));
 
         double _pitchX = double.NaN;
         public double PitchX
@@ -389,11 +398,11 @@ namespace LittleBigMouse
             {
                 if (value == PitchX) return;
                 _pitchX = value;
-                changed("PitchX");
-                changed("DpiX");
-                changed("DpiAvg");
-                changed("PhysicalWidth");
-                changed("PhysicalBounds");
+                Changed("PitchX");
+                Changed("DpiX");
+                Changed("DpiAvg");
+                Changed("PhysicalWidth");
+                Changed("PhysicalBounds");
             }
             get
             {
@@ -410,15 +419,13 @@ namespace LittleBigMouse
         {
             set
             {
-                if (value != PitchY)
-                {
-                    _pitchY = value;
-                    changed("PitchY");
-                    changed("DpiY");
-                    changed("DpiAvg");
-                    changed("PhysicalHeight");
-                    changed("PhysicalBounds");
-                }
+                if (value == PitchY) return;
+                _pitchY = value;
+                Changed("PitchY");
+                Changed("DpiY");
+                Changed("DpiAvg");
+                Changed("PhysicalHeight");
+                Changed("PhysicalBounds");
             }
             get
             {
@@ -467,7 +474,6 @@ namespace LittleBigMouse
             {
                 int factor = 100;
                 User32.GetScaleFactorForMonitor(HMonitor, ref factor);
-                //if (factor == 180) return 2.0;
                 return (double) factor/100;
             }
         }
@@ -499,7 +505,7 @@ namespace LittleBigMouse
                 return dpiY;
             }
         }
-        public double RawDpiX
+        public double AngularDpiX
         {
             get
             {
@@ -509,7 +515,7 @@ namespace LittleBigMouse
                 return dpiX;
             }
         }
-        public double RawDpiY
+        public double AngularDpiY
         {
             get
             {
@@ -520,8 +526,8 @@ namespace LittleBigMouse
             }
         }
 
-        public double RatioX => Math.Round((DpiX/RawDpiX) * 20)/20;
-        public double RatioY => Math.Round((DpiY / RawDpiY) * 20) / 20;
+        public double RatioX => Math.Round((DpiX / AngularDpiX) * 20) / 20;
+        public double RatioY => Math.Round((DpiY / AngularDpiY) * 20) / 20;
 
         public double DpiX
         {
@@ -564,7 +570,7 @@ namespace LittleBigMouse
             {
                 if (_graphicsDpiX == 0)
                 {
-                    IntPtr hdc = Gdi32.CreateDC(null, _formScreen.DeviceName, null, IntPtr.Zero);
+                    IntPtr hdc = Gdi32.CreateDC(null, FormScreen.DeviceName, null, IntPtr.Zero);
                     System.Drawing.Graphics gfx = System.Drawing.Graphics.FromHdc(hdc);
                     _graphicsDpiX = gfx.DpiX;
                     gfx.Dispose();
@@ -582,7 +588,7 @@ namespace LittleBigMouse
             {
                 if (_graphicsDpiY == 0)
                 {
-                    IntPtr hdc = Gdi32.CreateDC(null, _formScreen.DeviceName, null, IntPtr.Zero);
+                    IntPtr hdc = Gdi32.CreateDC(null, FormScreen.DeviceName, null, IntPtr.Zero);
                     System.Drawing.Graphics gfx = System.Drawing.Graphics.FromHdc(hdc);
                     _graphicsDpiY = gfx.DpiY;
                     gfx.Dispose();
@@ -592,30 +598,12 @@ namespace LittleBigMouse
             }
         }
 
-        public double PixelToWpfRatioX
-        {
-            get
-            {
-                //return SystemParameters.VirtualScreenWidth / System.Windows.Forms.SystemInformation.VirtualScreen.Width;
-                //return PixelBounds.Width / _formScreen.Bounds.Width;
-                return (96.0 / GraphicsDpiX);// * (_screen.Bounds.Width / PixelBounds.Width);
-            }
-        }
-        public double PixelToWpfRatioY
-        {
-            get
-            {
-                //return SystemParameters.VirtualScreenHeight / System.Windows.Forms.SystemInformation.VirtualScreen.Height;
-                //return PixelBounds.Height / _formScreen.Bounds.Height;
-                return (96.0 / GraphicsDpiY);// * (_screen.Bounds.Height / PixelBounds.Height);
-            }
-        }
 
         private double LogPixelSx
         {
             get
             {
-                IntPtr hdc = Gdi32.CreateDC("DISPLAY", _formScreen.DeviceName, null, IntPtr.Zero);
+                IntPtr hdc = Gdi32.CreateDC("DISPLAY", FormScreen.DeviceName, null, IntPtr.Zero);
                 double dpi = Gdi32.GetDeviceCaps(hdc, DeviceCap.LOGPIXELSX);
                 Gdi32.DeleteDC(hdc);
                 return dpi;
@@ -625,7 +613,7 @@ namespace LittleBigMouse
         {
             get
             {
-                IntPtr hdc = Gdi32.CreateDC("DISPLAY", _formScreen.DeviceName, null, IntPtr.Zero);
+                IntPtr hdc = Gdi32.CreateDC("DISPLAY", FormScreen.DeviceName, null, IntPtr.Zero);
                 double w = Gdi32.GetDeviceCaps(hdc, DeviceCap.HORZSIZE);
                 double h = Gdi32.GetDeviceCaps(hdc, DeviceCap.VERTSIZE);
                 Gdi32.DeleteDC(hdc);
@@ -653,107 +641,30 @@ namespace LittleBigMouse
         }
 
 
-        [Obsolete]
-        public Point PixelToPhysical(Point p)
-        {
-            var x = (p.X - PixelLocation.X + 0.5) * PitchX + PhysicalLocation.X;
-            var y = (p.Y - PixelLocation.Y + 0.5) * PitchY + PhysicalLocation.Y;
-            return new Point(x, y);
-        }
+ 
 
-
-        [Obsolete]
-        public Size PixelToPhysical(Size s)
-        {
-            var x = s.Width * PitchX;
-            var y = s.Height * PitchY;
-            return new Size(x, y);
-        }
-
-        [Obsolete]
-        public Point PhysicalToPixel(Point p)
-        {
-            //double x = Math.Floor(((p.X - PhysicalLocation.X) / PitchX) + 0.5) + PixelBounds.X;
-            //double y = Math.Floor(((p.Y - PhysicalLocation.Y) / PitchY) + 0.5) + PixelBounds.Y;
-            double x = Math.Floor(((p.X - PhysicalLocation.X) * WinDpiX / (PitchX * 96)) + 0.5) + PixelLocation.X;
-            double y = Math.Floor(((p.Y - PhysicalLocation.Y) * WinDpiY / (PitchY * 96)) + 0.5) + PixelLocation.Y;
-            return new Point(x, y);
-        }
-
-        [Obsolete]
-        public Point PixelToWpf(Point p)
-        {
-            var x = p.X * PixelToWpfRatioX;
-            double y = p.Y * PixelToWpfRatioY;
-            return new Point(x, y);
-        }
-
-        [Obsolete]
-        public Rect PixelToWpf(Rect r)
-        {
-            return new Rect(PixelToWpf(r.TopLeft), PixelToWpf(r.BottomRight));
-        }
-
-        [Obsolete]
-        public Point WpfToPixel(Point p)
-        {
-            double x = Math.Floor((p.X / PixelToWpfRatioX) + 0.5);
-            double y = Math.Floor((p.Y / PixelToWpfRatioY) + 0.5);
-            return new Point(x, y);
-        }
-        [Obsolete]
-        public Point PhysicalToWpf(Point p)
-        {
-            return PixelToWpf(PhysicalToPixel(p));
-        }
-        [Obsolete]
-        public Point WpfToPhysical(Point p)
-        {
-            return PixelToPhysical(WpfToPixel(p));
-        }
-
-        public IntPtr HPhysical
+        public string CapabilitiesString
         {
             get
             {
-                IntPtr hMonitor = HMonitor;
-                MONITORINFOEX monitorInfoEx = new MONITORINFOEX();
-                monitorInfoEx.Size = (int)Marshal.SizeOf(monitorInfoEx);
+                IntPtr hMonitor = HMonitor; //HPhysical;
 
-                if (User32.GetMonitorInfo(hMonitor, ref monitorInfoEx))
-                {
-                    uint pdwNumberOfPhysicalMonitors = 0;
-                    Dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref pdwNumberOfPhysicalMonitors);
+                uint len = 0;
+                if (!Gdi32.DDCCIGetCapabilitiesStringLength(hMonitor, ref len)) return "-1-";
 
-                    if (pdwNumberOfPhysicalMonitors >= 0)
-                    {
-                        // Récupère un handle physique du moniteur
-                        PHYSICAL_MONITOR[] pPhysicalMonitorArray = new PHYSICAL_MONITOR[pdwNumberOfPhysicalMonitors];
-                        Dxva2.GetPhysicalMonitorsFromHMONITOR(hMonitor, pdwNumberOfPhysicalMonitors, pPhysicalMonitorArray);
-                        //Nom = pPhysicalMonitorArray[0].szPhysicalMonitorDescription;
-                        return pPhysicalMonitorArray[0].hPhysicalMonitor;
-                    }
-                }
-                return IntPtr.Zero;
+                StringBuilder s = new StringBuilder((int)len + 1);
 
+                if (!Gdi32.DDCCIGetCapabilitiesString(hMonitor, s, len)) return "-2-";
+
+                return s.ToString();
             }
-
         }
 
-
-        private MonitorLevel _brightness;
-        private MonitorLevel _contrast;
-
-        private MonitorRGBLevel _gain;
-        private MonitorRGBLevel _drive;
-        private MonitorRGBLevel _probe;
-
-        public MonitorLevel Brightness { get { return _brightness; } }
-        public MonitorLevel Contrast { get { return _contrast; } }
-
-        public MonitorRGBLevel Gain { get { return _gain; } }
-        public MonitorRGBLevel Drive { get { return _drive; } }
-        public MonitorRGBLevel Probe { get { return _probe; } }
+        public MonitorLevel Brightness { get; }
+        public MonitorLevel Contrast { get; }
+        public MonitorRGBLevel Gain { get; }
+        public MonitorRGBLevel Drive { get; }
+        public MonitorRGBLevel Probe { get; }
 
         public bool GetBrightness(ref uint min, ref uint value, ref uint max)
         {
@@ -792,7 +703,7 @@ namespace LittleBigMouse
         public ProbedColor ProbedColor
         {
             get { return _probedColor; }
-            set { _probedColor = value; changed("ProbedColor"); }
+            set { _probedColor = value; Changed("ProbedColor"); }
         }
         public bool GetProbe(uint component, ref uint min, ref uint value, ref uint max)
         {
@@ -826,10 +737,9 @@ namespace LittleBigMouse
 
         }
         public MonitorLevel Channel(uint channel) { return _values[channel]; }
-        public MonitorLevel Red { get { return Channel(0); } }
-        public MonitorLevel Green { get { return Channel(1); } }
-        public MonitorLevel Blue { get { return Channel(2); } }
-
+        public MonitorLevel Red => Channel(0);
+        public MonitorLevel Green => Channel(1);
+        public MonitorLevel Blue => Channel(2);
     }
     public class MonitorLevel : INotifyPropertyChanged
     {
@@ -960,14 +870,8 @@ namespace LittleBigMouse
                 }
             }
         }
-        public uint Min
-        {
-            get { return _min; }
-        }
-        public uint Max
-        {
-            get { return _max; }
-        }
+        public uint Min => _min;
+        public uint Max => _max;
     }
 
 }

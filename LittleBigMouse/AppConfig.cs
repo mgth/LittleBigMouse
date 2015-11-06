@@ -25,28 +25,17 @@ using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using LbmScreenConfig;
 
 namespace LittleBigMouse
 {
 
     public class AppConfig : Application, ISingleInstanceApp, IDisposable
     {
-        private ScreenConfig _config;
 
-        private readonly Notify _notify = new Notify();
-        private void LoadConfig()
-        {
-            _config?.Stop();
-            _config = new ScreenConfig();
-            _config?.Start();
-        }
         private void _formConfig_RegistryChanged(object sender, EventArgs e)
         {
-            LoadConfig();
-        }
-        private void _notify_Click(object sender, EventArgs e)
-        {
-            ShowConfig();
+            //TODO : reload
         }
 
         private FormConfig _formConfig = null;
@@ -54,7 +43,7 @@ namespace LittleBigMouse
         {
             if (_formConfig==null)
             {
-                _formConfig = new FormConfig(_config);
+                _formConfig = new FormConfig(new ScreenConfig());
                 _formConfig.RegistryChanged += _formConfig_RegistryChanged;
 
                 _formConfig.Closed += _formConfig_Closed;
@@ -73,32 +62,9 @@ namespace LittleBigMouse
             _formConfig = null;
         }
 
-        public void Start(bool silent)
-        {
-            SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
-            LoadConfig();
-            if (!silent) { ShowConfig(); }
-            _notify.Click += _notify_Click;
-        }
-
-        private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
-        {
-            LoadConfig();
-        }
-
         public void Stop()
         {
-            if (_config!=null)
-            {
-                _config.Stop();
 
-                if (_config.AdjustSpeed)
-                    Mouse.MouseSpeed = 10.0;
-
-                if (_config.AdjustPointer)
-                    Mouse.setCursorAero(1);
-            }
-            _notify?.Dispose();
         }
 
 
@@ -114,25 +80,19 @@ namespace LittleBigMouse
         private bool _disposed = false;
         protected virtual void Dispose(bool disposing)
         {
-            if(!_disposed)
-            {
-                if (disposing)
-                {
-                    Stop();
-                    if (_config != null)
-                    {
-                        _config.Dispose();
-                        _config = null;
-                    }
-                    if (_formConfig != null)
-                    {
-                        _formConfig.Dispose();
-                        _formConfig = null;
-                    }
+            if (_disposed) return;
 
+            if (disposing)
+            {
+                Stop();
+                if (_formConfig != null)
+                {
+                    _formConfig.Dispose();
+                    _formConfig = null;
                 }
-                _disposed = true;
+
             }
+            _disposed = true;
         }
         public void Dispose()
         {

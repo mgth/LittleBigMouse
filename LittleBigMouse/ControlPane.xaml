@@ -34,27 +34,27 @@
         <Label Foreground="Blue" Grid.Row="7" Content="Blue Drive" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
         <Slider
             Grid.Row="0" Grid.Column="1" MinWidth="200"
-            Value="{Binding Path=Screen.Brightness.Value}"           
+            Value="{Binding Path=Monitor.Brightness.Value}"           
             SmallChange="1" LargeChange="10"
-            Minimum="{Binding Path=Screen.Brightness.Min}"
-            Maximum="{Binding Path=Screen.Brightness.Max}" 
+            Minimum="{Binding Path=Monitor.Brightness.Min}"
+            Maximum="{Binding Path=Monitor.Brightness.Max}" 
             />
 
-        <Slider Grid.Row="1" Value="{Binding Path=Screen.Contrast.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Contrast.Min}" Maximum="{Binding Path=Screen.Contrast.Max}"  MinWidth="200"/>
-        <Slider Grid.Row="2" Value="{Binding Path=Screen.Gain.Red.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Gain.Red.Min}" Maximum="{Binding Path=Screen.Gain.Red.Max}"  MinWidth="200"/>
-        <Slider Grid.Row="3" Value="{Binding Path=Screen.Gain.Green.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Gain.Green.Min}" Maximum="{Binding Path=Screen.Gain.Green.Max}"  MinWidth="200"/>
-        <Slider Grid.Row="4" Value="{Binding Path=Screen.Gain.Blue.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Gain.Blue.Min}" Maximum="{Binding Path=Screen.Gain.Blue.Max}"  MinWidth="200"/>
-        <Slider Grid.Row="5" Value="{Binding Path=Screen.Drive.Red.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Drive.Red.Min}" Maximum="{Binding Path=Screen.Drive.Red.Max}"  MinWidth="200"/>
-        <Slider Grid.Row="6" Value="{Binding Path=Screen.Drive.Green.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Drive.Green.Min}" Maximum="{Binding Path=Screen.Drive.Green.Max}"  MinWidth="200"/>
-        <Slider Grid.Row="7" Value="{Binding Path=Screen.Drive.Blue.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Screen.Drive.Blue.Min}" Maximum="{Binding Path=Screen.Drive.Blue.Max}"  MinWidth="200"/>
-        <Label Foreground="White" Grid.Row="0" Grid.Column="2" Content="{Binding Path=Screen.Brightness.ValueAsync}"/>
-        <Label Foreground="White" Grid.Row="1" Grid.Column="2" Content="{Binding Path=Screen.Contrast.ValueAsync}"/>
-        <Label Foreground="White" Grid.Row="2" Grid.Column="2" Content="{Binding Path=Screen.Gain.Red.ValueAsync}"/>
-        <Label Foreground="White" Grid.Row="3" Grid.Column="2" Content="{Binding Path=Screen.Gain.Green.ValueAsync}"/>
-        <Label Foreground="White" Grid.Row="4" Grid.Column="2" Content="{Binding Path=Screen.Gain.Blue.ValueAsync}"/>
-        <Label Foreground="White" Grid.Row="5" Grid.Column="2" Content="{Binding Path=Screen.Drive.Red.ValueAsync}"/>
-        <Label Foreground="White" Grid.Row="6" Grid.Column="2" Content="{Binding Path=Screen.Drive.Green.ValueAsync}"/>
-        <Label Foreground="White" Grid.Row="7" Grid.Column="2" Content="{Binding Path=Screen.Drive.Blue.ValueAsync}"/>
+        <Slider Grid.Row="1" Value="{Binding Path=Monitor.Contrast.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Monitor.Contrast.Min}" Maximum="{Binding Path=Monitor.Contrast.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="2" Value="{Binding Path=Monitor.Gain.Red.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Monitor.Gain.Red.Min}" Maximum="{Binding Path=Monitor.Gain.Red.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="3" Value="{Binding Path=Monitor.Gain.Green.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Monitor.Gain.Green.Min}" Maximum="{Binding Path=Monitor.Gain.Green.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="4" Value="{Binding Path=Monitor.Gain.Blue.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Monitor.Gain.Blue.Min}" Maximum="{Binding Path=Monitor.Gain.Blue.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="5" Value="{Binding Path=Monitor.Drive.Red.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Monitor.Drive.Red.Min}" Maximum="{Binding Path=Monitor.Drive.Red.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="6" Value="{Binding Path=Monitor.Drive.Green.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Monitor.Drive.Green.Min}" Maximum="{Binding Path=Monitor.Drive.Green.Max}"  MinWidth="200"/>
+        <Slider Grid.Row="7" Value="{Binding Path=Monitor.Drive.Blue.ValueAsync}" Grid.Column="1" LargeChange="10" SmallChange="1" Minimum="{Binding Path=Monitor.Drive.Blue.Min}" Maximum="{Binding Path=Monitor.Drive.Blue.Max}"  MinWidth="200"/>
+        <Label Foreground="White" Grid.Row="0" Grid.Column="2" Content="{Binding Path=Monitor.Brightness.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="1" Grid.Column="2" Content="{Binding Path=Monitor.Contrast.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="2" Grid.Column="2" Content="{Binding Path=Monitor.Gain.Red.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="3" Grid.Column="2" Content="{Binding Path=Monitor.Gain.Green.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="4" Grid.Column="2" Content="{Binding Path=Monitor.Gain.Blue.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="5" Grid.Column="2" Content="{Binding Path=Monitor.Drive.Red.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="6" Grid.Column="2" Content="{Binding Path=Monitor.Drive.Green.ValueAsync}"/>
+        <Label Foreground="White" Grid.Row="7" Grid.Column="2" Content="{Binding Path=Monitor.Drive.Blue.ValueAsync}"/>
 
             <StackPanel  Margin="5" Grid.Row="8" Grid.Column="1">
             <local:TestPatternButton PatternColor="Black" PatternType="Solid" Click="pattern_Click"/>

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using LbmScreenConfig;
 
 namespace LittleBigMouse
 {
@@ -23,16 +24,21 @@ namespace LittleBigMouse
             InitializeComponent();
             DataContext = this;
         }
-        private Screen _screen = null;
+        //        private MonitorControl Monitor = null;
+        private MonitorControl _monitor = null;
+        public MonitorControl Monitor {  get { return _monitor; } }
+
+
         public Screen Screen
         {
-            get { return _screen; }
+            get { return Monitor.Screen; }
             set
             {
-                _screen = value;
+                _monitor = new MonitorControl(value);
                 ShowPattern();
 
                 Changed("Screen");
+                Changed("Monitor");
             }
         }
 
@@ -92,7 +98,7 @@ namespace LittleBigMouse
 
             while (count > 0)
             {
-                if (Dicotune(Screen.Gain.Channel(channel))) count = 2;
+                if (Dicotune(Monitor.Gain.Channel(channel))) count = 2;
                 else count--;
 
                 channel++;
@@ -158,9 +164,9 @@ namespace LittleBigMouse
         {
             Argyll probe = new Argyll();
 
-            Screen.ProbedColor = new ProbedColor(probe.spotread());
+            Monitor.ProbedColor = new ProbedColor(probe.spotread());
 
-            return Screen.ProbedColor.DeviationRGB();
+            return Monitor.ProbedColor.DeviationRGB();
         }
 
 
@@ -184,8 +190,8 @@ namespace LittleBigMouse
             for (uint i = level.Min; i <= level.Max; i++)
             {
                 level.Value = i;
-                Screen.ProbedColor = new ProbedColor(probe.spotread());
-                c[i - level.Min] = Screen.ProbedColor.Luminance;
+                Monitor.ProbedColor = new ProbedColor(probe.spotread());
+                c[i - level.Min] = Monitor.ProbedColor.Luminance;
             }
 
         }
@@ -209,8 +215,8 @@ namespace LittleBigMouse
                 pattern.ShowOnScreen(Screen);
 
                 //System.Windows.Threading.Dispatcher.Run();
-                Screen.ProbedColor = new ProbedColor(probe.spotread());
-                c[(uint)i] = Screen.ProbedColor.Luminance;
+                Monitor.ProbedColor = new ProbedColor(probe.spotread());
+                c[(uint)i] = Monitor.ProbedColor.Luminance;
 
                 pattern.Close();
                 pattern = new TestPatternWindow();
@@ -219,14 +225,14 @@ namespace LittleBigMouse
 
         private void cmdProbeBrightness_Click(object sender, RoutedEventArgs e)
         {
-            Curve c = new Curve((int)Screen.Brightness.Max + 1, Colors.White);
+            Curve c = new Curve((int)Monitor.Brightness.Max + 1, Colors.White);
             curve.AddCurve(c);
 
             Thread thread = new Thread(
                 new ThreadStart(
                   delegate ()
                   {
-                      ProbeLevel(Screen.Brightness,c);
+                      ProbeLevel(Monitor.Brightness,c);
                   }));
 
             thread.Start();
@@ -235,14 +241,14 @@ namespace LittleBigMouse
 
         private void cmdProbeContrast_Click(object sender, RoutedEventArgs e)
         {
-            Curve c = new Curve((int)Screen.Contrast.Max + 1, Colors.Yellow);
+            Curve c = new Curve((int)Monitor.Contrast.Max + 1, Colors.Yellow);
             curve.AddCurve(c);
 
             Thread thread = new Thread(
                 new ThreadStart(
                   delegate ()
                   {
-                      ProbeLevel(Screen.Contrast,c);
+                      ProbeLevel(Monitor.Contrast,c);
                   }));
 
             thread.Start();
@@ -270,14 +276,14 @@ namespace LittleBigMouse
 
         private void cmdProbeRedGain_Click(object sender, RoutedEventArgs e)
         {
-            Curve c = new Curve((int)Screen.Gain.Red.Max + 1, Colors.Red);
+            Curve c = new Curve((int)Monitor.Gain.Red.Max + 1, Colors.Red);
             curve.AddCurve(c);
 
             Thread thread = new Thread(
                 new ThreadStart(
                   delegate ()
                   {
-                      ProbeLevel(Screen.Gain.Red, c);
+                      ProbeLevel(Monitor.Gain.Red, c);
                   }));
 
             thread.Start();
@@ -285,14 +291,14 @@ namespace LittleBigMouse
         }
         private void cmdProbeGreenGain_Click(object sender, RoutedEventArgs e)
         {
-            Curve c = new Curve((int)Screen.Gain.Green.Max + 1, Colors.Green);
+            Curve c = new Curve((int)Monitor.Gain.Green.Max + 1, Colors.Green);
             curve.AddCurve(c);
 
             Thread thread = new Thread(
                 new ThreadStart(
                   delegate ()
                   {
-                      ProbeLevel(Screen.Gain.Green, c);
+                      ProbeLevel(Monitor.Gain.Green, c);
                   }));
 
             thread.Start();
@@ -300,14 +306,14 @@ namespace LittleBigMouse
         }
         private void cmdProbeBlueGain_Click(object sender, RoutedEventArgs e)
         {
-            Curve c = new Curve((int)Screen.Gain.Blue.Max + 1, Colors.Blue);
+            Curve c = new Curve((int)Monitor.Gain.Blue.Max + 1, Colors.Blue);
             curve.AddCurve(c);
 
             Thread thread = new Thread(
                 new ThreadStart(
                   delegate ()
                   {
-                      ProbeLevel(Screen.Gain.Blue, c);
+                      ProbeLevel(Monitor.Gain.Blue, c);
                   }));
 
             thread.Start();

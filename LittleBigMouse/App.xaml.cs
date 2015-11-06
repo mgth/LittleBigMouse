@@ -36,68 +36,33 @@ namespace LittleBigMouse
     public partial class App : Application
     {
         private const string Unique = "MgthLittleBigMouseApp";
-
-        [STAThread]
         public static void Main(string[] args)
         {
-            bool silent = false;
             bool exit = false;
 
             foreach (string s in args)
             {
                 switch (s)
                 {
-                    case "--schedule":
-                        Schedule();
-                        exit = true;
-                        break;
-
-                    case "--unschedule":
-                        Unschedule();
-                        exit = true;
-                        break;
-
-                    case "--silent":
-                        silent = true;
-                        break;
-
                     case "--exit":
                         exit = true;
                         break;
                 }
             }
 
-            if (SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique))
+            if (!SingleInstance<AppConfig>.InitializeAsFirstInstance(Unique)) return;
+
+            if (exit) return;
+
+            using (AppConfig app = new AppConfig())
             {
-                if (!exit)
-                {
-                    using (AppConfig application = new AppConfig())
-                    {
-                        application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-                        application.Start(silent);
-
-                        application.Run();
-                    }
-
-                    SingleInstance<AppConfig>.Cleanup();
-                }
+                app.Run();
             }
+
+            SingleInstance<AppConfig>.Cleanup();
         }
-
-
-
-
-        public static bool IsAdministrator
-        {
-            get
-            {
-                WindowsIdentity identity = WindowsIdentity.GetCurrent();
-                WindowsPrincipal principal = new WindowsPrincipal(identity);
-                return principal.IsInRole(WindowsBuiltInRole.Administrator);
-            }
-        }
-
         public static String ServiceName
         {
             get { return System.Windows.Forms.Application.ProductName; }
@@ -127,20 +92,29 @@ namespace LittleBigMouse
                 return false;
             }
         }
-
+        public static bool IsAdministrator
+        {
+            get
+            {
+                WindowsIdentity identity = WindowsIdentity.GetCurrent();
+                if (identity == null) return false;
+                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+        }
         public static void Schedule()
         {
             if (IsAdministrator)
             {
                 using (TaskService ts = new TaskService())
                 {
-                    ts.RootFolder.DeleteTask(ServiceName,false);
+                    ts.RootFolder.DeleteTask(ServiceName, false);
 
                     TaskDefinition td = ts.NewTask();
                     td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
                     td.Triggers.Add(new LogonTrigger());
                     td.Actions.Add(
-                        new ExecAction(System.Windows.Forms.Application.ExecutablePath.ToString(),"--silent")
+                        new ExecAction(System.Windows.Forms.Application.ExecutablePath.ToString(), "--silent")
                         );
 
                     td.Principal.RunLevel = TaskRunLevel.Highest;
@@ -166,4 +140,5 @@ namespace LittleBigMouse
             else AdminCommand("--unschedule");
         }
     }
+
 }

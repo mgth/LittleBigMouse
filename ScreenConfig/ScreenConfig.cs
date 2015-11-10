@@ -53,16 +53,21 @@ namespace LbmScreenConfig
         public List<Screen> AllScreens { get; }
 
         private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
-        public RegistryKey OpenRootRegKey()
+        public RegistryKey OpenRootRegKey(bool create = false)
         {
-            return Registry.CurrentUser.CreateSubKey(RootKey);
+            using (RegistryKey key = Registry.CurrentUser)
+            {
+                if (key == null) return null;
+                return create ? key.CreateSubKey(RootKey) : key.OpenSubKey(RootKey);
+            }
         }
 
-        public RegistryKey OpenConfigRegKey()
+        public RegistryKey OpenConfigRegKey(bool create = false)
         {
-            using (RegistryKey k = OpenRootRegKey())
+            using (RegistryKey key = OpenRootRegKey(create))
             {
-                return k.CreateSubKey(_id);             
+                if (key == null) return null;
+                return create ? key.CreateSubKey(_id) : key.OpenSubKey(_id);
             }
         }
 
@@ -84,14 +89,17 @@ namespace LbmScreenConfig
 
             using (RegistryKey k = OpenConfigRegKey())
             {
-                Enabled = k.GetValue("Enabled", 0).ToString() == "1";
-                AdjustPointer = k.GetValue("AdjustPointer", 0).ToString() == "1";
-                AdjustSpeed = k.GetValue("AdjustSpeed", 0).ToString() == "1";
-                AllowCornerCrossing = k.GetValue("AllowCornerCrossing", 0).ToString() == "1";
-                AllowOverlaps = k.GetValue("AllowOverlaps", 0).ToString() == "1";
-                AllowDiscontinuity = k.GetValue("AllowDiscontinuity", 0).ToString() == "1";
-                LoadAtStartup = k.GetValue("LoadAtStartup", 0).ToString() == "1";
-            }
+                if (k != null)
+                {
+                    Enabled = k.GetValue("Enabled", 0).ToString() == "1";
+                    AdjustPointer = k.GetValue("AdjustPointer", 0).ToString() == "1";
+                    AdjustSpeed = k.GetValue("AdjustSpeed", 0).ToString() == "1";
+                    AllowCornerCrossing = k.GetValue("AllowCornerCrossing", 0).ToString() == "1";
+                    AllowOverlaps = k.GetValue("AllowOverlaps", 0).ToString() == "1";
+                    AllowDiscontinuity = k.GetValue("AllowDiscontinuity", 0).ToString() == "1";
+                    LoadAtStartup = k.GetValue("LoadAtStartup", 0).ToString() == "1";                   
+                }
+           }
 
             foreach (Screen s in AllScreens)
             {
@@ -99,20 +107,25 @@ namespace LbmScreenConfig
             }
         }
 
-        public void Save()
+        public bool Save()
         {
-            using (RegistryKey k = OpenConfigRegKey())
+            using (RegistryKey k = OpenConfigRegKey(true))
             {
-                k.SetValue("Enabled", Enabled ? "1" : "0");
-                k.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
-                k.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
-                k.SetValue("AllowCornerCrossing", AllowCornerCrossing ? "1" : "0");
-                k.SetValue("AllowOverlaps", AllowOverlaps ? "1" : "0");
-                k.SetValue("AllowDiscontinuity", AllowDiscontinuity ? "1" : "0");
-                k.SetValue("LoadAtStartup", LoadAtStartup ? "1" : "0");
+                if (k != null)
+                {
+                    k.SetValue("Enabled", Enabled ? "1" : "0");
+                    k.SetValue("AdjustPointer", AdjustPointer ? "1" : "0");
+                    k.SetValue("AdjustSpeed", AdjustSpeed ? "1" : "0");
+                    k.SetValue("AllowCornerCrossing", AllowCornerCrossing ? "1" : "0");
+                    k.SetValue("AllowOverlaps", AllowOverlaps ? "1" : "0");
+                    k.SetValue("AllowDiscontinuity", AllowDiscontinuity ? "1" : "0");
+                    k.SetValue("LoadAtStartup", LoadAtStartup ? "1" : "0");
 
-                foreach (Screen s in AllScreens)
-                    s.Save(k);
+                    foreach (Screen s in AllScreens)
+                        s.Save(k);
+                    return true;
+                }
+                return false;
             }
 
             

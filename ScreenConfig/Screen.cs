@@ -330,24 +330,27 @@ namespace LbmScreenConfig
 
         public RegistryKey OpenMonitorRegKey(bool create=false)
         {
-            using (RegistryKey key = Config.OpenRootRegKey())
+            using (RegistryKey key = Config.OpenRootRegKey(create))
             {
-                return create?key.CreateSubKey(IdMonitor) :key.OpenSubKey(IdMonitor);
+                if (key == null) return null;
+                return create ?key.CreateSubKey(IdMonitor) :key.OpenSubKey(IdMonitor);
             }
         }
 
         public RegistryKey OpenGuiLocationRegKey(bool create = false)
         {
-            using (RegistryKey key = OpenMonitorRegKey())
+            using (RegistryKey key = OpenMonitorRegKey(create))
             {
+                if (key == null) return null;
                 return create ? key.CreateSubKey("GuiLocation") : key.OpenSubKey("GuiLocation");
             }
         }
 
         public RegistryKey OpenConfigRegKey(bool create = false)
         {
-            using (RegistryKey key = Config.OpenConfigRegKey())
+            using (RegistryKey key = Config.OpenConfigRegKey(create))
             {
+                if (key == null) return null;
                 return create ? key.CreateSubKey(IdMonitor) : key.OpenSubKey(IdMonitor);
             }
         }

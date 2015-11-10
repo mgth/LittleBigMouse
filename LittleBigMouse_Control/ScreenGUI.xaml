@@ -1,0 +1,216 @@
+﻿<UserControl x:Class="LittleBigMouse_Control.ScreenGui"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LittleBigMouse_Control"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300"
+             HorizontalAlignment="Left"
+             VerticalAlignment="Top"
+             MinHeight="0"
+             MinWidth="0"
+             Width="{Binding Path=ThisWidth}"
+             Height="{Binding Path=ThisHeight}"
+             Margin="{Binding Path=ThisMargin}"
+             MouseLeftButtonUp="ScreenGui_OnMouseLeftButtonUp"
+             MouseLeftButtonDown="ScreenGui_OnMouseLeftButtonDown"
+             MouseMove="ScreenGui_OnMouseMove"
+             RenderTransformOrigin="0,0"
+             >
+    <UserControl.ContextMenu>
+        <ContextMenu>
+            <MenuItem Header="Place from windows config" Click="ResetPlace_Click"/>
+            <Separator />
+            <MenuItem Header="Reset Size" Click="ResetSize_Click"/>
+        </ContextMenu>
+    </UserControl.ContextMenu>
+    
+    <Canvas>
+        <Grid Background="{Binding BorderColor}"               
+              Width="{Binding Path=ThisWidth, FallbackValue=320}"
+              Height="{Binding Path=ThisHeight, FallbackValue=180}"
+        >
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="{Binding Path=LeftBorder,FallbackValue=20}"  MouseWheel="LeftBorder_MouseWheel"/>
+            <ColumnDefinition/>
+            <ColumnDefinition Width="{Binding Path=RightBorder,FallbackValue=20}" MouseWheel="RightBorder_MouseWheel"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="{Binding Path=TopBorder,FallbackValue=20}"/>            
+            <RowDefinition/>
+            <RowDefinition Height="{Binding Path=BottomBorder,FallbackValue=20}"/>        
+        </Grid.RowDefinitions>
+
+
+        <Border Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" MouseWheel="TopBorder_MouseWheel" Background="{Binding Path=TopBorderColor}" MouseEnter="TopBorder_MouseEnter" MouseLeave="TopBorder_MouseLeave" MouseLeftButtonDown="TopBorder_MouseDown">
+            <Grid>
+                <TextBox FontSize="{Binding Path=TopFontSize}" Visibility="{Binding Path=TopBorderVisibility}" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#00FFFFFF" Text="{Binding Path=Screen.RealTopBorder, StringFormat=N0, FallbackValue=top.b}" />
+            </Grid>
+        </Border>
+        
+
+        <Border 
+            Grid.Column="0" 
+            Grid.Row="2" 
+            Grid.ColumnSpan="3" 
+            MouseWheel="BottomBorder_MouseWheel" 
+            Background="{Binding Path=BottomBorderColor}" 
+            MouseEnter="BottomBorder_MouseEnter" 
+            MouseLeave="BottomBorder_MouseLeave" 
+            MouseLeftButtonDown="BottomBorder_MouseDown">
+            
+            <TextBox 
+                HorizontalAlignment="Center" 
+                FontSize="{Binding Path=BottomFontSize}"  
+                Visibility="{Binding Path=BottomBorderVisibility}" 
+                Width="Auto" 
+                Background="Transparent" 
+                Text="{Binding Path=Screen.RealBottomBorder, StringFormat=N0, FallbackValue=top.b}" />
+        </Border>
+
+        <Border 
+            Grid.Column="0" 
+            Grid.Row="1" 
+            MouseWheel="LeftBorder_MouseWheel" 
+            Background="{Binding Path=LeftBorderColor}" 
+            MouseEnter="LeftBorder_MouseEnter" 
+            MouseLeave="LeftBorder_MouseLeave" 
+            MouseLeftButtonDown="LeftBorder_MouseDown">
+
+            <TextBox  
+                FontSize="{Binding Path=LeftFontSize}" 
+                Visibility="{Binding Path=LeftBorderVisibility}"  
+                RenderTransformOrigin="0.5,0.5" 
+                HorizontalAlignment="Center" 
+                VerticalAlignment="Center" 
+                Background="Transparent" 
+                Text="{Binding Path=Screen.RealLeftBorder, StringFormat=N0, FallbackValue=top.b}" 
+                >
+                <TextBox.RenderTransform>
+                    <RotateTransform  Angle="-90"/>
+                </TextBox.RenderTransform>
+
+            </TextBox>
+        </Border>
+
+        <Border    Grid.Column="2" Grid.Row="1" MouseWheel="RightBorder_MouseWheel" Background="{Binding Path=RightBorderColor}" MouseEnter="RightBorder_MouseEnter" MouseLeave="RightBorder_MouseLeave" MouseLeftButtonDown="RightBorder_MouseDown">
+            <TextBox FontSize="{Binding Path=RightFontSize}"  Visibility="{Binding Path=RightBorderVisibility}" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" Height="25" Background="#00FFFFFF" Text="{Binding Path=Screen.RealRightBorder, StringFormat=N0, FallbackValue=top.b}" MouseWheel="TextBox_MouseWheel">
+            <TextBox.RenderTransform>
+                <RotateTransform  Angle="90"/>
+            </TextBox.RenderTransform>
+
+            </TextBox>
+        </Border>
+
+        <Grid Grid.Column="1" Grid.Row="1" x:Name="grid" SizeChanged="Grid_SizeChanged">
+
+            <Border BorderThickness="0" Background="{Binding Path=ScreenColor}"/>
+
+            <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PnpCode, FallbackValue=XXX000}"  HorizontalAlignment="Left" VerticalAlignment="{Binding Path=PnpNameVerticalAlignment}" Foreground="#FFD9DCEC"/>
+
+            <TextBox 
+                FontSize="{Binding Path=ThisFontSize}" 
+                Text="{Binding Path=Screen.PhysicalY, StringFormat=N1, FallbackValue=top.y}" 
+                KeyUp="TextBox_KeyEnterUpdate" 
+                HorizontalAlignment="Center" 
+                VerticalAlignment="Top" 
+                Background="#00FFFFFF"/>
+            
+            <TextBox 
+                FontSize="{Binding Path=ThisFontSize}" 
+                Text="{Binding Path=Screen.PhysicalX, StringFormat=N1, FallbackValue=left.x}" 
+                KeyUp="TextBox_KeyEnterUpdate" 
+                HorizontalAlignment="Left" 
+                VerticalAlignment="Center" 
+                Background="#00FFFFFF"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
+                <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalHeight, FallbackValue=phy.h}" KeyUp="TextBox_KeyEnterUpdate" VerticalAlignment="Bottom"  HorizontalAlignment="Center" Foreground="#FFD9DCEC" Background="#00FFFFFF" Visibility="{Binding Path=SelectedVisibility}" MouseWheel="PhysicalHeight_MouseWheel"/>
+                <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PhysicalBounds.Bottom,FallbackValue=bot.y}" ContentStringFormat="#0.#" HorizontalAlignment="Center"/>
+                <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PixelSize.Height,FallbackValue=pix.h}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"  Visibility="{Binding Path=SelectedVisibility}" />
+            </StackPanel>
+
+            <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
+                <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalWidth,FallbackValue=phy.w}" KeyUp="TextBox_KeyEnterUpdate" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Background="#00FFFFFF" MouseWheel="PhysicalWidth_MouseWheel" Visibility="{Binding Path=SelectedVisibility}"/>
+                <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PhysicalBounds.Right,FallbackValue=right.x}" ContentStringFormat="#0.#" HorizontalAlignment="Right"/>
+                <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PixelSize.Width,FallbackValue=pix.w}" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Visibility="{Binding Path=SelectedVisibility}"/>
+            </StackPanel>
+            
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="{Binding Path=SelectedBrush, FallbackValue=#FF333E9A}" BorderBrush="#FFD9DCEC">
+                    <Label FontSize="{Binding Path=ThisFontSize}" x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />
+                </Border>
+            </StackPanel>
+
+                <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" HorizontalAlignment="Right" Foreground="White"/>
+
+
+        </Grid>
+
+        <Border Grid.ColumnSpan="3"  Grid.RowSpan="3" BorderThickness="1,1,0,0" BorderBrush="LightSlateGray"/>
+        <Border Grid.ColumnSpan="3"  Grid.RowSpan="3" BorderThickness="0,0,1,1" BorderBrush="black"/>
+        <Border Grid.Column="1"  Grid.Row="1" BorderThickness="1,1,0,0" BorderBrush="black"/>
+        <Border Grid.Column="1"  Grid.Row="1" BorderThickness="0,0,0,1">
+
+            <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                <GradientStop Offset="0" Color="LightBlue"/>
+                <GradientStop Offset="1" Color="Gray"/>
+            </LinearGradientBrush></Border.BorderBrush>
+        </Border>
+        <Border Grid.Column="1"  Grid.Row="1" BorderThickness="0,0,1,0">
+
+            <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Offset="0" Color="LightBlue"/>
+                    <GradientStop Offset="1" Color="Gray"/>
+                </LinearGradientBrush>
+            </Border.BorderBrush>
+        </Border>
+
+        
+    </Grid>
+
+
+        <Grid              
+              Width="{Binding Path=ThisUnrotatedWidth}"
+              Height="{Binding Path=ThisUnrotatedHeight}"
+             RenderTransform="{Binding Path=ScreenOrientation}"
+            IsHitTestVisible="False"
+        >
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="{Binding Path=UnrotatedLeftBorder,FallbackValue=20}"/>
+            <ColumnDefinition/>
+                <ColumnDefinition Width="{Binding Path=UnrotatedRightBorder,FallbackValue=20}"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+                <RowDefinition Height="{Binding Path=UnrotatedTopBorder,FallbackValue=20}"/>
+            <RowDefinition/>
+                <RowDefinition Height="{Binding Path=UnrotatedBottomBorder,FallbackValue=20}"/>
+        </Grid.RowDefinitions>
+            <Label ClipToBounds="False" Padding="0" Grid.Row="0" Grid.Column="1" Content="{Binding Path=Screen.PnpDeviceName, FallbackValue=Unknown}"
+                   FontSize="{Binding Path=PnpNameFontSize}">
+
+                <Label.Foreground><LinearGradientBrush>
+                    <GradientStop Offset="0" Color="#F0FFFFFF"/>
+                    <GradientStop Offset="1" Color="#A0FFFFFF"/>
+                </LinearGradientBrush></Label.Foreground>
+            </Label>
+            <StackPanel Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                <Label FontSize="{Binding Path=ThisFontSize}" Margin="0,0,0,-10" Content="{Binding Path=Screen.Model,FallbackValue=Brand Model}" HorizontalAlignment="Center" Foreground="White"/>
+                <Label FontSize="{Binding Path=ThisFontSize}" Margin="0,0,0,-5" Content="{Binding Path=Screen.SerialNo,FallbackValue=Serial No}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
+            </StackPanel>
+            <Label 
+            Padding="{Binding Path=LogoPadding}" 
+            Margin="0" 
+            HorizontalAlignment="Center" 
+            VerticalAlignment="Center" 
+            Grid.Row="2" 
+            Grid.Column="1" 
+            Content="{Binding Path=Logo}"
+            />
+        </Grid>
+
+        
+    </Canvas>
+</UserControl>

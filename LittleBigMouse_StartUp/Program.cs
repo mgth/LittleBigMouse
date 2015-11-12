@@ -122,7 +122,7 @@ namespace LittleBigMouse_StartUp
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
 
             }

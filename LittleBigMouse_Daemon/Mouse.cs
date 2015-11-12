@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Runtime.InteropServices;
 using System.Windows;
 using WinAPI_User32;
 
@@ -29,6 +30,25 @@ namespace LittleBigMouse_Daemon
 {
     public class Mouse
     {
+        private static void MouseEvent(WinAPI_User32.MOUSEEVENTF evt, double x, double y)
+        {
+            WinAPI_User32.InputUnion[] input = new WinAPI_User32.InputUnion[1];
+            input[0] = new WinAPI_User32.InputUnion()
+            {
+                mi = new WinAPI_User32.MOUSEINPUT()
+                {
+                    dwFlags = evt
+                        ,
+                    dx = (int)x,
+                    dy = (int)y,
+                }
+            };
+
+
+            uint res = WinAPI_User32.User32.SendInput(1, input, Marshal.SizeOf(typeof(WinAPI_User32.MOUSEINPUT)));
+
+        }
+
         public static Point CursorPos
         {
             get
@@ -40,28 +60,16 @@ namespace LittleBigMouse_Daemon
             set
             {
                 User32.SetCursorPos((int)value.X, (int)value.Y);
+
+                User32.POINT newLocation;
+                User32.GetCursorPos(out newLocation);
+
+                MouseEvent(MOUSEEVENTF.MOVE | MOUSEEVENTF.ABSOLUTE, value.X, value.Y);
+                                        //(DWORD)((65535.0f * x) / (w - 1) + 0.5f),
+                                        //(DWORD)((65535.0f * y) / (h - 1) + 0.5f),
+                                        //0, 0);
+
             }
-                      /*{
-                            InputUnion[] input = new InputUnion[1];
-                            input[0] = new InputUnion()
-                            {
-                                mi = new MOUSEINPUT()
-                                {
-                                    dwFlags =
-                        //                WinAPI_User32.MOUSEEVENTF.ABSOLUTE |
-                                        WinAPI_User32.MOUSEEVENTF.VIRTUALDESK |
-                                        MOUSEEVENTF.MOVE
-                                        ,
-                                    dx = (int)value.X,
-                                    dy = (int)value.Y,
-                                }
-                            };  
-
-
-                            uint res = User32.SendInput(1, input, Marshal.SizeOf(typeof(WinAPI_User32.MOUSEINPUT)));
-                            Console.WriteLine(res);
-
-                        }*/
         }
 
         static public double MouseSpeed

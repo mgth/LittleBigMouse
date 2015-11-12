@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--This file is NOT compatible with Silverlight-->
 <Viewbox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Stretch="Uniform">
-    <Canvas Name="svg2" Width="91.026" Height="10" Canvas.Left="0" Canvas.Top="0">
+  <Canvas Name="svg2" Width="91.026" Height="30.223" Canvas.Left="0" Canvas.Top="0">
     <Canvas.RenderTransform>
       <TranslateTransform X="0" Y="0"/>
     </Canvas.RenderTransform>
@@ -10,7 +10,7 @@
     <!--Unknown tag: sodipodi:namedview-->
     <Canvas Name="g12">
       <Canvas.RenderTransform>
-        <TranslateTransform X="0.05895466" Y="-10"/>
+        <TranslateTransform X="0.05895466" Y="0"/>
       </Canvas.RenderTransform>
       <Canvas Name="g14">
         <Polygon xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Points="63.866,12.026 63.816,12.026 63.945,19.669 61.63,19.669 61.63,10.356 65.125,10.356 67.288,17.745 67.34,17.745 67.211,10.356 69.541,10.356 69.541,19.669 66.191,19.669 " Name="polygon16" FillRule="NonZero" Fill="#FFB3B3B3"/>

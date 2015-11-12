@@ -21,44 +21,36 @@
 	  http://www.mgth.fr
 */
 
-using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using LbmScreenConfig;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Navigation;
+using NativeHelpers;
 
 namespace LittleBigMouse_Control
 {
     /// <summary>
     /// Interaction logic for Config.xaml
     /// </summary>
-    public partial class FormConfig : Window, INotifyPropertyChanged
+    public partial class ConfigGui : PerMonitorDPIWindow, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
         private readonly PropertyChangeHandler _change;
 
         public ScreenConfig Config { get; }
 
-        public Screen Selected
+        public ScreenGui Selected
         {
             get
-            { return (from ScreenGui sgui in ScreensGrid.Children where sgui.Selected select sgui.Screen).FirstOrDefault(); }
+            { return AllScreenGuis.FirstOrDefault(gui => gui.Selected); }
             set
             {
-                foreach (ScreenGui sgui in ScreensGrid.Children.Cast<ScreenGui>().Where(sgui => sgui.Screen == value))
-                {
-                    sgui.Selected = true;
-                }
+                value.Selected = true;
             }
         }
 
@@ -72,7 +64,7 @@ namespace LittleBigMouse_Control
 
         private readonly WindowResizer _resizer;
 
-        public FormConfig()
+        public ConfigGui()
         {
             _change = new PropertyChangeHandler(this);
             _change.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args) { PropertyChanged?.Invoke(sender, args); };
@@ -107,9 +99,42 @@ namespace LittleBigMouse_Control
             };
 
             _change.Watch(Config,"Config");
+
+            Config.PropertyChanged += Config_PropertyChanged;
+            foreach (Screen screen in Config.AllScreens)
+            {
+                screen.PropertyChanged += Config_PropertyChanged;
+            }
         }
 
-        private Screen _locationScreen;
+        public bool LiveUpdate
+        {
+            get { return _liveUpdate; }
+            set { _liveUpdate = value;
+                if (_liveUpdate)
+                    ActivateConfig();
+                else
+                {
+                    LittleBigMouseClient.Client.LoadConfig();
+                }
+            }
+        }
+
+        private void Config_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            ActivateConfig();
+        }
+
+        public void ActivateConfig()
+        {
+            if (LiveUpdate)
+            {
+                Save();
+                LittleBigMouseClient.Client.LoadConfig();                         
+            }
+        }
+
+    private Screen _locationScreen;
         public Screen LocationScreen
         {
             get
@@ -247,42 +272,7 @@ namespace LittleBigMouse_Control
             Height = (bottomRight.Y - topLeft.Y) * LocationScreen.GuiLocation.Height;
 
             _doNotSaveLocation = false;
-        }
-
-
-        private void CallStartUp(bool setSchedule, bool run)
-        {
-            string filename = "";
-
-            try
-            {
-                var p = Process.GetCurrentProcess();
-                filename = p.MainModule.FileName.Replace("Control", "StartUp").Replace(".vshost","");
-            //System.Reflection.Assembly.GetExecutingAssembly().Location.Replace("Control","StartUp");
-            }
-            catch (Exception)
-            {
-                 filename = "LittleBigMouse_StartUp.exe";
-            }
-            
-
-            string arg = "";
-
-            if (setSchedule)
-            {
-                if (Config.LoadAtStartup)
-                    arg += "--schedule ";
-                else
-                    arg += "--unschedule ";             
-            }
-
-            arg += "--stop ";
-
-            if (run && Config.Enabled) arg += "--start ";
-
-            Process.Start(filename, arg);
-        }
-        
+        }        
 
         private void Save()
         {
@@ -291,15 +281,16 @@ namespace LittleBigMouse_Control
 
         private void cmdOk_Click(object sender, RoutedEventArgs e)
         {
-            Save();
-            CallStartUp(true,true);
+            cmdApply_Click(sender,e);
             Close();
         }
 
         private void cmdApply_Click(object sender, RoutedEventArgs e)
         {
             Save();
-            CallStartUp(true, true);
+            LittleBigMouseClient.Client.LoadAtStartup(Config.LoadAtStartup);
+            LittleBigMouseClient.Client.LoadConfig();
+            LittleBigMouseClient.Client.Start();
         }
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)
@@ -314,20 +305,8 @@ namespace LittleBigMouse_Control
 
         private void cmdUnload_Click(object sender, RoutedEventArgs e)
         {
-            string filename = "LittleBigMouse_StartUp.exe"; // = System.Reflection.Assembly.GetExecutingAssembly().Location.Replace("Control", "StartUp");
-
-
-            try
-            {
-                Process.Start(filename, "--stop");
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                // Append when user cancel uac
-            }
+            LittleBigMouseClient.Client.Quit();
         }
-
-
 
         private bool _showRulers = false;
 
@@ -361,11 +340,13 @@ namespace LittleBigMouse_Control
         }
 
         private readonly List<Ruler> _rulers = new List<Ruler>();
+        private bool _liveUpdate = false;
+
         private void AddRuler(RulerSide side)
         {
             if (Selected == null) return;
 
-            foreach (var sz in Config.AllScreens.Select(s => new Ruler(Selected, s, side)))
+            foreach (var sz in Config.AllScreens.Select(s => new Ruler(Selected.Screen, s, side)))
             {
                 _rulers.Add(sz);
             }
@@ -407,7 +388,7 @@ namespace LittleBigMouse_Control
         {
             get
             {
-                var p1 = new WpfPoint(Config, Selected, Left, Top);
+                var p1 = new WpfPoint(Config, Selected.Screen, Left, Top);
                 return p1.TargetScreen;
             }
         }
@@ -415,21 +396,28 @@ namespace LittleBigMouse_Control
         [DependsOn("DrawnOnScreen","State", "ShowRulers")]
         public GridLength HorizontalResizerSize 
             => WindowState == WindowState.Maximized && ShowRulers ? 
-            new GridLength(30 * LocationScreen.PhysicalToWpfRatioX) : new GridLength(10);
+            new GridLength(30 * LocationScreen.PhysicalToWpfRatioX / ScaleFactor) : new GridLength(10);
 
         [DependsOn("DrawnOnScreen", "State", "ShowRulers")]
         public GridLength VerticalResizerSize 
             => WindowState ==  WindowState.Maximized && ShowRulers ?
-            new GridLength(30 * LocationScreen.PhysicalToWpfRatioY) : new GridLength(10);
+            new GridLength(30 * LocationScreen.PhysicalToWpfRatioY / ScaleFactor) : new GridLength(10);
 
-        private void FormConfig_OnLocationChanged(object sender, EventArgs e)
+        private void ConfigGui_OnLocationChanged(object sender, EventArgs e)
         {
             if (_doNotSaveLocation) return;
 
             AbsolutePoint p = new WpfPoint(Config,null,Left + Width/2,Top + Height/2);
             if (p.TargetScreen != LocationScreen)
             {
+                double width = Width / LocationScreen.WpfToPixelRatioX;
+                double height = Height / LocationScreen.WpfToPixelRatioY;
+
                 LocationScreen = p.TargetScreen;
+
+                Width = width * LocationScreen.WpfToPixelRatioX;
+                Height = height * LocationScreen.WpfToPixelRatioY;
+
                 GetScreenGui(LocationScreen).Selected = true;
             }
                 

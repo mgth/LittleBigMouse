@@ -145,16 +145,12 @@ namespace LittleBigMouse_Control
                 {
                     case RulerSide.Top:
                         return new Thickness(1, 0, 1, 0);
-
                     case RulerSide.Bottom:
                         return new Thickness(1, 0, 1, 0);
-
                     case RulerSide.Left:
                         return new Thickness(0, 1, 0, 1);
-
                     case RulerSide.Right:
                         return new Thickness(0, 1, 0, 1);
-
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -474,7 +470,7 @@ namespace LittleBigMouse_Control
 
                 _drawOn.PhysicalY = _dragStartPoint.Y - offset;
 
-               // if (_drawOn.PhysicalY == old) _dragStartPoint.Y = _drawOn.PhysicalY;
+                if (_drawOn.Primary && _drawOn.PhysicalY == old) _oldPoint.Y += offset / _drawOn.PitchY;
             }
             else
             {
@@ -484,7 +480,7 @@ namespace LittleBigMouse_Control
 
                 _drawOn.PhysicalX = _dragStartPoint.X - offset;
 
-                //if (_drawOn.PhysicalX == old) _dragStartPoint.X += offset;
+                if (_drawOn.Primary && _drawOn.PhysicalX == old) _oldPoint.X += offset / _drawOn.PitchX;
             }
         }
 
@@ -505,8 +501,11 @@ namespace LittleBigMouse_Control
 
         private void Window_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            _moving = false;
-            ReleaseMouseCapture();
+            if (_moving)
+            {
+                _moving = false;
+                ReleaseMouseCapture();
+            }
         }
 
         private bool _moving { get; set; } = false;

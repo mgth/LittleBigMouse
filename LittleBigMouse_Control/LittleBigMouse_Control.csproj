@@ -41,7 +41,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -78,10 +78,31 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>true</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>true</Prefer32Bit>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Runtime.Remoting" />
+    <Reference Include="System.ServiceModel" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Core" />
@@ -100,9 +121,8 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="PropertyPane.cs" />
-    <Compile Include="ScreenGUI.xaml.cs">
-      <DependentUpon>ScreenGUI.xaml</DependentUpon>
+    <Compile Include="ScreenGui.xaml.cs">
+      <DependentUpon>ScreenGui.xaml</DependentUpon>
     </Compile>
     <Compile Include="Ruler.xaml.cs">
       <DependentUpon>Ruler.xaml</DependentUpon>
@@ -111,11 +131,7 @@
     <Compile Include="SmootGradientLinearBrush.cs" />
     <Compile Include="WinAPI_User32.cs" />
     <Compile Include="WindowResize.cs" />
-    <Page Include="FormConfig.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="InsideRuler.xaml">
+    <Page Include="ConfigGui.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -123,17 +139,10 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="FormConfig.xaml.cs">
-      <DependentUpon>FormConfig.xaml</DependentUpon>
+    <Compile Include="ConfigGui.xaml.cs">
+      <DependentUpon>ConfigGui.xaml</DependentUpon>
     </Compile>
-    <Compile Include="InsideRuler.xaml.cs">
-      <DependentUpon>InsideRuler.xaml</DependentUpon>
-    </Compile>
-    <Page Include="sam_Samsung.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="ScreenGUI.xaml">
+    <Page Include="ScreenGui.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -192,20 +201,26 @@
       <Project>{cea3e9df-4011-4041-bccf-6318dc7e76f4}</Project>
       <Name>LittleBigMouse_Daemon</Name>
     </ProjectReference>
-    <ProjectReference Include="..\LittleBigMouse_StartUp\LittleBigMouse_StartUp.csproj">
-      <Project>{da8d21ec-0133-465a-b0d7-a5d402bd2ac5}</Project>
-      <Name>LittleBigMouse_StartUp</Name>
-    </ProjectReference>
     <ProjectReference Include="..\MouseKeyboardActivityMonitor\MouseKeyboardActivityMonitor.csproj">
       <Project>{f52aa97e-180a-40ed-8f2b-09080171d6c7}</Project>
       <Name>MouseKeyboardActivityMonitor</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NativeHelpers\NativeHelpers.vcxproj">
+      <Project>{938e65d0-ec9c-4181-87ca-a43d4747610d}</Project>
+      <Name>NativeHelpers</Name>
     </ProjectReference>
     <ProjectReference Include="..\ScreenConfig\LbmScreenConfig.csproj">
       <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
       <Name>LbmScreenConfig</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="setup\LittleBigMouse.iss" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>"C:\Program Files (x86)\Inno Setup 5\Compil32.exe" /cc ..\..\..\setup\LittleBigMouse.iss</PostBuildEvent>
+  </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

@@ -2,7 +2,7 @@
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
   <asmv3:application>
     <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
-      <dpiAware>True/PM</dpiAware>
+      <!--<dpiAware>True/PM</dpiAware>-->
       <!--<dpiAware>True</dpiAware>-->
     </asmv3:windowsSettings>
   </asmv3:application>
@@ -64,7 +64,8 @@
   -->
 
   <!-- Activer les thèmes pour les contrôles et boîtes de dialogue communes de Windows (Windows XP et version ultérieure) -->
-  <!--
+  <!--  -->
+
   <dependency>
     <dependentAssembly>
       <assemblyIdentity
@@ -77,6 +78,5 @@
         />
     </dependentAssembly>
   </dependency>
-  -->
 
 </assembly>

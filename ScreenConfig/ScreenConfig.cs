@@ -227,21 +227,37 @@ namespace LbmScreenConfig
             set { _change.SetProperty(ref _loadAtStartup, value); }
         }
 
+        public bool IsRatio100
+        {
+            get
+            {
+                foreach (Screen screen in AllScreens)
+                {
+                    if (screen.PixelToWpfRatioX != 1) return false;
+                    if (screen.PixelToWpfRatioY != 1) return false;
+                }
+                return true;
+            }
+        }
+
+        public bool AdjustPointerAllowed => IsRatio100; 
         private bool _adjustPointer;
         public bool AdjustPointer
         {
-            get { return _adjustPointer; }
+            get { return AdjustPointerAllowed && _adjustPointer; }
             set { _change.SetProperty(ref _adjustPointer, value); }
         }
 
+        public bool AdjustSpeedAllowed => IsRatio100;
         private bool _adjustSpeed;
         public bool AdjustSpeed
         {
-            get { return _adjustSpeed; }
+            get { return AdjustSpeedAllowed && _adjustSpeed; }
             set {
                 _change.SetProperty(ref _adjustSpeed, value);
             }
         }
+
         private bool _allowCornerCrossing;
         public bool AllowCornerCrossing
         {

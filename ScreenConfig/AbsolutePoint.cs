@@ -79,6 +79,10 @@ namespace LbmScreenConfig
                 switch (aw)
                 {
                     case Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
+                        return new WpfPoint(Config, Screen,
+                            Pixel.X * Screen.PixelToWpfRatioX,
+                            Pixel.Y * Screen.PixelToWpfRatioY
+                            );
                     case Process_DPI_Awareness.Process_System_DPI_Aware:
                         return new WpfPoint(Config, Screen,
                             Pixel.X*Screen.PixelToWpfRatioX,
@@ -86,8 +90,8 @@ namespace LbmScreenConfig
                             );
                     default:
                         return new WpfPoint(Config, Screen,
-                            Screen.PixelLocation.X + (Pixel.X - Screen.PixelLocation.X) / Screen.WpfToPixelRatioX,
-                            Screen.PixelLocation.Y + (Pixel.Y - Screen.PixelLocation.Y) / Screen.WpfToPixelRatioY
+                            Screen.PixelLocation.X + (Pixel.X - Screen.PixelLocation.X) * Screen.PixelToWpfRatioX,
+                            Screen.PixelLocation.Y + (Pixel.Y - Screen.PixelLocation.Y) * Screen.PixelToWpfRatioY
                             );
                 }
             }

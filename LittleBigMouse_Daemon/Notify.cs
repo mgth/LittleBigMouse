@@ -22,7 +22,6 @@
 */
 
 using System;
-using System.Data.SqlClient;
 using System.Windows.Forms;
 
 namespace LittleBigMouse_Daemon
@@ -43,8 +42,7 @@ namespace LittleBigMouse_Daemon
             SetOff();
             _notify.MouseClick += _notify_MouseClick;
 
-            _notify.Click += _notify_Click;
-        }
+         }
 
         public void SetOn()
         {
@@ -59,12 +57,11 @@ namespace LittleBigMouse_Daemon
         {
             if (e.Button == MouseButtons.Right)
                 _notify.ContextMenuStrip.Show( Control.MousePosition);
+
+            if (e.Button == MouseButtons.Left)
+                Click?.Invoke(sender, e);
         }
 
-        private void _notify_Click(object sender, EventArgs e)
-        {
-            Click?.Invoke(sender, e);
-        }
 
         public event EventHandler Click;
         public void Dispose()

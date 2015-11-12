@@ -90,9 +90,9 @@ namespace LbmScreenConfig
             return key;
         }
 
-        public Edid(Screen screen)
+        public Edid(string deviceName)
         {
-            DISPLAY_DEVICE dd = DisplayDeviceFromID(screen.DeviceName);
+            DISPLAY_DEVICE dd = DisplayDeviceFromID(deviceName);
 
 
             IntPtr devInfo = SetupAPI.SetupDiGetClassDevsEx(
@@ -232,8 +232,8 @@ namespace LbmScreenConfig
 
         DISPLAY_DEVICE DisplayDeviceFromID(String id)
         {
-                DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
-                uint devIdx = 0;
+            DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
+            uint devIdx = 0;
 
             while (User32.EnumDisplayDevices(null, devIdx, ref ddDev, 0))
             {
@@ -250,7 +250,7 @@ namespace LbmScreenConfig
                 }
                devIdx++;
             }
-                return ddDev;
+            return ddDev;
         }
     }
 }

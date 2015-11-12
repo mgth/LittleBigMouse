@@ -23,15 +23,15 @@
 
 using Microsoft.Win32;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Windows;
-using System.Windows.Media;
 using WinAPI_Dxva2;
 using WinAPI_Gdi32;
 using WinAPI_User32;
@@ -41,6 +41,7 @@ using Size = System.Windows.Size;
 [assembly: InternalsVisibleTo("ScreenConfig")]
 namespace LbmScreenConfig
 {
+    [DataContract]
     public class Screen : INotifyPropertyChanged
     {
         // PropertyChanged Handling
@@ -71,9 +72,7 @@ namespace LbmScreenConfig
                 WorkingArea = GetRect(mi.WorkArea);
 
             }
-
-            Edid = new Edid(this);
-
+            Edid = new Edid(DeviceName);
 
             PhysicalX = PhysicalOveralBoundsWithoutThis.Right;
         }
@@ -132,15 +131,9 @@ namespace LbmScreenConfig
         public string Id => IdMonitor + "_" + Orientation.ToString();
         public bool Primary { get; }
         public string DeviceName { get; }
-
-        public string PnpDeviceName
-        {
-            get
-            {
-                if (_pnpName == null) _pnpName = Html.GetPnpName(PnpCode);
-                return (_pnpName);
-            }
-        }
+        public string PnpDeviceName => _pnpName ?? (_pnpName = Html.GetPnpName(PnpCode));
+        [DependsOn("DeviceName")]
+        public int DeviceNo => int.Parse(DeviceName.Substring(11));
 
        public int Orientation
         {
@@ -154,12 +147,12 @@ namespace LbmScreenConfig
             }
         }
 
-        public int DeviceNo => int.Parse(DeviceName.Substring(11));
 
         // Physical dimensions
         // Natives
         private double _physicalX = double.NaN;
  
+        //[DataMember]
         public double PhysicalX {
             get { return double.IsNaN(_physicalX) ? 0 : _physicalX; }
             set
@@ -180,6 +173,7 @@ namespace LbmScreenConfig
             }
         }
         private double _physicalY = double.NaN;
+        //[DataMember]
         public double PhysicalY {
             get { return double.IsNaN(_physicalY) ? 0 : _physicalY; }
             set
@@ -201,6 +195,7 @@ namespace LbmScreenConfig
         }
 
         private double _realPhysicalWidth = double.NaN;
+        //[DataMember]
         public double RealPhysicalWidth {
             get { return  double.IsNaN(_realPhysicalWidth) ? DeviceCapsPhysicalSize.Width : _realPhysicalWidth; }
             set
@@ -210,6 +205,7 @@ namespace LbmScreenConfig
         }
 
         private double _realPhysicalHeight = double.NaN;
+        //[DataMember]
         public double RealPhysicalHeight {
             get { return  double.IsNaN(_realPhysicalHeight)? DeviceCapsPhysicalSize.Height : _realPhysicalHeight; }
             set
@@ -219,6 +215,7 @@ namespace LbmScreenConfig
         }
 
         [DependsOn("RealPhysicalWidth", "PixelSize")]
+       //[DataMember]
         public double RealPitchX
         {
             set { RealPhysicalWidth = PixelSize.Width * value; }
@@ -226,6 +223,7 @@ namespace LbmScreenConfig
         }
 
         [DependsOn("RealPhysicalHeight", "PixelSize")]
+        //[DataMember]
         public double RealPitchY
         {
             set { RealPhysicalHeight = PixelSize.Height * value; }
@@ -233,6 +231,7 @@ namespace LbmScreenConfig
         }
 
         private double _physicalRatioX = double.NaN;
+        //[DataMember]
         public double PhysicalRatioX
         {
             get { return double.IsNaN(_physicalRatioX) ? 1 : _physicalRatioX; }
@@ -240,6 +239,7 @@ namespace LbmScreenConfig
         }
 
         private double _physicalRatioY = double.NaN;
+        //[DataMember]
         public double PhysicalRatioY
         {
             get { return double.IsNaN(_physicalRatioY) ? 1 : _physicalRatioY; }
@@ -303,7 +303,7 @@ namespace LbmScreenConfig
             }
         }
 
-        // Pixel Dimensions native
+        // Pixel native Dimensions 
         public Rect PixelBounds { get; }
 
         [DependsOn("PixelBounds")]
@@ -320,7 +320,7 @@ namespace LbmScreenConfig
 
         // Wpf
         [DependsOn("PixelBounds", "PixelToWpfRatioX")]
-        public double WpfWidth => PixelBounds.Width*PixelToWpfRatioX;
+        public double WpfWidth => PixelBounds.Width * PixelToWpfRatioX;
         [DependsOn("PixelBounds", "PixelToWpfRatioY")]
         public double WpfHeight => PixelBounds.Height * PixelToWpfRatioY;
 
@@ -734,56 +734,106 @@ namespace LbmScreenConfig
             }
         }
 
+        private Process_DPI_Awareness DpiAwareness
+        {
+            get
+            {
+                    Process p = Process.GetCurrentProcess();
+
+                    Process_DPI_Awareness aw = Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
+
+                    User32.GetProcessDpiAwareness(p.Handle, out aw);
+
+                return aw;
+            }
+        }
+
 
         // This is the ratio used in system config
         [DependsOn("RealDpiX", "AngularDpiX", "EffectiveDpiX")]
-        public double WpfToPixelRatioX => (Config.PrimaryScreen.EffectiveDpiX / 96) * Math.Round((RealDpiX / DpiAwareAngularDpiX) * 20) / 20;
+        public double WpfToPixelRatioX
+        {
+            get
+            {
+                switch (DpiAwareness)
+                {
+                    case Process_DPI_Awareness.Process_DPI_Unaware:
+                        return Math.Round((RealDpiX/DpiAwareAngularDpiX)*20)/20;
+                    case Process_DPI_Awareness.Process_System_DPI_Aware:
+                        return Config.PrimaryScreen.EffectiveDpiX / 96;
+                    case Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
+                        return Config.PrimaryScreen.EffectiveDpiX / 96;//EffectiveDpiX/96;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+            }
+        }
+
         [DependsOn("RealDpiY", "AngularDpiY", "EffectiveDpiY")]
-        public double WpfToPixelRatioY => (Config.PrimaryScreen.EffectiveDpiY / 96) * Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
+        public double WpfToPixelRatioY
+        {
+            get
+            {
+                switch (DpiAwareness)
+                {
+                    case Process_DPI_Awareness.Process_DPI_Unaware:
+                        return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
+                    case Process_DPI_Awareness.Process_System_DPI_Aware:
+                        return Config.PrimaryScreen.EffectiveDpiY / 96;
+                    case Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
+                        return Config.PrimaryScreen.EffectiveDpiY / 96;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+            }
+        }
 
         [DependsOn("WpfToPixelRatioX")]
-        public double PixelToWpfRatioX => 1 / WpfToPixelRatioX;
+        public double PixelToWpfRatioX => 1/WpfToPixelRatioX;
+
         [DependsOn("WpfToPixelRatioY")]
-        public double PixelToWpfRatioY => 1 / WpfToPixelRatioY;
+        public double PixelToWpfRatioY => 1/WpfToPixelRatioY;
 
         [DependsOn("PitchX")]
-        public double PhysicalToPixelRatioX => 1 / PitchX;
+        public double PhysicalToPixelRatioX => 1/PitchX;
+
         [DependsOn("PitchY")]
-        public double PhysicalToPixelRatioY => 1 / PitchY;
+        public double PhysicalToPixelRatioY => 1/PitchY;
 
 
         [DependsOn("PhysicalToPixelRatioX", "WpfToPixelRatioX")]
-        public double PhysicalToWpfRatioX => PhysicalToPixelRatioX / WpfToPixelRatioX;
+        public double PhysicalToWpfRatioX => PhysicalToPixelRatioX/WpfToPixelRatioX;
 
         [DependsOn("PitchY")]
-        public double PhysicalToWpfRatioY => PhysicalToPixelRatioY/ WpfToPixelRatioY;
+        public double PhysicalToWpfRatioY => PhysicalToPixelRatioY/WpfToPixelRatioY;
 
         [DependsOn("RealPitchX")]
         public double RealDpiX
         {
-            set { RealPitchX = 25.4 / value; }
-            get { return 25.4 / RealPitchX; }
+            set { RealPitchX = 25.4/value; }
+            get { return 25.4/RealPitchX; }
         }
 
         [DependsOn("RealPitchY")]
         public double RealDpiY
         {
-            set { RealPitchY = 25.4 / value; }
-            get { return 25.4 / RealPitchY; }
+            set { RealPitchY = 25.4/value; }
+            get { return 25.4/RealPitchY; }
         }
+
         [DependsOn("PitchX")]
-        public double DpiX => 25.4 / PitchX;
+        public double DpiX => 25.4/PitchX;
 
         [DependsOn("PitchY")]
-        public double DpiY => 25.4 / PitchY;
+        public double DpiY => 25.4/PitchY;
 
-        [DependsOn("PitchX","PitchY")]
+        [DependsOn("PitchX", "PitchY")]
         public double RealDpiAvg
         {
             get
             {
-                double pitch = Math.Sqrt((PitchX * PitchX) + (PitchY * PitchY)) / Math.Sqrt(2);
-                return 25.4 / pitch;
+                double pitch = Math.Sqrt((PitchX*PitchX) + (PitchY*PitchY))/Math.Sqrt(2);
+                return 25.4/pitch;
             }
         }
 
@@ -831,6 +881,7 @@ namespace LbmScreenConfig
                 return dpi;
             }
         }
+
         private Size DeviceCapsPhysicalSize
         {
             get
@@ -844,7 +895,6 @@ namespace LbmScreenConfig
         }
 
 
-
         public string CapabilitiesString
         {
             get
@@ -854,7 +904,7 @@ namespace LbmScreenConfig
                 uint len = 0;
                 if (!Gdi32.DDCCIGetCapabilitiesStringLength(hMonitor, ref len)) return "-1-";
 
-                StringBuilder s = new StringBuilder((int)len + 1);
+                StringBuilder s = new StringBuilder((int) len + 1);
 
                 if (!Gdi32.DDCCIGetCapabilitiesString(hMonitor, s, len)) return "-2-";
 
@@ -876,7 +926,7 @@ namespace LbmScreenConfig
                 double moveUp = s.PhysicalOutsideBounds.Y - (PhysicalOutsideBounds.Y - s.PhysicalOutsideBounds.Height);
                 double moveDown = (PhysicalOutsideBounds.Y + PhysicalOutsideBounds.Height) - s.PhysicalOutsideBounds.Y;
 
-                if(moveDown<=0 || moveLeft<=0 || moveUp<=0 || moveRight<=0) continue;
+                if (moveDown <= 0 || moveLeft <= 0 || moveUp <= 0 || moveRight <= 0) continue;
 
                 done = true;
                 if (moveLeft <= moveRight && moveLeft <= moveUp && moveLeft <= moveDown)
@@ -886,7 +936,6 @@ namespace LbmScreenConfig
                 else if (moveRight <= moveLeft && moveRight <= moveUp && moveRight <= moveDown)
                 {
                     s.PhysicalX += moveRight;
-
                 }
                 else if (moveUp <= moveRight && moveUp <= moveLeft && moveUp <= moveDown)
                 {
@@ -898,7 +947,6 @@ namespace LbmScreenConfig
                 }
             }
             return done;
-
         }
 
         public bool PhysicalOverlapWith(Screen screen)
@@ -910,6 +958,7 @@ namespace LbmScreenConfig
 
             return true;
         }
+
         public bool PhysicalTouch(Screen screen)
         {
             if (PhysicalOverlapWith(screen)) return false;
@@ -934,6 +983,7 @@ namespace LbmScreenConfig
             if (screen.PhysicalY >= PhysicalBounds.Bottom) return -1;
             return screen.PhysicalX - PhysicalBounds.Right;
         }
+
         public double MoveUpToTouch(Screen screen)
         {
             if (PhysicalX > screen.PhysicalBounds.Right) return -1;
@@ -947,11 +997,6 @@ namespace LbmScreenConfig
             if (screen.PhysicalX > PhysicalBounds.Right) return -1;
             return screen.PhysicalY - PhysicalBounds.Bottom;
         }
-
-
     }
-
-
-
 }
 

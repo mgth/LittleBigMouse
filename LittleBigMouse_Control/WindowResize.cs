@@ -45,6 +45,8 @@ namespace LittleBigMouse_Control
 
             sizer.Background = new SolidColorBrush(Colors.Black);
 
+            sizer.Margin = new Thickness(-1);
+
             sizer.SetValue(Grid.RowProperty, row);
             sizer.SetValue(Grid.ColumnProperty, column);
             _grid.Children.Add(sizer);

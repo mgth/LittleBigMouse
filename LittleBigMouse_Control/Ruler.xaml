@@ -22,13 +22,16 @@
     <Border x:Name="border" Opacity="1" BorderThickness="0">
         <Canvas x:Name="Canvas" Margin="{Binding Path=CanvasMargin}" >
             <Canvas.Background>
-                <LinearGradientBrush StartPoint="{Binding Path=GradientStartPoint}" EndPoint="{Binding Path=GradientEndPoint}">
+                <LinearGradientBrush
+                    StartPoint="{Binding Path=GradientStartPoint}"                 
+                    EndPoint="{Binding Path=GradientEndPoint}">
+                    
+                    <!--<GradientStop Color="Gray" Offset="0"/>
+                    <GradientStop Color="LightGray" Offset="1"/>-->
                     <GradientStop Color="#FF4080FF" Offset="0"/>
                     <GradientStop Color="#00808080" Offset="1"/>
                 </LinearGradientBrush>
             </Canvas.Background>
-
-
         </Canvas>
     </Border>
 </Window>

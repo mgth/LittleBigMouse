@@ -2,34 +2,56 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.Eventing.Reader;
-using System.Linq;
-using System.Threading;
+using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
 using LittleBigMouseGeo;
 using Microsoft.Win32;
 using MouseKeyboardActivityMonitor.WinApi;
 using LbmScreenConfig;
-using Microsoft.Shell;
+using System.ServiceModel;
+using System.ServiceModel.Description;
+using System.Threading;
+using Microsoft.Win32.TaskScheduler;
 
 namespace LittleBigMouse_Daemon
 {
-    class Program : Application, ISingleInstanceApp
+    [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
+    class Program : Application, ILittleBigMouseService
     {
         private const string Unique = "LittleBigMouse_Daemon";
         [STAThread]
         public static void Main(string[] args)
         {
-            if (SingleInstance<Program>.InitializeAsFirstInstance(Unique))
+            bool firstInstance;
+            Mutex mutex = new Mutex(true, "LittleBigMouse_Daemon" + Environment.UserName, out firstInstance);
+
+            if (!firstInstance)
             {
-                var prog = new Program {ShutdownMode = ShutdownMode.OnExplicitShutdown};
+                LittleBigMouseClient.Client.CommandLine(args);
+                mutex.Close();
+                return;
+            }
+
+
+            Program prog = new Program();
+
+            using (ServiceHost host = new ServiceHost(prog, LittleBigMouseClient.Address))
+            {
+                // Enable metadata publishing.
+                ServiceMetadataBehavior smb = new ServiceMetadataBehavior();
+                //smb.HttpGetEnabled = true;
+                smb.MetadataExporter.PolicyVersion = PolicyVersion.Policy15;
+
+                host.Description.Behaviors.Add(smb);
+
+                host.Open();
 
                 prog.Run();
 
-                // Allow single instance code to perform cleanup operations
-                SingleInstance<Program>.Cleanup();
+                host.Close();
             }
+
+            mutex.Close();
         }
 
         private readonly Notify _notify;
@@ -42,39 +64,41 @@ namespace LittleBigMouse_Daemon
             _notify.AddMenu("Open", Open);
             _notify.AddMenu("Start", Start);
             _notify.AddMenu("Stop", Stop);
-            _notify.AddMenu("Exit", ExitProg);
+            _notify.AddMenu("Exit", Quit);
 
 
             SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
             this.Exit += Program_Exit;
 
-
+            Start();
         }
 
-        private void Open(object sender, EventArgs eventArgs)
+        private void Open(object sender, EventArgs eventArgs) { Open(); }
+        private void _notify_Click(object sender, EventArgs e) { Open(); }
+        [DllImport("user32")]
+        private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+        private void Open()
         {
+            Process[] pp = Process.GetProcessesByName("LittleBigMouse_Control");
+            foreach (var process in pp)
+            {
+                SetForegroundWindow(process.MainWindowHandle);
+            }
+            if (pp.Length > 0) return;
+             
             var p = Process.GetCurrentProcess();
-            string filename = p.MainModule.FileName.Replace("Daemon", "StartUp").Replace(".vshost", "");
+            string filename = p.MainModule.FileName.Replace("Daemon", "Control").Replace(".vshost", "");
             Process.Start(filename, "--startcontrol");
         }
 
-        private static void _notify_Click(object sender, EventArgs e)
-        {
-
-        }
 
         private void Program_Exit(object sender, ExitEventArgs e)
         {
             _notify.Dispose();
         }
 
-        public bool SignalExternalCommandLineArgs(IList<string> args)
-        {
-            ParseCommandLine(args);
-            return true;
-        }
-
-        public void ParseCommandLine(IList<string> args)
+        public void CommandLine(IList<string> args)
         {
             foreach (string s in args)
             {
@@ -85,13 +109,19 @@ namespace LittleBigMouse_Daemon
                         Shutdown();
                         break;
                     case "--load":
-                        _config = new ScreenConfig();
+                        LoadConfig();
                         break;
                     case "--start":
                         Start();
                         break;
                     case "--stop":
                         Stop();
+                        break;
+                    case "--schedule":
+                        LoadAtStartup(false);
+                        break;
+                    case "--unschedule":
+                        LoadAtStartup(true);
                         break;
                 }
             }
@@ -102,13 +132,19 @@ namespace LittleBigMouse_Daemon
         private readonly MouseHookListener _mouseHookManager = new MouseHookListener(new GlobalHooker());
         private PixelPoint _oldPoint;
 
+        public void Quit()
+        {
+            Stop();
+            Shutdown();
+        }
+
         private void Start(object sender, EventArgs e) { Start(); }
         public void Start()
         {
             if (_mouseHookManager.Enabled) return;
 
             if (_config == null)
-                _config = new ScreenConfig();
+                LoadConfig();
 
             if (_config == null || !_config.Enabled) return;
 
@@ -137,13 +173,72 @@ namespace LittleBigMouse_Daemon
 
             _notify.SetOff();
         }
-        private void ExitProg(object sender, EventArgs e) { Stop(); Shutdown(); }
+
+        public void LoadAtStartup(bool state = true)
+        {
+            if (state) Schedule();
+            else Unschedule();
+        }
+
+        public void CommandLine(string[] args)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void LoadConfig(ScreenConfig config)
+        {
+            _config = config;
+        }
+
+        private void Quit(object sender, EventArgs e) { Quit(); }
 
         private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
         {
-            _config = new ScreenConfig();
+            LoadConfig();
         }
+        public void LoadConfig()
+        {
+            LoadConfig(new ScreenConfig());
+        }
+        private const string ServiceName = "LittleBigMouse";
 
+        public void Schedule()
+        {
+            using (TaskService ts = new TaskService())
+            {
+                ts.RootFolder.DeleteTask(ServiceName, false);
+
+                TaskDefinition td = ts.NewTask();
+                td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
+                td.Triggers.Add(
+                    new BootTrigger());
+                    //new LogonTrigger());
+
+                var p = Process.GetCurrentProcess();
+                string filename = p.MainModule.FileName.Replace(".vshost", "");
+
+
+                td.Actions.Add(
+                    new ExecAction(filename)
+                    );
+
+                td.Principal.RunLevel = TaskRunLevel.Highest;
+                td.Settings.DisallowStartIfOnBatteries = false;
+                td.Settings.DisallowStartOnRemoteAppSession = true;
+                td.Settings.StopIfGoingOnBatteries = false;
+                td.Settings.ExecutionTimeLimit = TimeSpan.Zero;
+
+                ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
+            }
+        }
+        public void Unschedule()
+        {
+            using (TaskService ts = new TaskService())
+            {
+                ts.RootFolder.DeleteTask(ServiceName, false);
+            }
+
+        }
 
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
@@ -248,10 +343,7 @@ namespace LittleBigMouse_Daemon
             e.Handled = true;
         }
 
-        public void Dispose()
-        {
-            //_notify?.Dispose();
-        }
-
     }
+
+
 }

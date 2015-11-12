@@ -46,7 +46,7 @@ namespace LittleBigMouse_Control
         private readonly PropertyChangeHandler _change;
 
         public Screen Screen { get; }
-        public FormConfig ConfigGui { get; }
+        public ConfigGui ConfigGui { get; }
 
         public event ScreenGuiSelectedChangedHandler SelectedChanged; 
         private void OnSelectedChanged()
@@ -54,7 +54,7 @@ namespace LittleBigMouse_Control
             SelectedChanged?.Invoke(Screen, Selected);
         }
 
-        public ScreenGui(Screen s, FormConfig configGui)
+        public ScreenGui(Screen s, ConfigGui configGui)
         {
             _change = new PropertyChangeHandler(this);
             _change.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args) { PropertyChanged?.Invoke(sender, args); };
@@ -690,6 +690,8 @@ namespace LittleBigMouse_Control
 
             if (!Screen.Config.AllowDiscontinuity) Screen.Config.Compact();
             if (!Screen.Config.AllowOverlaps) Screen.Config.Expand();
+
+            ConfigGui.ActivateConfig();
         }
 
 

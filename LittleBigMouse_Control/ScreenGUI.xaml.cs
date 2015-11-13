@@ -251,7 +251,7 @@ namespace LittleBigMouse_Control
                         return (Viewbox)Application.Current.FindResource("LogoCompaq");
                     case "htc":
                         return (Viewbox)Application.Current.FindResource("LogoHitachi");
-                    case "HYO":
+                    case "hyo":
                         return (Viewbox)Application.Current.FindResource("LogoQnix");
                     default:
                         return (Viewbox)Application.Current.FindResource("LogoLbm");

@@ -22,7 +22,7 @@
             raisons de compatibilité descendante.
         -->
         <!--<requestedExecutionLevel level="highestAvailable" uiAccess="true" />-->
-        <requestedExecutionLevel level="highestAvailable" uiAccess="false" />
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
       </requestedPrivileges>
     </security>
   </trustInfo>

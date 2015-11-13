@@ -28,6 +28,7 @@ namespace LbmScreenConfig
                     _client = new LittleBigMouseClient();
                 }
 
+
                 return _client;
             }
         }
@@ -44,36 +45,62 @@ namespace LbmScreenConfig
         public void LoadConfig()
         {
             try { Channel.LoadConfig(); }
-            catch (EndpointNotFoundException) { LauchServer("--loadconfig"); }                           
+            catch (EndpointNotFoundException) { LauchServer("--loadconfig"); }
+            catch (FaultException)
+            {
+            }
         }
 
         public void Quit()
         {
             try { Channel.Quit(); }
-            catch (EndpointNotFoundException) { }
+            catch (EndpointNotFoundException) 
+            { }
+            catch (FaultException)
+            {
+            }
         }
 
         public void Start()
         {
             try { Channel.Start(); }
-            catch (EndpointNotFoundException) { LauchServer("--start"); }
+            catch (EndpointNotFoundException)
+            { LauchServer("--start"); }
+            catch (FaultException)
+            {
+            }
         }
 
         public void Stop()
         {
             try { Channel.Stop(); }
             catch (EndpointNotFoundException) { }
+            catch (FaultException)
+            {
+            }
         }
         public void CommandLine(IList<string> args)
         {
             try { Channel.CommandLine(args); }
             catch (EndpointNotFoundException) { LauchServer(String.Join(".",args)); }
+            catch (FaultException)
+            {
+            }
         }
 
         public void LoadAtStartup(bool state = true)
         {
-            try { Channel.LoadAtStartup(state); }
-            catch (EndpointNotFoundException) { LauchServer(state?"--schedule":"--unschedule"); }
+            try
+            {
+                Channel.LoadAtStartup(state);
+            }
+            catch (EndpointNotFoundException)
+            {
+                LauchServer(state ? "--schedule" : "--unschedule");
+            }
+            catch (FaultException)
+            {
+            }
         }
         public void LauchServer(string args="")
         {

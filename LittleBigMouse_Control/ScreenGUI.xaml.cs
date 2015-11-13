@@ -217,6 +217,7 @@ namespace LittleBigMouse_Control
                     case "eiz":
                         return (Viewbox)Application.Current.FindResource("LogoEizo");
                     case "ben":
+                    case "bnq":
                         return (Viewbox)Application.Current.FindResource("LogoBenq");
                     case "nec":
                         return (Viewbox)Application.Current.FindResource("LogoNec");
@@ -246,11 +247,14 @@ namespace LittleBigMouse_Control
                         return (Viewbox)Application.Current.FindResource("LogoPhilips");                    
                     case "hei":
                         return (Viewbox)Application.Current.FindResource("LogoYundai");
-                    default:
                     case "cpq":
                         return (Viewbox)Application.Current.FindResource("LogoCompaq");
                     case "htc":
                         return (Viewbox)Application.Current.FindResource("LogoHitachi");
+                    case "HYO":
+                        return (Viewbox)Application.Current.FindResource("LogoQnix");
+                    default:
+                        return (Viewbox)Application.Current.FindResource("LogoLbm");
                 }
             }
         }

@@ -212,8 +212,8 @@ namespace LittleBigMouse_Daemon
                 TaskDefinition td = ts.NewTask();
                 td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
                 td.Triggers.Add(
-                    new BootTrigger());
-                    //new LogonTrigger());
+                    //new BootTrigger());
+                    new LogonTrigger());
 
                 var p = Process.GetCurrentProcess();
                 string filename = p.MainModule.FileName.Replace(".vshost", "");

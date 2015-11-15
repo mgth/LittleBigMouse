@@ -83,6 +83,10 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="MouseKeyboardActivityMonitor, Version=4.0.5150.10665, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\MouseKeyboardActivityMonitor.4.0.5150.10665\lib\net20\MouseKeyboardActivityMonitor.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
@@ -119,12 +123,9 @@
     <None Include="app.manifest">
       <SubType>Designer</SubType>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MouseKeyboardActivityMonitor\MouseKeyboardActivityMonitor.csproj">
-      <Project>{f52aa97e-180a-40ed-8f2b-09080171d6c7}</Project>
-      <Name>MouseKeyboardActivityMonitor</Name>
-    </ProjectReference>
     <ProjectReference Include="..\ScreenConfig\LbmScreenConfig.csproj">
       <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
       <Name>LbmScreenConfig</Name>

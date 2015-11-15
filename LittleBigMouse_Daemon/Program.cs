@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using LittleBigMouseGeo;
@@ -242,7 +243,6 @@ namespace LittleBigMouse_Daemon
 
         private void _MouseHookManager_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
-
             if (_oldPoint == null)
             {
                 _oldPoint = new PixelPoint(_config, null, e.X, e.Y);
@@ -281,12 +281,11 @@ namespace LittleBigMouse_Daemon
                 double dist = 100.0;
                 Segment seg = new Segment(_oldPoint.Physical.Point, pIn.Physical.Point);
 
+                // Calculate side to enter screen when corner crossing not allowed.
                 Side side = Segment.OpositeSide(seg.IntersectSide(_oldPoint.Screen.PhysicalBounds));
 
-                foreach (Screen s in _config.AllScreens)
+                foreach (Screen s in _config.AllScreens.Where(s => s!=_oldPoint.Screen))
                 {
-                    if (s == _oldPoint.Screen) continue;
-
                     foreach (
                         Point p in 
                         _config.AllowCornerCrossing?
@@ -321,7 +320,6 @@ namespace LittleBigMouse_Daemon
             //Mouse.CursorPos = pIn.Physical.ToScreen(screenOut).Pixel.Inside.Point;
 
             // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used
-            // TODO : deactivate option when screen ratio exed 100%
             if (_config.AdjustPointer)
             {
                 if (screenOut.RealDpiAvg > 110)
@@ -333,7 +331,6 @@ namespace LittleBigMouse_Daemon
 
 
             // Adjust pointer speed to dpi ratio : should not be usefull if windows screen ratio is used
-            // TODO : deactivate option when screen ratio exed 100%
             if (_config.AdjustSpeed)
             {
                 Mouse.MouseSpeed = Math.Round((5.0 / 96.0) * screenOut.RealDpiAvg, 0);

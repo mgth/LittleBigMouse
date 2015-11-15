@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // Les informations générales relatives à un assembly dépendent de 
 // l'ensemble d'attributs suivant. Changez les valeurs de ces attributs pour modifier les informations
 // associées à un assembly.
-[assembly: AssemblyTitle("LittleBigMouse_StartUp")]
+[assembly: AssemblyTitle("LittleBigMouse_Service")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("LittleBigMouse_StartUp")]
+[assembly: AssemblyProduct("LittleBigMouse_Service")]
 [assembly: AssemblyCopyright("Copyright ©  2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // Le GUID suivant est pour l'ID de la typelib si ce projet est exposé à COM
-[assembly: Guid("da8d21ec-0133-465a-b0d7-a5d402bd2ac5")]
+[assembly: Guid("84ef1d16-8076-443f-b4c3-c3e1d7290710")]
 
 // Les informations de version pour un assembly se composent des quatre valeurs suivantes :
 //

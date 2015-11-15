@@ -131,7 +131,23 @@ namespace LbmScreenConfig
         public string Id => IdMonitor + "_" + Orientation.ToString();
         public bool Primary { get; }
         public string DeviceName { get; }
-        public string PnpDeviceName => _pnpName ?? (_pnpName = Html.GetPnpName(PnpCode));
+        public string PnpDeviceName
+        {
+            get
+            {
+                DISPLAY_DEVICE dd = Edid.DisplayDeviceFromID(DeviceName);
+                string name = Html.CleanupPnpName(dd.DeviceString);
+                if (name.ToLower() != "generic pnp monitor" )
+                    return name;
+
+                if (_pnpDeviceName != null)
+                    return _pnpDeviceName;
+
+                _pnpDeviceName = Html.GetPnpName(PnpCode);
+                return _pnpDeviceName;
+            }
+        }
+
         [DependsOn("DeviceName")]
         public int DeviceNo => int.Parse(DeviceName.Substring(11));
 
@@ -384,7 +400,7 @@ namespace LbmScreenConfig
             else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
 
-        private string _pnpName;
+        private string _pnpDeviceName;
 
         public void Load()
         {
@@ -446,7 +462,7 @@ namespace LbmScreenConfig
                             GetKeyDouble(ref _realPhysicalHeight, key, "PhysicalWidth");
                             break;
                     }
-                    GetKeyString(ref _pnpName, key, "PnpName");
+                    GetKeyString(ref _pnpDeviceName, key, "PnpName");
                 }
             }
 
@@ -516,7 +532,7 @@ namespace LbmScreenConfig
                             SetKeyDouble(_realPhysicalHeight, key, "PhysicalWidth");
                             break;
                     }
-                    SetKeyString(ref _pnpName, key, "PnpName");
+                    SetKeyString(ref _pnpDeviceName, key, "PnpName");
                 }
             }
 

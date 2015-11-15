@@ -74,6 +74,20 @@ namespace LbmScreenConfig
             return result;
         }
 
+        public static string CleanupPnpName(string result)
+        {
+                if (result.Contains("Drivers")) result = result.Replace("Drivers", "");
+
+                Match match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
+
+                for (int i = 1; i < match2.Groups.Count; i++)
+                {
+
+                    result = result.Replace("(" + match2.Groups[i].Value + ")", "");
+                }
+
+                return result.Trim();          
+        }
 
         public static string GetPnpName(string url, string regex, string pnpcode)
         {
@@ -85,19 +99,8 @@ namespace LbmScreenConfig
             if (match.Success)
             {
                 string result = match.Groups[1].Value;
-                if (result.Contains("Drivers")) result = result.Replace("Drivers", "");
 
-                Match match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
-
-                for (int i = 1; i < match2.Groups.Count; i++)
-                {
-
-                    result = result.Replace("(" + match2.Groups[i].Value + ")", "");
-                }
-
-                result = result.Trim();
-
-                return result;
+                return CleanupPnpName(result);
             }
             return "";
         }

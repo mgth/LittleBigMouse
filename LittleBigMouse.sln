@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.23107.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MouseKeyboardActivityMonitor", "MouseKeyboardActivityMonitor\MouseKeyboardActivityMonitor.csproj", "{F52AA97E-180A-40ED-8F2B-09080171D6C7}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TaskService", "TaskService\TaskService.csproj", "{81B5ABCC-6909-483D-8BB3-84B52E3C7043}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LbmScreenConfig", "ScreenConfig\LbmScreenConfig.csproj", "{3FBBF289-0B82-4089-80CA-67977A808C5D}"
@@ -14,6 +12,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse_Control", "LittleBigMouse_Control\LittleBigMouse_Control.csproj", "{7AD2B3B1-3CDD-40D6-9135-E02C37001AFB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NativeHelpers", "NativeHelpers\NativeHelpers.vcxproj", "{938E65D0-EC9C-4181-87CA-A43D4747610D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse_Service", "LittleBigMouse_Service\LittleBigMouse_Service.csproj", "{84EF1D16-8076-443F-B4C3-C3E1D7290710}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -25,19 +25,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Debug|x64.ActiveCfg = Release|x64
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Debug|x64.Build.0 = Release|x64
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Debug|x86.ActiveCfg = Release|x86
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Debug|x86.Build.0 = Release|x86
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Release|x64.ActiveCfg = Release|x64
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Release|x64.Build.0 = Release|x64
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Release|x86.ActiveCfg = Release|x86
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Release|x86.Build.0 = Release|x86
-		{F52AA97E-180A-40ED-8F2B-09080171D6C7}.Release|x86.Deploy.0 = Release|x86
 		{81B5ABCC-6909-483D-8BB3-84B52E3C7043}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{81B5ABCC-6909-483D-8BB3-84B52E3C7043}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{81B5ABCC-6909-483D-8BB3-84B52E3C7043}.Debug|x64.ActiveCfg = Release|x64
@@ -97,6 +84,18 @@ Global
 		{938E65D0-EC9C-4181-87CA-A43D4747610D}.Release|x64.Build.0 = Release|x64
 		{938E65D0-EC9C-4181-87CA-A43D4747610D}.Release|x86.ActiveCfg = Release|Win32
 		{938E65D0-EC9C-4181-87CA-A43D4747610D}.Release|x86.Build.0 = Release|Win32
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Debug|x64.ActiveCfg = Debug|x64
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Debug|x64.Build.0 = Debug|x64
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Debug|x86.Build.0 = Debug|Any CPU
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Release|Any CPU.Build.0 = Release|Any CPU
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Release|x64.ActiveCfg = Release|x64
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Release|x64.Build.0 = Release|x64
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Release|x86.ActiveCfg = Release|Any CPU
+		{84EF1D16-8076-443F-B4C3-C3E1D7290710}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

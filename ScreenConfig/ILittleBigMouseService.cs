@@ -28,7 +28,6 @@ namespace LbmScreenConfig
                     _client = new LittleBigMouseClient();
                 }
 
-
                 return _client;
             }
         }

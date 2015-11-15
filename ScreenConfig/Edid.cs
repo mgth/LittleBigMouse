@@ -94,7 +94,6 @@ namespace LbmScreenConfig
         {
             DISPLAY_DEVICE dd = DisplayDeviceFromID(deviceName);
 
-
             IntPtr devInfo = SetupAPI.SetupDiGetClassDevsEx(
                     ref SetupAPI.GUID_CLASS_MONITOR, //class GUID
                     null, //enumerator
@@ -230,7 +229,7 @@ namespace LbmScreenConfig
             return DisplayDeviceFromID(mi.DeviceName);
         }
 
-        DISPLAY_DEVICE DisplayDeviceFromID(String id)
+        internal DISPLAY_DEVICE DisplayDeviceFromID(String id)
         {
             DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
             uint devIdx = 0;

@@ -1,10 +1,10 @@
 ; -- LittleBigMouse.iss --
-;#define AppVer GetFileVersion('..\bin\x64\Release\LittleBigMouse.exe')
-#define AppVer '2.0-beta3'
+;#define AppVer GetFileVersion('..\bin\x64\Release\LittleBigMouse_Control.exe')
+#define AppVer '2.0-beta3.1'
 
 [Setup]
 AppName=Little Big Mouse
-AppVersion=AppVer
+AppVersion=#AppVer
 DefaultDirName={pf}\LittleBigMouse
 DefaultGroupName=Little Big Mouse
 UninstallDisplayIcon={app}\LittleBigMouse_Control.exe

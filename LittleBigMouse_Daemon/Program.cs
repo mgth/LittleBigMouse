@@ -119,10 +119,10 @@ namespace LittleBigMouse_Daemon
                         Stop();
                         break;
                     case "--schedule":
-                        LoadAtStartup(false);
+                        LoadAtStartup(true);
                         break;
                     case "--unschedule":
-                        LoadAtStartup(true);
+                        LoadAtStartup(false);
                         break;
                 }
             }

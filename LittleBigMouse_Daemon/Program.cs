@@ -24,7 +24,7 @@ namespace LittleBigMouse_Daemon
         public static void Main(string[] args)
         {
             bool firstInstance;
-            Mutex mutex = new Mutex(true, "LittleBigMouse_Daemon" + Environment.UserName, out firstInstance);
+            Mutex mutex = new Mutex(true, Unique + Environment.UserName, out firstInstance);
 
             if (!firstInstance)
             {
@@ -39,9 +39,11 @@ namespace LittleBigMouse_Daemon
             using (ServiceHost host = new ServiceHost(prog, LittleBigMouseClient.Address))
             {
                 // Enable metadata publishing.
-                ServiceMetadataBehavior smb = new ServiceMetadataBehavior();
+                ServiceMetadataBehavior smb = new ServiceMetadataBehavior
+                {
+                    MetadataExporter = {PolicyVersion = PolicyVersion.Policy15}
+                };
                 //smb.HttpGetEnabled = true;
-                smb.MetadataExporter.PolicyVersion = PolicyVersion.Policy15;
 
                 host.Description.Behaviors.Add(smb);
 
@@ -215,9 +217,9 @@ namespace LittleBigMouse_Daemon
                     //new BootTrigger());
                     new LogonTrigger());
 
-                var p = Process.GetCurrentProcess();
-                string filename = p.MainModule.FileName.Replace(".vshost", "");
-
+                //var p = Process.GetCurrentProcess();
+                //string filename = p.MainModule.FileName.Replace(".vshost", "");
+                string filename = AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName.Replace(".vshost", "");
 
                 td.Actions.Add(
                     new ExecAction(filename)

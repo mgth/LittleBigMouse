@@ -51,10 +51,10 @@ namespace LbmScreenConfig
 
         protected AbsolutePoint(ScreenConfig config, Screen screen, double x, double y)
         {
-            Config = config;
-            Screen = screen??TargetScreen;
             X = x;
             Y = y;
+            Config = config;
+            Screen = screen??TargetScreen;
         }
 
 
@@ -127,23 +127,9 @@ namespace LbmScreenConfig
         public bool Eguals(AbsolutePoint p2)
         {
             if (X != p2?.Physical.X) return false;
-            if (Y != p2?.Physical.Y) return false;
-            return true;
+            return Y == p2?.Physical.Y;
         }
 
-        public static bool operator ==(PhysicalPoint p1, AbsolutePoint p2)
-        {
-            if (p1?.X != p2?.Physical.X) return false;
-            if (p1?.Y != p2?.Physical.Y) return false;
-            return true;
-        }
-        public static bool operator !=(PhysicalPoint p1, AbsolutePoint p2)
-        {
-            if (null == p1) return true;
-            if (p1.X != p2?.Physical.X) return true;
-            if (p1.Y != p2?.Physical.Y) return true;
-            return false;
-        }
 
         public override PhysicalPoint Physical => this;
 
@@ -155,6 +141,7 @@ namespace LbmScreenConfig
         public override bool IsInside(Screen s = null)
         {
             if (s == null) s = Screen;
+            if (s == null) return false;
 
             if (X < s.PhysicalLocation.X) return false;
             if (X >= s.PhysicalLocation.X + s.PixelSize.Width * s .PitchX) return false;

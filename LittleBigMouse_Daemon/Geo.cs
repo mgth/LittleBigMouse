@@ -22,7 +22,10 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Windows;
+using System.Windows.Navigation;
 
 namespace LittleBigMouseGeo
 {
@@ -34,10 +37,33 @@ namespace LittleBigMouseGeo
         Left,
         Right,
     }
+
+    public static class GeoExtentions
+    {
+        public static Segment Segment(this Rect rect, Side side)
+        {
+            switch (side)
+            {
+                case Side.Left:
+                    return new Segment(rect.TopLeft, rect.BottomLeft);
+                case Side.Right:
+                    return new Segment(rect.TopRight, rect.BottomRight);
+                case Side.Top:
+                    return new Segment(rect.TopLeft, rect.TopRight);
+                case Side.Bottom:
+                    return new Segment(rect.BottomLeft, rect.BottomRight);
+                case Side.None:
+                default:
+                    return null;
+            }
+        }
+    }
+
     public class Line
     {
         public static Line fromSegment(Segment s)
         {
+            // Line is vertical
             if (s.A.X == s.B.X)
             {
                 return new Line(s.A.X);
@@ -49,149 +75,97 @@ namespace LittleBigMouseGeo
             return new Line(coef, origine);
         }
 
-        private double _coef;
-        public double Coef { get { return _coef; } }
+        public double Coef { get; }
 
-        private double _origine;
-        public double OrigineY
-        {
-            get
-            {
-                if (double.IsNaN(_coef)) return double.NaN;
-                return _origine;
-            }
-        }
-        public double OrigineX
-        {
-            get
-            {
-                if (double.IsNaN(_coef)) return _origine;
-                return (0 - _origine) / _coef;
-            }
-        }
+        private readonly double _origine;
+        public double OrigineY => double.IsPositiveInfinity(Coef) ? 0 : _origine;
 
+        public double OrigineX => double.IsPositiveInfinity(Coef) ? _origine : (0 - _origine)/Coef;
+
+        public Point Origine => new Point(OrigineX, OrigineY);
 
         public Line(double coef, double origine)
         {
-            _coef = coef;
+            Coef = coef;
             _origine = origine;
         }
 
-        public Line(double X)
+        // Specific case of vertical line vhere coef is infinit
+        public Line(double x)
         {
-            _coef = double.NaN;
-            _origine = X;
+            Coef = double.PositiveInfinity;
+            _origine = x;
         }
 
         public Point? Intersect(Line l)
         {
-            double X;
-            double Y;
+            double x;
+            double y;
 
-            if (Coef == l.Coef) return null;
-
-            if (double.IsNaN(Coef))
+            if (Coef == l.Coef)
             {
-                if (double.IsNaN(l.Coef))
-                {
-                    return null;
-                }
-                else
-                {
-                    X = OrigineX;
-                    Y = l.Coef * X + l.OrigineY;
-                }
+                if (OrigineY == l.OrigineY) { return Origine; }
+                return null;
+            }
+                
+
+            if (double.IsPositiveInfinity(Coef))
+            {
+                if (double.IsPositiveInfinity(l.Coef)) { return null;}
+                                
+                x = OrigineX;
+                y = l.Coef * x + l.OrigineY;
             }
             else
             {
-                if (double.IsNaN(l.Coef))
+                if (double.IsPositiveInfinity(l.Coef))
                 {
-                    X = l.OrigineX;
-                    Y = Coef * X + OrigineY;
+                    x = l.OrigineX;
+                    y = Coef * x + OrigineY;
                 }
                 else
                 {
-                    X = (OrigineY - l.OrigineY) / (l.Coef - Coef);
-                    Y = l.Coef * X + l.OrigineY;
+                    x = (OrigineY - l.OrigineY) / (l.Coef - Coef);
+                    y = l.Coef * x + l.OrigineY;
                 }
             }
 
-            return new Point(X, Y);
+            return new Point(x, y);
         }
 
-        public Point? Intersect(Segment s)
+        public IEnumerable<Point> Intersect(Segment s)
         {
             Point? p = Intersect(s.Line);
-            if (p!=null && s.Rect.Contains(p??new Point()))
+            if (p!=null && s.Rect.Contains(p.Value))
             {
-                return p;
+                yield return p.Value;
             }
-            return null;
         }
 
-        public IEnumerable<Point> Intersect(Rect r)
+        public IEnumerable<Point> Intersect(Rect rect)
         {
-            Point? p = null;
-
-            p = Intersect(r,Side.Left);
-            if (p != null) yield return p.Value;
-            p = Intersect(r,Side.Right);
-            if (p != null) yield return p.Value;
-            p = Intersect(r,Side.Top);
-            if (p != null) yield return p.Value;
-            p = Intersect(r,Side.Bottom);
-            if (p != null) yield return p.Value;
-
-        }
-
-        public Point? Intersect(Rect r, Side side)
-        {
-            switch (side)
-            {
-                case Side.Left:
-                    return Intersect(new Segment(r.TopLeft, r.BottomLeft));
-                case Side.Right:
-                    return Intersect(new Segment(r.TopRight, r.BottomRight));
-                case Side.Top:
-                    return Intersect(new Segment(r.TopLeft, r.TopRight));
-                case Side.Bottom:
-                    return Intersect(new Segment(r.BottomLeft, r.BottomRight));
-                default:
-                    return null;
-            }
+            foreach (Point p in Intersect(rect.Segment(Side.Left))) yield return p;
+            foreach (Point p in Intersect(rect.Segment(Side.Right))) yield return p;
+            foreach (Point p in Intersect(rect.Segment(Side.Top))) yield return p;
+            foreach (Point p in Intersect(rect.Segment(Side.Bottom))) yield return p;
         }
     }
 
 
     public class Segment
     {
-        Point _a;
-        Point _b;
-
         Line _line;
-        //        Rect? _rect = null;
+
         public Segment(Point a, Point b)
         {
-            _a = a; _b = b;
+            A = a; B = b;
         }
-        public Point A { get { return _a; } }
-        public Point B { get { return _b; } }
+        public Point A { get; }
+        public Point B { get; }
 
-        public Line Line
-        {
-            get
-            {
-                if (_line == null) _line = Line.fromSegment(this);
-                return _line;
-            }
-        }
-        public Rect Rect
-        {
-            get
-            {
-                return new Rect(A, B);
-            }
-        }
+        public Line Line => _line ?? (_line = Line.fromSegment(this));
+
+        public Rect Rect => new Rect(A, B);
 
         public double Size
         {
@@ -203,13 +177,36 @@ namespace LittleBigMouseGeo
 
         }
 
+        public Point? Intersect(Line l)
+        {
+            if (l == null) throw new ArgumentNullException(nameof(l));
+            Point? p = Line.Intersect(l);
+            if (p==null) return null;
+
+            Point p1 = p.Value;
+
+            if (p1.X < Rect.X - Epsilon) return null;
+            if (p1.Y < Rect.Y - Epsilon) return null;
+            if (p1.X > Rect.Right + Epsilon) return null;
+            if (p1.Y > Rect.Bottom + Epsilon) return null;
+            //        && Rect.Contains(p.Value)) return p;
+            return p1;
+        }
+
+
+        private const double Epsilon = 0.001; 
         public Point? Intersect(Segment s)
         {
             Point? p = Line.Intersect(s.Line);
 
-            if (p!=null && Rect.Contains(p??new Point()) && s.Rect.Contains(p??new Point())) return p;
+            if (p == null) return null;
 
-            return null;
+            if (p.Value.X < Rect.X - Epsilon) return null;
+            if (p.Value.Y < Rect.Y - Epsilon) return null;
+            if (p.Value.X > Rect.Right + Epsilon) return null;
+            if (p.Value.Y > Rect.Bottom + Epsilon) return null;
+
+            return p;
         }
 
         public IEnumerable<Point> Intersect(Rect r)
@@ -229,22 +226,15 @@ namespace LittleBigMouseGeo
             if (p != null) yield return p.Value;
         }
 
-        public Side IntersectSide(Rect r)
+        public Side IntersectSide(Rect rect)
         {
-            Point? p = null;
+            Side[] sides = {Side.Left, Side.Right, Side.Top, Side.Bottom};
 
-            p = Intersect(new Segment(r.TopLeft, r.BottomLeft));
-            if (p != null) return Side.Left;
-
-            p = Intersect(new Segment(r.TopRight, r.BottomRight));
-            if (p != null) return Side.Right;
-
-            p = Intersect(new Segment(r.TopLeft, r.TopRight));
-            if (p != null) return Side.Top;
-
-            p = Intersect(new Segment(r.BottomLeft, r.BottomRight));
-            if (p != null) return Side.Bottom;
-
+            //return sides.Where(s => Intersect(r.Segment(s)) != null).FirstOrDefault();
+            foreach (var side in sides)
+            {
+                if (Intersect(rect.Segment(side)) != null) return side;
+            }
             return Side.None;
         }
 
@@ -264,5 +254,6 @@ namespace LittleBigMouseGeo
                     return Side.None;
             }
         }
+
     }
 }

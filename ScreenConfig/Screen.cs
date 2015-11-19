@@ -25,7 +25,6 @@ using Microsoft.Win32;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -371,34 +370,6 @@ namespace LbmScreenConfig
             }
         }
 
-        private void GetKeyDouble(ref double prop, RegistryKey key, string keyName, bool notify=true)
-        {
-            string sValue = key.GetValue(keyName, "NaN").ToString();
-            if (sValue == "NaN") return;
-
-            double value = double.Parse(sValue, CultureInfo.InvariantCulture);
-            if (notify) _change.SetProperty(ref prop, value, keyName);
-            else prop = value;
-        }
-
-        private static void SetKeyDouble(double prop, RegistryKey key, string keyName)
-        {
-            if (double.IsNaN(prop)) { key.DeleteValue(keyName, false); }
-            else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
-        }
-        private void GetKeyString(ref string prop, RegistryKey key, string keyName)
-        {
-            string sValue = (string)key.GetValue(keyName, null);
-            if (sValue == null) return;
-
-            _change.SetProperty(ref prop, sValue, keyName);
-        }
-
-        private static void SetKeyString(ref string prop, RegistryKey key, string keyName)
-        {
-            if (prop == null) { key.DeleteValue(keyName, false); }
-            else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
-        }
 
         private string _pnpDeviceName;
 
@@ -409,10 +380,10 @@ namespace LbmScreenConfig
                 if (key != null)
                 {
                     double left = _guiLocation.Left, top = _guiLocation.Top, width = _guiLocation.Width, height = _guiLocation.Height;
-                    GetKeyDouble(ref left, key, "Left", false);
-                    GetKeyDouble(ref width, key, "Width", false);
-                    GetKeyDouble(ref top, key, "Top", false);
-                    GetKeyDouble(ref height, key, "Height", false);
+                    key.GetKey(ref left, "Left");
+                    key.GetKey(ref width, "Width");
+                    key.GetKey(ref top, "Top");
+                    key.GetKey(ref height, "Height");
                     _change.SetProperty(ref _guiLocation, new Rect(new Point(left, top), new Size(width, height)));
                 }
             }
@@ -424,28 +395,28 @@ namespace LbmScreenConfig
                     switch (Orientation)
                     {
                         case 0:
-                            GetKeyDouble(ref _leftBorder, key, "LeftBorder");
-                            GetKeyDouble(ref _rightBorder, key, "RightBorder");
-                            GetKeyDouble(ref _topBorder, key, "TopBorder");
-                            GetKeyDouble(ref _bottomBorder, key, "BottomBorder");
+                            key.GetKey(ref _leftBorder,  "LeftBorder", _change);
+                            key.GetKey(ref _rightBorder,  "RightBorder", _change);
+                            key.GetKey(ref _topBorder, "TopBorder", _change);
+                            key.GetKey(ref _bottomBorder, "BottomBorder", _change);
                             break;
                         case 1:
-                            GetKeyDouble(ref _leftBorder, key, "TopBorder");
-                            GetKeyDouble(ref _rightBorder, key, "BottomBorder");
-                            GetKeyDouble(ref _topBorder, key, "LeftBorder");
-                            GetKeyDouble(ref _bottomBorder, key, "RightBorder");
+                            key.GetKey(ref _leftBorder, "TopBorder", _change);
+                            key.GetKey(ref _rightBorder, "BottomBorder", _change);
+                            key.GetKey(ref _topBorder, "LeftBorder", _change);
+                            key.GetKey(ref _bottomBorder, "RightBorder", _change);
                             break;
                         case 2:
-                            GetKeyDouble(ref _leftBorder, key, "RightBorder");
-                            GetKeyDouble(ref _rightBorder, key, "LeftBorder");
-                            GetKeyDouble(ref _topBorder, key, "BottomBorder");
-                            GetKeyDouble(ref _bottomBorder, key, "TopBorder");
+                            key.GetKey(ref _leftBorder, "RightBorder", _change);
+                            key.GetKey(ref _rightBorder, "LeftBorder", _change);
+                            key.GetKey(ref _topBorder, "BottomBorder", _change);
+                            key.GetKey(ref _bottomBorder, "TopBorder", _change);
                             break;
                         case 3:
-                            GetKeyDouble(ref _leftBorder, key, "BottomBorder");
-                            GetKeyDouble(ref _rightBorder, key, "TopBorder");
-                            GetKeyDouble(ref _topBorder, key, "RightBorder");
-                            GetKeyDouble(ref _bottomBorder, key, "LeftBorder");
+                            key.GetKey(ref _leftBorder, "BottomBorder", _change);
+                            key.GetKey(ref _rightBorder, "TopBorder", _change);
+                            key.GetKey(ref _topBorder, "RightBorder", _change);
+                            key.GetKey(ref _bottomBorder, "LeftBorder", _change);
                             break;
                     }
 
@@ -453,16 +424,16 @@ namespace LbmScreenConfig
                     {
                         case 0:
                         case 2:
-                            GetKeyDouble(ref _realPhysicalWidth, key, "PhysicalWidth");
-                            GetKeyDouble(ref _realPhysicalHeight, key, "PhysicalHeight");
+                            key.GetKey(ref _realPhysicalWidth, "PhysicalWidth", _change);
+                            key.GetKey(ref _realPhysicalHeight, "PhysicalHeight", _change);
                             break;
                         case 1:
                         case 3:
-                            GetKeyDouble(ref _realPhysicalWidth, key, "PhysicalHeight");
-                            GetKeyDouble(ref _realPhysicalHeight, key, "PhysicalWidth");
+                            key.GetKey(ref _realPhysicalWidth, "PhysicalHeight", _change);
+                            key.GetKey(ref _realPhysicalHeight, "PhysicalWidth", _change);
                             break;
                     }
-                    GetKeyString(ref _pnpDeviceName, key, "PnpName");
+                    key.GetKey(ref _pnpDeviceName, "PnpName", _change);
                 }
             }
 
@@ -470,10 +441,10 @@ namespace LbmScreenConfig
             {
                 if (key != null)
                 {
-                    GetKeyDouble(ref _physicalX, key, "PhysicalX");              
-                    GetKeyDouble(ref _physicalY, key, "PhysicalY");
-                    GetKeyDouble(ref _physicalRatioX, key, "PhysicalRatioX");
-                    GetKeyDouble(ref _physicalRatioY, key, "PhysicalRatioY");
+                    key.GetKey(ref _physicalX, "PhysicalX", _change);              
+                    key.GetKey(ref _physicalY, "PhysicalY", _change);
+                    key.GetKey(ref _physicalRatioX, "PhysicalRatioX", _change);
+                    key.GetKey(ref _physicalRatioY, "PhysicalRatioY", _change);
                 }
             }
         }
@@ -482,10 +453,10 @@ namespace LbmScreenConfig
         {
             using (RegistryKey key = OpenGuiLocationRegKey(true))
             {
-                SetKeyDouble(_guiLocation.Left, key, "Left");
-                SetKeyDouble(_guiLocation.Width, key, "Width");
-                SetKeyDouble(_guiLocation.Top, key, "Top");
-                SetKeyDouble(_guiLocation.Height, key, "Height");
+                key.SetKey(_guiLocation.Left, "Left");
+                key.SetKey(_guiLocation.Width, "Width");
+                key.SetKey(_guiLocation.Top, "Top");
+                key.SetKey(_guiLocation.Height, "Height");
             }
             using (RegistryKey key = OpenMonitorRegKey(true))
             {
@@ -494,28 +465,28 @@ namespace LbmScreenConfig
                     switch (Orientation)
                     {
                         case 0:
-                            SetKeyDouble(_leftBorder, key, "LeftBorder");
-                            SetKeyDouble(_rightBorder, key, "RightBorder");
-                            SetKeyDouble(_topBorder, key, "TopBorder");
-                            SetKeyDouble(_bottomBorder, key, "BottomBorder");
+                            key.SetKey(_leftBorder, "LeftBorder");
+                            key.SetKey(_rightBorder, "RightBorder");
+                            key.SetKey(_topBorder, "TopBorder");
+                            key.SetKey(_bottomBorder, "BottomBorder");
                             break;
                         case 1:
-                            SetKeyDouble(_leftBorder, key, "TopBorder");
-                            SetKeyDouble(_rightBorder, key, "BottomBorder");
-                            SetKeyDouble(_topBorder, key, "LeftBorder");
-                            SetKeyDouble(_bottomBorder, key, "RightBorder");
+                            key.SetKey(_leftBorder, "TopBorder");
+                            key.SetKey(_rightBorder, "BottomBorder");
+                            key.SetKey(_topBorder, "LeftBorder");
+                            key.SetKey(_bottomBorder, "RightBorder");
                             break;
                         case 2:
-                            SetKeyDouble(_leftBorder, key, "RightBorder");
-                            SetKeyDouble(_rightBorder, key, "LeftBorder");
-                            SetKeyDouble(_topBorder, key, "BottomBorder");
-                            SetKeyDouble(_bottomBorder, key, "TopBorder");
+                            key.SetKey(_leftBorder, "RightBorder");
+                            key.SetKey(_rightBorder, "LeftBorder");
+                            key.SetKey(_topBorder, "BottomBorder");
+                            key.SetKey(_bottomBorder, "TopBorder");
                             break;
                         case 3:
-                            SetKeyDouble(_leftBorder, key, "BottomBorder");
-                            SetKeyDouble(_rightBorder, key, "TopBorder");
-                            SetKeyDouble(_topBorder, key, "RightBorder");
-                            SetKeyDouble(_bottomBorder, key, "LeftBorder");
+                            key.SetKey(_leftBorder, "BottomBorder");
+                            key.SetKey(_rightBorder, "TopBorder");
+                            key.SetKey(_topBorder, "RightBorder");
+                            key.SetKey(_bottomBorder, "LeftBorder");
                             break;
                     }
 
@@ -523,16 +494,16 @@ namespace LbmScreenConfig
                     {
                         case 0:
                         case 2:
-                            SetKeyDouble(_realPhysicalWidth, key, "PhysicalWidth");
-                            SetKeyDouble(_realPhysicalHeight, key, "PhysicalHeight");
+                            key.SetKey(_realPhysicalWidth, "PhysicalWidth");
+                            key.SetKey(_realPhysicalHeight, "PhysicalHeight");
                             break;
                         case 1:
                         case 3:
-                            SetKeyDouble(_realPhysicalWidth, key, "PhysicalHeight");
-                            SetKeyDouble(_realPhysicalHeight, key, "PhysicalWidth");
+                            key.SetKey(_realPhysicalWidth, "PhysicalHeight");
+                            key.SetKey(_realPhysicalHeight, "PhysicalWidth");
                             break;
                     }
-                    SetKeyString(ref _pnpDeviceName, key, "PnpName");
+                    key.SetKey(ref _pnpDeviceName, "PnpName");
                 }
             }
 
@@ -540,10 +511,10 @@ namespace LbmScreenConfig
             {
                 if (key != null)
                 {                    
-                    SetKeyDouble(_physicalX, key, "PhysicalX");
-                    SetKeyDouble(_physicalY, key, "PhysicalY");
-                    SetKeyDouble(_physicalRatioX, key, "PhysicalRatioX");
-                    SetKeyDouble(_physicalRatioY, key, "PhysicalRatioY");
+                    key.SetKey(_physicalX, "PhysicalX");
+                    key.SetKey(_physicalY, "PhysicalY");
+                    key.SetKey(_physicalRatioX, "PhysicalRatioX");
+                    key.SetKey(_physicalRatioY, "PhysicalRatioY");
                 }
             }
         }
@@ -568,21 +539,28 @@ namespace LbmScreenConfig
             };
         }
 
+        private double _leftBorder = 20.0;
         public double RealLeftBorder
         {
             get { return _leftBorder; }
             set { _change.SetProperty(ref _leftBorder, value); }
         }
+
+        private double _rightBorder = 20.0;
         public double RealRightBorder
         {
             get { return _rightBorder; }
             set { _change.SetProperty(ref _rightBorder, value); }
         }
+
+        private double _topBorder = 20.0;
         public double RealTopBorder
         {
             get { return _topBorder; }
             set { _change.SetProperty(ref _topBorder, value); }
         }
+
+        private double _bottomBorder = 20.0;
         public double RealBottomBorder
         {
             get { return _bottomBorder; }
@@ -644,29 +622,21 @@ namespace LbmScreenConfig
         [DllImport("Shcore.dll")]
         private static extern IntPtr GetDpiForMonitor([In]IntPtr hmonitor, [In]DpiType dpiType, [Out]out uint dpiX, [Out]out uint dpiY);
 
-        private uint _winDpiX = 0;
-        private uint _winDpiY = 0;
-        private double _leftBorder = 20.0;
-        private double _rightBorder = 20.0;
-        private double _topBorder = 20.0;
-        private double _bottomBorder = 20.0;
 
         private void GetWinDpi()
         {
             GetDpiForMonitor(HMonitor, DpiType.Effective, out _winDpiX, out _winDpiY);
         }
-        public double WinDpiX
-        {
-            get
-            {
+
+        private uint _winDpiX = 0;
+        public double WinDpiX { get {
                 if (_winDpiX == 0) GetWinDpi();
                 return _winDpiX;
             }
         }
-        public double WinDpiY
-        {
-            get
-            {
+
+        private uint _winDpiY = 0;
+        public double WinDpiY { get {
                 if (_winDpiY == 0) GetWinDpi();
                 return _winDpiY;
             }

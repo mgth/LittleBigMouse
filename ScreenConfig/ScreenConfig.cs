@@ -38,7 +38,6 @@ namespace LbmScreenConfig
         public event PropertyChangedEventHandler PropertyChanged;
         private readonly PropertyChangeHandler _change;
 
-        private string _id = "";
         public ScreenConfig()
         {
             _change = new PropertyChangeHandler(this);
@@ -67,22 +66,30 @@ namespace LbmScreenConfig
             using (RegistryKey key = OpenRootRegKey(create))
             {
                 if (key == null) return null;
-                return create ? key.CreateSubKey(_id) : key.OpenSubKey(_id);
+                return create ? key.CreateSubKey(Id) : key.OpenSubKey(Id);
             }
         }
 
+        public String Id
+        {
+            get
+            {
+                string id = "";
+                foreach (var screen in AllScreens.OrderBy(s => s.Id))
+                {
+                    id += ((id!="")?"." :"") + screen.Id;
+                }
+                return id;
+            }
+        }
 
         public void Load()
         {
-            _id = "";
- 
             User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
                 delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
                 {
-                    Screen s = GetScreen(hMonitor);
-                    _id += ((_id!="")?"." :"") + s.Id;
+                    GetScreen(hMonitor);
                     return true;
-
                 }, IntPtr.Zero);
 
             SetPhysicalAuto();
@@ -127,10 +134,6 @@ namespace LbmScreenConfig
                 }
                 return false;
             }
-
-            
-
-            RegistryChanged?.Invoke(this, new EventArgs());
         }
 
         private Screen GetScreen(IntPtr hMonitor)

@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.ServiceModel;
 using System.ServiceModel.Description;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LbmScreenConfig
 {
@@ -45,46 +42,39 @@ namespace LbmScreenConfig
         {
             try { Channel.LoadConfig(); }
             catch (EndpointNotFoundException) { LauchServer("--loadconfig"); }
-            catch (FaultException)
-            {
-            }
+            catch (CommunicationException) { }
+            //catch (FaultException) { }
         }
 
         public void Quit()
         {
             try { Channel.Quit(); }
-            catch (EndpointNotFoundException) 
-            { }
-            catch (FaultException)
-            {
-            }
+            catch (EndpointNotFoundException)  { }
+            catch (CommunicationException) { }
+            //catch (FaultException) { }
         }
 
         public void Start()
         {
             try { Channel.Start(); }
-            catch (EndpointNotFoundException)
-            { LauchServer("--start"); }
-            catch (FaultException)
-            {
-            }
+            catch (EndpointNotFoundException) { LauchServer("--start"); }
+            catch (CommunicationException) { }
+            //catch (FaultException) { }
         }
 
         public void Stop()
         {
             try { Channel.Stop(); }
             catch (EndpointNotFoundException) { }
-            catch (FaultException)
-            {
-            }
+            catch (CommunicationException) { }
+            //catch (FaultException) { }
         }
         public void CommandLine(IList<string> args)
         {
             try { Channel.CommandLine(args); }
             catch (EndpointNotFoundException) { LauchServer(String.Join(".",args)); }
-            catch (FaultException)
-            {
-            }
+            catch (CommunicationException) { }
+            //catch (FaultException) { }
         }
 
         public void LoadAtStartup(bool state = true)
@@ -93,14 +83,11 @@ namespace LbmScreenConfig
             {
                 Channel.LoadAtStartup(state);
             }
-            catch (EndpointNotFoundException)
-            {
-                LauchServer(state ? "--schedule" : "--unschedule");
-            }
-            catch (FaultException)
-            {
-            }
+            catch (EndpointNotFoundException) { LauchServer(state ? "--schedule" : "--unschedule"); }
+            catch (CommunicationException) { }
+            //catch (FaultException) { }
         }
+
         public void LauchServer(string args="")
         {
             var p = Process.GetCurrentProcess();

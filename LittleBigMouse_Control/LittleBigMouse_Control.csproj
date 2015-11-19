@@ -209,6 +209,10 @@
       <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
       <Name>LbmScreenConfig</Name>
     </ProjectReference>
+    <ProjectReference Include="..\TaskService\TaskService.csproj">
+      <Project>{81B5ABCC-6909-483D-8BB3-84B52E3C7043}</Project>
+      <Name>TaskService</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="setup\LittleBigMouse.iss" />

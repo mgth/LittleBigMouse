@@ -24,29 +24,27 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using Microsoft.Win32;
 using WinAPI_User32;
 
 namespace LittleBigMouse_Daemon
 {
     public class Mouse
     {
-        private static void MouseEvent(WinAPI_User32.MOUSEEVENTF evt, double x, double y)
+        private static void MouseEvent(MOUSEEVENTF evt, double x, double y)
         {
-            WinAPI_User32.InputUnion[] input = new WinAPI_User32.InputUnion[1];
-            input[0] = new WinAPI_User32.InputUnion()
+            InputUnion[] input = new InputUnion[1];
+            input[0] = new InputUnion()
             {
-                mi = new WinAPI_User32.MOUSEINPUT()
+                mi = new MOUSEINPUT()
                 {
-                    dwFlags = evt
-                        ,
+                    dwFlags = evt ,
                     dx = (int)x,
                     dy = (int)y,
                 }
             };
 
-
-            uint res = WinAPI_User32.User32.SendInput(1, input, Marshal.SizeOf(typeof(WinAPI_User32.MOUSEINPUT)));
-
+            uint res = User32.SendInput(1, input, Marshal.SizeOf(input));
         }
 
         public static Point CursorPos
@@ -61,28 +59,28 @@ namespace LittleBigMouse_Daemon
             {
                 User32.SetCursorPos((int)value.X, (int)value.Y);
 
-                User32.POINT newLocation;
-                User32.GetCursorPos(out newLocation);
+                //User32.POINT newLocation;
+                //User32.GetCursorPos(out newLocation);
 
-                MouseEvent(MOUSEEVENTF.MOVE | MOUSEEVENTF.ABSOLUTE, value.X, value.Y);
-                                        //(DWORD)((65535.0f * x) / (w - 1) + 0.5f),
-                                        //(DWORD)((65535.0f * y) / (h - 1) + 0.5f),
-                                        //0, 0);
-
+                //if (newLocation.X != value.X || newLocation.Y != value.Y)
+                //{
+                //    MouseEvent(MOUSEEVENTF.MOVE | MOUSEEVENTF.ABSOLUTE, value.X, value.Y);
+                //                            //(DWORD)((65535.0f * x) / (w - 1) + 0.5f),
+                //                            //(DWORD)((65535.0f * y) / (h - 1) + 0.5f),
+                //                            //0, 0);                   
+                //}
             }
         }
 
         static public double MouseSpeed
         {
-            get
-            {
+            get {
                 uint speed = 0;
                 User32.SystemParametersInfo(User32.SPI_GETMOUSESPEED, 0, ref speed, 0);
                 return speed;
             }
 
-            set
-            {
+            set {
                 User32.SystemParametersInfo(User32.SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
             }
         }
@@ -109,6 +107,32 @@ namespace LittleBigMouse_Daemon
             SetCursor("UpArrow", @"%SystemRoot%\cursors\aero_up" + suffix + ".cur");
             SetCursor("Wait", @"%SystemRoot%\cursors\aero_busy" + suffix + ".ani");
 
+            User32.SystemParametersInfo(User32.SPI_SETCURSORS, 0, 0, User32.SPIF_UPDATEINIFILE | User32.SPIF_SENDCHANGE);
+        }
+
+        public static void SaveCursor(RegistryKey savekey)
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Cursors\"))
+            {
+                if (key == null) return;
+                foreach (string name in key.GetValueNames())
+                {
+                    savekey.SetValue(name, key.GetValue(name));
+                }
+            }
+        }
+
+        public static void RestoreCursor(RegistryKey savekey)
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"\Control Panel\Cursors\"))
+            {
+                if (key == null) return;
+
+                foreach (string name in savekey.GetValueNames())
+                {
+                    key.SetValue(name, savekey.GetValue(name));
+                }
+            }
             User32.SystemParametersInfo(User32.SPI_SETCURSORS, 0, 0, User32.SPIF_UPDATEINIFILE | User32.SPIF_SENDCHANGE);
         }
 

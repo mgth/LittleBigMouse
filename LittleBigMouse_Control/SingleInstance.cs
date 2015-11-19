@@ -21,7 +21,6 @@ namespace Microsoft.Shell
     using System.Threading;
     using System.Windows;
     using System.Windows.Threading;
-    using System.Xml.Serialization;
     using System.Security;
     using System.Runtime.InteropServices;
     using System.ComponentModel;

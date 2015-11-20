@@ -348,7 +348,7 @@ namespace LbmScreenConfig
             using (RegistryKey key = Config.OpenRootRegKey(create))
             {
                 if (key == null) return null;
-                return create ?key.CreateSubKey(IdMonitor) :key.OpenSubKey(IdMonitor);
+                return create ?key.CreateSubKey(@"monitors\" + IdMonitor) :key.OpenSubKey(@"monitors\" + IdMonitor);
             }
         }
 

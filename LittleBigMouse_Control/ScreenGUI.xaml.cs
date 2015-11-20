@@ -31,6 +31,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using LbmScreenConfig;
+using WinAPI_Dxva2;
 
 namespace LittleBigMouse_Control
 {
@@ -881,6 +882,10 @@ namespace LittleBigMouse_Control
                      new Anchor(Screen,Screen.PhysicalOutsideBounds.Bottom,new SolidColorBrush(Colors.Chartreuse)),
                 };
 
+        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        {
+            Dxva2.SetVCPFeature(Screen.HPhysical, 0xE1, 1);
+        }
     }
 
     public class Anchor

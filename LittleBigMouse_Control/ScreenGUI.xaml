@@ -144,7 +144,15 @@
             </StackPanel>
 
                 <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" HorizontalAlignment="Right" Foreground="White"/>
-
+                
+            <Button 
+                Margin="30" 
+                Width="100" 
+                Height="50" 
+                VerticalAlignment="Bottom" 
+                HorizontalAlignment="Right"
+                Click="ButtonBase_OnClick"
+                />
 
         </Grid>
 

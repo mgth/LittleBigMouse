@@ -26,6 +26,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using WinAPI_User32;
 // ReSharper disable CompareOfFloatsByEqualityOperator
@@ -66,7 +67,7 @@ namespace LbmScreenConfig
             using (RegistryKey key = OpenRootRegKey(create))
             {
                 if (key == null) return null;
-                return create ? key.CreateSubKey(Id) : key.OpenSubKey(Id);
+                return create ? key.CreateSubKey(@"configs\" + Id) : key.OpenSubKey(@"configs\" + Id);
             }
         }
 
@@ -83,8 +84,30 @@ namespace LbmScreenConfig
             }
         }
 
+        public void EnumDisplays()
+        {
+            DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
+            uint devIdx = 0;
+
+            while (User32.EnumDisplayDevices(null, devIdx, ref ddDev, 0))
+            {
+                    DISPLAY_DEVICE ddMon = new DISPLAY_DEVICE();
+                    ddMon.cb = Marshal.SizeOf(ddMon);
+                    uint monIdx = 0;
+                    while (User32.EnumDisplayDevices(ddDev.DeviceName, monIdx,ref ddMon, 0))
+                    {
+                        
+                        monIdx++;
+                    }
+
+                    devIdx++;
+            }
+        }
+
         public void Load()
         {
+//            EnumDisplays();
+
             User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
                 delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
                 {

@@ -12,10 +12,11 @@ namespace WinAPI_Dxva2
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
         public string szPhysicalMonitorDescription;
     }
-    class Dxva2
+
+    public static class Dxva2
     {
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, ref uint pdwNumberOfPhysicalMonitors);
+        public static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, ref uint pdwNumberOfPhysicalMonitors);
 
         [DllImport("dxva2.dll", EntryPoint = "DestroyPhysicalMonitors")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -23,31 +24,31 @@ namespace WinAPI_Dxva2
             uint dwPhysicalMonitorArraySize, ref PHYSICAL_MONITOR[] pPhysicalMonitorArray);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, uint dwPhysicalMonitorArraySize, [Out] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
+        public static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, uint dwPhysicalMonitorArraySize, [Out] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool GetMonitorBrightness(IntPtr hMonitor, ref uint pdwMinimumBrightness, ref uint pdwCurrentBrightness, ref uint pdwMaximumBrightness);
+        public static extern bool GetMonitorBrightness(IntPtr hMonitor, ref uint pdwMinimumBrightness, ref uint pdwCurrentBrightness, ref uint pdwMaximumBrightness);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool SetMonitorBrightness(IntPtr hMonitor, uint dwNewBrightness);
+        public static extern bool SetMonitorBrightness(IntPtr hMonitor, uint dwNewBrightness);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool GetMonitorContrast(IntPtr hMonitor, ref uint pdwMinimumContrast, ref uint pdwCurrentContrast, ref uint pdwMaximumContrast);
+        public static extern bool GetMonitorContrast(IntPtr hMonitor, ref uint pdwMinimumContrast, ref uint pdwCurrentContrast, ref uint pdwMaximumContrast);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool SetMonitorContrast(IntPtr hMonitor, uint dwNewContrast);
+        public static extern bool SetMonitorContrast(IntPtr hMonitor, uint dwNewContrast);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool GetMonitorRedGreenOrBlueGain(IntPtr hMonitor, uint component, ref uint pdwMinimumContrast, ref uint pdwCurrentContrast, ref uint pdwMaximumContrast);
+        public static extern bool GetMonitorRedGreenOrBlueGain(IntPtr hMonitor, uint component, ref uint pdwMinimumContrast, ref uint pdwCurrentContrast, ref uint pdwMaximumContrast);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool SetMonitorRedGreenOrBlueGain(IntPtr hMonitor, uint component, uint dwNewContrast);
+        public static extern bool SetMonitorRedGreenOrBlueGain(IntPtr hMonitor, uint component, uint dwNewContrast);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool GetMonitorRedGreenOrBlueDrive(IntPtr hMonitor, uint component, ref uint pdwMinimumContrast, ref uint pdwCurrentContrast, ref uint pdwMaximumContrast);
+        public static extern bool GetMonitorRedGreenOrBlueDrive(IntPtr hMonitor, uint component, ref uint pdwMinimumContrast, ref uint pdwCurrentContrast, ref uint pdwMaximumContrast);
 
         [DllImport("Dxva2.dll", CharSet = CharSet.Auto)]
-        internal static extern bool SetMonitorRedGreenOrBlueDrive(IntPtr hMonitor, uint component, uint dwNewContrast);
+        public static extern bool SetMonitorRedGreenOrBlueDrive(IntPtr hMonitor, uint component, uint dwNewContrast);
 
 
 
@@ -63,13 +64,13 @@ namespace WinAPI_Dxva2
 
         [DllImport("dxva2.dll", EntryPoint = "GetVCPFeatureAndVCPFeatureReply", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool GetVCPFeatureAndVCPFeatureReply(
+        public static extern bool GetVCPFeatureAndVCPFeatureReply(
             [In] IntPtr hMonitor, [In] uint dwVCPCode, uint pvct, ref uint pdwCurrentValue, ref uint pdwMaximumValue);
 
 
         [DllImport("dxva2.dll", EntryPoint = "SetVCPFeature", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool SetVCPFeature(
+        public static extern bool SetVCPFeature(
             [In] IntPtr hMonitor, uint dwVCPCode, uint dwNewValue);
     }
 }

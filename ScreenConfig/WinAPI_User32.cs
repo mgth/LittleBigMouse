@@ -1353,9 +1353,15 @@ namespace WinAPI_User32
             }
         }
 
-        //Dispay
+        //Display
+        [DllImport("user32.dll")]
+        public static extern DISP_CHANGE ChangeDisplaySettings(ref DEVMODE devMode, ChangeDisplaySettingsFlags flags);
+        [DllImport("user32.dll")]
+        public static extern DISP_CHANGE ChangeDisplaySettings(IntPtr devMode, ChangeDisplaySettingsFlags flags);
         [DllImport("user32.dll")]
         public static extern DISP_CHANGE ChangeDisplaySettingsEx(string lpszDeviceName, ref DEVMODE lpDevMode, IntPtr hwnd, ChangeDisplaySettingsFlags dwflags, IntPtr lParam);
+        [DllImport("user32.dll")]
+        public static extern DISP_CHANGE ChangeDisplaySettingsEx(string lpszDeviceName, IntPtr lpDevMode, IntPtr hwnd, ChangeDisplaySettingsFlags dwflags, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         [return: MarshalAs(UnmanagedType.Bool)]

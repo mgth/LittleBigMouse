@@ -92,7 +92,7 @@ namespace LbmScreenConfig
 
         public Edid(string deviceName)
         {
-            DISPLAY_DEVICE dd = DisplayDeviceFromID(deviceName);
+            DISPLAY_DEVICE dd = DisplayDeviceFromId(deviceName);
 
             IntPtr devInfo = SetupAPI.SetupDiGetClassDevsEx(
                     ref SetupAPI.GUID_CLASS_MONITOR, //class GUID
@@ -226,10 +226,10 @@ namespace LbmScreenConfig
             MONITORINFOEX mi = new MONITORINFOEX(true);
             User32.GetMonitorInfo(hMonitor, ref mi);
 
-            return DisplayDeviceFromID(mi.DeviceName);
+            return DisplayDeviceFromId(mi.DeviceName);
         }
 
-        internal DISPLAY_DEVICE DisplayDeviceFromID(String id)
+        public static DISPLAY_DEVICE DisplayDeviceFromId(String id)
         {
             DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
             uint devIdx = 0;
@@ -248,6 +248,30 @@ namespace LbmScreenConfig
                     }
                 }
                devIdx++;
+            }
+            return ddDev;
+        }
+        public static DISPLAY_DEVICE DisplayDeviceFromDeviceId(String id)
+        {
+            DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
+            uint devIdx = 0;
+
+            while (User32.EnumDisplayDevices(null, devIdx, ref ddDev, 0))
+            {
+                    DISPLAY_DEVICE ddMon = new DISPLAY_DEVICE();
+                    ddMon.cb = Marshal.SizeOf(ddMon);
+                    uint monIdx = 0;
+                    while (User32.EnumDisplayDevices(ddDev.DeviceName, monIdx, ref ddMon, 0))
+                    {
+                        if (ddMon.DeviceID == id)
+                        {
+                            return ddDev;
+                            //return ddMon;
+                        }
+                        monIdx++;
+                    }
+                
+                devIdx++;
             }
             return ddDev;
         }

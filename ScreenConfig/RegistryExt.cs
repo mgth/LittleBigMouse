@@ -22,7 +22,7 @@ namespace LbmScreenConfig
             else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
 
-        public static void GetKey(this RegistryKey key, ref string prop,  string keyName, PropertyChangeHandler change = null)
+        public static void GetKey(this RegistryKey key,ref string prop,  string keyName, PropertyChangeHandler change = null)
         {
             string sValue = (string)key.GetValue(keyName, null);
             if (sValue == null) return;
@@ -31,7 +31,7 @@ namespace LbmScreenConfig
             else change?.SetProperty(ref prop, sValue, keyName);
         }
 
-        public static void SetKey(this RegistryKey key, ref string prop, string keyName)
+        public static void SetKey(this RegistryKey key, string prop, string keyName)
         {
             if (prop == null) { key.DeleteValue(keyName, false); }
             else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }

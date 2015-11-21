@@ -4,8 +4,10 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.ServiceModel;
 using System.Windows;
+using System.Windows.Forms;
 using LbmScreenConfig;
 using Microsoft.Win32.TaskScheduler;
+using Application = System.Windows.Application;
 
 namespace LittleBigMouse_Daemon
 {
@@ -33,6 +35,12 @@ namespace LittleBigMouse_Daemon
             if (_notify != null)
                 _notify.Click += OnNotifyClick;
 
+            foreach (string configName in ScreenConfig.ConfigsList)
+            {
+                _notify.AddMenu(configName, MatchConfig);
+            }
+
+
             _notify.AddMenu("Open", Open);
             _notify.AddMenu("Start", Start);
             _notify.AddMenu("Stop", Stop);
@@ -40,12 +48,23 @@ namespace LittleBigMouse_Daemon
 
             Start();
         }
+
+        private void MatchConfig(object sender, EventArgs e)
+        {
+            var menu = sender as ToolStripMenuItem;
+            if (menu != null)
+            {
+                _engine.MatchConfig(menu.Text);
+            }
+        }
+
         private void OnExit(object sender, ExitEventArgs exitEventArgs)
         {
             Stop();
             _engine.StopServer();
             _notify.Dispose();
         }
+
         public void CommandLine(IList<string> args)
         {
             foreach (string s in args)

@@ -82,9 +82,17 @@ namespace LbmScreenConfig
                 Dxva2.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }
 
+        public string DeviceId
+        {
+            get
+            {
+                DISPLAY_DEVICE dd = Edid.DisplayDeviceFromId(DeviceName);
+                return dd.DeviceID;
+            }
+        }
 
-        // Todo, HPhysical not needed hes I think
-        private PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
+    // Todo, HPhysical not needed hes I think
+    private PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
 
         public IntPtr HPhysical
         {
@@ -134,7 +142,7 @@ namespace LbmScreenConfig
         {
             get
             {
-                DISPLAY_DEVICE dd = Edid.DisplayDeviceFromID(DeviceName);
+                DISPLAY_DEVICE dd = Edid.DisplayDeviceFromId(DeviceName);
                 string name = Html.CleanupPnpName(dd.DeviceString);
                 if (name.ToLower() != "generic pnp monitor" )
                     return name;
@@ -343,13 +351,18 @@ namespace LbmScreenConfig
 
         // Registry settings
 
-        public RegistryKey OpenMonitorRegKey(bool create=false)
+        public static RegistryKey OpenMonitorRegKey(string id, bool create=false)
         {
-            using (RegistryKey key = Config.OpenRootRegKey(create))
+            using (RegistryKey key = ScreenConfig.OpenRootRegKey(create))
             {
                 if (key == null) return null;
-                return create ?key.CreateSubKey(@"monitors\" + IdMonitor) :key.OpenSubKey(@"monitors\" + IdMonitor);
+                return create ?key.CreateSubKey(@"monitors\" + id) :key.OpenSubKey(@"monitors\" + id);
             }
+        }
+
+        public RegistryKey OpenMonitorRegKey(bool create = false)
+        {
+            return OpenMonitorRegKey(IdMonitor, create);
         }
 
         public RegistryKey OpenGuiLocationRegKey(bool create = false)
@@ -361,15 +374,25 @@ namespace LbmScreenConfig
             }
         }
 
+        public static RegistryKey OpenConfigRegKey(string configId, string monitorId, bool create = false)
+        {
+            using (RegistryKey key = ScreenConfig.OpenConfigRegKey(configId, create))
+            {
+                if (key == null) return null;
+                return create ? key.CreateSubKey(monitorId) : key.OpenSubKey(monitorId);
+            }
+        }
+
         public RegistryKey OpenConfigRegKey(bool create = false)
         {
+            return OpenConfigRegKey(Config.Id, IdMonitor, create);
+
             using (RegistryKey key = Config.OpenConfigRegKey(create))
             {
                 if (key == null) return null;
                 return create ? key.CreateSubKey(IdMonitor) : key.OpenSubKey(IdMonitor);
             }
         }
-
 
         private string _pnpDeviceName;
 
@@ -503,7 +526,8 @@ namespace LbmScreenConfig
                             key.SetKey(_realPhysicalHeight, "PhysicalWidth");
                             break;
                     }
-                    key.SetKey(ref _pnpDeviceName, "PnpName");
+                    key.SetKey(_pnpDeviceName, "PnpName");
+                    key.SetKey(DeviceId,"DeviceId");
                 }
             }
 
@@ -515,6 +539,12 @@ namespace LbmScreenConfig
                     key.SetKey(_physicalY, "PhysicalY");
                     key.SetKey(_physicalRatioX, "PhysicalRatioX");
                     key.SetKey(_physicalRatioY, "PhysicalRatioY");
+
+                    key.SetKey(PixelLocation.X, "PixelX");
+                    key.SetKey(PixelLocation.Y, "PixelY");
+                    key.SetKey(PixelSize.Width, "PixelWidth");
+                    key.SetKey(PixelSize.Height, "PixelHeight");
+
                 }
             }
         }
@@ -982,6 +1012,71 @@ namespace LbmScreenConfig
             if (PhysicalX > screen.PhysicalBounds.Right) return -1;
             if (screen.PhysicalX > PhysicalBounds.Right) return -1;
             return screen.PhysicalY - PhysicalBounds.Bottom;
+        }
+
+        public static void AttachToDesktop(string configId, string monitorId)
+        {
+            string id;
+            using (RegistryKey monkey = OpenMonitorRegKey(monitorId))
+            {
+               id = monkey?.GetValue("DeviceId").ToString();
+                if (id == null) return;
+            }
+
+            double x = 0;
+            double y = 0;
+            double width = 0;
+            double height = 0;
+
+            using (RegistryKey monkey = OpenConfigRegKey(configId, monitorId))
+            {
+                x = double.Parse(monkey.GetValue("PixelX").ToString());
+                y = double.Parse(monkey.GetValue("PixelY").ToString());
+                width = double.Parse(monkey.GetValue("PixelWidth").ToString());
+                height = double.Parse(monkey.GetValue("PixelHeight").ToString());
+            }
+
+            DISPLAY_DEVICE ddMon = Edid.DisplayDeviceFromDeviceId(id);
+            DEVMODE devmode = new DEVMODE();
+            devmode.Size = (short)Marshal.SizeOf(devmode);
+
+
+            int idx = 0;
+            while (true)
+            {
+                if (!User32.EnumDisplaySettings(ddMon.DeviceName, idx, ref devmode))
+                return;
+
+                if (devmode.PelsHeight == height && devmode.PelsWidth == width && devmode.BitsPerPel==32) break;
+                idx++;
+            }
+
+
+            //devmode.Position = new POINTL { x = (int)x, y = (int)y };
+            //devmode.Fields |= DM.Position;
+
+            devmode.DeviceName = ddMon.DeviceName /*+ @"\Monitor0"*/;
+
+            DISP_CHANGE ch = User32.ChangeDisplaySettingsEx(ddMon.DeviceName, ref devmode, IntPtr.Zero , ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
+            if (ch == DISP_CHANGE.Successful)
+                ch = User32.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+        }
+
+        public void DetachFromDesktop()
+        {
+            DISPLAY_DEVICE ddMon = Edid.DisplayDeviceFromDeviceId(DeviceId);
+            DEVMODE devmode = new DEVMODE();
+            devmode.Size = (short)Marshal.SizeOf(devmode);
+
+            devmode.DeviceName = ddMon.DeviceName ;
+            devmode.PelsHeight = 0;
+            devmode.PelsWidth = 0;
+            devmode.Fields = DM.PelsWidth | DM.PelsHeight /*| DM.BitsPerPixel*/ | DM.Position
+                        | DM.DisplayFrequency | DM.DisplayFlags ;
+
+            DISP_CHANGE ch = User32.ChangeDisplaySettingsEx(ddMon.DeviceName, ref devmode, IntPtr.Zero, ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
+            if (ch == DISP_CHANGE.Successful)
+                ch = User32.ChangeDisplaySettingsEx(null,IntPtr.Zero, IntPtr.Zero, 0,IntPtr.Zero);
         }
     }
 }

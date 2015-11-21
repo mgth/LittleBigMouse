@@ -35,6 +35,28 @@ namespace LbmScreenConfig
 {
     public class ScreenConfig : INotifyPropertyChanged
     {
+        public static RegistryKey OpenRootRegKey(bool create = false)
+        {
+            using (RegistryKey key = Registry.CurrentUser)
+            {
+                if (key == null) return null;
+                return create ? key.CreateSubKey(RootKey) : key.OpenSubKey(RootKey);
+            }
+        }
+
+        public static IEnumerable<string> ConfigsList
+        {
+            get
+            {
+                using (RegistryKey rootkey = OpenRootRegKey())
+                {
+                    using (RegistryKey key = rootkey.OpenSubKey("configs"))
+                    {
+                        return key?.GetSubKeyNames();
+                    }
+                }
+            }
+        } 
         // PropertyChanged Handling
         public event PropertyChangedEventHandler PropertyChanged;
         private readonly PropertyChangeHandler _change;
@@ -48,30 +70,24 @@ namespace LbmScreenConfig
             Load();
         }
 
-        public event EventHandler RegistryChanged;
-
         public List<Screen> AllScreens { get; }
 
         private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
-        public RegistryKey OpenRootRegKey(bool create = false)
+        internal static RegistryKey OpenConfigRegKey(string configId, bool create)
         {
-            using (RegistryKey key = Registry.CurrentUser)
+            using (RegistryKey key = OpenRootRegKey(create))
             {
                 if (key == null) return null;
-                return create ? key.CreateSubKey(RootKey) : key.OpenSubKey(RootKey);
+                return create ? key.CreateSubKey(@"configs\" + configId) : key.OpenSubKey(@"configs\" + configId);
             }
         }
 
         public RegistryKey OpenConfigRegKey(bool create = false)
         {
-            using (RegistryKey key = OpenRootRegKey(create))
-            {
-                if (key == null) return null;
-                return create ? key.CreateSubKey(@"configs\" + Id) : key.OpenSubKey(@"configs\" + Id);
-            }
+            return OpenConfigRegKey(Id,create) ;
         }
 
-        public String Id
+        public string Id
         {
             get
             {
@@ -84,7 +100,7 @@ namespace LbmScreenConfig
             }
         }
 
-        public void EnumDisplays()
+        public static void EnumDisplays()
         {
             DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
             uint devIdx = 0;
@@ -96,17 +112,47 @@ namespace LbmScreenConfig
                     uint monIdx = 0;
                     while (User32.EnumDisplayDevices(ddDev.DeviceName, monIdx,ref ddMon, 0))
                     {
-                        
+                        DEVMODE devmode = new DEVMODE();
+                        devmode.Size = (short)Marshal.SizeOf(devmode);
+
+                        bool result = User32.EnumDisplaySettings(ddDev.DeviceName, 0, ref devmode) ;
                         monIdx++;
                     }
-
                     devIdx++;
+            }
+        }
+
+        public void MatchConfig(string id)
+        {
+            using (RegistryKey rootkey = OpenRootRegKey())
+            {
+                using (RegistryKey key = rootkey.OpenSubKey(@"configs\" + id))
+                {
+                    List<string> todo = key.GetSubKeyNames().ToList();
+
+                    foreach (Screen screen in AllScreens)
+                    {
+                        if (todo.Contains(screen.IdMonitor))
+                        {
+                            todo.Remove(screen.IdMonitor);
+                        }
+                        else
+                        {
+                            screen.DetachFromDesktop();
+                        }
+                    }
+
+                    foreach (string s in todo)
+                    {
+                        Screen.AttachToDesktop(id, s);
+                    }
+                }
             }
         }
 
         public void Load()
         {
-//            EnumDisplays();
+            EnumDisplays();
 
             User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
                 delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
@@ -372,6 +418,7 @@ namespace LbmScreenConfig
             }
 
         }
+
 
         public void Compact()
         {

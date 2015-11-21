@@ -59,7 +59,7 @@ namespace LittleBigMouse_Daemon
 
             SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
-            using (RegistryKey key = _config.OpenRootRegKey(true))
+            using (RegistryKey key = ScreenConfig.OpenRootRegKey(true))
             {
                 string ms = key.GetValue("InitialMouseSpeed", string.Empty).ToString();
 
@@ -98,7 +98,7 @@ namespace LittleBigMouse_Daemon
             if (_config.AdjustSpeed)
             {
                 Mouse.MouseSpeed = _initMouseSpeed;
-                using (var key = _config.OpenRootRegKey(true))
+                using (var key = ScreenConfig.OpenRootRegKey(true))
                 {
                     key.DeleteValue("InitialMouseSpeed");
                 }
@@ -106,7 +106,7 @@ namespace LittleBigMouse_Daemon
 
             if (_config.AdjustPointer)
             {
-                using (var key = _config.OpenRootRegKey())
+                using (var key = ScreenConfig.OpenRootRegKey())
                 {
                     using (RegistryKey savekey = key.OpenSubKey("InitialCursor"))
                     {
@@ -172,15 +172,16 @@ namespace LittleBigMouse_Daemon
             // No move
             if (pIn.Equals(_oldPoints.Last())) return;
 
+            Screen oldScreen = _oldPoints.Last().Screen;
             // no screen change
-            if (pIn.TargetScreen == _oldPoints.Last().Screen)
+            if (pIn.TargetScreen == oldScreen)
             {
                 AddOldPoint(pIn);
                 return;
             }
 
             Screen screenOut = pIn.Physical.TargetScreen;
-
+            PixelPoint pOut = pIn;
 
             //Debug.WriteLine("From:" + _oldPoint.Screen.DeviceName + " X:" + _oldPoint.X + " Y:" + _oldPoint.Y);
             //Debug.WriteLine(" To:" + (screenOut?.DeviceName ?? "null") + " X:" + pIn.X + " Y:" + pIn.Y + "\n");
@@ -192,19 +193,18 @@ namespace LittleBigMouse_Daemon
             if (screenOut == null)
             {
                 double dist = double.PositiveInfinity;// (100.0);
-                Segment seg = new Segment(_oldPoints.First().Physical.Point, pIn.Physical.Point);
-                Segment seg1 = new Segment(_oldPoints.Last().Physical.Point, pIn.Physical.Point);
+                Segment seg1 = new Segment(_oldPoints.First().Physical.Point, pIn.Physical.Point);
+                Segment seg = new Segment(_oldPoints.Last().Physical.Point, pIn.Physical.Point);
 
                 Debug.Print(seg.Line.Coef.ToString() + "(" + seg1.Line.Coef.ToString() + ")");
                 Dump(pIn);
 
                 // Calculate side to enter screen when corner crossing not allowed.
-                Side side = seg.IntersectSide(_oldPoints.First().Screen.PhysicalBounds);
+                Side side = seg.IntersectSide(_oldPoints.Last().Screen.PhysicalBounds);
 
-                foreach (Screen screen in _config.AllScreens.Where(s => s != _oldPoints.Last().Screen))
+
+                foreach (Screen screen in _config.AllScreens.Where(s => s != oldScreen))
                 {
-
-
                     if (_config.AllowCornerCrossing)
                     {
                         foreach ( Point p in seg.Line.Intersect(screen.PhysicalBounds) )
@@ -214,7 +214,7 @@ namespace LittleBigMouse_Daemon
                             if (travel.Size > dist) continue;
 
                             dist = travel.Size;
-                            pIn = (new PhysicalPoint(_config, screen, p.X, p.Y)).Pixel.Inside;
+                            pOut = (new PhysicalPoint(_config, screen, p.X, p.Y)).Pixel.Inside;
                             screenOut = screen;
                         }
                     }
@@ -223,7 +223,6 @@ namespace LittleBigMouse_Daemon
                         double offsetX = 0;
                         double offsetY = 0;
 
-                        Screen oldScreen = _oldPoints.Last().TargetScreen;
 
                         switch (side)
                         {
@@ -250,15 +249,17 @@ namespace LittleBigMouse_Daemon
                         }
 
                         double length = Math.Sqrt(offsetX*offsetX + offsetY*offsetY);
+                        Debug.Print(dist + " => " + screen.DeviceName + " = " + length);
 
-                        if (length < dist)
+                        if (length >0 && length < dist)
                         {
                             PhysicalPoint shifted = new PhysicalPoint(_config, screen, pIn.Physical.X + offsetX, pIn.Physical.Y + offsetY);
                             if (shifted.TargetScreen == screen)
                             {
                                 dist = length;
-                                pIn = shifted.Pixel.Inside;
-                                screenOut = screen;                                                    
+                                pOut = shifted.Pixel;
+                                screenOut = screen;              
+                                                                      
                             }
                         }
                     }
@@ -274,7 +275,7 @@ namespace LittleBigMouse_Daemon
             }
 
             // Actual mouving mouse to new location
-            Mouse.CursorPos = pIn.Physical.ToScreen(screenOut).Pixel. /*Inside.MouseWpf.*/Point;
+            Mouse.CursorPos = pOut.Physical.ToScreen(screenOut).Pixel. /*Inside.MouseWpf.*/Point;
 
             // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used
             if (_config.AdjustPointer)
@@ -293,8 +294,13 @@ namespace LittleBigMouse_Daemon
                 Mouse.MouseSpeed = Math.Round((5.0/96.0)*screenOut.RealDpiAvg, 0);
             }
 
-            AddOldPoint(new PixelPoint(_config, screenOut, pIn.X, pIn.Y));
+            AddOldPoint(pOut);
             e.Handled = true;
+        }
+
+        public void MatchConfig(string configId)
+        {
+            _config.MatchConfig(configId);
         }
     }
 }

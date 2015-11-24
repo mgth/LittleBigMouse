@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -32,6 +33,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using LbmScreenConfig;
 using WinAPI_Dxva2;
+using WinAPI_User32;
 
 namespace LittleBigMouse_Control
 {
@@ -200,11 +202,16 @@ namespace LittleBigMouse_Control
             }
         }
 
+        private bool _power = true;
+
+        public Viewbox PowerButton => _power
+            ? (Viewbox) Application.Current.FindResource("LogoPowerOn")
+            : (Viewbox) Application.Current.FindResource("LogoPowerOff");
+
         public Viewbox Logo
         {
             get
             {
-                Viewbox wb = null;
                 switch (Screen.ManufacturerCode.ToLower())
                 {
                     case "sam":
@@ -666,8 +673,11 @@ namespace LittleBigMouse_Control
         public Visibility SelectedVisibility
              => Selected ? Visibility.Visible : Visibility.Collapsed;
 
-        private Point _oldPosition;
-        private Point? _dragStartPosition;
+        private Point _guiStartPosition;
+        private Point _guiLastPosition;
+        private Point _dragStartPosition;
+        private Point _dragLastPosition;
+
         private void ScreenGui_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2)
@@ -686,17 +696,16 @@ namespace LittleBigMouse_Control
         {
             if (!ConfigGui.Moving) return;
 
-            ConfigGui.Moving = false;
-            _dragStartPosition = null;
-            ReleaseMouseCapture();
-
             ConfigGui.VerticalAnchorsGrid.Children.Clear();
             ConfigGui.HorizontalAnchorsGrid.Children.Clear();
 
-            ConfigGui.UpdatePhysicalOutsideBounds();
-
             if (!Screen.Config.AllowDiscontinuity) Screen.Config.Compact();
             if (!Screen.Config.AllowOverlaps) Screen.Config.Expand();
+
+            ConfigGui.Moving = false;
+            ReleaseMouseCapture();
+
+            ConfigGui.UpdatePhysicalOutsideBounds();
 
             ConfigGui.ActivateConfig();
         }
@@ -704,8 +713,10 @@ namespace LittleBigMouse_Control
 
         private void StartMove(MouseEventArgs e)
         {
-            _oldPosition = ConfigGui.UiToPhysical(e.GetPosition(ConfigGui.ScreensGrid));
+            _guiStartPosition = e.GetPosition(ConfigGui.ScreensGrid);
+            _guiLastPosition = _guiStartPosition;
             _dragStartPosition = Screen.PhysicalLocation;
+            _dragLastPosition = _dragStartPosition;
 
             // bring element to front so we can move it over the others
             ConfigGui.ScreensGrid.Children.Remove(this);
@@ -722,6 +733,8 @@ namespace LittleBigMouse_Control
 
         private void ScreenGui_OnMouseMove(object sender, MouseEventArgs e)
         {
+            const double maxSnapDistance = 10.0;
+
             if (!ConfigGui.Moving) return;
 
             if ( e.LeftButton != MouseButtonState.Pressed)
@@ -731,19 +744,18 @@ namespace LittleBigMouse_Control
             }
 
 
-            var newPosition = ConfigGui.UiToPhysical(e.GetPosition(ConfigGui.ScreensGrid));
+            var newGuiPosition = e.GetPosition(ConfigGui.ScreensGrid);
 
-            Point dragOffset = new Point(
-                (_dragStartPosition?.X ?? 0) - Screen.PhysicalX + newPosition.X - _oldPosition.X,
-                (_dragStartPosition?.Y ?? 0) - Screen.PhysicalY + newPosition.Y - _oldPosition.Y
-                );
+            Vector dragOffset = (newGuiPosition - _guiStartPosition) / ConfigGui.Ratio;
 
-            Point offset = new Point(double.PositiveInfinity, double.PositiveInfinity);
+            Vector snapOffset = new Vector(double.PositiveInfinity, double.PositiveInfinity);
 
             List<Anchor> xAnchors = new List<Anchor>();
             List<Anchor> yAnchors = new List<Anchor>();
 
+            Vector shift = ShiftScreen(dragOffset);
 
+            //use anchors when control key is not pressed
             if ((Keyboard.Modifiers & ModifierKeys.Control) == 0)
             {
                 foreach (ScreenGui s in OtherGuis)
@@ -752,104 +764,109 @@ namespace LittleBigMouse_Control
                     {
                         foreach (Anchor xAnchorOther in s.VerticalAnchors)
                         {
-                            double xOffset = xAnchorOther.Pos - (xAnchorThis.Pos + dragOffset.X);
+                            double xOffset = xAnchorOther.Pos - xAnchorThis.Pos;
 
-                            if (xOffset == offset.X)
+                            // if new offset is just egual to last, add the new anchor visualization
+                            if (Math.Abs(xOffset - snapOffset.X) < 0.01)
                             {
-                                offset.X = xOffset;
+                                snapOffset.X = xOffset;
                                 xAnchors.Add(xAnchorOther);
                             }
-                            else if ((Math.Abs(xOffset) < Math.Abs(offset.X)))
+                            // if new offset is better than old one, remove all visuals and add the new one
+                            else if ((Math.Abs(xOffset) < Math.Abs(snapOffset.X)))
                             {
-                                offset.X = xOffset;
+                                snapOffset.X = xOffset;
                                 xAnchors.Clear();
                                 xAnchors.Add(xAnchorOther);
                             }
                         }
                     }
-                }
 
-
-                foreach (ScreenGui s in OtherGuis)
-                {
                     foreach (Anchor yAnchorThis in HorizontalAnchors)
                     {
                         foreach (Anchor yAnchorOther in s.HorizontalAnchors)
                         {
-                            double yOffset = yAnchorOther.Pos - (yAnchorThis.Pos + dragOffset.Y);
-                            if (yOffset == offset.Y)
+                            double yOffset = yAnchorOther.Pos - yAnchorThis.Pos;
+                            // if new offset is just egual to last, add the new anchor visualization
+                            if (Math.Abs(yOffset - snapOffset.Y) < 0.01)
                             {
-                                offset.Y = yOffset;
-                                yAnchors.Add(yAnchorThis);
+                                snapOffset.Y = yOffset;
+                                yAnchors.Add(yAnchorOther);
                             }
-                            else if ((Math.Abs(yOffset) < Math.Abs(offset.Y)))
+                            // if new offset is better than old one, remove all visuals and add the new one
+                            else if ((Math.Abs(yOffset) < Math.Abs(snapOffset.Y)))
                             {
-                                offset.Y = yOffset;
+                                snapOffset.Y = yOffset;
                                 yAnchors.Clear();
-                                yAnchors.Add(yAnchorThis);
+                                yAnchors.Add(yAnchorOther);
                             }
                         }
                     }
                 }
 
-                if (Math.Abs(offset.X) <= 10) dragOffset.X += offset.X;
-                if (Math.Abs(offset.Y) <= 10) dragOffset.Y += offset.Y;
-            }
 
-            
-            ConfigGui.VerticalAnchorsGrid.Children.Clear();
-
-            Point shift = new Point(0,0);
-
-            Point old = Screen.PhysicalLocation;
-
-            Screen.PhysicalX = old.X + dragOffset.X;
-            Screen.PhysicalY = old.Y + dragOffset.Y;
-
-
-            if (old == Screen.PhysicalLocation)
-            {
-                shift = new Point(-dragOffset.X,-dragOffset.Y);
-                ConfigGui.ShiftPhysicalBounds(shift);
-            }
-
-            if (Math.Abs(offset.X) <= 10)
-            {
-                foreach (Anchor x in xAnchors)
+                //Apply offset if under maximal snap distance
+                if (Math.Abs(snapOffset.X) > maxSnapDistance)
                 {
-                    double guix = ConfigGui.PhysicalToUIX(x.Pos + shift.X);
-                    Line l = new Line()
-                    {
-                        X1 = guix,
-                        X2 = guix,
-                        Y1 = 0,
-                        Y2 = ConfigGui.ScreensGrid.ActualHeight,
-                        Stroke = x.Brush,
-                        StrokeDashArray = new DoubleCollection { 5, 3 }
-                    };
-                    ConfigGui.VerticalAnchorsGrid.Children.Add(l);
+                    xAnchors.Clear();
+                    snapOffset.X = 0;
                 }
+
+                if (Math.Abs(snapOffset.Y) > maxSnapDistance)
+                {
+                    yAnchors.Clear();
+                    snapOffset.Y = 0;
+                }
+
+                dragOffset += snapOffset;
+            }
+
+            shift = ShiftScreen(dragOffset);
+
+            ConfigGui.VerticalAnchorsGrid.Children.Clear();
+            foreach (Anchor anchor in xAnchors)
+            {
+                double guiX = ConfigGui.PhysicalToUIX(anchor.Pos + shift.X);
+                Line l = new Line()
+                {
+                    X1 = guiX, X2 = guiX,
+                    Y1 = 0, Y2 = ConfigGui.ScreensGrid.ActualHeight,
+                    Stroke = anchor.Brush,
+                    StrokeDashArray = new DoubleCollection { 5, 3 }
+                };
+                ConfigGui.VerticalAnchorsGrid.Children.Add(l);
             }
 
             ConfigGui.HorizontalAnchorsGrid.Children.Clear();
-
-            if (Math.Abs(offset.Y) <= 10)
+            foreach (Anchor anchor in yAnchors)
             {
-                foreach (Anchor y in yAnchors)
+                double guiY = ConfigGui.PhysicalToUIY(anchor.Pos + shift.Y);
+                Line l = new Line()
                 {
-                    double guiY = ConfigGui.PhysicalToUIY(y.Pos + shift.Y);
-                    Line l = new Line()
-                    {
-                        Y1 = guiY,
-                        Y2 = guiY,
-                        X1 = 0,
-                        X2 = ConfigGui.ScreensGrid.ActualWidth,
-                        Stroke = y.Brush,
-                        StrokeDashArray = new DoubleCollection { 5, 3 }
-                    };
-                    ConfigGui.HorizontalAnchorsGrid.Children.Add(l);
-                }
+                    Y1 = guiY,
+                    Y2 = guiY,
+                    X1 = 0,
+                    X2 = ConfigGui.ScreensGrid.ActualWidth,
+                    Stroke = anchor.Brush,
+                    StrokeDashArray = new DoubleCollection { 5, 3 }
+                };
+                ConfigGui.HorizontalAnchorsGrid.Children.Add(l);
             }
+        }
+
+        private Vector ShiftScreen(Vector offset)
+        {
+            Point pos = _dragStartPosition + offset;
+
+            Screen.PhysicalLocation = pos;
+
+            Vector shift = Screen.PhysicalLocation - pos;
+
+            ConfigGui.ShiftPhysicalBounds(shift);
+
+            _dragStartPosition += shift;
+
+            return shift;
         }
 
 
@@ -882,9 +899,36 @@ namespace LittleBigMouse_Control
                      new Anchor(Screen,Screen.PhysicalOutsideBounds.Bottom,new SolidColorBrush(Colors.Chartreuse)),
                 };
 
-        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        private void ButtonOff_OnClick(object sender, RoutedEventArgs e)
         {
-            Dxva2.SetVCPFeature(Screen.HPhysical, 0xE1, 1);
+            Dxva2.SetVCPFeature(Screen.HPhysical, 0xD6, 4);
+        }
+        private void ButtonOn_OnClick(object sender, RoutedEventArgs e)
+        {
+            uint code = Convert.ToUInt32(txtCode.Text,16);
+            uint value = Convert.ToUInt32(txtValue.Text,16);
+
+            uint pvct;
+            uint current;
+            uint max;
+
+            Dxva2.GetVCPFeatureAndVCPFeatureReply(Screen.HPhysical, code, out pvct, out current, out max);
+
+            Debug.Print(pvct.ToString() + ":" + current.ToString() + "<" + max.ToString());
+
+            Dxva2.SetVCPFeature(Screen.HPhysical, code, value);
+            //for (uint i = 0; i < max; i++)
+            //{
+            //    if (i==5 && code==0xD6) continue; 
+            //    bool result = Dxva2.SetVCPFeature(Screen.HPhysical, code, i);
+            //    Debug.Print(i.ToString() + (result?":O":"X"));
+            //}
+
+            //IntPtr desk = User32.GetDesktopWindow();
+            //IntPtr win = User32.FindWindowEx(IntPtr.Zero, IntPtr.Zero, null, null);
+
+            //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, 2);
+            //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
         }
     }
 

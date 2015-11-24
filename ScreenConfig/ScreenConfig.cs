@@ -72,6 +72,8 @@ namespace LbmScreenConfig
 
         public List<Screen> AllScreens { get; }
 
+        public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => s != screen);
+
         private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
         internal static RegistryKey OpenConfigRegKey(string configId, bool create)
         {

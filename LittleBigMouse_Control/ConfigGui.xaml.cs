@@ -220,6 +220,13 @@ namespace LittleBigMouse_Control
                 (p.Y / Ratio) + all.Top
                 );
         }
+        public Vector UiToPhysical(Vector V)
+        {
+            return new Vector(
+                (V.X / Ratio),
+                (V.Y / Ratio)
+                );
+        }
 
         private void _gui_SelectedChanged(object s, bool selected)
         {
@@ -351,9 +358,15 @@ namespace LittleBigMouse_Control
             }
         }
 
-        public void ShiftPhysicalBounds(Point shift)
+        public void ShiftPhysicalBounds(Vector shift)
         {
-            Rect r = new Rect(new Point(PhysicalOutsideBounds.X+ shift.X, PhysicalOutsideBounds.Y+ shift.Y), PhysicalOutsideBounds.Size);
+            Rect r = new Rect(
+                new Point(
+                    PhysicalOutsideBounds.X+ shift.X, 
+                    PhysicalOutsideBounds.Y+ shift.Y
+                    )
+                    , PhysicalOutsideBounds.Size
+                    );
             _change.SetProperty(ref _physicalOutsideBounds, r, "PhysicalOutsideBounds");
         }
 

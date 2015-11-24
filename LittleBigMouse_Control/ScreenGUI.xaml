@@ -144,17 +144,29 @@
             </StackPanel>
 
                 <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" HorizontalAlignment="Right" Foreground="White"/>
-                
-            <Button 
-                Margin="30" 
-                Width="100" 
-                Height="50" 
+
+                <StackPanel Margin="30" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                    <Button                 
+                Width="50"  
+                Height="25" 
                 VerticalAlignment="Bottom" 
                 HorizontalAlignment="Right"
-                Click="ButtonBase_OnClick"
+                Click="ButtonOff_OnClick"
+                        Content="Off"
                 />
-
-        </Grid>
+                    <TextBox x:Name="txtCode">D6</TextBox>
+                    <TextBox x:Name="txtValue">1</TextBox>
+                    <Button                 
+                Width="50"  
+                Height="25" 
+                VerticalAlignment="Bottom" 
+                HorizontalAlignment="Right"
+                Click="ButtonOn_OnClick"
+                        Content="On"
+                />
+                    
+                </StackPanel>
+            </Grid>
 
         <Border Grid.ColumnSpan="3"  Grid.RowSpan="3" BorderThickness="1,1,0,0" BorderBrush="LightSlateGray"/>
         <Border Grid.ColumnSpan="3"  Grid.RowSpan="3" BorderThickness="0,0,1,1" BorderBrush="black"/>
@@ -217,6 +229,15 @@
             Grid.Column="1" 
             Content="{Binding Path=Logo}"
             />
+
+            <Label 
+            Margin="0" 
+            HorizontalAlignment="Right" 
+            VerticalAlignment="Center" 
+            Grid.Row="2" 
+            Grid.Column="1" 
+                Grid.ColumnSpan="2"
+                Content="{Binding Path=PowerButton}"/>
         </Grid>
 
         

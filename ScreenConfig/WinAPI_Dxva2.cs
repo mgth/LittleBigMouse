@@ -65,7 +65,7 @@ namespace WinAPI_Dxva2
         [DllImport("dxva2.dll", EntryPoint = "GetVCPFeatureAndVCPFeatureReply", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetVCPFeatureAndVCPFeatureReply(
-            [In] IntPtr hMonitor, [In] uint dwVCPCode, uint pvct, ref uint pdwCurrentValue, ref uint pdwMaximumValue);
+            [In] IntPtr hMonitor, [In] uint dwVCPCode, out uint pvct, out uint pdwCurrentValue, out uint pdwMaximumValue);
 
 
         [DllImport("dxva2.dll", EntryPoint = "SetVCPFeature", SetLastError = true)]

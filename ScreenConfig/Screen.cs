@@ -184,10 +184,11 @@ namespace LbmScreenConfig
 
                 if (Primary)
                 {
-                    foreach (Screen s in Config.AllScreens.Where(s => !s.Primary))
+                    foreach (Screen s in Config.AllBut(this))
                     {
-                        s.PhysicalX -= value;
+                        s.PhysicalX -= value - _physicalX;
                     }
+                    _change.SetProperty(ref _physicalX, 0);
                 }
                 else
                 {
@@ -205,10 +206,11 @@ namespace LbmScreenConfig
 
                 if (Primary)
                 {
-                    foreach (Screen s in Config.AllScreens.Where(s => !s.Primary))
+                    foreach (Screen s in Config.AllBut(this))
                     {
-                        s.PhysicalY -= value;
+                        s.PhysicalY -= value - _physicalY;
                     }
+                    _change.SetProperty(ref _physicalY, 0);
                 }
                 else
                 {

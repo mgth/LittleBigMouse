@@ -129,7 +129,6 @@
     </Compile>
     <Compile Include="SingleInstance.cs" />
     <Compile Include="SmootGradientLinearBrush.cs" />
-    <Compile Include="WinAPI_User32.cs" />
     <Compile Include="WindowResize.cs" />
     <Page Include="ConfigGui.xaml">
       <Generator>MSBuild:Compile</Generator>

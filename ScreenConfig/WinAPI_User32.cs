@@ -50,7 +50,7 @@ namespace WinAPI_User32
             Disconnect = 0x2000000
         }
 
-        enum DISP_CHANGE : int
+    public enum DISP_CHANGE : int
         {
             Successful = 0,
             Restart = 1,
@@ -62,7 +62,7 @@ namespace WinAPI_User32
             BadDualView = -6
         }
         [StructLayout(LayoutKind.Explicit, CharSet = CharSet.Ansi)]
-        struct DEVMODE
+        public struct DEVMODE
         {
             public const int CCHDEVICENAME = 32;
             public const int CCHFORMNAME = 32;
@@ -134,14 +134,14 @@ namespace WinAPI_User32
             public Int32 DisplayFrequency;
         }
 
-        struct POINTL
+    public struct POINTL
         {
             public Int32 x;
             public Int32 y;
         }
 
         [Flags()]
-        enum DM : int
+        public enum DM : int
         {
             Orientation = 0x1,
             PaperSize = 0x2,
@@ -1094,14 +1094,16 @@ namespace WinAPI_User32
         SCALE_180_PERCENT = 180,
         SCALE_225_PERCENT = 225,
     }
-    internal enum Monitor_DPI_Type
+
+    public enum Monitor_DPI_Type
     {
         MDT_Effective_DPI = 0,
         MDT_Angular_DPI = 1,
         MDT_Raw_DPI = 2,
         MDT_Default = MDT_Effective_DPI
     }
-    internal enum Process_DPI_Awareness
+
+    public enum Process_DPI_Awareness
     {
         Process_DPI_Unaware = 0,
         Process_System_DPI_Aware = 1,
@@ -1324,9 +1326,9 @@ namespace WinAPI_User32
         internal HARDWAREINPUT hi;
     }
 
-    delegate bool EnumMonitorsDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+    public delegate bool EnumMonitorsDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
 
-    class User32
+    public static class User32
     {
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
@@ -1451,5 +1453,24 @@ namespace WinAPI_User32
                 IntPtr  hprocess,
                 out Process_DPI_Awareness value
               );
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetDesktopWindow();
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, Int32 wMsg, bool wParam, Int32 lParam);
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, Int32 Msg, Int32 wParam, Int32 lParam);
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(Int32 hWnd, Int32 Msg, Int32 wParam, Int32 lParam);
+
+        public const int WM_SETREDRAW = 11;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr FindWindowEx(IntPtr hwndParent,
+       IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+
+        public const int SC_MONITORPOWER = 0xF170;
+        public const int WM_SYSCOMMAND = 0x0112;
     }
 }

@@ -9,12 +9,13 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LittleBigMouse_Control</RootNamespace>
     <AssemblyName>LittleBigMouse_Control</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <IsWebBootstrapper>false</IsWebBootstrapper>
+    <TargetFrameworkProfile />
     <PublishUrl>publier\</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Disk</InstallFrom>
@@ -39,6 +40,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>x86</PlatformTarget>
@@ -48,6 +50,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>MainIcon.ico</ApplicationIcon>
@@ -99,6 +102,12 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="OxyPlot">
+      <HintPath>..\packages\OxyPlot.Core.1.0.0-unstable1886\lib\net45\OxyPlot.dll</HintPath>
+    </Reference>
+    <Reference Include="OxyPlot.Wpf">
+      <HintPath>..\packages\OxyPlot.Wpf.1.0.0-unstable1886\lib\net45\OxyPlot.Wpf.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Runtime.Remoting" />
@@ -121,16 +130,56 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Argyll\Argyll.cs" />
+    <Compile Include="BordersPlugin\ScreenGuiBorders.xaml.cs">
+      <DependentUpon>ScreenGuiBorders.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="BordersPlugin\BordersPlugin.cs" />
+    <Compile Include="ColorManagment.cs" />
+    <Compile Include="Curve.xaml.cs">
+      <DependentUpon>Curve.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="IPluginButton.cs" />
+    <Compile Include="MultiScreensGui.xaml.cs">
+      <DependentUpon>MultiScreensGui.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="NotifyUserControl.cs" />
+    <Compile Include="Plugin.cs" />
+    <Compile Include="ScreenGuiControl.cs" />
     <Compile Include="ScreenGui.xaml.cs">
       <DependentUpon>ScreenGui.xaml</DependentUpon>
     </Compile>
     <Compile Include="Ruler.xaml.cs">
       <DependentUpon>Ruler.xaml</DependentUpon>
     </Compile>
+    <Compile Include="ControlGui.cs" />
+    <Compile Include="ScreensPresenter.cs" />
+    <Compile Include="SizerPlugin\ControlGuiSizer.xaml.cs">
+      <DependentUpon>ControlGuiSizer.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="SizerPlugin\ScreenGuiSizer.xaml.cs">
+      <DependentUpon>ScreenGuiSizer.xaml</DependentUpon>
+    </Compile>
     <Compile Include="SingleInstance.cs" />
+    <Compile Include="SizerPlugin\SizerPlugin.cs" />
     <Compile Include="SmootGradientLinearBrush.cs" />
+    <Compile Include="TestPattern.cs" />
+    <Compile Include="TestPatternWindow.xaml.cs">
+      <DependentUpon>TestPatternWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="VcpPlugin\ScreenGuiVcp.xaml.cs">
+      <DependentUpon>ScreenGuiVcp.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="VcpPlugin\VcpPlugin.cs" />
+    <Compile Include="VcpPlugin\VcpSlider.xaml.cs">
+      <DependentUpon>VcpSlider.xaml</DependentUpon>
+    </Compile>
     <Compile Include="WindowResize.cs" />
-    <Page Include="ConfigGui.xaml">
+    <Page Include="BordersPlugin\ScreenGuiBorders.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="MainGui.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -138,9 +187,17 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="ConfigGui.xaml.cs">
-      <DependentUpon>ConfigGui.xaml</DependentUpon>
+    <Compile Include="MainGui.xaml.cs">
+      <DependentUpon>MainGui.xaml</DependentUpon>
     </Compile>
+    <Page Include="Curve.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="MultiScreensGui.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="ScreenGui.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -148,6 +205,26 @@
     <Page Include="Ruler.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
+    </Page>
+    <Page Include="SizerPlugin\ControlGuiSizer.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="SizerPlugin\ScreenGuiSizer.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="TestPatternWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="VcpPlugin\ScreenGuiVcp.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="VcpPlugin\VcpSlider.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
   <ItemGroup>
@@ -171,6 +248,7 @@
     <None Include="app.manifest">
       <SubType>Designer</SubType>
     </None>
+    <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -209,13 +287,14 @@
       <Name>LbmScreenConfig</Name>
     </ProjectReference>
     <ProjectReference Include="..\TaskService\TaskService.csproj">
-      <Project>{81B5ABCC-6909-483D-8BB3-84B52E3C7043}</Project>
+      <Project>{81b5abcc-6909-483d-8bb3-84b52e3c7043}</Project>
       <Name>TaskService</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="setup\LittleBigMouse.iss" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>"C:\Program Files (x86)\Inno Setup 5\Compil32.exe" /cc ..\..\..\setup\LittleBigMouse.iss</PostBuildEvent>

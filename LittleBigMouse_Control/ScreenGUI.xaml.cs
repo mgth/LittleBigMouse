@@ -41,74 +41,76 @@ namespace LittleBigMouse_Control
     /// <summary>
     /// Interaction logic for ScreenGUI.xaml
     /// </summary>
-    public partial class ScreenGui : UserControl, INotifyPropertyChanged
+    public partial class ScreenGui : NotifyUserControl
     {
         private const double MinFontSize = 0.1;
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        private readonly PropertyChangeHandler _change;
 
         public Screen Screen { get; }
-        public ConfigGui ConfigGui { get; }
+        public MultiScreensGui Presenter { get; }
 
-        public event ScreenGuiSelectedChangedHandler SelectedChanged; 
-        private void OnSelectedChanged()
+        public ScreenGuiControl ScreenGuiControl
         {
-            SelectedChanged?.Invoke(Screen, Selected);
-        }
-
-        public ScreenGui(Screen s, ConfigGui configGui)
-        {
-            _change = new PropertyChangeHandler(this);
-            _change.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args) { PropertyChanged?.Invoke(sender, args); };
-
-            ConfigGui = configGui;
-            Screen = s;
-
-            InitializeComponent();
-
-            Screen.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args)
-            {
-                _change.RaiseProperty("Screen." + args.PropertyName);
-            };
-
-            _change.Watch(Screen.Config, "Config");
-            _change.Watch(ConfigGui, "ConfigGui");
-
-            DataContext = this;
-        }
-
-        public IEnumerable<ScreenGui> OtherGuis
-            => ConfigGui.AllScreenGuis.Where(elGui => !Equals(elGui, this));
-
-        private bool _selected = false;
-        public bool Selected
-        {
-            get { return _selected; }
+            get { return _screenGuiControl; }
             set
             {
-                if (!_change.SetProperty(ref _selected, value)) return;
 
-                if (value)
+                if (Change.SetProperty(ref _screenGuiControl, value))
                 {
-                    foreach (var elGui in OtherGuis)
-                    {
-                        elGui.Selected = false;
-                    }
-                    OnSelectedChanged();
-                }
-                else
-                {
-                    TopBorderSelected = false;
-                    BottomBorderSelected = false;
-                    LeftBorderSelected = false;
-                    RightBorderSelected = false;
-                    OnSelectedChanged();
+                    grid.Children.Clear();
+
+                    if (_screenGuiControl!=null)
+                        grid.Children.Add(_screenGuiControl);
                 }
             }
         }
 
-        [DependsOn("Selected")]
+        public event ScreenGuiSelectedChangedHandler SelectedChanged; 
+
+        public ScreenGui(Screen s, MultiScreensGui screensGui)
+        {
+            Presenter = screensGui;
+            Screen = s;
+
+            InitializeComponent();
+
+            Change.Watch(Screen, "Screen");
+            Change.Watch(Screen.Config, "Config");
+            Change.Watch(Presenter, "Presenter");
+            Change.Watch(MainGui.Instance, "MainGui");
+
+            DataContext = this;
+        }
+
+        [DependsOn("MainGui.GetScreenGuiControl", "Screen")]
+        public void UpdateScreenGuiControl()
+        {
+            ScreenGuiControl = MainGui.Instance.GetScreenGuiControl(Screen);
+        }
+
+        public IEnumerable<ScreenGui> OtherGuis
+            => Presenter.AllScreenGuis.Where(elGui => !Equals(elGui, this));
+
+
+        [DependsOn("Screen.Selected")]
+        public void UpdateSelected()
+        {
+            if (Screen.Selected)
+            {
+                
+            }
+            else
+            {
+                TopBorderSelected = false;
+                BottomBorderSelected = false;
+                LeftBorderSelected = false;
+                RightBorderSelected = false;
+            }
+            SelectedChanged?.Invoke(Screen, Screen.Selected);
+        }
+
+
+        [DependsOn("Screen.Selected")]
         public LinearGradientBrush BorderColor
         {
             get
@@ -134,7 +136,7 @@ namespace LittleBigMouse_Control
             }
         }
 
-        [DependsOn("Selected")]
+        [DependsOn("Screen.Selected")]
         public LinearGradientBrush ScreenColor
         {
             get
@@ -158,14 +160,14 @@ namespace LittleBigMouse_Control
             }
         }
 
-        [DependsOn("Selected")]
+        [DependsOn("Screen.Selected")]
         public Brush SelectedBrush
         {
             get
             {
                 Color c1;
                 Color c2;
-                if (Selected)
+                if (Screen.Selected)
                 {
                     c1 = Colors.LightGreen;
                     c2 = Colors.DarkGreen;
@@ -269,32 +271,33 @@ namespace LittleBigMouse_Control
             }
         }
 
-        [DependsOn("ConfigGui.Ratio")]
-        public Thickness LogoPadding => new Thickness(4*ConfigGui.Ratio);
+        [DependsOn("Presenter.Ratio")]
+        public Thickness LogoPadding => new Thickness(4*Presenter.Ratio);
 
 
 
-        [DependsOn("Screen.PhysicalOutsideBounds", "ConfigGui.Ratio", "Screen.Orientation")]
-        public double ThisWidth => Screen.PhysicalOutsideBounds.Width * ConfigGui.Ratio;
+        [DependsOn("Screen.MovingPhysicalOutsideBounds", "Presenter.Ratio", "Screen.Orientation")]
+        public double ThisWidth => 
+            Screen.PhysicalOutsideBounds.Width * Presenter.Ratio;
 
-        [DependsOn("Screen.PhysicalOutsideBounds", "ConfigGui.Ratio", "Screen.Orientation")]
+        [DependsOn("Screen.MovingPhysicalOutsideBounds", "Presenter.Ratio", "Screen.Orientation")]
         public double ThisUnrotatedWidth => (Screen.Orientation % 2 == 0) ? ThisWidth : ThisHeight;
 
-        [DependsOn("Screen.PhysicalOutsideBounds", "ConfigGui.Ratio", "Screen.Orientation")]
-        public double ThisHeight => Screen.PhysicalOutsideBounds.Height * ConfigGui.Ratio;
+        [DependsOn("Screen.MovingPhysicalOutsideBounds", "Presenter.Ratio", "Screen.Orientation")]
+        public double ThisHeight => Screen.PhysicalOutsideBounds.Height * Presenter.Ratio;
 
-        [DependsOn("Screen.PhysicalOutsideBounds", "ConfigGui.Ratio", "Screen.Orientation")]
+        [DependsOn("Screen.MovingPhysicalOutsideBounds", "Presenter.Ratio", "Screen.Orientation")]
         public double ThisUnrotatedHeight => (Screen.Orientation%2 == 0) ? ThisHeight : ThisWidth;
 
 
-        [DependsOn("ConfigGui.Size", "Screen.PhysicalX", "Screen.PhysicalY", "ConfigGui.PhysicalOutsideBounds", "Screen.LeftBorder","Screen.TopBorder", "ConfigGui.Ratio")]
+        [DependsOn("Presenter.Size", "Screen.PhysicalX", "Screen.PhysicalY", "Presenter.MovingPhysicalOutsideBounds", "Screen.LeftBorder","Screen.TopBorder", "Presenter.Ratio")]
         public Thickness ThisMargin => new Thickness(
-                    ConfigGui.PhysicalToUIX(Screen.PhysicalOutsideBounds.X),
-                    ConfigGui.PhysicalToUIY(Screen.PhysicalOutsideBounds.Y),
+                    Presenter.PhysicalToUiX(Screen.PhysicalOutsideBounds.X),
+                    Presenter.PhysicalToUiY(Screen.PhysicalOutsideBounds.Y),
                     0, 0);
 
-        [DependsOn("Screen.TopBorder", "ConfigGui.Ratio")]
-        public GridLength TopBorder => new GridLength(Screen.TopBorder * ConfigGui.Ratio);
+        [DependsOn("Screen.TopBorder", "Presenter.Ratio")]
+        public GridLength TopBorder => new GridLength(Screen.TopBorder * Presenter.Ratio);
         [DependsOn("LeftBorder", "TopBorder", "RightBorder", "BottomBorder")]
         public GridLength UnrotatedTopBorder
         {
@@ -313,8 +316,8 @@ namespace LittleBigMouse_Control
                 }
             }
         }
-        [DependsOn("Screen.BottomBorder", "ConfigGui.Ratio")]
-        public GridLength BottomBorder => new GridLength(Screen.BottomBorder * ConfigGui.Ratio);
+        [DependsOn("Screen.BottomBorder", "Presenter.Ratio")]
+        public GridLength BottomBorder => new GridLength(Screen.BottomBorder * Presenter.Ratio);
 
         [DependsOn("LeftBorder", "TopBorder", "RightBorder", "BottomBorder")]
         public GridLength UnrotatedBottomBorder
@@ -337,8 +340,8 @@ namespace LittleBigMouse_Control
         [DependsOn("BottomBorder")]
         public double BottomFontSize => Math.Max(MinFontSize, BottomBorder.Value*0.6);
 
-        [DependsOn("Screen.LeftBorder", "ConfigGui.Ratio")]
-        public GridLength LeftBorder => new GridLength(Screen.LeftBorder * ConfigGui.Ratio);
+        [DependsOn("Screen.LeftBorder", "Presenter.Ratio")]
+        public GridLength LeftBorder => new GridLength(Screen.LeftBorder * Presenter.Ratio);
 
         [DependsOn("LeftBorder", "TopBorder", "RightBorder", "BottomBorder")]
         public GridLength UnrotatedLeftBorder
@@ -362,8 +365,8 @@ namespace LittleBigMouse_Control
         [DependsOn("LeftBorder")]
         public double LeftFontSize => Math.Max(MinFontSize, LeftBorder.Value * 0.6);
 
-        [DependsOn("Screen.RightBorder", "ConfigGui.Ratio")]
-        public GridLength RightBorder => new GridLength(Screen.RightBorder * ConfigGui.Ratio);
+        [DependsOn("Screen.RightBorder", "MainGui.Ratio")]
+        public GridLength RightBorder => new GridLength(Screen.RightBorder * Presenter.Ratio);
 
         [DependsOn("LeftBorder", "TopBorder", "RightBorder", "BottomBorder")]
         public GridLength UnrotatedRightBorder
@@ -442,28 +445,8 @@ namespace LittleBigMouse_Control
         public VerticalAlignment PnpNameVerticalAlignment
             => (Screen.Orientation == 2) ? VerticalAlignment.Bottom : VerticalAlignment.Top;
 
-        private void Grid_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            center.Height = Math.Min(grid.ActualHeight, grid.ActualWidth)/3;
-            center.Width =  center.Height;
-            center.CornerRadius = new CornerRadius(center.Height / 2);
-
-            if (center.Height>0)
-                lblName.FontSize = center.Height / 2;
-        }
 
  
-        private void TextBox_KeyEnterUpdate(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter)
-            {
-                TextBox tBox = (TextBox)sender;
-                DependencyProperty prop = TextBox.TextProperty;
-
-                BindingExpression binding = BindingOperations.GetBindingExpression(tBox, prop);
-                binding?.UpdateSource();
-            }
-        }
 
         private void TextBox_MouseWheel(object sender, MouseWheelEventArgs e)
         {
@@ -500,7 +483,7 @@ namespace LittleBigMouse_Control
         public bool TopBorderOverflown
         {
             get { return _topBorderOverflown; }
-            set { _change.SetProperty(ref _topBorderOverflown, value); }
+            set { Change.SetProperty(ref _topBorderOverflown, value); }
         }
         private bool _topBorderSelected = false;
         public bool TopBorderSelected
@@ -508,7 +491,7 @@ namespace LittleBigMouse_Control
             get { return _topBorderSelected; }
             set
             {
-                if(_change.SetProperty(ref _topBorderSelected, value) && value)
+                if(Change.SetProperty(ref _topBorderSelected, value) && value)
                 {
                     LeftBorderSelected = false;
                     RightBorderSelected = false;
@@ -543,7 +526,7 @@ namespace LittleBigMouse_Control
         public bool BottomBorderOverflown
         {
             get { return _BottomBorderOverflown; }
-            set { _change.SetProperty(ref _BottomBorderOverflown, value); }
+            set { Change.SetProperty(ref _BottomBorderOverflown, value); }
         }
         private bool _BottomBorderSelected = false;
         public bool BottomBorderSelected
@@ -551,7 +534,7 @@ namespace LittleBigMouse_Control
             get { return _BottomBorderSelected; }
             set
             {
-                if (_change.SetProperty(ref _BottomBorderSelected, value) && value)
+                if (Change.SetProperty(ref _BottomBorderSelected, value) && value)
                 {
                     LeftBorderSelected = false;
                     TopBorderSelected = false;
@@ -586,7 +569,7 @@ namespace LittleBigMouse_Control
         public bool LeftBorderOverflown
         {
             get { return _LeftBorderOverflown; }
-            set { _change.SetProperty(ref _LeftBorderOverflown, value); }
+            set { Change.SetProperty(ref _LeftBorderOverflown, value); }
         }
         private bool _LeftBorderSelected = false;
         public bool LeftBorderSelected
@@ -594,7 +577,7 @@ namespace LittleBigMouse_Control
             get { return _LeftBorderSelected; }
             set
             {
-                if (_change.SetProperty(ref _LeftBorderSelected, value) && value)
+                if (Change.SetProperty(ref _LeftBorderSelected, value) && value)
                 {
                     RightBorderSelected = false;
                     TopBorderSelected = false;
@@ -629,15 +612,17 @@ namespace LittleBigMouse_Control
         public bool RightBorderOverflown
         {
             get { return _RightBorderOverflown; }
-            set { _change.SetProperty(ref _RightBorderOverflown, value); }
+            set { Change.SetProperty(ref _RightBorderOverflown, value); }
         }
         private bool _RightBorderSelected = false;
+        private ScreenGuiControl _screenGuiControl;
+
         public bool RightBorderSelected
         {
             get { return _RightBorderSelected; }
             set
             {
-                if (_change.SetProperty(ref _RightBorderSelected, value) && value)
+                if (Change.SetProperty(ref _RightBorderSelected, value) && value)
                 {
                     LeftBorderSelected = false;
                     TopBorderSelected = false;
@@ -654,220 +639,10 @@ namespace LittleBigMouse_Control
         public Visibility RightBorderVisibility
             => RightBorderOverflown || RightBorderSelected ? Visibility.Visible : Visibility.Hidden;
 
-        private void PhysicalWidth_MouseWheel(object sender, MouseWheelEventArgs e)
-        {
-            if (!Selected) return;
 
-            double delta = (e.Delta > 0) ? 1 : -1;
-            Screen.RealPhysicalWidth += delta;
-        }
-        private void PhysicalHeight_MouseWheel(object sender, MouseWheelEventArgs e)
-        {
-            if (!Selected) return;
-
-            double delta = (e.Delta > 0) ? 1 : -1;
-            Screen.RealPhysicalHeight += delta;
-        }
-
-        [DependsOn("Selected")]
+        [DependsOn("Screen.Selected")]
         public Visibility SelectedVisibility
-             => Selected ? Visibility.Visible : Visibility.Collapsed;
-
-        private Point _guiStartPosition;
-        private Point _guiLastPosition;
-        private Point _dragStartPosition;
-        private Point _dragLastPosition;
-
-        private void ScreenGui_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.ClickCount == 2)
-            {
-                ConfigGui.SetFullScreen(Screen);
-            }
-            else
-            StartMove(e);
-        }
-        private void ScreenGui_OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            EndMove();
-        }
-
-        private void EndMove()
-        {
-            if (!ConfigGui.Moving) return;
-
-            ConfigGui.VerticalAnchorsGrid.Children.Clear();
-            ConfigGui.HorizontalAnchorsGrid.Children.Clear();
-
-            if (!Screen.Config.AllowDiscontinuity) Screen.Config.Compact();
-            if (!Screen.Config.AllowOverlaps) Screen.Config.Expand();
-
-            ConfigGui.Moving = false;
-            ReleaseMouseCapture();
-
-            ConfigGui.UpdatePhysicalOutsideBounds();
-
-            ConfigGui.ActivateConfig();
-        }
-
-
-        private void StartMove(MouseEventArgs e)
-        {
-            _guiStartPosition = e.GetPosition(ConfigGui.ScreensGrid);
-            _guiLastPosition = _guiStartPosition;
-            _dragStartPosition = Screen.PhysicalLocation;
-            _dragLastPosition = _dragStartPosition;
-
-            // bring element to front so we can move it over the others
-            ConfigGui.ScreensGrid.Children.Remove(this);
-            ConfigGui.ScreensGrid.Children.Add(this);
-
-            CaptureMouse();
-
-            ConfigGui.Moving = true;
-
-            Selected = true;
-
-            e.Handled = true;
-        }
-
-        private void ScreenGui_OnMouseMove(object sender, MouseEventArgs e)
-        {
-            const double maxSnapDistance = 10.0;
-
-            if (!ConfigGui.Moving) return;
-
-            if ( e.LeftButton != MouseButtonState.Pressed)
-            {
-                EndMove();
-                return;
-            }
-
-
-            var newGuiPosition = e.GetPosition(ConfigGui.ScreensGrid);
-
-            Vector dragOffset = (newGuiPosition - _guiStartPosition) / ConfigGui.Ratio;
-
-            Vector snapOffset = new Vector(double.PositiveInfinity, double.PositiveInfinity);
-
-            List<Anchor> xAnchors = new List<Anchor>();
-            List<Anchor> yAnchors = new List<Anchor>();
-
-            Vector shift = ShiftScreen(dragOffset);
-
-            //use anchors when control key is not pressed
-            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0)
-            {
-                foreach (ScreenGui s in OtherGuis)
-                {
-                    foreach (Anchor xAnchorThis in VerticalAnchors)
-                    {
-                        foreach (Anchor xAnchorOther in s.VerticalAnchors)
-                        {
-                            double xOffset = xAnchorOther.Pos - xAnchorThis.Pos;
-
-                            // if new offset is just egual to last, add the new anchor visualization
-                            if (Math.Abs(xOffset - snapOffset.X) < 0.01)
-                            {
-                                snapOffset.X = xOffset;
-                                xAnchors.Add(xAnchorOther);
-                            }
-                            // if new offset is better than old one, remove all visuals and add the new one
-                            else if ((Math.Abs(xOffset) < Math.Abs(snapOffset.X)))
-                            {
-                                snapOffset.X = xOffset;
-                                xAnchors.Clear();
-                                xAnchors.Add(xAnchorOther);
-                            }
-                        }
-                    }
-
-                    foreach (Anchor yAnchorThis in HorizontalAnchors)
-                    {
-                        foreach (Anchor yAnchorOther in s.HorizontalAnchors)
-                        {
-                            double yOffset = yAnchorOther.Pos - yAnchorThis.Pos;
-                            // if new offset is just egual to last, add the new anchor visualization
-                            if (Math.Abs(yOffset - snapOffset.Y) < 0.01)
-                            {
-                                snapOffset.Y = yOffset;
-                                yAnchors.Add(yAnchorOther);
-                            }
-                            // if new offset is better than old one, remove all visuals and add the new one
-                            else if ((Math.Abs(yOffset) < Math.Abs(snapOffset.Y)))
-                            {
-                                snapOffset.Y = yOffset;
-                                yAnchors.Clear();
-                                yAnchors.Add(yAnchorOther);
-                            }
-                        }
-                    }
-                }
-
-
-                //Apply offset if under maximal snap distance
-                if (Math.Abs(snapOffset.X) > maxSnapDistance)
-                {
-                    xAnchors.Clear();
-                    snapOffset.X = 0;
-                }
-
-                if (Math.Abs(snapOffset.Y) > maxSnapDistance)
-                {
-                    yAnchors.Clear();
-                    snapOffset.Y = 0;
-                }
-
-                dragOffset += snapOffset;
-            }
-
-            shift = ShiftScreen(dragOffset);
-
-            ConfigGui.VerticalAnchorsGrid.Children.Clear();
-            foreach (Anchor anchor in xAnchors)
-            {
-                double guiX = ConfigGui.PhysicalToUIX(anchor.Pos + shift.X);
-                Line l = new Line()
-                {
-                    X1 = guiX, X2 = guiX,
-                    Y1 = 0, Y2 = ConfigGui.ScreensGrid.ActualHeight,
-                    Stroke = anchor.Brush,
-                    StrokeDashArray = new DoubleCollection { 5, 3 }
-                };
-                ConfigGui.VerticalAnchorsGrid.Children.Add(l);
-            }
-
-            ConfigGui.HorizontalAnchorsGrid.Children.Clear();
-            foreach (Anchor anchor in yAnchors)
-            {
-                double guiY = ConfigGui.PhysicalToUIY(anchor.Pos + shift.Y);
-                Line l = new Line()
-                {
-                    Y1 = guiY,
-                    Y2 = guiY,
-                    X1 = 0,
-                    X2 = ConfigGui.ScreensGrid.ActualWidth,
-                    Stroke = anchor.Brush,
-                    StrokeDashArray = new DoubleCollection { 5, 3 }
-                };
-                ConfigGui.HorizontalAnchorsGrid.Children.Add(l);
-            }
-        }
-
-        private Vector ShiftScreen(Vector offset)
-        {
-            Point pos = _dragStartPosition + offset;
-
-            Screen.PhysicalLocation = pos;
-
-            Vector shift = Screen.PhysicalLocation - pos;
-
-            ConfigGui.ShiftPhysicalBounds(shift);
-
-            _dragStartPosition += shift;
-
-            return shift;
-        }
+             => Screen.Selected ? Visibility.Visible : Visibility.Collapsed;
 
 
         private void ResetPlace_Click(object sender, RoutedEventArgs e)
@@ -881,55 +656,8 @@ namespace LittleBigMouse_Control
             Screen.RealPhysicalWidth = double.NaN;
         }
 
-        public List<Anchor> VerticalAnchors => new List<Anchor>
-                {
-                     new Anchor(Screen,Screen.PhysicalOutsideBounds.X,new SolidColorBrush(Colors.Chartreuse)),
-                     new Anchor(Screen,Screen.PhysicalX,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(Screen,Screen.PhysicalX + Screen.PhysicalWidth /2,new SolidColorBrush(Colors.Red)),
-                     new Anchor(Screen,Screen.PhysicalBounds.Right,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(Screen,Screen.PhysicalOutsideBounds.Right,new SolidColorBrush(Colors.Chartreuse)),
-                };
 
-        public List<Anchor> HorizontalAnchors => new List<Anchor>
-                {
-                     new Anchor(Screen,Screen.PhysicalOutsideBounds.Y,new SolidColorBrush(Colors.Chartreuse)),
-                     new Anchor(Screen,Screen.PhysicalY,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(Screen,Screen.PhysicalY + Screen.PhysicalHeight /2,new SolidColorBrush(Colors.Red)),
-                     new Anchor(Screen,Screen.PhysicalBounds.Bottom,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(Screen,Screen.PhysicalOutsideBounds.Bottom,new SolidColorBrush(Colors.Chartreuse)),
-                };
 
-        private void ButtonOff_OnClick(object sender, RoutedEventArgs e)
-        {
-            Dxva2.SetVCPFeature(Screen.HPhysical, 0xD6, 4);
-        }
-        private void ButtonOn_OnClick(object sender, RoutedEventArgs e)
-        {
-            uint code = Convert.ToUInt32(txtCode.Text,16);
-            uint value = Convert.ToUInt32(txtValue.Text,16);
-
-            uint pvct;
-            uint current;
-            uint max;
-
-            Dxva2.GetVCPFeatureAndVCPFeatureReply(Screen.HPhysical, code, out pvct, out current, out max);
-
-            Debug.Print(pvct.ToString() + ":" + current.ToString() + "<" + max.ToString());
-
-            Dxva2.SetVCPFeature(Screen.HPhysical, code, value);
-            //for (uint i = 0; i < max; i++)
-            //{
-            //    if (i==5 && code==0xD6) continue; 
-            //    bool result = Dxva2.SetVCPFeature(Screen.HPhysical, code, i);
-            //    Debug.Print(i.ToString() + (result?":O":"X"));
-            //}
-
-            //IntPtr desk = User32.GetDesktopWindow();
-            //IntPtr win = User32.FindWindowEx(IntPtr.Zero, IntPtr.Zero, null, null);
-
-            //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, 2);
-            //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
-        }
     }
 
     public class Anchor

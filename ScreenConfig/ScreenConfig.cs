@@ -56,16 +56,14 @@ namespace LbmScreenConfig
                     }
                 }
             }
-        } 
+        }
         // PropertyChanged Handling
-        public event PropertyChangedEventHandler PropertyChanged;
-        private readonly PropertyChangeHandler _change;
+        private readonly PropertyChangedHelper _change;
+        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
 
         public ScreenConfig()
         {
-            _change = new PropertyChangeHandler(this);
-            _change.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args) { PropertyChanged?.Invoke(sender, args); };
-
+            _change = new PropertyChangedHelper(this);
             AllScreens = new List<Screen>();
             Load();
         }
@@ -73,6 +71,8 @@ namespace LbmScreenConfig
         public List<Screen> AllScreens { get; }
 
         public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => s != screen);
+
+        public Screen Selected => AllScreens.FirstOrDefault(screen => screen.Selected);
 
         private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
         internal static RegistryKey OpenConfigRegKey(string configId, bool create)
@@ -240,7 +240,13 @@ namespace LbmScreenConfig
 
         public Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
 
- 
+        private bool _moving = false;
+        public bool Moving
+        {
+            get { return _moving; }
+            set { _change.SetProperty(ref _moving, value); }
+        }
+
 
         // Physical Locations
         private Rect _physicalBounds = new Rect();
@@ -268,6 +274,30 @@ namespace LbmScreenConfig
 
             _change.SetProperty(ref _physicalOutsideBounds, outside, "PhysicalOutsideBounds");
         }
+
+        private Rect _movingPhysicalOutsideBounds;
+        public Rect MovingPhysicalOutsideBounds => _movingPhysicalOutsideBounds;
+        public void ShiftMovingPhysicalBounds(Vector shift)
+        {
+            Rect r = new Rect(
+                new Point(
+                    MovingPhysicalOutsideBounds.X + shift.X,
+                    MovingPhysicalOutsideBounds.Y + shift.Y
+                    )
+                    , MovingPhysicalOutsideBounds.Size
+                    );
+            _change.SetProperty(ref _movingPhysicalOutsideBounds, r, "MovingPhysicalOutsideBounds");
+        }
+
+        [DependsOn("Moving", "PhysicalOutsideBounds")]
+        public void UpdateMovingPhysicalOutsideBounds()
+        {
+            if (Moving) return;
+            _change.SetProperty(ref _movingPhysicalOutsideBounds, PhysicalOutsideBounds, "MovingPhysicalOutsideBounds");
+        }
+
+
+
         public void UpdatePhysicalBounds()
         {
             Rect inside = new Rect();

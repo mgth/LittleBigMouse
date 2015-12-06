@@ -23,6 +23,7 @@
 
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
@@ -44,8 +45,8 @@ namespace LbmScreenConfig
     public class Screen : INotifyPropertyChanged
     {
         // PropertyChanged Handling
-        public event PropertyChangedEventHandler PropertyChanged;
-        private readonly PropertyChangeHandler _change;
+        private readonly PropertyChangedHelper _change;
+        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
 
         public IntPtr HMonitor { get; }
         internal Edid Edid;
@@ -54,9 +55,7 @@ namespace LbmScreenConfig
 
         internal Screen(ScreenConfig config, IntPtr hMonitor)
         {
-            _change = new PropertyChangeHandler(this);
-            _change.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args) { PropertyChanged?.Invoke(sender, args); };
-
+            _change = new PropertyChangedHelper(this);
             Config = config;
             HMonitor = hMonitor;
 
@@ -158,7 +157,21 @@ namespace LbmScreenConfig
         [DependsOn("DeviceName")]
         public int DeviceNo => int.Parse(DeviceName.Substring(11));
 
-       public int Orientation
+        private bool _selected;
+
+        public bool Selected
+        {
+            get { return _selected; }
+            set
+            {
+                if (!_change.SetProperty(ref _selected, value)) return;
+                if (!value) return;
+                foreach (Screen screen in Config.AllBut(this)) screen.Selected = false;
+            }
+        }
+
+
+        public int Orientation
         {
             get
             {

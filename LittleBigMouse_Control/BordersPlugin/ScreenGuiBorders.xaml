@@ -1,0 +1,15 @@
+﻿<local:ScreenGuiControl 
+    x:TypeArguments="borders:ScreenGuiBorders"
+    x:Class="LittleBigMouse_Control.BordersPlugin.ScreenGuiBorders"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LittleBigMouse_Control"
+             xmlns:borders="clr-namespace:LittleBigMouse_Control.BordersPlugin"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300">
+    <Grid>
+            
+    </Grid>
+</local:ScreenGuiControl>

@@ -5,7 +5,7 @@ namespace LbmScreenConfig
 {
     public static class RegistryExt
     {
-        public static void GetKey(this RegistryKey key, ref double prop, string keyName, PropertyChangeHandler change=null)
+        public static void GetKey(this RegistryKey key, ref double prop, string keyName, PropertyChangedHelper change=null)
         {
             string sValue = key.GetValue(keyName, "NaN").ToString();
             if (sValue == "NaN") return;
@@ -22,7 +22,7 @@ namespace LbmScreenConfig
             else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
 
-        public static void GetKey(this RegistryKey key,ref string prop,  string keyName, PropertyChangeHandler change = null)
+        public static void GetKey(this RegistryKey key,ref string prop,  string keyName, PropertyChangedHelper change = null)
         {
             string sValue = (string)key.GetValue(keyName, null);
             if (sValue == null) return;
@@ -36,7 +36,7 @@ namespace LbmScreenConfig
             if (prop == null) { key.DeleteValue(keyName, false); }
             else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
-        public static void GetKey(this RegistryKey key, ref bool prop, string keyName, PropertyChangeHandler change = null)
+        public static void GetKey(this RegistryKey key, ref bool prop, string keyName, PropertyChangedHelper change = null)
         {
             string sValue = (string)key.GetValue(keyName, "0");
             if (sValue == null) return;

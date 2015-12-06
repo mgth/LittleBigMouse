@@ -8,15 +8,21 @@ using System.Runtime.CompilerServices;
 
 namespace LbmScreenConfig
 {
-    public class PropertyChangeHandler
+    public class PropertyChangedHelper
     {
         public event PropertyChangedEventHandler PropertyChanged;
-        private readonly object _object;
-        public PropertyChangeHandler(object obj)
+
+        private object _object;
+
+        public PropertyChangedHelper(INotifyPropertyChanged obj)
         {
             _object = obj;
         }
 
+        public void Add (INotifyPropertyChanged obj, PropertyChangedEventHandler handler)
+        {
+            _object = obj; PropertyChanged += handler; }
+        public void Remove (PropertyChangedEventHandler handler) { PropertyChanged -= handler; }
 
         private bool _suspended = false;
         private readonly List<string> _propertyChangedList = new List<string>();
@@ -35,12 +41,26 @@ namespace LbmScreenConfig
             List<string> tmp = new List<string>(_propertyChangedList.ToArray());
             _propertyChangedList.Clear();
 
+            if (PropertyChanged == null) return;
+            Delegate[] delegates = PropertyChanged.GetInvocationList();
+
             foreach (string s in tmp)
             {
-                //var handler = PropertyChanged;
-                PropertyChanged?.Invoke(_object, new PropertyChangedEventArgs(s));
-            }
+                PropertyChangedEventArgs arg = new PropertyChangedEventArgs(s);
 
+                foreach (Delegate del in delegates)
+                {
+                    PropertyChangedEventHandler sink = (PropertyChangedEventHandler) del;
+                    try
+                    {
+                        sink(_object, arg);
+                    }
+                    catch (Exception ex)
+                    {
+                    
+                    }
+                }
+            }
         }
         protected void OnPropertyChanged([CallerMemberName] string propName = null)
         {
@@ -104,52 +124,85 @@ namespace LbmScreenConfig
             }
         }
 
-        static private readonly Dictionary<Type,Dictionary<string,List<string>>> _dictProperties = new Dictionary<Type, Dictionary<string, List<string>>>();
-        static private readonly Dictionary<Type, Dictionary<string, List<MethodInfo>>> _dictMethods = new Dictionary<Type, Dictionary<string, List<MethodInfo>>>();
+        private static readonly Dictionary<Type,Dictionary<string,List<string>>> _dictProperties = new Dictionary<Type, Dictionary<string, List<string>>>();
+        private static readonly Dictionary<Type, Dictionary<string, List<MethodInfo>>> _dictMethods = new Dictionary<Type, Dictionary<string, List<MethodInfo>>>();
+
+        private static readonly object LockDict = new object();
+
         public void RaiseProperty([CallerMemberName] string propertyName = null)
         {
-            //            OnPropertyChanged(propertyName);
-            Dictionary<string, List<string>> dictProperties;
-            Dictionary<string, List<MethodInfo>> dictMethods;
+            if (_object == null) return;
+
+            Dictionary<string, List<string>> dictClassProperties;
+            Dictionary<string, List<MethodInfo>> dictClassMethods;
             List<string> listProperties;
             List<MethodInfo> listMethods;
 
-            if (!_dictProperties.TryGetValue(_object.GetType(), out dictProperties))
+            Type Type = _object.GetType();
+            lock (LockDict)
             {
-                dictProperties = new Dictionary<string, List<string>>();
-                _dictProperties.Add(_object.GetType(), dictProperties);
+
+                if (!_dictProperties.TryGetValue(Type, out dictClassProperties))
+                {
+                    dictClassProperties = new Dictionary<string, List<string>>();
+                    _dictProperties.Add(Type, dictClassProperties);
+                }
+
+                if (!_dictMethods.TryGetValue(Type, out dictClassMethods))
+                {
+                    dictClassMethods = new Dictionary<string, List<MethodInfo>>();
+                    _dictMethods.Add(Type, dictClassMethods);
+                }
+
+            //            if (!dictProperties.TryGetValue(propertyName, out listProperties))
+                if (!dictClassProperties.ContainsKey(propertyName))
+                {
+                    listProperties = new List<string>();
+                    listMethods = new List<MethodInfo>();
+
+                    GetDependOn(propertyName, ref listProperties, ref listMethods);
+                    dictClassProperties.Add(propertyName, listProperties);
+                    dictClassMethods.Add(propertyName, listMethods);
+                }
+                else
+                {
+                    listProperties = dictClassProperties[propertyName];
+                    listMethods = dictClassMethods[propertyName];
+                }
             }
 
-            if (!_dictMethods.TryGetValue(_object.GetType(), out dictMethods))
-            {
-                dictMethods = new Dictionary<string, List<MethodInfo>>();
-                _dictMethods.Add(_object.GetType(), dictMethods);
-            }
-
-            if (!dictProperties.TryGetValue(propertyName, out listProperties))
-            {
-                listProperties = new List<string>();
-                listMethods = new List<MethodInfo>();
-
-                GetDependOn(propertyName, ref listProperties, ref listMethods);
-                dictProperties.Add(propertyName, listProperties);
-                dictMethods.Add(propertyName, listMethods);
-            }
-            else dictMethods.TryGetValue(propertyName, out listMethods);
-
+            //Raise property changed event for every properties marked with DependsOn
             foreach (var s in listProperties.Where(s => !s.Contains('.')))
                 OnPropertyChanged(s);
 
+            //Execute all methods marked with DependsOn
             if (listMethods!=null)
                 foreach (var mi in listMethods)
                 {
                    mi.Invoke(_object, null);
                 }
         }
+        public void Watch(ref EventHandler evt, string prefix)
+        {
+            evt += delegate 
+            {
+                RaiseProperty(prefix);
+            };
+        }
 
         public void Watch(INotifyPropertyChanged obj, string prefix)
         {
-            obj.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args) { RaiseProperty(prefix + "." + args.PropertyName); };
+            obj.PropertyChanged += delegate(object sender, PropertyChangedEventArgs args)
+            {
+                RaiseProperty(prefix + "." + args.PropertyName);
+            };
+        }
+        public void UnWatch(INotifyPropertyChanged obj, string prefix)
+        {
+            obj.PropertyChanged -= delegate (object sender, PropertyChangedEventArgs args)
+            {
+                RaiseProperty(prefix + "." + args.PropertyName);
+            };
         }
     }
     public class DependsOn : Attribute

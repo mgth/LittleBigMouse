@@ -46,11 +46,12 @@ namespace LittleBigMouse_Control
         Right
     }
 
+ 
     public partial class Ruler : Window, INotifyPropertyChanged
     {
         // PropertyChanged Handling
-        public event PropertyChangedEventHandler PropertyChanged;
-        private readonly PropertyChangeHandler _change;
+        private readonly PropertyChangedHelper _change;
+        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this,value); } remove {_change.Remove(value);} }
 
         readonly Screen _screen;
         readonly Screen _drawOn;
@@ -294,8 +295,7 @@ namespace LittleBigMouse_Control
 
         public Ruler(Screen screen, Screen drawOn, RulerSide side)
         {
-            _change = new PropertyChangeHandler(this);
-            _change.PropertyChanged += delegate(object sender, PropertyChangedEventArgs args) { PropertyChanged?.Invoke(sender, args); };
+            _change = new PropertyChangedHelper(this);
 
             _screen = screen;
             _drawOn = drawOn;
@@ -322,16 +322,16 @@ namespace LittleBigMouse_Control
                     if (_side == RulerSide.Top || _side == RulerSide.Bottom)
                     {
                         _change.RaiseProperty("CanvasMargin");
-                        //_change.RaiseProperty("RulerLeft");
-                        //_change.RaiseProperty("RulerWidth");
+                        //Change.RaiseProperty("RulerLeft");
+                        //Change.RaiseProperty("RulerWidth");
                     }
                     break;
                 case "PhysicalWidth":
                     if (_side == RulerSide.Top || _side == RulerSide.Bottom)
                     {
                         _change.RaiseProperty("CanvasMargin");
-                        //_change.RaiseProperty("RulerLeft");
-                        //_change.RaiseProperty("RulerWidth");
+                        //Change.RaiseProperty("RulerLeft");
+                        //Change.RaiseProperty("RulerWidth");
                     DrawRuler();
                     }
                     break;
@@ -339,17 +339,17 @@ namespace LittleBigMouse_Control
                     if (_side == RulerSide.Left || _side == RulerSide.Right)
                     {
                         _change.RaiseProperty("CanvasMargin");
-                        //_change.RaiseProperty("ActualRulerTop");
-                        //_change.RaiseProperty("RulerTop");
-                        //_change.RaiseProperty("RulerHeight");
+                        //Change.RaiseProperty("ActualRulerTop");
+                        //Change.RaiseProperty("RulerTop");
+                        //Change.RaiseProperty("RulerHeight");
                     }
                     break;
                 case "PhysicalHeight":
                     if (_side == RulerSide.Left || _side == RulerSide.Right)
                     {
                         _change.RaiseProperty("CanvasMargin");
-                        //_change.RaiseProperty("RulerTop");
-                        //_change.RaiseProperty("RulerHeight");
+                        //Change.RaiseProperty("RulerTop");
+                        //Change.RaiseProperty("RulerHeight");
                         DrawRuler();
                     }
                      break;

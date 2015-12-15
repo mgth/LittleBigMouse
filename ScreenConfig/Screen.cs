@@ -26,6 +26,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -398,16 +399,16 @@ namespace LbmScreenConfig
             }
         }
 
-        public RegistryKey OpenConfigRegKey(bool create = false)
-        {
-            return OpenConfigRegKey(Config.Id, IdMonitor, create);
+        public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Config.Id, IdMonitor, create);
 
-            using (RegistryKey key = Config.OpenConfigRegKey(create))
-            {
-                if (key == null) return null;
-                return create ? key.CreateSubKey(IdMonitor) : key.OpenSubKey(IdMonitor);
-            }
+        public string ConfigPath(bool create = false)
+        {
+            string path = Path.Combine(Config.ConfigPath(create), Id);
+            if (create) System.IO.Directory.CreateDirectory(path);
+
+            return path;
         }
+
 
         private string _pnpDeviceName;
 
@@ -588,28 +589,44 @@ namespace LbmScreenConfig
         public double RealLeftBorder
         {
             get { return _leftBorder; }
-            set { _change.SetProperty(ref _leftBorder, value); }
+            set
+            {
+                if (value < 0) value = 0;
+                _change.SetProperty(ref _leftBorder, value);
+            }
         }
 
         private double _rightBorder = 20.0;
         public double RealRightBorder
         {
             get { return _rightBorder; }
-            set { _change.SetProperty(ref _rightBorder, value); }
+            set
+            {
+                if (value < 0) value = 0;
+                _change.SetProperty(ref _rightBorder, value);
+            }
         }
 
         private double _topBorder = 20.0;
         public double RealTopBorder
         {
             get { return _topBorder; }
-            set { _change.SetProperty(ref _topBorder, value); }
+            set
+            {
+                if (value < 0) value = 0;
+                _change.SetProperty(ref _topBorder, value);
+            }
         }
 
         private double _bottomBorder = 20.0;
         public double RealBottomBorder
         {
             get { return _bottomBorder; }
-            set { _change.SetProperty(ref _bottomBorder, value); }
+            set
+            {
+                if (value < 0) value = 0;
+                _change.SetProperty(ref _bottomBorder, value);
+            }
         }
 
         [DependsOn("RealLeftBorder", "PhysicalRatioX")]

@@ -43,8 +43,6 @@ namespace LittleBigMouse_Control.SizerPlugin
                             gui.MainGrid.Children.Add(HorizontalAnchors);                           
                         }
 
-                        MainGui.ControlGrid.Children.Clear();
-
                         MainGui.ControlGui = new ControlGuiSizer();
                         MainGui.GetScreenGuiControl = screen => new ScreenGuiSizer(screen);
 

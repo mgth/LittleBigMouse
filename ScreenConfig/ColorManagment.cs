@@ -1,7 +1,6 @@
 ﻿using System;
-using System.Windows.Media;
 
-namespace LittleBigMouse_Control
+namespace LbmScreenConfig
 {
     //http://www.brucelindbloom.com/index.html
 
@@ -51,6 +50,24 @@ namespace LittleBigMouse_Control
         public virtual ProbedColorLab Lab => XYZ.Lab;
         public virtual ProbedColorxyY xyY => XYZ.xyY;
         public virtual ProbedColorRGB RGB => XYZ.RGB;
+
+        public static ProbedColor DIlluminant(double T)
+        {
+            ProbedColorxyY xyY = new ProbedColorxyY();
+            if (T > 7000)
+            {
+                xyY.x = (-2006400000 / Math.Pow(T, 3)) + (2967800 / Math.Pow(T, 2)) + (99.11 * T) + 0.244063;
+            }
+            else
+            {
+                xyY.x = (-4607000000 / Math.Pow(T, 3)) + (1901800 / Math.Pow(T, 2)) + (247.48*T) + 0.237040;            
+            }
+
+            xyY.y = -3.0*Math.Pow(xyY.x, 2) + 2.87*xyY.x - 0.275;
+
+            return xyY;
+        }
+
         public double DeltaE(ProbedColor referenceColor = null)
         {
             ProbedColorLab refLab;

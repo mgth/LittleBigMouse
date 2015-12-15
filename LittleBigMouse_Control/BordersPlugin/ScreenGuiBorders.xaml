@@ -10,6 +10,107 @@
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300">
     <Grid>
+        <Border BorderThickness="0" Background="{Binding Path=ScreenColor}"/>
+
+        <Grid x:Name="Grid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+                <ColumnDefinition MouseWheel="Height_MouseWheel"/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition MouseWheel="Width_MouseWheel"/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+
+            <Border Background="Transparent" Grid.Column="2" Grid.ColumnSpan="2" Grid.RowSpan="4" MouseWheel="Height_MouseWheel"/>
             
+            <Border Background="Transparent" Grid.Row="2" Grid.ColumnSpan="4" Grid.RowSpan="2" MouseWheel="Width_MouseWheel"/>
+
+            <TextBox x:Name="txtHeight" Background="#E0FFFFFF"
+                Grid.Column="2" 
+                Grid.Row="1" 
+                VerticalAlignment="Center" 
+                     HorizontalAlignment="Right"
+                Text="{Binding PhysicalOutsideHeight, StringFormat=N1}"
+                MouseWheel="Height_MouseWheel"
+                >
+                <TextBox.Effect>
+                    <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
+                </TextBox.Effect>
+            </TextBox>
+            
+            <TextBox x:Name="txtWidth" Background="#E0FFFFFF"
+                     Grid.Column="1" 
+                     Grid.Row="2" 
+                     VerticalAlignment="Bottom" 
+                     HorizontalAlignment="Center"
+                     Text="{Binding PhysicalOutsideWidth,  StringFormat=N1}"
+                     MouseWheel="Width_MouseWheel"
+                     >
+                <TextBox.Effect>
+                    <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
+                </TextBox.Effect>
+
+            </TextBox>
+
+
+        </Grid>
+
+        <TextBox 
+            Foreground="#FFD9DCEC"
+                FontSize="{Binding Path=ThisFontSize}" 
+                Text="{Binding Path=Screen.RealTopBorder, StringFormat=N1, FallbackValue=top}" 
+                KeyUp="OnKeyEnterUpdate" 
+                HorizontalAlignment="Center" 
+                VerticalAlignment="Top" 
+                Background="#00FFFFFF"
+             MouseWheel="Top_MouseWheel"
+            
+            />
+
+        <TextBox 
+            Foreground="#FFD9DCEC"
+                FontSize="{Binding Path=ThisFontSize}" 
+                Text="{Binding Path=Screen.RealLeftBorder, StringFormat=N1, FallbackValue=left}" 
+                KeyUp="OnKeyEnterUpdate" 
+                HorizontalAlignment="Left" 
+                VerticalAlignment="Center" 
+                Background="#00FFFFFF"
+             MouseWheel="Left_MouseWheel"
+            />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
+            <TextBox 
+                FontSize="{Binding Path=ThisFontSize}"
+                Text="{Binding Path=Screen.RealBottomBorder, StringFormat=N1, FallbackValue=bottom}" 
+                KeyUp="OnKeyEnterUpdate" 
+                VerticalAlignment="Bottom"  
+                HorizontalAlignment="Center" 
+                Foreground="#FFD9DCEC" 
+                Background="#00FFFFFF" 
+                MouseWheel="Bottom_MouseWheel"/>
+        </StackPanel>
+
+        <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
+            <TextBox 
+                FontSize="{Binding Path=ThisFontSize}" 
+                Text="{Binding Path=Screen.RealRightBorder, StringFormat=N1,FallbackValue=right}" 
+                KeyUp="OnKeyEnterUpdate" 
+                HorizontalAlignment="Right" 
+                Foreground="#FFD9DCEC" 
+                Background="#00FFFFFF" 
+                MouseWheel="Right_MouseWheel"/>
+        </StackPanel>
+
+        <!--<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="{Binding Path=SelectedBrush, FallbackValue=#FF333E9A}" BorderBrush="#FFD9DCEC">
+                <Label FontSize="{Binding Path=ThisFontSize}" x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />
+            </Border>
+        </StackPanel>-->
+
     </Grid>
 </local:ScreenGuiControl>

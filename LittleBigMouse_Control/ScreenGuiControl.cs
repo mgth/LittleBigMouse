@@ -20,18 +20,18 @@ namespace LittleBigMouse_Control
         protected ScreenGuiControl(Screen screen)
         {
             Screen = screen;
+            DataContext = this;
         }
 
         protected void OnKeyEnterUpdate(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter)
-            {
-                TextBox tBox = (TextBox)sender;
-                DependencyProperty prop = TextBox.TextProperty;
+            if (e.Key != Key.Enter) return;
 
-                BindingExpression binding = BindingOperations.GetBindingExpression(tBox, prop);
-                binding?.UpdateSource();
-            }
+            TextBox tBox = (TextBox)sender;
+            DependencyProperty prop = TextBox.TextProperty;
+
+            BindingExpression binding = BindingOperations.GetBindingExpression(tBox, prop);
+            binding?.UpdateSource();
         }
     }
 }

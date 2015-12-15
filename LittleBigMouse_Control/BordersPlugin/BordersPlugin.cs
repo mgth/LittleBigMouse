@@ -14,7 +14,6 @@ namespace LittleBigMouse_Control.BordersPlugin
         public override bool Init()
         {
             AddButton(this);
-            MainGui.GetScreenGuiControl = screen => new ScreenGuiVcp(screen);
             return true;
         }
 
@@ -31,6 +30,7 @@ namespace LittleBigMouse_Control.BordersPlugin
                 {
                     if (value)
                     {
+                        MainGui.GetScreenGuiControl = screen => new ScreenGuiBorders(screen);
                         MainGui.ControlGrid.Children.Clear();
 
                         MainGui.ControlGui = new ControlGuiSizer();
@@ -42,6 +42,7 @@ namespace LittleBigMouse_Control.BordersPlugin
                         {
  //                           MainGui.ScreenGuiPlugin = null;
                             MainGui.ControlGui = null;
+                            MainGui.GetScreenGuiControl = null;
                         }
                     }                    
                 }

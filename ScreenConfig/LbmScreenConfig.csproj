@@ -94,9 +94,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AbsolutePoint.cs" />
+    <Compile Include="ColorManagment.cs" />
     <Compile Include="Edid.cs" />
     <Compile Include="Html.cs" />
     <Compile Include="ILittleBigMouseService.cs" />
+    <Compile Include="ProbeLut.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="PropertyChangeHandler.cs" />
     <Compile Include="RegistryExt.cs" />

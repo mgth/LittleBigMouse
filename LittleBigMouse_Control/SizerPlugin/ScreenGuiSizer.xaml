@@ -18,7 +18,7 @@
         <TextBox 
                 FontSize="{Binding Path=ThisFontSize}" 
                 Text="{Binding Path=Screen.PhysicalY, StringFormat=N1, FallbackValue=top.y}" 
-                KeyUp="TextBox_KeyEnterUpdate" 
+                KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Center" 
                 VerticalAlignment="Top" 
                 Background="#00FFFFFF"/>
@@ -26,19 +26,19 @@
         <TextBox 
                 FontSize="{Binding Path=ThisFontSize}" 
                 Text="{Binding Path=Screen.PhysicalX, StringFormat=N1, FallbackValue=left.x}" 
-                KeyUp="TextBox_KeyEnterUpdate" 
+                KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Left" 
                 VerticalAlignment="Center" 
                 Background="#00FFFFFF"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
-            <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalHeight, FallbackValue=phy.h}" KeyUp="TextBox_KeyEnterUpdate" VerticalAlignment="Bottom"  HorizontalAlignment="Center" Foreground="#FFD9DCEC" Background="#00FFFFFF" Visibility="{Binding Path=SelectedVisibility}" MouseWheel="PhysicalHeight_MouseWheel"/>
+            <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalHeight, FallbackValue=phy.h}" KeyUp="OnKeyEnterUpdate" VerticalAlignment="Bottom"  HorizontalAlignment="Center" Foreground="#FFD9DCEC" Background="#00FFFFFF" Visibility="{Binding Path=SelectedVisibility}" MouseWheel="PhysicalHeight_MouseWheel"/>
             <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PhysicalBounds.Bottom,FallbackValue=bot.y}" ContentStringFormat="#0.#" HorizontalAlignment="Center"/>
             <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PixelSize.Height,FallbackValue=pix.h}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"  Visibility="{Binding Path=SelectedVisibility}" />
         </StackPanel>
 
         <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
-            <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalWidth,FallbackValue=phy.w}" KeyUp="TextBox_KeyEnterUpdate" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Background="#00FFFFFF" MouseWheel="PhysicalWidth_MouseWheel" Visibility="{Binding Path=SelectedVisibility}"/>
+            <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalWidth,FallbackValue=phy.w}" KeyUp="OnKeyEnterUpdate" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Background="#00FFFFFF" MouseWheel="PhysicalWidth_MouseWheel" Visibility="{Binding Path=SelectedVisibility}"/>
             <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PhysicalBounds.Right,FallbackValue=right.x}" ContentStringFormat="#0.#" HorizontalAlignment="Right"/>
             <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PixelSize.Width,FallbackValue=pix.w}" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Visibility="{Binding Path=SelectedVisibility}"/>
         </StackPanel>
@@ -51,26 +51,6 @@
 
         <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" HorizontalAlignment="Right" Foreground="White"/>
 
-        <StackPanel Margin="30" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-            <Button                 
-                Width="50"  
-                Height="25" 
-                VerticalAlignment="Bottom" 
-                HorizontalAlignment="Right"
-                Click="ButtonOff_OnClick"
-                        Content="Off"
-                />
-            <TextBox x:Name="txtCode">D6</TextBox>
-            <TextBox x:Name="txtValue">1</TextBox>
-            <Button                 
-                Width="50"  
-                Height="25" 
-                VerticalAlignment="Bottom" 
-                HorizontalAlignment="Right"
-                Click="ButtonOn_OnClick"
-                        Content="On"
-                />
 
-        </StackPanel>
     </Grid>
 </local:ScreenGuiControl>

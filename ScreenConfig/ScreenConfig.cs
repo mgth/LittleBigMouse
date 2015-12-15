@@ -25,6 +25,7 @@ using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -75,6 +76,7 @@ namespace LbmScreenConfig
         public Screen Selected => AllScreens.FirstOrDefault(screen => screen.Selected);
 
         private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
+
         internal static RegistryKey OpenConfigRegKey(string configId, bool create)
         {
             using (RegistryKey key = OpenRootRegKey(create))
@@ -84,23 +86,21 @@ namespace LbmScreenConfig
             }
         }
 
-        public RegistryKey OpenConfigRegKey(bool create = false)
+        internal static string ConfigPath(string configId, bool create)
         {
-            return OpenConfigRegKey(Id,create) ;
+            string path = Path.Combine(Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData), "LittleBigMouse", configId);
+
+            if (create) System.IO.Directory.CreateDirectory(path);
+
+            return path;
         }
 
-        public string Id
-        {
-            get
-            {
-                string id = "";
-                foreach (var screen in AllScreens.OrderBy(s => s.Id))
-                {
-                    id += ((id!="")?"." :"") + screen.Id;
-                }
-                return id;
-            }
-        }
+        public string ConfigPath(bool create) => ConfigPath(Id, create);
+
+        public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Id,create);
+
+        public string Id => AllScreens.OrderBy(s => s.Id).Aggregate("", (current, screen) => current + (((current != "") ? "." : "") + screen.Id));
 
         public static void EnumDisplays()
         {
@@ -175,9 +175,10 @@ namespace LbmScreenConfig
                     AllowCornerCrossing = k.GetValue("AllowCornerCrossing", 0).ToString() == "1";
                     AllowOverlaps = k.GetValue("AllowOverlaps", 0).ToString() == "1";
                     AllowDiscontinuity = k.GetValue("AllowDiscontinuity", 0).ToString() == "1";
-                    LoadAtStartup = k.GetValue("LoadAtStartup", 0).ToString() == "1";                   
+                    LoadAtStartup = k.GetValue("LoadAtStartup", 0).ToString() == "1";
+                    HomeCinema = k.GetValue("HomeCinema", 0).ToString() == "1";
                 }
-           }
+            }
 
             foreach (Screen s in AllScreens)
             {
@@ -198,6 +199,7 @@ namespace LbmScreenConfig
                     k.SetValue("AllowOverlaps", AllowOverlaps ? "1" : "0");
                     k.SetValue("AllowDiscontinuity", AllowDiscontinuity ? "1" : "0");
                     k.SetValue("LoadAtStartup", LoadAtStartup ? "1" : "0");
+                    k.SetValue("HomeCinema", HomeCinema ? "1" : "0");
 
                     foreach (Screen s in AllScreens)
                         s.Save(k);
@@ -367,6 +369,13 @@ namespace LbmScreenConfig
         {
             get { return _allowCornerCrossing; }
             set { _change.SetProperty(ref _allowCornerCrossing, value); }
+        }
+
+        private bool _homeCinema;
+        public bool HomeCinema
+        {
+            get { return _homeCinema; }
+            set { _change.SetProperty(ref _homeCinema, value); }
         }
 
         private Rect _configLocation;

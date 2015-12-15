@@ -294,6 +294,12 @@ namespace LittleBigMouse_Daemon
                 Mouse.MouseSpeed = Math.Round((5.0/96.0)*screenOut.RealDpiAvg, 0);
             }
 
+            if (_config.HomeCinema)
+            {
+                oldScreen.Vcp().Power = false;
+            }
+            screenOut.Vcp().Power = true;
+
             AddOldPoint(pOut);
             e.Handled = true;
         }

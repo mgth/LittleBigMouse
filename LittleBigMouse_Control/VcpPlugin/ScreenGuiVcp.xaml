@@ -17,6 +17,24 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <StackPanel Grid.Column="0" Grid.RowSpan="2" Orientation="Horizontal">
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Slider Value="{Binding Lut.Luminance}" HorizontalAlignment="Center" Grid.Row="0" Orientation="Vertical" x:Name="Slider" SmallChange="1" LargeChange="10" Maximum="{Binding Lut.MaxLuminance}" Minimum ="{Binding Lut.MinLuminance}">
+                    <Slider.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="Black" Offset="1"/>
+                            <GradientStop Color="white" Offset="0"/>
+                        </LinearGradientBrush>
+                    </Slider.Background>
+                </Slider>
+                <TextBox Grid.Row="1" x:Name="TextBox" Text="{Binding Lut.Luminance, StringFormat=N0}"/>
+            </Grid>
+
+
             <vcpPlugin:VcpSlider x:Name="BrightnessSlider" Component="Brightness"/>
             <vcpPlugin:VcpSlider x:Name="ContrastSlider" Component="Contrast"/>
             <vcpPlugin:VcpSlider x:Name="RedSlider" Component="Red"/>
@@ -37,9 +55,19 @@
             Click="Tune_OnClick"
                     Content="Tune"
             />
+            
+            <Button             
+            Click="ProbeLuminance_OnClick"
+                    Content="Tune Full"
+            />
+            
            <Button             
             Click="WakeUp_OnClick"
                     Content="WakeUp"
+            />
+            <Button             
+            Click="Save_OnClick"
+                    Content="Save"
             />
         </StackPanel>
         

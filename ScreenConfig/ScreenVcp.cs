@@ -10,14 +10,28 @@ using WinAPI_Dxva2;
 
 namespace LbmScreenConfig
 {
+    public static class VcpExpendScreen
+    {
+        private static Dictionary<Screen, ScreenVcp> _allVcp = new Dictionary<Screen, ScreenVcp>();
+        public static ScreenVcp Vcp(this Screen screen)
+        {
+            if (_allVcp.ContainsKey(screen)) return _allVcp[screen];
+
+            ScreenVcp vcp = new ScreenVcp(screen);
+            _allVcp.Add(screen, vcp);
+            return vcp;
+        }
+    }
     public enum Component { Red, Green, Blue, Brightness, Contrast }
     public class ScreenVcp : INotifyPropertyChanged
     {
+
         // PropertyChanged Handling
         private readonly PropertyChangedHelper _change;
         public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
-        private Screen Screen { get; }
-        public ScreenVcp(Screen screen)
+        public Screen Screen { get; }
+
+        internal ScreenVcp(Screen screen)
         {
             _change = new PropertyChangedHelper(this);
 
@@ -28,7 +42,35 @@ namespace LbmScreenConfig
             Gain = new MonitorRgbLevel(GetGain, SetGain);
             Drive = new MonitorRgbLevel(GetDrive, SetDrive);
 
-//            Probe = new MonitorRgbLevel(GetProbe, SetProbe);
+            //            Probe = new MonitorRgbLevel(GetProbe, SetProbe);
+        }
+
+        public bool AlternatePower => Screen.ManufacturerCode == "DEL";
+
+        private bool _power = true;
+        public bool Power
+        {
+            get { return _power; }
+            set
+            {
+                if (!_change.SetProperty(ref _power, value)) return;
+
+                if (value)
+                {
+                    if(AlternatePower)
+                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xE1, 0);
+                    else
+                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xD6, 1);
+
+                }
+                else
+                {
+                    if(AlternatePower)
+                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xE1, 1);
+                    else
+                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xD6, 4);
+                }
+            }
         }
 
 
@@ -40,70 +82,53 @@ namespace LbmScreenConfig
         public MonitorRgbLevel Drive { get; }
         public MonitorRgbLevel Probe { get; }
 
-        public bool GetBrightness(ref uint min, ref uint value, ref uint max, uint component = 0)
-    {
-        return Dxva2.GetMonitorBrightness(Screen.HPhysical, ref min, ref value, ref max);
-    }
-    public bool SetBrightness(uint value, uint component = 0)
-    {
-        return Dxva2.SetMonitorBrightness(Screen.HPhysical, value);
-    }
-    public bool GetContrast(ref uint min, ref uint value, ref uint max, uint component = 0)
-    {
-        return Dxva2.GetMonitorContrast(Screen.HPhysical, ref min, ref value, ref max);
-    }
-    public bool SetContrast(uint value, uint component = 0)
-    {
-        return Dxva2.SetMonitorContrast(Screen.HPhysical, value);
-    }
-    public bool GetGain(ref uint min, ref uint value, ref uint max, uint component)
-    {
-        return Dxva2.GetMonitorRedGreenOrBlueGain(Screen.HPhysical, component, ref min, ref value, ref max);
-    }
-    public bool SetGain(uint value, uint component)
-    {
-        return Dxva2.SetMonitorRedGreenOrBlueGain(Screen.HPhysical, component, value);
-    }
-    public bool GetDrive(ref uint min, ref uint value, ref uint max, uint component)
-    {
-        return Dxva2.GetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, ref min, ref value, ref max);
-    }
-    public bool SetDrive(uint component, uint value)
-    {
-        return Dxva2.SetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, value);
+        private bool GetBrightness(ref uint min, ref uint value, ref uint max, uint component = 0)
+        {
+            return Dxva2.GetMonitorBrightness(Screen.HPhysical, ref min, ref value, ref max);
+        }
+        private bool SetBrightness(uint value, uint component = 0)
+        {
+            return Dxva2.SetMonitorBrightness(Screen.HPhysical, value);
+        }
+        private bool GetContrast(ref uint min, ref uint value, ref uint max, uint component = 0)
+        {
+            return Dxva2.GetMonitorContrast(Screen.HPhysical, ref min, ref value, ref max);
+        }
+        private bool SetContrast(uint value, uint component = 0)
+        {
+            return Dxva2.SetMonitorContrast(Screen.HPhysical, value);
+        }
+        private bool GetGain(ref uint min, ref uint value, ref uint max, uint component)
+        {
+            return Dxva2.GetMonitorRedGreenOrBlueGain(Screen.HPhysical, component, ref min, ref value, ref max);
+        }
+        private bool SetGain(uint value, uint component)
+        {
+            return Dxva2.SetMonitorRedGreenOrBlueGain(Screen.HPhysical, component, value);
+        }
+        private bool GetDrive(ref uint min, ref uint value, ref uint max, uint component)
+        {
+            return Dxva2.GetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, ref min, ref value, ref max);
+        }
+        private bool SetDrive(uint component, uint value)
+        {
+            return Dxva2.SetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, value);
+        }
     }
 
-    //private ProbedColor _probedColor;
-    //public ProbedColor ProbedColor
-    //{
-    //    get { return _probedColor; }
-    //    set { _probedColor = value; changed("ProbedColor"); }
-    //}
-    //public bool GetProbe (ref uint min, ref uint value, ref uint max, uint component)
-    //{
-    //    return Dxva2.GetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, ref min, ref value, ref max);
-    //}
-    //public bool SetProbe(uint value, uint component)
-    //{
-    //    return Dxva2.SetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, value);
-    //}
-}
-
-    public delegate bool VcpGetter( ref uint min, ref uint value, ref uint max, uint component = 0);
-    public delegate bool VcpSetter( uint value, uint component = 0);
+    public delegate bool VcpGetter(ref uint min, ref uint value, ref uint max, uint component = 0);
+    public delegate bool VcpSetter(uint value, uint component = 0);
 
     public class MonitorRgbLevel : DependencyObject, INotifyPropertyChanged
     {
-        public event PropertyChangedEventHandler PropertyChanged;
-        private void changed(String name)
-        {
-            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(name));
-        }
+        private readonly PropertyChangedHelper _change;
+        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
 
         private readonly MonitorLevel[] _values = new MonitorLevel[3];
 
         public MonitorRgbLevel(VcpGetter getter, VcpSetter setter)
         {
+            _change = new PropertyChangedHelper(this);
             for (uint i = 0; i < 3; i++)
                 _values[i] = new MonitorLevel(getter, setter, i);
 
@@ -138,8 +163,8 @@ namespace LbmScreenConfig
         public MonitorLevel(VcpGetter getter, VcpSetter setter, uint component = 0)
         {
             _change = new PropertyChangedHelper(this);
-               //_screen = screen;
-               _component = component;
+            //_screen = screen;
+            _component = component;
             _componentSetter = setter;
             _componentGetter = getter;
 
@@ -170,7 +195,7 @@ namespace LbmScreenConfig
             uint max = 0;
             uint value = 0;
 
-            lock(LockDdcCi)
+            lock (LockDdcCi)
             {
                 _componentGetter?.Invoke(ref min, ref value, ref max, _component);
             }
@@ -190,7 +215,7 @@ namespace LbmScreenConfig
         {
             //lock (_lockTread)
             {
-                if (_threadSetter?.IsAlive??false) return;
+                if (_threadSetter?.IsAlive ?? false) return;
                 _threadSetter = new Thread(
                     delegate ()
                     {
@@ -218,7 +243,7 @@ namespace LbmScreenConfig
                         }
                     });
 
-                _threadSetter.Start();                
+                _threadSetter.Start();
             }
 
         }
@@ -226,13 +251,13 @@ namespace LbmScreenConfig
         [DependsOn("Value")]
         public uint ValueAsync
         {
-            get { return _value; }
+            get { return _pendding==uint.MaxValue?_value:_pendding; }
             set
             {
                 lock (_lockPending)
                 {
                     if (_pendding == value) return;
-                    _pendding = value;                   
+                    _pendding = value;
                 }
                 SetValueThread();
             }
@@ -241,7 +266,7 @@ namespace LbmScreenConfig
         {
             get
             {
-                while (_pendding != uint.MaxValue)
+                //while (_pendding != uint.MaxValue)
                 {
                     SetValueThread();
                 }
@@ -255,7 +280,6 @@ namespace LbmScreenConfig
                     _pendding = value;
                 }
                 SetValueThread();
-                //while (_pendding < uint.MaxValue);
             }
         }
         public uint Min => _min;

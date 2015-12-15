@@ -19,11 +19,8 @@ namespace LittleBigMouse_Control.VcpPlugin
     /// </summary>
     public partial class ScreenGuiVcp : ScreenGuiControl
     {
-        public ScreenVcp Vcp { get; }
         public ScreenGuiVcp(Screen screen):base(screen)
         {
-            Vcp = new ScreenVcp(screen);
-
             InitializeComponent();
 
             BrightnessSlider.MonitorLevel = Vcp.Brightness;
@@ -33,8 +30,14 @@ namespace LittleBigMouse_Control.VcpPlugin
             GreenSlider.MonitorLevel = Vcp.Gain.Green;
             BlueSlider.MonitorLevel = Vcp.Gain.Blue;
 
+            Lut.Load();
+
             DataContext = this;
+
         }
+
+        public ScreenVcp Vcp => Screen.Vcp();
+        public ProbeLut Lut => Screen.ProbeLut();
 
         private void ButtonOff_OnClick(object sender, RoutedEventArgs e)
         {
@@ -74,7 +77,89 @@ namespace LittleBigMouse_Control.VcpPlugin
         //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, 2);
         //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
         //}
+        private void ProbeLuminance_OnClick(object sender, RoutedEventArgs e)
+        {
+            var probe = new Argyll.LittleBigMouse.Argyll();
+            new Thread(() =>
+            {
+                MonitorLevel level = Screen.Vcp().Brightness;
+                LineSeries _line = new LineSeries();
 
+                //_line.Color = OxyColors.Red;
+
+                Curve.PlotModel.Series.Add(_line);
+
+                for (uint i = level.Min/*50*/; i <= level.Max; i++)
+                {
+                    level.Value = i;
+
+                    Tune();
+
+                    Tune t = Lut.Current;
+                    ProbedColor color = probe.SpotRead();
+                    t.Y = color.xyY.Y;
+                    t.x = color.xyY.x;
+                    t.y = color.xyY.y;
+
+                    Lut.RemoveBrightness(t.Brightness);
+                    Lut.Add(t);
+
+                    _line.Points.Add(new DataPoint(i, t.Y));
+                    Curve.Refresh();
+                }
+            }
+            ).Start();
+            return;
+
+            new Thread(() => {
+                for (uint channel = 0; channel < 3; channel++)
+                {
+                    MonitorLevel level = Vcp.Gain.Channel(channel);
+                    LineSeries line = new LineSeries();
+
+                    switch (channel)
+                    {
+                        case 0:
+                            line.Color = OxyColors.Red;
+                            break;
+                        case 1:
+                            line.Color = OxyColors.Green;
+                            break;
+                        case 2:
+                            line.Color = OxyColors.Blue;
+                            break;
+                    }
+
+                    Curve.PlotModel.Series.Add(line);
+
+                    uint max = level.Value;
+
+                    for (uint i = 32; i <= max; i++)
+                    {
+                        level.Value = i; Thread.Sleep(1000);
+
+                        ProbedColor color = probe.SpotRead();
+
+                        line.Points.Add(new DataPoint(i, color.DeltaE00()));
+                        Curve.Refresh();
+                    }
+
+                    double min = double.MaxValue;
+                    uint minIdx = level.Value;
+                    foreach (DataPoint dp in line.Points)
+                    {
+                        if (dp.Y < min)
+                        {
+                            min = dp.Y;
+                            minIdx = (uint)dp.X;
+                        }
+                    }
+
+                    level.Value = minIdx;
+                }
+            }
+            ).Start();
+        }
         private void Probe_OnClick(object sender, RoutedEventArgs e)
         {
             var probe = new Argyll.LittleBigMouse.Argyll();
@@ -183,7 +268,7 @@ namespace LittleBigMouse_Control.VcpPlugin
 
             _tune = new double[Vcp.Gain.Red.Max+1, Vcp.Gain.Green.Max+1, Vcp.Gain.Blue.Max+1];
 
-            uint[] rgb = {Vcp.Gain.Red.Value, Vcp.Gain.Green.Value, Vcp.Gain.Blue.Value};
+            uint[] rgb = { Vcp.Gain.Red.Value, Vcp.Gain.Green.Value, Vcp.Gain.Blue.Value};
 
             while (count > 0)
             {
@@ -199,50 +284,80 @@ namespace LittleBigMouse_Control.VcpPlugin
             while (Vcp.Gain.Blue.Value != rgb[2]) Vcp.Gain.Blue.Value = rgb[2];
         }
 
-        private bool Tune(uint channel,ref uint[] rgb)
+        private bool Tune(uint channel, ref uint[] rgb)
         {
-            uint c1 = channel%3;
-            uint c2;
+            uint[] c;
+            uint[] min = new uint[3];
+            uint[] max = new uint[3];
+            uint n = 0;
+
             switch (channel)
             {
+                case 0:
+                    c = new uint[] {0, 1, 2};
+                    n = 1;
+                    break;
+                case 1:
+                    c = new uint[] {1, 2, 0};
+                    n = 1;
+                    break;
+                case 2:
+                    c = new uint[] {2, 0, 1};
+                    n = 1;
+                    break;
                 case 3: //0
-                    c2 = 1;
+                    c = new uint[] {0, 1, 2};
+                    n = 2;
                     break;
-                case 4://1
-                    c2 = 2;
+                case 4: //1
+                    c = new uint[] {1, 2, 0};
+                    n = 2;
                     break;
-                case 5://2
-                    c2 = 0;
+                case 5: //2
+                    c = new uint[] {2, 0, 1};
+                    n = 2;
                     break;
                 default:
-                    c2 = 3;
+                    c = new uint[] {0, 1, 2};
+                    n = 3;
                     break;
             }
 
-            uint min = Vcp.Gain.Channel(c1).Min;
-            uint max = Vcp.Gain.Channel(c1).Max;
 
-            uint min2 = 0;
-            uint max2 = 0;
-
-            if (c2 < 3)
+            for (int i = 0; i < 3; i++)
             {
-                min2 = Vcp.Gain.Channel(c2).Min;
-                max2 = Vcp.Gain.Channel(c2).Max;                
+                min[i] = Vcp.Gain.Channel(c[i]).Min;
+                max[i] = Vcp.Gain.Channel(c[i]).Max;
             }
 
-            uint oldGain = rgb[c1];
+
+            // keep one channel to its max
+            switch (n)
+            {
+                case 1:
+                    if (rgb[c[0]] == max[0] && rgb[c[1]] < max[1] && rgb[c[2]] < max[2]) return false;
+                    break;
+                case 2:
+                    if ((rgb[c[0]] == max[0] || rgb[c[1]] == max[1]) && rgb[c[2]] < max[2]) return false;
+                    break;
+                case 3:
+                    return false;
+            }
+            
+
+
+            uint[] oldGain = { rgb[c[0]], rgb[c[1]], rgb[c[2]] };
             //uint old2 = rgb[c2];
 
             double deltaE = Probe(rgb);
             _line.Points.Add(new DataPoint(_line.Points.Count, deltaE));
             Curve.Refresh();
 
-            while (rgb[c1] > min && (c2==3 || rgb[c2] > min))
+            while (rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]]> min[2]))
             {
                 double old = deltaE;
-                rgb[c1] -= 1;
-                if(c2<3) rgb[c2] -= 1;
+
+                for (int i=0; i<n; i++) rgb[c[i]]--;
 
                 deltaE = Probe(rgb);
 
@@ -252,18 +367,17 @@ namespace LittleBigMouse_Control.VcpPlugin
                 Curve.Refresh();
             }
 
-            while (rgb[c1] < max && (c2 == 3 || rgb[c2] < max))
+            while (rgb[c[0]] < max[0] && (n < 2 || rgb[c[1]] < max[1]) && (n < 3 || rgb[c[2]] < max[2]))
             {
                 double old = deltaE;
-                rgb[c1] ++;
-                if (c2 < 3) rgb[c2] ++;
+
+                for (int i = 0; i < n; i++) rgb[c[i]]++;
 
                 deltaE = Probe(rgb);
 
                 if (deltaE > old)
                 {
-                    rgb[c1]--;
-                    if (c2 < 3) rgb[c2]--;
+                    for (int i = 0; i < n; i++) rgb[c[i]]--;
                     deltaE = Probe(rgb);
                     break;
                 }
@@ -272,7 +386,11 @@ namespace LittleBigMouse_Control.VcpPlugin
                 Curve.Refresh();
             }
 
-            return (oldGain != rgb[c1]);
+            return (
+                oldGain[0] != rgb[c[0]]
+                || oldGain[1] != rgb[c[1]] 
+                || oldGain[2] != rgb[c[2]]
+                );
     }
         private double Probe(uint[] rgb)
         {
@@ -294,6 +412,11 @@ namespace LittleBigMouse_Control.VcpPlugin
         }
         private void UIElement_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+        }
+
+        private void Save_OnClick(object sender, RoutedEventArgs e)
+        {
+            Lut.Save();
         }
     }
 }

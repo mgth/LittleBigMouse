@@ -40,14 +40,14 @@
         </Grid.RowDefinitions>
 
 
-        <Border Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" MouseWheel="TopBorder_MouseWheel" Background="{Binding Path=TopBorderColor}" MouseEnter="TopBorder_MouseEnter" MouseLeave="TopBorder_MouseLeave" MouseLeftButtonDown="TopBorder_MouseDown">
+        <!--<Border Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" MouseWheel="TopBorder_MouseWheel" Background="{Binding Path=TopBorderColor}" MouseEnter="TopBorder_MouseEnter" MouseLeave="TopBorder_MouseLeave" MouseLeftButtonDown="TopBorder_MouseDown">
             <Grid>
                 <TextBox FontSize="{Binding Path=TopFontSize}" Visibility="{Binding Path=TopBorderVisibility}" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#00FFFFFF" Text="{Binding Path=Screen.RealTopBorder, StringFormat=N0, FallbackValue=top.b}" />
             </Grid>
-        </Border>
+        </Border>-->
         
 
-        <Border 
+        <!--<Border 
             Grid.Column="0" 
             Grid.Row="2" 
             Grid.ColumnSpan="3" 
@@ -57,16 +57,16 @@
             MouseLeave="BottomBorder_MouseLeave" 
             MouseLeftButtonDown="BottomBorder_MouseDown">
             
-            <TextBox 
+            --><!--<TextBox 
                 HorizontalAlignment="Center" 
                 FontSize="{Binding Path=BottomFontSize}"  
                 Visibility="{Binding Path=BottomBorderVisibility}" 
                 Width="Auto" 
                 Background="Transparent" 
-                Text="{Binding Path=Screen.RealBottomBorder, StringFormat=N0, FallbackValue=top.b}" />
-        </Border>
+                Text="{Binding Path=Screen.RealBottomBorder, StringFormat=N0, FallbackValue=top.b}" />--><!--
+        </Border>-->
 
-        <Border 
+        <!--<Border 
             Grid.Column="0" 
             Grid.Row="1" 
             MouseWheel="LeftBorder_MouseWheel" 
@@ -75,7 +75,7 @@
             MouseLeave="LeftBorder_MouseLeave" 
             MouseLeftButtonDown="LeftBorder_MouseDown">
 
-            <TextBox  
+            --><!--<TextBox  
                 FontSize="{Binding Path=LeftFontSize}" 
                 Visibility="{Binding Path=LeftBorderVisibility}"  
                 RenderTransformOrigin="0.5,0.5" 
@@ -88,17 +88,17 @@
                     <RotateTransform  Angle="-90"/>
                 </TextBox.RenderTransform>
 
-            </TextBox>
-        </Border>
+            </TextBox>--><!--
+        </Border>-->
 
-        <Border    Grid.Column="2" Grid.Row="1" MouseWheel="RightBorder_MouseWheel" Background="{Binding Path=RightBorderColor}" MouseEnter="RightBorder_MouseEnter" MouseLeave="RightBorder_MouseLeave" MouseLeftButtonDown="RightBorder_MouseDown">
-            <TextBox FontSize="{Binding Path=RightFontSize}"  Visibility="{Binding Path=RightBorderVisibility}" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" Height="25" Background="#00FFFFFF" Text="{Binding Path=Screen.RealRightBorder, StringFormat=N0, FallbackValue=top.b}" MouseWheel="TextBox_MouseWheel">
+        <!--<Border    Grid.Column="2" Grid.Row="1" MouseWheel="RightBorder_MouseWheel" Background="{Binding Path=RightBorderColor}" MouseEnter="RightBorder_MouseEnter" MouseLeave="RightBorder_MouseLeave" MouseLeftButtonDown="RightBorder_MouseDown">
+            --><!--<TextBox FontSize="{Binding Path=RightFontSize}"  Visibility="{Binding Path=RightBorderVisibility}" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" Height="25" Background="#00FFFFFF" Text="{Binding Path=Screen.RealRightBorder, StringFormat=N0, FallbackValue=top.b}" MouseWheel="TextBox_MouseWheel">
             <TextBox.RenderTransform>
                 <RotateTransform  Angle="90"/>
             </TextBox.RenderTransform>
 
-            </TextBox>
-        </Border>
+            </TextBox>--><!--
+        </Border>-->
 
             <Grid Grid.Column="1" Grid.Row="1" x:Name="grid">
             </Grid>
@@ -175,6 +175,7 @@
                 Content="{Binding Path=PowerButton}"/>
         </Grid>
 
+        <Grid x:Name="CoverGrid"></Grid>
         
     </Canvas>
 </local:NotifyUserControl>

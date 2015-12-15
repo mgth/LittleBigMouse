@@ -135,7 +135,6 @@
       <DependentUpon>ScreenGuiBorders.xaml</DependentUpon>
     </Compile>
     <Compile Include="BordersPlugin\BordersPlugin.cs" />
-    <Compile Include="ColorManagment.cs" />
     <Compile Include="Curve.xaml.cs">
       <DependentUpon>Curve.xaml</DependentUpon>
     </Compile>
@@ -166,6 +165,9 @@
     <Compile Include="TestPattern.cs" />
     <Compile Include="TestPatternWindow.xaml.cs">
       <DependentUpon>TestPatternWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="VcpPlugin\ControlGuiVcp.xaml.cs">
+      <DependentUpon>ControlGuiVcp.xaml</DependentUpon>
     </Compile>
     <Compile Include="VcpPlugin\ScreenGuiVcp.xaml.cs">
       <DependentUpon>ScreenGuiVcp.xaml</DependentUpon>
@@ -217,6 +219,10 @@
     <Page Include="TestPatternWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="VcpPlugin\ControlGuiVcp.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
     </Page>
     <Page Include="VcpPlugin\ScreenGuiVcp.xaml">
       <Generator>MSBuild:Compile</Generator>

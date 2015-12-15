@@ -42,15 +42,27 @@ namespace LittleBigMouse_Control
                 lblName.FontSize = center.Height / 2;
         }
 
-        private void TextBox_KeyEnterUpdate(object sender, KeyEventArgs e)
+        [DependsOn("Screen.Selected")]
+        public LinearGradientBrush ScreenColor
         {
-            if (e.Key == Key.Enter)
+            get
             {
-                TextBox tBox = (TextBox)sender;
-                DependencyProperty prop = TextBox.TextProperty;
+                var c1 = Color.FromArgb(0xFF, 0x72, 0x88, 0xC0);
+                var c2 = Color.FromArgb(0xFF, 0x52, 0x66, 0x9D);
 
-                BindingExpression binding = BindingOperations.GetBindingExpression(tBox, prop);
-                binding?.UpdateSource();
+                return new LinearGradientBrush()
+                {
+                    StartPoint = new Point(0, 0.3),
+                    EndPoint = new Point(1, 0.7),
+                    GradientStops =
+                    {
+                        new GradientStop {Color = c1, Offset = 0},
+                        new GradientStop {Color = c2, Offset = 1}
+                    }
+                };
+                //GradientStop gd0 = new GradientStop {Color =  false ? Colors.Lime : Colors.Gray};
+                //GradientStop gd1 = new GradientStop {Color =  false ? Colors.DarkGreen : new Color {A=255,R=30,G=30,B=30},Offset =0.6};
+
             }
         }
 
@@ -289,36 +301,6 @@ namespace LittleBigMouse_Control
                      new Anchor(Screen,Screen.PhysicalOutsideBounds.Bottom,new SolidColorBrush(Colors.Chartreuse)),
                 };
 
-        private void ButtonOff_OnClick(object sender, RoutedEventArgs e)
-        {
-            Dxva2.SetVCPFeature(Screen.HPhysical, 0xD6, 4);
-        }
-        private void ButtonOn_OnClick(object sender, RoutedEventArgs e)
-        {
-            uint code = Convert.ToUInt32(txtCode.Text, 16);
-            uint value = Convert.ToUInt32(txtValue.Text, 16);
 
-            uint pvct;
-            uint current;
-            uint max;
-
-            Dxva2.GetVCPFeatureAndVCPFeatureReply(Screen.HPhysical, code, out pvct, out current, out max);
-
-            Debug.Print(pvct.ToString() + ":" + current.ToString() + "<" + max.ToString());
-
-            Dxva2.SetVCPFeature(Screen.HPhysical, code, value);
-            //for (uint i = 0; i < max; i++)
-            //{
-            //    if (i==5 && code==0xD6) continue; 
-            //    bool result = Dxva2.SetVCPFeature(Screen.HPhysical, code, i);
-            //    Debug.Print(i.ToString() + (result?":O":"X"));
-            //}
-
-            //IntPtr desk = User32.GetDesktopWindow();
-            //IntPtr win = User32.FindWindowEx(IntPtr.Zero, IntPtr.Zero, null, null);
-
-            //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, 2);
-            //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
-        }
     }
 }

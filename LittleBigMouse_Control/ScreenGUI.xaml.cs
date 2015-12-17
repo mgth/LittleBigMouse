@@ -32,6 +32,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using LbmScreenConfig;
+using NotifyChange;
 using WinAPI_Dxva2;
 using WinAPI_User32;
 

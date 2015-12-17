@@ -36,15 +36,6 @@ namespace LittleBigMouse_Control.BordersPlugin
                         MainGui.ControlGui = new ControlGuiSizer();
 
                     }
-                    else
-                    {
- //                       if (MainGui.ScreenGuiPlugin == this)
-                        {
- //                           MainGui.ScreenGuiPlugin = null;
-                            MainGui.ControlGui = null;
-                            MainGui.GetScreenGuiControl = null;
-                        }
-                    }                    
                 }
             }
         }

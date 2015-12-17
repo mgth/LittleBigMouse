@@ -207,7 +207,7 @@ namespace LbmScreenConfig
         {
             for (int i=54;i<=108;i+=18)
             {
-                if (_rawData[i]==0 && _rawData[i+1]==0 && _rawData[i+2]==0 && _rawData[i+3]==code)
+                if (i<_rawData.Length && _rawData[i]==0 && _rawData[i+1]==0 && _rawData[i+2]==0 && _rawData[i+3]==code)
                 {
                     string s = "";
                     for (int j = i + 5; j < i + 18; j++)

@@ -5,8 +5,10 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:LittleBigMouse_Control.SizerPlugin"
              xmlns:littleBigMouseControl="clr-namespace:LittleBigMouse_Control"
+             xmlns:lbmScreenConfig="clr-namespace:LbmScreenConfig;assembly=LbmScreenConfig"
              mc:Ignorable="d" 
              d:DesignHeight="50" d:DesignWidth="600">
+
     <Grid>
         <StackPanel  Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
             <!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
@@ -23,7 +25,8 @@
                 </StackPanel>
                 <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                 <Label Foreground="White">Brightness</Label>
-                <ScrollBar Value="{Binding Luminance}" Minimum="{Binding MinLuminance}" Maximum="{Binding MaxLuminance}" Orientation="Horizontal" MinWidth="100"/>
+
+                    <lbmScreenConfig:Luminance  Config="{Binding Config}" />
                 </StackPanel>
                 <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                 </StackPanel>

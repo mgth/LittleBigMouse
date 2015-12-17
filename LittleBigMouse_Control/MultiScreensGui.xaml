@@ -7,19 +7,41 @@
                         >
     <Grid x:Name="MainGrid">
         <!--SizeChanged="MainGrid_OnSizeChanged"-->
-        <Grid.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="2,2">
-                <GradientStop Offset="0" Color="#FF293348"/>
-                <GradientStop Offset="1.5" Color="Transparent"/>
-            </LinearGradientBrush>
-        </Grid.Background>
 
-        <Label Foreground="#20F0F0FF" FontSize="50">
+            <!--<Border.Effect>
+                <BlurEffect Radius="10"></BlurEffect>
+            </Border.Effect>-->
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0.4" EndPoint="1,0.6">
+                <!--<GradientStop Offset="0" Color="#FF293348"/>-->
+                <GradientStop Offset="0" Color="Black"/>
+                <GradientStop Offset="0.5" Color="#80808080"/>
+                <GradientStop Offset="0.53" Color="#80606060"/>
+                <!--<GradientStop Offset="0.5" Color="Transparent"/>
+                    <GradientStop Offset="0.6" Color="#E0293348"/>-->
+                    <GradientStop Offset="1" Color="#40000000"/>
+                </LinearGradientBrush>
+        </Grid.Background>
+        
+        <Label FontSize="50">
+            <Label.Foreground>
+                
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <!--<GradientStop Offset="0" Color="#FF293348"/>-->
+                    <GradientStop Offset="0" Color="#20F0F0FF"/>
+                    <GradientStop Offset="0.5" Color="#A0808080"/>
+                    <GradientStop Offset="0.53" Color="#80606060"/>
+                    <GradientStop Offset="1" Color="#80808080"/>
+                </LinearGradientBrush>
+                
+            </Label.Foreground>
+            
+            
             <Label.Effect>
                 <BlurEffect Radius="10"></BlurEffect>
             </Label.Effect>
 
-            Little Big Mouse
+            Little Big Mon
         </Label>
 
         <Canvas x:Name="ScreensGrid" />

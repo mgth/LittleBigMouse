@@ -16,6 +16,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using LbmScreenConfig;
+using NotifyChange;
 using WinAPI_Dxva2;
 using Component = LbmScreenConfig.Component;
 

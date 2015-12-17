@@ -36,10 +36,6 @@ namespace LittleBigMouse_Control.VcpPlugin
                     MainGui.ControlGui = new ControlGuiVcp();
                     MainGui.GetScreenGuiControl = screen => new ScreenGuiVcp(screen);
                 }
-                else
-                {
-                    MainGui.ControlGui = null;
-                }
             }
         }
     }

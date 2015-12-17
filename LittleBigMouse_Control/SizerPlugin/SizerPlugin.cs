@@ -55,7 +55,6 @@ namespace LittleBigMouse_Control.SizerPlugin
                             gui.MainGrid.Children.Remove(HorizontalAnchors);
                         }
 
-                        MainGui.ControlGui = null;
                      }                    
                 }
             }

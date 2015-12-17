@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using LbmScreenConfig;
+using NotifyChange;
 using WinAPI_Dxva2;
 
 namespace LittleBigMouse_Control

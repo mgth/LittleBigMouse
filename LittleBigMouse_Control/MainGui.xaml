@@ -11,9 +11,10 @@
         BorderBrush="Black"
         Background="Transparent"
         WindowStyle="None"
-        AllowsTransparency="True"
-        
+         AllowsTransparency="True"
+       
         LocationChanged="ConfigGui_OnLocationChanged"      
+        Loaded="Window_Loaded"
          >
     <!--Left ="{Binding Path=LocationLeft, Mode=TwoWay}"
         Top ="{Binding Path=LocationTop, Mode=TwoWay}"
@@ -21,7 +22,9 @@
         Height ="{Binding Path=LocationTop, Mode=TwoWay}"-->
 
     <!--<Grid Background="#FF2D2D30">-->
-
+    <Window.Resources>
+        <Style x:Key="ButtonStyle" BasedOn="{StaticResource {x:Type ToggleButton}}" TargetType="RadioButton" />
+    </Window.Resources>
     <Grid x:Name="ResizeGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="{Binding Path=VerticalResizerSize, FallbackValue=10}"></RowDefinition>
@@ -44,8 +47,8 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"></ColumnDefinition>
             </Grid.ColumnDefinitions>
-            <StackPanel x:Name="ButtonPanel" Orientation="Horizontal" Background="Black"/>
-
+            <StackPanel  x:Name="ButtonPanel" Orientation="Horizontal" Background="Black"/>
+            
             <Grid Grid.Row="1" x:Name="MainGrid">
                 
             </Grid>

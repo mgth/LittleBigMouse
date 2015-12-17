@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using NotifyChange;
 using WinAPI_Dxva2;
 
 namespace LbmScreenConfig

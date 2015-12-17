@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.23107.0
+VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TaskService", "TaskService\TaskService.csproj", "{81B5ABCC-6909-483D-8BB3-84B52E3C7043}"
 EndProject
@@ -9,9 +9,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LbmScreenConfig", "ScreenCo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse_Daemon", "LittleBigMouse_Daemon\LittleBigMouse_Daemon.csproj", "{CEA3E9DF-4011-4041-BCCF-6318DC7E76F4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse_Control", "LittleBigMouse_Control\LittleBigMouse_Control.csproj", "{7AD2B3B1-3CDD-40D6-9135-E02C37001AFB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMon_Control", "LittleBigMouse_Control\LittleBigMon_Control.csproj", "{7AD2B3B1-3CDD-40D6-9135-E02C37001AFB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NativeHelpers", "NativeHelpers\NativeHelpers.vcxproj", "{938E65D0-EC9C-4181-87CA-A43D4747610D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotifyChange", "NotifyChange\NotifyChange.csproj", "{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -82,6 +84,18 @@ Global
 		{938E65D0-EC9C-4181-87CA-A43D4747610D}.Release|x64.Build.0 = Release|x64
 		{938E65D0-EC9C-4181-87CA-A43D4747610D}.Release|x86.ActiveCfg = Release|Win32
 		{938E65D0-EC9C-4181-87CA-A43D4747610D}.Release|x86.Build.0 = Release|Win32
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Debug|x64.Build.0 = Debug|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Debug|x86.Build.0 = Debug|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Release|x64.ActiveCfg = Release|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Release|x64.Build.0 = Release|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Release|x86.ActiveCfg = Release|Any CPU
+		{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

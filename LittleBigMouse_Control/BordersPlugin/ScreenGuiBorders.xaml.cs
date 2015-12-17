@@ -14,6 +14,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using LbmScreenConfig;
+using NotifyChange;
 
 namespace LittleBigMouse_Control.BordersPlugin
 {
@@ -35,6 +36,13 @@ namespace LittleBigMouse_Control.BordersPlugin
 
             Unloaded += OnUnloaded;
 
+            Loaded += OnLoaded;
+
+            
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs routedEventArgs)
+        {
             DrawLines();
         }
 
@@ -49,7 +57,8 @@ namespace LittleBigMouse_Control.BordersPlugin
         [DependsOn("Size")]
         public void DrawLines()
         {
-            if (this.Visibility != System.Windows.Visibility.Visible) return;
+            if (Visibility != Visibility.Visible) return;
+            if (!IsLoaded) return;
 
             Canvas c = new Canvas();
 
@@ -123,37 +132,31 @@ namespace LittleBigMouse_Control.BordersPlugin
         }
         private void Height_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            double delta = (e.Delta > 0) ? 1 : -1;
-            PhysicalOutsideHeight += delta;
+                PhysicalOutsideHeight += WheelDelta(e);
         }
         private void Width_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            double delta = (e.Delta > 0) ? 1 : -1;
-            PhysicalOutsideWidth += delta;
+            PhysicalOutsideWidth += WheelDelta(e);
         }
 
         private void Bottom_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            double delta = (e.Delta > 0) ? 1 : -1;
-            Screen.RealBottomBorder += delta;
+            Screen.RealBottomBorder += WheelDelta(e);
         }
 
         private void Right_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            double delta = (e.Delta > 0) ? 1 : -1;
-            Screen.RealRightBorder += delta;
+            Screen.RealRightBorder += WheelDelta(e);
         }
 
         private void Left_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            double delta = (e.Delta > 0) ? 1 : -1;
-            Screen.RealLeftBorder += delta;
+            Screen.RealLeftBorder += WheelDelta(e);
         }
 
         private void Top_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            double delta = (e.Delta > 0) ? 1 : -1;
-            Screen.RealTopBorder += delta;
+            Screen.RealTopBorder += WheelDelta(e);
         }
     }
 }

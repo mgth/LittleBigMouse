@@ -33,6 +33,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Windows;
+using NotifyChange;
 using WinAPI_Dxva2;
 using WinAPI_Gdi32;
 using WinAPI_User32;

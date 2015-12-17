@@ -5,9 +5,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using LbmScreenConfig;
+using LittleBigMouse_Control.Properties;
+using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
@@ -34,8 +37,11 @@ namespace LittleBigMouse_Control
 
         public void AddButton(IPluginButton plugin)
         {
-            ToggleButton tb = new ToggleButton
+            //                <RadioButton Style="{StaticResource {x:Type ToggleButton}}" />
+
+            RadioButton tb = new RadioButton
             {
+                Style = (Style)MainGui.Resources["ButtonStyle"],
                 Content = plugin.Caption,
                 DataContext = plugin,
             };
@@ -49,6 +55,7 @@ namespace LittleBigMouse_Control
             tb.SetBinding(ToggleButton.IsCheckedProperty, binding);
 
             MainGui.ButtonPanel.Children.Add(tb);
+
         }
 
     }

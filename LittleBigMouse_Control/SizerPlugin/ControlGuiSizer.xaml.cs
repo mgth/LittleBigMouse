@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using SystemColors1;
 using LbmScreenConfig;
 
 namespace LittleBigMouse_Control.SizerPlugin
@@ -148,6 +149,11 @@ namespace LittleBigMouse_Control.SizerPlugin
         private void Config_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             ActivateConfig();
+        }
+
+        private void cmdColors_Click(object sender, RoutedEventArgs e)
+        {
+            new ColorsWindow().Show();
         }
     }
 }

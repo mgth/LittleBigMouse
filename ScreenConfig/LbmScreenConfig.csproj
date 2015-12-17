@@ -79,11 +79,13 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Xaml" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -94,13 +96,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AbsolutePoint.cs" />
+    <Compile Include="AccentColor.cs" />
     <Compile Include="ColorManagment.cs" />
     <Compile Include="Edid.cs" />
     <Compile Include="Html.cs" />
     <Compile Include="ILittleBigMouseService.cs" />
+    <Compile Include="Luminance.xaml.cs">
+      <DependentUpon>Luminance.xaml</DependentUpon>
+    </Compile>
     <Compile Include="ProbeLut.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="PropertyChangeHandler.cs" />
     <Compile Include="RegistryExt.cs" />
     <Compile Include="Screen.cs" />
     <Compile Include="ScreenConfig.cs" />
@@ -112,9 +117,22 @@
     <Compile Include="WinAPI_Ntdll.cs" />
     <Compile Include="WinAPI_SetupAPI.cs" />
     <Compile Include="WinAPI_User32.cs" />
+    <Compile Include="WindowInteropHelper.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="Luminance.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
+      <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
+      <Name>NotifyChange</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

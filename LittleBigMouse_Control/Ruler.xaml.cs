@@ -29,6 +29,7 @@ using System.Windows.Shapes;
 using LbmScreenConfig;
 using System.ComponentModel;
 using System.Windows.Interop;
+using NotifyChange;
 using WinAPI_User32;
 
 namespace LittleBigMouse_Control

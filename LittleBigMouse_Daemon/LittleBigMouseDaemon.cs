@@ -20,13 +20,17 @@ namespace LittleBigMouse_Daemon
 
         public LittleBigMouseDaemon()
         {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Startup += OnStartup;
             Exit += OnExit;
 
         }
 
+        
+
         private void OnStartup(object sender, EventArgs exitEventArgs)
         {
+
             _notify = new Notify();
             _engine = new MouseEngine();
 
@@ -35,11 +39,14 @@ namespace LittleBigMouse_Daemon
             if (_notify != null)
                 _notify.Click += OnNotifyClick;
 
+            this.Deactivated += OnDeactivated; 
+
             foreach (string configName in ScreenConfig.ConfigsList)
             {
                 _notify.AddMenu(configName, MatchConfig);
             }
 
+            //_notify.AddMenu("Brightness", Brightness);
 
             _notify.AddMenu("Open", Open);
             _notify.AddMenu("Start", Start);
@@ -47,6 +54,12 @@ namespace LittleBigMouse_Daemon
             _notify.AddMenu("Exit", Quit);
 
             Start();
+        }
+
+        private void OnDeactivated(object sender, EventArgs eventArgs)
+        {
+            _brightness?.Close();
+            _brightness = null;
         }
 
         private void MatchConfig(object sender, EventArgs e)
@@ -125,7 +138,6 @@ namespace LittleBigMouse_Daemon
             _notify.SetOff();
         }
         private void Open(object sender, EventArgs eventArgs) { Open(); }
-        private void OnNotifyClick(object sender, EventArgs e) { Open(); }
         [DllImport("user32")]
         private static extern bool SetForegroundWindow(IntPtr hwnd);
         private void Open()
@@ -141,6 +153,20 @@ namespace LittleBigMouse_Daemon
             string filename = p.MainModule.FileName.Replace("Daemon", "Control").Replace(".vshost", "");
             Process.Start(filename, "--startcontrol");
         }
+
+
+        private Window _brightness = null;
+        private void OnNotifyClick(object sender, EventArgs e) { Brightness(); }
+        public void Brightness(object sender, EventArgs eventArgs) { Brightness(); }
+        private void Brightness()
+        {
+            if (_brightness==null)
+                _brightness = new LuminanceWindow();
+
+            _brightness.Show();
+        }
+
+
         public void Schedule()
         {
             using (TaskService ts = new TaskService())

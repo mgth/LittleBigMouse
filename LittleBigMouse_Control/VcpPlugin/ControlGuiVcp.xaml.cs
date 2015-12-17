@@ -72,64 +72,6 @@ namespace LittleBigMouse_Control.VcpPlugin
             ;
         }
 
-        public double Luminance
-        {
-            get
-            {
-                double l = 0;
 
-                foreach (Screen screen in Config.AllScreens)
-                {
-                    ProbeLut lut = screen.ProbeLut(); //ProbeLut.GetLut(screen);
-                    lut.Load();
-                    l += lut.Current.Y;
-                }
-
-                return l/Config.AllScreens.Count;
-            }
-
-            set
-            {
-                foreach (Screen screen in Config.AllScreens)
-                {
-                    ProbeLut lut = screen.ProbeLut();
-                    lut.Load();
-                    lut.Luminance = value;
-                }
-            }
-        }
-
-        public double MaxLuminance
-        {
-            get
-            {
-                double max = 0;
-
-                foreach (Screen screen in Config.AllScreens)
-                {
-                    ProbeLut lut = screen.ProbeLut();
-                    lut.Load();
-                    max = Math.Max(max, lut.MaxLuminance);
-                }
-
-                return max;
-            }
-        }
-        public double MinLuminance
-        {
-            get
-            {
-                double min = 0;
-
-                foreach (Screen screen in Config.AllScreens)
-                {
-                    ProbeLut lut = screen.ProbeLut();
-                    lut.Load();
-                    min = Math.Min(min, lut.MinLuminance);
-                }
-
-                return min;
-            }
-        }
     }
 }

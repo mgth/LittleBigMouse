@@ -29,6 +29,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
+using NotifyChange;
 using WinAPI_User32;
 // ReSharper disable CompareOfFloatsByEqualityOperator
 

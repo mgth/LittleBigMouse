@@ -113,17 +113,20 @@
     <Compile Include="LittleBigMouseService.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="LuminanceWindow.xaml.cs">
+      <DependentUpon>LuminanceWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Mouse.cs" />
     <Compile Include="MouseEngine.cs" />
     <Compile Include="Notify.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="Properties\Annotations.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="WinAPI_User32.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
@@ -133,6 +136,10 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
+      <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
+      <Name>NotifyChange</Name>
+    </ProjectReference>
     <ProjectReference Include="..\ScreenConfig\LbmScreenConfig.csproj">
       <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
       <Name>LbmScreenConfig</Name>
@@ -158,6 +165,12 @@
   <ItemGroup>
     <Content Include="lbm-off.ico" />
     <Content Include="lbm2-on.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="LuminanceWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

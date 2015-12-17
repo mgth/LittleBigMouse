@@ -135,6 +135,9 @@
       <DependentUpon>ScreenGuiBorders.xaml</DependentUpon>
     </Compile>
     <Compile Include="BordersPlugin\BordersPlugin.cs" />
+    <Compile Include="ColorsWindow.xaml.cs">
+      <DependentUpon>ColorsWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Curve.xaml.cs">
       <DependentUpon>Curve.xaml</DependentUpon>
     </Compile>
@@ -142,7 +145,6 @@
     <Compile Include="MultiScreensGui.xaml.cs">
       <DependentUpon>MultiScreensGui.xaml</DependentUpon>
     </Compile>
-    <Compile Include="NotifyUserControl.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="ScreenGuiControl.cs" />
     <Compile Include="ScreenGui.xaml.cs">
@@ -178,6 +180,10 @@
     </Compile>
     <Compile Include="WindowResize.cs" />
     <Page Include="BordersPlugin\ScreenGuiBorders.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="ColorsWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -287,6 +293,10 @@
     <ProjectReference Include="..\NativeHelpers\NativeHelpers.vcxproj">
       <Project>{938e65d0-ec9c-4181-87ca-a43d4747610d}</Project>
       <Name>NativeHelpers</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
+      <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
+      <Name>NotifyChange</Name>
     </ProjectReference>
     <ProjectReference Include="..\ScreenConfig\LbmScreenConfig.csproj">
       <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>

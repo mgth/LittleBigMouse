@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using LbmScreenConfig;
+using NotifyChange;
 
 namespace LittleBigMouse_Control
 {

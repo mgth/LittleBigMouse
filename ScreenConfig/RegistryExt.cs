@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using Microsoft.Win32;
+using NotifyChange;
 
 namespace LbmScreenConfig
 {

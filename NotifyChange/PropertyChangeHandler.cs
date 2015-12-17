@@ -6,7 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace LbmScreenConfig
+namespace NotifyChange
 {
     public class PropertyChangedHelper
     {
@@ -75,17 +75,17 @@ namespace LbmScreenConfig
             RaiseProperty(propertyName);
             return true;
         }
-        bool SetProperty<T, TProperty>(T input, Expression<Func<Screen, TProperty>> outExpr,
-            [CallerMemberName] string propertyName = null)
-        {
-            //if (string.IsNullOrEmpty(input)) return true;
-            var expr = (MemberExpression)outExpr.Body;
-            var prop = (PropertyInfo)expr.Member;
-            if (prop.Equals(input)) return false;
+        //bool SetProperty<T, TProperty>(T input, Expression<Func<Screen, TProperty>> outExpr,
+        //    [CallerMemberName] string propertyName = null)
+        //{
+        //    //if (string.IsNullOrEmpty(input)) return true;
+        //    var expr = (MemberExpression)outExpr.Body;
+        //    var prop = (PropertyInfo)expr.Member;
+        //    if (prop.Equals(input)) return false;
 
-            prop.SetValue(this, input, null);
-            return true;
-        }
+        //    prop.SetValue(this, input, null);
+        //    return true;
+        //}
 
         private void GetDependOn(string propertyName, ref List<string> list, ref List<MethodInfo> listMethods)
         {

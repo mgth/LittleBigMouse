@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 
 namespace WinAPI_User32
 {
@@ -364,7 +365,7 @@ namespace WinAPI_User32
     }
 
     [Flags]
-    internal enum MOUSEEVENTF : uint
+    public enum MOUSEEVENTF : uint
     {
         ABSOLUTE = 0x8000,
         HWHEEL = 0x01000,
@@ -1287,12 +1288,12 @@ namespace WinAPI_User32
         OEM_CLEAR = 0,
     }
     [StructLayout(LayoutKind.Sequential)]
-    internal struct MOUSEINPUT
+    public struct MOUSEINPUT
     {
-        internal int dx;
-        internal int dy;
+        public int dx;
+        public int dy;
         internal int mouseData;
-        internal MOUSEEVENTF dwFlags;
+        public MOUSEEVENTF dwFlags;
         internal uint time;
         internal UIntPtr dwExtraInfo;
     }
@@ -1316,10 +1317,9 @@ namespace WinAPI_User32
     }
 
     [StructLayout(LayoutKind.Explicit)]
-    internal struct InputUnion
+    public struct InputUnion
     {
-        [FieldOffset(0)]
-        internal MOUSEINPUT mi;
+        [FieldOffset(0)] public MOUSEINPUT mi;
         [FieldOffset(0)]
         internal KEYBDINPUT ki;
         [FieldOffset(0)]
@@ -1384,7 +1384,7 @@ namespace WinAPI_User32
 
         //Input
         [DllImport("user32.dll")]
-        internal static extern uint SendInput(uint nInputs,
+        public static extern uint SendInput(uint nInputs,
            [MarshalAs(UnmanagedType.LPArray), In] InputUnion[] pInputs,
            int cbSize);
 
@@ -1472,5 +1472,62 @@ namespace WinAPI_User32
 
         public const int SC_MONITORPOWER = 0xF170;
         public const int WM_SYSCOMMAND = 0x0112;
+
+
+        [DllImport("user32.dll")]
+        public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WindowCompositionAttributeData
+        {
+            public WindowCompositionAttribute Attribute;
+            public IntPtr Data;
+            public int SizeOfData;
+        }
+
+        public enum WindowCompositionAttribute
+        {
+            // ...
+            WCA_ACCENT_POLICY = 19
+            // ...
+        }
+
+        public enum AccentState
+        {
+            ACCENT_DISABLED = 0,
+            ACCENT_ENABLE_GRADIENT = 1,
+            ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+            ACCENT_ENABLE_BLURBEHIND = 3,
+            ACCENT_INVALID_STATE = 4
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct AccentPolicy
+        {
+            public AccentState AccentState;
+            public int AccentFlags;
+            public int GradientColor;
+            public int AnimationId;
+        }
+        public static void EnableBlur(Window win)
+        {
+            WindowInteropHelper windowHelper = new WindowInteropHelper(win);
+
+            var accent = new User32.AccentPolicy();
+            var accentStructSize = Marshal.SizeOf(accent);
+            accent.AccentState = User32.AccentState.ACCENT_ENABLE_BLURBEHIND;
+
+            var accentPtr = Marshal.AllocHGlobal(accentStructSize);
+            Marshal.StructureToPtr(accent, accentPtr, false);
+
+            var data = new User32.WindowCompositionAttributeData();
+            data.Attribute = User32.WindowCompositionAttribute.WCA_ACCENT_POLICY;
+            data.SizeOfData = accentStructSize;
+            data.Data = accentPtr;
+
+            User32.SetWindowCompositionAttribute(windowHelper.Handle, ref data);
+
+            Marshal.FreeHGlobal(accentPtr);
+        }
     }
 }

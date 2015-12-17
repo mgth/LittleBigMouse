@@ -5,6 +5,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using LbmScreenConfig;
 using LittleBigMouse_Control;
+using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
@@ -32,6 +33,13 @@ namespace LittleBigMouse_Control
 
             BindingExpression binding = BindingOperations.GetBindingExpression(tBox, prop);
             binding?.UpdateSource();
+        }
+
+        public double WheelDelta(MouseWheelEventArgs e)
+        {
+            double delta = (e.Delta > 0) ? 1 : -1;
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0) delta /= 10;
+            return delta;
         }
     }
 }

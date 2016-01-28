@@ -29,7 +29,10 @@ namespace LittleBigMouse_Control
         public ScreenGuiSizer(Screen screen) : base(screen)
         {
             InitializeComponent();
+            DataContext = new ScreenViewModel(screen);
+            SizeChanged += ((ScreenViewModel) DataContext).OnSizeChanged;
         }
+
 
         private SizerPlugin.SizerPlugin Plugin => SizerPlugin.SizerPlugin.Instance;
 
@@ -43,29 +46,6 @@ namespace LittleBigMouse_Control
                 lblName.FontSize = center.Height / 2;
         }
 
-        [DependsOn("Screen.Selected")]
-        public LinearGradientBrush ScreenColor
-        {
-            get
-            {
-                var c1 = Color.FromArgb(0xFF, 0x72, 0x88, 0xC0);
-                var c2 = Color.FromArgb(0xFF, 0x52, 0x66, 0x9D);
-
-                return new LinearGradientBrush()
-                {
-                    StartPoint = new Point(0, 0.3),
-                    EndPoint = new Point(1, 0.7),
-                    GradientStops =
-                    {
-                        new GradientStop {Color = c1, Offset = 0},
-                        new GradientStop {Color = c2, Offset = 1}
-                    }
-                };
-                //GradientStop gd0 = new GradientStop {Color =  false ? Colors.Lime : Colors.Gray};
-                //GradientStop gd1 = new GradientStop {Color =  false ? Colors.DarkGreen : new Color {A=255,R=30,G=30,B=30},Offset =0.6};
-
-            }
-        }
 
         private void PhysicalWidth_MouseWheel(object sender, MouseWheelEventArgs e)
         {
@@ -74,6 +54,7 @@ namespace LittleBigMouse_Control
             double delta = (e.Delta > 0) ? 1 : -1;
             Screen.RealPhysicalWidth += delta;
         }
+
         private void PhysicalHeight_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (!Screen.Selected) return;

@@ -1,5 +1,5 @@
 ﻿/*
-  MouseControl - Mouse Managment in multi DPI monitors environment
+  MouseControl - LbmMouse Managment in multi DPI monitors environment
   Copyright (c) 2015 Mathieu GRENET.  All right reserved.
 
   This file is part of MouseControl.

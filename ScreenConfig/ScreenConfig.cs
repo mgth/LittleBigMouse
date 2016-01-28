@@ -283,11 +283,8 @@ namespace LbmScreenConfig
         public void ShiftMovingPhysicalBounds(Vector shift)
         {
             Rect r = new Rect(
-                new Point(
-                    MovingPhysicalOutsideBounds.X + shift.X,
-                    MovingPhysicalOutsideBounds.Y + shift.Y
-                    )
-                    , MovingPhysicalOutsideBounds.Size
+                    _movingPhysicalOutsideBounds.TopLeft + shift
+                    , _movingPhysicalOutsideBounds.Size
                     );
             _change.SetProperty(ref _movingPhysicalOutsideBounds, r, "MovingPhysicalOutsideBounds");
         }
@@ -540,13 +537,14 @@ namespace LbmScreenConfig
         public void Expand()
         {
             bool done = false;
-
+            int i = 100; // hack to avoid infinit loop
             while (!done)
             {
                 done = true;
                 foreach (Screen screen in AllScreens.Where(screen => screen.Expand()))
-                {
-                    done = false;
+                {                 
+                    i--;
+                    if (i>0) done = false;
                 }
             }
         }

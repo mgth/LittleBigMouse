@@ -7,7 +7,7 @@
         xmlns:local="clr-namespace:LittleBigMouse_Control"
         mc:Ignorable="d"
         Icon="MainIcon.ico"
-        Title="Little Big Mouse"  Topmost="True"
+        Title="Little Big LbmMouse"  Topmost="True"
         BorderBrush="Black"
         Background="Transparent"
         WindowStyle="None"

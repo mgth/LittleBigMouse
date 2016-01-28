@@ -77,9 +77,71 @@ namespace LittleBigMouse_Control.VcpPlugin
         //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, 2);
         //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
         //}
+
+        private void PleaseInstall()
+        {
+            MessageBox.Show("Please install DispcalGUI & ArgyllCMS", "Calibration tools",
+                         MessageBoxButton.OK, MessageBoxImage.Exclamation);
+        }
+        private void ProbeLowLuminance_OnClick(object sender, RoutedEventArgs e)
+        {
+            var probe = new Argyll.LittleBigMouse.Argyll();
+            if (!probe.Installed)
+            {
+                PleaseInstall();
+                return;
+            }
+
+
+            new Thread(() =>
+            {
+                MonitorLevel level = Screen.Vcp().Brightness;
+                LineSeries _line = new LineSeries();
+
+                Curve.PlotModel.Series.Add(_line);
+
+                uint max = Screen.Vcp().Gain.Red.Max;
+                uint min = Screen.Vcp().Gain.Red.Min;
+
+                double old = Screen.ProbeLut().Luminance;
+                level.Value = 0;
+
+                for (uint i = max; i >= min; i--)
+                {
+                    
+
+                    TuneWhitePoint(i);
+
+                    Tune t = Lut.Current;
+                    ProbedColor color = probe.SpotRead();
+                    t.Y = color.xyY.Y;
+                    t.x = color.xyY.x;
+                    t.y = color.xyY.y;
+
+                    Lut.RemoveLowBrightness(i);
+                    Lut.Add(t);
+
+                    _line.Points.Add(new DataPoint(i, t.Y));
+                    Curve.Refresh();
+
+                    if(t.MinGain<=min) break;
+                }
+
+                Screen.ProbeLut().Luminance = old;
+            }
+            ).Start();
+            return;
+        }
         private void ProbeLuminance_OnClick(object sender, RoutedEventArgs e)
         {
             var probe = new Argyll.LittleBigMouse.Argyll();
+            if (!probe.Installed)
+            {
+                PleaseInstall();
+                return;
+            }
+
+
             new Thread(() =>
             {
                 MonitorLevel level = Screen.Vcp().Brightness;
@@ -89,11 +151,11 @@ namespace LittleBigMouse_Control.VcpPlugin
 
                 Curve.PlotModel.Series.Add(_line);
 
-                for (uint i = level.Min/*50*/; i <= level.Max; i++)
+                for (uint i = level.Min; i <= level.Max; i++)
                 {
                     level.Value = i;
 
-                    Tune();
+                    TuneWhitePoint();
 
                     Tune t = Lut.Current;
                     ProbedColor color = probe.SpotRead();
@@ -163,6 +225,11 @@ namespace LittleBigMouse_Control.VcpPlugin
         private void Probe_OnClick(object sender, RoutedEventArgs e)
         {
             var probe = new Argyll.LittleBigMouse.Argyll();
+            if (!probe.Installed)
+            {
+                PleaseInstall();
+                return;
+            }
             //Vcp.Brightness.SetToMax();
             //Vcp.Contrast.SetToMax();
             uint red = Vcp.Gain.Red.Value;
@@ -252,13 +319,17 @@ namespace LittleBigMouse_Control.VcpPlugin
 
         private void Tune_OnClick(object sender, RoutedEventArgs e)
         {
-            new Thread(Tune).Start();
+            new Thread(TuneWhitePoint).Start();
 
         }
 
         private double[,,] _tune;
         private LineSeries _line;
-        public void Tune()
+        public void TuneWhitePoint()
+        {
+            TuneWhitePoint(0);
+        }
+        public void TuneWhitePoint(uint max)
         {
             _line = new LineSeries();
             Curve.PlotModel.Series.Add(_line);
@@ -272,7 +343,7 @@ namespace LittleBigMouse_Control.VcpPlugin
 
             while (count > 0)
             {
-                if (Tune(channel,ref rgb)) count = 5;
+                if (TuneWhitePoint(channel, ref rgb, max)) count = 5;
                 else count--;
 
                 channel++;
@@ -284,7 +355,7 @@ namespace LittleBigMouse_Control.VcpPlugin
             while (Vcp.Gain.Blue.Value != rgb[2]) Vcp.Gain.Blue.Value = rgb[2];
         }
 
-        private bool Tune(uint channel, ref uint[] rgb)
+        private bool TuneWhitePoint(uint channel, ref uint[] rgb, uint maxlevel)
         {
             uint[] c;
             uint[] min = new uint[3];
@@ -327,7 +398,7 @@ namespace LittleBigMouse_Control.VcpPlugin
             for (int i = 0; i < 3; i++)
             {
                 min[i] = Vcp.Gain.Channel(c[i]).Min;
-                max[i] = Vcp.Gain.Channel(c[i]).Max;
+                max[i] = maxlevel==0?Vcp.Gain.Channel(c[i]).Max:maxlevel;
             }
 
 
@@ -403,6 +474,11 @@ namespace LittleBigMouse_Control.VcpPlugin
                 Thread.Sleep(500);
 
                 Argyll.LittleBigMouse.Argyll probe = new Argyll.LittleBigMouse.Argyll();
+                if (!probe.Installed)
+                {
+                    PleaseInstall();
+                    return 0;
+                }
                 ProbedColor color = probe.SpotRead();
  
                 //return color.DeltaE00();

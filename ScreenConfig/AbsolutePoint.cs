@@ -167,10 +167,15 @@ namespace LbmScreenConfig
             if (screen == null) screen = Screen;
             if (screen == null) return false;
 
-            if (X < screen.PixelLocation.X) return false;
-            if (Y < screen.PixelLocation.Y) return false;
-            if (X >= screen.PixelLocation.X + screen.PixelSize.Width) return false;
-            if (Y >= screen.PixelLocation.Y + screen.PixelSize.Height) return false;
+            if (
+                (X < screen.PixelLocation.X) ||
+                (Y < screen.PixelLocation.Y) ||
+                (X >= screen.PixelLocation.X + screen.PixelSize.Width) ||
+                (Y >= screen.PixelLocation.Y + screen.PixelSize.Height))
+            {
+
+                return false;
+            }
             return true;
         }
 

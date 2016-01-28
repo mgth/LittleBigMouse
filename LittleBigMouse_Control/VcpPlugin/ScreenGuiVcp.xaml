@@ -53,12 +53,17 @@
             />
             <Button             
             Click="Tune_OnClick"
-                    Content="Tune"
+                    Content="Tune WP"
             />
             
             <Button             
             Click="ProbeLuminance_OnClick"
-                    Content="Tune Full"
+                    Content="Tune WP High"
+            />
+            
+            <Button             
+            Click="ProbeLowLuminance_OnClick"
+                    Content="Tune WP Low"
             />
             
            <Button             

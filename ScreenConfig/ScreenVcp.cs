@@ -13,29 +13,23 @@ namespace LbmScreenConfig
 {
     public static class VcpExpendScreen
     {
-        private static Dictionary<Screen, ScreenVcp> _allVcp = new Dictionary<Screen, ScreenVcp>();
+        private static readonly Dictionary<Screen, ScreenVcp> AllVcp = new Dictionary<Screen, ScreenVcp>();
         public static ScreenVcp Vcp(this Screen screen)
         {
-            if (_allVcp.ContainsKey(screen)) return _allVcp[screen];
+            if (AllVcp.ContainsKey(screen)) return AllVcp[screen];
 
             ScreenVcp vcp = new ScreenVcp(screen);
-            _allVcp.Add(screen, vcp);
+            AllVcp.Add(screen, vcp);
             return vcp;
         }
     }
     public enum Component { Red, Green, Blue, Brightness, Contrast }
-    public class ScreenVcp : INotifyPropertyChanged
+    public class ScreenVcp : Notifier
     {
-
-        // PropertyChanged Handling
-        private readonly PropertyChangedHelper _change;
-        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
         public Screen Screen { get; }
 
         internal ScreenVcp(Screen screen)
         {
-            _change = new PropertyChangedHelper(this);
-
             Screen = screen;
             Brightness = new MonitorLevel(GetBrightness, SetBrightness);
             Contrast = new MonitorLevel(GetContrast, SetContrast);
@@ -54,7 +48,7 @@ namespace LbmScreenConfig
             get { return _power; }
             set
             {
-                if (!_change.SetProperty(ref _power, value)) return;
+                if (!SetProperty(ref _power, value)) return;
 
                 if (value)
                 {
@@ -120,33 +114,25 @@ namespace LbmScreenConfig
     public delegate bool VcpGetter(ref uint min, ref uint value, ref uint max, uint component = 0);
     public delegate bool VcpSetter(uint value, uint component = 0);
 
-    public class MonitorRgbLevel : DependencyObject, INotifyPropertyChanged
+    public class MonitorRgbLevel : Notifier
     {
-        private readonly PropertyChangedHelper _change;
-        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
-
         private readonly MonitorLevel[] _values = new MonitorLevel[3];
 
         public MonitorRgbLevel(VcpGetter getter, VcpSetter setter)
         {
-            _change = new PropertyChangedHelper(this);
             for (uint i = 0; i < 3; i++)
                 _values[i] = new MonitorLevel(getter, setter, i);
 
         }
         public MonitorLevel Channel(uint channel) { return _values[channel]; }
 
-        public static DependencyProperty RedProperty;
         public MonitorLevel Red => Channel(0);
         public MonitorLevel Green => Channel(1);
         public MonitorLevel Blue => Channel(2);
     }
 
-    public class MonitorLevel : INotifyPropertyChanged
+    public class MonitorLevel : Notifier
     {
-        // PropertyChanged Handling
-        private readonly PropertyChangedHelper _change;
-        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
 
         //Screen _screen;
 
@@ -163,8 +149,6 @@ namespace LbmScreenConfig
 
         public MonitorLevel(VcpGetter getter, VcpSetter setter, uint component = 0)
         {
-            _change = new PropertyChangedHelper(this);
-            //_screen = screen;
             _component = component;
             _componentSetter = setter;
             _componentGetter = getter;
@@ -173,10 +157,6 @@ namespace LbmScreenConfig
         }
 
         private static readonly object LockDdcCi = new object();
-
-        private readonly object _lockPending = new object();
-
-        private readonly object _lockTread = new object();
 
         public void SetToMax()
         {
@@ -196,14 +176,11 @@ namespace LbmScreenConfig
             uint max = 0;
             uint value = 0;
 
-            lock (LockDdcCi)
-            {
-                _componentGetter?.Invoke(ref min, ref value, ref max, _component);
-            }
+            lock (LockDdcCi) _componentGetter?.Invoke(ref min, ref value, ref max, _component);
 
-            _change.SetProperty(ref _min, min, "Min");
-            _change.SetProperty(ref _max, max, "Max");
-            _change.SetProperty(ref _value, value, "Value");
+            SetProperty(ref _min, min, "Min");
+            SetProperty(ref _max, max, "Max");
+            SetProperty(ref _value, value, "Value");
         }
         private void GetValueThread()
         {
@@ -211,77 +188,35 @@ namespace LbmScreenConfig
             thread.Start();
         }
 
-        private Thread _threadSetter;
-        private void SetValueThread()
-        {
-            //lock (_lockTread)
-            {
-                if (_threadSetter?.IsAlive ?? false) return;
-                _threadSetter = new Thread(
-                    delegate ()
-                    {
-                        // Only one DCC/CI request at a time
-                        lock (LockDdcCi)
-                        {
-                            uint pendding = uint.MaxValue;
-                            bool done = false;
-
-                            while (!done)
-                            {
-                                lock (_lockPending)
-                                {
-                                    if (_pendding == pendding)
-                                    {
-                                        _pendding = uint.MaxValue;
-                                        done = true;
-                                    }
-                                    else pendding = _pendding;
-                                }
-
-                                if (!done) _componentSetter?.Invoke(pendding, _component);
-                            }
-                            GetValue();
-                        }
-                    });
-
-                _threadSetter.Start();
-            }
-
-        }
+        private readonly object _lockPending = new object();
+        private readonly LossyThread _threadSetter = new LossyThread();
 
         [DependsOn("Value")]
         public uint ValueAsync
         {
-            get { return _pendding==uint.MaxValue?_value:_pendding; }
+            get
+            {
+                if (_pendding == uint.MaxValue) GetValue();
+                return _pendding==uint.MaxValue?_value:_pendding;
+            }
             set
             {
-                lock (_lockPending)
+                //lock (_lockPending) //causes deadlock
                 {
-                    if (_pendding == value) return;
-                    _pendding = value;
+                   if (_pendding == value) return;
+                    SetProperty(ref _pendding, value, "ValueAsync");
+                    _threadSetter.Add(() =>
+                    {
+                        lock(LockDdcCi) _componentSetter?.Invoke(value, _component);
+                        lock(_lockPending) SetProperty(ref _value, value, "Value");
+                    } );
                 }
-                SetValueThread();
             }
         }
         public uint Value
         {
-            get
-            {
-                //while (_pendding != uint.MaxValue)
-                {
-                    SetValueThread();
-                }
-                return _value;
-            }
-            set
-            {
-                lock (_lockPending)
-                {
-                    if (_pendding == value) return;
-                    _pendding = value;
-                }
-                SetValueThread();
-            }
+            get { return _value; }
+            set { ValueAsync = value; }
         }
         public uint Min => _min;
 

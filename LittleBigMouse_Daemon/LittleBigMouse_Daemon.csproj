@@ -116,7 +116,7 @@
     <Compile Include="LuminanceWindow.xaml.cs">
       <DependentUpon>LuminanceWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Mouse.cs" />
+    <Compile Include="LbmMouse.cs" />
     <Compile Include="MouseEngine.cs" />
     <Compile Include="Notify.cs" />
     <Compile Include="Program.cs" />

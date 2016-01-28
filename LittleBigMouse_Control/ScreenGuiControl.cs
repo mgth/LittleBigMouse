@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -9,19 +10,13 @@ using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
-    public class ScreenGuiControl<T> : ScreenGuiControl
-    {
-        protected ScreenGuiControl(Screen screen) : base(screen) {}
-    }
-
-    public class ScreenGuiControl : NotifyUserControl
+    public class ScreenGuiControl : UserControl
     {
         public Screen Screen { get; }
 
         protected ScreenGuiControl(Screen screen)
         {
             Screen = screen;
-            DataContext = this;
         }
 
         protected void OnKeyEnterUpdate(object sender, KeyEventArgs e)
@@ -41,5 +36,12 @@ namespace LittleBigMouse_Control
             if ((Keyboard.Modifiers & ModifierKeys.Control) != 0) delta /= 10;
             return delta;
         }
+
+
+
+
+
+
+
     }
 }

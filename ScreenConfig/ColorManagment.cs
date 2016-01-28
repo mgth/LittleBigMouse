@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 
 namespace LbmScreenConfig
 {
@@ -7,63 +8,40 @@ namespace LbmScreenConfig
  
     
 
-    public class Illuminant
-    {
-        public double[,] RGBMatrix;
-        private ProbedColor _white;
 
-        public ProbedColor White
-        {
-            get { return _white; }
-            set { _white = value;
-                _white.Illuminant = this;
-            }
-        }
-
-        public static Illuminant D65 => new Illuminant {
-                RGBMatrix = new double[,]{
-                {  3.2410, -1.5374, -0.4986 },
-                { -0.9692,  1.8760,  0.0416 },
-                {  0.0556, -0.2040,  1.0570 }
-            },
-                White = new ProbedColorxyY {x = 0.3128, y = 0.3292, Y = 1 }
-        }
-        ;
-        public static Illuminant D50 => new Illuminant
-        {
-            RGBMatrix = new double[,]{ // TODO : wrong value
-                {  3.2410, -1.5374, -0.4986 },
-                { -0.9692,  1.8760,  0.0416 },
-                {  0.0556, -0.2040,  1.0570 }
-            },
-            //White = new ProbedColorxyY{x = 0.34773, y = 0.35952, Y = 1 }
-            White = new ProbedColorxyY { x = 0.3457, y = 0.3587, Y = 1 }
-
-        }
-        ;
-    }
 
     public abstract class ProbedColor
     {
-        public Illuminant Illuminant { get; set; }
+        public ProbedColor Illuminant { get; set; }
         public abstract ProbedColorXYZ XYZ { get; }
         public virtual ProbedColorLab Lab => XYZ.Lab;
         public virtual ProbedColorxyY xyY => XYZ.xyY;
         public virtual ProbedColorRGB RGB => XYZ.RGB;
+
+
+        private static double Calc(double T, double coef, double exp)
+            => coef*Math.Pow(10, exp * 3)/Math.Pow(T, exp);
+
+        private static double Quadratic(double T, double a3, double b2, double cx, double d)
+            => Calc(T, a3, 3) + Calc(T, b2, 2) + Calc(T, cx, 1) + d;
 
         public static ProbedColor DIlluminant(double T)
         {
             ProbedColorxyY xyY = new ProbedColorxyY();
             if (T > 7000)
             {
-                xyY.x = (-2006400000 / Math.Pow(T, 3)) + (2967800 / Math.Pow(T, 2)) + (99.11 * T) + 0.244063;
+                xyY.x = Quadratic(T, -2.0064, 1.9018, 0.24748, 0.237040);
             }
             else
             {
-                xyY.x = (-4607000000 / Math.Pow(T, 3)) + (1901800 / Math.Pow(T, 2)) + (247.48*T) + 0.237040;            
+                xyY.x = Quadratic(T, -4.6070, 2.9678, 0.09911, 0.244063);            
             }
 
-            xyY.y = -3.0*Math.Pow(xyY.x, 2) + 2.87*xyY.x - 0.275;
+            xyY.y = -3.0 * Math.Pow(xyY.x, 2) + 2.87 * xyY.x - 0.275;
+
+            xyY.Y = 1;
+
+            xyY.Illuminant = xyY;
 
             return xyY;
         }
@@ -75,7 +53,7 @@ namespace LbmScreenConfig
 
             if (referenceColor == null)
             {
-                refLab = Illuminant.White.Lab;
+                refLab = Illuminant.Lab;
                 refLab.L = lab.L;
             }
             else refLab = referenceColor.Lab;
@@ -97,7 +75,7 @@ namespace LbmScreenConfig
 
             if (referenceColor == null)
             {
-                refLab = Illuminant.White.Lab;
+                refLab = Illuminant.Lab;
                 refLab.L = lab.L;
             }
             else refLab = referenceColor.Lab;
@@ -188,6 +166,8 @@ namespace LbmScreenConfig
 
             return Math.Sqrt(de);
         }
+
+        public double[,] RgbMatrix => new double[,] {};
     }
 
     public class ProbedColorXYZ : ProbedColor
@@ -209,7 +189,7 @@ namespace LbmScreenConfig
         {
             get
             {
-                ProbedColorXYZ white = Illuminant.White.XYZ;
+                ProbedColorXYZ white = Illuminant.XYZ;
 
                 double fX = LabF(X / white.X);
                 double fY = LabF(Y / white.Y);
@@ -246,7 +226,7 @@ namespace LbmScreenConfig
         {
             get 
             {
-                double[,] m = Illuminant.RGBMatrix;
+                double[,] m = Illuminant.RgbMatrix;
                 ProbedColorRGB rgb = new ProbedColorRGB
                 {
                     Illuminant = Illuminant,
@@ -281,7 +261,7 @@ namespace LbmScreenConfig
                 double y = (L > k*e) ? Math.Pow((L + 16)/116, 3) : L/k;
                 double z = (fz3 > e) ? fz3 : (116*fz - 16)/k;
 
-                ProbedColorXYZ white = Illuminant.White.XYZ;
+                ProbedColorXYZ white = Illuminant.XYZ;
 
                 return new ProbedColorXYZ
                 {

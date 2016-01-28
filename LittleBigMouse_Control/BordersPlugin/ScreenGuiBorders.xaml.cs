@@ -21,7 +21,7 @@ namespace LittleBigMouse_Control.BordersPlugin
     /// <summary>
     /// Logique d'interaction pour ScreenGuiBorders.xaml
     /// </summary>
-    public partial class ScreenGuiBorders : ScreenGuiControl<ScreenGuiBorders>
+    public partial class ScreenGuiBorders : ScreenGuiControl
     {
 
 
@@ -29,10 +29,12 @@ namespace LittleBigMouse_Control.BordersPlugin
         {
             InitializeComponent();
 
-            ScreenGui.SizeChanged += (sender, args) => Change.RaiseProperty("Size");
-            SizeChanged += (sender, args) => Change.RaiseProperty("Size");
+            DataContext = new ScreenViewModel(screen);
 
-            Change.Watch(Screen,"Screen");
+
+
+            ScreenGui.SizeChanged += (sender, args) => DrawLines();
+            SizeChanged += (sender, args) => DrawLines();
 
             Unloaded += OnUnloaded;
 
@@ -54,7 +56,6 @@ namespace LittleBigMouse_Control.BordersPlugin
 
         private ScreenGui ScreenGui => (MainGui.Instance.ScreensPresenter as MultiScreensGui)?.GetScreenGui(Screen);
 
-        [DependsOn("Size")]
         public void DrawLines()
         {
             if (Visibility != Visibility.Visible) return;
@@ -108,35 +109,15 @@ namespace LittleBigMouse_Control.BordersPlugin
             ui.Add(l);
         }
 
-        [DependsOn("Screen.RealPhysicalWidth", "Screen.RealLeftBorder", "Screen.RealRightBorder")]
-        public double PhysicalOutsideWidth
-        {
-            get { return Screen.RealPhysicalWidth + Screen.RealLeftBorder + Screen.RealRightBorder; }
-            set
-            {
-                double offset = (value - PhysicalOutsideWidth)/2;
-                Screen.RealLeftBorder += offset;
-                Screen.RealRightBorder += offset;
-            }
-        }
+        private ScreenViewModel ViewModel => DataContext as ScreenViewModel;
 
-        [DependsOn("Screen.RealPhysicalHeight", "Screen.RealTopBorder", "Screen.RealBottomBorder")]
-        public double PhysicalOutsideHeight
-        {
-            get { return Screen.RealPhysicalHeight + Screen.RealTopBorder + Screen.RealBottomBorder; }
-            set
-            {
-                double offset = value - PhysicalOutsideHeight;
-                Screen.RealBottomBorder += offset;
-            }
-        }
         private void Height_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-                PhysicalOutsideHeight += WheelDelta(e);
+            ViewModel.PhysicalOutsideHeight += WheelDelta(e);
         }
         private void Width_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            PhysicalOutsideWidth += WheelDelta(e);
+            ViewModel.PhysicalOutsideWidth += WheelDelta(e);
         }
 
         private void Bottom_MouseWheel(object sender, MouseWheelEventArgs e)

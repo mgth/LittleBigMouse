@@ -33,6 +33,7 @@ namespace LittleBigMouse_Control.SizerPlugin
             //{
             //    screenGui.SelectedChanged += OnSelectedChanged;
             //}
+            DataContext = this;
         }
 
         private void Save()

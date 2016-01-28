@@ -153,8 +153,8 @@
                 </LinearGradientBrush></Label.Foreground>
             </Label>
             <StackPanel Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                <Label FontSize="{Binding Path=ThisFontSize}" Margin="0,0,0,-10" Content="{Binding Path=Screen.Model,FallbackValue=Brand Model}" HorizontalAlignment="Center" Foreground="White"/>
-                <Label FontSize="{Binding Path=ThisFontSize}" Margin="0,0,0,-5" Content="{Binding Path=Screen.SerialNo,FallbackValue=Serial No}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
+                <Label FontSize="{Binding Path=FontSize}" Margin="0,0,0,-10" Content="{Binding Path=Screen.Model,FallbackValue=Brand Model}" HorizontalAlignment="Center" Foreground="White"/>
+                <Label FontSize="{Binding Path=FontSize}" Margin="0,0,0,-5" Content="{Binding Path=Screen.SerialNo,FallbackValue=Serial No}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
             </StackPanel>
             <Label 
             Padding="{Binding Path=LogoPadding}" 

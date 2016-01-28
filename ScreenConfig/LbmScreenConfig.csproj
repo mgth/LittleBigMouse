@@ -101,6 +101,8 @@
     <Compile Include="Edid.cs" />
     <Compile Include="Html.cs" />
     <Compile Include="ILittleBigMouseService.cs" />
+    <Compile Include="IniFile.cs" />
+    <Compile Include="LossyThread.cs" />
     <Compile Include="Luminance.xaml.cs">
       <DependentUpon>Luminance.xaml</DependentUpon>
     </Compile>

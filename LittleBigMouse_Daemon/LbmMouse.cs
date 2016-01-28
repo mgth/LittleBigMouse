@@ -1,5 +1,5 @@
 ﻿/*
-  MouseControl - Mouse Managment in multi DPI monitors environment
+  MouseControl - LbmMouse Managment in multi DPI monitors environment
   Copyright (c) 2015 Mathieu GRENET.  All right reserved.
 
   This file is part of MouseControl.
@@ -29,7 +29,7 @@ using WinAPI_User32;
 
 namespace LittleBigMouse_Daemon
 {
-    public class Mouse
+    public class LbmMouse
     {
         private static void MouseEvent(MOUSEEVENTF evt, double x, double y)
         {

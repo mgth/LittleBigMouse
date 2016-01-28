@@ -938,7 +938,7 @@
                 <!--Unknown tag: sodipodi:namedview-->
                 <Rectangle xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Canvas.Left="1.5411793" Canvas.Top="14.801891" Width="410.33981" Height="276.95267" Name="rect3356" Fill="#FFF2F2F2" StrokeThickness="34.6424408" Stroke="#FF000000" StrokeMiterLimit="4"/>
                 <Rectangle xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Canvas.Left="313.32126" Canvas.Top="232.97697" Width="416.27347" Height="265.7254" Name="rect3358" Fill="#FFCCCCCC" StrokeThickness="29.48887634" Stroke="#FF000000" StrokeMiterLimit="18.89999962"/>
-                <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path9" Fill="{StaticResource linearGradient4192}" StrokeThickness="37.2" Stroke="#FF000000" StrokeMiterLimit="4">
+                <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="Path9" Fill="{StaticResource linearGradient4192}" StrokeThickness="37.2" Stroke="#FF000000" StrokeMiterLimit="4">
                     <Path.Data>
                         <PathGeometry Figures="m 316.1651 15.707485 c -71.797 0 -130 58.758701 -130 131.242195 l 0 127.99609 0 94.95508 c 0 69.482 58.203 125.80664 130 125.80664 l 70 0 c 71.797 0 130 -56.32464 130 -125.80664 l 0 -94.95508 0 -0.23828 0 -127.75781 c 0 -72.483494 -58.203 -131.242195 -130 -131.242195 l -17 0 0 75.148438 c 15.071 6.485656 25.55664 20.850527 25.55664 37.542977 l 0 70.88867 c 0 20.98267 -13.79982 36.12758 -28.4818 36.95794 l -32.68482 -0.38802 c -16.04605 -0.0503 -25.94666 -20.07048 -25.94666 -36.56792 l 0 -70.89062 c 0 -16.6925 10.48464 -31.057372 25.55664 -37.543027 l 0 -75.148438 z" FillRule="NonZero"/>
                     </Path.Data>
@@ -972,12 +972,12 @@
                         <Rectangle xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Canvas.Left="343.28732" Canvas.Top="434.68964" Width="26.90851" Height="97.849121" Name="rect4215" Fill="#FFCCCCCC" Stroke="#FF000000"/>
                         <Rectangle xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Canvas.Left="460.70627" Canvas.Top="438.38647" Width="23.64687" Height="15.11531" RadiusY="0" RadiusX="0" Name="rect4219" Fill="#FFCCCCCC" Stroke="#FF000000"/>
                         <Rectangle xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Canvas.Left="460.70627" Canvas.Top="458.33652" Width="23.64687" Height="74.20224" RadiusY="0" RadiusX="0" Name="rect4221" Fill="#FFCCCCCC" Stroke="#FF000000"/>
-                        <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path4227" Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
+                        <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="Path4227" Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
                             <Path.Data>
                                 <PathGeometry Figures="m 419.8457 457.25195 c -8.33202 -0.014 -18.70464 0.6471 -23.69336 2.58203 -7.98195 3.0959 -9.8589 5.27739 -12.08789 10.90625 -2.22899 5.62886 0.34375 13.125 0.34375 13.125 l 21.1836 -2.41796 c 0 0 4.45159 -6.4043 9.55664 -6.4043 5.10506 0 1.38086 4.75781 1.38086 4.75781 0 0 -38.51563 9.85601 -38.51563 28.4707 0 18.61468 12.3849 23.30353 17.2168 24.72852 4.83191 1.42499 16.70366 -6.28324 21.29883 -5.04102 4.59517 1.24222 4.49023 4.58008 4.49023 4.58008 l 24.60156 0 0 -58.30273 c -2.55471 -12.57563 -9.44902 -15.38667 -14.58593 -16.35938 -1.92635 -0.36476 -6.19024 -0.61659 -11.18946 -0.625 z m -7.57617 48.48633 a 4.0294456 4.7777715 0 0 1 4.0293 4.7793 4.0294456 4.7777715 0 0 1 -4.0293 4.77734 4.0294456 4.7777715 0 0 1 -4.0293 -4.77734 4.0294456 4.7777715 0 0 1 4.0293 -4.7793 z" FillRule="evenodd"/>
                             </Path.Data>
                         </Path>
-                        <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path4231" Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
+                        <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="Path4231" Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
                             <Path.Data>
                                 <PathGeometry Figures="m 498.6228 532.53877 22.83146 0 -0.0582 -50.65858 c 0 0 0.0587 -3.03542 4.5283 -3.14349 4.0725 -0.0985 4.20269 2.93108 4.0335 2.93976 l 0.0582 7.64563 21.60834 -0.50665 0 -30.4789 -21.60834 0 c 0 0 -1.31421 3.0808 -3.12055 3.32485 -1.80634 0.24405 -5.44125 -3.32485 -5.44125 -3.32485 l -26.92958 0 0 11.21691 4.09812 0.21402 z" FillRule="evenodd"/>
                             </Path.Data>
@@ -1041,7 +1041,7 @@
                             <Canvas.RenderTransform>
                                 <TranslateTransform X="657.5518" Y="140.9434"/>
                             </Canvas.RenderTransform>
-                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path2208" Fill="#FF680000">
+                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="Path2208" Fill="#FF680000">
                                 <Path.Data>
                                     <PathGeometry Figures="m 0 0 c 5.188 -3.445 8.611 -9.34 8.611 -16.035 0 -10.625 -8.611 -19.238 -19.238 -19.238 -10.623 0 -19.235 8.613 -19.235 19.238 0 6.693 3.424 12.586 8.612 16.029 6.28 3.733 5.623 6.225 5.623 6.225 -0.788 4.328 -5.623 3.25 -5.623 3.25 -9.985 -4.162 -17.008 -14.01 -17.008 -25.504 0 -15.26 12.371 -27.631 27.631 -27.631 15.264 0 27.633 12.371 27.633 27.631 0 11.494 -7.02 21.342 -17.006 25.504 0 0 -4.609 1.078 -5.788 -2.332 0 0 -1.051 -4.59 5.788 -7.137" FillRule="nonzero"/>
                                 </Path.Data>
@@ -1051,7 +1051,7 @@
                             <Canvas.RenderTransform>
                                 <TranslateTransform X="650.0576" Y="136.9531"/>
                             </Canvas.RenderTransform>
-                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path2212" Fill="#FF680000">
+                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="Path2212" Fill="#FF680000">
                                 <Path.Data>
                                     <PathGeometry Figures="m 0 0 c 0 -1.629 -1.47 -2.951 -3.28 -2.951 -1.811 0 -3.278 1.322 -3.278 2.951 l 0 19.281 c 0 1.631 1.467 2.951 3.278 2.951 1.81 0 3.28 -1.32 3.28 -2.951 L 0 0 Z" FillRule="nonzero"/>
                                 </Path.Data>
@@ -1105,7 +1105,7 @@
                             <Canvas.RenderTransform>
                                 <TranslateTransform X="278.1372" Y="140.9434"/>
                             </Canvas.RenderTransform>
-                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path538" Fill="White">
+                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="Path538" Fill="White">
                                 <Path.Data>
                                     <PathGeometry Figures="m 0 0 c 5.189 -3.445 8.612 -9.34 8.612 -16.035 0 -10.625 -8.612 -19.238 -19.238 -19.238 -10.624 0 -19.237 8.613 -19.237 19.238 0 6.693 3.423 12.586 8.613 16.029 6.279 3.733 5.623 6.225 5.623 6.225 -0.788 4.328 -5.623 3.25 -5.623 3.25 -9.986 -4.162 -17.008 -14.01 -17.008 -25.504 0 -15.26 12.372 -27.631 27.632 -27.631 15.262 0 27.633 12.371 27.633 27.631 0 11.494 -7.022 21.342 -17.007 25.504 0 0 -4.609 1.078 -5.79 -2.332 0 0 -1.049 -4.59 5.79 -7.137" FillRule="nonzero"/>
                                 </Path.Data>
@@ -1115,7 +1115,7 @@
                             <Canvas.RenderTransform>
                                 <TranslateTransform X="270.6421" Y="136.9531"/>
                             </Canvas.RenderTransform>
-                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path542" Fill="White">
+                            <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="Path542" Fill="White">
                                 <Path.Data>
                                     <PathGeometry Figures="m 0 0 c 0 -1.629 -1.468 -2.951 -3.279 -2.951 -1.811 0 -3.279 1.322 -3.279 2.951 l 0 19.281 c 0 1.631 1.468 2.951 3.279 2.951 1.811 0 3.279 -1.32 3.279 -2.951 L 0 0 Z" FillRule="nonzero"/>
                                 </Path.Data>

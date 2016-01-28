@@ -1,5 +1,5 @@
 ﻿/*
-  MouseControl - Mouse Managment in multi DPI monitors environment
+  MouseControl - LbmMouse Managment in multi DPI monitors environment
   Copyright (c) 2015 Mathieu GRENET.  All right reserved.
 
   This file is part of MouseControl.
@@ -457,7 +457,7 @@ namespace LittleBigMouse_Control
         {
             if (!_moving || _dragStartPoint == null) return;
 
-            Point newPoint = PointToScreen(e.GetPosition(this)); // Mouse.CursorPos;
+            Point newPoint = PointToScreen(e.GetPosition(this)); // LbmMouse.CursorPos;
             //newPoint.Offset(
             //    _screen.Config.PhysicalBounds.X/_drawOn.PitchX, 
             //    _screen.Config.PhysicalBounds.Y/_drawOn.PitchY

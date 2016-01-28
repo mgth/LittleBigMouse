@@ -13,10 +13,10 @@
 
         <Border BorderThickness="0" Background="{Binding Path=ScreenColor}"/>
 
-        <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PnpCode, FallbackValue=XXX000}"  HorizontalAlignment="Left" VerticalAlignment="{Binding Path=PnpNameVerticalAlignment}" Foreground="#FFD9DCEC"/>
+        <Label FontSize="{Binding Path=FontSize}" Content="{Binding Path=Screen.PnpCode, FallbackValue=XXX000}"  HorizontalAlignment="Left" VerticalAlignment="{Binding Path=PnpNameVerticalAlignment}" Foreground="#FFD9DCEC"/>
 
         <TextBox 
-                FontSize="{Binding Path=ThisFontSize}" 
+                FontSize="{Binding Path=FontSize}" 
                 Text="{Binding Path=Screen.PhysicalY, StringFormat=N1, FallbackValue=top.y}" 
                 KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Center" 
@@ -24,7 +24,7 @@
                 Background="#00FFFFFF"/>
 
         <TextBox 
-                FontSize="{Binding Path=ThisFontSize}" 
+                FontSize="{Binding Path=FontSize}" 
                 Text="{Binding Path=Screen.PhysicalX, StringFormat=N1, FallbackValue=left.x}" 
                 KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Left" 
@@ -32,24 +32,24 @@
                 Background="#00FFFFFF"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
-            <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalHeight, FallbackValue=phy.h}" KeyUp="OnKeyEnterUpdate" VerticalAlignment="Bottom"  HorizontalAlignment="Center" Foreground="#FFD9DCEC" Background="#00FFFFFF" Visibility="{Binding Path=SelectedVisibility}" MouseWheel="PhysicalHeight_MouseWheel"/>
-            <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PhysicalBounds.Bottom,FallbackValue=bot.y}" ContentStringFormat="#0.#" HorizontalAlignment="Center"/>
-            <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PixelSize.Height,FallbackValue=pix.h}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"  Visibility="{Binding Path=SelectedVisibility}" />
+            <TextBox FontSize="{Binding Path=FontSize}" Text="{Binding Path=Screen.RealPhysicalHeight, FallbackValue=phy.h}" KeyUp="OnKeyEnterUpdate" VerticalAlignment="Bottom"  HorizontalAlignment="Center" Foreground="#FFD9DCEC" Background="#00FFFFFF" Visibility="{Binding Path=SelectedVisibility}" MouseWheel="PhysicalHeight_MouseWheel"/>
+            <Label FontSize="{Binding Path=FontSize}" Content="{Binding Path=Screen.PhysicalBounds.Bottom,FallbackValue=bot.y}" ContentStringFormat="#0.#" HorizontalAlignment="Center"/>
+            <Label FontSize="{Binding Path=FontSize}" Content="{Binding Path=Screen.PixelSize.Height,FallbackValue=pix.h}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"  Visibility="{Binding Path=SelectedVisibility}" />
         </StackPanel>
 
         <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
-            <TextBox FontSize="{Binding Path=ThisFontSize}" Text="{Binding Path=Screen.RealPhysicalWidth,FallbackValue=phy.w}" KeyUp="OnKeyEnterUpdate" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Background="#00FFFFFF" MouseWheel="PhysicalWidth_MouseWheel" Visibility="{Binding Path=SelectedVisibility}"/>
-            <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PhysicalBounds.Right,FallbackValue=right.x}" ContentStringFormat="#0.#" HorizontalAlignment="Right"/>
-            <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.PixelSize.Width,FallbackValue=pix.w}" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Visibility="{Binding Path=SelectedVisibility}"/>
+            <TextBox FontSize="{Binding Path=FontSize}" Text="{Binding Path=Screen.RealPhysicalWidth,FallbackValue=phy.w}" KeyUp="OnKeyEnterUpdate" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Background="#00FFFFFF" MouseWheel="PhysicalWidth_MouseWheel" Visibility="{Binding Path=SelectedVisibility}"/>
+            <Label FontSize="{Binding Path=FontSize}" Content="{Binding Path=Screen.PhysicalBounds.Right,FallbackValue=right.x}" ContentStringFormat="#0.#" HorizontalAlignment="Right"/>
+            <Label FontSize="{Binding Path=FontSize}" Content="{Binding Path=Screen.PixelSize.Width,FallbackValue=pix.w}" HorizontalAlignment="Right" Foreground="#FFD9DCEC" Visibility="{Binding Path=SelectedVisibility}"/>
         </StackPanel>
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="{Binding Path=SelectedBrush, FallbackValue=#FF333E9A}" BorderBrush="#FFD9DCEC">
-                <Label FontSize="{Binding Path=ThisFontSize}" x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />
+                <Label FontSize="{Binding Path=FontSize}" x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />
             </Border>
         </StackPanel>
 
-        <Label FontSize="{Binding Path=ThisFontSize}" Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" HorizontalAlignment="Right" Foreground="White"/>
+        <Label FontSize="{Binding Path=FontSize}" Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" HorizontalAlignment="Right" Foreground="White"/>
 
 
     </Grid>

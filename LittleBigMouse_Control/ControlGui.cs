@@ -14,5 +14,8 @@ namespace LittleBigMouse_Control
     {
         public ScreenConfig Config => MainGui.Instance.Config;
         public MainGui MainGui => MainGui.Instance ;
+
+
+
     }
 }

@@ -23,6 +23,7 @@ namespace LittleBigMouse_Daemon
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Startup += OnStartup;
             Exit += OnExit;
+            Deactivated += OnDeactivated; 
 
         }
 
@@ -39,7 +40,6 @@ namespace LittleBigMouse_Daemon
             if (_notify != null)
                 _notify.Click += OnNotifyClick;
 
-            this.Deactivated += OnDeactivated; 
 
             foreach (string configName in ScreenConfig.ConfigsList)
             {
@@ -58,8 +58,8 @@ namespace LittleBigMouse_Daemon
 
         private void OnDeactivated(object sender, EventArgs eventArgs)
         {
-            _brightness?.Close();
-            _brightness = null;
+            _brightness?.Hide();
+            //_brightness = null;
         }
 
         private void MatchConfig(object sender, EventArgs e)
@@ -155,15 +155,25 @@ namespace LittleBigMouse_Daemon
         }
 
 
-        private Window _brightness = null;
+        private readonly LuminanceWindow _brightness = new LuminanceWindow();
         private void OnNotifyClick(object sender, EventArgs e) { Brightness(); }
-        public void Brightness(object sender, EventArgs eventArgs) { Brightness(); }
+
+        public void Brightness(object sender, EventArgs eventArgs)
+        {
+            Brightness();
+        }
         private void Brightness()
         {
-            if (_brightness==null)
-                _brightness = new LuminanceWindow();
+            if (_brightness == null) return;
 
-            _brightness.Show();
+            if (_brightness.Visibility == Visibility.Visible)
+                _brightness.Hide();
+            else
+            {
+                _brightness.Hook = _engine.Hook;
+                _brightness.Show();
+                
+            }
         }
 
 

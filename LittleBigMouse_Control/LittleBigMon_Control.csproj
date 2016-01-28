@@ -155,6 +155,7 @@
     </Compile>
     <Compile Include="ControlGui.cs" />
     <Compile Include="ScreensPresenter.cs" />
+    <Compile Include="ScreenViewModel.cs" />
     <Compile Include="SizerPlugin\ControlGuiSizer.xaml.cs">
       <DependentUpon>ControlGuiSizer.xaml</DependentUpon>
     </Compile>
@@ -171,6 +172,7 @@
     <Compile Include="VcpPlugin\ControlGuiVcp.xaml.cs">
       <DependentUpon>ControlGuiVcp.xaml</DependentUpon>
     </Compile>
+    <Compile Include="VcpPlugin\LossyThread.cs" />
     <Compile Include="VcpPlugin\ScreenGuiVcp.xaml.cs">
       <DependentUpon>ScreenGuiVcp.xaml</DependentUpon>
     </Compile>

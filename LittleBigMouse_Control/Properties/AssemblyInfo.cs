@@ -7,7 +7,7 @@ using System.Windows.Media;
 // l'ensemble d'attributs suivant. Changez les valeurs de ces attributs pour modifier les informations
 // associées à un assembly.
 [assembly: AssemblyTitle("LittleBigMouse_Control")]
-[assembly: AssemblyDescription("DPI Aware Mouse control")]
+[assembly: AssemblyDescription("DPI Aware LbmMouse control")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Mgth")]
 [assembly: AssemblyProduct("LittleBigMouse_Control")]

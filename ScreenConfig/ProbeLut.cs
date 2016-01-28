@@ -33,6 +33,9 @@ namespace LbmScreenConfig
         public double Green;
         [XmlAttribute]
         public double Blue;
+
+        public double MaxGain => (new double[]{Red, Green, Blue}).Max();
+        public double MinGain => (new double[] { Red, Green, Blue }).Min();
     }
         public static class ProbeLutExpendScreen
         {
@@ -73,6 +76,14 @@ namespace LbmScreenConfig
         public bool RemoveBrightness(double brightness)
         {
             Tune t = _lut.FirstOrDefault(x => x.Brightness == brightness);
+            if (t == null) return false;
+
+            _lut.Remove(t);
+            return true;
+        }
+        public bool RemoveLowBrightness(double maxgain)
+        {
+            Tune t = _lut.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain== maxgain));
             if (t == null) return false;
 
             _lut.Remove(t);
@@ -185,7 +196,7 @@ namespace LbmScreenConfig
         {
             get
             {
-                Tune t = FromBrightness(Vcp.Brightness.ValueAsync);
+                Tune t = FromBrightness(Vcp.Brightness.Value);
                 return t.Y;
             }
             set

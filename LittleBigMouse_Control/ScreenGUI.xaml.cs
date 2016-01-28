@@ -1,5 +1,5 @@
 ﻿/*
-  MouseControl - Mouse Managment in multi DPI monitors environment
+  MouseControl - LbmMouse Managment in multi DPI monitors environment
   Copyright (c) 2015 Mathieu GRENET.  All right reserved.
 
   This file is part of MouseControl.
@@ -268,7 +268,7 @@ namespace LittleBigMouse_Control
         public double ThisUnrotatedHeight => (Screen.Orientation%2 == 0) ? ThisHeight : ThisWidth;
 
 
-        [DependsOn("Presenter.Size", "Screen.PhysicalX", "Screen.PhysicalY", "Presenter.MovingPhysicalOutsideBounds", "Screen.LeftBorder","Screen.TopBorder", "Presenter.Ratio")]
+        [DependsOn("Presenter.Size", "Screen.PhysicalX", "Screen.PhysicalY", "Config.MovingPhysicalOutsideBounds", "Screen.LeftBorder","Screen.TopBorder", "Presenter.Ratio")]
         public Thickness ThisMargin => new Thickness(
                     Presenter.PhysicalToUiX(Screen.PhysicalOutsideBounds.X),
                     Presenter.PhysicalToUiY(Screen.PhysicalOutsideBounds.Y),
@@ -415,13 +415,6 @@ namespace LittleBigMouse_Control
             }
         }
 
-        [DependsOn("Screen.Orientation")]
-        public VerticalAlignment DpiVerticalAlignment
-            => (Screen.Orientation==3) ? VerticalAlignment.Bottom : VerticalAlignment.Top;
-
-        [DependsOn("Screen.Orientation")]
-        public VerticalAlignment PnpNameVerticalAlignment
-            => (Screen.Orientation == 2) ? VerticalAlignment.Bottom : VerticalAlignment.Top;
 
 
  

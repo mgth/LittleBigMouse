@@ -33,18 +33,17 @@
         <local:ScaleConverter x:Key="Scale" />
     </UserControl.Resources>
     
-    <Grid Grid.Column="1" Grid.Row="1" x:Name="grid" SizeChanged="OnSizeChanged">
+    <Grid x:Name="grid" SizeChanged="OnSizeChanged">
 
         <Border BorderThickness="0" Background="{StaticResource ScreenColor}"/>
         <!-- Central Device No -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Border x:Name="center" 
+             <Border x:Name="center" 
+                     Height ="100"
+                     Width ="100"
                     BorderThickness = "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.05}" 
                     CornerRadius= "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
-                    
-                    Width="{Binding Path=ActualHeight, ElementName=grid, Converter={StaticResource Scale},ConverterParameter=0.5}" 
-                    Height="{Binding Path=ActualHeight, ElementName=grid, Converter={StaticResource Scale},ConverterParameter=0.5}" 
-                    
+                     
                     Background="{Binding Screen.Selected, Converter={StaticResource Highlighter}, FallbackValue={StaticResource UnselectedBrush}}" 
                     BorderBrush="#FFD9DCEC">
                 <Label 
@@ -67,8 +66,6 @@
                HorizontalAlignment="Left" 
                VerticalAlignment="{Binding Path=PnpNameVerticalAlignment}" 
                Foreground="#FFD9DCEC"/>
-            <Label ContentStringFormat="#0"  Content="{Binding Screen.SystemScaleFactor, FallbackValue=xxx}"/>
-            <Label ContentStringFormat="#0.00" Content="{Binding Screen.ScaleFactor, FallbackValue=x.xx}"/>
         </StackPanel>
 <!-- Y Position -->
         <TextBox 

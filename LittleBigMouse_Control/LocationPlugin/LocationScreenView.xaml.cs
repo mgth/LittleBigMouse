@@ -70,14 +70,16 @@ namespace LittleBigMouse_Control
 
         private LocationScreenViewModel ViewModel => (DataContext as LocationScreenViewModel);
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            //center.Height = Math.Min(grid.ActualHeight, grid.ActualWidth) / 3;
-            //center.Width = center.Height;
-            //center.CornerRadius = new CornerRadius(center.Height / 2);
-
-            //if (center.Height > 0)
-            //    lblName.FontSize = center.Height / 2;
+            double size = Math.Min(grid.ActualHeight, grid.ActualWidth) / 3;
+            center.Height = size;
+            center.Width = size;
         }
 
 

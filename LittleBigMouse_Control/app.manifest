@@ -2,8 +2,9 @@
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
   <asmv3:application>
     <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
-      <!--<dpiAware>True/PM</dpiAware>-->
+      <dpiAware>True/PM</dpiAware>
       <!--<dpiAware>True</dpiAware>-->
+      <!--<dpiAware>False</dpiAware>-->
     </asmv3:windowsSettings>
   </asmv3:application>
   <assemblyIdentity version="1.0.0.0" name="MyApplication.app"/>
@@ -56,13 +57,13 @@
        DPI plus élevé. Les applications Windows Presentation Foundation (WPF) prennent automatiquement en charge DPI et n'ont pas besoin 
        d'opter pour ce choix. Les applications Windows Forms qui ciblent .NET Framework 4.6 et qui optent pour ce paramètre, doivent 
        également affecter la valeur 'true' au paramètre 'EnableWindowsFormsHighDpiAutoResizing' dans leur fichier app.config. -->
-  <!--
-  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+  
+  <!--<application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
     </windowsSettings>
-  </application>
-  -->
+  </application>-->
+  
 
   <!-- Activer les thèmes pour les contrôles et boîtes de dialogue communes de Windows (Windows XP et version ultérieure) -->
   <!--  -->

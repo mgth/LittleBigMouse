@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Serialization;
+using Argyll;
 using NotifyChange;
 
 namespace LbmScreenConfig
@@ -39,24 +40,21 @@ namespace LbmScreenConfig
     }
         public static class ProbeLutExpendScreen
         {
-            private static Dictionary<Screen, ProbeLut> _allLut = new Dictionary<Screen, ProbeLut>();
+            private static readonly Dictionary<Screen, ProbeLut> AllLut = new Dictionary<Screen, ProbeLut>();
             public static ProbeLut ProbeLut(this Screen screen)
             {
-                if (_allLut.ContainsKey(screen)) return _allLut[screen];
+                if (AllLut.ContainsKey(screen)) return AllLut[screen];
 
                 ProbeLut lut = new ProbeLut(screen);
-                _allLut.Add(screen, lut);
+                AllLut.Add(screen, lut);
                 return lut;
             }
     }
 
 
    // [assembly:InternalsVisibleTo("ProbeLutExpendScreen")]
-    public class ProbeLut : INotifyPropertyChanged
+    public class ProbeLut : Notifier
     {
-        // PropertyChanged Handling
-        protected readonly PropertyChangedHelper Change;
-        public event PropertyChangedEventHandler PropertyChanged { add { Change.Add(this, value); } remove { Change.Remove(value); } }
         public ProbedColor DIlluminant { get; }
 
         private readonly Screen _screen;
@@ -65,13 +63,12 @@ namespace LbmScreenConfig
 
         internal ProbeLut(Screen screen)
         {
-            Change = new PropertyChangedHelper(this);
             _screen = screen;
-            Change.Watch(Vcp, "VCP");
-            Change.Watch(Vcp.Brightness, "Brightness");
+            Watch(Vcp, "Vcp");
+            Watch(Vcp.Brightness, "Brightness");
         }
 
-        public ScreenVcp Vcp => _screen.Vcp();
+        public MonitorVcp Vcp => _screen.Monitor.Vcp();
 
         public bool RemoveBrightness(double brightness)
         {
@@ -175,20 +172,20 @@ namespace LbmScreenConfig
         private void SetLuminance(double luminance)
         {
             Tune t = FromLuminance(luminance);
-            Vcp.Brightness.ValueAsync = (uint)Math.Round(t.Brightness,0);
-            Vcp.Contrast.ValueAsync = (uint)Math.Round(t.Contrast, 0);
-            Vcp.Gain.Red.ValueAsync = (uint)Math.Round(t.Red, 0);
-            Vcp.Gain.Blue.ValueAsync = (uint)Math.Round(t.Blue, 0);
-            Vcp.Gain.Green.ValueAsync = (uint)Math.Round(t.Green, 0);
+            Vcp.Brightness.Value = (uint)Math.Round(t.Brightness,0);
+            Vcp.Contrast.Value = (uint)Math.Round(t.Contrast, 0);
+            Vcp.Gain.Red.Value = (uint)Math.Round(t.Red, 0);
+            Vcp.Gain.Blue.Value = (uint)Math.Round(t.Blue, 0);
+            Vcp.Gain.Green.Value = (uint)Math.Round(t.Green, 0);
         }
 
         public Tune Current => new Tune
         {
-            Brightness = Vcp.Brightness.ValueAsync,
-            Contrast = Vcp.Contrast.ValueAsync,
-            Red = Vcp.Gain.Red.ValueAsync,
-            Blue = Vcp.Gain.Blue.ValueAsync,
-            Green = Vcp.Gain.Green.ValueAsync,
+            Brightness = Vcp.Brightness.Value,
+            Contrast = Vcp.Contrast.Value,
+            Red = Vcp.Gain.Red.Value,
+            Blue = Vcp.Gain.Blue.Value,
+            Green = Vcp.Gain.Green.Value,
         };
 
         [DependsOn("Brightness.Value")]
@@ -211,7 +208,7 @@ namespace LbmScreenConfig
         public Double MinLuminance => 
             (_lut.Count==0)?0:_lut.First().Y;
 
-        public string ConfigPath => Path.Combine(Vcp.Screen.ConfigPath(true), "Luminance.xml") ;
+        public string ConfigPath => Path.Combine(_screen.ConfigPath(true), "Luminance.xml") ;
 
         public void Save()
         {
@@ -233,7 +230,27 @@ namespace LbmScreenConfig
             }
             catch (FileNotFoundException)
             {
-                
+                _lut = new List<Tune>
+                {
+                    new Tune
+                    {
+                        Brightness = MinLuminance,
+                        Y = 0,
+                        Red = Vcp.Gain.Red.Value,
+                        Blue = Vcp.Gain.Blue.Value,
+                        Green = Vcp.Gain.Blue.Value,
+                        Contrast = Vcp.Contrast.Value
+                    },
+                    new Tune
+                    {
+                        Brightness = MaxLuminance,
+                        Y = 160,
+                        Red = Vcp.Gain.Red.Value,
+                        Blue = Vcp.Gain.Blue.Value,
+                        Green = Vcp.Gain.Blue.Value,
+                        Contrast = Vcp.Contrast.Value
+                    },
+                };
             }
         }
     }

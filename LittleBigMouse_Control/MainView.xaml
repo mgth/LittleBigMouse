@@ -1,4 +1,4 @@
-﻿<src:PerMonitorDPIWindow x:Class="LittleBigMouse_Control.MainGui"
+﻿<Window x:Class="LittleBigMouse_Control.MainView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -13,7 +13,6 @@
         WindowStyle="None"
          AllowsTransparency="True"
        
-        LocationChanged="ConfigGui_OnLocationChanged"      
         Loaded="Window_Loaded"
          >
     <!--Left ="{Binding Path=LocationLeft, Mode=TwoWay}"
@@ -47,17 +46,15 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"></ColumnDefinition>
             </Grid.ColumnDefinitions>
-            <StackPanel  x:Name="ButtonPanel" Orientation="Horizontal" Background="Black"/>
+            <ContentControl Content="{Binding ButtonPanel}" Background="Black"/>
             
-            <Grid Grid.Row="1" x:Name="MainGrid">
-                
-            </Grid>
+            <ContentControl Grid.Row="1" Content="{Binding Presenter.View}"/>
 
             <Border Grid.Row="2" Grid.Column="0" Background="#C0000000">
-                <Grid x:Name="ControlGrid"/>
+                <ContentControl Content="{Binding Control.View}"/>
             </Border>
 
         </Grid>
     </Grid>
 
-</src:PerMonitorDPIWindow>
+</Window>

@@ -43,17 +43,19 @@ namespace LittleBigMouse_Control.VcpPlugin
         public static DependencyProperty MonitorLevelProperty = DependencyProperty.Register(
             "MonitorLevel",
             typeof(MonitorLevel),
-            typeof(VcpSlider)
+            typeof(VcpSlider),
+            new FrameworkPropertyMetadata(OnMonitorLevelProperty)
             );
+
+        private static void OnMonitorLevelProperty(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            ((MonitorLevel)e.NewValue).PropertyChanged += (d as VcpSlider).ValueOnPropertyChanged;
+        }
 
         public MonitorLevel MonitorLevel
         {
             get { return (MonitorLevel)GetValue(MonitorLevelProperty); }
-            set
-            {
-                SetValue(MonitorLevelProperty,value);
-                value.PropertyChanged += ValueOnPropertyChanged;
-            }
+            set { SetValue(MonitorLevelProperty,value); }
         }
 
         private void ValueOnPropertyChanged(object sender, PropertyChangedEventArgs propertyChangedEventArgs)
@@ -69,12 +71,11 @@ namespace LittleBigMouse_Control.VcpPlugin
                 case "Max":
                     Dispatcher.Invoke( delegate { Slider.Maximum = level.Max; });
                     break;
-//                case "Value":
-                case "ValueAsync":
+                case "Value":
                     Dispatcher.Invoke(delegate
                     {
-                        Slider.Value = level.ValueAsync;
-                        TextBox.Text = level.ValueAsync.ToString();
+                        Slider.Value = level.Value;
+                        TextBox.Text = level.Value.ToString();
                     });
                     break;
             }
@@ -108,7 +109,7 @@ namespace LittleBigMouse_Control.VcpPlugin
 
         private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            MonitorLevel.Value = (uint)Slider.Value;
+            MonitorLevel.ValueAsync = (uint)Slider.Value;
         }
     }
 }

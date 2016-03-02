@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using LbmScreenConfig;
 
 namespace LittleBigMouse_Control.VcpPlugin
@@ -10,10 +11,10 @@ namespace LittleBigMouse_Control.VcpPlugin
     /// <summary>
     /// Logique d'interaction pour ControlGuiSizer.xaml
     /// </summary>
-    public partial class ControlGuiVcp : ControlGui
+    public partial class VcpControlView : UserControl
     {
 
-        public ControlGuiVcp() : base()
+        public VcpControlView()
         {
             InitializeComponent();
             DataContext = this;
@@ -21,26 +22,21 @@ namespace LittleBigMouse_Control.VcpPlugin
 
         private void Save()
         {
-            Config.Save();
+ //           Config.Save();
         }
 
-        private void cmdOk_Click(object sender, RoutedEventArgs e)
-        {
-            cmdApply_Click(sender, e);
-            MainGui.Close();
-        }
 
         private void cmdApply_Click(object sender, RoutedEventArgs e)
         {
             Save();
-            LittleBigMouseClient.Client.LoadAtStartup(Config.LoadAtStartup);
+            //LittleBigMouseClient.Client.LoadAtStartup(Config.LoadAtStartup);
             LittleBigMouseClient.Client.LoadConfig();
             LittleBigMouseClient.Client.Start();
         }
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)
         {
-            MainGui.Close();
+           // MainGui.Close();
         }
 
 
@@ -56,15 +52,6 @@ namespace LittleBigMouse_Control.VcpPlugin
         private readonly List<Ruler> _rulers = new List<Ruler>();
         private bool _liveUpdate = false;
 
-        private void AddRuler(RulerSide side)
-        {
-            if (Config.Selected == null) return;
-
-            foreach (var sz in Config.AllScreens.Select(s => new Ruler(Config.Selected, s, side)))
-            {
-                _rulers.Add(sz);
-            }
-        }
 
 
         private void ButtonBase_OnClick(object sender, RoutedEventArgs e)

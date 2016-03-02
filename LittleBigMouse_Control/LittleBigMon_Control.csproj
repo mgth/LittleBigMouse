@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LittleBigMouse_Control</RootNamespace>
     <AssemblyName>LittleBigMouse_Control</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
@@ -102,8 +102,12 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="OxyPlot">
-      <HintPath>..\packages\OxyPlot.Core.1.0.0-unstable1886\lib\net45\OxyPlot.dll</HintPath>
+    <Reference Include="LiveCharts, Version=0.6.4.0, Culture=neutral, PublicKeyToken=bc51a8d89213f1fa, processorArchitecture=MSIL">
+      <HintPath>..\packages\LiveCharts.0.6.4.0\lib\net46\LiveCharts.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.QualityTools.Testing.Fakes, Version=12.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="OxyPlot.Wpf">
       <HintPath>..\packages\OxyPlot.Wpf.1.0.0-unstable1886\lib\net45\OxyPlot.Wpf.dll</HintPath>
@@ -130,11 +134,12 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="Argyll\Argyll.cs" />
-    <Compile Include="BordersPlugin\ScreenGuiBorders.xaml.cs">
-      <DependentUpon>ScreenGuiBorders.xaml</DependentUpon>
+    <Compile Include="PresenterViewModel.cs" />
+    <Compile Include="ScreenControlViewModel.cs" />
+    <Compile Include="SizePlugin\SizeScreenView.xaml.cs">
+      <DependentUpon>SizeScreenView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="BordersPlugin\BordersPlugin.cs" />
+    <Compile Include="SizePlugin\SizePlugin.cs" />
     <Compile Include="ColorsWindow.xaml.cs">
       <DependentUpon>ColorsWindow.xaml</DependentUpon>
     </Compile>
@@ -142,46 +147,51 @@
       <DependentUpon>Curve.xaml</DependentUpon>
     </Compile>
     <Compile Include="IPluginButton.cs" />
-    <Compile Include="MultiScreensGui.xaml.cs">
-      <DependentUpon>MultiScreensGui.xaml</DependentUpon>
+    <Compile Include="MainViewModel.cs" />
+    <Compile Include="MultiScreensView.xaml.cs">
+      <DependentUpon>MultiScreensView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="MultiScreensViewModel.cs" />
     <Compile Include="Plugin.cs" />
-    <Compile Include="ScreenGuiControl.cs" />
-    <Compile Include="ScreenGui.xaml.cs">
-      <DependentUpon>ScreenGui.xaml</DependentUpon>
+    <Compile Include="ScreenFrameView.xaml.cs">
+      <DependentUpon>ScreenFrameView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Ruler.xaml.cs">
       <DependentUpon>Ruler.xaml</DependentUpon>
     </Compile>
-    <Compile Include="ControlGui.cs" />
-    <Compile Include="ScreensPresenter.cs" />
+    <Compile Include="ScreenFrameViewModel.cs" />
     <Compile Include="ScreenViewModel.cs" />
-    <Compile Include="SizerPlugin\ControlGuiSizer.xaml.cs">
-      <DependentUpon>ControlGuiSizer.xaml</DependentUpon>
+    <Compile Include="SizePlugin\SizeViewModel.cs" />
+    <Compile Include="LocationPlugin\LocationControlView.xaml.cs">
+      <DependentUpon>LocationControlView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="SizerPlugin\ScreenGuiSizer.xaml.cs">
-      <DependentUpon>ScreenGuiSizer.xaml</DependentUpon>
+    <Compile Include="LocationPlugin\LocationScreenView.xaml.cs">
+      <DependentUpon>LocationScreenView.xaml</DependentUpon>
     </Compile>
     <Compile Include="SingleInstance.cs" />
-    <Compile Include="SizerPlugin\SizerPlugin.cs" />
+    <Compile Include="LocationPlugin\LocationControlViewModel.cs" />
+    <Compile Include="LocationPlugin\LocationPlugin.cs" />
+    <Compile Include="LocationPlugin\LocationScreenViewModel.cs" />
     <Compile Include="SmootGradientLinearBrush.cs" />
     <Compile Include="TestPattern.cs" />
     <Compile Include="TestPatternWindow.xaml.cs">
       <DependentUpon>TestPatternWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="VcpPlugin\ControlGuiVcp.xaml.cs">
-      <DependentUpon>ControlGuiVcp.xaml</DependentUpon>
+    <Compile Include="VcpPlugin\VcpControlView.xaml.cs">
+      <DependentUpon>VcpControlView.xaml</DependentUpon>
     </Compile>
     <Compile Include="VcpPlugin\LossyThread.cs" />
     <Compile Include="VcpPlugin\ScreenGuiVcp.xaml.cs">
       <DependentUpon>ScreenGuiVcp.xaml</DependentUpon>
     </Compile>
+    <Compile Include="VcpPlugin\VcpControlViewModel.cs" />
     <Compile Include="VcpPlugin\VcpPlugin.cs" />
     <Compile Include="VcpPlugin\VcpSlider.xaml.cs">
       <DependentUpon>VcpSlider.xaml</DependentUpon>
     </Compile>
+    <Compile Include="ViewModel.cs" />
     <Compile Include="WindowResize.cs" />
-    <Page Include="BordersPlugin\ScreenGuiBorders.xaml">
+    <Page Include="SizePlugin\SizeScreenView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -189,7 +199,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="MainGui.xaml">
+    <Page Include="MainView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -197,18 +207,18 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="MainGui.xaml.cs">
-      <DependentUpon>MainGui.xaml</DependentUpon>
+    <Compile Include="MainView.xaml.cs">
+      <DependentUpon>MainView.xaml</DependentUpon>
     </Compile>
     <Page Include="Curve.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="MultiScreensGui.xaml">
+    <Page Include="MultiScreensView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="ScreenGui.xaml">
+    <Page Include="ScreenFrameView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -216,11 +226,11 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="SizerPlugin\ControlGuiSizer.xaml">
+    <Page Include="LocationPlugin\LocationControlView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="SizerPlugin\ScreenGuiSizer.xaml">
+    <Page Include="LocationPlugin\LocationScreenView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -228,7 +238,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="VcpPlugin\ControlGuiVcp.xaml">
+    <Page Include="VcpPlugin\VcpControlView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -288,6 +298,11 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\LightMeter\Argyll\Argyll.csproj">
+      <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
+      <Name>Argyll</Name>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+    </ProjectReference>
     <ProjectReference Include="..\LittleBigMouse_Daemon\LittleBigMouse_Daemon.csproj">
       <Project>{cea3e9df-4011-4041-bccf-6318dc7e76f4}</Project>
       <Name>LittleBigMouse_Daemon</Name>

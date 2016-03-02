@@ -24,18 +24,24 @@
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Management;
+using System.Net.WebSockets;
 using System.Runtime.InteropServices;
+using System.Runtime.Remoting.Messaging;
 using System.Windows;
+using System.Windows.Documents;
 using NotifyChange;
 using WinAPI_User32;
 // ReSharper disable CompareOfFloatsByEqualityOperator
 
 namespace LbmScreenConfig
 {
-    public class ScreenConfig : INotifyPropertyChanged
+    public class ScreenConfig : Notifier
     {
         public static RegistryKey OpenRootRegKey(bool create = false)
         {
@@ -46,6 +52,10 @@ namespace LbmScreenConfig
             }
         }
 
+        /// <returns>a list of string representing each known config in registry</returns>
+        /// <summary>
+        /// 
+        /// </summary>
         public static IEnumerable<string> ConfigsList
         {
             get
@@ -59,18 +69,37 @@ namespace LbmScreenConfig
                 }
             }
         }
-        // PropertyChanged Handling
-        private readonly PropertyChangedHelper _change;
-        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
 
         public ScreenConfig()
         {
-            _change = new PropertyChangedHelper(this);
-            AllScreens = new List<Screen>();
+            _monitors.CollectionChanged += MonitorsOnCollectionChanged;
+
+            Watch(AllScreens,"Screen");
+
+            foreach (Monitor monitor in _monitors)
+            {
+                GetScreen(monitor);
+            }
             Load();
         }
 
-        public List<Screen> AllScreens { get; }
+        private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
+        {
+            if (args.NewItems != null)
+                foreach (Monitor monitor in args.NewItems)
+                {
+                    GetScreen(monitor);
+                }
+            if (args.OldItems != null)
+                foreach (Monitor monitor in args.OldItems)
+                {
+                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor == monitor);
+
+                    if (screen != null) AllScreens.Remove(screen);
+                }
+        }
+
+        public ObservableCollection<Screen> AllScreens { get; } = new ObservableCollection<Screen>();
 
         public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => s != screen);
 
@@ -92,38 +121,20 @@ namespace LbmScreenConfig
             string path = Path.Combine(Environment.GetFolderPath(
                 Environment.SpecialFolder.LocalApplicationData), "LittleBigMouse", configId);
 
-            if (create) System.IO.Directory.CreateDirectory(path);
+            if (create) Directory.CreateDirectory(path);
 
             return path;
         }
 
         public string ConfigPath(bool create) => ConfigPath(Id, create);
 
-        public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Id,create);
+        public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Id, create);
 
-        public string Id => AllScreens.OrderBy(s => s.Id).Aggregate("", (current, screen) => current + (((current != "") ? "." : "") + screen.Id));
+        public string Id
+            =>
+                AllScreens.OrderBy(s => s.Id)
+                    .Aggregate("", (current, screen) => current + (((current != "") ? "." : "") + screen.Id));
 
-        public static void EnumDisplays()
-        {
-            DISPLAY_DEVICE ddDev = new DISPLAY_DEVICE(true);
-            uint devIdx = 0;
-
-            while (User32.EnumDisplayDevices(null, devIdx, ref ddDev, 0))
-            {
-                    DISPLAY_DEVICE ddMon = new DISPLAY_DEVICE();
-                    ddMon.cb = Marshal.SizeOf(ddMon);
-                    uint monIdx = 0;
-                    while (User32.EnumDisplayDevices(ddDev.DeviceName, monIdx,ref ddMon, 0))
-                    {
-                        DEVMODE devmode = new DEVMODE();
-                        devmode.Size = (short)Marshal.SizeOf(devmode);
-
-                        bool result = User32.EnumDisplaySettings(ddDev.DeviceName, 0, ref devmode) ;
-                        monIdx++;
-                    }
-                    devIdx++;
-            }
-        }
 
         public void MatchConfig(string id)
         {
@@ -141,7 +152,7 @@ namespace LbmScreenConfig
                         }
                         else
                         {
-                            screen.DetachFromDesktop();
+                            screen.Monitor.DetachFromDesktop();
                         }
                     }
 
@@ -153,17 +164,27 @@ namespace LbmScreenConfig
             }
         }
 
+        public void EnumWMI()
+        {
+            string NamespacePath = "\\\\.\\ROOT\\WMI\\ms_409";
+            string ClassName = "WmiMonitorID";
+
+            //Create ManagementClass
+            ManagementClass oClass = new ManagementClass(NamespacePath + ":" + ClassName);
+
+            //Get all instances of the class and enumerate them
+            foreach (ManagementObject oObject in oClass.GetInstances())
+            {
+                //access a property of the Management object
+                Console.WriteLine("ManufacturerName : {0}", oObject["ManufacturerName"]);
+            }
+        }
+
+        private ObservableCollection<Monitor> _monitors = DisplayDevice.AllMonitors;
+
+
         public void Load()
         {
-            EnumDisplays();
-
-            User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
-                delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
-                {
-                    GetScreen(hMonitor);
-                    return true;
-                }, IntPtr.Zero);
-
             SetPhysicalAuto();
 
             using (RegistryKey k = OpenConfigRegKey())
@@ -185,6 +206,8 @@ namespace LbmScreenConfig
             {
                 s.Load();
             }
+            //Follow = true;
+            Saved = true;
         }
 
         public bool Save()
@@ -204,26 +227,25 @@ namespace LbmScreenConfig
 
                     foreach (Screen s in AllScreens)
                         s.Save(k);
+
+                    Saved = true;
                     return true;
                 }
                 return false;
             }
         }
 
-        private Screen GetScreen(IntPtr hMonitor)
+        private Screen GetScreen(Monitor monitor)
         {
-            foreach (Screen s in AllScreens.Where(s => s.HMonitor == hMonitor))
+            Screen screen = AllScreens.FirstOrDefault(s => s.Monitor.HMonitor == monitor.HMonitor);
+            if (screen == null)
             {
-                return s;
-            }
-
-            {
-                Screen s = new Screen(this, hMonitor);
-                AllScreens.Add(s);
-                s.PropertyChanged += Screen_PropertyChanged;
+                screen = new Screen(this, monitor);
+                AllScreens.Add(screen);
+                screen.PropertyChanged += Screen_PropertyChanged;
                 UpdatePhysicalOutsideBounds();
-                return s;
             }
+            return screen;
         }
 
 
@@ -243,21 +265,29 @@ namespace LbmScreenConfig
 
         public Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
 
+        /// <summary>
+        /// Moving is true when screen is dragged on gui
+        /// </summary>
         private bool _moving = false;
+
         public bool Moving
         {
             get { return _moving; }
-            set { _change.SetProperty(ref _moving, value); }
+            set { SetProperty(ref _moving, value); }
         }
 
-
-        // Physical Locations
-        private Rect _physicalBounds = new Rect();
-        public Rect PhysicalBounds => _physicalBounds;
-
+        /// <summary>
+        /// Physical Outside Bounds updated while moving (screen dragged on gui)
+        /// </summary>
         Rect _physicalOutsideBounds = new Rect();
-        public Rect PhysicalOutsideBounds => _physicalOutsideBounds;
 
+        public Rect PhysicalOutsideBounds
+        {
+            get { return _physicalOutsideBounds; }
+            private set { if (SetProperty(ref _physicalOutsideBounds, value)) Saved = false; }
+        }
+
+        [DependsOn("Moving", "Screen.PhysicalOutsideBounds")]
         public void UpdatePhysicalOutsideBounds()
         {
             Rect outside = new Rect();
@@ -275,29 +305,50 @@ namespace LbmScreenConfig
                 outside.Union(s.PhysicalOutsideBounds);
             }
 
-            _change.SetProperty(ref _physicalOutsideBounds, outside, "PhysicalOutsideBounds");
+            PhysicalOutsideBounds = outside;
         }
 
         private Rect _movingPhysicalOutsideBounds;
-        public Rect MovingPhysicalOutsideBounds => _movingPhysicalOutsideBounds;
+
+
+        /// <summary>
+        /// Physical Outside Bounds NOT updated while moving (screen dragged on gui)
+        /// </summary>
+        public Rect MovingPhysicalOutsideBounds
+        {
+            get { return _movingPhysicalOutsideBounds; }
+            private set { SetProperty(ref _movingPhysicalOutsideBounds, value); }
+        }
+
         public void ShiftMovingPhysicalBounds(Vector shift)
         {
             Rect r = new Rect(
-                    _movingPhysicalOutsideBounds.TopLeft + shift
-                    , _movingPhysicalOutsideBounds.Size
-                    );
-            _change.SetProperty(ref _movingPhysicalOutsideBounds, r, "MovingPhysicalOutsideBounds");
+                _movingPhysicalOutsideBounds.TopLeft + shift
+                , _movingPhysicalOutsideBounds.Size
+                );
+            MovingPhysicalOutsideBounds = r;
         }
 
-        [DependsOn("Moving", "PhysicalOutsideBounds")]
-        public void UpdateMovingPhysicalOutsideBounds()
+        [DependsOn(nameof(Moving), nameof(PhysicalOutsideBounds))]
+        private void UpdateMovingPhysicalOutsideBounds()
         {
             if (Moving) return;
-            _change.SetProperty(ref _movingPhysicalOutsideBounds, PhysicalOutsideBounds, "MovingPhysicalOutsideBounds");
+            MovingPhysicalOutsideBounds = PhysicalOutsideBounds;
         }
 
 
+        /// <summary>
+        /// Physical Bounds of overall screens without borders
+        /// </summary>
+        private Rect _physicalBounds = new Rect();
 
+        public Rect PhysicalBounds
+        {
+            get { return _physicalBounds; }
+            private set { if (SetProperty(ref _physicalBounds, value)) Saved = false; }
+        }
+
+        [DependsOn("Screen.PhysicalBounds")]
         public void UpdatePhysicalBounds()
         {
             Rect inside = new Rect();
@@ -315,20 +366,26 @@ namespace LbmScreenConfig
                 inside.Union(s.PhysicalBounds);
             }
 
-            _change.SetProperty(ref _physicalBounds, inside, "PhysicalBounds");
+            PhysicalBounds = inside;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         private bool _enabled;
-        public bool Enabled {
+
+        public bool Enabled
+        {
             get { return _enabled; }
-            set { _change.SetProperty(ref _enabled, value); }
+            set { if (SetProperty(ref _enabled, value)) Saved = false; }
         }
 
         private bool _loadAtStartup;
+
         public bool LoadAtStartup
         {
-            get { return _loadAtStartup;  }
-            set { _change.SetProperty(ref _loadAtStartup, value); }
+            get { return _loadAtStartup; }
+            set { if (SetProperty(ref _loadAtStartup, value)) Saved = false; }
         }
 
         public bool IsRatio100
@@ -344,52 +401,58 @@ namespace LbmScreenConfig
             }
         }
 
-        public bool AdjustPointerAllowed => IsRatio100; 
+        public bool AdjustPointerAllowed => IsRatio100;
         private bool _adjustPointer;
+
         public bool AdjustPointer
         {
             get { return AdjustPointerAllowed && _adjustPointer; }
-            set { _change.SetProperty(ref _adjustPointer, value); }
+            set { if (SetProperty(ref _adjustPointer, value)) Saved = false; }
         }
 
         public bool AdjustSpeedAllowed => IsRatio100;
         private bool _adjustSpeed;
+
         public bool AdjustSpeed
         {
             get { return AdjustSpeedAllowed && _adjustSpeed; }
-            set {
-                _change.SetProperty(ref _adjustSpeed, value);
-            }
+            set { if (SetProperty(ref _adjustSpeed, value)) Saved = false; }
         }
 
         private bool _allowCornerCrossing;
+
         public bool AllowCornerCrossing
         {
             get { return _allowCornerCrossing; }
-            set { _change.SetProperty(ref _allowCornerCrossing, value); }
+            set { if (SetProperty(ref _allowCornerCrossing, value)) Saved = false; }
         }
 
+
         private bool _homeCinema;
+
         public bool HomeCinema
         {
             get { return _homeCinema; }
-            set { _change.SetProperty(ref _homeCinema, value); }
+            set { if (SetProperty(ref _homeCinema, value)) Saved = false; }
         }
 
         private Rect _configLocation;
+
         public Rect ConfigLocation
         {
             get { return _configLocation; }
-            set { _change.SetProperty(ref _configLocation, value); }
+            set { SetProperty(ref _configLocation, value); }
         }
 
 
         public void SetPhysicalAuto()
         {
-
+            // List all screens not positioned
             List<Screen> unatachedScreens = AllScreens.ToList();
 
-            List<Screen> todo = new List<Screen> {PrimaryScreen};
+            // start with primary screen
+            Queue<Screen> todo = new Queue<Screen>();
+            todo.Enqueue(PrimaryScreen);
 
             while (todo.Count > 0)
             {
@@ -398,223 +461,161 @@ namespace LbmScreenConfig
                     unatachedScreens.Remove(s2);
                 }
 
-                Screen s = todo[0];
-                todo.Remove(s);
-                foreach (Screen s1 in unatachedScreens)
+                Screen placedScreen = todo.Dequeue();
+
+                foreach (Screen screenToPlace in unatachedScreens)
                 {
-                    if (s1 == s) continue;
+                    if (screenToPlace == placedScreen) continue;
 
                     bool done = false;
-                    if (s1.PixelBounds.X == s.PixelBounds.Right)
+
+                    //     __
+                    //  __| A
+                    // B  |__
+                    //  __|
+                    if (screenToPlace.PixelBounds.X == placedScreen.PixelBounds.Right)
                     {
-                        s1.PhysicalX = s.PhysicalOutsideBounds.Right + s1.LeftBorder;
+                        screenToPlace.PhysicalX = placedScreen.PhysicalOutsideBounds.Right + screenToPlace.LeftBorder;
                         done = true;
                     }
-                    if (s1.PixelBounds.Y == s.PixelBounds.Bottom)
+                    //B |___|_
+                    //A  |    |
+                    if (screenToPlace.PixelBounds.Y == placedScreen.PixelBounds.Bottom)
                     {
-                        s1.PhysicalY = s.PhysicalOutsideBounds.Bottom + s1.TopBorder;
+                        screenToPlace.PhysicalY = placedScreen.PhysicalOutsideBounds.Bottom + screenToPlace.TopBorder;
                         done = true;
                     }
 
-                    if (s1.PixelBounds.Right == s.PixelBounds.X)
+                    //     __
+                    //  __| B
+                    // A  |__
+                    //  __|
+                    if (screenToPlace.PixelBounds.Right == placedScreen.PixelBounds.X)
                     {
-                        s1.PhysicalX = s.PhysicalOutsideBounds.Left - s1.PhysicalOutsideBounds.Width + s1.LeftBorder;
-                        done = true;
-                    }
-                    if (s1.PixelBounds.Bottom == s.PixelLocation.Y)
-                    {
-                        s1.PhysicalY = s.PhysicalOutsideBounds.Top - s1.PhysicalOutsideBounds.Height + s1.TopBorder;
-                        done = true;
-                    }
-
-                    if (s1.PixelBounds.X == s.PixelBounds.X)
-                    {
-                        s1.PhysicalX = s.PhysicalX;
-                        done = true;
-                    }
-                    if (s1.PixelBounds.Y == s.PixelBounds.Y)
-                    {
-                        s1.PhysicalY = s.PhysicalY;
+                        screenToPlace.PhysicalX = placedScreen.PhysicalOutsideBounds.Left -
+                                                  screenToPlace.PhysicalOutsideBounds.Width + screenToPlace.LeftBorder;
                         done = true;
                     }
 
-                    if (s1.PixelBounds.Right == s.PixelBounds.Right)
+                    //A |___|_
+                    //B  |    |
+
+                    if (screenToPlace.PixelBounds.Bottom == placedScreen.PixelLocation.Y)
                     {
-                        s1.PhysicalX = s.PhysicalBounds.Right - s1.PhysicalBounds.Width;
+                        screenToPlace.PhysicalY = placedScreen.PhysicalOutsideBounds.Top -
+                                                  screenToPlace.PhysicalOutsideBounds.Height + screenToPlace.TopBorder;
                         done = true;
                     }
-                    if (s1.PixelBounds.Bottom == s.PixelBounds.Bottom)
+
+
+                    //  __
+                    // |
+                    // |__
+                    //  __
+                    // |
+                    // |__
+                    if (screenToPlace.PixelBounds.X == placedScreen.PixelBounds.X)
                     {
-                        s1.PhysicalY = s.PhysicalBounds.Bottom - s1.PhysicalBounds.Height;
+                        screenToPlace.PhysicalX = placedScreen.PhysicalX;
+                        done = true;
+                    }
+
+                    //  ___   ___
+                    // |   | |   |
+                    if (screenToPlace.PixelBounds.Y == placedScreen.PixelBounds.Y)
+                    {
+                        screenToPlace.PhysicalY = placedScreen.PhysicalY;
+                        done = true;
+                    }
+
+                    // __
+                    //   |
+                    // __|
+                    // __
+                    //   |
+                    // __|
+                    if (screenToPlace.PixelBounds.Right == placedScreen.PixelBounds.Right)
+                    {
+                        screenToPlace.PhysicalX = placedScreen.PhysicalBounds.Right - screenToPlace.PhysicalBounds.Width;
+                        done = true;
+                    }
+
+                    //|___||___|
+                    if (screenToPlace.PixelBounds.Bottom == placedScreen.PixelBounds.Bottom)
+                    {
+                        screenToPlace.PhysicalY = placedScreen.PhysicalBounds.Bottom -
+                                                  screenToPlace.PhysicalBounds.Height;
                         done = true;
                     }
                     if (done)
                     {
-                        todo.Add(s1);
+                        todo.Enqueue(screenToPlace);
                     }
                 }
 
             }
-
         }
 
+        private readonly object _compactLock = new object();
+        private bool _compacting = false;
 
+        [DependsOn("Screen.PhysicalOutsideBounds", nameof(Moving), nameof(AllowOverlaps), nameof(AllowDiscontinuity))]
         public void Compact()
         {
-            CompactX();
-            CompactY();
-        }
+            if (Moving) return;
+            lock (_compactLock)
+            {
+                if (_compacting) return;
+                _compacting = true;
+            }
 
-        public void CompactX()
-        {
-            List<Screen> todo = AllScreens.ToList();
+            List<Screen> done = new List<Screen> {PrimaryScreen};
 
-            double right = todo.Select(s => s.PhysicalOutsideBounds.X).Min();
-
+            List<Screen> todo = AllBut(PrimaryScreen).OrderBy(s => s.Distance(PrimaryScreen)).ToList();
 
             while (todo.Count > 0)
             {
-                Screen leftScreen = null;
+                Screen screen = todo[0];
+                todo.Remove(screen);
 
-                foreach (Screen s in todo.Where(s => leftScreen==null || s.PhysicalOutsideBounds.X < leftScreen.PhysicalOutsideBounds.X))
-                {
-                    leftScreen = s;
-                }
-                leftScreen.PhysicalX = right + leftScreen.LeftBorder;
+                screen.PlaceAuto(done);
+                done.Add(screen);
 
-
-                right = leftScreen.PhysicalOutsideBounds.Right;
-                List<Screen> doneList = new List<Screen>() {leftScreen};
-
-                while (doneList.Count > 0)
-                {
-                    todo = todo.Except(doneList).ToList(); doneList.Clear();
-
-                    foreach (Screen s in todo.Where(s => s.PhysicalOutsideBounds.X <= right))
-                    {
-                        if (right<s.PhysicalOutsideBounds.Right) right = s.PhysicalOutsideBounds.Right;
-                        doneList.Add(s);
-                    }               
-                }               
+                todo = todo.OrderBy(s => s.Distance(done)).ToList();
             }
 
-        }
-        public void CompactY()
-        {
-            List<Screen> todo = AllScreens.ToList();
-
-            double bottom = todo.Select(s => s.PhysicalOutsideBounds.Y).Min();
-
-
-            while (todo.Count > 0)
+            lock (_compactLock)
             {
-                Screen topScreen = null;
-
-                foreach (Screen s in todo.Where(s => topScreen == null || s.PhysicalOutsideBounds.Y < topScreen.PhysicalOutsideBounds.Y))
-                {
-                    topScreen = s;
-                }
-                topScreen.PhysicalY = bottom + topScreen.TopBorder;
-
-
-                bottom = topScreen.PhysicalOutsideBounds.Bottom;
-                List<Screen> doneList = new List<Screen>() { topScreen };
-
-                while (doneList.Count > 0)
-                {
-                    todo = todo.Except(doneList).ToList(); doneList.Clear();
-
-                    foreach (Screen s in todo.Where(s => s.PhysicalOutsideBounds.Y <= bottom))
-                    {
-                        if (bottom < s.PhysicalOutsideBounds.Bottom) bottom = s.PhysicalOutsideBounds.Bottom;
-                        doneList.Add(s);
-                    }
-                }
-            }
-
-        }
-
-        public void Expand()
-        {
-            bool done = false;
-            int i = 100; // hack to avoid infinit loop
-            while (!done)
-            {
-                done = true;
-                foreach (Screen screen in AllScreens.Where(screen => screen.Expand()))
-                {                 
-                    i--;
-                    if (i>0) done = false;
-                }
+                _compacting = false;
             }
         }
+
 
         private bool _allowOverlaps = false;
+
         public bool AllowOverlaps
         {
             get { return _allowOverlaps; }
-            set { _change.SetProperty(ref _allowOverlaps, value); }
+            set {
+                if (SetProperty(ref _allowOverlaps, value))
+                {
+                    Saved = false;
+                } }
         }
 
         private bool _allowDiscontinuity = false;
+        private bool _saved = false;
+
         public bool AllowDiscontinuity
         {
             get { return _allowDiscontinuity; }
-            set { _change.SetProperty(ref _allowDiscontinuity, value); }
+            set { if (SetProperty(ref _allowDiscontinuity, value)) Saved = false; }
         }
-    }
 
-    public class ScreenList : List<Screen>
-    {
-        public List<ScreenList> SplitBlocs()
+        public bool Saved
         {
-            List<ScreenList> result = new List<ScreenList>();
-            List<Screen> leftScreens = this.ToList();
-
-            while (leftScreens.Count > 0)
-            {
-                Screen s = leftScreens[0];
-                ScreenList list = new ScreenList {s};
-
-                bool done = true;
-
-                while (done)
-                {
-                    leftScreens = leftScreens.Except(list).ToList();
-
-                    done = false;
-                    foreach (Screen screen in leftScreens.Where(screen => !list.Overlap(s) && list.Touch(s)))
-                    {
-                        list.Add(screen);
-                        done = true;
-                    }             
-                }
-
-                result.Add(list);             
-            }
-
-            return result;
+            get { return _saved; }
+            private set { SetProperty(ref _saved, value); }
         }
-
-        public bool Overlap(Screen screen)
-        {
-            return this.Any(screen.PhysicalOverlapWith);
-        }
-
-        public bool Touch(Screen screen)
-        {
-            return this.Any(screen.PhysicalTouch);
-        }
-
-        void Compact()
-        {
-            List<ScreenList> lists = SplitBlocs();
-
-            while (lists.Count > 1)
-            {
-                
-            }
-        }
-
     }
 }

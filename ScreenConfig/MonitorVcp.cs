@@ -11,36 +11,34 @@ using WinAPI_Dxva2;
 
 namespace LbmScreenConfig
 {
-    public static class VcpExpendScreen
+    public static class VcpExpendMonitor
     {
-        private static readonly Dictionary<Screen, ScreenVcp> AllVcp = new Dictionary<Screen, ScreenVcp>();
-        public static ScreenVcp Vcp(this Screen screen)
+        private static readonly Dictionary<Monitor, MonitorVcp> AllVcp = new Dictionary<Monitor, MonitorVcp>();
+        public static MonitorVcp Vcp(this Monitor monitor)
         {
-            if (AllVcp.ContainsKey(screen)) return AllVcp[screen];
+            if (AllVcp.ContainsKey(monitor)) return AllVcp[monitor];
 
-            ScreenVcp vcp = new ScreenVcp(screen);
-            AllVcp.Add(screen, vcp);
+            MonitorVcp vcp = new MonitorVcp(monitor);
+            AllVcp.Add(monitor, vcp);
             return vcp;
         }
     }
     public enum Component { Red, Green, Blue, Brightness, Contrast }
-    public class ScreenVcp : Notifier
+    public class MonitorVcp : Notifier
     {
-        public Screen Screen { get; }
+        public Monitor Monitor { get; }
 
-        internal ScreenVcp(Screen screen)
+        internal MonitorVcp(Monitor monitor)
         {
-            Screen = screen;
+            Monitor = monitor;
             Brightness = new MonitorLevel(GetBrightness, SetBrightness);
             Contrast = new MonitorLevel(GetContrast, SetContrast);
 
             Gain = new MonitorRgbLevel(GetGain, SetGain);
             Drive = new MonitorRgbLevel(GetDrive, SetDrive);
-
-            //            Probe = new MonitorRgbLevel(GetProbe, SetProbe);
         }
 
-        public bool AlternatePower => Screen.ManufacturerCode == "DEL";
+        public bool AlternatePower => Monitor.ManufacturerCode == "DEL";
 
         private bool _power = true;
         public bool Power
@@ -53,17 +51,17 @@ namespace LbmScreenConfig
                 if (value)
                 {
                     if(AlternatePower)
-                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xE1, 0);
+                        Dxva2.SetVCPFeature(Monitor.HPhysical, 0xE1, 0);
                     else
-                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xD6, 1);
+                        Dxva2.SetVCPFeature(Monitor.HPhysical, 0xD6, 1);
 
                 }
                 else
                 {
                     if(AlternatePower)
-                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xE1, 1);
+                        Dxva2.SetVCPFeature(Monitor.HPhysical, 0xE1, 1);
                     else
-                        Dxva2.SetVCPFeature(Screen.HPhysical, 0xD6, 4);
+                        Dxva2.SetVCPFeature(Monitor.HPhysical, 0xD6, 4);
                 }
             }
         }
@@ -75,39 +73,38 @@ namespace LbmScreenConfig
 
         public MonitorRgbLevel Gain { get; }
         public MonitorRgbLevel Drive { get; }
-        public MonitorRgbLevel Probe { get; }
 
         private bool GetBrightness(ref uint min, ref uint value, ref uint max, uint component = 0)
         {
-            return Dxva2.GetMonitorBrightness(Screen.HPhysical, ref min, ref value, ref max);
+            return Dxva2.GetMonitorBrightness(Monitor.HPhysical, ref min, ref value, ref max);
         }
         private bool SetBrightness(uint value, uint component = 0)
         {
-            return Dxva2.SetMonitorBrightness(Screen.HPhysical, value);
+            return Dxva2.SetMonitorBrightness(Monitor.HPhysical, value);
         }
         private bool GetContrast(ref uint min, ref uint value, ref uint max, uint component = 0)
         {
-            return Dxva2.GetMonitorContrast(Screen.HPhysical, ref min, ref value, ref max);
+            return Dxva2.GetMonitorContrast(Monitor.HPhysical, ref min, ref value, ref max);
         }
         private bool SetContrast(uint value, uint component = 0)
         {
-            return Dxva2.SetMonitorContrast(Screen.HPhysical, value);
+            return Dxva2.SetMonitorContrast(Monitor.HPhysical, value);
         }
         private bool GetGain(ref uint min, ref uint value, ref uint max, uint component)
         {
-            return Dxva2.GetMonitorRedGreenOrBlueGain(Screen.HPhysical, component, ref min, ref value, ref max);
+            return Dxva2.GetMonitorRedGreenOrBlueGain(Monitor.HPhysical, component, ref min, ref value, ref max);
         }
         private bool SetGain(uint value, uint component)
         {
-            return Dxva2.SetMonitorRedGreenOrBlueGain(Screen.HPhysical, component, value);
+            return Dxva2.SetMonitorRedGreenOrBlueGain(Monitor.HPhysical, component, value);
         }
         private bool GetDrive(ref uint min, ref uint value, ref uint max, uint component)
         {
-            return Dxva2.GetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, ref min, ref value, ref max);
+            return Dxva2.GetMonitorRedGreenOrBlueDrive(Monitor.HPhysical, component, ref min, ref value, ref max);
         }
         private bool SetDrive(uint component, uint value)
         {
-            return Dxva2.SetMonitorRedGreenOrBlueDrive(Screen.HPhysical, component, value);
+            return Dxva2.SetMonitorRedGreenOrBlueDrive(Monitor.HPhysical, component, value);
         }
     }
 
@@ -133,19 +130,14 @@ namespace LbmScreenConfig
 
     public class MonitorLevel : Notifier
     {
-
-        //Screen _screen;
-
         private uint _value = 0;
         private uint _min = 0;
         private uint _max = 0;
-        private uint _pendding = uint.MaxValue;
 
-        readonly uint _component = 0;
+        private readonly uint _component = 0;
 
         private readonly VcpSetter _componentSetter = null;
         private readonly VcpGetter _componentGetter = null;
-
 
         public MonitorLevel(VcpGetter getter, VcpSetter setter, uint component = 0)
         {
@@ -153,73 +145,99 @@ namespace LbmScreenConfig
             _componentSetter = setter;
             _componentGetter = getter;
 
-            GetValueThread();
+            _threadSetter = new LossyThread( );
+
+            _threadSetter.Add(GetValue);
         }
 
         private static readonly object LockDdcCi = new object();
 
-        public void SetToMax()
-        {
-            //GetValue();
-            Value = Max;
-        }
+        public void SetToMax() { CheckedValue = Max; }
 
-        public void SetToMin()
-        {
-            GetValue();
-            Value = Min;
-        }
+        public void SetToMin() { CheckedValue = Min; }
 
         private void GetValue()
         {
+            if (_componentGetter == null) return;
+
             uint min = 0;
             uint max = 0;
             uint value = 0;
 
-            lock (LockDdcCi) _componentGetter?.Invoke(ref min, ref value, ref max, _component);
+            bool result = false;
+            int tries = 10;
 
-            SetProperty(ref _min, min, "Min");
-            SetProperty(ref _max, max, "Max");
-            SetProperty(ref _value, value, "Value");
+            lock (LockDdcCi) 
+                while(!result && tries-- > 0)
+                    result = _componentGetter.Invoke(ref min, ref value, ref max, _component);
+
+            if (result)
+            {
+                Min = min;
+                Max = max;
+                SetProperty(ref _value, value, "Value");               
+            }
         }
-        private void GetValueThread()
+
+        private readonly object _lockValue = new object();
+        private readonly LossyThread _threadSetter;
+        private uint _valueAsync;
+
+        public uint Value
         {
-            Thread thread = new Thread(GetValue);
-            thread.Start();
+            get { return _value; }
+            set
+            {
+                //lock(_lockValue)
+                if (SetProperty(ref _value, value))
+                {
+                        lock(LockDdcCi) _componentSetter?.Invoke(value, _component);
+                        //SetProperty(ref _valueAsync, value, "ValueAsync"); 
+                }
+            }
         }
 
-        private readonly object _lockPending = new object();
-        private readonly LossyThread _threadSetter = new LossyThread();
+        [DependsOn("Value")]
+        public uint CheckedValue
+        {
+            get { return _value;}
+            set
+            {
+                int tries = 10;
+                while (_value != value && tries-- > 0)
+                {
+                    Value = value;
+                    GetValue();
+                }
+            }
+        }
 
         [DependsOn("Value")]
         public uint ValueAsync
         {
-            get
-            {
-                if (_pendding == uint.MaxValue) GetValue();
-                return _pendding==uint.MaxValue?_value:_pendding;
-            }
+            get { return _valueAsync; }
             set
             {
-                //lock (_lockPending) //causes deadlock
+                //lock (_lockValue) //causes deadlock
                 {
-                   if (_pendding == value) return;
-                    SetProperty(ref _pendding, value, "ValueAsync");
+                    SetProperty(ref _valueAsync, value);
                     _threadSetter.Add(() =>
                     {
-                        lock(LockDdcCi) _componentSetter?.Invoke(value, _component);
-                        lock(_lockPending) SetProperty(ref _value, value, "Value");
-                    } );
+                        CheckedValue = value;
+                    });
                 }
             }
         }
-        public uint Value
+        public uint Min
         {
-            get { return _value; }
-            set { ValueAsync = value; }
+            get { return _min; }
+            private set { SetProperty(ref _min, value); }
         }
-        public uint Min => _min;
 
-        public uint Max => _max;
+        public uint Max
+        {
+            get { return _max; }
+            private set { SetProperty(ref _max, value); }
+        }
     }
 }

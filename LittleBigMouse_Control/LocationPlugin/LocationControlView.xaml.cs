@@ -16,48 +16,38 @@ using System.Windows.Shapes;
 using SystemColors1;
 using LbmScreenConfig;
 
-namespace LittleBigMouse_Control.SizerPlugin
+namespace LittleBigMouse_Control.LocationPlugin
 {
     /// <summary>
     /// Logique d'interaction pour ControlGuiSizer.xaml
     /// </summary>
-    public partial class ControlGuiSizer : ControlGui
+    public partial class LocationControlView : UserControl
     {
 
-        public ControlGuiSizer() : base()
+        public LocationControlView() 
         {
             InitializeComponent();
-
-            Config.PropertyChanged += Config_PropertyChanged;
-            //foreach (ScreenGui screenGui in MainGui.AllScreenGuis)
-            //{
-            //    screenGui.SelectedChanged += OnSelectedChanged;
-            //}
-            DataContext = this;
         }
 
-        private void Save()
-        {
-            Config.Save();
-        }
+        private ICommand Save = new RoutedCommand();
 
         private void cmdOk_Click(object sender, RoutedEventArgs e)
         {
             cmdApply_Click(sender, e);
-            MainGui.Close();
+           // MainGui.Close();
         }
 
         private void cmdApply_Click(object sender, RoutedEventArgs e)
         {
-            Save();
-            LittleBigMouseClient.Client.LoadAtStartup(Config.LoadAtStartup);
+            //Save();
+            //LittleBigMouseClient.Client.LoadAtStartup(Config.LoadAtStartup);
             LittleBigMouseClient.Client.LoadConfig();
             LittleBigMouseClient.Client.Start();
         }
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)
         {
-            MainGui.Close();
+          //  MainGui.Close();
         }
 
         private void OnClosing(object sender, CancelEventArgs e)
@@ -77,7 +67,7 @@ namespace LittleBigMouse_Control.SizerPlugin
             get { return _showRulers; }
             set
             {
-                if (Change.SetProperty(ref _showRulers, value))
+        //        if (Change.SetProperty(ref _showRulers, value))
                 {
                     if (_showRulers)
                     {
@@ -106,12 +96,12 @@ namespace LittleBigMouse_Control.SizerPlugin
 
         private void AddRuler(RulerSide side)
         {
-            if (Config.Selected == null) return;
+            //if (Config.Selected == null) return;
 
-            foreach (var sz in Config.AllScreens.Select(s => new Ruler(Config.Selected, s, side)))
-            {
-                _rulers.Add(sz);
-            }
+            //foreach (var sz in Config.AllScreens.Select(s => new Ruler(Config.Selected, s, side)))
+            //{
+            //    _rulers.Add(sz);
+            //}
         }
         private void OnSelectedChanged(object s, bool selected)
         {
@@ -129,12 +119,12 @@ namespace LittleBigMouse_Control.SizerPlugin
             get { return _liveUpdate; }
             set
             {
-                if (Change.SetProperty(ref _liveUpdate, value) && value)
-                    ActivateConfig();
-                else
-                {
-                    LittleBigMouseClient.Client.LoadConfig();
-                }
+                //if (Change.SetProperty(ref _liveUpdate, value) && value)
+                //    ActivateConfig();
+                //else
+                //{
+                //    LittleBigMouseClient.Client.LoadConfig();
+                //}
             }
         }
 
@@ -142,7 +132,7 @@ namespace LittleBigMouse_Control.SizerPlugin
         {
             if (LiveUpdate)
             {
-                Save();
+                //Save();
                 LittleBigMouseClient.Client.LoadConfig();
             }
 

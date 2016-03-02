@@ -277,9 +277,9 @@ namespace LittleBigMouse_Daemon
 
             if (_config.HomeCinema)
             {
-                oldScreen.Vcp().Power = false;
+                oldScreen.Monitor.Vcp().Power = false;
             }
-            screenOut.Vcp().Power = true;
+            screenOut.Monitor.Vcp().Power = true;
 
             _oldPoint = pOut;
             e.Handled = true;

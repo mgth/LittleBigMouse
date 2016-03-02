@@ -10,14 +10,14 @@ using LbmScreenConfig;
 
 namespace LittleBigMouse_Control.VcpPlugin
 {
-    public class VcpPlugin : Plugin<VcpPlugin>, IPluginButton
+    class VcpPlugin : Plugin, IPluginButton
     {
         private bool _isActivated;
 
 
         public override bool Init()
         {
-            AddButton(this);
+            MainViewModel.AddButton(this);
             return true;
         }
 
@@ -29,12 +29,13 @@ namespace LittleBigMouse_Control.VcpPlugin
             get { return _isActivated; }
             set
             {
-                if (!Change.SetProperty(ref _isActivated, value)) return;
+                if (!SetProperty(ref _isActivated, value)) return;
 
                 if (value)
                 {
-                    MainGui.ControlGui = new ControlGuiVcp();
-                    MainGui.GetScreenGuiControl = screen => new ScreenGuiVcp(screen);
+                    MainViewModel.Control = new VcpControlViewModel();
+                    MainViewModel.Presenter.GetScreenControlViewModel 
+                        = screen => new ScreenControlViewModel { Screen =screen}; //TODO create VcpScreenControlViewModel
                 }
             }
         }

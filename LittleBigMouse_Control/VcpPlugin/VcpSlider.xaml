@@ -11,7 +11,15 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <Slider HorizontalAlignment="Center" Grid.Row="0" Orientation="Vertical" x:Name="Slider" ValueChanged="Slider_OnValueChanged" SmallChange="1" LargeChange="10" Maximum="100">
+        <Slider 
+            HorizontalAlignment="Center" 
+            Grid.Row="0" 
+            Orientation="Vertical" 
+            x:Name="Slider" 
+            ValueChanged="Slider_OnValueChanged" 
+            SmallChange="1" 
+            LargeChange="10" 
+            Maximum="100">
             <Slider.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                     <GradientStop Color="Black" Offset="1"/>

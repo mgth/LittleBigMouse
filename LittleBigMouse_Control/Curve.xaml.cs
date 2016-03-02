@@ -15,8 +15,6 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using LbmScreenConfig;
 using NotifyChange;
-using OxyPlot;
-using OxyPlot.Wpf;
 
 namespace LittleBigMouse_Control
 {
@@ -26,7 +24,7 @@ namespace LittleBigMouse_Control
     public partial class Curve : UserControl, INotifyPropertyChanged
     {
         protected readonly PropertyChangedHelper Change;
-        private IList<DataPoint> _points;
+        private IList<double> _points;
         public event PropertyChangedEventHandler PropertyChanged { add { Change.Add(this, value); } remove { Change.Remove(value); } }
         public Curve()
         {
@@ -34,16 +32,16 @@ namespace LittleBigMouse_Control
             InitializeComponent();
             DataContext = this;
         }
-        private PlotModel _plotModel = new PlotModel();
-        public PlotModel PlotModel
-        {
-            get { return _plotModel; }
-            set { Change.SetProperty(ref _plotModel, value); }
-        }
+       // private PlotModel _plotModel = new PlotModel();
+        //public PlotModel PlotModel
+        //{
+        //    get { return _plotModel; }
+        //    set { Change.SetProperty(ref _plotModel, value); }
+        //}
 
         public void Refresh()
         {
-            PlotView.InvalidatePlot();
+            //PlotView.InvalidateVisual();
         }
 
     }

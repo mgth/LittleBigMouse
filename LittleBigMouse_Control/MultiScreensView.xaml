@@ -1,4 +1,4 @@
-﻿<local:ScreensPresenter x:Class="LittleBigMouse_Control.MultiScreensGui"
+﻿<UserControl x:Class="LittleBigMouse_Control.MultiScreensView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformaD:\docs\_docs_\_projets\LittleBigMouse\LittleBigMouse_Control\MainGui.xamlts.org/markup-compatibility/2006" 
@@ -44,6 +44,6 @@
             Little Big Mon
         </Label>
 
-        <Canvas x:Name="ScreensGrid" />
+        <ContentControl Content="{Binding ScreensCanvas}"/>
     </Grid>
-</local:ScreensPresenter>
+</UserControl>

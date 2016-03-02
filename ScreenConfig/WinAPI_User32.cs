@@ -133,7 +133,42 @@ namespace WinAPI_User32
             public Int32 Nup;
             [FieldOffset(120)]
             public Int32 DisplayFrequency;
+
+        public DEVMODE(bool init)
+        {
+            Size = (short)Marshal.SizeOf(typeof(DEVMODE));
+            DeviceName = string.Empty;
+            SpecVersion = 0;
+            DriverVersion = 0;
+            DriverExtra = 0;
+            Fields = (DM) 0;
+            Orientation = 0;
+            PaperSize = 0;
+            PaperLength = 0;
+            PaperWidth = 0;
+            Scale = 0;
+            Copies = 0;
+            DefaultSource = 0;
+            PrintQuality = 0;
+            Position = new POINTL();
+            DisplayOrientation = 0;
+            DisplayFixedOutput = 0;
+            Color = 0;
+            Duplex = 0;
+            YResolution = 0;
+            TTOption = 0;
+            Collate = 0;
+            FormName = null;
+            LogPixels = 0;
+            BitsPerPel = 0;
+            PelsWidth = 0;
+            PelsHeight = 0;
+            DisplayFlags = 0;
+            Nup = 0;
+            DisplayFrequency = 0;
         }
+
+    }
 
     public struct POINTL
         {
@@ -346,7 +381,7 @@ namespace WinAPI_User32
 
         public MONITORINFOEX(bool init)
         {
-            Size = 40 + 2 * CCHDEVICENAME;
+            Size = (int)Marshal.SizeOf(typeof(MONITORINFOEX));
             DeviceName = string.Empty;
             Monitor=new RECT();
             WorkArea=new RECT();
@@ -1365,7 +1400,7 @@ namespace WinAPI_User32
         [DllImport("user32.dll")]
         public static extern DISP_CHANGE ChangeDisplaySettingsEx(string lpszDeviceName, IntPtr lpDevMode, IntPtr hwnd, ChangeDisplaySettingsFlags dwflags, IntPtr lParam);
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.ThisCall)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
 
@@ -1374,12 +1409,12 @@ namespace WinAPI_User32
 
         //Monitor
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        static internal extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+        internal static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
         [DllImport("user32.dll")]
-        static internal extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+        internal static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
         [DllImport("user32.dll")]
-        static public extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip,
+        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip,
            EnumMonitorsDelegate lpfnEnum, IntPtr dwData);
 
         //Input

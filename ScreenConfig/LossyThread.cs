@@ -9,13 +9,18 @@ namespace LbmScreenConfig
         private readonly Queue<ThreadStart> _delegates = new Queue<ThreadStart>();
 
         private Thread _thread;
+        private readonly ThreadStart _finnaly;
 
         private readonly object _threadLock = new object();
+
+        public LossyThread(ThreadStart ts=null)
+        {
+            _finnaly = ts;
+        }
 
         public void Add(ThreadStart ts)
         {
             lock (_delegates) _delegates.Enqueue(ts);
-
             new Thread(Run).Start();
         }
 
@@ -39,8 +44,15 @@ namespace LbmScreenConfig
             }
 
             d?.DynamicInvoke();
+
+            lock (_delegates)
+            {
+                if (_delegates.Count == 0)
+                    d = _finnaly;
+                else d = null;
+            }
+            d?.DynamicInvoke();
         }
     }
-
 }
 

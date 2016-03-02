@@ -11,10 +11,16 @@ using System.Windows;
 
 namespace NotifyChange
 {
-    public class Notifier : INotifyPropertyChanged
+    public class Notifier : DependencyObject, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
+        protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+        {
+            base.OnPropertyChanged(e);
+
+            RaiseProperty(e.Property.Name);
+        }
 
         private bool _suspended = false;
         private readonly List<string> _propertyChangedList = new List<string>();
@@ -68,6 +74,17 @@ namespace NotifyChange
             RaiseProperty(propertyName);
             return true;
         }
+
+        public bool SetAndWatch<T>(ref T storage, T value, [CallerMemberName] string propertyName = null) where T : INotifyPropertyChanged
+        {
+            if (storage != null && !Equals(storage, value)) UnWatch(storage);
+            if (SetProperty(ref storage, value, propertyName))
+            {
+                Watch(storage, propertyName);
+                return true;
+            }
+            return false;
+        }
         //bool SetProperty<T, TProperty>(T input, Expression<Func<Screen, TProperty>> outExpr,
         //    [CallerMemberName] string propertyName = null)
         //{
@@ -92,7 +109,7 @@ namespace NotifyChange
                 {
                     if (ca.Properties != null)
                     {
-                        if (ca.Properties.Contains(propertyName) && !list.Contains(pInfo.Name))
+                        if ( (ca.Properties.Contains(propertyName.Split('.')[0]) || ca.Properties.Contains(propertyName) )  && !list.Contains(pInfo.Name))
                         {
                             GetDependOn(pInfo.Name, ref list, ref listMethods);
                         }
@@ -100,25 +117,39 @@ namespace NotifyChange
                 }
             }
 
-            MethodInfo[] methods = GetType().GetMethods();
-            foreach (MethodInfo mInfo in methods)
+            Type t = GetType();
+            while (t != null)
             {
-                foreach (DependsOn ca in
-                    mInfo.GetCustomAttributes(false).OfType<DependsOn>())
+                MethodInfo[] m = t.GetMethods(
+                    BindingFlags.DeclaredOnly |
+                    BindingFlags.Instance | BindingFlags.Public
+                    | BindingFlags.NonPublic
+                    );
+                foreach (MethodInfo mi in m)
                 {
-                    if (ca.Properties != null)
+                    if (!listMethods.Contains(mi))
                     {
-                        if (ca.Properties.Contains(propertyName) && !listMethods.Contains(mInfo))
+                        foreach (DependsOn ca in
+                            mi.GetCustomAttributes(false).OfType<DependsOn>())
                         {
-                            listMethods.Add(mInfo);
+                            if (ca.Properties == null) continue;
+                            //if ( ca.Properties.Contains(propertyName) || ca.Properties.Contains(propertyName) )
+                            if (ca.Properties.Any(s => s == propertyName || s.Split('.')[0] == propertyName))
+                            {
+                                listMethods.Add(mi);
+                            }
                         }
                     }
                 }
+
+                t = t.BaseType;
             }
         }
 
         private static readonly Dictionary<Type, Dictionary<string, List<string>>> _dictProperties = new Dictionary<Type, Dictionary<string, List<string>>>();
         private static readonly Dictionary<Type, Dictionary<string, List<MethodInfo>>> _dictMethods = new Dictionary<Type, Dictionary<string, List<MethodInfo>>>();
+
+        private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _watch = new Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler>(); 
 
         private static readonly object LockDict = new object();
 
@@ -129,20 +160,20 @@ namespace NotifyChange
             List<string> listProperties;
             List<MethodInfo> listMethods;
 
-            Type Type = GetType();
+            Type type = GetType();
             lock (LockDict)
             {
 
-                if (!_dictProperties.TryGetValue(Type, out dictClassProperties))
+                if (!_dictProperties.TryGetValue(type, out dictClassProperties))
                 {
                     dictClassProperties = new Dictionary<string, List<string>>();
-                    _dictProperties.Add(Type, dictClassProperties);
+                    _dictProperties.Add(type, dictClassProperties);
                 }
 
-                if (!_dictMethods.TryGetValue(Type, out dictClassMethods))
+                if (!_dictMethods.TryGetValue(type, out dictClassMethods))
                 {
                     dictClassMethods = new Dictionary<string, List<MethodInfo>>();
-                    _dictMethods.Add(Type, dictClassMethods);
+                    _dictMethods.Add(type, dictClassMethods);
                 }
 
                 //            if (!dictProperties.TryGetValue(propertyName, out listProperties))
@@ -186,23 +217,36 @@ namespace NotifyChange
             };
         }
 
-
-        public void Watch(INotifyPropertyChanged obj, string prefix)
+        public void Watch(ref SizeChangedEventHandler evt, string prefix)
         {
-            if (obj!=null)
-            obj.PropertyChanged += delegate (object sender, PropertyChangedEventArgs args)
+            evt += delegate
             {
-                RaiseProperty(prefix + "." + args.PropertyName);
+                RaiseProperty(prefix);
             };
         }
 
-        public void UnWatch(INotifyPropertyChanged obj, string prefix)
+        public void Watch(INotifyPropertyChanged obj, string prefix)
         {
-            if(obj!=null)
-            obj.PropertyChanged -= delegate (object sender, PropertyChangedEventArgs args)
+            if (obj != null)
             {
-                RaiseProperty(prefix + "." + args.PropertyName);
-            };
+                PropertyChangedEventHandler handler = delegate (object sender, PropertyChangedEventArgs args)
+                {
+                    RaiseProperty(prefix + "." + args.PropertyName);
+                };
+                obj.PropertyChanged += handler;
+                _watch.Add(obj,handler);
+            }
+            
+        }
+
+        public void UnWatch(INotifyPropertyChanged obj)
+        {
+            if (obj != null)
+            {
+                PropertyChangedEventHandler handler =_watch[obj];
+                obj.PropertyChanged -= handler;
+                _watch.Remove(obj);
+            }
         }
 
         public void Watch<T>(ObservableCollection<T> collection, string prefix) where T:INotifyPropertyChanged
@@ -214,7 +258,7 @@ namespace NotifyChange
                 if (e.OldItems!=null)
                 foreach (INotifyPropertyChanged item in e.OldItems)
                 {
-                    UnWatch(item, prefix);
+                    UnWatch(item);
                     RaiseProperty(prefix);
                 }
 
@@ -235,7 +279,7 @@ namespace NotifyChange
                     if (e.OldItems != null)
                         foreach (INotifyPropertyChanged item in e.OldItems)
                         {
-                            UnWatch(item, prefix);
+                            UnWatch(item);
                             RaiseProperty(prefix);
                         }
 
@@ -247,6 +291,11 @@ namespace NotifyChange
                         }
                 };
         }
+        protected static PropertyMetadata WatchNotifier() => new PropertyMetadata(null, (d, e) =>
+        {
+            (d as Notifier)?.UnWatch(e.OldValue as Notifier);
+            (d as Notifier)?.Watch(e.NewValue as Notifier, e.Property.Name);
+        });
 
     }
     public class PropertyChangedHelper
@@ -296,7 +345,7 @@ namespace NotifyChange
                     {
                         sink(_object, arg);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     
                     }
@@ -413,7 +462,7 @@ namespace NotifyChange
             }
 
             //Raise property changed event for every properties marked with DependsOn
-            foreach (var s in listProperties.Where(s => !s.Contains('.')))
+            foreach (var s in listProperties)//.Where(s => !s.Contains('.')))
                 OnPropertyChanged(s);
 
             //Execute all methods marked with DependsOn
@@ -446,6 +495,8 @@ namespace NotifyChange
                 RaiseProperty(prefix + "." + args.PropertyName);
             };
         }
+
+
     }
     public class DependsOn : Attribute
     {

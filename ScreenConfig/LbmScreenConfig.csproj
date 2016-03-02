@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LbmScreenConfig</RootNamespace>
     <AssemblyName>LbmScreenConfig</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -66,23 +67,12 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="OxyPlot, Version=1.0.0.0, Culture=neutral, PublicKeyToken=638079a8f0bd61e9, processorArchitecture=MSIL">
-      <HintPath>..\packages\OxyPlot.Core.1.0.0-unstable1886\lib\net45\OxyPlot.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OxyPlot.Wpf, Version=1.0.0.0, Culture=neutral, PublicKeyToken=75e952ba404cdbb0, processorArchitecture=MSIL">
-      <HintPath>..\packages\OxyPlot.Wpf.1.0.0-unstable1886\lib\net45\OxyPlot.Wpf.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OxyPlot.Xps, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\OxyPlot.Wpf.1.0.0-unstable1886\lib\net45\OxyPlot.Xps.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Management" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="System.Xaml" />
@@ -97,7 +87,7 @@
   <ItemGroup>
     <Compile Include="AbsolutePoint.cs" />
     <Compile Include="AccentColor.cs" />
-    <Compile Include="ColorManagment.cs" />
+    <Compile Include="DisplayDevice.cs" />
     <Compile Include="Edid.cs" />
     <Compile Include="Html.cs" />
     <Compile Include="ILittleBigMouseService.cs" />
@@ -106,12 +96,13 @@
     <Compile Include="Luminance.xaml.cs">
       <DependentUpon>Luminance.xaml</DependentUpon>
     </Compile>
+    <Compile Include="LuminanceViewModel.cs" />
     <Compile Include="ProbeLut.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RegistryExt.cs" />
     <Compile Include="Screen.cs" />
     <Compile Include="ScreenConfig.cs" />
-    <Compile Include="ScreenVcp.cs" />
+    <Compile Include="MonitorVcp.cs" />
     <Compile Include="WinAPI_AdvAPI32.cs" />
     <Compile Include="WinAPI_Dxva2.cs" />
     <Compile Include="WinAPI_Gdi32.cs" />
@@ -122,15 +113,17 @@
     <Compile Include="WindowInteropHelper.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
     <Page Include="Luminance.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\LightMeter\Argyll\Argyll.csproj">
+      <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
+      <Name>Argyll</Name>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+    </ProjectReference>
     <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
       <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
       <Name>NotifyChange</Name>

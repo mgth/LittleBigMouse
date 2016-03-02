@@ -14,49 +14,16 @@ using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
-    public abstract class Plugin<T> : Plugin where T : Plugin, new()
+    abstract class Plugin : Notifier
     {
-        private static T _instance;
-        public static T Instance => _instance ?? (_instance = new T());
-    }
+        private MainViewModel _mainViewModel;
 
-    public abstract class Plugin : INotifyPropertyChanged
-    {
-        // PropertyChanged Handling
-        protected readonly PropertyChangedHelper Change;
-        public event PropertyChangedEventHandler PropertyChanged { add { Change.Add(this, value); } remove { Change.Remove(value); } }
-
-        public MainGui MainGui => MainGui.Instance;
-
-        protected Plugin()
+        public MainViewModel MainViewModel
         {
-            Change = new PropertyChangedHelper(this);
+            get { return _mainViewModel; }
+            set { SetProperty(ref _mainViewModel, value); }
         }
 
         public abstract bool Init();
-
-        public void AddButton(IPluginButton plugin)
-        {
-            //                <RadioButton Style="{StaticResource {x:Type ToggleButton}}" />
-
-            RadioButton tb = new RadioButton
-            {
-                Style = (Style)MainGui.Resources["ButtonStyle"],
-                Content = plugin.Caption,
-                DataContext = plugin,
-            };
-
-            Binding binding = new Binding
-            {
-                Mode = BindingMode.TwoWay,
-                Path = new PropertyPath("IsActivated"),
-            };
-
-            tb.SetBinding(ToggleButton.IsCheckedProperty, binding);
-
-            MainGui.ButtonPanel.Children.Add(tb);
-
-        }
-
     }
 }

@@ -8,20 +8,19 @@ using System.Windows;
 using System.Windows.Controls;
 using LbmScreenConfig;
 
-namespace LittleBigMouse_Control.SizerPlugin
+namespace LittleBigMouse_Control.LocationPlugin
 {
-    public class SizerPlugin : Plugin<SizerPlugin>, IPluginButton
+    class LocationPlugin : Plugin, IPluginButton
     {
         private bool _isActivated;
 
         public override bool Init()
         {
-            AddButton(this);
+            MainViewModel.AddButton(this);
             return true;
         }
 
-
-        public string Caption => "Sizer";
+        public string Caption => "Location";
 
         public Grid VerticalAnchors { get; } = new Grid();
         public Grid HorizontalAnchors { get; } = new Grid();
@@ -31,21 +30,28 @@ namespace LittleBigMouse_Control.SizerPlugin
             get { return _isActivated; }
             set
             {
-                if (Change.SetProperty(ref _isActivated, value))
+                if (SetProperty(ref _isActivated, value))
                 {
-                    MultiScreensGui gui = MainGui.ScreensPresenter as MultiScreensGui;
+                    MultiScreensView gui = MainViewModel.Presenter.View as MultiScreensView;
                     if (value)
                     {
-
                         if (gui != null)
                         {
                             gui.MainGrid.Children.Add(VerticalAnchors);
-                            gui.MainGrid.Children.Add(HorizontalAnchors);                           
+                            gui.MainGrid.Children.Add(HorizontalAnchors);
                         }
 
-                        MainGui.ControlGui = new ControlGuiSizer();
-                        MainGui.GetScreenGuiControl = screen => new ScreenGuiSizer(screen);
+                        MainViewModel.Control = new LocationControlViewModel
+                        {
+                            Config = MainViewModel.Config,
+                        };
 
+                        MainViewModel.Presenter.GetScreenControlViewModel = 
+                            screen => new LocationScreenViewModel
+                            {
+                                Plugin = this,
+                                Screen = screen
+                            };
                     }
                     else
                     {

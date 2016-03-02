@@ -74,6 +74,11 @@ namespace LittleBigMouse_Daemon
             }
         }
 
+        public bool Running()
+        {
+            return _engine.Hook.Enabled;
+        }
+
         private static void InstallService()
         {
             try

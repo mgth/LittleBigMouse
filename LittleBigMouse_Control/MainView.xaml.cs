@@ -44,7 +44,7 @@ namespace LittleBigMouse_Control
     /// <summary>
     /// Interaction logic for Config.xaml
     /// </summary>
-    public partial class MainView : Window//PerMonitorDPIWindow
+    public partial class MainView : PerMonitorDPIWindow
     {
 
         private readonly WindowResizer _resizer;
@@ -68,7 +68,7 @@ namespace LittleBigMouse_Control
                 {
                     new LocationPlugin.LocationPlugin(),
                     new SizePlugin.BordersPlugin(),
-                    new VcpPlugin.VcpPlugin()
+                    //new VcpPlugin.VcpPlugin()
                 },
                 Presenter = presenter
             };
@@ -176,15 +176,6 @@ namespace LittleBigMouse_Control
         }
 
 
-        //public void SetFullScreen(Screen s)
-        //{
-        //    if (s != LocationScreen)
-        //    {
-        //        LoadLocation(s);
-        //    }
-        //    else 
-        //        WindowState = (WindowState == WindowState.Maximized) ? WindowState.Normal : WindowState.Maximized;
-        //}
 
         //[DependsOn("Location")]
         //public Screen DrawnOnScreen
@@ -226,19 +217,6 @@ namespace LittleBigMouse_Control
                 
         //    SaveLocation();
         //}
-
-
-
-        //public Plugin ScreenGuiPlugin
-        //{
-        //    get { return _screenGuiPlugin; }
-        //    set
-        //    {
-        //        _change.SetProperty(ref _screenGuiPlugin, value);
-        //    }
-        //}
-
-
     }
 
     public static class FrameworkElementExt

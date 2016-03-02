@@ -74,7 +74,7 @@ namespace LbmScreenConfig
         {
             _monitors.CollectionChanged += MonitorsOnCollectionChanged;
 
-            Watch(AllScreens,"Screen");
+            Watch(AllScreens, "Screen");
 
             foreach (Monitor monitor in _monitors)
             {
@@ -103,7 +103,17 @@ namespace LbmScreenConfig
 
         public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => s != screen);
 
-        public Screen Selected => AllScreens.FirstOrDefault(screen => screen.Selected);
+        public Screen Selected
+        {
+            get { return _selected; }
+            private set { SetProperty(ref _selected, value); }
+        }
+
+        [DependsOn("Screen.Selected")]
+        public void UpdateSelected()
+        {
+            Selected  = AllScreens.FirstOrDefault ( screen => screen.Selected );
+        }
 
         private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
 
@@ -185,6 +195,7 @@ namespace LbmScreenConfig
 
         public void Load()
         {
+            Moving = true; //TODO : Hugly hack
             SetPhysicalAuto();
 
             using (RegistryKey k = OpenConfigRegKey())
@@ -206,8 +217,8 @@ namespace LbmScreenConfig
             {
                 s.Load();
             }
-            //Follow = true;
             Saved = true;
+            Moving = false;
         }
 
         public bool Save()
@@ -447,6 +458,11 @@ namespace LbmScreenConfig
 
         public void SetPhysicalAuto()
         {
+            lock (_compactLock)
+            {
+                if (_compacting) return;
+                _compacting = true;
+            }
             // List all screens not positioned
             List<Screen> unatachedScreens = AllScreens.ToList();
 
@@ -553,6 +569,10 @@ namespace LbmScreenConfig
                     }
                 }
 
+                lock (_compactLock)
+                {
+                    _compacting = false;
+                }
             }
         }
 
@@ -569,7 +589,7 @@ namespace LbmScreenConfig
                 _compacting = true;
             }
 
-            List<Screen> done = new List<Screen> {PrimaryScreen};
+            List<Screen> done = new List<Screen> { PrimaryScreen };
 
             List<Screen> todo = AllBut(PrimaryScreen).OrderBy(s => s.Distance(PrimaryScreen)).ToList();
 
@@ -596,15 +616,18 @@ namespace LbmScreenConfig
         public bool AllowOverlaps
         {
             get { return _allowOverlaps; }
-            set {
+            set
+            {
                 if (SetProperty(ref _allowOverlaps, value))
                 {
                     Saved = false;
-                } }
+                }
+            }
         }
 
         private bool _allowDiscontinuity = false;
         private bool _saved = false;
+        private Screen _selected;
 
         public bool AllowDiscontinuity
         {

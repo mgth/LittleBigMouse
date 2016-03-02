@@ -101,7 +101,7 @@
                    />
             
             <StackPanel Orientation="Horizontal" 
-                        Visibility="{Binding Screen.Selected, Converter={StaticResource ToVisibilityConverter}}" >
+                         >
                 <TextBox 
                      Text="{Binding Path=RatioY, StringFormat=N1, FallbackValue=phy.h}" 
                      KeyUp="OnKeyEnterUpdate" 
@@ -129,7 +129,7 @@
                    Foreground="#FFD9DCEC" 
                    Visibility="{Binding Screen.Selected, Converter={StaticResource ToVisibilityConverter}}"
                    />
-            <StackPanel Orientation="Horizontal" Visibility="{Binding Path=Screen.Selected,Converter={StaticResource ToVisibilityConverter}}">
+            <StackPanel Orientation="Horizontal">
                 <TextBox 
                          Text="{Binding Path=RatioX, StringFormat=N1,FallbackValue=phy.w}" 
                          KeyUp="OnKeyEnterUpdate" 

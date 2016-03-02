@@ -6,14 +6,14 @@
              xmlns:local="clr-namespace:LittleBigMouse_Control.LocationPlugin"
              xmlns:littleBigMouseControl="clr-namespace:LittleBigMouse_Control"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300">
+             d:DesignHeight="50" d:DesignWidth="800">
     <Grid>
         <StackPanel  Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
             <!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
             <StackPanel Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right">
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                <!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                     <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
-                </StackPanel>
+                </StackPanel>-->
                 <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                     <CheckBox  Content="Allow overlaps" IsChecked="{Binding Path=Config.AllowOverlaps, Mode=TwoWay}" Foreground="LightGray"/>
                     <CheckBox  Content="Allow discontinuity" IsChecked="{Binding Path=Config.AllowDiscontinuity, Mode=TwoWay}" Foreground="LightGray" />
@@ -31,10 +31,12 @@
                 </StackPanel>
             </StackPanel>
             <!--</ScrollViewer>-->
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdUnload}">Unload</Button>
+            <!--<Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdUnload}">Unload</Button>
             <Button MinWidth="50" Margin="10,0,0,0" Command="{Binding CmdOk}">Ok</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdApply}">Apply</Button>
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdCancel}">Cancel</Button>
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdCancel}">Cancel</Button>-->
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartStopCommand}" Content="{Binding StartStopLabel, FallbackValue=Start}"/>
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding SaveCommand}">Save</Button>
         </StackPanel>
 
     </Grid>

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel.Design;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -9,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 using LbmScreenConfig;
 using NotifyChange;
 
@@ -20,6 +22,9 @@ namespace LittleBigMouse_Control
 
         public MainViewModel()
         {
+            CloseCommand = new CloseCommand(this);
+            MaximizeCommand = new MaximizeCommand(this);
+
             Plugins.CollectionChanged += Plugins_CollectionChanged;
         }
 
@@ -75,6 +80,48 @@ namespace LittleBigMouse_Control
             set { SetValue(PresenterProperty, value); }
         }
 
+        public CloseCommand CloseCommand { get; }
+        public MaximizeCommand MaximizeCommand { get; }
+
+        public void Close()
+        {
+            if (Config.Saved)
+            {
+                Application.Current.Shutdown();
+                return;
+            }
+
+            MessageBoxResult result = MessageBox.Show("Save your changes before exiting ?", "Confirmation", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                Config.Save();
+                Application.Current.Shutdown();
+            }
+
+            if (result == MessageBoxResult.No)
+            {
+                Application.Current.Shutdown();
+            }
+        }
+
+        public void Maximize()
+        {
+            Window w = (View as Window);
+            if(w!=null)
+            if (w.WindowState==WindowState.Normal)
+                w.WindowState = WindowState.Maximized;
+            else
+            {
+                w.WindowState = WindowState.Normal;
+            }
+        }
+        public void UnMaximaze()
+        {
+            Window w = (View as Window);
+            if (w != null)
+                w.WindowState = WindowState.Normal;
+        }
+
         public StackPanel ButtonPanel { get; } = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -101,4 +148,53 @@ namespace LittleBigMouse_Control
             ButtonPanel.Children.Add(tb);
         }
     }
+
+    class CloseCommand : ICommand
+    {
+        private readonly MainViewModel _main;
+
+        public CloseCommand(MainViewModel main)
+        {
+            _main = main;
+        }
+
+         #region ICommand Members
+
+        public bool CanExecute(object parameter)
+        {
+            return true;
+        }
+
+        public event EventHandler CanExecuteChanged;
+        public void Execute(object parameter)
+        {
+            _main.Close();
+        }
+        #endregion
+    }
+
+    class MaximizeCommand : ICommand
+    {
+        private readonly MainViewModel _main;
+
+        public MaximizeCommand(MainViewModel main)
+        {
+            _main = main;
+        }
+
+        #region ICommand Members
+
+        public bool CanExecute(object parameter)
+        {
+            return true;
+        }
+
+        public event EventHandler CanExecuteChanged;
+        public void Execute(object parameter)
+        {
+            _main.Maximize();
+        }
+        #endregion
+    }
+
 }

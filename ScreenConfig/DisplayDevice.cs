@@ -283,7 +283,7 @@ namespace LbmScreenConfig
         ~Monitor()
         {
             Adapter.Monitors.Remove(this);
-            AllMonitors.Remove(this);
+            //AllMonitors.Remove(this); TODO : this is not thread safe
             if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
                 Dxva2.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }

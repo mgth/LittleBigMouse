@@ -223,5 +223,7 @@ namespace LittleBigMouse_Control.LocationPlugin
                      new Anchor(s,s.PhysicalBounds.Bottom,new SolidColorBrush(Colors.LightGreen)),
                      new Anchor(s,s.PhysicalOutsideBounds.Bottom,new SolidColorBrush(Colors.Chartreuse)),
                 };
+
+
     }
 }

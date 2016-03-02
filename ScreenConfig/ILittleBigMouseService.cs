@@ -77,6 +77,15 @@ namespace LbmScreenConfig
             //catch (FaultException) { }
         }
 
+        public bool Running()
+        {
+            try { return Channel.Running(); }
+            catch (EndpointNotFoundException) {  }
+            catch (CommunicationException) {  }
+
+            return false;
+        }
+
         public void LoadAtStartup(bool state = true)
         {
             try
@@ -112,5 +121,7 @@ namespace LbmScreenConfig
         void LoadAtStartup(bool state=true);
         [OperationContract]
         void CommandLine(IList<string> args);
+        [OperationContract]
+        bool Running();
     }
 }

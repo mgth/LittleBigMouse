@@ -62,7 +62,7 @@ namespace LbmScreenConfig
         {
             Config = config;
             Monitor = monitor;
-
+//            Watch(Config,"Config");
 
             // Todo : PhysicalX = PhysicalOveralBoundsWithoutThis.Right;
         }

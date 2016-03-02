@@ -55,11 +55,11 @@ namespace LittleBigMouse_Daemon
 
             Start();
         }
+        private void OnNotifyClick(object sender, EventArgs e) { Open(); }
 
         private void OnDeactivated(object sender, EventArgs eventArgs)
         {
-            _brightness?.Hide();
-            //_brightness = null;
+            //_brightness?.Hide();
         }
 
         private void MatchConfig(object sender, EventArgs e)
@@ -104,6 +104,11 @@ namespace LittleBigMouse_Daemon
                         break;
                 }
             }
+        }
+
+        public bool Running()
+        {
+            return _engine.Hook.Enabled;
         }
 
         public void LoadAtStartup(bool state = true)
@@ -154,7 +159,7 @@ namespace LittleBigMouse_Daemon
             Process.Start(filename, "--startcontrol");
         }
 
-
+        /*
         private readonly LuminanceWindow _brightness = new LuminanceWindow();
         private void OnNotifyClick(object sender, EventArgs e) { Brightness(); }
 
@@ -175,7 +180,7 @@ namespace LittleBigMouse_Daemon
                 
             }
         }
-
+        */
 
         public void Schedule()
         {

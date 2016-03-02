@@ -1,0 +1,157 @@
+﻿<UserControl x:Class="LittleBigMouse_Control.LocationScreenView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LittleBigMouse_Control"
+             xmlns:system="clr-namespace:System;assembly=mscorlib"
+             mc:Ignorable="d" 
+             MouseLeftButtonUp="OnMouseLeftButtonUp"
+             MouseLeftButtonDown="OnMouseLeftButtonDown"
+             MouseMove="OnMouseMove"
+             d:DesignHeight="300" d:DesignWidth="300"
+             x:Name="UserControl"
+             FontSize="{Binding Path=ActualHeight, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.05}"             
+             >
+    
+    <UserControl.Resources>
+        <LinearGradientBrush x:Key="ScreenColor" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="#FF7288C0" Offset="0"/>
+            <GradientStop Color="#FF52669D" Offset="1"/>
+            
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="SelectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="LightGreen" Offset="0"/>
+            <GradientStop Color="DarkGreen" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="UnselectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="#FF7288C0" Offset="0"/>
+            <GradientStop Color="#FF333E9A" Offset="1"/>
+        </LinearGradientBrush>
+        <local:BoolToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
+        <local:BoolToVisibilityConverter x:Key="ToVisibilityConverter" TrueValue="Visible" FalseValue="Hidden"/>
+        <local:ScaleConverter x:Key="Scale" />
+    </UserControl.Resources>
+    
+    <Grid Grid.Column="1" Grid.Row="1" x:Name="grid" SizeChanged="OnSizeChanged">
+
+        <Border BorderThickness="0" Background="{StaticResource ScreenColor}"/>
+        <!-- Central Device No -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="center" 
+                    BorderThickness = "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.05}" 
+                    CornerRadius= "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
+                    
+                    Width="{Binding Path=ActualHeight, ElementName=grid, Converter={StaticResource Scale},ConverterParameter=0.5}" 
+                    Height="{Binding Path=ActualHeight, ElementName=grid, Converter={StaticResource Scale},ConverterParameter=0.5}" 
+                    
+                    Background="{Binding Screen.Selected, Converter={StaticResource Highlighter}, FallbackValue={StaticResource UnselectedBrush}}" 
+                    BorderBrush="#FFD9DCEC">
+                <Label 
+                   FontSize="{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
+                    x:Name="lblName" 
+                    Margin="0,-7,0,-5" 
+                    Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" 
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center" 
+                    VerticalContentAlignment="Center" 
+                    Foreground="White" 
+                    FontWeight="Bold" />
+            </Border>
+        </StackPanel>
+        
+        <!-- PNP Code -->
+<StackPanel>
+        <Label 
+               Content="{Binding Path=Screen.PnpCode, FallbackValue=XXX000}"  
+               HorizontalAlignment="Left" 
+               VerticalAlignment="{Binding Path=PnpNameVerticalAlignment}" 
+               Foreground="#FFD9DCEC"/>
+            <Label ContentStringFormat="#0"  Content="{Binding Screen.SystemScaleFactor, FallbackValue=xxx}"/>
+            <Label ContentStringFormat="#0.00" Content="{Binding Screen.ScaleFactor, FallbackValue=x.xx}"/>
+        </StackPanel>
+<!-- Y Position -->
+        <TextBox 
+               Text="{Binding Path=Screen.PhysicalY, StringFormat=N1, FallbackValue=top.y}" 
+                KeyUp="OnKeyEnterUpdate" 
+                HorizontalAlignment="Center" 
+                VerticalAlignment="Top" 
+                Background="#00FFFFFF"/>
+
+<!-- X Position -->
+        <TextBox 
+                Text="{Binding Path=Screen.PhysicalX, StringFormat=N1, FallbackValue=left.x}" 
+                KeyUp="OnKeyEnterUpdate" 
+                HorizontalAlignment="Left" 
+                VerticalAlignment="Center" 
+                Background="#00FFFFFF"/>
+        
+<!-- Bottom Dimensions -->
+        <StackPanel Orientation="Horizontal" 
+                    HorizontalAlignment="Center"  
+                    VerticalAlignment="Bottom">
+            <Label 
+                   Content="{Binding Path=Screen.PhysicalBounds.Bottom,FallbackValue=bot.y}" 
+                   ContentStringFormat="#0.#" 
+                   HorizontalAlignment="Center"/>
+            <Label 
+                   Content="{Binding Path=Screen.PixelSize.Height,FallbackValue=pix.h}" 
+                   HorizontalAlignment="Center" Foreground="#FFD9DCEC"  
+                   Visibility="{Binding Screen.Selected, Converter={StaticResource ToVisibilityConverter}}"
+                   />
+            
+            <StackPanel Orientation="Horizontal" 
+                        Visibility="{Binding Screen.Selected, Converter={StaticResource ToVisibilityConverter}}" >
+                <TextBox 
+                     Text="{Binding Path=RatioY, StringFormat=N1, FallbackValue=phy.h}" 
+                     KeyUp="OnKeyEnterUpdate" 
+                     VerticalAlignment="Center"  
+                     Foreground="#FFD9DCEC" 
+                     Background="#00FFFFFF" 
+                     
+                     MouseWheel="PhysicalHeight_MouseWheel"
+                     />
+                <Label Content="%" Foreground="#FFD9DCEC" VerticalAlignment="Center"></Label>
+            </StackPanel>
+        </StackPanel>
+        
+<!-- Right Dimensions -->
+        <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
+            
+            <Label 
+                   Content="{Binding Path=Screen.PhysicalBounds.Right,FallbackValue=right.x}" 
+                   ContentStringFormat="#0.#" 
+                   HorizontalAlignment="Right"/>
+            
+            <Label 
+                  Content="{Binding Path=Screen.PixelSize.Width,FallbackValue=pix.w}" 
+                   HorizontalAlignment="Right" 
+                   Foreground="#FFD9DCEC" 
+                   Visibility="{Binding Screen.Selected, Converter={StaticResource ToVisibilityConverter}}"
+                   />
+            <StackPanel Orientation="Horizontal" Visibility="{Binding Path=Screen.Selected,Converter={StaticResource ToVisibilityConverter}}">
+                <TextBox 
+                         Text="{Binding Path=RatioX, StringFormat=N1,FallbackValue=phy.w}" 
+                         KeyUp="OnKeyEnterUpdate" 
+                         HorizontalAlignment="Right" 
+                    VerticalAlignment="Center"
+                         Foreground="#FFD9DCEC" 
+                         Background="#00FFFFFF" 
+                         MouseWheel="PhysicalWidth_MouseWheel" 
+                        />
+                <Label Content="%" Foreground="#FFD9DCEC" VerticalAlignment="Center"/>
+            </StackPanel>
+        </StackPanel>
+        
+
+
+        <Label 
+            FontSize="{Binding Path=ActualHeight, ElementName=grid, Converter={StaticResource Scale},ConverterParameter=0.05}" 
+            Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" 
+            ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" 
+            HorizontalAlignment="Right" 
+            Foreground="White"/>
+
+
+    </Grid>
+</UserControl>

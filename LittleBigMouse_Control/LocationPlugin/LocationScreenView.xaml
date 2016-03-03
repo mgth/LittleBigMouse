@@ -11,8 +11,14 @@
              MouseMove="OnMouseMove"
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
-             FontSize="{Binding Path=ActualHeight, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.05}"             
              >
+             <!--FontSize="{Binding Path=ActualHeight, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.05}"-->             
+    <UserControl.FontSize>
+        <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.05">
+            <Binding ElementName="UserControl" Path="ActualHeight"/>
+            <Binding ElementName="UserControl" Path="ActualWidth"/>
+        </MultiBinding>
+    </UserControl.FontSize>
     
     <UserControl.Resources>
         <LinearGradientBrush x:Key="ScreenColor" StartPoint="0,0.3" EndPoint="1,0.7">
@@ -30,22 +36,26 @@
         </LinearGradientBrush>
         <local:BoolToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
         <local:BoolToVisibilityConverter x:Key="ToVisibilityConverter" TrueValue="Visible" FalseValue="Hidden"/>
-        <local:ScaleConverter x:Key="Scale" />
     </UserControl.Resources>
     
-    <Grid x:Name="grid" SizeChanged="OnSizeChanged">
+    <Grid x:Name="grid" >
 
         <Border BorderThickness="0" Background="{StaticResource ScreenColor}"/>
         <!-- Central Device No -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
              <Border x:Name="center" 
-                     Height ="100"
-                     Width ="100"
+                    Width ="{Binding ElementName=center, Path=Height}"
                     BorderThickness = "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.05}" 
                     CornerRadius= "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
                      
                     Background="{Binding Screen.Selected, Converter={StaticResource Highlighter}, FallbackValue={StaticResource UnselectedBrush}}" 
                     BorderBrush="#FFD9DCEC">
+                 <Border.Height>
+                         <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.3">
+                            <Binding ElementName="UserControl" Path="ActualHeight"/>
+                            <Binding ElementName="UserControl" Path="ActualWidth"/>
+                        </MultiBinding>
+                </Border.Height>
                 <Label 
                    FontSize="{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
                     x:Name="lblName" 
@@ -143,7 +153,6 @@
 
 
         <Label 
-            FontSize="{Binding Path=ActualHeight, ElementName=grid, Converter={StaticResource Scale},ConverterParameter=0.05}" 
             Content="{Binding Path=Screen.RealDpiAvg, FallbackValue=96}" 
             ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" 
             HorizontalAlignment="Right" 

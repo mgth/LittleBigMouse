@@ -33,8 +33,8 @@ namespace LittleBigMouse_Control
         public LocationScreenView() 
         {
             InitializeComponent();
-            SizeChanged += OnSizeChanged1;
-            LayoutUpdated += View_LayoutUpdated;
+            //LayoutUpdated += View_LayoutUpdated;
+            SizeChanged += View_LayoutUpdated;
         }
 
         //        private ScreenConfig Config => MainViewModel.Instance.Config;
@@ -52,35 +52,19 @@ namespace LittleBigMouse_Control
         {
             if (_staticPoint != null)
             {
-                Point p2 = PointToScreen(
+                Point p = PointToScreen(
                     new Point(
                         ActualWidth * _staticPoint.Value.X,
                         ActualHeight * _staticPoint.Value.Y
                         ));
-                WinAPI_User32.User32.SetCursorPos((int)p2.X, (int)p2.Y);
+
+                WinAPI_User32.User32.SetCursorPos((int)p.X, (int)p.Y);
 
                 _staticPoint = null;
             }
         }
 
-        private void OnSizeChanged1(object sender, SizeChangedEventArgs sizeChangedEventArgs)
-        {
-            ((ScreenViewModel)DataContext).RaiseProperty("Size");
-        }
-
-        private LocationScreenViewModel ViewModel => (DataContext as LocationScreenViewModel);
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void OnSizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            double size = Math.Min(grid.ActualHeight, grid.ActualWidth) / 3;
-            center.Height = size;
-            center.Width = size;
-        }
+         private LocationScreenViewModel ViewModel => (DataContext as LocationScreenViewModel);
 
 
         private void PhysicalWidth_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -193,4 +177,24 @@ namespace LittleBigMouse_Control
 
     }
 
+    public class MultiScaleConverter : IMultiValueConverter
+    {
+        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            double v = double.MaxValue;
+            foreach (object value in values)
+            {
+                if (value is double && (double)value < v) v = (double) value;
+            }
+
+            double scale = double.Parse((string)parameter, CultureInfo.InvariantCulture);
+
+            return Math.Max(v * scale, 0.1);
+        }
+
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

@@ -40,7 +40,6 @@ namespace LittleBigMouse_Control
             {
                 double offset = value - PhysicalOutsideHeight;
                 Screen.RealBottomBorder += offset;
-                Screen.Config.Compact();
             }
         }
 
@@ -53,7 +52,6 @@ namespace LittleBigMouse_Control
                 double offset = (value - PhysicalOutsideWidth) / 2;
                 Screen.RealLeftBorder += offset;
                 Screen.RealRightBorder += offset;
-                Screen.Config.Compact();
             }
         }
 
@@ -65,25 +63,8 @@ namespace LittleBigMouse_Control
 
 
 
-        protected const double MinFontSize = 0.1;
-
-        private double _fontSize = MinFontSize;
         public static DependencyProperty ScreenProperty = DependencyProperty.Register(nameof(Screen), typeof(Screen), typeof(ScreenViewModel), WatchNotifier());
 
-        public double FontSize
-        {
-            get { return _fontSize; }
-            private set { SetProperty(ref _fontSize, value); }
-        }
 
-        public void OnSizeChanged(object sender, SizeChangedEventArgs sizeChangedEventArgs)
-        {
-            var obj = sender as UserControl;
-            if (obj != null)
-            {
-                double s = Math.Min(obj.ActualHeight, obj.ActualWidth) / 7;
-                FontSize = Math.Max(MinFontSize, Math.Pow(s, 1 / 1.3));              
-            }
-        }
     }
 }

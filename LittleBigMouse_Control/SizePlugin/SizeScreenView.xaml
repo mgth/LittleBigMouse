@@ -9,15 +9,14 @@
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
-    
-                FontSize="{Binding 
-                    ElementName=UserControl,
-                    Path=ActualHeight,
-                    Converter={StaticResource Scale},
-                    ConverterParameter=0.05,
-                    FallbackValue=14}"
     >
-    
+    <UserControl.FontSize>
+        <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.05">
+            <Binding ElementName="UserControl" Path="ActualHeight"/>
+            <Binding ElementName="UserControl" Path="ActualWidth"/>
+        </MultiBinding>
+    </UserControl.FontSize>
+
     <Grid>
         <Border BorderThickness="0" Background="{Binding Path=ScreenColor}"/>
 
@@ -93,24 +92,23 @@
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
                 </TextBox.Effect>
             </TextBox>
-               <Viewbox
+            <Viewbox x:Name ="ChkLock"
                 Grid.Column="2" 
                 Grid.Row="2" 
                     VerticalAlignment="Bottom"
                    HorizontalAlignment="Right"
-                Height ="{Binding 
-                    ElementName=UserControl,
-                    Path=ActualHeight,
-                    Converter={StaticResource Scale},
-                    ConverterParameter=0.05,
-                    FallbackValue=14}"
                 Width ="{Binding 
-                    ElementName=UserControl,
-                    Path=ActualHeight,
-                    Converter={StaticResource Scale},
-                    ConverterParameter=0.05,
-                    FallbackValue=14}"
->
+                    ElementName=ChkLock,
+                    Path=Height}"
+                >
+                   <Viewbox.Height>
+                    <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.05" FallbackValue="20">
+                        <Binding ElementName="UserControl" Path="ActualHeight"/>
+                        <Binding ElementName="UserControl" Path="ActualWidth"/>
+                    </MultiBinding>
+                </Viewbox.Height>
+                   
+                   
             <CheckBox  IsChecked="{Binding Screen.FixedAspectRatio}" />
                  </Viewbox>
            

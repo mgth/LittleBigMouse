@@ -82,6 +82,7 @@ namespace LittleBigMouse_Daemon
 
             Hook.MouseMoveExt += OnMouseMoveExt;
             Hook.Enabled = true;
+ //           LittleBigMouseDaemon.Callback?.OnStateChange();
         }
 
         public void Stop()
@@ -92,6 +93,7 @@ namespace LittleBigMouse_Daemon
 
             Hook.MouseMoveExt -= OnMouseMoveExt;
             Hook.Enabled = false;
+ //           LittleBigMouseDaemon.Callback?.OnStateChange();
 
             if (_config == null) return;
 

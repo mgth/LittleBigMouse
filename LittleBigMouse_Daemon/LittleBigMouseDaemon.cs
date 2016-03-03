@@ -11,7 +11,7 @@ using Application = System.Windows.Application;
 
 namespace LittleBigMouse_Daemon
 {
-    [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
+    [ServiceBehavior(ConcurrencyMode = ConcurrencyMode.Reentrant, InstanceContextMode = InstanceContextMode.Single)]
     class LittleBigMouseDaemon : Application, ILittleBigMouseService
     {
         private const string ServiceName = "LittleBigMouse";
@@ -20,6 +20,7 @@ namespace LittleBigMouse_Daemon
 
         public LittleBigMouseDaemon()
         {
+
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Startup += OnStartup;
             Exit += OnExit;
@@ -27,7 +28,7 @@ namespace LittleBigMouse_Daemon
 
         }
 
-        
+       // public static ILittleBigMouseCallback Callback;
 
         private void OnStartup(object sender, EventArgs exitEventArgs)
         {
@@ -36,6 +37,8 @@ namespace LittleBigMouse_Daemon
             _engine = new MouseEngine();
 
             _engine.StartServer(this);
+
+            
 
             if (_notify != null)
                 _notify.Click += OnNotifyClick;
@@ -116,6 +119,11 @@ namespace LittleBigMouse_Daemon
             if (state) Schedule();
             else Unschedule();
         }
+
+        //public void Init()
+        //{
+        //    Callback = OperationContext.Current.GetCallbackChannel<ILittleBigMouseCallback>();
+        //}
 
         public void LoadConfig()
         {
@@ -219,5 +227,6 @@ namespace LittleBigMouse_Daemon
             }
 
         }
+
     }
 }

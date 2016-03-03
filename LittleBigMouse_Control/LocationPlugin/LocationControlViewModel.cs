@@ -21,22 +21,51 @@ namespace LittleBigMouse_Control.LocationPlugin
                 if (SetAndWatch(ref _config, value))
                 {
                     SaveCommand = new SaveCommand(Config);
-                    StartStopCommand = new StartStopCommand();
+                    StartCommand = new StartCommand(Config);
+                    StopCommand = new StopCommand(Config);
+                    LittleBigMouseClient.Client.StateChanged += Client_StateChanged;
                 }
             }
+        }
+
+        private void Client_StateChanged()
+        {
+            Running = LittleBigMouseClient.Client.Running();
         }
 
         public String StatStopLabel => LittleBigMouseClient.Client.Running()?"Stop":"Start";
 
         public SaveCommand SaveCommand { get; private set; }
-        public StartStopCommand StartStopCommand { get; private set; }
+        public StartCommand StartCommand { get; private set; }
+        public StopCommand StopCommand { get; private set; }
         private ScreenConfig _config;
-        private bool _showRulers;
 
+        private bool _showRulers;
         public bool ShowRulers
         {
             get { return _showRulers; }
             set { SetProperty(ref _showRulers,value); }
+        }
+
+        private bool _running;
+        public bool Running
+        {
+            get { return _running; }
+            private set { SetProperty(ref _running, value); }
+        }
+        private bool _liveUpdate;
+        public bool LiveUpdate
+        {
+            get { return _liveUpdate; }
+            set { SetProperty(ref _liveUpdate, value); }
+        }
+        [DependsOn(nameof(LiveUpdate), "Config.Saved")]
+        private void DoLiveUpdate()
+        {
+            if (LiveUpdate && !Config.Saved)
+            {
+                StartCommand.Execute(null);
+            }
         }
 
         private readonly List<Ruler> _rulers = new List<Ruler>();
@@ -102,13 +131,19 @@ namespace LittleBigMouse_Control.LocationPlugin
         #endregion
     }
 
-    class StartStopCommand : ICommand
+    class StartCommand : ICommand
     {
-        //private readonly ScreenConfig _config;
+        private readonly ScreenConfig _config;
 
-        public StartStopCommand(/*ScreenConfig config*/)
+        public StartCommand(ScreenConfig config)
         {
-            //_config = config;
+            _config = config;
+            LittleBigMouseClient.Client.StateChanged += Client_StateChanged;
+        }
+
+        private void Client_StateChanged()
+        {
+            //CanExecuteChanged?.Invoke(this,null);
         }
 
         #region ICommand Members
@@ -116,6 +151,7 @@ namespace LittleBigMouse_Control.LocationPlugin
         public bool CanExecute(object parameter)
         {
             return true;
+            //return !LittleBigMouseClient.Client.Running();
         }
 
         public event EventHandler CanExecuteChanged;
@@ -124,7 +160,49 @@ namespace LittleBigMouse_Control.LocationPlugin
             //if (!LittleBigMouseClient.Client.Running())
             //    LittleBigMouseClient.Client.Stop();
             //else
+            if (!_config.Saved) _config.Save();
+
+            if (!LittleBigMouseClient.Client.Running())
                 LittleBigMouseClient.Client.Start();
+            else
+            {
+                _config.Save();
+                LittleBigMouseClient.Client.LoadConfig();
+            }
+        }
+        #endregion
+    }
+
+    class StopCommand : ICommand
+    {
+        private readonly ScreenConfig _config;
+
+        public StopCommand(ScreenConfig config)
+        {
+            _config = config;
+            LittleBigMouseClient.Client.StateChanged += Client_StateChanged;
+        }
+
+        private void Client_StateChanged()
+        {
+            //CanExecuteChanged?.Invoke(this,null);
+        }
+
+        #region ICommand Members
+
+        public bool CanExecute(object parameter)
+        {
+            return true;
+            //return !LittleBigMouseClient.Client.Running();
+        }
+
+        public event EventHandler CanExecuteChanged;
+        public void Execute(object parameter)
+        {
+            //if (!LittleBigMouseClient.Client.Running())
+            //    LittleBigMouseClient.Client.Stop();
+            //else
+            LittleBigMouseClient.Client.Stop();
         }
         #endregion
     }

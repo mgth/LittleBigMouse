@@ -21,6 +21,11 @@ namespace LittleBigMouse_Daemon
             _engine.Stop();
         }
 
+        public void Init()
+        {
+            throw new System.NotImplementedException();
+        }
+
         public void LoadConfig()
         {
             _engine.LoadConfig();

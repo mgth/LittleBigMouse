@@ -104,14 +104,6 @@ namespace LittleBigMouse_Control
         [DependsOn("Screen.BottomBorder", "Presenter.Ratio")]
         public GridLength BottomBorder => new GridLength(Screen.BottomBorder * Presenter.Ratio);
 
-
-        [DependsOn("BottomBorder")]
-        public double BottomFontSize => Math.Max(MinFontSize, BottomBorder.Value * 0.6);
-
-
-        [DependsOn("LeftBorder")]
-        public double LeftFontSize => Math.Max(MinFontSize, LeftBorder.Value * 0.6);
-
         [DependsOn("Screen.LeftBorder", "Presenter.Ratio")]
         public GridLength LeftBorder => new GridLength(Screen.LeftBorder * Presenter.Ratio);
 

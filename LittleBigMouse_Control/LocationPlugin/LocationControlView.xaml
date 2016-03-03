@@ -35,7 +35,8 @@
             <Button MinWidth="50" Margin="10,0,0,0" Command="{Binding CmdOk}">Ok</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdApply}">Apply</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdCancel}">Cancel</Button>-->
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartStopCommand}" Content="{Binding StartStopLabel, FallbackValue=Start}"/>
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}" Content="{Binding StartStopLabel, FallbackValue=Apply/Start}"/>
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StopCommand}" Content="{Binding StartStopLabel, FallbackValue=Stop}"/>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding SaveCommand}">Save</Button>
         </StackPanel>
 

@@ -7,6 +7,7 @@
     <Application.Resources>
         <local:BoolToVisibilityConverter x:Key="ToVisibilityConverter" TrueValue="Visible" FalseValue="Hidden"/>
         <local:ScaleConverter x:Key="Scale" />
+        <local:MultiScaleConverter x:Key="MultiScale" />
 
 
         <Viewbox x:Key="LogoAcer"  x:Shared="false"   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Stretch="Uniform">

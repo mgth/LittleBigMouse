@@ -25,18 +25,18 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.Win32;
-using WinAPI_User32;
+using WinAPI;
 
 namespace LittleBigMouse_Daemon
 {
-    public class LbmMouse
+    class LbmMouse
     {
-        private static void MouseEvent(MOUSEEVENTF evt, double x, double y)
+        private static void MouseEvent(NativeMethods.MOUSEEVENTF evt, double x, double y)
         {
-            InputUnion[] input = new InputUnion[1];
-            input[0] = new InputUnion()
+            NativeMethods.InputUnion[] input = new NativeMethods.InputUnion[1];
+            input[0] = new NativeMethods.InputUnion()
             {
-                mi = new MOUSEINPUT()
+                mi = new NativeMethods.MOUSEINPUT()
                 {
                     dwFlags = evt ,
                     dx = (int)x,
@@ -44,20 +44,20 @@ namespace LittleBigMouse_Daemon
                 }
             };
 
-            uint res = User32.SendInput(1, input, Marshal.SizeOf(input));
+            uint res = NativeMethods.SendInput(1, input, Marshal.SizeOf(input));
         }
 
         public static Point CursorPos
         {
             get
             {
-                User32.POINT p=new User32.POINT();
-                User32.GetCursorPos(out p);
+                NativeMethods.POINT p=new NativeMethods.POINT();
+                NativeMethods.GetCursorPos(out p);
                 return p;
             }
             set
             {
-                User32.SetCursorPos((int)value.X, (int)value.Y);
+                NativeMethods.SetCursorPos((int)value.X, (int)value.Y);
 
                 //User32.POINT newLocation;
                 //User32.GetCursorPos(out newLocation);
@@ -76,12 +76,12 @@ namespace LittleBigMouse_Daemon
         {
             get {
                 uint speed = 0;
-                User32.SystemParametersInfo(User32.SPI_GETMOUSESPEED, 0, ref speed, 0);
+                NativeMethods.SystemParametersInfo(NativeMethods.SPI_GETMOUSESPEED, 0, ref speed, 0);
                 return speed;
             }
 
             set {
-                User32.SystemParametersInfo(User32.SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
+                NativeMethods.SystemParametersInfo(NativeMethods.SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
             }
         }
         public static void SetCursor(string name, string fileName)
@@ -107,7 +107,7 @@ namespace LittleBigMouse_Daemon
             SetCursor("UpArrow", @"%SystemRoot%\cursors\aero_up" + suffix + ".cur");
             SetCursor("Wait", @"%SystemRoot%\cursors\aero_busy" + suffix + ".ani");
 
-            User32.SystemParametersInfo(User32.SPI_SETCURSORS, 0, 0, User32.SPIF_UPDATEINIFILE | User32.SPIF_SENDCHANGE);
+            NativeMethods.SystemParametersInfo(NativeMethods.SPI_SETCURSORS, 0, 0, NativeMethods.SPIF_UPDATEINIFILE | NativeMethods.SPIF_SENDCHANGE);
         }
 
         public static void SaveCursor(RegistryKey savekey)
@@ -133,7 +133,7 @@ namespace LittleBigMouse_Daemon
                     key.SetValue(name, savekey.GetValue(name));
                 }
             }
-            User32.SystemParametersInfo(User32.SPI_SETCURSORS, 0, 0, User32.SPIF_UPDATEINIFILE | User32.SPIF_SENDCHANGE);
+            NativeMethods.SystemParametersInfo(NativeMethods.SPI_SETCURSORS, 0, 0, NativeMethods.SPIF_UPDATEINIFILE | NativeMethods.SPIF_SENDCHANGE);
         }
 
         public static void SetCursorAero(int size)

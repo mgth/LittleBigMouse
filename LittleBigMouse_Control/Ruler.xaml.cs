@@ -30,7 +30,7 @@ using LbmScreenConfig;
 using System.ComponentModel;
 using System.Windows.Interop;
 using NotifyChange;
-using WinAPI_User32;
+using WinAPI;
 
 namespace LittleBigMouse_Control
 {
@@ -544,13 +544,13 @@ namespace LittleBigMouse_Control
         public void SuspendDrawing()
         {
             HwndSource source = (HwndSource)HwndSource.FromVisual(this);
-            User32.SendMessage(source.Handle, User32.WM_SETREDRAW, false, 0);
+            NativeMethods.SendMessage(source.Handle, NativeMethods.WM_SETREDRAW, false, 0);
         }
 
         public void ResumeDrawing()
         {
             HwndSource source = (HwndSource)HwndSource.FromVisual(this);
-            User32.SendMessage(source.Handle, User32.WM_SETREDRAW, true, 0);
+            NativeMethods.SendMessage(source.Handle, NativeMethods.WM_SETREDRAW, true, 0);
             //Refresh();
         }
 

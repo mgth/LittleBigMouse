@@ -137,6 +137,14 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\MgthFramework\NativeMethods\WinAPI.csproj">
+      <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
+      <Name>WinAPI</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MonitorVcp\MonitorVcp.csproj">
+      <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>
+      <Name>MonitorVcp</Name>
+    </ProjectReference>
     <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
       <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
       <Name>NotifyChange</Name>
@@ -148,6 +156,10 @@
     <ProjectReference Include="..\TaskService\TaskService.csproj">
       <Project>{81B5ABCC-6909-483D-8BB3-84B52E3C7043}</Project>
       <Name>TaskService</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\WindowsMonitors\WindowsMonitors.csproj">
+      <Project>{0c90e881-b94c-4dc5-b2d0-ff6dc7601de4}</Project>
+      <Name>WindowsMonitors</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

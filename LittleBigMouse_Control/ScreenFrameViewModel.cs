@@ -7,12 +7,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using LittleBigMouse_Daemon.Annotations;
 using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
-    class ScreenFrameViewModel : ScreenViewModel
+    internal class ScreenFrameViewModel : ScreenViewModel
     {
         public override Type ViewType => typeof(ScreenFrameView);
 
@@ -141,7 +140,7 @@ namespace LittleBigMouse_Control
         [DependsOn("Screen", "Screen.Orientation", "Width", "Height")]
         private void UpdateUnrotatedWidthHeight()
         {
-            if (Screen.Orientation % 2 == 0)
+            if (Screen.Monitor.DisplayOrientation % 2 == 0)
             {
                 UnrotatedHeight = Height;
                 UnrotatedWidth = Width;
@@ -182,7 +181,7 @@ namespace LittleBigMouse_Control
         {
             GridLength[] unrotated = { TopBorder, RightBorder, BottomBorder, LeftBorder };
 
-            int o = Screen.Orientation;
+            int o = Screen.Monitor.DisplayOrientation;
 
             UnrotatedTopBorder = unrotated[o++ % 4];
             UnrotatedRightBorder = unrotated[o++ % 4];
@@ -191,11 +190,11 @@ namespace LittleBigMouse_Control
         }
         #endregion
 
-        [DependsOn("Presenter.GetScreenControlViewModel", nameof(Screen))]
+        [DependsOn("Presenter.ScreenControlGetter", nameof(Screen))]
         private void UpdateScreenGuiControl(string s)
         {
             ControlViewModel 
-                = Presenter?.GetScreenControlViewModel?.Invoke(Screen);
+                = Presenter?.ScreenControlGetter?.GetScreenControlViewModel(Screen);
 
             if(ControlViewModel!=null)
             ControlViewModel.Frame = this;
@@ -209,13 +208,13 @@ namespace LittleBigMouse_Control
             private set { SetProperty(ref _screenOrientation, value); }
         }
 
-        [DependsOn("Screen.Orientation", nameof(Width), nameof(Height))]
+        [DependsOn("DisplayMonitor.DisplayOrientation", nameof(Width), nameof(Height))]
         public void UpddateScreenOrientation()
         {
                 var t = new TransformGroup();
-                if (Screen.Orientation > 0) t.Children.Add(new RotateTransform(90 * Screen.Orientation));
+                if (Screen.Monitor.DisplayOrientation > 0) t.Children.Add(new RotateTransform(90 * Screen.Monitor.DisplayOrientation));
 
-                switch (Screen.Orientation)
+                switch (Screen.Monitor.DisplayOrientation)
                 {
                     case 1:
                         t.Children.Add(new TranslateTransform(Width, 0));
@@ -239,10 +238,10 @@ namespace LittleBigMouse_Control
             private set { SetProperty(ref _logo, value); }
         }
 
-        [DependsOn("Screen.ManufacturerCode")]
+        [DependsOn("Screen.DisplayMonitor.ManufacturerCode")]
         public void UpdateLogo()
         {
-                switch (Screen.ManufacturerCode.ToLower())
+                switch (Screen.Monitor.ManufacturerCode.ToLower())
                 {
                     case "sam":
                     Logo = (Viewbox)Application.Current.FindResource("LogoSam");

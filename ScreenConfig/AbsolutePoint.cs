@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
-using WinAPI_User32;
+using WinAPI;
 
 namespace LbmScreenConfig
 {
@@ -72,18 +72,18 @@ namespace LbmScreenConfig
             {
                 Process p = Process.GetCurrentProcess();
 
-                Process_DPI_Awareness aw = Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
+                NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
 
-                User32.GetProcessDpiAwareness(p.Handle,out aw);
+                NativeMethods.GetProcessDpiAwareness(p.Handle,out aw);
 
                 switch (aw)
                 {
-                    case Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
+                    case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
                         return new WpfPoint(Config, Screen,
                             Pixel.X * Screen.PixelToWpfRatioX,
                             Pixel.Y * Screen.PixelToWpfRatioY
                             );
-                    case Process_DPI_Awareness.Process_System_DPI_Aware:
+                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
                         return new WpfPoint(Config, Screen,
                             Pixel.X*Screen.PixelToWpfRatioX,
                             Pixel.Y*Screen.PixelToWpfRatioY
@@ -217,14 +217,14 @@ namespace LbmScreenConfig
             {
                 Process p = Process.GetCurrentProcess();
 
-                Process_DPI_Awareness aw = Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
+                NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
 
-                User32.GetProcessDpiAwareness(p.Handle, out aw);
+                NativeMethods.GetProcessDpiAwareness(p.Handle, out aw);
 
                 switch (aw)
                 {
-                   case Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
-                    case Process_DPI_Awareness.Process_System_DPI_Aware:
+                   case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
+                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
                         return new PixelPoint(Config, Screen,
                             X * Screen.WpfToPixelRatioX,
                             Y * Screen.WpfToPixelRatioY

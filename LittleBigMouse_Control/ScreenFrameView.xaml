@@ -4,7 +4,6 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:LittleBigMouse_Control"
-             xmlns:notifyChange="clr-namespace:NotifyChange;assembly=NotifyChange"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300"
              HorizontalAlignment="Left"
@@ -15,6 +14,7 @@
              Width="{Binding Path=Width, FallbackValue=320}"
              Height="{Binding Path=Height, FallbackValue=180}"
              Margin="{Binding Path=Margin}"
+             Foreground="White"
              >
     <UserControl.ContextMenu>
         <ContextMenu>
@@ -23,6 +23,13 @@
             <MenuItem Header="Reset Size" Click="ResetSize_Click"/>
         </ContextMenu>
     </UserControl.ContextMenu>
+    
+        <UserControl.FontSize>
+            <MultiBinding ConverterParameter="0.05" Converter="{StaticResource MultiScale}">
+                <Binding ElementName="UserControl" Path="ActualHeight"/>
+                <Binding ElementName="UserControl" Path="ActualWidth"/>
+            </MultiBinding>
+        </UserControl.FontSize>
 
     <UserControl.Resources>
         <LinearGradientBrush x:Key="SelectedBrush" 
@@ -128,9 +135,12 @@
                         </LinearGradientBrush>
                     </Label.Foreground>
                 </Label>
+
+                
+                
                 <StackPanel Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                    <Label FontSize="{Binding Path=FontSize}" Margin="0,0,0,-10" Content="{Binding Path=Screen.Model,FallbackValue=Brand Model}" HorizontalAlignment="Center" Foreground="White"/>
-                    <Label FontSize="{Binding Path=FontSize}" Margin="0,0,0,-5" Content="{Binding Path=Screen.SerialNo,FallbackValue=Serial No}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
+                <Label Margin="0,0,0,-10" Content="{Binding Path=Screen.Monitor.Model,FallbackValue=Brand Model}" HorizontalAlignment="Center" Foreground="White"/>
+                    <Label Margin="0,0,0,-5" Content="{Binding Path=Screen.Monitor.SerialNo,FallbackValue=Serial No}" HorizontalAlignment="Center" Foreground="#FFD9DCEC"/>
                 </StackPanel>
                 <Label 
             Padding="{Binding Path=LogoPadding}" 

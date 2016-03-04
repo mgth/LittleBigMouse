@@ -4,8 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:src="clr-namespace:NativeHelpers;assembly=NativeHelpers"
-        xmlns:local="clr-namespace:LittleBigMouse_Control"
-        mc:Ignorable="d"
+                         mc:Ignorable="d"
         Icon="MainIcon.ico"
         Title="Little Big LbmMouse"  Topmost="True"
         BorderBrush="Black"
@@ -44,7 +43,7 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"></ColumnDefinition>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid Grid.Row="0" Grid.Column="0" Background="#C0000000">
                 <Grid.ColumnDefinitions>

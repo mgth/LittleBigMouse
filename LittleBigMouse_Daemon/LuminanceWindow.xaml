@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
        xmlns:lbmScreenConfig="clr-namespace:LbmScreenConfig;assembly=LbmScreenConfig"
        xmlns:littleBigMouseDaemon="clr-namespace:LittleBigMouse_Daemon"
+       xmlns:monitorVcp="clr-namespace:MonitorVcp;assembly=MonitorVcp"
        mc:Ignorable="d"
         Title="Luminance"
         WindowStyle="None"
@@ -37,7 +38,7 @@
         </EventTrigger>-->
     </Window.Triggers>
     <Grid>
-        <lbmScreenConfig:Luminance x:Name="Luminance" Config="{Binding Config}"/>
+        <monitorVcp:Luminance x:Name="Luminance" Config="{Binding Config}"/>
 
     </Grid>
 </Window>

@@ -10,7 +10,7 @@ using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
-    class ScreenControlViewModel : ScreenViewModel
+    internal class ScreenControlViewModel : ScreenViewModel
     {
         public static DependencyProperty FrameProperty = DependencyProperty.Register
             (nameof(Frame), typeof(ScreenFrameViewModel), typeof(ScreenControlViewModel), WatchNotifier());

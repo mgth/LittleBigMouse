@@ -9,6 +9,7 @@ using System.Windows;
 using LbmScreenConfig;
 using LittleBigMouseGeo;
 using Microsoft.Win32;
+using MonitorVcp;
 using MouseKeyboardActivityMonitor;
 using MouseKeyboardActivityMonitor.WinApi;
 
@@ -158,7 +159,7 @@ namespace LittleBigMouse_Daemon
             // No move
             if (pIn.Equals(_oldPoint)) return;
 
-            Debug.Print(pIn.X + " , " + pIn.Y + " -> " + pIn.TargetScreen?.DeviceName);
+            Debug.Print(pIn.X + " , " + pIn.Y + " -> " + pIn.TargetScreen?.Monitor.Adapter.DeviceName);
 
             // no screen change
             if (oldScreen == null || pIn.TargetScreen == oldScreen)
@@ -169,7 +170,7 @@ namespace LittleBigMouse_Daemon
 
             Screen screenOut = pIn.Physical.TargetScreen;
 
-            Debug.Print("S>" + screenOut?.DeviceName);
+            Debug.Print("S>" + screenOut?.Monitor.Adapter.DeviceName);
 
             PixelPoint pOut = pIn;
 
@@ -229,7 +230,7 @@ namespace LittleBigMouse_Daemon
                                 throw new ArgumentOutOfRangeException();
                         }
 
-                        Debug.Print(screen.DeviceName + " = " + offset.Length);
+                        Debug.Print(screen.Monitor.Adapter.DeviceName + " = " + offset.Length);
 
                         if (offset.Length > 0 && offset.Length < dist)
                         {

@@ -21,21 +21,11 @@
 	  http://www.mgth.fr
 */
 
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
 using System.Windows;
 using LbmScreenConfig;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Data;
 using System.Windows.Input;
 using NativeHelpers;
-using WinAPI_User32;
-using System.Windows.Interop;
-using System.Runtime.InteropServices;
-using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
@@ -66,9 +56,10 @@ namespace LittleBigMouse_Control
                 Config = config,
                 Plugins =
                 {
-                    new LocationPlugin.LocationPlugin(),
-                    new SizePlugin.BordersPlugin(),
-                    //new VcpPlugin.VcpPlugin()
+                    new PluginLocation.LocationPlugin(),
+                    new Plugins.Size.SizePlugin(),
+                    //new VcpPlugin.VcpPlugin(),
+                    new Plugins.Debug.PluginDebug(),
                 },
                 Presenter = presenter
             };
@@ -80,7 +71,7 @@ namespace LittleBigMouse_Control
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            User32.EnableBlur(this);
+            this.EnableBlur();
         }
 
 

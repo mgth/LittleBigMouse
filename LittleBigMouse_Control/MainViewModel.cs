@@ -12,11 +12,12 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using LbmScreenConfig;
+using LittleBigMouse_Control.Plugins;
 using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
-    class MainViewModel : ViewModel
+    internal class MainViewModel : ViewModel
     {
         public override Type ViewType => typeof (MainView);
 
@@ -145,7 +146,17 @@ namespace LittleBigMouse_Control
 
             tb.SetBinding(ToggleButton.IsCheckedProperty, binding);
 
+            tb.Checked += Tb_Checked;
+
             ButtonPanel.Children.Add(tb);
+        }
+
+        private void Tb_Checked(object sender, RoutedEventArgs e)
+        {
+            foreach (ToggleButton tb in ButtonPanel.Children)
+            {
+                if (tb != sender) tb.IsChecked = false;
+            }
         }
     }
 

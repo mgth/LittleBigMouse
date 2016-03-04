@@ -7,9 +7,10 @@ using System.Windows.Media;
 using LittleBigMouse_Daemon.Annotations;
 using LbmScreenConfig;
 using Microsoft.Win32.SafeHandles;
+using MonitorVcp;
 using MouseKeyboardActivityMonitor;
 using MouseKeyboardActivityMonitor.WinApi;
-using WinAPI_User32;
+using WinAPI;
 using MouseEventArgs = System.Windows.Forms.MouseEventArgs;
 
 namespace LittleBigMouse_Daemon
@@ -52,7 +53,7 @@ namespace LittleBigMouse_Daemon
 
             Left = AutoLeft;
             Top = AutoTop;
-            Loaded += (sender, args) => User32.EnableBlur(this);
+            Loaded += (sender, args) => this.EnableBlur();
             Loaded += OnLoaded;
             SizeChanged += (sender, args) => OnPropertyChanged(nameof(AutoTop));
             SizeChanged += (sender, args) => OnPropertyChanged(nameof(AutoLeft));

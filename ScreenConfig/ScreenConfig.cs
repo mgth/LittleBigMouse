@@ -35,8 +35,8 @@ using System.Runtime.InteropServices;
 using System.Runtime.Remoting.Messaging;
 using System.Windows;
 using System.Windows.Documents;
+using WindowsMonitors;
 using NotifyChange;
-using WinAPI_User32;
 // ReSharper disable CompareOfFloatsByEqualityOperator
 
 namespace LbmScreenConfig
@@ -76,7 +76,7 @@ namespace LbmScreenConfig
 
             Watch(AllScreens, "Screen");
 
-            foreach (Monitor monitor in _monitors)
+            foreach (DisplayMonitor monitor in _monitors)
             {
                 GetScreen(monitor);
             }
@@ -86,12 +86,12 @@ namespace LbmScreenConfig
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
         {
             if (args.NewItems != null)
-                foreach (Monitor monitor in args.NewItems)
+                foreach (DisplayMonitor monitor in args.NewItems)
                 {
                     GetScreen(monitor);
                 }
             if (args.OldItems != null)
-                foreach (Monitor monitor in args.OldItems)
+                foreach (DisplayMonitor monitor in args.OldItems)
                 {
                     Screen screen = AllScreens.FirstOrDefault(s => s.Monitor == monitor);
 
@@ -190,7 +190,7 @@ namespace LbmScreenConfig
             }
         }
 
-        private ObservableCollection<Monitor> _monitors = DisplayDevice.AllMonitors;
+        private readonly ObservableCollection<DisplayMonitor> _monitors = DisplayDevice.AllMonitors;
 
 
         public void Load()
@@ -246,32 +246,17 @@ namespace LbmScreenConfig
             }
         }
 
-        private Screen GetScreen(Monitor monitor)
+        private Screen GetScreen(DisplayMonitor monitor)
         {
             Screen screen = AllScreens.FirstOrDefault(s => s.Monitor.HMonitor == monitor.HMonitor);
             if (screen == null)
             {
                 screen = new Screen(this, monitor);
                 AllScreens.Add(screen);
-                screen.PropertyChanged += Screen_PropertyChanged;
-                UpdatePhysicalOutsideBounds();
             }
             return screen;
         }
 
-
-        private void Screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            switch (e.PropertyName)
-            {
-                case "PhysicalBounds":
-                    UpdatePhysicalBounds();
-                    break;
-                case "PhysicalOutsideBounds":
-                    UpdatePhysicalOutsideBounds();
-                    break;
-            }
-        }
 
 
         public Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);

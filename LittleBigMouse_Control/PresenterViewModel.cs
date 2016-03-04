@@ -4,11 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using LittleBigMouse_Control.Plugins;
 using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
-    abstract class PresenterViewModel : ViewModel
+    internal abstract class PresenterViewModel : ViewModel
     {
         public static DependencyProperty MainViewModelProperty = DependencyProperty.Register(nameof(MainViewModel), typeof(MainViewModel), typeof(MultiScreensViewModel));
         public MainViewModel MainViewModel
@@ -17,10 +18,10 @@ namespace LittleBigMouse_Control
             set { SetValue(MainViewModelProperty, value); }
         }
 
-        public static DependencyProperty GetScreenControlViewModelPropery = DependencyProperty.Register(nameof(GetScreenControlViewModel), typeof(GetScreenControlViewModelDelegate), typeof(MainViewModel));
-        public GetScreenControlViewModelDelegate GetScreenControlViewModel
+        public static DependencyProperty GetScreenControlViewModelPropery = DependencyProperty.Register(nameof(ScreenControlGetter), typeof(IPluginScreenControl), typeof(MainViewModel));
+        public IPluginScreenControl ScreenControlGetter
         {
-            get { return (GetScreenControlViewModelDelegate)GetValue(GetScreenControlViewModelPropery); }
+            get { return (IPluginScreenControl)GetValue(GetScreenControlViewModelPropery); }
             set { SetValue(GetScreenControlViewModelPropery, value); }
         }
 

@@ -34,12 +34,9 @@ using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Windows;
+using WindowsMonitors;
 using NotifyChange;
-using WinAPI_Dxva2;
-using WinAPI_Gdi32;
-using WinAPI_User32;
-using Point = System.Windows.Point;
-using Size = System.Windows.Size;
+using WinAPI;
 
 [assembly: InternalsVisibleTo("ScreenConfig")]
 namespace LbmScreenConfig
@@ -47,9 +44,9 @@ namespace LbmScreenConfig
     [DataContract]
     public class Screen : Notifier
     {
-        private Monitor _monitor;
+        private DisplayMonitor _monitor;
 
-        public Monitor Monitor
+        public DisplayMonitor Monitor
         {
             get { return _monitor; }
             private set { SetAndWatch(ref _monitor, value); }
@@ -58,7 +55,7 @@ namespace LbmScreenConfig
 
         public IEnumerable<Screen> OtherScreens => Config.AllScreens.Where(s => s != this);
 
-        internal Screen(ScreenConfig config, Monitor monitor)
+        internal Screen(ScreenConfig config, DisplayMonitor monitor)
         {
             Config = config;
             Monitor = monitor;
@@ -71,39 +68,23 @@ namespace LbmScreenConfig
         {
         }
 
-        //public string DeviceId
-        //{
-        //    get
-        //    {
-        //        DISPLAY_DEVICE dd = Edid.DisplayDeviceFromId(DeviceName);
-        //        return dd.DeviceId;
-        //    }
-        //}
-
-
 
         // References properties
-        public string ProductCode => Monitor.ProductCode;
-        public string Model => Monitor.Model;
-        public string ManufacturerCode => Monitor.ManufacturerCode;
-        [DependsOn("ManufacturerCode", "ProductCode")]
-        public string PnpCode => ManufacturerCode + ProductCode;
-        public string SerialNo => Monitor.SerialNo;
-        [DependsOn("Monitor.Serial")]
-        public string Serial => Monitor.Serial;
-        [DependsOn("PnpCode", "Serial")]
-        public string IdMonitor => PnpCode + "_" + Serial;
+        [DependsOn("DisplayMonitor.ManufacturerCode", "DisplayMonitor.ProductCode")]
+        public string PnpCode => Monitor.ManufacturerCode + Monitor.ProductCode;
+
+        [DependsOn("PnpCode", "DisplayMonitor.Serial")]
+        public string IdMonitor => PnpCode + "_" + Monitor.Serial;
 
         [DependsOn("PixelSize")]
         public string IdResolution => PixelSize.Width + "x" + PixelSize.Height;
-        [DependsOn("IdMonitor", "Orientation")]
-        public string Id => IdMonitor + "_" + Orientation.ToString();
 
-        [DependsOn("Monitor.Flags")]
+        [DependsOn("IdMonitor", "Orientation")]
+        public string Id => IdMonitor + "_" + Monitor.DisplayOrientation.ToString();
+
+        [DependsOn("DisplayMonitor.Flags")]
         public bool Primary => (Monitor.Flags == 1);
 
-
-        public string DeviceName => Monitor.Adapter.DeviceName;
 
         public string PnpDeviceName
         {
@@ -122,7 +103,7 @@ namespace LbmScreenConfig
         {
             get
             {
-                var s = DeviceName.Split('\\');
+                var s = Monitor.DeviceName.Split('\\');
                 return s.Length < 4 ? 0 : int.Parse(s[3].Replace("DISPLAY", ""));
             }
         }
@@ -147,14 +128,11 @@ namespace LbmScreenConfig
             set { SetProperty(ref _fixedAspectRatio, value); }
         }
 
-        [DependsOn("Monitor.DisplayOrientation")]
-        public int Orientation => Monitor.DisplayOrientation;
-
         // Physical dimensions
         // Natives
         private double _physicalX = double.NaN;
 
-        //[DataMember]
+        [DataMember]
         public double PhysicalX
         {
             get { return double.IsNaN(_physicalX) ? 0 : _physicalX; }
@@ -180,7 +158,7 @@ namespace LbmScreenConfig
        }
 
         private double _physicalY = double.NaN;
-        //[DataMember]
+        [DataMember]
         public double PhysicalY
         {
             get { return double.IsNaN(_physicalY) ? 0 : _physicalY; }
@@ -206,7 +184,7 @@ namespace LbmScreenConfig
         }
 
         private double _realPhysicalWidth = double.NaN;
-        //[DataMember]
+        [DataMember]
         public double RealPhysicalWidth
         {
             get { return double.IsNaN(_realPhysicalWidth) ? Monitor.DeviceCapsHorzSize : _realPhysicalWidth; }
@@ -216,6 +194,53 @@ namespace LbmScreenConfig
                 SetRealPhysicalWidth(value);
                 if (FixedAspectRatio) SetRealPhysicalHeight(RealPhysicalHeight * ratio);
             }
+        }
+
+        public double UnrotatedRealPhysicalWidth
+        {
+            get { return (Monitor.DisplayOrientation % 2 == 0)? RealPhysicalWidth: RealPhysicalHeight; }
+            set
+            {
+                double ratio = value / UnrotatedRealPhysicalWidth;
+                if (SetRealPhysicalWidth(value) && FixedAspectRatio)
+                    SetUnrotatedRealPhysicalHeight(UnrotatedRealPhysicalHeight * ratio);
+            }
+        }
+
+        private bool SetUnrotatedRealPhysicalWidth(double value)
+        {
+                switch (Monitor.DisplayOrientation % 2)
+                {
+                    case 0:
+                        return SetRealPhysicalWidth(value);
+                    case 1:
+                        return SetRealPhysicalHeight(value);
+                }
+            return false;
+        }
+
+        public double UnrotatedRealPhysicalHeight
+        {
+            get { return (Monitor.DisplayOrientation % 2 == 0) ? RealPhysicalHeight : RealPhysicalWidth; }
+            set
+            {
+                double ratio = value / UnrotatedRealPhysicalHeight;
+                if ( SetUnrotatedRealPhysicalHeight(value) && FixedAspectRatio)
+                    SetUnrotatedRealPhysicalWidth(UnrotatedRealPhysicalWidth * ratio);
+            }
+        }
+        
+        private bool SetUnrotatedRealPhysicalHeight(double value)
+        {
+            switch (Monitor.DisplayOrientation % 2)
+            {
+                case 0:
+                    return SetRealPhysicalHeight(value);
+                case 1:
+                    return SetRealPhysicalWidth(value);
+            }
+            return false;
+
         }
 
         [DependsOn("Monitor.DeviceCapsHorzSize", "Monitor.DeviceCapsVertSize")]
@@ -333,7 +358,7 @@ namespace LbmScreenConfig
             }
         }
 
-        [DependsOn(nameof(PhysicalWidth), nameof(PhysicalHeight))]
+        [DependsOn(nameof(Monitor), nameof(PhysicalWidth), nameof(PhysicalHeight))]
         private void UpdatePhysicalSize()
         {
             PhysicalSize = new Size(PhysicalWidth, PhysicalHeight);
@@ -344,7 +369,7 @@ namespace LbmScreenConfig
         {
             get
             {
-                if (_physicalSize.Width == 0 || _physicalSize.Width == 0) throw new Exception("Not initialised");
+                //if (_physicalSize.Width == 0 || _physicalSize.Width == 0) throw new Exception("Not initialised");
                 return _physicalSize;
             }
             private set { SetProperty(ref _physicalSize, value); }
@@ -378,7 +403,7 @@ namespace LbmScreenConfig
         }
 
         // Pixel native Dimensions 
-        [DependsOn("Monitor.MonitorArea")]
+        [DependsOn("DisplayMonitor.MonitorArea")]
         public Rect PixelBounds => Monitor.MonitorArea;
 
         [DependsOn("PixelBounds")]
@@ -467,7 +492,7 @@ namespace LbmScreenConfig
             {
                 if (key != null)
                 {
-                    switch (Orientation)
+                    switch (Monitor.DisplayOrientation)
                     {
                         case 0:
                             key.GetKey(ref _leftBorder, "LeftBorder", this);
@@ -495,7 +520,7 @@ namespace LbmScreenConfig
                             break;
                     }
 
-                    switch (Orientation)
+                    switch (Monitor.DisplayOrientation)
                     {
                         case 0:
                         case 2:
@@ -537,7 +562,7 @@ namespace LbmScreenConfig
             {
                 if (key != null)
                 {
-                    switch (Orientation)
+                    switch (Monitor.DisplayOrientation)
                     {
                         case 0:
                             key.SetKey(_leftBorder, "LeftBorder");
@@ -565,7 +590,7 @@ namespace LbmScreenConfig
                             break;
                     }
 
-                    switch (Orientation)
+                    switch (Monitor.DisplayOrientation)
                     {
                         case 0:
                         case 2:
@@ -602,7 +627,7 @@ namespace LbmScreenConfig
         }
 
 
-        [DependsOn("Monitor.WorkArea")]
+        [DependsOn("DisplayMonitor.WorkArea")]
         public Rect WorkingArea => Monitor.WorkArea;
 
         public AbsoluteRectangle AbsoluteWorkingArea => new AbsoluteRectangle(
@@ -771,36 +796,10 @@ namespace LbmScreenConfig
             }
         }
 
-        public int SystemScaleFactor
-        {
-            get
-            {
-                int factor = 100;
-                User32.GetScaleFactorForMonitor(Monitor.HMonitor, ref factor);
-                return factor;
-            }
-        }
-        public double ScaleFactor
-        {
-            get
-            {
-                switch (SystemScaleFactor)
-                {
-                    default:
-                        return 1; //1.25
-                    case 140:
-                        return 1.5;//1.75
-                    case 180:
-                        return 2.00;//2.25 2.50 
-
-                }
-            }
-        }
-
         public Point ScaledPoint(Point p)
         {
-            User32.POINT up = new User32.POINT((int)p.X, (int)p.Y);
-            User32.PhysicalToLogicalPoint(Monitor.HMonitor, ref up);
+            NativeMethods.POINT up = new NativeMethods.POINT((int)p.X, (int)p.Y);
+            NativeMethods.PhysicalToLogicalPoint(Monitor.HMonitor, ref up);
             return new Point(up.X, up.Y);
         }
         public double RawDpiX
@@ -865,15 +864,15 @@ namespace LbmScreenConfig
             }
         }
 
-        private Process_DPI_Awareness DpiAwareness
+        private NativeMethods.Process_DPI_Awareness DpiAwareness
         {
             get
             {
                 Process p = Process.GetCurrentProcess();
 
-                Process_DPI_Awareness aw = Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
+                NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
 
-                User32.GetProcessDpiAwareness(p.Handle, out aw);
+                NativeMethods.GetProcessDpiAwareness(p.Handle, out aw);
 
                 return aw;
             }
@@ -888,11 +887,11 @@ namespace LbmScreenConfig
             {
                 switch (DpiAwareness)
                 {
-                    case Process_DPI_Awareness.Process_DPI_Unaware:
+                    case NativeMethods.Process_DPI_Awareness.Process_DPI_Unaware:
                         return Math.Round((RealDpiX / DpiAwareAngularDpiX) * 20) / 20;
-                    case Process_DPI_Awareness.Process_System_DPI_Aware:
+                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
                         return Config.PrimaryScreen.EffectiveDpiX / 96;
-                    case Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
+                    case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
                         return Config.PrimaryScreen.EffectiveDpiX / 96;//EffectiveDpiX/96;
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -907,11 +906,11 @@ namespace LbmScreenConfig
             {
                 switch (DpiAwareness)
                 {
-                    case Process_DPI_Awareness.Process_DPI_Unaware:
+                    case NativeMethods.Process_DPI_Awareness.Process_DPI_Unaware:
                         return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
-                    case Process_DPI_Awareness.Process_System_DPI_Aware:
+                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
                         return Config.PrimaryScreen.EffectiveDpiY / 96;
-                    case Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
+                    case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
                         return Config.PrimaryScreen.EffectiveDpiY / 96;
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -1006,9 +1005,9 @@ namespace LbmScreenConfig
         {
             get
             {
-                IntPtr hdc = Gdi32.CreateDC("DISPLAY", DeviceName, null, IntPtr.Zero);
-                double dpi = Gdi32.GetDeviceCaps(hdc, DeviceCap.LOGPIXELSX);
-                Gdi32.DeleteDC(hdc);
+                IntPtr hdc = NativeMethods.CreateDC("DISPLAY", Monitor.Adapter.DeviceName, null, IntPtr.Zero);
+                double dpi = NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.LOGPIXELSX);
+                NativeMethods.DeleteDC(hdc);
                 return dpi;
             }
         }
@@ -1022,11 +1021,11 @@ namespace LbmScreenConfig
                 IntPtr hMonitor = Monitor.HMonitor; //HPhysical;
 
                 uint len = 0;
-                if (!Gdi32.DDCCIGetCapabilitiesStringLength(hMonitor, ref len)) return "-1-";
+                if (!NativeMethods.DDCCIGetCapabilitiesStringLength(hMonitor, ref len)) return "-1-";
 
                 StringBuilder s = new StringBuilder((int)len + 1);
 
-                if (!Gdi32.DDCCIGetCapabilitiesString(hMonitor, s, len)) return "-2-";
+                if (!NativeMethods.DDCCIGetCapabilitiesString(hMonitor, s, len)) return "-2-";
 
                 return s.ToString();
             }
@@ -1323,15 +1322,15 @@ namespace LbmScreenConfig
                 height = double.Parse(monkey.GetValue("PixelHeight").ToString());
             }
 
-            Adapter adapter = DisplayDevice.FromId(id);
-            DEVMODE devmode = new DEVMODE();
+            DisplayAdapter adapter = DisplayDevice.FromId(id);
+            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE();
             devmode.Size = (short)Marshal.SizeOf(devmode);
 
 
             int idx = 0;
             while (true)
             {
-                if (!User32.EnumDisplaySettings(adapter.DeviceName, idx, ref devmode))
+                if (!NativeMethods.EnumDisplaySettings(adapter.DeviceName, idx, ref devmode))
                     return;
 
                 if (devmode.PelsHeight == height && devmode.PelsWidth == width && devmode.BitsPerPel == 32) break;
@@ -1344,9 +1343,9 @@ namespace LbmScreenConfig
 
             devmode.DeviceName = adapter.DeviceName /*+ @"\Monitor0"*/;
 
-            DISP_CHANGE ch = User32.ChangeDisplaySettingsEx(adapter.DeviceName, ref devmode, IntPtr.Zero, ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
-            if (ch == DISP_CHANGE.Successful)
-                ch = User32.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+            NativeMethods.DISP_CHANGE ch = NativeMethods.ChangeDisplaySettingsEx(adapter.DeviceName, ref devmode, IntPtr.Zero, NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
+            if (ch == NativeMethods.DISP_CHANGE.Successful)
+                ch = NativeMethods.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
         }
 
         public void PlaceAuto(IEnumerable<Screen> screens)

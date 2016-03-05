@@ -201,8 +201,14 @@ namespace NotifyChange
             if (listMethods != null)
                 foreach (var mi in listMethods)
                 {
-                    if (mi.GetParameters().Length==0)
+                    if (mi.GetParameters().Length == 0)
+
+                    {
+                        string name = mi.Name;
+
                         mi.Invoke(this, null);
+
+                    }
                     else
                     {
                         mi.Invoke(this, new object[] {propertyName});
@@ -243,15 +249,21 @@ namespace NotifyChange
         {
             if (obj != null)
             {
-                PropertyChangedEventHandler handler =_watch[obj];
-                obj.PropertyChanged -= handler;
-                _watch.Remove(obj);
+                if (_watch.ContainsKey(obj))
+                {
+                    PropertyChangedEventHandler handler =_watch[obj];
+                    obj.PropertyChanged -= handler;
+                    _watch.Remove(obj);                 
+                }
+                // TODO : should obj not exist ?
             }
         }
 
         public void Watch<T>(ObservableCollection<T> collection, string prefix) where T:INotifyPropertyChanged
         {
             if (collection == null) return;
+
+            foreach(T obj in collection) Watch(obj, prefix);
 
             collection.CollectionChanged += delegate(object sender, NotifyCollectionChangedEventArgs e)
             {

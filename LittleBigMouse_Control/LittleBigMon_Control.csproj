@@ -192,6 +192,7 @@
     <Compile Include="Plugins\Vcp\VcpSlider.xaml.cs">
       <DependentUpon>VcpSlider.xaml</DependentUpon>
     </Compile>
+    <Compile Include="ViewHelper.cs" />
     <Compile Include="ViewModel.cs" />
     <Compile Include="WindowResize.cs" />
     <Page Include="Plugins\Debug\DebugScreenView.xaml">

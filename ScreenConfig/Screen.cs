@@ -82,8 +82,8 @@ namespace LbmScreenConfig
         [DependsOn("IdMonitor", "Orientation")]
         public string Id => IdMonitor + "_" + Monitor.DisplayOrientation.ToString();
 
-        [DependsOn("DisplayMonitor.Flags")]
-        public bool Primary => (Monitor.Flags == 1);
+        [DependsOn("DisplayMonitor.Primary")]
+        public bool Primary => (Monitor.Primary == 1);
 
 
         public string PnpDeviceName
@@ -1323,29 +1323,34 @@ namespace LbmScreenConfig
             }
 
             DisplayAdapter adapter = DisplayDevice.FromId(id);
-            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE();
-            devmode.Size = (short)Marshal.SizeOf(devmode);
-
-
-            int idx = 0;
-            while (true)
+            if (adapter != null)
             {
-                if (!NativeMethods.EnumDisplaySettings(adapter.DeviceName, idx, ref devmode))
-                    return;
+                NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
 
-                if (devmode.PelsHeight == height && devmode.PelsWidth == width && devmode.BitsPerPel == 32) break;
-                idx++;
+                int idx = 0;
+                while (true)
+                {
+                    if (!NativeMethods.EnumDisplaySettings(adapter.DeviceName, idx, ref devmode))
+                        return;
+
+                    if (devmode.PelsHeight == height && devmode.PelsWidth == width && devmode.BitsPerPel == 32) break;
+                    idx++;
+                }
+
+
+
+                //devmode.Position = new POINTL { x = (int)x, y = (int)y };
+                //devmode.Fields |= DM.Position;
+
+                devmode.DeviceName = adapter.DeviceName /*+ @"\Monitor0"*/;
+
+                NativeMethods.DISP_CHANGE ch = NativeMethods.ChangeDisplaySettingsEx(adapter.DeviceName, ref devmode,
+                    IntPtr.Zero,
+                    NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY |
+                    NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
+                if (ch == NativeMethods.DISP_CHANGE.Successful)
+                    ch = NativeMethods.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
             }
-
-
-            //devmode.Position = new POINTL { x = (int)x, y = (int)y };
-            //devmode.Fields |= DM.Position;
-
-            devmode.DeviceName = adapter.DeviceName /*+ @"\Monitor0"*/;
-
-            NativeMethods.DISP_CHANGE ch = NativeMethods.ChangeDisplaySettingsEx(adapter.DeviceName, ref devmode, IntPtr.Zero, NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
-            if (ch == NativeMethods.DISP_CHANGE.Successful)
-                ch = NativeMethods.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
         }
 
         public void PlaceAuto(IEnumerable<Screen> screens)

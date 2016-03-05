@@ -72,15 +72,10 @@ namespace LbmScreenConfig
 
         public ScreenConfig()
         {
+            MonitorsOnCollectionChanged(_monitors,new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,_monitors));
             _monitors.CollectionChanged += MonitorsOnCollectionChanged;
 
             Watch(AllScreens, "Screen");
-
-            foreach (DisplayMonitor monitor in _monitors)
-            {
-                GetScreen(monitor);
-            }
-            Load();
         }
 
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
@@ -88,7 +83,12 @@ namespace LbmScreenConfig
             if (args.NewItems != null)
                 foreach (DisplayMonitor monitor in args.NewItems)
                 {
-                    GetScreen(monitor);
+                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor == monitor);
+                    if (screen == null)
+                    {
+                        screen = new Screen(this, monitor);
+                        AllScreens.Add(screen);
+                    }
                 }
             if (args.OldItems != null)
                 foreach (DisplayMonitor monitor in args.OldItems)
@@ -97,6 +97,8 @@ namespace LbmScreenConfig
 
                     if (screen != null) AllScreens.Remove(screen);
                 }
+
+            Load();
         }
 
         public ObservableCollection<Screen> AllScreens { get; } = new ObservableCollection<Screen>();

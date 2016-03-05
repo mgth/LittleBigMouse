@@ -105,17 +105,9 @@ namespace LittleBigMouse_Control.Plugins.Location
             ViewModel.Move(e.GetPosition(ViewModel.Frame.Presenter.ScreensCanvas));
         }
 
-
         private void OnKeyEnterUpdate(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter)
-            {
-                TextBox tBox = (TextBox)sender;
-                DependencyProperty prop = TextBox.TextProperty;
-
-                BindingExpression binding = BindingOperations.GetBindingExpression(tBox, prop);
-                if (binding != null) { binding.UpdateSource(); }
-            }
+            ViewHelper.OnKeyEnterUpdate(sender,e);
         }
     }
 

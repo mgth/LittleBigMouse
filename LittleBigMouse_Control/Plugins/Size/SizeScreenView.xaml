@@ -72,10 +72,12 @@
                      HorizontalAlignment="Right"
                 Text="{Binding Screen.RealPhysicalHeight, StringFormat=N1}"
                 MouseWheel="InsideHeight_MouseWheel"
+                KeyUp="OnKeyEnterUpdate" 
                 >
                 <TextBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
                 </TextBox.Effect>
+                
             </TextBox>
             
             <TextBox Background="#E0FFFFFF"
@@ -85,6 +87,7 @@
                      HorizontalAlignment="Center"
                      Text="{Binding Screen.RealPhysicalWidth,  StringFormat=N1}"
                      MouseWheel="InsideWidth_MouseWheel"
+                     KeyUp="OnKeyEnterUpdate" 
                      >
                 <TextBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
@@ -118,6 +121,7 @@
                      HorizontalAlignment="Left"
                 Text="{Binding PhysicalOutsideHeight, StringFormat=N1}"
                 MouseWheel="Height_MouseWheel"
+                     KeyUp="OnKeyEnterUpdate" 
                 >
                 <TextBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
@@ -131,6 +135,7 @@
                      HorizontalAlignment="Center"
                      Text="{Binding PhysicalOutsideWidth,  StringFormat=N1}"
                      MouseWheel="Width_MouseWheel"
+                     KeyUp="OnKeyEnterUpdate" 
                      >
                 <TextBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
@@ -147,7 +152,7 @@
                 HorizontalAlignment="Center" 
                 VerticalAlignment="Top" 
                 Background="#00FFFFFF"
-             MouseWheel="Top_MouseWheel"           
+             MouseWheel="Top_MouseWheel"   
             />
 
         <TextBox 

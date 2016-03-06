@@ -18,13 +18,14 @@ namespace WindowsMonitors
             UpdateDevices();
         }
 
+ 
         private static void SystemEventsOnDisplaySettingsChanged(object sender, EventArgs eventArgs)
         {
             UpdateDevices();
         }
 
-        public static ObservableCollection<DisplayAdapter> AllAdapters { get; } = new ObservableCollection<DisplayAdapter>();
         public static ObservableCollection<DisplayMonitor> AllMonitors { get; } = new ObservableCollection<DisplayMonitor>();
+        public static List<DisplayMonitor> TempMonitors { get; private set; }
 
         public static DisplayAdapter FromId(string id)
         {
@@ -34,17 +35,20 @@ namespace WindowsMonitors
 
         public static void UpdateDevices()
         {
+            // Todo: try not to clear berore updating, but it's very buggy now
+            while(AllMonitors.Count>0) AllMonitors.RemoveAt(0);
+
+            TempMonitors = new List<DisplayMonitor>();
+
+            IList<DisplayMonitor> oldMonitors = AllMonitors.ToList();
+
             NativeMethods.DISPLAY_DEVICE dev = new NativeMethods.DISPLAY_DEVICE(true);
             uint i = 0;
 
             while (NativeMethods.EnumDisplayDevices(null, i++, ref dev, 0))
             {
-                DisplayAdapter adapter = AllAdapters.FirstOrDefault(d => d.DeviceName == dev.DeviceName);
-                if (adapter == null) adapter = new DisplayAdapter(dev);
-                else adapter.Init(dev);
+                new DisplayAdapter(dev);
             }
-
-            IList<DisplayMonitor> existing = AllMonitors.ToList();
 
             NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
                 delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref NativeMethods.RECT lprcMonitor, IntPtr dwData)
@@ -53,36 +57,26 @@ namespace WindowsMonitors
                     bool success = NativeMethods.GetMonitorInfo(hMonitor, ref mi);
                     if (success)
                     {
-                        var ddDev = AllAdapters.FirstOrDefault(d => d.DeviceName == mi.DeviceName);
-                        if (ddDev != null)
+                        IList monitors = TempMonitors.Where(d => d.Adapter.DeviceName == mi.DeviceName).ToList();
+                        foreach (DisplayMonitor ddMon in monitors)
                         {
-                            if (ddDev.Monitors.Count == 0)
-                            {
-                                DisplayMonitor dummy = new DisplayMonitor(ddDev,
-                                    new NativeMethods.DISPLAY_DEVICE { DeviceName = ddDev.DeviceName + @"\Monitor0" });
-                                AllMonitors.Add(dummy);
-                            }
+                            ddMon.Init(hMonitor, mi);
 
-                            foreach (var ddMon in ddDev.Monitors)
-                            {
-                                ddMon.Init(hMonitor, mi);
-                                if (existing.Contains(ddMon))
-                                    existing.Remove(ddMon);
-                                else
-                                    AllMonitors.Add(ddMon);
-                            }
+                            if (oldMonitors.Contains(ddMon))
+                                oldMonitors.Remove(ddMon);
+                                
+                            if(!AllMonitors.Contains(ddMon)) AllMonitors.Add(ddMon);
                         }
+                        
                     }
 
                     return true;
                 }, IntPtr.Zero);
 
-            foreach (DisplayMonitor monitor in existing)
+            foreach (DisplayMonitor monitor in oldMonitors)
             {
                 AllMonitors.Remove(monitor);
             }
-
-            UpdateEdid();
         }
         public static RegistryKey GetKeyFromPath(string path, int parent = 0)
         {
@@ -129,59 +123,7 @@ namespace WindowsMonitors
             return result;
         }
 
-        public static void UpdateEdid()
-        {
-            IntPtr devInfo = NativeMethods.SetupDiGetClassDevsEx(
-                ref NativeMethods.GUID_CLASS_MONITOR, //class GUID
-                null, //enumerator
-                IntPtr.Zero, //HWND
-                NativeMethods.DIGCF_PRESENT | NativeMethods.DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
-                IntPtr.Zero, // device info, create a new one.
-                null, // machine name, local machine
-                 IntPtr.Zero
-            );// reserved
 
-            if (devInfo == IntPtr.Zero)
-                return;
-
-            NativeMethods.SP_DEVINFO_DATA devInfoData = new NativeMethods.SP_DEVINFO_DATA(true);
-
-            uint i = 0;
-            //            string s = screen.DeviceName.Substring(11);
-            //            uint i = 3-uint.Parse(s);
-
-            do
-            {
-                if (NativeMethods.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
-                {
-
-                    IntPtr hEdidRegKey = NativeMethods.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                        NativeMethods.DICS_FLAG_GLOBAL, 0, NativeMethods.DIREG_DEV, NativeMethods.KEY_READ);
-
-                    if (hEdidRegKey != IntPtr.Zero && (hEdidRegKey.ToInt32() != -1))
-                    {
-                        using (RegistryKey key = GetKeyFromPath(GetHKeyName(hEdidRegKey), 1))
-                        {
-                            string id = ((string[])key.GetValue("HardwareID"))[0] + "\\" + key.GetValue("Driver");
-
-                            DisplayMonitor mon = AllMonitors.FirstOrDefault(m => m.DeviceId == id);
-                            if (mon != null)
-                            {
-                                mon.HKeyName = GetHKeyName(hEdidRegKey);
-                                using (RegistryKey keyEdid = GetKeyFromPath(mon.HKeyName))
-                                {
-                                    mon.Edid = (byte[])keyEdid.GetValue("EDID");
-                                }
-                            }
-                        }
-                        NativeMethods.RegCloseKey(hEdidRegKey);
-                    }
-                }
-                i++;
-            } while (NativeMethods.ERROR_NO_MORE_ITEMS != NativeMethods.GetLastError());
-
-            NativeMethods.SetupDiDestroyDeviceInfoList(devInfo);
-        }
 
         private string _deviceName = "";
         private string _deviceString = "";
@@ -217,6 +159,7 @@ namespace WindowsMonitors
             get { return _stateFlags; }
             set { SetProperty(ref _stateFlags, value); }
         }
+
 
         public string DeviceId
         {

@@ -1,14 +1,12 @@
 ﻿using System;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
-using LittleBigMouse_Control.SizePlugin;
+using NotifyChange;
 
-namespace LittleBigMouse_Control.SizePlugin
+namespace LittleBigMouse_Control.Plugins.Size
 {
     class CotationMark
     {
@@ -188,6 +186,74 @@ namespace LittleBigMouse_Control.SizePlugin
 
             _outsideVerticalCotation.SetPoints(arrow, x + (w/8)-(w/128),y2,x + (w/8)-(w/128),y2+h2);
             _ousideHorizontalCotation.SetPoints(arrow, x2, y + (h/8)-(h/128),x2+w2,y + (h/8)-(h/128));
+        }
+
+        [DependsOn("Screen.RealPhysicalHeight")]
+        public double RealPhysicalHeight
+        {
+            get { return Screen.RealPhysicalHeight; }
+            set { Screen.RealPhysicalHeight = value; Screen.Config.Compact(); }
+        }
+
+
+        [DependsOn("Screen.RealPhysicalWidth")]
+        public double RealPhysicalWidth
+        {
+            get { return Screen.RealPhysicalWidth; }
+            set { Screen.RealPhysicalWidth = value; Screen.Config.Compact(); }
+        }
+
+        [DependsOn("Screen.RealTopBorder")]
+        public double RealTopBorder
+        {
+            get { return Screen.RealTopBorder; }
+            set { Screen.RealTopBorder = value; Screen.Config.Compact(); }
+        }
+
+        [DependsOn("Screen.RealRightBorder")]
+        public double RealRightBorder
+        {
+            get { return Screen.RealRightBorder; }
+            set { Screen.RealRightBorder = value; Screen.Config.Compact(); }
+        }
+
+        [DependsOn("Screen.RealBottomBorder")]
+        public double RealBottomBorder
+        {
+            get { return Screen.RealBottomBorder; }
+            set { Screen.RealBottomBorder = value; Screen.Config.Compact(); }
+        }
+
+        [DependsOn("Screen.RealLeftBorder")]
+        public double RealLeftBorder
+        {
+            get { return Screen.RealLeftBorder; }
+            set { Screen.RealLeftBorder = value; Screen.Config.Compact(); }
+        }
+
+        [DependsOn("Screen.RealPhysicalHeight", "Screen.RealTopBorder", "Screen.RealBottomBorder")]
+        public double PhysicalOutsideHeight
+        {
+            get { return Screen.RealPhysicalHeight + Screen.RealTopBorder + Screen.RealBottomBorder; }
+            set
+            {
+                double offset = value - PhysicalOutsideHeight;
+                Screen.RealBottomBorder += offset;
+                Screen.Config.Compact();
+            }
+        }
+
+        [DependsOn("Screen.RealPhysicalWidth", "Screen.RealLeftBorder", "Screen.RealRightBorder")]
+        public double PhysicalOutsideWidth
+        {
+            get { return Screen.RealPhysicalWidth + Screen.RealLeftBorder + Screen.RealRightBorder; }
+            set
+            {
+                double offset = (value - PhysicalOutsideWidth) / 2;
+                Screen.RealLeftBorder += offset;
+                Screen.RealRightBorder += offset;
+                Screen.Config.Compact();
+            }
         }
     }
 }

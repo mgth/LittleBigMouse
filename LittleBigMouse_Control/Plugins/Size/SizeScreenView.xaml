@@ -70,7 +70,7 @@
                 Grid.Row="2" 
                 VerticalAlignment="Center" 
                      HorizontalAlignment="Right"
-                Text="{Binding Screen.RealPhysicalHeight, StringFormat=N1}"
+                Text="{Binding RealPhysicalHeight, StringFormat=N1}"
                 MouseWheel="InsideHeight_MouseWheel"
                 KeyUp="OnKeyEnterUpdate" 
                 >
@@ -85,7 +85,7 @@
                      Grid.Row="2" 
                      VerticalAlignment="Bottom" 
                      HorizontalAlignment="Center"
-                     Text="{Binding Screen.RealPhysicalWidth,  StringFormat=N1}"
+                     Text="{Binding RealPhysicalWidth,  StringFormat=N1}"
                      MouseWheel="InsideWidth_MouseWheel"
                      KeyUp="OnKeyEnterUpdate" 
                      >
@@ -147,7 +147,7 @@
 
         <TextBox 
             Foreground="#FFD9DCEC"
-                Text="{Binding Path=Screen.RealTopBorder, StringFormat=N1, FallbackValue=top}" 
+                Text="{Binding Path=RealTopBorder, StringFormat=N1, FallbackValue=top}" 
                 KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Center" 
                 VerticalAlignment="Top" 
@@ -158,7 +158,7 @@
         <TextBox 
             Foreground="#FFD9DCEC"
                 
-            Text="{Binding Path=Screen.RealLeftBorder, StringFormat=N1, FallbackValue=left}" 
+            Text="{Binding Path=RealLeftBorder, StringFormat=N1, FallbackValue=left}" 
                 KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Left" 
                 VerticalAlignment="Center" 
@@ -168,7 +168,7 @@
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
             <TextBox 
-                Text="{Binding Path=Screen.RealBottomBorder, StringFormat=N1, FallbackValue=bottom}" 
+                Text="{Binding Path=RealBottomBorder, StringFormat=N1, FallbackValue=bottom}" 
                 KeyUp="OnKeyEnterUpdate" 
                 VerticalAlignment="Bottom"  
                 HorizontalAlignment="Center" 
@@ -179,7 +179,7 @@
 
         <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
             <TextBox 
-                Text="{Binding Path=Screen.RealRightBorder, StringFormat=N1,FallbackValue=right}" 
+                Text="{Binding Path=RealRightBorder, StringFormat=N1,FallbackValue=right}" 
                 KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Right" 
                 Foreground="#FFD9DCEC" 

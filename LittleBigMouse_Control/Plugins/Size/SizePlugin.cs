@@ -1,7 +1,6 @@
 ﻿using System;
 using LbmScreenConfig;
 using LittleBigMouse_Control.PluginLocation;
-using LittleBigMouse_Control.SizePlugin;
 
 namespace LittleBigMouse_Control.Plugins.Size
 {

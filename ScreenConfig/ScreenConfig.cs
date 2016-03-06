@@ -70,10 +70,11 @@ namespace LbmScreenConfig
             }
         }
 
+        private static ObservableCollection<DisplayMonitor> Monitors => DisplayDevice.AllMonitors;
         public ScreenConfig()
         {
-            MonitorsOnCollectionChanged(_monitors,new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,_monitors));
-            _monitors.CollectionChanged += MonitorsOnCollectionChanged;
+            MonitorsOnCollectionChanged(Monitors,new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,Monitors));
+            Monitors.CollectionChanged += MonitorsOnCollectionChanged;
 
             Watch(AllScreens, "Screen");
         }
@@ -83,7 +84,7 @@ namespace LbmScreenConfig
             if (args.NewItems != null)
                 foreach (DisplayMonitor monitor in args.NewItems)
                 {
-                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor == monitor);
+                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
                     if (screen == null)
                     {
                         screen = new Screen(this, monitor);
@@ -93,7 +94,7 @@ namespace LbmScreenConfig
             if (args.OldItems != null)
                 foreach (DisplayMonitor monitor in args.OldItems)
                 {
-                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor == monitor);
+                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
 
                     if (screen != null) AllScreens.Remove(screen);
                 }
@@ -192,7 +193,6 @@ namespace LbmScreenConfig
             }
         }
 
-        private readonly ObservableCollection<DisplayMonitor> _monitors = DisplayDevice.AllMonitors;
 
 
         public void Load()
@@ -248,19 +248,6 @@ namespace LbmScreenConfig
             }
         }
 
-        private Screen GetScreen(DisplayMonitor monitor)
-        {
-            Screen screen = AllScreens.FirstOrDefault(s => s.Monitor.HMonitor == monitor.HMonitor);
-            if (screen == null)
-            {
-                screen = new Screen(this, monitor);
-                AllScreens.Add(screen);
-            }
-            return screen;
-        }
-
-
-
         public Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
 
         /// <summary>
@@ -285,7 +272,7 @@ namespace LbmScreenConfig
             private set { if (SetProperty(ref _physicalOutsideBounds, value)) Saved = false; }
         }
 
-        [DependsOn("Moving", "Screen.PhysicalOutsideBounds")]
+        [DependsOn(nameof(Moving),"Screen.PhysicalOutsideBounds")]
         public void UpdatePhysicalOutsideBounds()
         {
             Rect outside = new Rect();
@@ -445,6 +432,8 @@ namespace LbmScreenConfig
 
         public void SetPhysicalAuto()
         {
+            if (PrimaryScreen == null) return;
+
             lock (_compactLock)
             {
                 if (_compacting) return;
@@ -566,9 +555,11 @@ namespace LbmScreenConfig
         private readonly object _compactLock = new object();
         private bool _compacting = false;
 
-        [DependsOn("Screen.PhysicalOutsideBounds", nameof(Moving), nameof(AllowOverlaps), nameof(AllowDiscontinuity))]
         public void Compact()
         {
+            if (PrimaryScreen == null) return;
+
+
             if (Moving) return;
             lock (_compactLock)
             {
@@ -625,7 +616,7 @@ namespace LbmScreenConfig
         public bool Saved
         {
             get { return _saved; }
-            private set { SetProperty(ref _saved, value); }
+            set { SetProperty(ref _saved, value); }
         }
     }
 }

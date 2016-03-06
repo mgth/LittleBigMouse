@@ -48,7 +48,11 @@ namespace LittleBigMouse_Control
 
             double scale = double.Parse((string)parameter, CultureInfo.InvariantCulture);
 
-            return Math.Max(v * scale, 0.1);
+            double result = Math.Min(Math.Max(v * scale, 0.1), 35791);
+
+            if (double.IsNaN(result) || double.IsInfinity(result)) return 0.1;
+
+            return result;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -70,7 +74,11 @@ namespace LittleBigMouse_Control
 
             double scale = double.Parse((string)parameter, CultureInfo.InvariantCulture);
 
-            return Math.Max(v * scale, 0.1);
+            double result = Math.Min(Math.Max(v * scale, 0.1), 35791);
+
+            if (double.IsNaN(result) || double.IsInfinity(result)) return 0.1;
+
+            return result;
         }
 
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)

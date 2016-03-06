@@ -5,22 +5,25 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using Microsoft.Win32;
 using NotifyChange;
 using WinAPI;
 
 namespace WindowsMonitors
 {
-    public class DisplayMonitor : DisplayDevice
+    public class DisplayMonitor : DisplayDevice, IEquatable<DisplayMonitor>
     {
-        public DisplayAdapter Adapter { get; }
+        public DisplayAdapter Adapter { get; private set; }
         public DisplayMonitor(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
-            Adapter = adapter;
-            Init(dev);
-            adapter.Monitors.Add(this);
+            Init(adapter, dev);
         }
-        public void Init(NativeMethods.DISPLAY_DEVICE dev)
+        public void Init(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
+            bool old = Suspend();
+
+            Adapter = adapter;
+
             DeviceId = dev.DeviceID;
             DeviceKey = dev.DeviceKey;
             DeviceName = dev.DeviceName;
@@ -29,6 +32,8 @@ namespace WindowsMonitors
 
             UpdateDevMode();
             UpdateDeviceCaps();
+            UpdateEdid();
+            Resume(old);
         }
 
         public void Init(IntPtr hMonitor, NativeMethods.MONITORINFOEX mi)
@@ -41,9 +46,14 @@ namespace WindowsMonitors
         }
 
 
-        ~DisplayMonitor()
+        public bool Equals(DisplayMonitor other)
         {
-            Adapter.Monitors.Remove(this);
+            if (other == null) return false;
+            return DeviceId == other.DeviceId;
+    }
+
+    ~DisplayMonitor()
+        {
             //AllMonitors.Remove(this); TODO : this is not thread safe
             if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
                 NativeMethods.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
@@ -68,15 +78,17 @@ namespace WindowsMonitors
         private string _model = "";
         private string _serialNo = "";
         private Size _physicalSize;
-
+        private bool _attachedToDesktop;
 
         public void UpdateDevMode()
         {
             NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
             if (NativeMethods.EnumDisplaySettings(Adapter.DeviceName, -1, ref devmode))
             {
-                if ((devmode.Fields & NativeMethods.DM.Position) != 0) Position = new Point(devmode.Position.x, devmode.Position.y);
+                // Orientation should be set before any dimension
                 if ((devmode.Fields & NativeMethods.DM.DisplayOrientation) != 0) DisplayOrientation = devmode.DisplayOrientation;
+
+                if ((devmode.Fields & NativeMethods.DM.Position) != 0) Position = new Point(devmode.Position.x, devmode.Position.y);
                 if ((devmode.Fields & NativeMethods.DM.BitsPerPixel) != 0) BitsPerPixel = devmode.BitsPerPel;
                 if ((devmode.Fields & NativeMethods.DM.PelsWidth) != 0) PelsWidth = devmode.PelsWidth;
                 if ((devmode.Fields & NativeMethods.DM.PelsHeight) != 0) PelsHeight = devmode.PelsHeight;
@@ -85,6 +97,18 @@ namespace WindowsMonitors
                 if ((devmode.Fields & NativeMethods.DM.DisplayFixedOutput) != 0) DisplayFixedOutput = devmode.DisplayFixedOutput;
             }
         }
+        public bool AttachedToDesktop
+        {
+            get { return _attachedToDesktop; }
+            private set { SetProperty(ref _attachedToDesktop, value); }
+        }
+
+        [DependsOn(nameof(State))]
+        void UpdateFromState()
+        {
+            AttachedToDesktop = (State & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != 0;
+        }
+
 
         public int PelsHeight
         {
@@ -186,7 +210,58 @@ namespace WindowsMonitors
             get { return _edid; }
             set { SetProperty(ref _edid, value); }
         }
+        public void UpdateEdid()
+        {
+            IntPtr devInfo = NativeMethods.SetupDiGetClassDevsEx(
+                ref NativeMethods.GUID_CLASS_MONITOR, //class GUID
+                null, //enumerator
+                IntPtr.Zero, //HWND
+                NativeMethods.DIGCF_PRESENT | NativeMethods.DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
+                IntPtr.Zero, // device info, create a new one.
+                null, // machine name, local machine
+                 IntPtr.Zero
+            );// reserved
 
+            if (devInfo == IntPtr.Zero)
+                return;
+
+            NativeMethods.SP_DEVINFO_DATA devInfoData = new NativeMethods.SP_DEVINFO_DATA(true);
+
+            uint i = 0;
+
+            do
+            {
+                if (NativeMethods.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
+                {
+
+                    IntPtr hEdidRegKey = NativeMethods.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
+                        NativeMethods.DICS_FLAG_GLOBAL, 0, NativeMethods.DIREG_DEV, NativeMethods.KEY_READ);
+
+                    if (hEdidRegKey != IntPtr.Zero && (hEdidRegKey.ToInt32() != -1))
+                    {
+                        using (RegistryKey key = GetKeyFromPath(GetHKeyName(hEdidRegKey), 1))
+                        {
+                            string id = ((string[])key.GetValue("HardwareID"))[0] + "\\" + key.GetValue("Driver");
+
+                            if (id == DeviceId)
+                            {
+                                HKeyName = GetHKeyName(hEdidRegKey);
+                                using (RegistryKey keyEdid = GetKeyFromPath(HKeyName))
+                                {
+                                    Edid = (byte[])keyEdid.GetValue("EDID");
+                                }
+                                NativeMethods.RegCloseKey(hEdidRegKey);
+                                return;
+                            }
+                        }
+                        NativeMethods.RegCloseKey(hEdidRegKey);
+                    }
+                }
+                i++;
+            } while (NativeMethods.ERROR_NO_MORE_ITEMS != NativeMethods.GetLastError());
+
+            NativeMethods.SetupDiDestroyDeviceInfoList(devInfo);
+        }
         [DependsOn(nameof(Edid))]
         private void UpdateManufacturerCode()
         {

@@ -28,14 +28,14 @@ namespace LittleBigMouse_Control.PluginLocation
         public double RatioX
         {
             get { return Screen.PhysicalRatioX*100; }
-            set { Screen.PhysicalRatioX = value/100; }
+            set { Screen.PhysicalRatioX = value/100; Screen.Config.Compact(); }
         }
 
         [DependsOn("Screen.PhysicalRatioY")]
         public double RatioY
         {
             get { return Screen.PhysicalRatioY * 100; }
-            set { Screen.PhysicalRatioY = value / 100; }
+            set { Screen.PhysicalRatioY = value / 100; Screen.Config.Compact(); }
         }
 
         [DependsOn("Screen.Orientation")]
@@ -81,12 +81,10 @@ namespace LittleBigMouse_Control.PluginLocation
             Plugin.VerticalAnchors.Children.Clear();
             Plugin.HorizontalAnchors.Children.Clear();
 
-            //if (!Screen.Config.AllowOverlaps) Screen.Config.Expand();
-
             Screen.Config.Moving = false;
             Screen.Config.UpdatePhysicalOutsideBounds();
 
-            //if (!Screen.Config.AllowDiscontinuity) Screen.Config.Compact();
+            Screen.Config.Compact();
 
             //Todo : Plugin.ActivateConfig();
         }

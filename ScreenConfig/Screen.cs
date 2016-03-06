@@ -42,7 +42,7 @@ using WinAPI;
 namespace LbmScreenConfig
 {
     [DataContract]
-    public class Screen : Notifier
+    public class Screen : Notifier, IEquatable<Screen>
     {
         private DisplayMonitor _monitor;
 
@@ -64,25 +64,31 @@ namespace LbmScreenConfig
             // Todo : PhysicalX = PhysicalOveralBoundsWithoutThis.Right;
         }
 
+        public bool Equals(Screen other)
+        {
+            if (other == null) return false;
+            return Monitor.Equals(other.Monitor);
+        }
+
         ~Screen()
         {
         }
 
 
         // References properties
-        [DependsOn("DisplayMonitor.ManufacturerCode", "DisplayMonitor.ProductCode")]
+        [DependsOn("Monitor.ManufacturerCode", "Monitor.ProductCode")]
         public string PnpCode => Monitor.ManufacturerCode + Monitor.ProductCode;
 
-        [DependsOn("PnpCode", "DisplayMonitor.Serial")]
+        [DependsOn(nameof(PnpCode), "Monitor.Serial")]
         public string IdMonitor => PnpCode + "_" + Monitor.Serial;
 
-        [DependsOn("PixelSize")]
+        [DependsOn(nameof(PixelSize))]
         public string IdResolution => PixelSize.Width + "x" + PixelSize.Height;
 
-        [DependsOn("IdMonitor", "Orientation")]
+        [DependsOn(nameof(IdMonitor), "Monitor.DisplayOrientation")]
         public string Id => IdMonitor + "_" + Monitor.DisplayOrientation.ToString();
 
-        [DependsOn("DisplayMonitor.Primary")]
+        [DependsOn("Monitor.Primary")]
         public bool Primary => (Monitor.Primary == 1);
 
 
@@ -98,7 +104,7 @@ namespace LbmScreenConfig
             }
         }
 
-        [DependsOn("DeviceName")]
+        [DependsOn("Monitor.DeviceName")]
         public int DeviceNo
         {
             get
@@ -121,7 +127,7 @@ namespace LbmScreenConfig
             }
         }
 
-        private bool _fixedAspectRatio = true;
+        private bool _fixedAspectRatio = false;
         public bool FixedAspectRatio
         {
             get { return _fixedAspectRatio; }
@@ -136,12 +142,16 @@ namespace LbmScreenConfig
         public double PhysicalX
         {
             get { return double.IsNaN(_physicalX) ? 0 : _physicalX; }
-            set { SetPhysicalX(value); }
+            set
+            {
+                if (SetPhysicalX(value))
+                    Config.Saved = false;
+            }
         }
 
-        public void SetPhysicalX(double value)
+        public bool SetPhysicalX(double value)
         {
-            if (value == PhysicalX) return;
+            if (value == PhysicalX) return false;
 
             if (Primary)
             {
@@ -149,25 +159,26 @@ namespace LbmScreenConfig
                 {
                     s.SetPhysicalX(s.PhysicalX + _physicalX - value);
                 }
-                SetProperty(ref _physicalX, 0, nameof(PhysicalX));
+                return SetProperty(ref _physicalX, 0, nameof(PhysicalX));
             }
-            else
-            {
-                SetProperty(ref _physicalX, value, nameof(PhysicalX));
-            }
-       }
+            return SetProperty(ref _physicalX, value, nameof(PhysicalX));
+        }
 
         private double _physicalY = double.NaN;
         [DataMember]
         public double PhysicalY
         {
             get { return double.IsNaN(_physicalY) ? 0 : _physicalY; }
-            set { SetPhysicalY(value); }
+            set
+            {
+                if (SetPhysicalY(value))
+                    Config.Saved = false;
+            }
         }
 
-        public void SetPhysicalY(double value)
+        public bool SetPhysicalY(double value)
         {
-            if (value == PhysicalY) return;
+            if (value == PhysicalY) return false;
 
             if (Primary)
             {
@@ -175,23 +186,23 @@ namespace LbmScreenConfig
                 {
                     s.SetPhysicalY(s.PhysicalY + _physicalY - value); //shift;
                 }
-                SetProperty(ref _physicalY, 0, nameof(PhysicalY));
+                return SetProperty(ref _physicalY, 0, nameof(PhysicalY));
             }
-            else
-            {
-                SetProperty(ref _physicalY, value, nameof(PhysicalY));
-            }
+            return SetProperty(ref _physicalY, value, nameof(PhysicalY));
         }
 
         private double _realPhysicalWidth = double.NaN;
         [DataMember]
+
+        [DependsOn("Monitor.DeviceCapsHorzSize")]
         public double RealPhysicalWidth
         {
             get { return double.IsNaN(_realPhysicalWidth) ? Monitor.DeviceCapsHorzSize : _realPhysicalWidth; }
             set
             {
                 double ratio = value / RealPhysicalWidth;
-                SetRealPhysicalWidth(value);
+                if (SetRealPhysicalWidth(value))
+                    Config.Saved = false;
                 if (FixedAspectRatio) SetRealPhysicalHeight(RealPhysicalHeight * ratio);
             }
         }
@@ -257,14 +268,16 @@ namespace LbmScreenConfig
 
 
         private double _realPhysicalHeight = double.NaN;
-        //[DataMember]
+        [DataMember]
+        [DependsOn("Monitor.DeviceCapsVertSize")]
         public double RealPhysicalHeight
         {
             get { return double.IsNaN(_realPhysicalHeight) ? Monitor.DeviceCapsVertSize : _realPhysicalHeight; }
             set
             {
                 double ratio = value / RealPhysicalHeight;
-                SetRealPhysicalHeight(value);
+                if (SetRealPhysicalHeight(value))
+                    Config.Saved = false;
                 if (FixedAspectRatio) SetRealPhysicalWidth(RealPhysicalWidth * ratio);
             }
         }
@@ -403,25 +416,25 @@ namespace LbmScreenConfig
         }
 
         // Pixel native Dimensions 
-        [DependsOn("DisplayMonitor.MonitorArea")]
+        [DependsOn("Monitor.MonitorArea")]
         public Rect PixelBounds => Monitor.MonitorArea;
 
-        [DependsOn("PixelBounds")]
+        [DependsOn(nameof(PixelBounds))]
         public Size PixelSize => PixelBounds.Size;
 
-        [DependsOn("PixelLocation", "PixelSize")]
+        [DependsOn(nameof(PixelLocation), nameof(PixelSize))]
         public AbsolutePoint BottomRight => new PixelPoint(Config, this, PixelLocation.X + PixelSize.Width, PixelLocation.Y + PixelSize.Height);
 
-        [DependsOn("PixelBounds", "BottomRight")]
+        [DependsOn(nameof(PixelBounds), nameof(BottomRight))]
         public AbsoluteRectangle Bounds => new AbsoluteRectangle(new PixelPoint(Config, this, PixelBounds.X, PixelBounds.Y), BottomRight);
 
-        [DependsOn("PixelBounds")]
+        [DependsOn(nameof(PixelBounds))]
         public PixelPoint PixelLocation => new PixelPoint(Config, this, PixelBounds.X, PixelBounds.Y);
 
         // Wpf
-        [DependsOn("PixelBounds", "PixelToWpfRatioX")]
+        [DependsOn(nameof(PixelBounds), nameof(PixelToWpfRatioX))]
         public double WpfWidth => PixelBounds.Width * PixelToWpfRatioX;
-        [DependsOn("PixelBounds", "PixelToWpfRatioY")]
+        [DependsOn(nameof(PixelBounds), nameof(PixelToWpfRatioY))]
         public double WpfHeight => PixelBounds.Height * PixelToWpfRatioY;
 
 
@@ -537,6 +550,7 @@ namespace LbmScreenConfig
                 }
             }
 
+            if (Config!=null)
             using (RegistryKey key = OpenConfigRegKey())
             {
                 if (key != null)
@@ -627,12 +641,9 @@ namespace LbmScreenConfig
         }
 
 
-        [DependsOn("DisplayMonitor.WorkArea")]
-        public Rect WorkingArea => Monitor.WorkArea;
-
         public AbsoluteRectangle AbsoluteWorkingArea => new AbsoluteRectangle(
-            new PixelPoint(Config, this, WorkingArea.X, WorkingArea.Y),
-            new PixelPoint(Config, this, WorkingArea.Right, WorkingArea.Bottom)
+            new PixelPoint(Config, this, Monitor.WorkArea.X, Monitor.WorkArea.Y),
+            new PixelPoint(Config, this, Monitor.WorkArea.Right, Monitor.WorkArea.Bottom)
             );
 
 
@@ -749,7 +760,7 @@ namespace LbmScreenConfig
                 {
                     Rect r = new Rect();
                     r.Width = 0.5;
-                    r.Height = (9 * WorkingArea.Width / 16) / WorkingArea.Height;
+                    r.Height = (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height;
                     r.Y = 1 - r.Height;
                     r.X = 1 - r.Width;
 
@@ -934,7 +945,7 @@ namespace LbmScreenConfig
         [DependsOn("PhysicalToPixelRatioX", "WpfToPixelRatioX")]
         public double PhysicalToWpfRatioX => PhysicalToPixelRatioX / WpfToPixelRatioX;
 
-        [DependsOn("PitchY")]
+        [DependsOn("PhysicalToPixelRatioY", "WpfToPixelRatioY")]
         public double PhysicalToWpfRatioY => PhysicalToPixelRatioY / WpfToPixelRatioY;
 
         [DependsOn("RealPitchX")]

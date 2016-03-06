@@ -15,6 +15,7 @@
              Height="{Binding Path=Height, FallbackValue=180}"
              Margin="{Binding Path=Margin}"
              Foreground="White"
+             x:Name="UserControl"
              >
     <UserControl.ContextMenu>
         <ContextMenu>
@@ -119,15 +120,12 @@
                 Padding="0" 
                 Grid.Row="0" 
                 Grid.Column="1" 
-                Content="{Binding Path=Screen.PnpDeviceName, FallbackValue=Unknown}"
-                FontSize="{Binding 
-                    ElementName=TopRow,
-                    Path=ActualHeight,
-                    Converter={StaticResource Scale},
-                    ConverterParameter=0.8,
-                    FallbackValue=14}"
-                >
+                Content="{Binding Path=Screen.PnpDeviceName, FallbackValue=Unknown}">
 
+                    <Label.FontSize>
+                        <Binding ElementName="TopRow" Path="ActualHeight" Converter="{StaticResource Scale}" ConverterParameter="0.8"
+                                 FallbackValue="14" />
+                    </Label.FontSize>
                     <Label.Foreground>
                         <LinearGradientBrush>
                             <GradientStop Offset="0" Color="#F0FFFFFF"/>

@@ -14,7 +14,7 @@ namespace LittleBigMouse_Control
 {
     public class ScreenViewModel : ViewModel
     {
-
+        
 
         private ViewModel _control = null;
         public ViewModel Control => _control??(_control=NewControl);
@@ -30,30 +30,9 @@ namespace LittleBigMouse_Control
         private void WatchConfig()
         {
             Watch(Screen.Config,"Config");
+            Watch(Screen.Monitor,"Monitor");
         }
 
-        [DependsOn("Screen.RealPhysicalHeight", "Screen.RealTopBorder", "Screen.RealBottomBorder")]
-        public double PhysicalOutsideHeight
-        {
-            get { return Screen.RealPhysicalHeight + Screen.RealTopBorder + Screen.RealBottomBorder; }
-            set
-            {
-                double offset = value - PhysicalOutsideHeight;
-                Screen.RealBottomBorder += offset;
-            }
-        }
-
-        [DependsOn("Screen.RealPhysicalWidth", "Screen.RealLeftBorder", "Screen.RealRightBorder")]
-        public double PhysicalOutsideWidth
-        {
-            get { return Screen.RealPhysicalWidth + Screen.RealLeftBorder + Screen.RealRightBorder; }
-            set
-            {
-                double offset = (value - PhysicalOutsideWidth) / 2;
-                Screen.RealLeftBorder += offset;
-                Screen.RealRightBorder += offset;
-            }
-        }
 
         private bool _power = true;
         public Viewbox PowerButton => _power

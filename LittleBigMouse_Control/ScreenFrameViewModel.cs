@@ -137,7 +137,7 @@ namespace LittleBigMouse_Control
             private set { SetValue(UnrotatedHeightPropertyKey, value); }
         }
 
-        [DependsOn("Screen", "Screen.Orientation", "Width", "Height")]
+        [DependsOn("Screen", "Monitor.DisplayOrientation", "Width", "Height")]
         private void UpdateUnrotatedWidthHeight()
         {
             if (Screen.Monitor.DisplayOrientation % 2 == 0)
@@ -208,7 +208,7 @@ namespace LittleBigMouse_Control
             private set { SetProperty(ref _screenOrientation, value); }
         }
 
-        [DependsOn("DisplayMonitor.DisplayOrientation", nameof(Width), nameof(Height))]
+        [DependsOn("Monitor.DisplayOrientation", nameof(Width), nameof(Height))]
         public void UpddateScreenOrientation()
         {
                 var t = new TransformGroup();
@@ -238,7 +238,7 @@ namespace LittleBigMouse_Control
             private set { SetProperty(ref _logo, value); }
         }
 
-        [DependsOn("Screen.DisplayMonitor.ManufacturerCode")]
+        [DependsOn("Monitor.ManufacturerCode")]
         public void UpdateLogo()
         {
                 switch (Screen.Monitor.ManufacturerCode.ToLower())

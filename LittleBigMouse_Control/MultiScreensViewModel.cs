@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -22,7 +23,7 @@ namespace LittleBigMouse_Control
             ScreenFrames.CollectionChanged += ScreenFrames_CollectionChanged;
         }
 
-        private void ScreenFrames_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        private void ScreenFrames_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.OldItems != null)
                 foreach (ScreenFrameViewModel frame in e.OldItems)
@@ -62,31 +63,33 @@ namespace LittleBigMouse_Control
 
 
         [DependsOn(nameof(Config))]
-        private void UpdateScreensControlViews()
+        private void UpdateConfig()
         {
-            IList<ScreenFrameViewModel> old = ScreenFrames.ToList();
-
-            foreach (Screen s in Config.AllScreens)
-            {
-                ScreenFrameViewModel vm = old.FirstOrDefault(v => v.Screen.Equals(s) );
-
-                if (vm != null) { old.Remove(vm); }
-                else
-                {
-                    vm = new ScreenFrameViewModel
-                    {
-                        Screen = s,
-                        Presenter = this
-                    };
-                    ScreenFrames.Add(vm);
-                }
-            }
-
-            foreach (ScreenFrameViewModel frame in old)
-            {
-                ScreenFrames.Remove(frame);
-            }
+            AllScreens_CollectionChanged(Config.AllScreens, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,Config.AllScreens));
+            Config.AllScreens.CollectionChanged += AllScreens_CollectionChanged;
         }
+
+        private void AllScreens_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if(e.NewItems!=null)
+                foreach (Screen screen in e.NewItems)
+                {
+                    ScreenFrameViewModel vm = ScreenFrames.FirstOrDefault(v => v.Screen.Equals(screen) );
+                    if (vm == null)
+                        ScreenFrames.Add(new ScreenFrameViewModel
+                        {
+                            Screen = screen,
+                            Presenter = this
+                        });
+                }
+            if (e.OldItems != null)
+                foreach (Screen screen in e.OldItems)
+                {
+                    ScreenFrameViewModel vm = ScreenFrames.FirstOrDefault(v => v.Screen.Equals(screen));
+                    if (vm!=null) ScreenFrames.Remove(vm);
+                }
+        }
+
         public static DependencyProperty ConfigProperty = DependencyProperty.Register(nameof(Config), typeof(ScreenConfig), typeof(MultiScreensViewModel), WatchNotifier());
 
 

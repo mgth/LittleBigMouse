@@ -18,7 +18,7 @@ namespace LittleBigMouse_Daemon
     [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
     public class MouseEngine 
     {
-        private ScreenConfig _config;
+        public ScreenConfig Config { get; private set; }
         private double _initMouseSpeed;
         public readonly MouseHookListener Hook = new MouseHookListener(new GlobalHooker());
         private PixelPoint _oldPoint = null;
@@ -53,10 +53,10 @@ namespace LittleBigMouse_Daemon
         {
             if (Hook.Enabled) return;
 
-            if (_config == null)
+            if (Config == null)
                 LoadConfig();
 
-            if (_config == null || !_config.Enabled) return;
+            if (Config == null || !Config.Enabled) return;
 
             SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
@@ -96,9 +96,9 @@ namespace LittleBigMouse_Daemon
             Hook.Enabled = false;
  //           LittleBigMouseDaemon.Callback?.OnStateChange();
 
-            if (_config == null) return;
+            if (Config == null) return;
 
-            if (_config.AdjustSpeed)
+            if (Config.AdjustSpeed)
             {
                 LbmMouse.MouseSpeed = _initMouseSpeed;
                 using (var key = ScreenConfig.OpenRootRegKey(true))
@@ -107,7 +107,7 @@ namespace LittleBigMouse_Daemon
                 }
             }
 
-            if (_config.AdjustPointer)
+            if (Config.AdjustPointer)
             {
                 using (var key = ScreenConfig.OpenRootRegKey())
                 {
@@ -126,15 +126,17 @@ namespace LittleBigMouse_Daemon
 
         public void LoadConfig(ScreenConfig config)
         {
-            _config = config;
+            Config = config;
+            ConfigLoaded?.Invoke(config,null);
         }
+
+        public event EventHandler ConfigLoaded;
         public void LoadConfig()
         {
             LoadConfig(new ScreenConfig());
         }
         private void OnDisplaySettingsChanged(object sender, EventArgs e)
         {
-            Debug.Print("LoadConfig");
             LoadConfig();
         }
 
@@ -143,7 +145,7 @@ namespace LittleBigMouse_Daemon
             // If first time called just save that point
             if (_oldPoint == null)
             {
-                _oldPoint = new PixelPoint(_config, null, e.X, e.Y);
+                _oldPoint = new PixelPoint(Config, null, e.X, e.Y);
                 return;
             }
 
@@ -187,9 +189,9 @@ namespace LittleBigMouse_Daemon
                 Side side = seg.IntersectSide(_oldPoint.Screen.PhysicalBounds);
 
 
-                foreach (Screen screen in _config.AllScreens.Where(s => s != oldScreen))
+                foreach (Screen screen in Config.AllScreens.Where(s => s != oldScreen))
                 {
-                    if (_config.AllowCornerCrossing)
+                    if (Config.AllowCornerCrossing)
                     {
                         foreach ( Point p in seg.Line.Intersect(screen.PhysicalBounds) )
                         {
@@ -198,7 +200,7 @@ namespace LittleBigMouse_Daemon
                             if (travel.Size > dist) continue;
 
                             dist = travel.Size;
-                            pOut = (new PhysicalPoint(_config, screen, p.X, p.Y)).Pixel.Inside;
+                            pOut = (new PhysicalPoint(Config, screen, p.X, p.Y)).Pixel.Inside;
                             screenOut = screen;
                         }
                     }
@@ -235,7 +237,7 @@ namespace LittleBigMouse_Daemon
                         if (offset.Length > 0 && offset.Length < dist)
                         {
                             Point shiftedPoint = pIn.Physical.Point + offset;
-                            PhysicalPoint shifted = new PhysicalPoint(_config, screen, shiftedPoint.X , shiftedPoint.Y);
+                            PhysicalPoint shifted = new PhysicalPoint(Config, screen, shiftedPoint.X , shiftedPoint.Y);
                             if (shifted.TargetScreen == screen)
                             {
                                 dist = offset.Length;
@@ -262,7 +264,7 @@ namespace LittleBigMouse_Daemon
             Debug.Print(">" + LbmMouse.CursorPos.X + "," + LbmMouse.CursorPos.Y);
 
             // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used
-            if (_config.AdjustPointer)
+            if (Config.AdjustPointer)
             {
                 if (screenOut.RealDpiAvg > 110)
                 {
@@ -273,12 +275,12 @@ namespace LittleBigMouse_Daemon
 
 
             // Adjust pointer speed to dpi ratio : should not be usefull if windows screen ratio is used
-            if (_config.AdjustSpeed)
+            if (Config.AdjustSpeed)
             {
                 LbmMouse.MouseSpeed = Math.Round((5.0/96.0)*screenOut.RealDpiAvg, 0);
             }
 
-            if (_config.HomeCinema)
+            if (Config.HomeCinema)
             {
                 oldScreen.Monitor.Vcp().Power = false;
             }
@@ -290,7 +292,7 @@ namespace LittleBigMouse_Daemon
 
         public void MatchConfig(string configId)
         {
-            _config.MatchConfig(configId);
+            Config.MatchConfig(configId);
         }
     }
 }

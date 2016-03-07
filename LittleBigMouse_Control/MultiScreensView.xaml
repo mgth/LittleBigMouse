@@ -23,6 +23,7 @@
                 </LinearGradientBrush>
         </Grid.Background>
         
+        <Grid>
         <Label FontSize="50">
             <Label.Foreground>
                 
@@ -40,10 +41,18 @@
             <Label.Effect>
                 <BlurEffect Radius="10"></BlurEffect>
             </Label.Effect>
-
-            Little Big Mon
+Little Big Mouse
+            
         </Label>
-
+            <ContentControl Content="{StaticResource LogoLbm}" Opacity="0.02">
+                <!--<ContentControl.Effect>
+                    <BlurEffect Radius="50"></BlurEffect>
+                </ContentControl.Effect>-->
+            </ContentControl>
+            
+            
+            
+        </Grid>
         <ContentControl Content="{Binding ScreensCanvas}"/>
     </Grid>
 </UserControl>

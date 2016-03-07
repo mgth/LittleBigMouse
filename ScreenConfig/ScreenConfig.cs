@@ -70,7 +70,7 @@ namespace LbmScreenConfig
             }
         }
 
-        private static ObservableCollection<DisplayMonitor> Monitors => DisplayDevice.AllMonitors;
+        private static ObservableCollection<DisplayMonitor> Monitors => DisplayDevice.AttachedMonitors;
         public ScreenConfig()
         {
             MonitorsOnCollectionChanged(Monitors,new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,Monitors));
@@ -161,20 +161,72 @@ namespace LbmScreenConfig
                     {
                         if (todo.Contains(screen.IdMonitor))
                         {
+                            AttachToDesktop(id, screen.IdMonitor, false);
                             todo.Remove(screen.IdMonitor);
                         }
                         else
                         {
-                            screen.Monitor.DetachFromDesktop();
+                            screen.Monitor.DetachFromDesktop(false);
                         }
                     }
 
                     foreach (string s in todo)
                     {
-                        Screen.AttachToDesktop(id, s);
+                        AttachToDesktop(id, s, false);
+                    }
+
+                    DisplayMonitor.ApplyDesktop();
+                }
+            }
+        }
+
+        public static bool IsDoableConfig(String id)
+        {
+            using (RegistryKey rootkey = OpenRootRegKey())
+            {
+                using (RegistryKey key = rootkey.OpenSubKey(@"configs\" + id))
+                {
+                    List<string> todo = key.GetSubKeyNames().ToList();
+
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    foreach (string s in todo)
+                    {
+                        //string s2 = s.Substring(0, s.Length - 2);
+                        DisplayMonitor m = DisplayDevice.AllMonitors.FirstOrDefault(
+                            d => s == d.ManufacturerCode + d.ProductCode + "_" + d.Serial);
+
+                        if (m == null) return false;
                     }
                 }
             }
+            return true;
+        }
+        public static void AttachToDesktop(string configId, string monitorId, bool apply=true)
+        {
+            //using (RegistryKey monkey = Screen.OpenMonitorRegKey(monitorId))
+            //{
+            //    id = monkey?.GetValue("DeviceId").ToString();
+            //    if (id == null) return;
+            //}
+            Rect area = new Rect();
+            bool primary = false;
+            int orientation = 0;
+
+            using (RegistryKey monkey = Screen.OpenConfigRegKey(configId, monitorId))
+            {
+                area.X = double.Parse(monkey.GetValue("PixelX").ToString());
+                area.Y = double.Parse(monkey.GetValue("PixelY").ToString());
+                area.Width = double.Parse(monkey.GetValue("PixelWidth").ToString());
+                area.Height = double.Parse(monkey.GetValue("PixelHeight").ToString());
+
+                primary = double.Parse(monkey.GetValue("Primary").ToString()) == 1;
+                orientation = (int)double.Parse(monkey.GetValue("Orientation").ToString());
+            }
+
+            DisplayMonitor monitor = DisplayDevice.AllMonitors.FirstOrDefault(
+                                        d => monitorId == d.ManufacturerCode + d.ProductCode + "_" + d.Serial);
+
+            monitor?.AttachToDesktop(primary, area, orientation, apply);
         }
 
         public void EnumWMI()

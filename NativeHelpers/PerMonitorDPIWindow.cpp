@@ -21,7 +21,7 @@ namespace NativeHelpers
 		}
 		else
 		{
-			m_perMonitorEnabled = false;
+			m_perMonitorEnabled = true;
 			//throw gcnew System::Exception(L"Enabling Per-monitor DPI Failed.  Do you have [assembly: DisableDpiAwareness] in your assembly manifest [AssemblyInfo.cs]?");
 		}
 

@@ -636,6 +636,8 @@ namespace LbmScreenConfig
                     key.SetKey(PixelSize.Width, "PixelWidth");
                     key.SetKey(PixelSize.Height, "PixelHeight");
 
+                    key.SetKey(Primary?1:0,"Primary");
+                    key.SetKey(Monitor.DisplayOrientation, "Orientation");
                 }
             }
         }
@@ -1311,58 +1313,6 @@ namespace LbmScreenConfig
             return screen.PhysicalY - PhysicalBounds.Bottom;
         }
 
-        public static void AttachToDesktop(string configId, string monitorId)
-        {
-            string id;
-            using (RegistryKey monkey = OpenMonitorRegKey(monitorId))
-            {
-                id = monkey?.GetValue("DeviceId").ToString();
-                if (id == null) return;
-            }
-
-            double x = 0;
-            double y = 0;
-            double width = 0;
-            double height = 0;
-
-            using (RegistryKey monkey = OpenConfigRegKey(configId, monitorId))
-            {
-                x = double.Parse(monkey.GetValue("PixelX").ToString());
-                y = double.Parse(monkey.GetValue("PixelY").ToString());
-                width = double.Parse(monkey.GetValue("PixelWidth").ToString());
-                height = double.Parse(monkey.GetValue("PixelHeight").ToString());
-            }
-
-            DisplayAdapter adapter = DisplayDevice.FromId(id);
-            if (adapter != null)
-            {
-                NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
-
-                int idx = 0;
-                while (true)
-                {
-                    if (!NativeMethods.EnumDisplaySettings(adapter.DeviceName, idx, ref devmode))
-                        return;
-
-                    if (devmode.PelsHeight == height && devmode.PelsWidth == width && devmode.BitsPerPel == 32) break;
-                    idx++;
-                }
-
-
-
-                //devmode.Position = new POINTL { x = (int)x, y = (int)y };
-                //devmode.Fields |= DM.Position;
-
-                devmode.DeviceName = adapter.DeviceName /*+ @"\Monitor0"*/;
-
-                NativeMethods.DISP_CHANGE ch = NativeMethods.ChangeDisplaySettingsEx(adapter.DeviceName, ref devmode,
-                    IntPtr.Zero,
-                    NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY |
-                    NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
-                if (ch == NativeMethods.DISP_CHANGE.Successful)
-                    ch = NativeMethods.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
-            }
-        }
 
         public void PlaceAuto(IEnumerable<Screen> screens)
         {

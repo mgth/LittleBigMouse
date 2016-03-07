@@ -50,11 +50,11 @@ namespace WindowsMonitors
         {
             if (other == null) return false;
             return DeviceId == other.DeviceId;
-    }
+        }
 
-    ~DisplayMonitor()
+        ~DisplayMonitor()
         {
-            //AllMonitors.Remove(this); TODO : this is not thread safe
+            //AttachedMonitors.Remove(this); TODO : this is not thread safe
             if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
                 NativeMethods.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }
@@ -166,7 +166,7 @@ namespace WindowsMonitors
                 // Must remove old primary screen before setting this one
                 if (value == 1)
                 {
-                    foreach (DisplayMonitor monitor in AllMonitors.Where(m => m!=this))
+                    foreach (DisplayMonitor monitor in AttachedMonitors.Where(m => m != this))
                     {
                         monitor.Primary = 0;
                     }
@@ -366,8 +366,45 @@ namespace WindowsMonitors
             }
             return "";
         }
+        public void AttachToDesktop(bool primary, Rect area, int orientation, bool apply = true)
+        {
 
-        public void DetachFromDesktop()
+            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
+
+            devmode.DeviceName = Adapter.DeviceName /*+ @"\Monitor0"*/;
+
+            devmode.Position = new NativeMethods.POINTL { x = (int)area.X, y = (int)area.Y };
+            devmode.Fields |= NativeMethods.DM.Position;
+
+            devmode.PelsWidth = (int)area.Width;
+            devmode.PelsHeight = (int)area.Height;
+            devmode.Fields |= NativeMethods.DM.PelsHeight | NativeMethods.DM.PelsWidth;
+
+            devmode.DisplayOrientation = orientation;
+            devmode.Fields |= NativeMethods.DM.DisplayOrientation;
+
+            devmode.BitsPerPel = 32;
+            devmode.Fields |= NativeMethods.DM.BitsPerPixel;
+
+            NativeMethods.ChangeDisplaySettingsFlags flag =
+                NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY |
+                NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET;
+
+            if (primary) flag |= NativeMethods.ChangeDisplaySettingsFlags.CDS_SET_PRIMARY;
+
+
+            var ch = NativeMethods.ChangeDisplaySettingsEx(Adapter.DeviceName, ref devmode, IntPtr.Zero, flag, IntPtr.Zero);
+            
+            if (ch == NativeMethods.DISP_CHANGE.Successful && apply)
+                ApplyDesktop();
+        }
+
+        public static void ApplyDesktop()
+        {
+            NativeMethods.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+        }
+
+        public void DetachFromDesktop(bool apply = true)
         {
             NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE();
             devmode.Size = (short)Marshal.SizeOf(devmode);
@@ -379,8 +416,8 @@ namespace WindowsMonitors
                         | NativeMethods.DM.DisplayFrequency | NativeMethods.DM.DisplayFlags;
 
             NativeMethods.DISP_CHANGE ch = NativeMethods.ChangeDisplaySettingsEx(Adapter.DeviceName, ref devmode, IntPtr.Zero, NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
-            if (ch == NativeMethods.DISP_CHANGE.Successful)
-                ch = NativeMethods.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+            if (ch == NativeMethods.DISP_CHANGE.Successful && apply)
+                ApplyDesktop();
         }
 
         private IntPtr _hPhysical;

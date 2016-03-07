@@ -24,23 +24,28 @@ namespace WindowsMonitors
             UpdateDevices();
         }
 
-        public static ObservableCollection<DisplayMonitor> AllMonitors { get; } = new ObservableCollection<DisplayMonitor>();
+        public static ObservableCollection<DisplayMonitor> AttachedMonitors { get; } = new ObservableCollection<DisplayMonitor>();
+        public static ObservableCollection<DisplayMonitor> UnattachedMonitors { get; } = new ObservableCollection<DisplayMonitor>();
+
+        public static IEnumerable<DisplayMonitor> AllMonitors => AttachedMonitors.Union(UnattachedMonitors);
+
         public static List<DisplayMonitor> TempMonitors { get; private set; }
 
-        public static DisplayAdapter FromId(string id)
+        public static DisplayMonitor FromId(string id)
         {
-            return (from monitor in AllMonitors where monitor.DeviceId == id select monitor.Adapter).FirstOrDefault();
+            return AllMonitors.FirstOrDefault(m => m.DeviceId == id);
         }
 
 
         public static void UpdateDevices()
         {
             // Todo: try not to clear berore updating, but it's very buggy now
-            while(AllMonitors.Count>0) AllMonitors.RemoveAt(0);
+            while(AttachedMonitors.Count>0) AttachedMonitors.RemoveAt(0);
 
             TempMonitors = new List<DisplayMonitor>();
 
-            IList<DisplayMonitor> oldMonitors = AllMonitors.ToList();
+            IList<DisplayMonitor> oldAttachedMonitors = AttachedMonitors.ToList();
+            IList<DisplayMonitor> oldUnattachedMonitors = UnattachedMonitors.ToList();
 
             NativeMethods.DISPLAY_DEVICE dev = new NativeMethods.DISPLAY_DEVICE(true);
             uint i = 0;
@@ -58,24 +63,40 @@ namespace WindowsMonitors
                     if (success)
                     {
                         IList monitors = TempMonitors.Where(d => d.Adapter.DeviceName == mi.DeviceName).ToList();
-                        foreach (DisplayMonitor ddMon in monitors)
+                        foreach (DisplayMonitor monitor in monitors)
                         {
-                            ddMon.Init(hMonitor, mi);
-
-                            if (oldMonitors.Contains(ddMon))
-                                oldMonitors.Remove(ddMon);
-                                
-                            if(!AllMonitors.Contains(ddMon)) AllMonitors.Add(ddMon);
+                            monitor.Init(hMonitor, mi);
                         }
-                        
                     }
 
                     return true;
                 }, IntPtr.Zero);
 
-            foreach (DisplayMonitor monitor in oldMonitors)
+            foreach (DisplayMonitor monitor in TempMonitors)
             {
-                AllMonitors.Remove(monitor);
+
+                if (monitor.AttachedToDesktop)
+                {
+                    if (!oldAttachedMonitors.Remove(monitor))
+                        AttachedMonitors.Add(monitor);
+                    oldUnattachedMonitors.Remove(monitor);
+                }
+                else
+                {
+                    if (!oldUnattachedMonitors.Remove(monitor))
+                        UnattachedMonitors.Add(monitor);
+                    oldAttachedMonitors.Remove(monitor);
+                }
+            }
+
+
+            foreach (DisplayMonitor monitor in oldAttachedMonitors)
+            {
+                AttachedMonitors.Remove(monitor);
+            }
+            foreach (DisplayMonitor monitor in oldUnattachedMonitors)
+            {
+                UnattachedMonitors.Remove(monitor);
             }
         }
         public static RegistryKey GetKeyFromPath(string path, int parent = 0)

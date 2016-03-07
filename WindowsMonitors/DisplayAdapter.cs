@@ -23,13 +23,15 @@ namespace WindowsMonitors
             NativeMethods.DISPLAY_DEVICE mon = new NativeMethods.DISPLAY_DEVICE(true);
             while (NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0))
             {
-                DisplayMonitor displayMonitor = AllMonitors.FirstOrDefault(d => d.DeviceId == mon.DeviceID);
-                if (displayMonitor == null) displayMonitor = new DisplayMonitor(this, mon);
-                else
-                    displayMonitor.Init(this, mon);
+                if (TempMonitors.FirstOrDefault(d => d.DeviceId == mon.DeviceID) == null)
+                {
+                    DisplayMonitor displayMonitor = AllMonitors.FirstOrDefault(d => d.DeviceId == mon.DeviceID);
+                    if (displayMonitor == null) displayMonitor = new DisplayMonitor(this, mon);
+                    else
+                        displayMonitor.Init(this, mon);
 
-                if(displayMonitor.AttachedToDesktop)
-                    TempMonitors.Add(displayMonitor);
+                    TempMonitors.Add(displayMonitor);                    
+                }
             }
         }
     }

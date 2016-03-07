@@ -26,9 +26,9 @@ using System.Windows.Forms;
 
 namespace LittleBigMouse_Daemon
 {
-    public class Notify : IDisposable
+    public class Notify //: IDisposable
     {
-        private System.Windows.Forms.NotifyIcon _notify;
+        private readonly System.Windows.Forms.NotifyIcon _notify;
 
         public Notify()
         {
@@ -52,6 +52,14 @@ namespace LittleBigMouse_Daemon
         {
             _notify.Icon = Properties.Resources.lbm_off;
         }
+        public void Show()
+        {
+            _notify.Visible = true;
+        }
+        public void Hide()
+        {
+            _notify.Visible = false;
+        }
 
         private void _notify_MouseClick(object sender, MouseEventArgs e)
         {
@@ -64,25 +72,52 @@ namespace LittleBigMouse_Daemon
 
 
         public event EventHandler Click;
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
+        //public void Dispose()
+        //{
+        //    Dispose(true);
+        //    GC.SuppressFinalize(this);
+        //}
         public delegate void Func();
 
-        public void AddMenu(string txt, EventHandler evt)
+        public void AddMenu(int pos, string txt, EventHandler evt, string tag=null, bool chk = false)
         {
-            _notify.ContextMenuStrip.Items.Add(txt, null, evt);
+            ToolStripMenuItem item = new ToolStripMenuItem(txt, null, evt);
+
+            item.Checked = chk;
+
+            item.Tag = tag;
+
+            if(pos<0 || pos>= _notify.ContextMenuStrip.Items.Count) _notify.ContextMenuStrip.Items.Add(item);
+
+            else _notify.ContextMenuStrip.Items.Insert(pos,item);
                 
         }
 
-        protected virtual void Dispose(bool disposing)
+        public void RemoveMenu(string tag)
         {
-            if (!disposing) return;
-
-            _notify.Visible = false;
-            _notify.Dispose();
+            bool done = false;
+            while (!done)
+            {
+                ToolStripItem[] items = new ToolStripItem[_notify.ContextMenuStrip.Items.Count];
+                _notify.ContextMenuStrip.Items.CopyTo(items,0);
+                done = true;
+                foreach (ToolStripItem i in items)
+                {
+                    if (i.Tag == tag)
+                    {
+                        _notify.ContextMenuStrip.Items.Remove(i);
+                        done = false;
+                    }
+                }
+            }
         }
+
+        //protected virtual void Dispose(bool disposing)
+        //{
+        //    if (!disposing) return;
+
+        //    _notify.Visible = false;
+        //    _notify.Dispose();
+        //}
     }
 }

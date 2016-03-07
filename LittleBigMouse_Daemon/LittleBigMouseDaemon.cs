@@ -36,6 +36,8 @@ namespace LittleBigMouse_Daemon
             _notify = new Notify();
             _engine = new MouseEngine();
 
+            _engine.ConfigLoaded += _engine_ConfigLoaded;
+
             _engine.StartServer(this);
 
             
@@ -43,21 +45,38 @@ namespace LittleBigMouse_Daemon
             if (_notify != null)
                 _notify.Click += OnNotifyClick;
 
-
-            foreach (string configName in ScreenConfig.ConfigsList)
-            {
-                _notify.AddMenu(configName, MatchConfig);
-            }
+            UpdateConfig();
 
             //_notify.AddMenu("Brightness", Brightness);
 
-            _notify.AddMenu("Open", Open);
-            _notify.AddMenu("Start", Start);
-            _notify.AddMenu("Stop", Stop);
-            _notify.AddMenu("Exit", Quit);
+            _notify.AddMenu(-1,"Open", Open);
+            _notify.AddMenu(-1,"Start", Start);
+            _notify.AddMenu(-1,"Stop", Stop);
+            _notify.AddMenu(-1,"Exit", Quit);
 
             Start();
         }
+
+        private void _engine_ConfigLoaded(object sender, EventArgs e)
+        {
+            UpdateConfig();
+        }
+
+        public void UpdateConfig()
+        {
+            _notify.RemoveMenu("config");
+
+            foreach (string configName in ScreenConfig.ConfigsList)
+            {
+                bool chk = configName==_engine.Config?.Id;
+
+                if (ScreenConfig.IsDoableConfig(configName))
+                    _notify.AddMenu(0,configName, MatchConfig, "config", chk);
+            }
+
+        }
+
+
         private void OnNotifyClick(object sender, EventArgs e) { Open(); }
 
         private void OnDeactivated(object sender, EventArgs eventArgs)
@@ -78,7 +97,7 @@ namespace LittleBigMouse_Daemon
         {
             Stop();
             _engine.StopServer();
-            _notify.Dispose();
+            _notify.Hide();
         }
 
         public void CommandLine(IList<string> args)

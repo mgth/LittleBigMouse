@@ -4,11 +4,11 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{0C90E881-B94C-4DC5-B2D0-FF6DC7601DE4}</ProjectGuid>
+    <ProjectGuid>{444F1148-7014-469B-8809-834FEDA0F730}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>WindowsMonitors</RootNamespace>
-    <AssemblyName>WindowsMonitors</AssemblyName>
+    <RootNamespace>Argyll</RootNamespace>
+    <AssemblyName>Argyll</AssemblyName>
     <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -49,8 +49,12 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Xaml" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -60,20 +64,23 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DisplayAdapter.cs" />
-    <Compile Include="DisplayDevice.cs" />
-    <Compile Include="DisplayMonitor.cs" />
-    <Compile Include="Edid.cs" />
+    <Compile Include="ArgyllProbe.cs" />
+    <Compile Include="ColorManagment.cs" />
+    <Compile Include="Gamut.cs" />
+    <Compile Include="Geo.cs" />
+    <Compile Include="IniFile.cs" />
+    <Compile Include="Matrix.cs" />
+    <Compile Include="Observer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NativeMethods\WinAPI.csproj">
-      <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
-      <Name>WinAPI</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
+    <ProjectReference Include="..\..\LittleBigMouse\NotifyChange\NotifyChange.csproj">
       <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
       <Name>NotifyChange</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Quadruple\Quadruple.csproj">
+      <Project>{286ae771-0e46-491a-bc01-e6e759c8371b}</Project>
+      <Name>Quadruple</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

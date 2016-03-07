@@ -4,14 +4,13 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{0C90E881-B94C-4DC5-B2D0-FF6DC7601DE4}</ProjectGuid>
+    <ProjectGuid>{641054C2-F89B-4ABE-97B4-EE841556E999}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>WindowsMonitors</RootNamespace>
-    <AssemblyName>WindowsMonitors</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <RootNamespace>WinAPI</RootNamespace>
+    <AssemblyName>WinAPI</AssemblyName>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -60,21 +59,15 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DisplayAdapter.cs" />
-    <Compile Include="DisplayDevice.cs" />
-    <Compile Include="DisplayMonitor.cs" />
-    <Compile Include="Edid.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\NativeMethods\WinAPI.csproj">
-      <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
-      <Name>WinAPI</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
-      <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
-      <Name>NotifyChange</Name>
-    </ProjectReference>
+    <Compile Include="WinAPI_AdvAPI32.cs" />
+    <Compile Include="WinAPI_Dxva2.cs" />
+    <Compile Include="WinAPI_Gdi32.cs" />
+    <Compile Include="WinAPI_Kernel32.cs" />
+    <Compile Include="WinAPI_Ntdll.cs" />
+    <Compile Include="WinAPI_SetupAPI.cs" />
+    <Compile Include="WinAPI_User32.cs" />
+    <Compile Include="WindowExt.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

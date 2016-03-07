@@ -15,9 +15,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NativeHelpers", "NativeHelp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotifyChange", "NotifyChange\NotifyChange.csproj", "{BFEAB5F5-443E-4F0E-85EE-A4BB3AEEEA4D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Argyll", "..\LightMeter\Argyll\Argyll.csproj", "{444F1148-7014-469B-8809-834FEDA0F730}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Argyll", "Argyll\Argyll.csproj", "{444F1148-7014-469B-8809-834FEDA0F730}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinAPI", "..\MgthFramework\NativeMethods\WinAPI.csproj", "{641054C2-F89B-4ABE-97B4-EE841556E999}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinAPI", "NativeMethods\WinAPI.csproj", "{641054C2-F89B-4ABE-97B4-EE841556E999}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsMonitors", "WindowsMonitors\WindowsMonitors.csproj", "{0C90E881-B94C-4DC5-B2D0-FF6DC7601DE4}"
 EndProject

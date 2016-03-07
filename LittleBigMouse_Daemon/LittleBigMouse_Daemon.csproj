@@ -137,7 +137,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MgthFramework\NativeMethods\WinAPI.csproj">
+    <ProjectReference Include="..\NativeMethods\WinAPI.csproj">
       <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
       <Name>WinAPI</Name>
     </ProjectReference>

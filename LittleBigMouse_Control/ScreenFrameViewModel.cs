@@ -140,6 +140,8 @@ namespace LittleBigMouse_Control
         [DependsOn("Screen", "Monitor.DisplayOrientation", "Width", "Height")]
         private void UpdateUnrotatedWidthHeight()
         {
+            if(Screen?.Monitor == null) return;
+
             if (Screen.Monitor.DisplayOrientation % 2 == 0)
             {
                 UnrotatedHeight = Height;
@@ -179,6 +181,8 @@ namespace LittleBigMouse_Control
         [DependsOn(nameof(LeftBorder), nameof(TopBorder), nameof(RightBorder), nameof(BottomBorder))]
         private void UpdateUnrotated()
         {
+            if (Screen == null) return;
+
             GridLength[] unrotated = { TopBorder, RightBorder, BottomBorder, LeftBorder };
 
             int o = Screen.Monitor.DisplayOrientation;
@@ -211,6 +215,8 @@ namespace LittleBigMouse_Control
         [DependsOn("Monitor.DisplayOrientation", nameof(Width), nameof(Height))]
         public void UpddateScreenOrientation()
         {
+            if (Screen?.Monitor == null) return;
+
                 var t = new TransformGroup();
                 if (Screen.Monitor.DisplayOrientation > 0) t.Children.Add(new RotateTransform(90 * Screen.Monitor.DisplayOrientation));
 
@@ -238,9 +244,11 @@ namespace LittleBigMouse_Control
             private set { SetProperty(ref _logo, value); }
         }
 
-        [DependsOn("Monitor.ManufacturerCode")]
+        [DependsOn("Screen", "Monitor.ManufacturerCode")]
         public void UpdateLogo()
         {
+            if (Screen?.Monitor == null) return;
+
                 switch (Screen.Monitor.ManufacturerCode.ToLower())
                 {
                     case "sam":

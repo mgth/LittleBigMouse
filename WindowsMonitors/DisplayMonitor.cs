@@ -266,7 +266,7 @@ namespace WindowsMonitors
         private void UpdateManufacturerCode()
         {
             String code;
-            if (Edid.Length < 10) code = "XXX";
+            if (Edid==null || Edid.Length < 10) code = "XXX";
             else
             {
                 code = "" + (char)(64 + ((Edid[8] >> 2) & 0x1F));
@@ -285,7 +285,7 @@ namespace WindowsMonitors
         [DependsOn(nameof(Edid))]
         private void UpdateProductCode()
         {
-            if (Edid.Length < 12) ProductCode = "0000";
+            if (Edid == null || Edid.Length < 12) ProductCode = "0000";
             else ProductCode = (Edid[10] + (Edid[11] << 8)).ToString("X4");
 
         }
@@ -299,7 +299,11 @@ namespace WindowsMonitors
         [DependsOn(nameof(Edid))]
         private void UpdateSerial()
         {
-            if (Edid.Length < 16) Serial = "00000000";
+            if (Edid == null || Edid.Length < 16)
+            {
+                Serial = "00000000";
+                return;
+            }
             string serial = "";
             for (int i = 12; i <= 15; i++) serial = (Edid[i]).ToString("X2") + serial;
             Serial = serial;
@@ -327,7 +331,7 @@ namespace WindowsMonitors
         [DependsOn(nameof(Edid))]
         private void UpdatePhysicalSize()
         {
-            if (Edid.Length > 68)
+            if (Edid != null && Edid.Length > 68)
             {
                 int w = ((Edid[68] & 0xF0) << 4) + Edid[66];
                 int h = ((Edid[68] & 0x0F) << 8) + Edid[67];
@@ -350,6 +354,8 @@ namespace WindowsMonitors
 
         public string Block(char code)
         {
+            if (Edid == null) return "";
+
             for (int i = 54; i <= 108; i += 18)
             {
                 if (i < Edid.Length && Edid[i] == 0 && Edid[i + 1] == 0 && Edid[i + 2] == 0 && Edid[i + 3] == code)

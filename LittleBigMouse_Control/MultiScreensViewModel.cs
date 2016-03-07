@@ -65,6 +65,7 @@ namespace LittleBigMouse_Control
         [DependsOn(nameof(Config))]
         private void UpdateConfig()
         {
+            if (Config == null) return;
             AllScreens_CollectionChanged(Config.AllScreens, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,Config.AllScreens));
             Config.AllScreens.CollectionChanged += AllScreens_CollectionChanged;
         }
@@ -94,8 +95,10 @@ namespace LittleBigMouse_Control
 
 
         [DependsOn("Size", "Config.MovingPhysicalOutsideBounds")]
-        private void UpdateRatio(string s)
+        private void UpdateRatio()
         {
+            if (Config == null) return;
+
             Rect all = Config.MovingPhysicalOutsideBounds;
 
             double ratio = 0;

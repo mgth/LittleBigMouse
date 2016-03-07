@@ -29,8 +29,11 @@ namespace LittleBigMouse_Control
         [DependsOn("Screen")]
         private void WatchConfig()
         {
-            Watch(Screen.Config,"Config");
-            Watch(Screen.Monitor,"Monitor");
+            if (Screen?.Config != null)
+                Watch(Screen.Config,"Config");
+
+            if (Screen?.Monitor != null)
+                Watch(Screen.Monitor,"Monitor");
         }
 
 

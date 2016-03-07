@@ -13,6 +13,11 @@ namespace NotifyChange
 {
     public class Notifier : DependencyObject, INotifyPropertyChanged
     {
+        public Notifier()
+        {
+            Init();
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
@@ -96,6 +101,36 @@ namespace NotifyChange
         //    prop.SetValue(this, input, null);
         //    return true;
         //}
+
+        private void Init()
+        {
+            Type t = GetType();
+            while (t != null)
+            {
+                MethodInfo[] m = t.GetMethods(
+                    BindingFlags.DeclaredOnly |
+                    BindingFlags.Instance | BindingFlags.Public
+                    | BindingFlags.NonPublic
+                    );
+                foreach (MethodInfo mi in m)
+                {
+                    if(mi.GetCustomAttributes(false).OfType<DependsOn>().Any())
+                    {
+                        if (mi.GetParameters().Length == 0)
+                        {
+                            mi.Invoke(this, null);
+
+                        }
+                        else
+                        {
+                            mi.Invoke(this, new object[] { "" });
+                        }
+                    }
+                }
+
+                t = t.BaseType;
+            }
+        }
 
         private void GetDependOn(string propertyName, ref List<string> list, ref List<MethodInfo> listMethods)
         {

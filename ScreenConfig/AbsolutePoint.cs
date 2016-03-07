@@ -85,8 +85,8 @@ namespace LbmScreenConfig
                             );
                     case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
                         return new WpfPoint(Config, Screen,
-                            Pixel.X*Screen.PixelToWpfRatioX,
-                            Pixel.Y*Screen.PixelToWpfRatioY
+                            Pixel.X * Screen.PixelToWpfRatioX,
+                            Pixel.Y * Screen.PixelToWpfRatioY
                             );
                     default:
                         return new WpfPoint(Config, Screen,

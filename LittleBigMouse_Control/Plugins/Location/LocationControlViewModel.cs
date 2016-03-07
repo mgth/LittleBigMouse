@@ -24,8 +24,15 @@ namespace LittleBigMouse_Control.PluginLocation
                     StartCommand = new StartCommand(Config);
                     StopCommand = new StopCommand(Config);
                     LittleBigMouseClient.Client.StateChanged += Client_StateChanged;
+
+                    View.Unloaded += View_Unloaded;
                 }
             }
+        }
+
+        private void View_Unloaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            ShowRulers = false;
         }
 
         private void Client_StateChanged()

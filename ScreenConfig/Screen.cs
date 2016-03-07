@@ -197,7 +197,7 @@ namespace LbmScreenConfig
         [DependsOn("Monitor.DeviceCapsHorzSize")]
         public double RealPhysicalWidth
         {
-            get { return double.IsNaN(_realPhysicalWidth) ? Monitor.DeviceCapsHorzSize : _realPhysicalWidth; }
+            get { return double.IsNaN(_realPhysicalWidth) ? (Monitor?.DeviceCapsHorzSize??0) : _realPhysicalWidth; }
             set
             {
                 double ratio = value / RealPhysicalWidth;
@@ -257,6 +257,7 @@ namespace LbmScreenConfig
         [DependsOn("Monitor.DeviceCapsHorzSize", "Monitor.DeviceCapsVertSize")]
         public void InitPhysicalSize()
         {
+            if (Monitor == null) return;
             if (double.IsNaN(_realPhysicalWidth)) SetRealPhysicalWidth(Monitor.DeviceCapsHorzSize);
             if (double.IsNaN(_realPhysicalHeight)) SetRealPhysicalHeight(Monitor.DeviceCapsVertSize);
         }
@@ -272,7 +273,7 @@ namespace LbmScreenConfig
         [DependsOn("Monitor.DeviceCapsVertSize")]
         public double RealPhysicalHeight
         {
-            get { return double.IsNaN(_realPhysicalHeight) ? Monitor.DeviceCapsVertSize : _realPhysicalHeight; }
+            get { return double.IsNaN(_realPhysicalHeight) ? (Monitor?.DeviceCapsVertSize??0) : _realPhysicalHeight; }
             set
             {
                 double ratio = value / RealPhysicalHeight;
@@ -905,7 +906,7 @@ namespace LbmScreenConfig
                     case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
                         return Config.PrimaryScreen.EffectiveDpiX / 96;
                     case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
-                        return Config.PrimaryScreen.EffectiveDpiX / 96;//EffectiveDpiX/96;
+                        return Config.MaxEffectiveDpiX / 96;
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -924,7 +925,7 @@ namespace LbmScreenConfig
                     case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
                         return Config.PrimaryScreen.EffectiveDpiY / 96;
                     case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
-                        return Config.PrimaryScreen.EffectiveDpiY / 96;
+                        return Config.MaxEffectiveDpiY / 96;
                     default:
                         throw new ArgumentOutOfRangeException();
                 }

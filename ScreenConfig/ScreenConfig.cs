@@ -71,9 +71,11 @@ namespace LbmScreenConfig
         }
 
         private static ObservableCollection<DisplayMonitor> Monitors => DisplayDevice.AttachedMonitors;
+
         public ScreenConfig()
         {
-            MonitorsOnCollectionChanged(Monitors,new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,Monitors));
+            MonitorsOnCollectionChanged(Monitors,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, Monitors));
             Monitors.CollectionChanged += MonitorsOnCollectionChanged;
 
             Watch(AllScreens, "Screen");
@@ -115,7 +117,7 @@ namespace LbmScreenConfig
         [DependsOn("Screen.Selected")]
         public void UpdateSelected()
         {
-            Selected  = AllScreens.FirstOrDefault ( screen => screen.Selected );
+            Selected = AllScreens.FirstOrDefault(screen => screen.Selected);
         }
 
         private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
@@ -201,7 +203,8 @@ namespace LbmScreenConfig
             }
             return true;
         }
-        public static void AttachToDesktop(string configId, string monitorId, bool apply=true)
+
+        public static void AttachToDesktop(string configId, string monitorId, bool apply = true)
         {
             //using (RegistryKey monkey = Screen.OpenMonitorRegKey(monitorId))
             //{
@@ -220,11 +223,11 @@ namespace LbmScreenConfig
                 area.Height = double.Parse(monkey.GetValue("PixelHeight").ToString());
 
                 primary = double.Parse(monkey.GetValue("Primary").ToString()) == 1;
-                orientation = (int)double.Parse(monkey.GetValue("Orientation").ToString());
+                orientation = (int) double.Parse(monkey.GetValue("Orientation").ToString());
             }
 
             DisplayMonitor monitor = DisplayDevice.AllMonitors.FirstOrDefault(
-                                        d => monitorId == d.ManufacturerCode + d.ProductCode + "_" + d.Serial);
+                d => monitorId == d.ManufacturerCode + d.ProductCode + "_" + d.Serial);
 
             monitor?.AttachToDesktop(primary, area, orientation, apply);
         }
@@ -324,7 +327,7 @@ namespace LbmScreenConfig
             private set { if (SetProperty(ref _physicalOutsideBounds, value)) Saved = false; }
         }
 
-        [DependsOn(nameof(Moving),"Screen.PhysicalOutsideBounds")]
+        [DependsOn(nameof(Moving), "Screen.PhysicalOutsideBounds")]
         public void UpdatePhysicalOutsideBounds()
         {
             Rect outside = new Rect();
@@ -619,7 +622,7 @@ namespace LbmScreenConfig
                 _compacting = true;
             }
 
-            List<Screen> done = new List<Screen> { PrimaryScreen };
+            List<Screen> done = new List<Screen> {PrimaryScreen};
 
             List<Screen> todo = AllBut(PrimaryScreen).OrderBy(s => s.Distance(PrimaryScreen)).ToList();
 
@@ -669,6 +672,22 @@ namespace LbmScreenConfig
         {
             get { return _saved; }
             set { SetProperty(ref _saved, value); }
+        }
+
+        [DependsOn("Screen.EffectiveDpiX")]
+        public double MaxEffectiveDpiX {
+            get
+            {
+                return AllScreens.Select(screen => screen.EffectiveDpiX).Concat(new double[] {0}).Max();
+            }
+        }
+        [DependsOn("Screen.EffectiveDpiY")]
+        public double MaxEffectiveDpiY
+        {
+            get
+            {
+                return AllScreens.Select(screen => screen.EffectiveDpiY).Concat(new double[] { 0 }).Max();
+            }
         }
     }
 }

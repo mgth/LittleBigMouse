@@ -21,7 +21,19 @@ namespace WindowsMonitors
 
             uint i = 0;
             NativeMethods.DISPLAY_DEVICE mon = new NativeMethods.DISPLAY_DEVICE(true);
-            while (NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0))
+
+            bool result = NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0);
+
+            if (result == false) // TODO
+            {
+                mon.DeviceID = DeviceName;
+                mon.DeviceName = DeviceName + @"\Monitor0";
+                mon.DeviceString = DeviceName.Split('\\').Last();
+                mon.StateFlags = NativeMethods.DisplayDeviceStateFlags.MultiDriver & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop;
+                result = true;
+            }
+
+            while (result)
             {
                 if (TempMonitors.FirstOrDefault(d => d.DeviceId == mon.DeviceID) == null)
                 {
@@ -32,6 +44,8 @@ namespace WindowsMonitors
 
                     TempMonitors.Add(displayMonitor);                    
                 }
+
+                result = NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0);
             }
         }
     }

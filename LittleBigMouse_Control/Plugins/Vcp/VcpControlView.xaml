@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="LittleBigMouse_Control.VcpPlugin.VcpControlView"
+﻿<UserControl x:Class="LittleBigMouse_Control.Plugins.Vcp.VcpControlView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 

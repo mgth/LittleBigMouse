@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using LbmScreenConfig;
 using LittleBigMouse_Control.Plugins;
+using LittleBigMouse_Control.Plugins.Location;
 
 namespace LittleBigMouse_Control.PluginLocation
 {

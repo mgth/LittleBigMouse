@@ -58,7 +58,7 @@ namespace LittleBigMouse_Control
                 {
                     new PluginLocation.LocationPlugin(),
                     new Plugins.Size.SizePlugin(),
-                    //new VcpPlugin.VcpPlugin(),
+                    new Plugins.Vcp.VcpPlugin(),
                     new Plugins.Debug.PluginDebug(),
                 },
                 Presenter = presenter

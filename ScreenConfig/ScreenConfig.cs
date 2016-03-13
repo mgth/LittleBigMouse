@@ -274,8 +274,8 @@ namespace LbmScreenConfig
             {
                 s.Load();
             }
-            Saved = true;
             Moving = false;
+            Saved = true;
         }
 
         public bool Save()
@@ -671,7 +671,10 @@ namespace LbmScreenConfig
         public bool Saved
         {
             get { return _saved; }
-            set { SetProperty(ref _saved, value); }
+            set
+            {
+                SetProperty(ref _saved, value);
+            }
         }
 
         [DependsOn("Screen.EffectiveDpiX")]

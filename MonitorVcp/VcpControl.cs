@@ -9,22 +9,22 @@ namespace MonitorVcp
 {
     public static class VcpExpendMonitor
     {
-        private static readonly Dictionary<DisplayMonitor, MonitorVcp> AllVcp = new Dictionary<DisplayMonitor, MonitorVcp>();
-        public static MonitorVcp Vcp(this DisplayMonitor monitor)
+        private static readonly Dictionary<DisplayMonitor, VcpControl> AllVcp = new Dictionary<DisplayMonitor, VcpControl>();
+        public static VcpControl Vcp(this DisplayMonitor monitor)
         {
             if (AllVcp.ContainsKey(monitor)) return AllVcp[monitor];
 
-            MonitorVcp vcp = new MonitorVcp(monitor);
+            VcpControl vcp = new VcpControl(monitor);
             AllVcp.Add(monitor, vcp);
             return vcp;
         }
     }
     public enum Component { Red, Green, Blue, Brightness, Contrast }
-    public class MonitorVcp : Notifier
+    public class VcpControl : Notifier
     {
         public DisplayMonitor Monitor { get; }
 
-        internal MonitorVcp(DisplayMonitor monitor)
+        public VcpControl(DisplayMonitor monitor)
         {
             Monitor = monitor;
             Brightness = new MonitorLevel(GetBrightness, SetBrightness);
@@ -187,7 +187,13 @@ namespace MonitorVcp
                 //lock(_lockValue)
                 if (SetProperty(ref _value, value))
                 {
-                        lock(LockDdcCi) _componentSetter?.Invoke(value, _component);
+
+                    bool result = false;
+                    int tries = 10;
+
+                    lock (LockDdcCi)
+                            while (!result && tries-- > 0)
+                            result = _componentSetter.Invoke(value, _component);
                         //SetProperty(ref _valueAsync, value, "ValueAsync"); 
                 }
             }

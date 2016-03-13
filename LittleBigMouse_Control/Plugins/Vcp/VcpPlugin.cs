@@ -1,15 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using LbmScreenConfig;
-using LittleBigMouse_Control.Plugins;
+﻿using LbmScreenConfig;
+using LittleBigMouse_Control.VcpPlugin;
 
-namespace LittleBigMouse_Control.VcpPlugin
+namespace LittleBigMouse_Control.Plugins.Vcp
 {
     class VcpPlugin : Plugin, IPluginButton, IPluginScreenControl
     {
@@ -34,13 +26,17 @@ namespace LittleBigMouse_Control.VcpPlugin
 
                 if (value)
                 {
-                    MainViewModel.Control = new VcpControlViewModel();
                     MainViewModel.Presenter.ScreenControlGetter = this;
+
+                    _control = new VcpControlViewModel();
+
+                    MainViewModel.Control = _control;
                 }
             }
         }
+        private VcpControlViewModel _control = null;
 
-        public ScreenControlViewModel GetScreenControlViewModel(Screen screen)=> new ScreenControlViewModel { Screen =screen};
-                        //TODO create VcpScreenControlViewModel
+        public ScreenControlViewModel GetScreenControlViewModel(Screen screen)
+            => new VcpScreenViewModel { Screen = screen};
     }
 }

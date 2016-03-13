@@ -23,7 +23,7 @@ namespace MonitorVcp
 
         private LuminanceViewModel ViewModel => DataContext as LuminanceViewModel;
 
-        public static readonly DependencyProperty ConfigProperty = DependencyProperty.Register("Config", typeof(ScreenConfig), typeof(Luminance), new PropertyMetadata(new ScreenConfig()));
+        public static readonly DependencyProperty ConfigProperty = DependencyProperty.Register("Config", typeof(ScreenConfig), typeof(Luminance), new PropertyMetadata(null));
 
         public ScreenConfig Config
         {

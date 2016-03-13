@@ -1401,8 +1401,9 @@ namespace WinAPI
         [DllImport("user32.dll")]
         public static extern DISP_CHANGE ChangeDisplaySettingsEx(string lpszDeviceName, IntPtr lpDevMode, IntPtr hwnd, ChangeDisplaySettingsFlags dwflags, IntPtr lParam);
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.ThisCall)]
-        [return: MarshalAs(UnmanagedType.Bool)]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]//, CallingConvention = CallingConvention.ThisCall)]
+        //[return: MarshalAs(UnmanagedType.Bool)]
+        //[DllImport("user32.dll")]
         public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
 
         [DllImport("user32.dll")]

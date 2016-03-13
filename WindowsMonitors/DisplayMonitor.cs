@@ -33,11 +33,14 @@ namespace WindowsMonitors
             UpdateDevMode();
             UpdateDeviceCaps();
             UpdateEdid();
+
             Resume(old);
         }
 
         public void Init(IntPtr hMonitor, NativeMethods.MONITORINFOEX mi)
         {
+            AttachedToDesktop = true;
+
             Primary = mi.Flags;
             MonitorArea = mi.Monitor;
             WorkArea = mi.WorkArea;

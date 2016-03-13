@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
+﻿using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using LbmScreenConfig;
 
-namespace LittleBigMouse_Control.VcpPlugin
+namespace LittleBigMouse_Control.Plugins.Vcp
 {
     /// <summary>
     /// Logique d'interaction pour ControlGuiSizer.xaml
@@ -17,7 +14,6 @@ namespace LittleBigMouse_Control.VcpPlugin
         public VcpControlView()
         {
             InitializeComponent();
-            DataContext = this;
         }
 
         private void Save()

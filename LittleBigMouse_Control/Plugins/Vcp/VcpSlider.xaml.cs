@@ -1,26 +1,13 @@
 ﻿using System;
-using System.CodeDom;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System.Windows.Threading;
-using LbmScreenConfig;
 using MonitorVcp;
 using NotifyChange;
 using Component = MonitorVcp.Component;
 
-namespace LittleBigMouse_Control.VcpPlugin
+namespace LittleBigMouse_Control.Plugins.Vcp
 {
     /// <summary>
     /// Logique d'interaction pour VcpSlider.xaml
@@ -36,7 +23,6 @@ namespace LittleBigMouse_Control.VcpPlugin
         {
             _change = new PropertyChangedHelper(this);
             InitializeComponent();
-            DataContext = this;
         }
 
 
@@ -49,7 +35,16 @@ namespace LittleBigMouse_Control.VcpPlugin
 
         private static void OnMonitorLevelProperty(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            ((MonitorLevel)e.NewValue).PropertyChanged += (d as VcpSlider).ValueOnPropertyChanged;
+            var slider = (d as VcpSlider);
+            if (slider == null) return;
+
+            var old = (MonitorLevel) e.OldValue;
+            if (old != null)
+                old.PropertyChanged -= slider.ValueOnPropertyChanged;
+
+            var newLevel = ((MonitorLevel)e.NewValue);
+            if (newLevel!=null)
+                newLevel.PropertyChanged += slider.ValueOnPropertyChanged;
         }
 
         public MonitorLevel MonitorLevel
@@ -109,6 +104,8 @@ namespace LittleBigMouse_Control.VcpPlugin
 
         private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (MonitorLevel == null) return;
+
             MonitorLevel.ValueAsync = (uint)Slider.Value;
         }
     }

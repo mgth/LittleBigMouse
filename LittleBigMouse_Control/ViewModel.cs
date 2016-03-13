@@ -19,7 +19,7 @@ namespace LittleBigMouse_Control
         {
             get
             {
-                if (_view == null) _view = NewView;
+                if (_view == null) _view = GetNewView();
 
                 return _view; 
             }
@@ -28,18 +28,13 @@ namespace LittleBigMouse_Control
 
         public virtual Type ViewType => null;
 
-        public virtual FrameworkElement NewView
+        public virtual FrameworkElement GetNewView()
         {
-            get
-            {
-                if (ViewType == null) return null;
+                 if (ViewType == null) return null;
 
                 var fe = (FrameworkElement)Activator.CreateInstance(ViewType);
                 fe.DataContext = this;
                 return fe;
-            }
         }
-
-
     }
 }

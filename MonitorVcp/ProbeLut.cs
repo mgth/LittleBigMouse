@@ -37,11 +37,11 @@ namespace MonitorVcp
             private static readonly Dictionary<Screen, ProbeLut> AllLut = new Dictionary<Screen, ProbeLut>();
             public static ProbeLut ProbeLut(this Screen screen)
             {
-                if (AllLut.ContainsKey(screen)) return AllLut[screen];
-
-                ProbeLut lut = new ProbeLut(screen);
-                AllLut.Add(screen, lut);
-                return lut;
+                if (!AllLut.ContainsKey(screen))
+                {
+                    AllLut.Add(screen, new ProbeLut(screen));                   
+                }
+                return AllLut[screen];
             }
     }
 
@@ -62,7 +62,7 @@ namespace MonitorVcp
             Watch(Vcp.Brightness, "Brightness");
         }
 
-        public MonitorVcp Vcp => _screen.Monitor.Vcp();
+        public VcpControl Vcp => _screen.Monitor.Vcp();
 
         public bool RemoveBrightness(double brightness)
         {

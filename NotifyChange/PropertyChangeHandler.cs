@@ -184,7 +184,8 @@ namespace NotifyChange
         private static readonly Dictionary<Type, Dictionary<string, List<string>>> _dictProperties = new Dictionary<Type, Dictionary<string, List<string>>>();
         private static readonly Dictionary<Type, Dictionary<string, List<MethodInfo>>> _dictMethods = new Dictionary<Type, Dictionary<string, List<MethodInfo>>>();
 
-        private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _watch = new Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler>(); 
+        private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _watch = new Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler>();
+        private readonly Dictionary<INotifyCollectionChanged, NotifyCollectionChangedEventHandler> _watchCollection = new Dictionary<INotifyCollectionChanged, NotifyCollectionChangedEventHandler>();
 
         private static readonly object LockDict = new object();
 
@@ -275,6 +276,12 @@ namespace NotifyChange
                     RaiseProperty(prefix + "." + args.PropertyName);
                 };
                 obj.PropertyChanged += handler;
+
+                if (_watch.ContainsKey(obj))
+                {
+                    
+                }
+
                 _watch.Add(obj,handler);
             }
             
@@ -298,9 +305,15 @@ namespace NotifyChange
         {
             if (collection == null) return;
 
+            //TODO : is this the right way to do, cause we should not watch twice
+            if (_watchCollection.ContainsKey(collection))
+            {
+                UnWatch(collection);
+            }
+
             foreach(T obj in collection) Watch(obj, prefix);
 
-            collection.CollectionChanged += delegate(object sender, NotifyCollectionChangedEventArgs e)
+            NotifyCollectionChangedEventHandler handler = delegate(object sender, NotifyCollectionChangedEventArgs e)
             {
                 if (e.OldItems!=null)
                 foreach (INotifyPropertyChanged item in e.OldItems)
@@ -316,27 +329,25 @@ namespace NotifyChange
                     RaiseProperty(prefix);
                 }
             };
+
+
+            collection.CollectionChanged += handler;
+
+            _watchCollection.Add(collection, handler);
         }
 
-        public void UnWatch<T>(ObservableCollection<T> collection, string prefix) where T : INotifyPropertyChanged
+        public void UnWatch<T>(ObservableCollection<T> collection) where T : INotifyPropertyChanged
         {
-            if (collection != null)
-                collection.CollectionChanged -= delegate (object sender, NotifyCollectionChangedEventArgs e)
-                {
-                    if (e.OldItems != null)
-                        foreach (INotifyPropertyChanged item in e.OldItems)
-                        {
-                            UnWatch(item);
-                            RaiseProperty(prefix);
-                        }
+            if (collection == null) return;
 
-                    if (e.NewItems != null)
-                        foreach (INotifyPropertyChanged item in e.NewItems)
-                        {
-                            Watch(item, prefix);
-                            RaiseProperty(prefix);
-                        }
-                };
+            foreach (T obj in collection) UnWatch(obj);
+
+            if (_watchCollection.ContainsKey(collection))
+            {
+                NotifyCollectionChangedEventHandler handler = _watchCollection[collection];
+                collection.CollectionChanged -= handler;
+                _watchCollection.Remove(collection);
+            }
         }
         protected static PropertyMetadata WatchNotifier() => new PropertyMetadata(null, (d, e) =>
         {

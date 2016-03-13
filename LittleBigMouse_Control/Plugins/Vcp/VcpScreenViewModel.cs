@@ -1,75 +1,28 @@
-﻿using System.Threading;
+﻿using System;
+using System.Threading;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
 using Argyll;
-using LbmScreenConfig;
 using MonitorVcp;
-using WinAPI;
 
 namespace LittleBigMouse_Control.Plugins.Vcp
 {
-    /// <summary>
-    /// Logique d'interaction pour ScreenGuiSizer.xaml
-    /// </summary>
-    public partial class ScreenGuiVcp : UserControl
+    class VcpScreenViewModel : ScreenControlViewModel
     {
-        public ScreenGuiVcp()
-        {
-            Lut.Load();
-        }
+        public override Type ViewType => typeof(VcpScreenView);
 
-        public Screen Screen => (DataContext as ScreenViewModel)?.Screen;
+        public VcpControl Vcp => Screen?.Monitor?.Vcp();
 
-        public MonitorVcp.MonitorVcp Vcp => Screen?.Monitor?.Vcp();
+
         public ProbeLut Lut => Screen?.ProbeLut();
 
-        private void ButtonOff_OnClick(object sender, RoutedEventArgs e)
+        [DependsOn("Screen")]
+        void InitLut()
         {
-            NativeMethods.SetVCPFeature(Screen.Monitor.HPhysical, 0xD6, 4);
+            Lut?.Load();
         }
-        private void WakeUp_OnClick(object sender, RoutedEventArgs e)
-        {
-            //Dxva2.SetVCPFeature(ScreenGui.Screen.HPhysical, 0x60, 0x0f);
-            NativeMethods.SetVCPFeature(Screen.Monitor.HPhysical, 0xD6, 1);
-            //Dxva2.SetVCPFeature(ScreenGui.Screen.HPhysical, 0xE1, 1);
-            NativeMethods.SetVCPFeature(Screen.Monitor.HPhysical, 0xE1, 0);              
-        }
-        //private void ButtonOn_OnClick(object sender, RoutedEventArgs e)
-        //{
-        //    uint code = Convert.ToUInt32(txtCode.Text, 16);
-        //    uint value = Convert.ToUInt32(txtValue.Text, 16);
-
-        //    uint pvct;
-        //    uint current;
-        //    uint max;
-
-        //    Dxva2.GetVCPFeatureAndVCPFeatureReply(ScreenGui.Screen.HPhysical, code, out pvct, out current, out max);
-
-        //    Debug.Print(pvct.ToString() + ":" + current.ToString() + "<" + max.ToString());
-
-        //    Dxva2.SetVCPFeature(ScreenGui.Screen.HPhysical, code, value);
-        //    //for (uint i = 0; i < max; i++)
-        //    //{
-        //    //    if (i==5 && code==0xD6) continue; 
-        //    //    bool result = Dxva2.SetVCPFeature(Screen.HPhysical, code, i);
-        //    //    Debug.Print(i.ToString() + (result?":O":"X"));
-        //    //}
-
-        //    //IntPtr desk = User32.GetDesktopWindow();
-        //    //IntPtr win = User32.FindWindowEx(IntPtr.Zero, IntPtr.Zero, null, null);
-
-        //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, 2);
-        //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
-        //}
-
-        private void PleaseInstall()
-        {
-            MessageBox.Show("Please install DispcalGUI & ArgyllCMS", "Calibration tools",
-                         MessageBoxButton.OK, MessageBoxImage.Exclamation);
-        }
-        private void ProbeLowLuminance_OnClick(object sender, RoutedEventArgs e)
+        public void ProbeLowLuminance()
         {
             var probe = new ArgyllProbe();
             if (!probe.Installed)
@@ -94,7 +47,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
 
                 for (uint i = max; i >= min; i--)
                 {
-                    
+
 
                     TuneWhitePoint(i);
 
@@ -104,7 +57,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
                     {
                         t.Y = probe.ProbedColor.xyY.Y;
                         t.x = probe.ProbedColor.xyY.x;
-                        t.y = probe.ProbedColor.xyY.y;                      
+                        t.y = probe.ProbedColor.xyY.y;
                     }
 
                     Lut.RemoveLowBrightness(i);
@@ -113,7 +66,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
                     //_line.Points.Add(new DataPoint(i, t.Y));
                     //Curve.Refresh();
 
-                    if(t.MinGain<=min) break;
+                    if (t.MinGain <= min) break;
                 }
 
                 Screen.ProbeLut().Luminance = old;
@@ -121,7 +74,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
             ).Start();
             return;
         }
-        private void ProbeLuminance_OnClick(object sender, RoutedEventArgs e)
+        private void ProbeLuminance()
         {
             var probe = new ArgyllProbe();
             if (!probe.Installed)
@@ -151,7 +104,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
                     {
                         t.Y = probe.ProbedColor.xyY.Y;
                         t.x = probe.ProbedColor.xyY.x;
-                        t.y = probe.ProbedColor.xyY.y;                        
+                        t.y = probe.ProbedColor.xyY.y;
                     }
 
                     Lut.RemoveBrightness(t.Brightness);
@@ -183,7 +136,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
                             break;
                     }
 
-                  //  Curve.PlotModel.Series.Add(line);
+                    //  Curve.PlotModel.Series.Add(line);
 
                     uint max = level.Value;
 
@@ -213,7 +166,6 @@ namespace LittleBigMouse_Control.Plugins.Vcp
             }
             ).Start();
         }
-
         private void Probe(ArgyllProbe probe, Color c, MonitorLevel level)
         {
             //LineSeries line = new LineSeries {Color = c};
@@ -233,8 +185,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
             }
 
         }
-
-        private void Probe_OnClick(object sender, RoutedEventArgs e)
+        public void Probe()
         {
             var probe = new ArgyllProbe();
             if (!probe.Installed)
@@ -276,65 +227,64 @@ namespace LittleBigMouse_Control.Plugins.Vcp
             ).Start();
             return;
 
-            new Thread (() => {
-                                  for (uint channel = 0; channel < 3; channel++)
-                                  {
-                                    MonitorLevel level = Vcp.Gain.Channel(channel);
-                                    //LineSeries line = new LineSeries();
+            new Thread(() => {
+                for (uint channel = 0; channel < 3; channel++)
+                {
+                    MonitorLevel level = Vcp.Gain.Channel(channel);
+                    //LineSeries line = new LineSeries();
 
-                                      switch (channel)
-                                      {
+                    switch (channel)
+                    {
                         case 0:
                             //line.Color = OxyColors.Red;
-                                              break;
+                            break;
                         case 1:
-                                              //line.Color = OxyColors.Green;
-                                              break;
-                                          case 2:
-                                              //line.Color = OxyColors.Blue;
-                                              break;
-                                      }
+                            //line.Color = OxyColors.Green;
+                            break;
+                        case 2:
+                            //line.Color = OxyColors.Blue;
+                            break;
+                    }
 
-                                //    Curve.PlotModel.Series.Add(line);
+                    //    Curve.PlotModel.Series.Add(line);
 
-                                      uint max = level.Value;
+                    uint max = level.Value;
 
-                                    for (uint i = 32; i <= max; i++)
-                                    {
-                                        level.Value = i; Thread.Sleep(1000);
+                    for (uint i = 32; i <= max; i++)
+                    {
+                        level.Value = i; Thread.Sleep(1000);
 
-                                        if (probe.SpotRead())
-                                        {
-                                            //line.Points.Add(new DataPoint(i,probe.ProbedColor.DeltaE00()));
-                                            //Curve.Refresh();                                            
-                                        }
-                                    }
+                        if (probe.SpotRead())
+                        {
+                            //line.Points.Add(new DataPoint(i,probe.ProbedColor.DeltaE00()));
+                            //Curve.Refresh();                                            
+                        }
+                    }
 
-                                      double min = double.MaxValue;
-                                      uint minIdx = level.Value;
-                                      //foreach (DataPoint dp in line.Points)
-                                      //{
-                                      //    if (dp.Y < min)
-                                      //    {
-                                      //        min = dp.Y;
-                                      //        minIdx = (uint)dp.X;
-                                      //    }
-                                      //}
+                    double min = double.MaxValue;
+                    uint minIdx = level.Value;
+                    //foreach (DataPoint dp in line.Points)
+                    //{
+                    //    if (dp.Y < min)
+                    //    {
+                    //        min = dp.Y;
+                    //        minIdx = (uint)dp.X;
+                    //    }
+                    //}
 
-                                      level.Value = minIdx;
-                                  }
+                    level.Value = minIdx;
+                }
             }
             ).Start();
         }
-
-        private void Tune_OnClick(object sender, RoutedEventArgs e)
-        {
-            new Thread(TuneWhitePoint).Start();
-
-        }
-
         private double[,,] _tune;
         //private LineSeries _line;
+
+        public void Tune()
+        {
+            new Thread(TuneWhitePoint).Start();          
+        }
+
 
         public void TuneWhitePoint()
         {
@@ -342,13 +292,13 @@ namespace LittleBigMouse_Control.Plugins.Vcp
         }
         public void TuneWhitePoint(uint max)
         {
-        //    _line = new LineSeries();
-        //    Curve.PlotModel.Series.Add(_line);
+            //    _line = new LineSeries();
+            //    Curve.PlotModel.Series.Add(_line);
 
             int count = 6;
             uint channel = 0;
 
-            _tune = new double[Vcp.Gain.Red.Max+1, Vcp.Gain.Green.Max+1, Vcp.Gain.Blue.Max+1];
+            _tune = new double[Vcp.Gain.Red.Max + 1, Vcp.Gain.Green.Max + 1, Vcp.Gain.Blue.Max + 1];
 
             uint[] rgb = { Vcp.Gain.Red.CheckedValue, Vcp.Gain.Green.CheckedValue, Vcp.Gain.Blue.CheckedValue };
 
@@ -376,31 +326,31 @@ namespace LittleBigMouse_Control.Plugins.Vcp
             switch (channel)
             {
                 case 0:
-                    c = new uint[] {0, 1, 2};
+                    c = new uint[] { 0, 1, 2 };
                     n = 1;
                     break;
                 case 1:
-                    c = new uint[] {1, 2, 0};
+                    c = new uint[] { 1, 2, 0 };
                     n = 1;
                     break;
                 case 2:
-                    c = new uint[] {2, 0, 1};
+                    c = new uint[] { 2, 0, 1 };
                     n = 1;
                     break;
                 case 3: //0
-                    c = new uint[] {0, 1, 2};
+                    c = new uint[] { 0, 1, 2 };
                     n = 2;
                     break;
                 case 4: //1
-                    c = new uint[] {1, 2, 0};
+                    c = new uint[] { 1, 2, 0 };
                     n = 2;
                     break;
                 case 5: //2
-                    c = new uint[] {2, 0, 1};
+                    c = new uint[] { 2, 0, 1 };
                     n = 2;
                     break;
                 default:
-                    c = new uint[] {0, 1, 2};
+                    c = new uint[] { 0, 1, 2 };
                     n = 3;
                     break;
             }
@@ -409,7 +359,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
             for (int i = 0; i < 3; i++)
             {
                 min[i] = Vcp.Gain.Channel(c[i]).Min;
-                max[i] = maxlevel==0?Vcp.Gain.Channel(c[i]).Max:maxlevel;
+                max[i] = maxlevel == 0 ? Vcp.Gain.Channel(c[i]).Max : maxlevel;
             }
 
 
@@ -425,7 +375,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
                 case 3:
                     return false;
             }
-            
+
 
 
             uint[] oldGain = { rgb[c[0]], rgb[c[1]], rgb[c[2]] };
@@ -435,11 +385,11 @@ namespace LittleBigMouse_Control.Plugins.Vcp
             //_line.Points.Add(new DataPoint(_line.Points.Count, deltaE));
             //Curve.Refresh();
 
-            while (rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]]> min[2]))
+            while (rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]] > min[2]))
             {
                 double old = deltaE;
 
-                for (int i=0; i<n; i++) rgb[c[i]]--;
+                for (int i = 0; i < n; i++) rgb[c[i]]--;
 
                 deltaE = Probe(rgb);
 
@@ -470,17 +420,17 @@ namespace LittleBigMouse_Control.Plugins.Vcp
 
             return (
                 oldGain[0] != rgb[c[0]]
-                || oldGain[1] != rgb[c[1]] 
+                || oldGain[1] != rgb[c[1]]
                 || oldGain[2] != rgb[c[2]]
                 );
-    }
+        }
         private double Probe(uint[] rgb)
         {
             if (_tune[rgb[0], rgb[1], rgb[2]] == 0)
             {
                 Vcp.Gain.Red.CheckedValue = rgb[0];
                 Vcp.Gain.Green.CheckedValue = rgb[1];
-                Vcp.Gain.Blue.CheckedValue = rgb[2];             
+                Vcp.Gain.Blue.CheckedValue = rgb[2];
 
                 Thread.Sleep(500);
 
@@ -492,20 +442,21 @@ namespace LittleBigMouse_Control.Plugins.Vcp
                 }
                 if (probe.SpotRead())
                 {
-                    _tune[rgb[0], rgb[1], rgb[2]] = probe.ProbedColor.DeltaE00();                   
+                    _tune[rgb[0], rgb[1], rgb[2]] = probe.ProbedColor.DeltaE00();
                 }
- 
+
                 //return color.DeltaE00();
             }
             return _tune[rgb[0], rgb[1], rgb[2]];
         }
-        private void UIElement_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-        }
-
-        private void Save_OnClick(object sender, RoutedEventArgs e)
+        public void Save()
         {
             Lut.Save();
+        }
+        private void PleaseInstall()
+        {
+            MessageBox.Show("Please install DispcalGUI & ArgyllCMS", "Calibration tools",
+                         MessageBoxButton.OK, MessageBoxImage.Exclamation);
         }
     }
 }

@@ -31,27 +31,6 @@
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>x86</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>MainIcon.ico</ApplicationIcon>
   </PropertyGroup>
@@ -137,6 +116,7 @@
       <DependentUpon>DebugScreenView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Plugins\Debug\DebugViewModel.cs" />
+    <Compile Include="Plugins\Vcp\VcpScreenViewModel.cs" />
     <Compile Include="PresenterViewModel.cs" />
     <Compile Include="ScreenControlViewModel.cs" />
     <Compile Include="Plugins\Size\SizeScreenView.xaml.cs">
@@ -184,8 +164,8 @@
       <DependentUpon>VcpControlView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Plugins\Vcp\LossyThread.cs" />
-    <Compile Include="Plugins\Vcp\ScreenGuiVcp.xaml.cs">
-      <DependentUpon>ScreenGuiVcp.xaml</DependentUpon>
+    <Compile Include="Plugins\Vcp\VcpScreenView.xaml.cs">
+      <DependentUpon>VcpScreenView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Plugins\Vcp\VcpControlViewModel.cs" />
     <Compile Include="Plugins\Vcp\VcpPlugin.cs" />
@@ -250,7 +230,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="Plugins\Vcp\ScreenGuiVcp.xaml">
+    <Page Include="Plugins\Vcp\VcpScreenView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

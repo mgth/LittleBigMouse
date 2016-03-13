@@ -2,7 +2,6 @@
 using System.Runtime.InteropServices.ComTypes;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Quadruple;
 
 namespace Argyll
 {
@@ -27,10 +26,10 @@ namespace Argyll
         public virtual ProbedColorRGB RGB(Gamut gamut) => XYZ.RGB(gamut);
 
 
-        private static Quad Calc(Quad T, Quad coef, double exp)
-            => coef*Quad.Pow(10, exp*3)/ Quad.Pow(T, exp);
+        private static double Calc(double T, double coef, double exp)
+            => coef*Math.Pow(10, exp*3)/ Math.Pow(T, exp);
 
-        private static Quad Quadratic(Quad T, Quad a3, Quad b2, Quad cx, Quad d)
+        private static double Quadratic(double T, double a3, double b2, double cx, double d)
             => Calc(T, a3, 3) + Calc(T, b2, 2) + Calc(T, cx, 1) + d;
 
         public static ProbedColor DIlluminant(double T)

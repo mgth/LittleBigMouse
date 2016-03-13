@@ -79,10 +79,6 @@
       <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
       <Name>NotifyChange</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Quadruple\Quadruple.csproj">
-      <Project>{286ae771-0e46-491a-bc01-e6e759c8371b}</Project>
-      <Name>Quadruple</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

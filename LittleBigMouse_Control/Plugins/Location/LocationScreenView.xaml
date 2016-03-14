@@ -127,7 +127,9 @@
             <Label 
                    Content="{Binding Path=Screen.PhysicalBounds.Right,FallbackValue=right.x}" 
                    ContentStringFormat="#0.#" 
-                   HorizontalAlignment="Right"/>
+                   HorizontalAlignment="Right"
+                />
+            
             
             <Label 
                   Content="{Binding Path=Screen.PixelSize.Width,FallbackValue=pix.w}" 

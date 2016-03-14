@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.ServiceModel;
 using System.ServiceModel.Description;
-using System.Threading;
 
 namespace LbmScreenConfig
 {
-//    public class LittleBigMouseClient : DuplexClientBase<ILittleBigMouseService>, ILittleBigMouseService
+    //    public class LittleBigMouseClient : DuplexClientBase<ILittleBigMouseService>, ILittleBigMouseService
     public class LittleBigMouseClient : ClientBase<ILittleBigMouseService>, ILittleBigMouseService
     {
         private static LittleBigMouseClient _client;

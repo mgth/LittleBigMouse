@@ -17,7 +17,6 @@ namespace WindowsMonitors
             SystemEvents.DisplaySettingsChanged += SystemEventsOnDisplaySettingsChanged;
             UpdateDevices();
         }
-
  
         private static void SystemEventsOnDisplaySettingsChanged(object sender, EventArgs eventArgs)
         {
@@ -156,8 +155,7 @@ namespace WindowsMonitors
         public string DeviceName
         {
             get { return _deviceName; }
-            internal set
-            {
+            internal set {
                 if (SetProperty(ref _deviceName, value ?? ""))
                 {
                     if (string.IsNullOrWhiteSpace(DeviceString))
@@ -181,7 +179,6 @@ namespace WindowsMonitors
             set { SetProperty(ref _stateFlags, value); }
         }
 
-
         public string DeviceId
         {
             get { return _deviceId; }
@@ -194,7 +191,5 @@ namespace WindowsMonitors
             internal set { SetProperty(ref _deviceKey, value); }
         }
     }
-
-
 }
 

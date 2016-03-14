@@ -21,13 +21,8 @@
 	  http://www.mgth.fr
 */
 
-using Microsoft.Win32;
-using System;
-using System.Runtime.InteropServices;
-using System.Windows;
-using WinAPI;
 
 namespace LbmScreenConfig
 {
- 
+
 }

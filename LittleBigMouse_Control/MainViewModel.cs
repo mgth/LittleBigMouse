@@ -1,11 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel.Design;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -13,7 +7,6 @@ using System.Windows.Data;
 using System.Windows.Input;
 using LbmScreenConfig;
 using LittleBigMouse_Control.Plugins;
-using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
@@ -27,6 +20,8 @@ namespace LittleBigMouse_Control
             MaximizeCommand = new MaximizeCommand(this);
 
             Plugins.CollectionChanged += Plugins_CollectionChanged;
+
+            InitNotifier();
         }
 
         private void Plugins_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -41,44 +36,34 @@ namespace LittleBigMouse_Control
 
         public readonly ObservableCollection<Plugin> Plugins = new ObservableCollection<Plugin>();
 
-        public static DependencyProperty ConfigProperty = DependencyProperty.Register(nameof(Config),typeof(ScreenConfig),typeof(MainViewModel));
-
-        public static DependencyProperty ControlProperty = DependencyProperty.Register(nameof(Control),typeof(ViewModel),typeof(MainViewModel));
-
-        public static DependencyProperty PresenterProperty = DependencyProperty.Register(
-            nameof(Presenter), 
-            typeof(ViewModel), 
-            typeof(MainViewModel), 
-            new FrameworkPropertyMetadata(
-                null,
-                new PropertyChangedCallback(PresenterChanged)));
-
-        private static void PresenterChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            PresenterViewModel presenter = (e.NewValue as PresenterViewModel);
-            if (presenter != null)
-                presenter.MainViewModel = d as MainViewModel;
-        }
-
         //private GetScreenControlViewModelDelegate _getScreenControlView;
 
-
+        private ScreenConfig _config;
         public ScreenConfig Config
         {
-            get { return (ScreenConfig)GetValue(ConfigProperty); }
-            set { SetValue(ConfigProperty, value); }
+            get { return _config; }
+            set { SetProperty(ref _config, value); }
         }
 
 
+        private ViewModel _control;
         public ViewModel Control
         {
-            get { return (ViewModel)GetValue(ControlProperty); }
-            set { SetValue(ControlProperty,value);}
+            get { return _control; }
+            set { SetProperty(ref _control, value);}
         }
+
+        private PresenterViewModel _presenter;
         public PresenterViewModel Presenter
         {
-            get { return (PresenterViewModel)GetValue(PresenterProperty); }
-            set { SetValue(PresenterProperty, value); }
+            get { return _presenter; }
+            set
+            {
+                if (SetAndWatch(ref _presenter, value))
+                {
+                    Presenter.MainViewModel = this;
+                }
+            }
         }
 
         public CloseCommand CloseCommand { get; }

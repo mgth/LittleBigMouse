@@ -1,14 +1,9 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using LbmScreenConfig;
 using NotifyChange;
 
@@ -21,6 +16,8 @@ namespace LittleBigMouse_Control
         {
             ScreensCanvas.SizeChanged += (sender, args) => RaiseProperty("Size");
             ScreenFrames.CollectionChanged += ScreenFrames_CollectionChanged;
+
+            InitNotifier();
         }
 
         private void ScreenFrames_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
@@ -38,10 +35,11 @@ namespace LittleBigMouse_Control
                 }
         }
 
+        private ScreenConfig _config;
         public ScreenConfig Config
         {
-            get { return (ScreenConfig)GetValue(ConfigProperty); }
-            set { SetValue(ConfigProperty, value); }
+            get { return _config; }
+            set { SetAndWatch(ref _config, value); }
         }
 
         public Canvas ScreensCanvas { get; } = new Canvas();
@@ -90,9 +88,6 @@ namespace LittleBigMouse_Control
                     if (vm!=null) ScreenFrames.Remove(vm);
                 }
         }
-
-        public static DependencyProperty ConfigProperty = DependencyProperty.Register(nameof(Config), typeof(ScreenConfig), typeof(MultiScreensViewModel), WatchNotifier());
-
 
         [DependsOn("Size", "Config.MovingPhysicalOutsideBounds")]
         private void UpdateRatio()

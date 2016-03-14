@@ -16,12 +16,12 @@ namespace LittleBigMouse_Control.Plugins.Vcp
     public partial class VcpSlider : UserControl, INotifyPropertyChanged
     {
         // PropertyChanged Handling
-        private readonly PropertyChangedHelper _change;
-        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(this, value); } remove { _change.Remove(value); } }
+        private readonly NotifierHelper _change;
+        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(value); } remove { _change.Remove(value); } }
 
         public VcpSlider()
         {
-            _change = new PropertyChangedHelper(this);
+            _change = new NotifierHelper(this);
             InitializeComponent();
         }
 

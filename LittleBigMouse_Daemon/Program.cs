@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Reflection;
 using LbmScreenConfig;
 using System.ServiceModel;
 using System.ServiceProcess;

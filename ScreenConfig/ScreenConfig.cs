@@ -26,15 +26,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Management;
-using System.Net.WebSockets;
-using System.Runtime.InteropServices;
-using System.Runtime.Remoting.Messaging;
 using System.Windows;
-using System.Windows.Documents;
 using WindowsMonitors;
 using NotifyChange;
 // ReSharper disable CompareOfFloatsByEqualityOperator
@@ -79,6 +74,8 @@ namespace LbmScreenConfig
             Monitors.CollectionChanged += MonitorsOnCollectionChanged;
 
             Watch(AllScreens, "Screen");
+
+            InitNotifier();
         }
 
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)

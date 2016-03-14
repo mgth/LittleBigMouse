@@ -1,35 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using LittleBigMouse_Control.Plugins;
-using NotifyChange;
+﻿using LittleBigMouse_Control.Plugins;
 
 namespace LittleBigMouse_Control
 {
     internal abstract class PresenterViewModel : ViewModel
     {
-        public static DependencyProperty MainViewModelProperty = DependencyProperty.Register(nameof(MainViewModel), typeof(MainViewModel), typeof(MultiScreensViewModel));
+
+        private MainViewModel _mainViewModel;
         public MainViewModel MainViewModel
         {
-            get { return (MainViewModel)GetValue(MainViewModelProperty); }
-            set { SetValue(MainViewModelProperty, value); }
+            get { return _mainViewModel; }
+            set { SetProperty(ref _mainViewModel, value); }
         }
 
-        public static DependencyProperty GetScreenControlViewModelPropery = DependencyProperty.Register(nameof(ScreenControlGetter), typeof(IPluginScreenControl), typeof(MainViewModel));
+        private IPluginScreenControl _screenControlGetter;
         public IPluginScreenControl ScreenControlGetter
         {
-            get { return (IPluginScreenControl)GetValue(GetScreenControlViewModelPropery); }
-            set { SetValue(GetScreenControlViewModelPropery, value); }
+            get { return _screenControlGetter; }
+            set { SetProperty(ref _screenControlGetter, value); }
         }
 
-        public static DependencyProperty RatioProperty = DependencyProperty.Register(nameof(Ratio), typeof(double), typeof(MultiScreensViewModel));
+        private double _ratio;
         public double Ratio
         {
-            get { return (double)GetValue(RatioProperty); }
-            protected set { SetValue(RatioProperty, value); }
+            get { return _ratio; }
+            protected set { SetProperty(ref _ratio, value); }
         }
         public abstract double PhysicalToUiX(double x);
         public abstract double PhysicalToUiY(double y);

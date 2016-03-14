@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Win32;
 using NotifyChange;
@@ -17,6 +14,7 @@ namespace WindowsMonitors
         public DisplayMonitor(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
             Init(adapter, dev);
+            InitNotifier();
         }
         public void Init(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
@@ -48,7 +46,6 @@ namespace WindowsMonitors
             HMonitor = hMonitor;
         }
 
-
         public bool Equals(DisplayMonitor other)
         {
             if (other == null) return false;
@@ -61,6 +58,7 @@ namespace WindowsMonitors
             if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
                 NativeMethods.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }
+
         private uint _primary;
         private Rect _monitorArea;
         private Rect _workArea;

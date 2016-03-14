@@ -1,12 +1,6 @@
-﻿using System.Threading;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using Argyll;
-using LbmScreenConfig;
-using MonitorVcp;
-using WinAPI;
 
 namespace LittleBigMouse_Control.Plugins.Vcp
 {

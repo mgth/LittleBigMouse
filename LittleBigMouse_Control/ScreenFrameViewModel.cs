@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -13,25 +8,25 @@ namespace LittleBigMouse_Control
 {
     internal class ScreenFrameViewModel : ScreenViewModel
     {
-        public override Type ViewType => typeof(ScreenFrameView);
-
-        public static DependencyProperty ControlViewModelProperty = DependencyProperty.Register
-            (nameof(ControlViewModel), typeof(ScreenControlViewModel), typeof(ScreenFrameViewModel), WatchNotifier());
-
-        public ScreenControlViewModel ControlViewModel
+        public ScreenFrameViewModel()
         {
-            get { return (ScreenControlViewModel)GetValue(ControlViewModelProperty); }
-            set { SetValue(ControlViewModelProperty, value); }
+            InitNotifier();
         }
 
-        public static DependencyProperty PresenterProperty = DependencyProperty.Register
-            (nameof(Presenter), typeof(MultiScreensViewModel), typeof(ScreenFrameViewModel), WatchNotifier());
+        public override Type ViewType => typeof(ScreenFrameView);
 
-
-        public MultiScreensViewModel Presenter
+        private ScreenControlViewModel _controlViewModel;
+        public ScreenControlViewModel ControlViewModel
         {
-            get { return (MultiScreensViewModel)GetValue(PresenterProperty); }
-            set { SetValue(PresenterProperty, value); }
+            get { return _controlViewModel; }
+            set { SetAndWatch(ref _controlViewModel, value); }
+        }
+
+        private MultiScreensViewModel _presenter;
+         public MultiScreensViewModel Presenter
+        {
+            get { return _presenter; }
+            set { SetAndWatch(ref _presenter, value); }
         }
 
         private double _width = 0;
@@ -110,31 +105,19 @@ namespace LittleBigMouse_Control
         public GridLength RightBorder => new GridLength(Screen.RightBorder * Presenter.Ratio);
 
         #region Unrotated
-        private static readonly DependencyPropertyKey UnrotatedRightBorderPropertyKey = DependencyProperty.RegisterReadOnly(nameof(UnrotatedRightBorder), typeof(GridLength), typeof(ScreenFrameViewModel), new PropertyMetadata(null));
-        private static readonly DependencyPropertyKey UnrotatedLeftBorderPropertyKey = DependencyProperty.RegisterReadOnly(nameof(UnrotatedLeftBorder), typeof(GridLength), typeof(ScreenFrameViewModel), new PropertyMetadata(null));
-        private static readonly DependencyPropertyKey UnrotatedTopBorderPropertyKey = DependencyProperty.RegisterReadOnly(nameof(UnrotatedTopBorder), typeof(GridLength), typeof(ScreenFrameViewModel), new PropertyMetadata(null));
-        private static readonly DependencyPropertyKey UnrotatedBottomBorderPropertyKey = DependencyProperty.RegisterReadOnly(nameof(UnrotatedBottomBorder), typeof(GridLength), typeof(ScreenFrameViewModel), new PropertyMetadata(null));
-        private static readonly DependencyProperty UnrotatedRightBorderProperty = UnrotatedRightBorderPropertyKey.DependencyProperty;
-        private static readonly DependencyProperty UnrotatedLeftBorderProperty = UnrotatedLeftBorderPropertyKey.DependencyProperty;
-        private static readonly DependencyProperty UnrotatedTopBorderProperty = UnrotatedTopBorderPropertyKey.DependencyProperty;
-        private static readonly DependencyProperty UnrotatedBottomBorderProperty = UnrotatedBottomBorderPropertyKey.DependencyProperty;
 
-        private static readonly DependencyPropertyKey UnrotatedWidthPropertyKey = DependencyProperty.RegisterReadOnly(nameof(UnrotatedWidth), typeof(double), typeof(ScreenFrameViewModel), new PropertyMetadata(null));
-        private static readonly DependencyPropertyKey UnrotatedHeightPropertyKey = DependencyProperty.RegisterReadOnly(nameof(UnrotatedHeight), typeof(double), typeof(ScreenFrameViewModel), new PropertyMetadata(null));
-        private static readonly DependencyProperty UnrotatedWidthProperty = UnrotatedWidthPropertyKey.DependencyProperty;
-        private static readonly DependencyProperty UnrotatedHeightProperty = UnrotatedHeightPropertyKey.DependencyProperty;
-
-
+        private double _unrotatedWidth;
         public double UnrotatedWidth
         {
-            get {  return (double)GetValue(UnrotatedWidthProperty); }
-            private set { SetValue(UnrotatedWidthPropertyKey, value); }
+            get {  return _unrotatedWidth; }
+            private set { SetProperty(ref _unrotatedWidth, value); }
         }
 
+        private double _unrotatedHeight;
         public double UnrotatedHeight
         {
-            get { return (double)GetValue(UnrotatedHeightProperty);  }
-            private set { SetValue(UnrotatedHeightPropertyKey, value); }
+            get { return _unrotatedHeight;  }
+            private set { SetProperty(ref _unrotatedHeight, value); }
         }
 
         [DependsOn("Screen", "Monitor.DisplayOrientation", "Width", "Height")]
@@ -154,28 +137,32 @@ namespace LittleBigMouse_Control
             }
         }
 
+        private GridLength _unrotatedTopBorder;
         public GridLength UnrotatedTopBorder
         {
-            get { return (GridLength)GetValue(UnrotatedTopBorderProperty); }
-            private set { SetValue(UnrotatedTopBorderPropertyKey, value); }
+            get { return _unrotatedTopBorder; }
+            private set { SetProperty(ref _unrotatedTopBorder, value); }
         }
 
+        private GridLength _unrotatedRightBorder;
         public GridLength UnrotatedRightBorder
         {
-            get { return (GridLength)GetValue(UnrotatedRightBorderProperty); }
-            private set { SetValue(UnrotatedRightBorderPropertyKey, value); }
+            get { return _unrotatedRightBorder; }
+            private set { SetProperty(ref _unrotatedRightBorder, value); }
         }
 
+        private GridLength _unrotatedBottomBorder;
         public GridLength UnrotatedBottomBorder
         {
-            get { return (GridLength)GetValue(UnrotatedBottomBorderProperty); }
-            private set { SetValue(UnrotatedBottomBorderPropertyKey, value); }
+            get { return _unrotatedBottomBorder; }
+            private set { SetProperty(ref _unrotatedBottomBorder, value); }
         }
 
+        private GridLength _unrotatedLeftBorder;
         public GridLength UnrotatedLeftBorder
         {
-            get { return (GridLength)GetValue(UnrotatedLeftBorderProperty); }
-            private set { SetValue(UnrotatedLeftBorderPropertyKey, value); }
+            get { return _unrotatedLeftBorder; }
+            private set { SetProperty(ref _unrotatedLeftBorder, value); }
         }
 
         [DependsOn(nameof(LeftBorder), nameof(TopBorder), nameof(RightBorder), nameof(BottomBorder))]

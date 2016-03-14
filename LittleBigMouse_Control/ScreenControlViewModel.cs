@@ -1,24 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
-using NotifyChange;
+﻿using System.Windows.Controls;
 
 namespace LittleBigMouse_Control
 {
     internal class ScreenControlViewModel : ScreenViewModel
     {
-        public static DependencyProperty FrameProperty = DependencyProperty.Register
-            (nameof(Frame), typeof(ScreenFrameViewModel), typeof(ScreenControlViewModel), WatchNotifier());
-
+        private ScreenFrameViewModel _frame;
         public ScreenFrameViewModel Frame
         {
-            get { return (ScreenFrameViewModel)GetValue(FrameProperty); }
-            set { SetValue(FrameProperty, value); }
+            get { return _frame; }
+            set { SetProperty(ref _frame, value); }
         }
 
         public Grid CoverControl { get; } = new Grid();

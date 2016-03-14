@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Runtime.InteropServices.ComTypes;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace Argyll
 {

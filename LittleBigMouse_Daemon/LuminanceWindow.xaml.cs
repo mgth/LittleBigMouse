@@ -6,11 +6,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using LittleBigMouse_Daemon.Annotations;
 using LbmScreenConfig;
-using Microsoft.Win32.SafeHandles;
 using MonitorVcp;
 using MouseKeyboardActivityMonitor;
-using MouseKeyboardActivityMonitor.WinApi;
-using WinAPI;
 using MouseEventArgs = System.Windows.Forms.MouseEventArgs;
 
 namespace LittleBigMouse_Daemon

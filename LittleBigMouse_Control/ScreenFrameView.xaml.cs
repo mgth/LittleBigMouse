@@ -20,14 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using LbmScreenConfig;
-using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
@@ -69,7 +67,6 @@ namespace LittleBigMouse_Control
     {
         public Screen Screen { get; }
         public double Pos { get; }
-
         public Brush Brush { get; }
 
         public Anchor(Screen screen, double pos, Brush brush)
@@ -79,6 +76,5 @@ namespace LittleBigMouse_Control
             Brush = brush;
         }
     }
-
 }
 

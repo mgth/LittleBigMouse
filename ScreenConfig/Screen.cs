@@ -24,14 +24,12 @@
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Windows;
 using WindowsMonitors;
@@ -61,6 +59,7 @@ namespace LbmScreenConfig
             Monitor = monitor;
 //            Watch(Config,"Config");
 
+            InitNotifier();
             // Todo : PhysicalX = PhysicalOveralBoundsWithoutThis.Right;
         }
 
@@ -1025,8 +1024,6 @@ namespace LbmScreenConfig
                 return dpi;
             }
         }
-
-
 
         public string CapabilitiesString
         {

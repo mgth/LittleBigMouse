@@ -45,7 +45,7 @@ namespace LittleBigMouse_Daemon
 
         public void Quit()
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("MouseEngine : Quit");
         }
 
         public void Start()

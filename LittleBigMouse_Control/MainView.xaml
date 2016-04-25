@@ -1,10 +1,9 @@
-﻿<src:PerMonitorDPIWindow x:Class="LittleBigMouse_Control.MainView"
+﻿<Window x:Class="LittleBigMouse_Control.MainView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:src="clr-namespace:NativeHelpers;assembly=NativeHelpers"
-                         mc:Ignorable="d"
+        mc:Ignorable="d"
         Icon="MainIcon.ico"
         Title="Little Big LbmMouse"  Topmost="True"
         BorderBrush="Black"
@@ -14,6 +13,7 @@
        MouseDown="OnMouseDown"
         Loaded="Window_Loaded"
          >
+        <!--xmlns:src="clr-namespace:NativeHelpers;assembly=NativeHelpers"-->
     <!--Left ="{Binding Path=LocationLeft, Mode=TwoWay}"
         Top ="{Binding Path=LocationTop, Mode=TwoWay}"
         Width ="{Binding Path=LocationWidth, Mode=TwoWay}"
@@ -65,4 +65,4 @@
         </Grid>
     </Grid>
 
-</src:PerMonitorDPIWindow>
+</Window>

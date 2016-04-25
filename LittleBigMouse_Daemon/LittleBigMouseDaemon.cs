@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.ServiceModel;
 using System.Windows;
@@ -17,15 +18,16 @@ namespace LittleBigMouse_Daemon
         private const string ServiceName = "LittleBigMouse";
         private MouseEngine _engine;
         private Notify _notify;
+        private IList<string> _args;
 
-        public LittleBigMouseDaemon()
+        public LittleBigMouseDaemon(IList<string> args)
         {
 
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Startup += OnStartup;
             Exit += OnExit;
-            Deactivated += OnDeactivated; 
-
+            Deactivated += OnDeactivated;
+            _args = args;
         }
 
        // public static ILittleBigMouseCallback Callback;
@@ -54,7 +56,8 @@ namespace LittleBigMouse_Daemon
             _notify.AddMenu(-1,"Stop", Stop);
             _notify.AddMenu(-1,"Exit", Quit);
 
-            Start();
+            CommandLine(_args);
+            //Start();
         }
 
         private void _engine_ConfigLoaded(object sender, EventArgs e)
@@ -102,9 +105,11 @@ namespace LittleBigMouse_Daemon
 
         public void CommandLine(IList<string> args)
         {
-            foreach (string s in args)
+            List<string> a = args.ToList();
+            foreach (string s in a)
             {
-                switch (s)
+                //args.Remove(s);
+                switch (s.ToLower())
                 {
                     case "--exit":
                         Quit();
@@ -226,7 +231,7 @@ namespace LittleBigMouse_Daemon
                 string filename = AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName.Replace(".vshost", "");
 
                 td.Actions.Add(
-                    new ExecAction(filename)
+                    new ExecAction(filename,"--start")
                     );
 
                 td.Principal.RunLevel = TaskRunLevel.Highest;

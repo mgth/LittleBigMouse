@@ -2469,7 +2469,7 @@ namespace Microsoft.Win32.TaskScheduler
 		///   </exception>
 		public void Insert(int index, TaskPrincipalPrivilege item)
 		{
-			throw new NotImplementedException();
+			throw new NotImplementedException("Task : Insert");
 		}
 
 		/// <summary>
@@ -2484,7 +2484,7 @@ namespace Microsoft.Win32.TaskScheduler
 		///   </exception>
 		public void RemoveAt(int index)
 		{
-			throw new NotImplementedException();
+			throw new NotImplementedException("Task : RemoveAt");
 		}
 
 		/// <summary>
@@ -2510,7 +2510,7 @@ namespace Microsoft.Win32.TaskScheduler
 			}
 			set
 			{
-				throw new NotImplementedException();
+				throw new NotImplementedException("Task[index] : set");
 			}
 		}
 
@@ -2537,7 +2537,7 @@ namespace Microsoft.Win32.TaskScheduler
 		///   </exception>
 		public void Clear()
 		{
-			throw new NotImplementedException();
+			throw new NotImplementedException("Task : Clear");
 		}
 
 		/// <summary>
@@ -2601,7 +2601,7 @@ namespace Microsoft.Win32.TaskScheduler
 		///   </exception>
 		public bool Remove(TaskPrincipalPrivilege item)
 		{
-			throw new NotImplementedException();
+			throw new NotImplementedException( "Task : Remove" );
 		}
 
 		/// <summary>

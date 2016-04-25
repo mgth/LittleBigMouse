@@ -18,21 +18,20 @@ namespace WindowsMonitors
         }
         public void Init(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
-            bool old = Suspend();
+            using (Suspend())
+            {
+                Adapter = adapter;
 
-            Adapter = adapter;
+                DeviceId = dev.DeviceID;
+                DeviceKey = dev.DeviceKey;
+                DeviceName = dev.DeviceName;
+                DeviceString = dev.DeviceString;
+                State = dev.StateFlags;
 
-            DeviceId = dev.DeviceID;
-            DeviceKey = dev.DeviceKey;
-            DeviceName = dev.DeviceName;
-            DeviceString = dev.DeviceString;
-            State = dev.StateFlags;
-
-            UpdateDevMode();
-            UpdateDeviceCaps();
-            UpdateEdid();
-
-            Resume(old);
+                UpdateDevMode();
+                UpdateDeviceCaps();
+                UpdateEdid();               
+            }
         }
 
         public void Init(IntPtr hMonitor, NativeMethods.MONITORINFOEX mi)
@@ -116,6 +115,11 @@ namespace WindowsMonitors
             get { return _pelsHeight; }
             private set { SetProperty(ref _pelsHeight, value); }
         }
+        //public int PelsHeight
+        //{
+        //    get { return GetProperty<int>(); }
+        //    private set { SetProperty(value); }
+        //}
         public int PelsWidth
         {
             get { return _pelsWidth; }
@@ -149,14 +153,14 @@ namespace WindowsMonitors
 
         public int DisplayOrientation
         {
-            get { return _displayOrientation; }
-            private set { SetProperty(ref _displayOrientation, value); }
+            get { return GetProperty<int>(); }
+            set { SetProperty(value); }
         }
 
         public Point Position
         {
-            get { return _position; }
-            private set { SetProperty(ref _position, value); }
+            get { return GetProperty<Point>(); }
+            set { SetProperty(value); }
         }
 
         public uint Primary
@@ -179,38 +183,39 @@ namespace WindowsMonitors
 
         public Rect MonitorArea
         {
-            get { return _monitorArea; }
-            set { SetProperty(ref _monitorArea, value); }
+            get { return GetProperty<Rect>(); }
+            set { SetProperty(value); }
         }
 
         public Rect WorkArea
         {
-            get { return _workArea; }
-            set { SetProperty(ref _workArea, value); }
+            get { return GetProperty<Rect>(); }
+            set { SetProperty(value); }
         }
 
         public IntPtr HMonitor
         {
-            get { return _hMonitor; }
-            set { SetProperty(ref _hMonitor, value); }
+            get { return GetProperty<IntPtr>(); }
+            set { SetProperty(value); }
         }
         public string HKeyName
         {
-            get { return _hKeyName; }
-            set { SetProperty(ref _hKeyName, value); }
+            get { return GetProperty<string>(); }
+            set { SetProperty(value); }
         }
 
         public string ManufacturerCode
         {
-            get { return _manufacturerCode; }
-            private set { SetProperty(ref _manufacturerCode, value); }
+            get { return GetProperty<string>(); }
+            private set { SetProperty(value); }
         }
 
         public byte[] Edid
         {
-            get { return _edid; }
-            set { SetProperty(ref _edid, value); }
+            get { return GetProperty<byte[]>(); }
+            private set { SetProperty(value); }
         }
+
         public void UpdateEdid()
         {
             IntPtr devInfo = NativeMethods.SetupDiGetClassDevsEx(

@@ -35,11 +35,10 @@ namespace LittleBigMouse_Control
                 }
         }
 
-        private ScreenConfig _config;
         public ScreenConfig Config
         {
-            get { return _config; }
-            set { SetAndWatch(ref _config, value); }
+            get { return GetProperty<ScreenConfig>(); }
+            set { SetAndWatch(value); }
         }
 
         public Canvas ScreensCanvas { get; } = new Canvas();

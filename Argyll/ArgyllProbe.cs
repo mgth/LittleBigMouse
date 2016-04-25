@@ -10,6 +10,10 @@ namespace Argyll
 {
     public class ArgyllProbe : Notifier
     {
+        public ArgyllProbe()
+        {
+            ConfigFromDipcalGUI();
+        }
         public ArgyllProbe(bool autoconfig = true)
         {
             if(autoconfig) ConfigFromDipcalGUI();

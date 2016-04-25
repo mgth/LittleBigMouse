@@ -84,7 +84,7 @@ namespace Microsoft.Win32.TaskScheduler
 		/// <exception cref="System.NotImplementedException">This action is technically unfeasable due to limitations of the underlying library. Use the <see cref="TaskFolder.CreateFolder(string, string)"/> instead.</exception>
 		public void Add(TaskFolder item)
 		{
-			throw new NotImplementedException();
+			throw new NotImplementedException("TaskFolder : Add");
 		}
 
 		/// <summary>

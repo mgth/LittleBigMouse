@@ -57,7 +57,7 @@ namespace LittleBigMouse_Control
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("ScaleConverter : ConvertBack");
         }
 
     }
@@ -83,7 +83,7 @@ namespace LittleBigMouse_Control
 
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("MultiScaleConverter : ConvertBack");
         }
     }
 }

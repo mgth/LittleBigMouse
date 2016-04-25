@@ -23,7 +23,7 @@ namespace LittleBigMouse_Daemon
 
         public void Init()
         {
-            throw new System.NotImplementedException();
+            throw new System.NotImplementedException("Service : Init");
         }
 
         public void LoadConfig()

@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using System;
 using System.Windows;
 using LbmScreenConfig;
 using System.Windows.Controls;
@@ -34,14 +35,21 @@ namespace LittleBigMouse_Control
     /// <summary>
     /// Interaction logic for Config.xaml
     /// </summary>
-    public partial class MainView : PerMonitorDPIWindow
+    public partial class MainView
     {
 
         private readonly WindowResizer _resizer;
 
         public MainView()
         {
-            InitializeComponent();
+            try
+            {
+                InitializeComponent();
+            }
+            catch (System.Windows.Markup.XamlParseException ex)
+            {
+                
+            }
             _resizer = new WindowResizer(this,ResizeGrid);
 
 
@@ -58,7 +66,7 @@ namespace LittleBigMouse_Control
                 {
                     new PluginLocation.LocationPlugin(),
                     new Plugins.Size.SizePlugin(),
-                    new Plugins.Vcp.VcpPlugin(),
+                    //new Plugins.Vcp.VcpPlugin(),
                     new Plugins.Debug.PluginDebug(),
                 },
                 Presenter = presenter

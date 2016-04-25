@@ -54,68 +54,99 @@ namespace LittleBigMouse_Control
         private readonly NotifierHelper _notify;
         public event PropertyChangedEventHandler PropertyChanged { add { _notify.Add(value); } remove { _notify.Remove(value);} }
 
-        readonly Screen _screen;
-        readonly Screen _drawOn;
+        private Screen _screen;
+        public Screen Screen
+        {
+            get { return _screen; }
+            set { _notify.SetAndWatch(ref _screen, value); }
+        }
 
-        readonly RulerSide _side;
+        private Screen _drawOn;
+        public Screen DrawOn
+        {
+            get { return _drawOn; }
+            set { _notify.SetAndWatch(ref _drawOn, value); }
+        }
+
+        private bool _enabled = false;
+        public bool Enabled
+        {
+            get { return _enabled; }
+            set { _notify.SetProperty(ref _enabled, value); }
+        }
+
+        private RulerSide _side;
+
+        public RulerSide Side
+        {
+            get { return _side; }
+            set { _notify.SetProperty(ref _side, value); }
+        }
 
 
+        [DependsOn("Enabled", "Screen.PhysicalBounds", "DrawOn.PhysicalBounds")]
         private void SetSize()
         {
-            switch (_side)
+            if (!Enabled || DrawOn == null || Screen == null)
+            {
+                Hide();
+                return;
+            }
+
+            switch (Side)
             {
                 case RulerSide.Right:
-                    var leftTop = new PhysicalPoint(_drawOn.Config, _drawOn,_screen.PhysicalX,_screen.PhysicalY);
-                    var leftBottom = new PhysicalPoint(_drawOn.Config, _drawOn, _screen.PhysicalX, _screen.PhysicalBounds.Bottom);
+                    var leftTop = new PhysicalPoint(DrawOn.Config, DrawOn, Screen.PhysicalX, Screen.PhysicalY);
+                    var leftBottom = new PhysicalPoint(DrawOn.Config, DrawOn, Screen.PhysicalX, Screen.PhysicalBounds.Bottom);
 
-                    if (leftBottom.Y <= _drawOn.PhysicalY || leftTop.Y >= _drawOn.PhysicalBounds.Bottom)
+                    if (leftBottom.Y <= DrawOn.PhysicalY || leftTop.Y >= DrawOn.PhysicalBounds.Bottom)
                     {
                         Hide();
                     }
                     else
                     {
-                        if (Enabled) Show();
+                        Show();
                     }
                     break;
 
                 case RulerSide.Left:
-                    var rightTop = new PhysicalPoint(_drawOn.Config, _drawOn, _screen.PhysicalBounds.Right, _screen.PhysicalBounds.Top);
-                    var rightBottom = new PhysicalPoint(_drawOn.Config, _drawOn, _screen.PhysicalBounds.Right, _screen.PhysicalBounds.Bottom);
+                    var rightTop = new PhysicalPoint(DrawOn.Config, DrawOn, Screen.PhysicalBounds.Right, Screen.PhysicalBounds.Top);
+                    var rightBottom = new PhysicalPoint(DrawOn.Config, DrawOn, Screen.PhysicalBounds.Right, Screen.PhysicalBounds.Bottom);
 
-                    if (rightBottom.Y <= _drawOn.PhysicalY || rightTop.Y >= _drawOn.PhysicalBounds.Bottom)
+                    if (rightBottom.Y <= DrawOn.PhysicalY || rightTop.Y >= DrawOn.PhysicalBounds.Bottom)
                     {
                         Hide();
                     }
                     else
                     {
-                        if (Enabled) Show();
+                        Show();
                     }
                     break;
 
                 case RulerSide.Bottom:
-                    PhysicalPoint topLeft = _screen.Bounds.TopLeft.ToScreen(_drawOn);
-                    PhysicalPoint topRight = _screen.Bounds.TopRight.ToScreen(_drawOn);
+                    PhysicalPoint topLeft = Screen.Bounds.TopLeft.ToScreen(DrawOn);
+                    PhysicalPoint topRight = Screen.Bounds.TopRight.ToScreen(DrawOn);
 
-                    if (topRight.X <= _drawOn.PhysicalX || topLeft.X >= _drawOn.PhysicalBounds.Right)
+                    if (topRight.X <= DrawOn.PhysicalX || topLeft.X >= DrawOn.PhysicalBounds.Right)
                     {
                         Hide();
                     }
                     else
                     {
-                        if (Enabled) Show();
+                        Show();
                     }
                     break;
                 case RulerSide.Top:
-                    PhysicalPoint bottomLeft = _screen.Bounds.BottomLeft.ToScreen(_drawOn);
-                    PhysicalPoint bottomRight = _screen.Bounds.BottomRight.ToScreen(_drawOn);
+                    PhysicalPoint bottomLeft = Screen.Bounds.BottomLeft.ToScreen(DrawOn);
+                    PhysicalPoint bottomRight = Screen.Bounds.BottomRight.ToScreen(DrawOn);
 
-                    if (bottomRight.X <= _drawOn.PhysicalX || bottomLeft.X >= _drawOn.PhysicalBounds.Right)
+                    if (bottomRight.X <= DrawOn.PhysicalX || bottomLeft.X >= DrawOn.PhysicalBounds.Right)
                     {
                         Hide();
                     }
                     else
                     {
-                        if(Enabled) Show();
+                        Show();
                     }
                     break;
                 default:
@@ -123,27 +154,13 @@ namespace LittleBigMouse_Control
             }
         }
 
-        private bool _enabled = false;
 
-        public bool Enabled
-        {
-            get { return _enabled; }
-            set
-            {
-                if (_enabled != value)
-                {
-                    _enabled = true;
-                    SetSize();
-                }
-            }
-        }
-
-
+        [DependsOn("Side")]
         public Thickness RulerThickness //rev
         {
             get
             {
-                switch (_side)
+                switch (Side)
                 {
                     case RulerSide.Top:
                         return new Thickness(1, 0, 1, 0);
@@ -159,53 +176,62 @@ namespace LittleBigMouse_Control
             }
         }
 
+        [DependsOn("Side", "DrawOn.PhysicalBounds", nameof(WindowHeight))]
         public double WindowTop
         {
             get
             {
-                if (_side == RulerSide.Bottom) return _drawOn.Bounds.BottomRight.Wpf.Y - WindowHeight;
+                if (Side == RulerSide.Bottom) return DrawOn.Bounds.BottomRight.Wpf.Y - WindowHeight;
 
-                return _drawOn.Bounds.TopLeft.Wpf.Y;
+                return DrawOn.Bounds.TopLeft.Wpf.Y;
             }
             set { }
         }
+
+        [DependsOn("Side", "DrawOn.PhysicalBounds", nameof(WindowWidth))]
         public double WindowLeft
         {
             get
             {
-                if (_side == RulerSide.Right) return _drawOn.Bounds.BottomRight.Wpf.X - WindowWidth;
+                if (Side == RulerSide.Right) return DrawOn.Bounds.BottomRight.Wpf.X - WindowWidth;
 
-                return _drawOn.Bounds.TopLeft.Wpf.X;
+                return DrawOn.Bounds.TopLeft.Wpf.X;
             }
             set { }
         }
+
+        [DependsOn("DrawOn.PhysicalBounds", "Screen.PhysicalBounds")]
         public double RulerLeft //rev
         {
-            get { return _screen.Bounds.TopLeft.ToScreen(_drawOn).Wpf.X; }
+            get { return Screen.Bounds.TopLeft.ToScreen(DrawOn).Wpf.X; }
             set { }
         }
 
+        [DependsOn("Side", "DrawOn.PhysicalBounds", "Screen.PhysicalBounds")]
         public double RulerTop //rev
         {
-            get { return _screen.Bounds.TopLeft.ToScreen(_drawOn).Wpf.Y; }
+            get { return Screen.Bounds.TopLeft.ToScreen(DrawOn).Wpf.Y; }
             set { }
         }
+
+        [DependsOn("Horizontal", "DrawOn.WpfWidth", "DrawOn.PhysicalToWpfRatioX")]
         public double WindowWidth //rev
         {
             get
             {
-                if (Horizontal) return _drawOn.WpfWidth;
+                if (Horizontal) return DrawOn.WpfWidth;
 
-                return 30 * _drawOn.PhysicalToWpfRatioX ;
+                return 30 * DrawOn.PhysicalToWpfRatioX ;
               
             }
             set { }
         }
+        [DependsOn("Horizontal", "Screen.PhysicalBounds", nameof(RulerLeft), nameof(WindowWidth))]
         public double RulerWidth //rev
         {
             get
             {
-                if (Horizontal) return _screen.Bounds.BottomRight.ToScreen(_drawOn).Wpf.X - RulerLeft;
+                if (Horizontal) return Screen.Bounds.BottomRight.ToScreen(DrawOn).Wpf.X - RulerLeft;
 
                 return WindowWidth;
             }
@@ -213,22 +239,24 @@ namespace LittleBigMouse_Control
         }
 
 
+        [DependsOn("DrawOn.Bounds", nameof(WindowTop), "DrawOn.PhysicalToWpfRatioY")]
         public double WindowHeight
         {
             get
             {
-                if (Vertical) return _drawOn.Bounds.BottomRight.Wpf.Y - WindowTop;
+                if (Vertical) return DrawOn.Bounds.BottomRight.Wpf.Y - WindowTop;
 
-                return 30 * _drawOn.PhysicalToWpfRatioY; // 3cm
+                return 30 * DrawOn.PhysicalToWpfRatioY; // 3cm
             }
             set { }
         }
 
+        [DependsOn("Screen.Bounds", "DrawOn.Bounds", nameof(RulerTop), nameof(WindowHeight))]
         public double RulerHeight //rev
         {
             get
             {
-                if (Vertical) return _screen.Bounds.BottomRight.ToScreen(_drawOn).Wpf.Y - RulerTop;
+                if (Vertical) return Screen.Bounds.BottomRight.ToScreen(DrawOn).Wpf.Y - RulerTop;
 
                 return WindowHeight;               
             }
@@ -236,37 +264,49 @@ namespace LittleBigMouse_Control
         }
 
 
+        private Thickness _canvasMargin;
 
         public Thickness CanvasMargin //rev
         {
-            get
+            get { return _canvasMargin; }
+            private set
             {
+                _notify.SetProperty(ref _canvasMargin, value);
+            }
+        }
+
+        [DependsOn("Screen.Bounds", "Screen.PhysicalBounds", "DrawOn.Bounds", "DrawOn.PhysicalBounds", "WindowTop", "WindowLeft", "WindowHeight", "RulerTop", "RulerLeft",  "RulerHeight", "RulerWidth")]
+        public void UpdateCanvasMargin()
+        {
+            if (DrawOn == null) return;
+            if (Screen == null) return;
+
                 if (Vertical)
                 {
-                    return new Thickness(
+                CanvasMargin = new Thickness(
                         0,
-                        _screen.Bounds.TopLeft.ToScreen(_drawOn).Wpf.Y - WindowTop,
+                        Screen.Bounds.TopLeft.ToScreen(DrawOn).Wpf.Y - WindowTop,
                         0,
                         (WindowTop + WindowHeight) - (RulerTop + RulerHeight)
                         );
                 }
                  else
                 {
-                    return new Thickness(
-                        _screen.Bounds.TopLeft.ToScreen(_drawOn).Wpf.X - WindowLeft,
+                CanvasMargin = new Thickness(
+                        Screen.Bounds.TopLeft.ToScreen(DrawOn).Wpf.X - WindowLeft,
                         0,
                         (WindowLeft + WindowWidth) - (RulerLeft + RulerWidth),
                         0
                         );
                 }
-             }
         }
 
+        [DependsOn(nameof(Side))]
         public Point GradientStartPoint //rev
         {
             get
             {
-                switch (_side)
+                switch (Side)
                 {
                     case RulerSide.Top: return new Point(0.5, 0);
                     case RulerSide.Bottom: return new Point(0.5, 1);
@@ -278,11 +318,12 @@ namespace LittleBigMouse_Control
             }
         }
 
+        [DependsOn(nameof(Side))]
         public Point GradientEndPoint //rev
         {
             get
             {
-                switch (_side)
+                switch (Side)
                 {
                     case RulerSide.Top: return new Point(0.5, 1);
                     case RulerSide.Bottom: return new Point(0.5, 0);
@@ -298,70 +339,59 @@ namespace LittleBigMouse_Control
         {
             _notify = new NotifierHelper(this);
 
-            _screen = screen;
-            _drawOn = drawOn;
-            _side = side;
-
-            _screen.PropertyChanged += _screen_PropertyChanged;
-            _drawOn.PropertyChanged += _screen_PropertyChanged;
+            Side = side;
 
             DataContext = this;
 
             InitializeComponent();
 
+            Screen = screen;
+            DrawOn = drawOn;
 
             DrawRuler();
-            SetSize();
 
             _notify.InitNotifier();
         }
 
-        private void _screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (!_refresh) return;
-            switch (e.PropertyName)
-            {
-                case "PhysicalX":
-                    if (_side == RulerSide.Top || _side == RulerSide.Bottom)
-                    {
-                        _notify.RaiseProperty("CanvasMargin");
-                        //Change.RaiseProperty("RulerLeft");
-                        //Change.RaiseProperty("RulerWidth");
-                    }
-                    break;
-                case "PhysicalWidth":
-                    if (_side == RulerSide.Top || _side == RulerSide.Bottom)
-                    {
-                        _notify.RaiseProperty("CanvasMargin");
-                        //Change.RaiseProperty("RulerLeft");
-                        //Change.RaiseProperty("RulerWidth");
-                    DrawRuler();
-                    }
-                    break;
-                case "PhysicalY":
-                    if (_side == RulerSide.Left || _side == RulerSide.Right)
-                    {
-                        _notify.RaiseProperty("CanvasMargin");
-                        //Change.RaiseProperty("ActualRulerTop");
-                        //Change.RaiseProperty("RulerTop");
-                        //Change.RaiseProperty("RulerHeight");
-                    }
-                    break;
-                case "PhysicalHeight":
-                    if (_side == RulerSide.Left || _side == RulerSide.Right)
-                    {
-                        _notify.RaiseProperty("CanvasMargin");
-                        //Change.RaiseProperty("RulerTop");
-                        //Change.RaiseProperty("RulerHeight");
-                        DrawRuler();
-                    }
-                     break;
-            }
-        }
 
-        [@DependsOn("Side")]
+        //private void _screen_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        //{
+        //    if (!_refresh) return;
+        //    switch (e.PropertyName)
+        //    {
+        //        case "PhysicalX":
+        //            if (_side == RulerSide.Top || _side == RulerSide.Bottom)
+        //            {
+        //                _notify.RaiseProperty("CanvasMargin");
+        //            }
+        //            break;
+        //        case "PhysicalWidth":
+        //            if (_side == RulerSide.Top || _side == RulerSide.Bottom)
+        //            {
+        //                _notify.RaiseProperty("CanvasMargin");
+        //                DrawRuler();
+        //            }
+        //            break;
+        //        case "PhysicalY":
+        //            if (_side == RulerSide.Left || _side == RulerSide.Right)
+        //            {
+        //                _notify.RaiseProperty("CanvasMargin");
+        //            }
+        //            break;
+        //        case "PhysicalHeight":
+        //            if (_side == RulerSide.Left || _side == RulerSide.Right)
+        //            {
+        //                _notify.RaiseProperty("CanvasMargin");
+        //                DrawRuler();
+        //            }
+        //             break;
+        //    }
+        //}
+
+        [DependsOn(nameof(Side))]
         public bool Vertical => (_side == RulerSide.Left) || (_side == RulerSide.Right);
 
+        [DependsOn(nameof(Side))]
         public bool Horizontal => !Vertical;
 
         private void DrawRuler()
@@ -370,8 +400,8 @@ namespace LittleBigMouse_Control
 
             bool revert = (_side == RulerSide.Right) || (_side == RulerSide.Bottom);
 
-            double sizeRatio = Vertical?((1/_drawOn.WpfToPixelRatioX)/_drawOn.PitchX):((1/_drawOn.WpfToPixelRatioY)/_drawOn.PitchY);
-            double lenghtRatio = Vertical?((1/_drawOn.WpfToPixelRatioY)/_drawOn.PitchY):((1/_drawOn.WpfToPixelRatioX)/_drawOn.PitchX);
+            double sizeRatio = Vertical?((1/ DrawOn.WpfToPixelRatioX)/ DrawOn.PitchX):((1/ DrawOn.WpfToPixelRatioY)/ DrawOn.PitchY);
+            double lenghtRatio = Vertical?((1/ DrawOn.WpfToPixelRatioY)/ DrawOn.PitchY):((1/ DrawOn.WpfToPixelRatioX)/ DrawOn.PitchX);
 
             double length = Vertical?_screen.PhysicalHeight:_screen.PhysicalWidth;
             double width = Vertical ? WindowWidth : WindowHeight;
@@ -461,43 +491,38 @@ namespace LittleBigMouse_Control
 
             Point newPoint = PointToScreen(e.GetPosition(this)); // LbmMouse.CursorPos;
             //newPoint.Offset(
-            //    _screen.Config.PhysicalBounds.X/_drawOn.PitchX, 
-            //    _screen.Config.PhysicalBounds.Y/_drawOn.PitchY
+            //    _screen.Config.PhysicalBounds.X/DrawOn.PitchX, 
+            //    _screen.Config.PhysicalBounds.Y/DrawOn.PitchY
             //    );
 
             if (Vertical)
             {
-                double offset = (newPoint.Y - _oldPoint.Y)*_drawOn.PitchY;
+                double offset = (newPoint.Y - _oldPoint.Y)* DrawOn.PitchY;
 
-                double old = _drawOn.PhysicalY;
+                double old = DrawOn.PhysicalY;
 
-                _drawOn.PhysicalY = _dragStartPoint.Y - offset;
+                DrawOn.PhysicalY = _dragStartPoint.Y - offset;
 
-                if (_drawOn.Primary && _drawOn.PhysicalY == old) _oldPoint.Y += offset / _drawOn.PitchY;
+                if (DrawOn.Primary && DrawOn.PhysicalY == old) _oldPoint.Y += offset / DrawOn.PitchY;
             }
             else
             {
-                double old = _drawOn.PhysicalY;
+                double old = DrawOn.PhysicalY;
 
-                double offset = (newPoint.X - _oldPoint.X)*_drawOn.PitchX;
+                double offset = (newPoint.X - _oldPoint.X)* DrawOn.PitchX;
 
-                _drawOn.PhysicalX = _dragStartPoint.X - offset;
+                DrawOn.PhysicalX = _dragStartPoint.X - offset;
 
-                if (_drawOn.Primary && _drawOn.PhysicalX == old) _oldPoint.X += offset / _drawOn.PitchX;
+                if (DrawOn.Primary && DrawOn.PhysicalX == old) _oldPoint.X += offset / DrawOn.PitchX;
             }
-        }
-
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            _screen.PropertyChanged -= _screen_PropertyChanged;
         }
 
         private void Window_MouseDown(object sender, MouseButtonEventArgs e)
         {
             _oldPoint = PointToScreen(e.GetPosition(this));
-            //_oldPoint.Offset(_screen.Config.PhysicalBounds.X/_drawOn.PitchX, _screen.Config.PhysicalBounds.Y/_drawOn.PitchY);
+            //_oldPoint.Offset(_screen.Config.PhysicalBounds.X/DrawOn.PitchX, _screen.Config.PhysicalBounds.Y/DrawOn.PitchY);
 
-            _dragStartPoint = InvertControl?_drawOn.PhysicalLocation:_screen.PhysicalLocation;
+            _dragStartPoint = InvertControl? DrawOn.PhysicalLocation:_screen.PhysicalLocation;
             _moving = true;
             CaptureMouse();
         }
@@ -521,25 +546,25 @@ namespace LittleBigMouse_Control
 
             Point p = e.GetPosition(this);
 
-            PhysicalPoint pos = new WpfPoint(_drawOn.Config, _drawOn,p.X,p.Y).Physical.ToScreen(_drawOn);
+            PhysicalPoint pos = new WpfPoint(DrawOn.Config, DrawOn, p.X,p.Y).Physical.ToScreen(DrawOn);
 
             if (Vertical)
             {
-                _drawOn.PhysicalRatioY *= ratio;
+                DrawOn.PhysicalRatioY *= ratio;
 
                 PhysicalPoint pos2 =
-                    new WpfPoint(_drawOn.Config, _drawOn, p.X, p.Y).Physical.ToScreen(_drawOn);
+                    new WpfPoint(DrawOn.Config, DrawOn, p.X, p.Y).Physical.ToScreen(DrawOn);
 
-                _drawOn.PhysicalY += pos.Y - pos2.Y;
+                DrawOn.PhysicalY += pos.Y - pos2.Y;
             }
             else
             {
-                _drawOn.PhysicalRatioX *= ratio;
+                DrawOn.PhysicalRatioX *= ratio;
 
                 PhysicalPoint pos2 =
-                    new WpfPoint(_drawOn.Config, _drawOn, p.X, p.Y).Physical.ToScreen(_drawOn);
+                    new WpfPoint(DrawOn.Config, DrawOn, p.X, p.Y).Physical.ToScreen(DrawOn);
 
-                _drawOn.PhysicalX += pos.X - pos2.X;
+                DrawOn.PhysicalX += pos.X - pos2.X;
             }
          }
 

@@ -25,7 +25,7 @@ namespace LittleBigMouse_Daemon
 
             if (Environment.UserInteractive)
             {
-                LittleBigMouseDaemon daemon = new LittleBigMouseDaemon();
+                LittleBigMouseDaemon daemon = new LittleBigMouseDaemon(args);
                 daemon.Run();
             }
             else

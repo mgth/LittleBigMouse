@@ -111,7 +111,7 @@ namespace Microsoft.Win32.TaskScheduler
 			}
 			else
 			{
-				throw new NotImplementedException();
+				throw new NotImplementedException("???");
 			}
 
 			return ret.ToArray();
@@ -177,7 +177,7 @@ namespace Microsoft.Win32.TaskScheduler
 				}
 				else
 				{
-					throw new NotImplementedException();
+					throw new NotImplementedException("???");
 				}
 			}
 			return ret;

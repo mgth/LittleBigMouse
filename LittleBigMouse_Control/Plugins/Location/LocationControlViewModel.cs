@@ -64,6 +64,18 @@ namespace LittleBigMouse_Control.PluginLocation
             get { return _liveUpdate; }
             set { SetProperty(ref _liveUpdate, value); }
         }
+
+        public bool LoadAtStartup
+        {
+            get { return _config.LoadAtStartup; }
+            set
+            {
+                _config.LoadAtStartup = value;
+                LittleBigMouseClient.Client.LoadAtStartup(value);
+            }
+        }
+
+
         [DependsOn(nameof(LiveUpdate), "Config.Saved")]
         private void DoLiveUpdate()
         {

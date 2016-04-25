@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using NotifyChange;
 
 namespace LittleBigMouse_Control
@@ -91,18 +92,19 @@ namespace LittleBigMouse_Control
         [DependsOn("Presenter.Ratio")]
         public Thickness LogoPadding => new Thickness(4 * Presenter.Ratio);
 
-
+        [DependsOn("Presenter.Ratio")]
+        private double Ratio => Presenter?.Ratio ?? 1;
 
         [DependsOn("Screen.TopBorder", "Presenter.Ratio")]
-        public GridLength TopBorder => new GridLength(Screen.TopBorder * Presenter.Ratio);
+        public GridLength TopBorder => new GridLength((Screen?.TopBorder??0) * Ratio);
         [DependsOn("Screen.BottomBorder", "Presenter.Ratio")]
-        public GridLength BottomBorder => new GridLength(Screen.BottomBorder * Presenter.Ratio);
+        public GridLength BottomBorder => new GridLength((Screen?.BottomBorder??0) * Ratio);
 
         [DependsOn("Screen.LeftBorder", "Presenter.Ratio")]
-        public GridLength LeftBorder => new GridLength(Screen.LeftBorder * Presenter.Ratio);
+        public GridLength LeftBorder => new GridLength((Screen?.LeftBorder??0) * Ratio);
 
         [DependsOn("Screen.RightBorder", "Presenter.Ratio")]
-        public GridLength RightBorder => new GridLength(Screen.RightBorder * Presenter.Ratio);
+        public GridLength RightBorder => new GridLength((Screen?.RightBorder??0) * Ratio);
 
         #region Unrotated
 

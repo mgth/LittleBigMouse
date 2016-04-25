@@ -12,7 +12,7 @@
         MouseUp="Window_MouseUp"
         MouseWheel="Ruler_OnMouseWheel"
         ShowInTaskbar="False"
-        ShowActivated="False" Closing="Window_Closing"
+        ShowActivated="False" 
         AllowsTransparency="True"
         Topmost="True"
         Top="{Binding Path=WindowTop, Mode=TwoWay}"

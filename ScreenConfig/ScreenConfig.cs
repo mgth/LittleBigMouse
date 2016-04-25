@@ -417,12 +417,10 @@ namespace LbmScreenConfig
             set { if (SetProperty(ref _enabled, value)) Saved = false; }
         }
 
-        private bool _loadAtStartup;
-
         public bool LoadAtStartup
         {
-            get { return _loadAtStartup; }
-            set { if (SetProperty(ref _loadAtStartup, value)) Saved = false; }
+            get { return GetProperty<bool>(); }
+            set { if (SetProperty(value)) { Saved = false; } }
         }
 
         public bool IsRatio100

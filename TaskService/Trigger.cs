@@ -949,7 +949,7 @@ namespace Microsoft.Win32.TaskScheduler
 		/// Gets a value that indicates the amount of time between the trigger events and when the task is started.
 		/// </summary>
 		/// <exception cref="System.NotImplementedException">This value cannot be set.</exception>
-		public TimeSpan Delay { get { return delay; } set { throw new NotImplementedException(); } }
+		public TimeSpan Delay { get { return delay; } set { throw new NotImplementedException("Trigger : Delay"); } }
 
 		/// <summary>
 		/// Clones this instance.

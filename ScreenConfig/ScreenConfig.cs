@@ -74,8 +74,6 @@ namespace LbmScreenConfig
             Monitors.CollectionChanged += MonitorsOnCollectionChanged;
 
             Watch(AllScreens, "Screen");
-
-            InitNotifier();
         }
 
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
@@ -107,8 +105,8 @@ namespace LbmScreenConfig
 
         public Screen Selected
         {
-            get { return _selected; }
-            private set { SetProperty(ref _selected, value); }
+            get { return GetProperty<Screen>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn("Screen.Selected")]
@@ -142,11 +140,21 @@ namespace LbmScreenConfig
 
         public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Id, create);
 
+
         public string Id
-            =>
-                AllScreens.OrderBy(s => s.Id)
+        {
+            get { return GetProperty<string>(); }
+            private set { SetProperty(value); }
+        }
+
+        public String Id_default => AllScreens.OrderBy(s => s.Id)
                     .Aggregate("", (current, screen) => current + (((current != "") ? "." : "") + screen.Id));
 
+        [DependsOn("Screen.Id")]
+        private void UpdateId()
+        {
+            Id = Id_default;
+        }
 
         public void MatchConfig(string id)
         {
@@ -250,7 +258,7 @@ namespace LbmScreenConfig
         public void Load()
         {
             Moving = true; //TODO : Hugly hack
-            SetPhysicalAuto();
+            //SetPhysicalAuto();
 
             using (RegistryKey k = OpenConfigRegKey())
             {
@@ -305,23 +313,19 @@ namespace LbmScreenConfig
         /// <summary>
         /// Moving is true when screen is dragged on gui
         /// </summary>
-        private bool _moving = false;
-
         public bool Moving
         {
-            get { return _moving; }
-            set { SetProperty(ref _moving, value); }
+            get { return GetProperty<bool>(); }
+            set { SetProperty(value); }
         }
 
         /// <summary>
         /// Physical Outside Bounds updated while moving (screen dragged on gui)
         /// </summary>
-        Rect _physicalOutsideBounds = new Rect();
-
         public Rect PhysicalOutsideBounds
         {
-            get { return _physicalOutsideBounds; }
-            private set { if (SetProperty(ref _physicalOutsideBounds, value)) Saved = false; }
+            get { return GetProperty<Rect>(); }
+            private set { if (SetProperty(value)) Saved = false; }
         }
 
         [DependsOn(nameof(Moving), "Screen.PhysicalOutsideBounds")]
@@ -345,23 +349,21 @@ namespace LbmScreenConfig
             PhysicalOutsideBounds = outside;
         }
 
-        private Rect _movingPhysicalOutsideBounds;
-
 
         /// <summary>
         /// Physical Outside Bounds NOT updated while moving (screen dragged on gui)
         /// </summary>
         public Rect MovingPhysicalOutsideBounds
         {
-            get { return _movingPhysicalOutsideBounds; }
-            private set { SetProperty(ref _movingPhysicalOutsideBounds, value); }
+            get { return GetProperty<Rect>(); }
+            private set { SetProperty(value); }
         }
 
         public void ShiftMovingPhysicalBounds(Vector shift)
         {
             Rect r = new Rect(
-                _movingPhysicalOutsideBounds.TopLeft + shift
-                , _movingPhysicalOutsideBounds.Size
+                MovingPhysicalOutsideBounds.TopLeft + shift
+                , MovingPhysicalOutsideBounds.Size
                 );
             MovingPhysicalOutsideBounds = r;
         }
@@ -377,12 +379,10 @@ namespace LbmScreenConfig
         /// <summary>
         /// Physical Bounds of overall screens without borders
         /// </summary>
-        private Rect _physicalBounds = new Rect();
-
         public Rect PhysicalBounds
         {
-            get { return _physicalBounds; }
-            private set { if (SetProperty(ref _physicalBounds, value)) Saved = false; }
+            get { return GetProperty<Rect>(); }
+            private set { if (SetProperty(value)) Saved = false; }
         }
 
         [DependsOn("Screen.PhysicalBounds")]
@@ -409,12 +409,11 @@ namespace LbmScreenConfig
         /// <summary>
         /// 
         /// </summary>
-        private bool _enabled;
 
         public bool Enabled
         {
-            get { return _enabled; }
-            set { if (SetProperty(ref _enabled, value)) Saved = false; }
+            get { return GetProperty<bool>(); }
+            set { if (SetProperty(value)) Saved = false; }
         }
 
         public bool LoadAtStartup
@@ -437,46 +436,38 @@ namespace LbmScreenConfig
         }
 
         public bool AdjustPointerAllowed => IsRatio100;
-        private bool _adjustPointer;
 
         public bool AdjustPointer
         {
-            get { return AdjustPointerAllowed && _adjustPointer; }
-            set { if (SetProperty(ref _adjustPointer, value)) Saved = false; }
+            get { return AdjustPointerAllowed && GetProperty<bool>(); }
+            set { if (SetProperty(value)) Saved = false; }
         }
 
         public bool AdjustSpeedAllowed => IsRatio100;
-        private bool _adjustSpeed;
 
         public bool AdjustSpeed
         {
-            get { return AdjustSpeedAllowed && _adjustSpeed; }
-            set { if (SetProperty(ref _adjustSpeed, value)) Saved = false; }
+            get { return AdjustSpeedAllowed && GetProperty<bool>(); }
+            set { if (SetProperty(value)) Saved = false; }
         }
-
-        private bool _allowCornerCrossing;
 
         public bool AllowCornerCrossing
         {
-            get { return _allowCornerCrossing; }
-            set { if (SetProperty(ref _allowCornerCrossing, value)) Saved = false; }
+            get { return GetProperty<bool>(); }
+            set { if (SetProperty(value)) Saved = false; }
         }
 
-
-        private bool _homeCinema;
 
         public bool HomeCinema
         {
-            get { return _homeCinema; }
-            set { if (SetProperty(ref _homeCinema, value)) Saved = false; }
+            get { return GetProperty<bool>(); }
+            set { if (SetProperty(value)) Saved = false; }
         }
-
-        private Rect _configLocation;
 
         public Rect ConfigLocation
         {
-            get { return _configLocation; }
-            set { SetProperty(ref _configLocation, value); }
+            get { return GetProperty<Rect>(); }
+            set { SetProperty(value); }
         }
 
 
@@ -639,36 +630,34 @@ namespace LbmScreenConfig
         }
 
 
-        private bool _allowOverlaps = false;
-
         public bool AllowOverlaps
         {
-            get { return _allowOverlaps; }
+            get { return GetProperty<bool>(); }
             set
             {
-                if (SetProperty(ref _allowOverlaps, value))
+                if (SetProperty(value))
                 {
                     Saved = false;
                 }
             }
         }
 
-        private bool _allowDiscontinuity = false;
-        private bool _saved = false;
-        private Screen _selected;
-
         public bool AllowDiscontinuity
         {
-            get { return _allowDiscontinuity; }
-            set { if (SetProperty(ref _allowDiscontinuity, value)) Saved = false; }
+            get { return GetProperty<bool>(); }
+            set { if (SetProperty(value)) Saved = false; }
         }
 
         public bool Saved
         {
-            get { return _saved; }
+            get { return GetProperty<bool>(); }
             set
             {
-                SetProperty(ref _saved, value);
+                if (SetProperty(value))
+                    if (value == false)
+                    {
+                        
+                    }
             }
         }
 

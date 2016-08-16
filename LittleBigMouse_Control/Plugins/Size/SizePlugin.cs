@@ -5,8 +5,6 @@ namespace LittleBigMouse_Control.Plugins.Size
 {
     internal class SizePlugin : Plugin, IPluginButton, IPluginScreenControl
     {
-        private bool _isActivated;
-
         public override bool Init()
         {
             MainViewModel?.AddButton(this);
@@ -17,10 +15,10 @@ namespace LittleBigMouse_Control.Plugins.Size
 
         public bool IsActivated
         {
-            get { return _isActivated; }
+            get { return GetProperty<bool>(); }
             set
             {
-                if (SetProperty(ref _isActivated, value))
+                if (SetProperty(value))
                 {
                     if (value)
                     {

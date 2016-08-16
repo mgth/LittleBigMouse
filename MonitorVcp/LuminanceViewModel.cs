@@ -10,13 +10,10 @@ namespace MonitorVcp
         public ScreenConfig Config { get; set; }
 
 
-        private double _luminance = -1;
-        public double Value
+        private double Value_default
         {
             get
             {
-                if (_luminance >= 0) return _luminance;
-
                 double l = 0;
 
                 if (Config == null) return l;
@@ -28,22 +25,31 @@ namespace MonitorVcp
                     l = Math.Max(l, lut.Luminance);
                 }
 
-                _luminance = l;
-                return _luminance;
+
+                return l;
+            }
+        }
+
+        public double Value
+        {
+            get
+            {
+                return GetProperty<double>();
+
             }
 
             set
             {
                 if (Config != null)
-                    if (SetProperty(ref _luminance, value))
-                {
-                    foreach (Screen screen in Config.AllScreens)
+                    if (SetProperty(value))
                     {
-                        ProbeLut lut = screen.ProbeLut();
-                        //lut.Load();
-                        lut.Luminance = value;
+                        foreach (Screen screen in Config.AllScreens)
+                        {
+                            ProbeLut lut = screen.ProbeLut();
+                            //lut.Load();
+                            lut.Luminance = value;
+                        }
                     }
-                }
             }
         }
         public double Max

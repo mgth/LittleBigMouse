@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This file is NOT compatible with Silverlight-->
+<Viewbox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Stretch="Uniform">
+  <Canvas Name="svg2" Width="69.08125" Height="77.384629">
+    <Canvas.RenderTransform>
+      <TranslateTransform X="0" Y="0"/>
+    </Canvas.RenderTransform>
+    <Canvas.Resources>
+      <PathGeometry xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Key="clipPath2218" Figures="m 586.579 189.092 120.69 0 0 -67.937 -120.69 0 0 67.937 z" FillRule="NonZero"/>
+      <LinearGradientBrush xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Key="linearGradient2226" MappingMode="Absolute" SpreadMethod="Pad" StartPoint="0,0" EndPoint="1,0">
+        <LinearGradientBrush.GradientStops>
+          <GradientStopCollection>
+            <GradientStop Color="#FFC6C5C5" Offset="0"/>
+            <GradientStop Color="#FFFEFEFE" Offset="0.15560874"/>
+            <GradientStop Color="#FFFEFEFE" Offset="0.548387"/>
+            <GradientStop Color="#FFFEFEFE" Offset="0.90926528"/>
+            <GradientStop Color="#FF979595" Offset="1"/>
+          </GradientStopCollection>
+        </LinearGradientBrush.GradientStops>
+        <LinearGradientBrush.Transform>
+          <MatrixTransform Matrix="120.68945 0 0 -120.68945 641.26075 241.77243"/>
+        </LinearGradientBrush.Transform>
+      </LinearGradientBrush>
+    </Canvas.Resources>
+    <!--Unknown tag: metadata-->
+    <!--Unknown tag: sodipodi:namedview-->
+    <Canvas Name="g10">
+      <Canvas.RenderTransform>
+        <MatrixTransform Matrix="1.25 0 0 -1.25 -476.81924 585.63902"/>
+      </Canvas.RenderTransform>
+      <Canvas Name="g8367">
+        <Canvas.RenderTransform>
+          <TranslateTransform X="141.57619" Y="309.32612"/>
+        </Canvas.RenderTransform>
+        <Canvas Name="g536">
+          <Canvas.RenderTransform>
+            <TranslateTransform X="278.1372" Y="140.9434"/>
+          </Canvas.RenderTransform>
+          <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path538" Fill="#FF005200">
+            <Path.Data>
+              <PathGeometry Figures="m 0 0 c 5.189 -3.445 8.612 -9.34 8.612 -16.035 0 -10.625 -8.612 -19.238 -19.238 -19.238 -10.624 0 -19.237 8.613 -19.237 19.238 0 6.693 3.423 12.586 8.613 16.029 6.279 3.733 5.623 6.225 5.623 6.225 -0.788 4.328 -5.623 3.25 -5.623 3.25 -9.986 -4.162 -17.008 -14.01 -17.008 -25.504 0 -15.26 12.372 -27.631 27.632 -27.631 15.262 0 27.633 12.371 27.633 27.631 0 11.494 -7.022 21.342 -17.007 25.504 0 0 -4.609 1.078 -5.79 -2.332 0 0 -1.049 -4.59 5.79 -7.137" FillRule="nonzero"/>
+            </Path.Data>
+          </Path>
+        </Canvas>
+        <Canvas Name="g540">
+          <Canvas.RenderTransform>
+            <TranslateTransform X="270.6421" Y="136.9531"/>
+          </Canvas.RenderTransform>
+          <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path542" Fill="#FF005200">
+            <Path.Data>
+              <PathGeometry Figures="m 0 0 c 0 -1.629 -1.468 -2.951 -3.279 -2.951 -1.811 0 -3.279 1.322 -3.279 2.951 l 0 19.281 c 0 1.631 1.468 2.951 3.279 2.951 1.811 0 3.279 -1.32 3.279 -2.951 L 0 0 Z" FillRule="nonzero"/>
+            </Path.Data>
+          </Path>
+        </Canvas>
+      </Canvas>
+      <Canvas Name="g2214" Opacity="0.497">
+        <Canvas Name="g2216"/>
+        <Canvas Name="g2238">
+          <Canvas Name="g2240">
+            <Canvas Name="g2242">
+              <Canvas Name="g2244">
+                <Canvas Name="g2246">
+                  <Canvas Name="g2248">
+                    <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path2250" Fill="{StaticResource linearGradient2226}">
+                      <Path.Data>
+                        <PathGeometry Figures="m 702.13165 275.74138 c -31.896 0 -58.078 -24.432 -60.871 -55.6 10.903 4.66 23.225 3.692 36.186 -2.508 15.877 -7.593 34.979 -13.097 52.492 -7.607 14.125 4.428 24.572 10.769 32.012 17.203 -5.814 27.707 -30.384 48.512 -59.819 48.512" FillRule="NonZero"/>
+                      </Path.Data>
+                    </Path>
+                  </Canvas>
+                </Canvas>
+              </Canvas>
+            </Canvas>
+          </Canvas>
+        </Canvas>
+      </Canvas>
+    </Canvas>
+  </Canvas>
+</Viewbox>

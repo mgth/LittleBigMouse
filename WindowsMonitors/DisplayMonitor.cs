@@ -8,13 +8,12 @@ using WinAPI;
 
 namespace WindowsMonitors
 {
-    public class DisplayMonitor : DisplayDevice, IEquatable<DisplayMonitor>
+    public class DisplayMonitor : DisplayDevice
     {
         public DisplayAdapter Adapter { get; private set; }
         public DisplayMonitor(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
             Init(adapter, dev);
-            InitNotifier();
         }
         public void Init(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
@@ -45,10 +44,17 @@ namespace WindowsMonitors
             HMonitor = hMonitor;
         }
 
-        public bool Equals(DisplayMonitor other)
+        public override bool Equals(Object obj)
         {
-            if (other == null) return false;
+            if (obj == null) return false;
+            var other = obj as DisplayMonitor;
+            if (other == null) return base.Equals(obj);
             return DeviceId == other.DeviceId;
+        }
+
+        public override int GetHashCode()
+        {
+            return ("DisplayMonitor" + DeviceId).GetHashCode();
         }
 
         ~DisplayMonitor()
@@ -58,27 +64,6 @@ namespace WindowsMonitors
                 NativeMethods.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }
 
-        private uint _primary;
-        private Rect _monitorArea;
-        private Rect _workArea;
-        private int _displayFixedOutput;
-        private int _displayFrequency;
-        private int _displayFlags;
-        private int _pelsWidth;
-        private int _bitsPerPixel;
-        private int _displayOrientation;
-        private Point _position;
-        private int _pelsHeight;
-        private IntPtr _hMonitor;
-        private string _hKeyName;
-        private string _manufacturerCode = "";
-        private byte[] _edid;
-        private string _productCode = "";
-        private string _serial = "";
-        private string _model = "";
-        private string _serialNo = "";
-        private Size _physicalSize;
-        private bool _attachedToDesktop;
 
         public void UpdateDevMode()
         {
@@ -99,8 +84,8 @@ namespace WindowsMonitors
         }
         public bool AttachedToDesktop
         {
-            get { return _attachedToDesktop; }
-            private set { SetProperty(ref _attachedToDesktop, value); }
+            get { return GetProperty<bool>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn(nameof(State))]
@@ -112,8 +97,8 @@ namespace WindowsMonitors
 
         public int PelsHeight
         {
-            get { return _pelsHeight; }
-            private set { SetProperty(ref _pelsHeight, value); }
+            get { return GetProperty<int>(); }
+            private set { SetProperty(value); }
         }
         //public int PelsHeight
         //{
@@ -122,33 +107,33 @@ namespace WindowsMonitors
         //}
         public int PelsWidth
         {
-            get { return _pelsWidth; }
-            private set { SetProperty(ref _pelsWidth, value); }
+            get { return GetProperty<int>(); }
+            private set { SetProperty(value); }
         }
 
         public int DisplayFixedOutput
         {
-            get { return _displayFixedOutput; }
-            private set { SetProperty(ref _displayFixedOutput, value); }
+            get { return GetProperty<int>(); }
+            private set { SetProperty(value); }
         }
 
         public int DisplayFrequency
         {
-            get { return _displayFrequency; }
-            private set { SetProperty(ref _displayFrequency, value); }
+            get { return GetProperty<int>(); }
+            private set { SetProperty(value); }
         }
 
         public int DisplayFlags
         {
-            get { return _displayFlags; }
-            private set { SetProperty(ref _displayFlags, value); }
+            get { return GetProperty<int>(); }
+            private set { SetProperty(value); }
         }
 
 
         public int BitsPerPixel
         {
-            get { return _bitsPerPixel; }
-            private set { SetProperty(ref _bitsPerPixel, value); }
+            get { return GetProperty<int>(); }
+            private set { SetProperty(value); }
         }
 
         public int DisplayOrientation
@@ -165,7 +150,7 @@ namespace WindowsMonitors
 
         public uint Primary
         {
-            get { return _primary; }
+            get { return GetProperty<uint>(); }
             set
             {
                 // Must remove old primary screen before setting this one
@@ -177,7 +162,7 @@ namespace WindowsMonitors
                     }
                 }
 
-                SetProperty(ref _primary, value);
+                SetProperty(value);
             }
         }
 
@@ -282,10 +267,10 @@ namespace WindowsMonitors
             ManufacturerCode = code;
         }
 
-        public String ProductCode
+        public string ProductCode
         {
-            get { return _productCode; }
-            private set { SetProperty(ref _productCode, value); }
+            get { return GetProperty<string>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn(nameof(Edid))]
@@ -298,8 +283,8 @@ namespace WindowsMonitors
 
         public string Serial
         {
-            get { return _serial; }
-            private set { SetProperty(ref _serial, value); }
+            get { return GetProperty<string>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn(nameof(Edid))]
@@ -317,22 +302,26 @@ namespace WindowsMonitors
 
         public string Model
         {
-            get { return _model; }
-            private set { SetProperty(ref _model, value); }
+            get { return GetProperty<string>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn(nameof(Edid))]
         private void UpdateModel() { Model = Block((char)0xFC); }
         public string SerialNo
         {
-            get { return _serialNo; }
-            private set { SetProperty(ref _serialNo, value); }
+            get { return GetProperty<string>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn(nameof(Edid))]
         private void UpdateSerialNo() { SerialNo = Block((char)0xFF); }
 
-        public Size PhysicalSize => _physicalSize;
+        public Size PhysicalSize
+        {
+            get { return GetProperty<Size>(); }
+            set { SetProperty(value); }
+        }
 
         [DependsOn(nameof(Edid))]
         private void UpdatePhysicalSize()
@@ -342,19 +331,7 @@ namespace WindowsMonitors
                 int w = ((Edid[68] & 0xF0) << 4) + Edid[66];
                 int h = ((Edid[68] & 0x0F) << 8) + Edid[67];
 
-                bool changed = false;
-
-                if (_physicalSize.Width != w)
-                {
-                    _physicalSize.Width = w;
-                    changed = true;
-                }
-                if (_physicalSize.Height != h)
-                {
-                    _physicalSize.Height = h;
-                    changed = true;
-                }
-                if (changed) RaiseProperty(nameof(PhysicalSize));
+                PhysicalSize  = new Size(w,h);
             }
         }
 
@@ -432,12 +409,11 @@ namespace WindowsMonitors
                 ApplyDesktop();
         }
 
-        private IntPtr _hPhysical;
         private NativeMethods.PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
         public IntPtr HPhysical
         {
-            get { return _hPhysical; }
-            private set { SetProperty(ref _hPhysical, value); }
+            get { return GetProperty<IntPtr>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn(nameof(HMonitor))]
@@ -455,19 +431,17 @@ namespace WindowsMonitors
             else HPhysical = IntPtr.Zero;
         }
 
-        private double _deviceCapsHorzSize = 0;
 
         public double DeviceCapsHorzSize
         {
-            get { return _deviceCapsHorzSize; }
-            private set { SetProperty(ref _deviceCapsHorzSize, value); }
+            get { return GetProperty<double>(); }
+            private set { SetProperty(value); }
         }
 
-        private double _deviceCapsVertSize = 0;
         public double DeviceCapsVertSize
         {
-            get { return _deviceCapsVertSize; }
-            private set { SetProperty(ref _deviceCapsVertSize, value); }
+            get { return GetProperty<double>(); }
+            private set { SetProperty(value); }
         }
 
         public void UpdateDeviceCaps()
@@ -482,23 +456,22 @@ namespace WindowsMonitors
             NativeMethods.DeleteDC(hdc);
         }
 
-        private Vector _effectiveDpi = new Vector();
         public Vector EffectiveDpi
         {
-            get { return _effectiveDpi; }
-            private set { SetProperty(ref _effectiveDpi, value); }
+            get { return GetProperty<Vector>(); }
+            private set { SetProperty(value); }
         }
-        private Vector _angularDpi = new Vector();
+
         public Vector AngularDpi
         {
-            get { return _angularDpi; }
-            private set { SetProperty(ref _angularDpi, value); }
+            get { return GetProperty<Vector>(); }
+            private set { SetProperty(value); }
         }
-        private Vector _rawDpi = new Vector();
+
         public Vector RawDpi
         {
-            get { return _rawDpi; }
-            private set { SetProperty(ref _rawDpi, value); }
+            get { return GetProperty<Vector>(); }
+            private set { SetProperty(value); }
         }
 
         private enum DpiType
@@ -523,12 +496,15 @@ namespace WindowsMonitors
             RawDpi = new Vector(x, y);
         }
 
-        private double _scaleFactor = 1;
         public double ScaleFactor
         {
-            get { return _scaleFactor; }
-            private set { SetProperty(ref _scaleFactor, value); }
+            get { return GetProperty<double>(); }
+            private set { SetProperty(value); }
         }
+
+        public double ScaleFactor_default => 1;
+
+
 
         [DependsOn(nameof(HMonitor))]
         public void UpdateScaleFactor()

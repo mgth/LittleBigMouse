@@ -4,11 +4,10 @@ namespace LittleBigMouse_Control
 {
     internal class ScreenControlViewModel : ScreenViewModel
     {
-        private ScreenFrameViewModel _frame;
         public ScreenFrameViewModel Frame
         {
-            get { return _frame; }
-            set { SetProperty(ref _frame, value); }
+            get { return GetProperty<ScreenFrameViewModel>(); }
+            set { SetProperty(value); }
         }
 
         public Grid CoverControl { get; } = new Grid();

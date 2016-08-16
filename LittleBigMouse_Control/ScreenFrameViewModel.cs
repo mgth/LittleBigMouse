@@ -9,39 +9,30 @@ namespace LittleBigMouse_Control
 {
     internal class ScreenFrameViewModel : ScreenViewModel
     {
-        public ScreenFrameViewModel()
-        {
-            InitNotifier();
-        }
-
         public override Type ViewType => typeof(ScreenFrameView);
 
-        private ScreenControlViewModel _controlViewModel;
         public ScreenControlViewModel ControlViewModel
         {
-            get { return _controlViewModel; }
-            set { SetAndWatch(ref _controlViewModel, value); }
+            get { return GetProperty<ScreenControlViewModel>(); }
+            set { SetAndWatch(value); }
         }
 
-        private MultiScreensViewModel _presenter;
          public MultiScreensViewModel Presenter
         {
-            get { return _presenter; }
-            set { SetAndWatch(ref _presenter, value); }
+            get { return GetProperty<MultiScreensViewModel>(); }
+            set { SetAndWatch(value); }
         }
 
-        private double _width = 0;
-        private double _height = 0;
         public double Width
         {
-            get { return _width; }
-            private set { SetProperty(ref _width, value); }
+            get { return GetProperty<double>(); }
+            private set { SetProperty(value); }
         }
 
         public double Height
         {
-            get { return _height; }
-            private set { SetProperty(ref _height, value); }
+            get { return GetProperty<double>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn("Screen.PhysicalOutsideBounds", "Presenter.Ratio")]
@@ -57,9 +48,11 @@ namespace LittleBigMouse_Control
         //    Presenter.PhysicalToUiY(Screen.PhysicalOutsideBounds.Y),
         //    0, 0);
 
-        private Thickness _margin = new Thickness();
-
-        public Thickness Margin => _margin;
+        public Thickness Margin
+        {
+            get { return GetProperty<Thickness>(); }
+            private set { SetProperty(value); }
+        }
 
         [DependsOn(
             "Presenter.Size",
@@ -70,22 +63,14 @@ namespace LittleBigMouse_Control
             //"Screen.LeftBorder",
             //"Screen.TopBorder",
             "Presenter.Ratio")]
-        private void UpdateMargin(string s)
+        private void UpdateMargin()
         {
-            if (s == "Config.MovingPhysicalOutsideBounds")
-            {
-                
-            }
-
             if (Presenter == null) return;
 
-            bool changed = false;
             double x = Presenter.PhysicalToUiX(Screen.PhysicalOutsideBounds.X);
             double y = Presenter.PhysicalToUiY(Screen.PhysicalOutsideBounds.Y);
-            if (_margin.Left != x) { _margin.Left = x; changed = true; }
-            if (_margin.Top != y) { _margin.Top = y; changed = true; }
 
-            if (changed) RaiseProperty(nameof(Margin));
+            Margin = new Thickness(x,y,0,0);
         }
 
 
@@ -108,18 +93,16 @@ namespace LittleBigMouse_Control
 
         #region Unrotated
 
-        private double _unrotatedWidth;
         public double UnrotatedWidth
         {
-            get {  return _unrotatedWidth; }
-            private set { SetProperty(ref _unrotatedWidth, value); }
+            get {  return GetProperty<double>(); }
+            private set { SetProperty(value); }
         }
 
-        private double _unrotatedHeight;
         public double UnrotatedHeight
         {
-            get { return _unrotatedHeight;  }
-            private set { SetProperty(ref _unrotatedHeight, value); }
+            get { return GetProperty<double>();  }
+            private set { SetProperty(value); }
         }
 
         [DependsOn("Screen", "Monitor.DisplayOrientation", "Width", "Height")]
@@ -139,32 +122,28 @@ namespace LittleBigMouse_Control
             }
         }
 
-        private GridLength _unrotatedTopBorder;
         public GridLength UnrotatedTopBorder
         {
-            get { return _unrotatedTopBorder; }
-            private set { SetProperty(ref _unrotatedTopBorder, value); }
+            get { return GetProperty<GridLength>(); }
+            private set { SetProperty(value); }
         }
 
-        private GridLength _unrotatedRightBorder;
         public GridLength UnrotatedRightBorder
         {
-            get { return _unrotatedRightBorder; }
-            private set { SetProperty(ref _unrotatedRightBorder, value); }
+            get { return GetProperty<GridLength>(); }
+            private set { SetProperty(value); }
         }
 
-        private GridLength _unrotatedBottomBorder;
         public GridLength UnrotatedBottomBorder
         {
-            get { return _unrotatedBottomBorder; }
-            private set { SetProperty(ref _unrotatedBottomBorder, value); }
+            get { return GetProperty<GridLength>(); }
+            private set { SetProperty(value); }
         }
 
-        private GridLength _unrotatedLeftBorder;
         public GridLength UnrotatedLeftBorder
         {
-            get { return _unrotatedLeftBorder; }
-            private set { SetProperty(ref _unrotatedLeftBorder, value); }
+            get { return GetProperty<GridLength>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn(nameof(LeftBorder), nameof(TopBorder), nameof(RightBorder), nameof(BottomBorder))]
@@ -184,7 +163,7 @@ namespace LittleBigMouse_Control
         #endregion
 
         [DependsOn("Presenter.ScreenControlGetter", nameof(Screen))]
-        private void UpdateScreenGuiControl(string s)
+        private void UpdateScreenGuiControl()
         {
             ControlViewModel 
                 = Presenter?.ScreenControlGetter?.GetScreenControlViewModel(Screen);
@@ -193,12 +172,11 @@ namespace LittleBigMouse_Control
             ControlViewModel.Frame = this;
         }
 
-        private Transform _screenOrientation;
 
         public Transform ScreenOrientation
         {
-            get { return _screenOrientation; }
-            private set { SetProperty(ref _screenOrientation, value); }
+            get { return GetProperty<Transform>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn("Monitor.DisplayOrientation", nameof(Width), nameof(Height))]
@@ -229,8 +207,8 @@ namespace LittleBigMouse_Control
 
         public Viewbox Logo
         {
-            get { return _logo; }
-            private set { SetProperty(ref _logo, value); }
+            get { return GetProperty<Viewbox>(); }
+            private set { SetProperty(value); }
         }
 
         [DependsOn("Screen", "Monitor.ManufacturerCode")]

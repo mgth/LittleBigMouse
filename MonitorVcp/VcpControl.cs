@@ -32,19 +32,16 @@ namespace MonitorVcp
 
             Gain = new MonitorRgbLevel(GetGain, SetGain);
             Drive = new MonitorRgbLevel(GetDrive, SetDrive);
-
-            InitNotifier();
         }
 
         public bool AlternatePower => Monitor.ManufacturerCode == "DEL";
 
-        private bool _power = true;
         public bool Power
         {
-            get { return _power; }
+            get { return GetProperty<bool>(); }
             set
             {
-                if (!SetProperty(ref _power, value)) return;
+                if (!SetProperty(value)) return;
 
                 if (value)
                 {
@@ -128,9 +125,6 @@ namespace MonitorVcp
 
     public class MonitorLevel : Notifier
     {
-        private uint _value = 0;
-        private uint _min = 0;
-        private uint _max = 0;
 
         private readonly uint _component = 0;
 
@@ -173,21 +167,20 @@ namespace MonitorVcp
             {
                 Min = min;
                 Max = max;
-                SetProperty(ref _value, value, "Value");               
+                SetProperty(value, "Value");               
             }
         }
 
         private readonly object _lockValue = new object();
         private readonly LossyThread _threadSetter;
-        private uint _valueAsync;
 
         public uint Value
         {
-            get { return _value; }
+            get { return GetProperty<uint>(); }
             set
             {
                 //lock(_lockValue)
-                if (SetProperty(ref _value, value))
+                if (SetProperty(value))
                 {
 
                     bool result = false;
@@ -204,11 +197,11 @@ namespace MonitorVcp
         [DependsOn("Value")]
         public uint CheckedValue
         {
-            get { return _value;}
+            get { return Value;}
             set
             {
                 int tries = 10;
-                while (_value != value && tries-- > 0)
+                while (Value != value && tries-- > 0)
                 {
                     Value = value;
                     GetValue();
@@ -219,12 +212,12 @@ namespace MonitorVcp
         [DependsOn("Value")]
         public uint ValueAsync
         {
-            get { return _valueAsync; }
+            get { return GetProperty<uint>(); }
             set
             {
                 //lock (_lockValue) //causes deadlock
                 {
-                    SetProperty(ref _valueAsync, value);
+                    SetProperty(value);
                     _threadSetter.Add(() =>
                     {
                         CheckedValue = value;
@@ -234,14 +227,14 @@ namespace MonitorVcp
         }
         public uint Min
         {
-            get { return _min; }
-            private set { SetProperty(ref _min, value); }
+            get { return GetProperty<uint>(); }
+            private set { SetProperty(value); }
         }
 
         public uint Max
         {
-            get { return _max; }
-            private set { SetProperty(ref _max, value); }
+            get { return GetProperty<uint>(); }
+            private set { SetProperty(value); }
         }
     }
 }

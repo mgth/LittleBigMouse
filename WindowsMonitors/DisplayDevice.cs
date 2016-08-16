@@ -145,18 +145,11 @@ namespace WindowsMonitors
 
 
 
-        private string _deviceName = "";
-        private string _deviceString = "";
-        private NativeMethods.DisplayDeviceStateFlags _stateFlags;
-        private string _deviceId;
-        private string _deviceKey;
-
-
         public string DeviceName
         {
-            get { return _deviceName; }
+            get { return GetProperty<string>(); }
             internal set {
-                if (SetProperty(ref _deviceName, value ?? ""))
+                if (SetProperty(value ?? ""))
                 {
                     if (string.IsNullOrWhiteSpace(DeviceString))
                     {
@@ -169,26 +162,26 @@ namespace WindowsMonitors
 
         public string DeviceString
         {
-            get { return _deviceString; }
-            internal set { SetProperty(ref _deviceString, value ?? ""); }
+            get { return GetProperty<string>(); }
+            internal set { SetProperty(value ?? ""); }
         }
 
         public NativeMethods.DisplayDeviceStateFlags State
         {
-            get { return _stateFlags; }
-            set { SetProperty(ref _stateFlags, value); }
+            get { return GetProperty<NativeMethods.DisplayDeviceStateFlags>(); }
+            set { SetProperty(value); }
         }
 
         public string DeviceId
         {
-            get { return _deviceId; }
-            internal set { SetProperty(ref _deviceId, value); }
+            get { return GetProperty<string>(); }
+            internal set { SetProperty(value); }
         }
 
         public string DeviceKey
         {
-            get { return _deviceKey; }
-            internal set { SetProperty(ref _deviceKey, value); }
+            get { return GetProperty<string>(); }
+            internal set { SetProperty(value); }
         }
     }
 }

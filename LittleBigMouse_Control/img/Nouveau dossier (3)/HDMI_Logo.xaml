@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This file is NOT compatible with Silverlight-->
+<Viewbox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Stretch="Uniform">
+  <Canvas Name="Layer_1" Width="300.00186" Height="48.940045">
+    <Canvas.RenderTransform>
+      <TranslateTransform X="0" Y="0"/>
+    </Canvas.RenderTransform>
+    <Canvas.Resources/>
+    <!--Unknown tag: metadata-->
+    <!--Unknown tag: sodipodi:namedview-->
+    <Canvas Name="g3248">
+      <Canvas.RenderTransform>
+        <MatrixTransform Matrix="0.20615142 0 0 0.20615142 -0.25768928 -0.25790671"/>
+      </Canvas.RenderTransform>
+      <Polygon xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Points="1456.5,36.25 1450.3,36.25 1450.3,10.2 1450.2,10.2 1440.6,36.25 1435.5,36.25 1425.9,10.2 1425.7,10.2 1425.7,36.25 1419.5,36.25 1419.5,2.15 1429.2,2.15 1438.1,25.15 1446.8,2.15 1456.5,2.15 " Name="polygon2993" FillRule="NonZero" Fill="#FFB3B3B3"/>
+      <Polygon xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Points="1411.4,2.15 1411.4,7.9 1401,7.9 1401,36.25 1394.8,36.25 1394.8,7.9 1384.3,7.9 1384.3,2.15 " Name="polygon2995" FillRule="NonZero" Fill="#FFB3B3B3"/>
+    </Canvas>
+    <Canvas Name="g3252">
+      <Canvas.RenderTransform>
+        <MatrixTransform Matrix="0.20615142 0 0 0.20615142 -0.25768928 -0.25790671"/>
+      </Canvas.RenderTransform>
+      <Polygon xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Points="1254.8,238.55 1254.8,1.25 1347.6,1.25 1347.6,98.15 1347.3,130.1 1347.6,153.5 1347.6,238.55 " Name="polygon2997" FillRule="NonZero" Fill="#FFB3B3B3"/>
+      <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path3005" Fill="#FFB3B3B3">
+        <Path.Data>
+          <PathGeometry Figures="m 1216.8 63.65 0 175 -89.8 0 0 -178.2 -85.6 0 0 178.2 -89.45 0 0 -178.2 -85.55 0 0 178.2 -89.95 0 0 -237.4 378.4 0 c 17.05 0 31.65 6.1 43.8 18.2 12.1 12.15 18.2 26.9 18.2 44.2 z" FillRule="NonZero"/>
+        </Path.Data>
+      </Path>
+      <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path3033" Fill="#FFB3B3B3">
+        <Path.Data>
+          <PathGeometry Figures="m 738.95 63.65 0 112.5 c 0 17.351 -6.149 32.051 -18.399 44.2 -12.25 12.101 -26.9 18.2 -44 18.2 l -287 0 -0.4 -140.4 89.85 0 0.4 81.35 169.7 0 0 -119.2 -259.95 0 0.4 -59.05 287 0 c 17.1 0 31.75 6.1 44 18.2 12.25 12.15 18.4 26.85 18.4 44.2 z" FillRule="NonZero"/>
+        </Path.Data>
+      </Path>
+      <Polygon xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Points="94.1,153.5 94.1,238.55 1.25,238.55 1.25,1.25 94.1,1.25 94.1,98.15 256,98.15 256,1.25 350.3,1.25 350.3,238.55 256,238.55 256,153.5 " Name="polygon3053" FillRule="NonZero" Fill="#FFB3B3B3"/>
+    </Canvas>
+  </Canvas>
+</Viewbox>

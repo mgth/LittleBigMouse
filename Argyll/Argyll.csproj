@@ -75,8 +75,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\LittleBigMouse\NotifyChange\NotifyChange.csproj">
-      <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
+    <ProjectReference Include="..\..\NotifyChange\NotifyChange\NotifyChange.csproj">
+      <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
       <Name>NotifyChange</Name>
     </ProjectReference>
   </ItemGroup>

@@ -5,25 +5,23 @@ namespace LittleBigMouse_Control
     internal abstract class PresenterViewModel : ViewModel
     {
 
-        private MainViewModel _mainViewModel;
         public MainViewModel MainViewModel
         {
-            get { return _mainViewModel; }
-            set { SetProperty(ref _mainViewModel, value); }
+            get { return GetProperty<MainViewModel>(); }
+            set { SetProperty( value); }
         }
 
         private IPluginScreenControl _screenControlGetter;
         public IPluginScreenControl ScreenControlGetter
         {
-            get { return _screenControlGetter; }
-            set { SetProperty(ref _screenControlGetter, value); }
+            get { return GetProperty<IPluginScreenControl>(); }
+            set { SetProperty(value); }
         }
 
-        private double _ratio;
         public double Ratio
         {
-            get { return _ratio; }
-            protected set { SetProperty(ref _ratio, value); }
+            get { return GetProperty<double>(); }
+            protected set { SetProperty(value); }
         }
         public abstract double PhysicalToUiX(double x);
         public abstract double PhysicalToUiY(double y);

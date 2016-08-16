@@ -13,10 +13,10 @@ namespace LittleBigMouse_Control.PluginLocation
 
         public ScreenConfig Config
         {
-            get { return _config; }
+            get { return GetProperty<ScreenConfig>(); }
             set
             {
-                if (SetAndWatch(ref _config, value))
+                if (SetAndWatch(value))
                 {
                     SaveCommand = new SaveCommand(Config);
                     StartCommand = new StartCommand(Config);
@@ -43,34 +43,31 @@ namespace LittleBigMouse_Control.PluginLocation
         public SaveCommand SaveCommand { get; private set; }
         public StartCommand StartCommand { get; private set; }
         public StopCommand StopCommand { get; private set; }
-        private ScreenConfig _config;
 
-        private bool _showRulers;
         public bool ShowRulers
         {
-            get { return _showRulers; }
-            set { SetProperty(ref _showRulers,value); }
+            get { return GetProperty<bool>(); }
+            set { SetProperty(value); }
         }
 
-        private bool _running;
         public bool Running
         {
-            get { return _running; }
-            private set { SetProperty(ref _running, value); }
+            get { return GetProperty<bool>(); }
+            private set { SetProperty(value); }
         }
-        private bool _liveUpdate;
+
         public bool LiveUpdate
         {
-            get { return _liveUpdate; }
-            set { SetProperty(ref _liveUpdate, value); }
+            get { return GetProperty<bool>(); }
+            set { SetProperty(value); }
         }
 
         public bool LoadAtStartup
         {
-            get { return _config.LoadAtStartup; }
+            get { return Config.LoadAtStartup; }
             set
             {
-                _config.LoadAtStartup = value;
+                Config.LoadAtStartup = value;
                 LittleBigMouseClient.Client.LoadAtStartup(value);
             }
         }
@@ -105,7 +102,7 @@ namespace LittleBigMouse_Control.PluginLocation
             }
             _rulers.Clear();
 
-            if (_showRulers)
+            if (ShowRulers)
             {
                 AddRuler(RulerSide.Left);
                 AddRuler(RulerSide.Right);

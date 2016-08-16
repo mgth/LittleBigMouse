@@ -42,8 +42,6 @@ namespace WindowsMonitors
 
                 result = NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0);
             }
-
-            InitNotifier();
         }
     }
 }

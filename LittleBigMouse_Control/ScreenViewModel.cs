@@ -7,15 +7,14 @@ namespace LittleBigMouse_Control
 {
     public class ScreenViewModel : ViewModel
     {
-        private ViewModel _control = null;
-        public ViewModel Control => _control??(_control=NewControl);
+        public ViewModel Control => GetProperty<ViewModel>();
+        public ViewModel Control_default => NewControl;
         public virtual ViewModel NewControl => null;
 
-        private Screen _screen;
         public Screen Screen
         {
-            get { return _screen; }
-            set { SetAndWatch(ref _screen, value); }
+            get { return GetProperty<Screen>(); }
+            set { SetAndWatch(value); }
         }
 
         [DependsOn("Screen")]

@@ -12,7 +12,7 @@ namespace LittleBigMouse_Control
 {
     internal class MainViewModel : ViewModel
     {
-        public override Type ViewType => typeof (MainView);
+        //public override Type ViewType => typeof (MainView);
 
         public MainViewModel()
         {
@@ -20,8 +20,6 @@ namespace LittleBigMouse_Control
             MaximizeCommand = new MaximizeCommand(this);
 
             Plugins.CollectionChanged += Plugins_CollectionChanged;
-
-            InitNotifier();
         }
 
         private void Plugins_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -38,28 +36,25 @@ namespace LittleBigMouse_Control
 
         //private GetScreenControlViewModelDelegate _getScreenControlView;
 
-        private ScreenConfig _config;
         public ScreenConfig Config
         {
-            get { return _config; }
-            set { SetProperty(ref _config, value); }
+            get { return GetProperty<ScreenConfig>(); }
+            set { SetProperty(value); }
         }
 
 
-        private ViewModel _control;
         public ViewModel Control
         {
-            get { return _control; }
-            set { SetProperty(ref _control, value);}
+            get { return GetProperty<ViewModel>(); }
+            set { SetProperty(value);}
         }
 
-        private PresenterViewModel _presenter;
         public PresenterViewModel Presenter
         {
-            get { return _presenter; }
+            get { return GetProperty<PresenterViewModel>(); }
             set
             {
-                if (SetAndWatch(ref _presenter, value))
+                if (SetAndWatch(value))
                 {
                     Presenter.MainViewModel = this;
                 }
@@ -101,7 +96,7 @@ namespace LittleBigMouse_Control
                 w.WindowState = WindowState.Normal;
             }
         }
-        public void UnMaximaze()
+        public void UnMaximize()
         {
             Window w = (View as Window);
             if (w != null)

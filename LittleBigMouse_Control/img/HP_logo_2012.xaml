@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This file is NOT compatible with Silverlight-->
+<Viewbox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Stretch="Uniform">
+  <Canvas Name="svg3009" Width="100" Height="100">
+    <Canvas.Resources/>
+    <!--Unknown tag: metadata-->
+    <!--Unknown tag: sodipodi:namedview-->
+    <Canvas Name="g3017">
+      <Canvas.RenderTransform>
+        <MatrixTransform Matrix="1.25 0 0 -1.25 -67.822513 702.43127"/>
+      </Canvas.RenderTransform>
+      <Canvas Name="g3061" Opacity="1">
+        <Canvas.RenderTransform>
+          <MatrixTransform Matrix="1.5180439 0 0 1.5180439 -28.149474 -249.71011"/>
+        </Canvas.RenderTransform>
+        <Canvas Name="g3021" Opacity="1">
+          <Canvas.RenderTransform>
+            <TranslateTransform X="106.93201" Y="508.32201"/>
+          </Canvas.RenderTransform>
+          <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path3023" Fill="#FFB3B3B3">
+            <Path.Data>
+              <PathGeometry Figures="m 0 0 c 0 14.524 -11.773 26.297 -26.297 26.297 -0.396 0 -0.79 -0.01 -1.182 -0.028 l -5.379 -14.784 4.685 0 c 2.787 0 4.289 -2.146 3.335 -4.767 l -6.635 -18.234 -5.571 10e-4 7.12 19.544 -4.189 0 -7.12 -19.544 -5.573 0 8.372 23 10e-4 0 5.036 13.841 C -44.471 22.228 -52.594 12.063 -52.594 0 c 0 -12.421 8.613 -22.83 20.192 -25.583 l 4.88 13.411 0.004 0 8.609 23.657 10.261 0 c 2.79 0 4.291 -2.146 3.337 -4.767 l -5.83 -16.015 c -0.444 -1.22 -1.869 -2.218 -3.167 -2.218 l -7.396 0 -5.374 -14.77 c 0.259 -0.007 0.52 -0.012 0.781 -0.012 C -11.773 -26.297 0 -14.523 0 0" FillRule="nonzero"/>
+            </Path.Data>
+          </Path>
+        </Canvas>
+        <Canvas Name="g3025" Opacity="1">
+          <Canvas.RenderTransform>
+            <TranslateTransform X="96.546997" Y="516.36501"/>
+          </Canvas.RenderTransform>
+          <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path3027" Fill="#FFB3B3B3">
+            <Path.Data>
+              <PathGeometry Figures="m 0 0 -4.187 0 -5.864 -16.089 4.187 0 L 0 0" FillRule="nonzero"/>
+            </Path.Data>
+          </Path>
+        </Canvas>
+      </Canvas>
+    </Canvas>
+  </Canvas>
+</Viewbox>

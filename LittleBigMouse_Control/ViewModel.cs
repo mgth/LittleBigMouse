@@ -9,18 +9,12 @@ namespace LittleBigMouse_Control
         //public static DependencyProperty ViewProperty = DependencyProperty.Register(nameof(View),typeof(FrameworkElement),typeof(ViewModel));
         //public FrameworkElement View { get { return (FrameworkElement)GetValue(ViewProperty); } set {SetValue(ViewProperty,value);} }
 
-        private FrameworkElement _view = null;
-
         public FrameworkElement View
         {
-            get
-            {
-                if (_view == null) _view = GetNewView();
-
-                return _view; 
-            }
-            set { SetProperty(ref _view, value); }
+            get { return GetProperty<FrameworkElement>(); }
+            set { SetProperty(value); }
         }
+        public FrameworkElement View_default => GetNewView();
 
         public virtual Type ViewType => null;
 

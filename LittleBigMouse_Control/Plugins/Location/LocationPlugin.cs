@@ -22,10 +22,10 @@ namespace LittleBigMouse_Control.PluginLocation
 
         public bool IsActivated
         {
-            get { return _isActivated; }
+            get { return GetProperty<bool>(); }
             set
             {
-                if (SetProperty(ref _isActivated, value))
+                if (SetProperty(value))
                 {
                     MultiScreensView gui = MainViewModel.Presenter.View as MultiScreensView;
                     if (value)

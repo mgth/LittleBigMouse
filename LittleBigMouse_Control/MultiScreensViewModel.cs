@@ -16,8 +16,6 @@ namespace LittleBigMouse_Control
         {
             ScreensCanvas.SizeChanged += (sender, args) => RaiseProperty("Size");
             ScreenFrames.CollectionChanged += ScreenFrames_CollectionChanged;
-
-            InitNotifier();
         }
 
         private void ScreenFrames_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)

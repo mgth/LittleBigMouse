@@ -6,49 +6,47 @@ namespace LbmScreenConfig
 {
     public static class RegistryExt
     {
-        public static void GetKey(this RegistryKey key, ref double prop, string keyName, Notifier change=null)
+        public static T GetKey<T>(this RegistryKey key, string keyName, T def = default(T))
         {
-            string sValue = key.GetValue(keyName, "NaN").ToString();
-            if (sValue == "NaN") return;
+            if (key == null) return def;
 
-            double value = double.Parse(sValue, CultureInfo.InvariantCulture);
-            if (change ==null) prop = value;
-            else
-                change.SetProperty(ref prop, value, keyName); 
+            object value = null;
+
+            string sValue = key.GetValue(keyName, "").ToString();
+            if (sValue == "") return def;
+
+            if (typeof(T) == typeof(double))
+            {
+                value = double.Parse(sValue, CultureInfo.InvariantCulture);
+            }
+            else if (typeof(T) == typeof(string))
+            {
+                value = sValue;
+            }
+            else if (typeof(T) == typeof(string))
+            {
+                value = sValue == "1";
+            }
+
+            return (T) value;
         }
 
-        public static void SetKey(this RegistryKey key, double prop, string keyName)
+        public static void SetKey(this RegistryKey key, string keyName, double value)
         {
-            if (double.IsNaN(prop)) { key.DeleteValue(keyName, false); }
-            else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
+            if (double.IsNaN(value)) { key.DeleteValue(keyName, false); }
+            else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
 
-        public static void GetKey(this RegistryKey key,ref string prop,  string keyName, Notifier change = null)
-        {
-            string sValue = (string)key.GetValue(keyName, null);
-            if (sValue == null) return;
 
-            if (change == null) prop = sValue;
-            else change?.SetProperty(ref prop, sValue, keyName);
+        public static void SetKey(this RegistryKey key, string keyName, string value)
+        {
+            if (value == null) { key.DeleteValue(keyName, false); }
+            else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
 
-        public static void SetKey(this RegistryKey key, string prop, string keyName)
+        public static void SetKey(this RegistryKey key, string keyName, bool value)
         {
-            if (prop == null) { key.DeleteValue(keyName, false); }
-            else { key.SetValue(keyName, prop.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
-        }
-        public static void GetKey(this RegistryKey key, ref bool prop, string keyName, Notifier change = null)
-        {
-            string sValue = (string)key.GetValue(keyName, "0");
-            if (sValue == null) return;
-
-            if (change == null) prop = sValue=="1";
-            else change?.SetProperty(ref prop, sValue == "1", keyName);
-        }
-
-        public static void SetKey(this RegistryKey key, ref bool prop, string keyName)
-        {
-            key.SetValue(keyName, prop?"1":"0", RegistryValueKind.String); 
+            key.SetValue(keyName, value ? "1":"0", RegistryValueKind.String); 
         }
     }
 }

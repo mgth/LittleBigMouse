@@ -49,63 +49,55 @@ namespace Argyll
             p.StandardInput.Flush();
         }
 
-        private string _name = "new";
         private bool _calibrating = false;
         private bool _spectrum = false;
-        private double _spectrumFrom = 0;
-        private double _spectrumTo = 0;
-        private int _spectrumSteps = 0;
-        private double _cct = 0;
-        private double _cri = 0;
-        private double _tlci = 0;
-        private double _lux = 0;
 
         public string Name
         {
-            get { return _name; }
-            set { SetProperty(ref _name, value); }
+            get { return GetProperty<string>(); }
+            set { SetProperty(value); }
         }
 
         public double SpectrumFrom
         {
-            get { return _spectrumFrom; }
-            set { SetProperty(ref _spectrumFrom, value); }
+            get { return GetProperty<double>(); }
+            set { SetProperty(value); }
         }
 
         public double SpectrumTo
         {
-            get { return _spectrumTo; }
-            set { SetProperty(ref _spectrumTo, value); }
+            get { return GetProperty<double>(); }
+            set { SetProperty(value); }
         }
 
         public int SpectrumSteps
         {
-            get { return _spectrumSteps; }
-            set { SetProperty(ref _spectrumSteps, value); }
+            get { return GetProperty<int>(); }
+            set { SetProperty(value); }
         }
 
         public double Cct
         {
-            get { return _cct; }
-            set { SetProperty(ref _cct, value); }
+            get { return GetProperty<double>(); }
+            set { SetProperty(value); }
         }
 
         public double Cri
         {
-            get { return _cri; }
-            set { SetProperty(ref _cri, value); }
+            get { return GetProperty<double>(); }
+            set { SetProperty(value); }
         }
 
         public double Tlci
         {
-            get { return _tlci; }
-            set { SetProperty(ref _tlci, value); }
+            get { return GetProperty<double>(); }
+            set { SetProperty(value); }
         }
 
         public double Lux
         {
-            get { return _lux; }
-            set { SetProperty(ref _lux, value); }
+            get { return GetProperty<double>(); }
+            set { SetProperty(value); }
         }
 
         public ObservableCollection<double> Spectrum { get; set; } = new ObservableCollection<double> {0};

@@ -54,39 +54,56 @@ namespace LittleBigMouse_Control
         private readonly NotifierHelper _notify;
         public event PropertyChangedEventHandler PropertyChanged { add { _notify.Add(value); } remove { _notify.Remove(value);} }
 
-        private Screen _screen;
         public Screen Screen
         {
-            get { return _screen; }
-            set { _notify.SetAndWatch(ref _screen, value); }
+            get { return _notify.GetProperty<Screen>(); }
+            set { _notify.SetAndWatch(value); }
         }
 
-        private Screen _drawOn;
         public Screen DrawOn
         {
-            get { return _drawOn; }
-            set { _notify.SetAndWatch(ref _drawOn, value); }
+            get { return _notify.GetProperty<Screen>(); }
+            set { _notify.SetAndWatch(value); }
         }
 
-        private bool _enabled = false;
         public bool Enabled
         {
-            get { return _enabled; }
-            set { _notify.SetProperty(ref _enabled, value); }
+            get { return _notify.GetProperty<bool>(); }
+            set { _notify.SetProperty(value); }
         }
-
-        private RulerSide _side;
 
         public RulerSide Side
         {
-            get { return _side; }
-            set { _notify.SetProperty(ref _side, value); }
+            get { return _notify.GetProperty<RulerSide>(); }
+            set { _notify.SetProperty(value); }
         }
 
+
+        private void TryShow()
+        {
+            try { Show();}
+            catch (Exception) { }
+        }
+
+        private bool IsClosed
+        {
+            get
+            {
+                for (int i = 0; i < Application.Current.Windows.Count; i++)
+                {
+                    var window = Application.Current.Windows[i];
+                    if(window != null && window.Equals(this))
+                        return false;
+                }
+                return true;
+            }
+        }
 
         [DependsOn("Enabled", "Screen.PhysicalBounds", "DrawOn.PhysicalBounds")]
         private void SetSize()
         {
+            if (IsClosed) return;
+
             if (!Enabled || DrawOn == null || Screen == null)
             {
                 Hide();
@@ -176,7 +193,7 @@ namespace LittleBigMouse_Control
             }
         }
 
-        [DependsOn("Side", "DrawOn.PhysicalBounds", nameof(WindowHeight))]
+        [DependsOn(nameof(Side), "DrawOn.PhysicalBounds", nameof(WindowHeight))]
         public double WindowTop
         {
             get
@@ -188,7 +205,7 @@ namespace LittleBigMouse_Control
             set { }
         }
 
-        [DependsOn("Side", "DrawOn.PhysicalBounds", nameof(WindowWidth))]
+        [DependsOn(nameof(Side), "DrawOn.PhysicalBounds", nameof(WindowWidth))]
         public double WindowLeft
         {
             get
@@ -264,14 +281,12 @@ namespace LittleBigMouse_Control
         }
 
 
-        private Thickness _canvasMargin;
-
         public Thickness CanvasMargin //rev
         {
-            get { return _canvasMargin; }
+            get { return _notify.GetProperty<Thickness>(); }
             private set
             {
-                _notify.SetProperty(ref _canvasMargin, value);
+                _notify.SetProperty(value);
             }
         }
 
@@ -339,18 +354,23 @@ namespace LittleBigMouse_Control
         {
             _notify = new NotifierHelper(this);
 
+            this.Closing += Ruler_Closing; ;
+
             Side = side;
+            Screen = screen;
+            DrawOn = drawOn;
 
             DataContext = this;
 
             InitializeComponent();
 
-            Screen = screen;
-            DrawOn = drawOn;
 
             DrawRuler();
+        }
 
-            _notify.InitNotifier();
+        private void Ruler_Closing(object sender, CancelEventArgs e)
+        {
+            _notify.Dispose();
         }
 
 
@@ -389,7 +409,7 @@ namespace LittleBigMouse_Control
         //}
 
         [DependsOn(nameof(Side))]
-        public bool Vertical => (_side == RulerSide.Left) || (_side == RulerSide.Right);
+        public bool Vertical => (Side == RulerSide.Left) || (Side == RulerSide.Right);
 
         [DependsOn(nameof(Side))]
         public bool Horizontal => !Vertical;
@@ -398,12 +418,12 @@ namespace LittleBigMouse_Control
         {
             Canvas.Children.Clear();
 
-            bool revert = (_side == RulerSide.Right) || (_side == RulerSide.Bottom);
+            bool revert = (Side == RulerSide.Right) || (Side == RulerSide.Bottom);
 
             double sizeRatio = Vertical?((1/ DrawOn.WpfToPixelRatioX)/ DrawOn.PitchX):((1/ DrawOn.WpfToPixelRatioY)/ DrawOn.PitchY);
             double lenghtRatio = Vertical?((1/ DrawOn.WpfToPixelRatioY)/ DrawOn.PitchY):((1/ DrawOn.WpfToPixelRatioX)/ DrawOn.PitchX);
 
-            double length = Vertical?_screen.PhysicalHeight:_screen.PhysicalWidth;
+            double length = Vertical?Screen.PhysicalHeight:Screen.PhysicalWidth;
             double width = Vertical ? WindowWidth : WindowHeight;
 
             int mm = 0;
@@ -522,7 +542,7 @@ namespace LittleBigMouse_Control
             _oldPoint = PointToScreen(e.GetPosition(this));
             //_oldPoint.Offset(_screen.Config.PhysicalBounds.X/DrawOn.PitchX, _screen.Config.PhysicalBounds.Y/DrawOn.PitchY);
 
-            _dragStartPoint = InvertControl? DrawOn.PhysicalLocation:_screen.PhysicalLocation;
+            _dragStartPoint = InvertControl? DrawOn.PhysicalLocation:Screen.PhysicalLocation;
             _moving = true;
             CaptureMouse();
         }

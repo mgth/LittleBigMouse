@@ -286,6 +286,10 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\NotifyChange\NotifyChange\NotifyChange.csproj">
+      <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
+      <Name>NotifyChange</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Argyll\Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
       <Name>Argyll</Name>
@@ -306,10 +310,6 @@
     <ProjectReference Include="..\NativeHelpers\NativeHelpers.vcxproj">
       <Project>{938e65d0-ec9c-4181-87ca-a43d4747610d}</Project>
       <Name>NativeHelpers</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
-      <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
-      <Name>NotifyChange</Name>
     </ProjectReference>
     <ProjectReference Include="..\ScreenConfig\LbmScreenConfig.csproj">
       <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>

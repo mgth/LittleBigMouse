@@ -19,10 +19,10 @@ namespace LittleBigMouse_Control.Plugins.Vcp
 
         public bool IsActivated
         {
-            get { return _isActivated; }
+            get { return GetProperty<bool>(); }
             set
             {
-                if (!SetProperty(ref _isActivated, value)) return;
+                if (!SetProperty(value)) return;
 
                 if (value)
                 {

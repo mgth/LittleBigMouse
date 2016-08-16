@@ -80,6 +80,10 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\NotifyChange\NotifyChange\NotifyChange.csproj">
+      <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
+      <Name>NotifyChange</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Argyll\Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
       <Name>Argyll</Name>
@@ -87,10 +91,6 @@
     <ProjectReference Include="..\NativeMethods\WinAPI.csproj">
       <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
       <Name>WinAPI</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NotifyChange\NotifyChange.csproj">
-      <Project>{bfeab5f5-443e-4f0e-85ee-a4bb3aeeea4d}</Project>
-      <Name>NotifyChange</Name>
     </ProjectReference>
     <ProjectReference Include="..\ScreenConfig\LbmScreenConfig.csproj">
       <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>

@@ -16,8 +16,8 @@ namespace LittleBigMouse_Control.Plugins.Location
 
         public LocationPlugin Plugin
         {
-            get { return _plugin; }
-            set { SetAndWatch(ref _plugin, value); }
+            get { return GetProperty<LocationPlugin>(); }
+            set { SetAndWatch(value); }
         }
 
         [DependsOn("Screen.PhysicalRatioX")]
@@ -47,7 +47,6 @@ namespace LittleBigMouse_Control.Plugins.Location
         private Point _guiLastPosition;
         private Point _dragStartPosition;
         private Point _dragLastPosition;
-        private LocationPlugin _plugin;
 
         private Vector ShiftScreen(Vector offset)
         {

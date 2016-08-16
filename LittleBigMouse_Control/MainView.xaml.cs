@@ -46,7 +46,7 @@ namespace LittleBigMouse_Control
             {
                 InitializeComponent();
             }
-            catch (System.Windows.Markup.XamlParseException ex)
+            catch (System.Windows.Markup.XamlParseException)
             {
                 
             }

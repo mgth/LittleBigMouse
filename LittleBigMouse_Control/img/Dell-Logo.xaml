@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This file is NOT compatible with Silverlight-->
+<Viewbox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Stretch="Uniform">
+  <Canvas Name="svg2142" Width="240" Height="73.9459">
+    <Canvas.RenderTransform>
+      <TranslateTransform X="0" Y="0"/>
+    </Canvas.RenderTransform>
+    <Canvas.Resources/>
+    <!--Unknown tag: metadata-->
+    <!--Unknown tag: sodipodi:namedview-->
+    <Canvas Name="Ebene_x0020_1">
+      <Canvas.RenderTransform>
+        <TranslateTransform X="4.485e-4" Y="3.2e-5"/>
+      </Canvas.RenderTransform>
+      <!--Unknown tag: metadata-->
+      <Path xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Name="path2146" Fill="#FFB3B3B3">
+        <Path.Data>
+          <PathGeometry Figures="M 102.502 0.775784 L 101.07186 0.775784 L 64.73016 25.000584 L 64.570203 24.375806 C 59.565623 10.141206 45.483303 3.887506 27.493203 3.887506 L 1.636503 3.887506 L 1.636503 69.574706 L 29.050903 69.574706 C 46.269803 69.574706 60.034103 62.534536 64.730203 49.084306 L 64.886268 48.615852 L 101.80697 73.170052 L 140.92537 47.050552 L 140.92537 69.574752 L 187.75037 69.574752 L 187.75037 49.501452 L 164.38447 49.501452 L 164.38447 3.887552 L 140.92527 3.887552 L 140.92527 27.118152 L 111.75687 47.016352 L 105.13949 42.328052 L 134.86579 22.308052 L 121.67849 13.761462 L 91.635888 33.781462 L 85.300278 29.824182 L 115.33698 9.806082 L 102.50188 0.775852 L 102.502 0.775784 z M 42.3526 37.509884 C 42.3526 46.115504 36.09885 50.025084 28.2721 50.025084 L 25.10903 50.025084 L 25.10903 24.215984 L 28.2721 24.215984 C 36.87772 24.215984 42.3526 28.595794 42.3526 37.509884 z M 238.3626 69.574684 L 192.5069 69.574684 L 192.5069 3.887484 L 215.9718 3.887484 L 215.9718 49.501384 L 238.3626 49.501384 L 238.3626 69.574684 z " FillRule="nonzero"/>
+        </Path.Data>
+      </Path>
+    </Canvas>
+  </Canvas>
+</Viewbox>

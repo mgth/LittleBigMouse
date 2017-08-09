@@ -1,31 +1,20 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using Erp.Notify;
 using LbmScreenConfig;
-using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
     public class ScreenViewModel : ViewModel
     {
-        public ViewModel Control => GetProperty<ViewModel>();
-        public ViewModel Control_default => NewControl;
+        public ViewModel Control => this.Get(()=>NewControl);
         public virtual ViewModel NewControl => null;
 
         public Screen Screen
         {
-            get { return GetProperty<Screen>(); }
-            set { SetAndWatch(value); }
+            get => this.Get<Screen>(); set => this.Set(value);
         }
 
-        [DependsOn("Screen")]
-        private void WatchConfig()
-        {
-            if (Screen?.Config != null)
-                Watch(Screen.Config,"Config");
-
-            if (Screen?.Monitor != null)
-                Watch(Screen.Monitor,"Monitor");
-        }
 
 
         private bool _power = true;

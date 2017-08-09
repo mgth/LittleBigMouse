@@ -2,10 +2,26 @@
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
   <asmv3:application>
     <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
-      <dpiAware>True/PM</dpiAware>
-      <!--<dpiAware>True</dpiAware>-->
-      <!--<dpiAware>False</dpiAware>-->
+      <dpiAware>true/PM</dpiAware>
     </asmv3:windowsSettings>
+    <!-- true ->> true/PM ::: try use per-monitor DPI v1 - will be override with dpiAwareness' value if possible -->
+    <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
+      <dpiAwareness>PerMonitorV2,PerMonitor</dpiAwareness>
+    </asmv3:windowsSettings>
+    <!-- PerMonitor -> PerMonitorV2 -> PerMonitorePerV2,PerMonitor ::: maximum support, with fallback -->
+    <!--<asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2017/WindowsSettings">
+      <gdiScaling>true</gdiScaling>
+    </asmv3:windowsSettings>-->
+    <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">
+      <disableWindowFiltering>false</disableWindowFiltering>
+    </asmv3:windowsSettings>
+    <!-- keep filtering, make "true" if your app acts like "remote-desktop" (enumerate immersive windows from the desktop). it requires app to be signed and be placed in safe location ("program files") -->
+    <!-- will try to scale text (sadly it won't support graphics) to make the text match the DPI, which will enable better fitting of old apps that are no longer in maintained.. -->
+    <!--<asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
+      <dpiAware>True/PM2</dpiAware>
+      <dpiAware>True</dpiAware>
+      <dpiAware></dpiAware>
+    </asmv3:windowsSettings>-->
   </asmv3:application>
   <assemblyIdentity version="1.0.0.0" name="MyApplication.app"/>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">

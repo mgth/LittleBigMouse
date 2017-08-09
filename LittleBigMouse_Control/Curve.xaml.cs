@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows.Controls;
-using NotifyChange;
+using Erp.Notify;
 
 namespace LittleBigMouse_Control
 {
@@ -10,12 +10,15 @@ namespace LittleBigMouse_Control
     /// </summary>
     public partial class Curve : UserControl, INotifyPropertyChanged
     {
-        protected readonly NotifierHelper Notify;
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
+
         private IList<double> _points;
-        public event PropertyChangedEventHandler PropertyChanged { add { Notify.Add(value); } remove { Notify.Remove(value); } }
         public Curve()
         {
-            Notify = new NotifierHelper(this);
             InitializeComponent();
             DataContext = this;
         }
@@ -23,7 +26,7 @@ namespace LittleBigMouse_Control
         //public PlotModel PlotModel
         //{
         //    get { return _plotModel; }
-        //    set { Change.SetProperty(ref _plotModel, value); }
+        //    set { Change.Set(ref _plotModel, value); }
         //}
 
         public void Refresh()

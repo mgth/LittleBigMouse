@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
-using NotifyChange;
+using Erp.Notify;
 
 namespace LittleBigMouse_Control.Plugins.Size
 {
@@ -20,8 +20,7 @@ namespace LittleBigMouse_Control.Plugins.Size
         }
         public double ArrowLength
         {
-            get { return _arrowLength; }
-            set
+            get => _arrowLength; set
             {
                 if (SetArrowLength(value))
                 SetArrows();
@@ -37,8 +36,7 @@ namespace LittleBigMouse_Control.Plugins.Size
 
         public Point StartPoint
         {
-            get { return _startPoint; }
-            set
+            get => _startPoint; set
             {
                 if (SetStartPoint(value))
                 SetArrows();            
@@ -78,8 +76,7 @@ namespace LittleBigMouse_Control.Plugins.Size
 
         public Point EndPoint
         {
-            get { return _endPoint; }
-            set
+            get => _endPoint; set
             {
                 SetStartPoint(value);
                 SetArrows();
@@ -99,10 +96,7 @@ namespace LittleBigMouse_Control.Plugins.Size
 
         public Brush Brush
         {
-            get
-            {
-                return _brush;
-            }
+            get => _brush;
             set
             {
                 _brush = value;
@@ -188,70 +182,66 @@ namespace LittleBigMouse_Control.Plugins.Size
             _ousideHorizontalCotation.SetPoints(arrow, x2, y + (h/8)-(h/128),x2+w2,y + (h/8)-(h/128));
         }
 
-        [DependsOn("Screen.RealPhysicalHeight")]
+        [TriggedOn("Screen.RealPhysicalHeight")]
         public double RealPhysicalHeight
         {
-            get { return Screen.RealPhysicalHeight; }
-            set { Screen.RealPhysicalHeight = value; Screen.Config.Compact(); }
+            get => Screen.RealPhysicalHeight; set { Screen.RealPhysicalHeight = value; Screen.Config.Compact(); }
         }
 
 
-        [DependsOn("Screen.RealPhysicalWidth")]
+        [TriggedOn("Screen.RealPhysicalWidth")]
         public double RealPhysicalWidth
         {
-            get { return Screen.RealPhysicalWidth; }
-            set { Screen.RealPhysicalWidth = value; Screen.Config.Compact(); }
+            get => Screen.RealPhysicalWidth; set { Screen.RealPhysicalWidth = value; Screen.Config.Compact(); }
         }
 
-        [DependsOn("Screen.RealTopBorder")]
+        [TriggedOn("Screen.TopBorderInMm")]
         public double RealTopBorder
         {
-            get { return Screen.RealTopBorder; }
-            set { Screen.RealTopBorder = value; Screen.Config.Compact(); }
+            get => Screen.TopBorderInMm; set { Screen.TopBorderInMm = value; Screen.Config.Compact(); }
         }
 
-        [DependsOn("Screen.RealRightBorder")]
+        [TriggedOn("Screen.RightBorderInMm")]
         public double RealRightBorder
         {
-            get { return Screen.RealRightBorder; }
-            set { Screen.RealRightBorder = value; Screen.Config.Compact(); }
+            get => Screen.RightBorderInMm; set { Screen.RightBorderInMm = value; Screen.Config.Compact(); }
         }
 
-        [DependsOn("Screen.RealBottomBorder")]
+        [TriggedOn("Screen.BottomBorderInMm")]
         public double RealBottomBorder
         {
-            get { return Screen.RealBottomBorder; }
-            set { Screen.RealBottomBorder = value; Screen.Config.Compact(); }
+            get => Screen.BottomBorderInMm; set { Screen.BottomBorderInMm = value; Screen.Config.Compact(); }
         }
 
-        [DependsOn("Screen.RealLeftBorder")]
+        [TriggedOn("Screen.LeftBorderInMm")]
         public double RealLeftBorder
         {
-            get { return Screen.RealLeftBorder; }
-            set { Screen.RealLeftBorder = value; Screen.Config.Compact(); }
+            get => Screen.LeftBorderInMm; set { Screen.LeftBorderInMm = value; Screen.Config.Compact(); }
         }
 
-        [DependsOn("Screen.RealPhysicalHeight", "Screen.RealTopBorder", "Screen.RealBottomBorder")]
+        [TriggedOn("Screen.RealPhysicalHeight")]
+        [TriggedOn("Screen.TopBorderInMm")]
+        [TriggedOn("Screen.BottomBorderInMm")]
         public double PhysicalOutsideHeight
         {
-            get { return Screen.RealPhysicalHeight + Screen.RealTopBorder + Screen.RealBottomBorder; }
-            set
+            get => Screen.RealPhysicalHeight + Screen.TopBorderInMm + Screen.BottomBorderInMm; set
             {
                 double offset = value - PhysicalOutsideHeight;
-                Screen.RealBottomBorder += offset;
+                Screen.BottomBorderInMm += offset;
                 Screen.Config.Compact();
             }
         }
 
-        [DependsOn("Screen.RealPhysicalWidth", "Screen.RealLeftBorder", "Screen.RealRightBorder")]
+        [TriggedOn("Screen.RealPhysicalWidth")]
+        [TriggedOn("Screen.LeftBorderInMm")]
+        [TriggedOn("Screen.RightBorderInMm")]
         public double PhysicalOutsideWidth
         {
-            get { return Screen.RealPhysicalWidth + Screen.RealLeftBorder + Screen.RealRightBorder; }
-            set
+            get => Screen.RealPhysicalWidth + Screen.LeftBorderInMm + Screen.RightBorderInMm; set
             {
                 double offset = (value - PhysicalOutsideWidth) / 2;
-                Screen.RealLeftBorder += offset;
-                Screen.RealRightBorder += offset;
+                Screen.LeftBorderInMm += offset;
+                Screen.RightBorderInMm += offset;
                 Screen.Config.Compact();
             }
         }

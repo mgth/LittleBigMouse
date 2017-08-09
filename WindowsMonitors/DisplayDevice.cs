@@ -2,16 +2,22 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
+using Erp.Notify;
 using Microsoft.Win32;
-using NotifyChange;
 using WinAPI;
 
 namespace WindowsMonitors
 {
-    public class DisplayDevice : Notifier
+    public class DisplayDevice : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
         static DisplayDevice()
         {
             SystemEvents.DisplaySettingsChanged += SystemEventsOnDisplaySettingsChanged;
@@ -147,9 +153,9 @@ namespace WindowsMonitors
 
         public string DeviceName
         {
-            get { return GetProperty<string>(); }
+            get => this.Get<string>();
             internal set {
-                if (SetProperty(value ?? ""))
+                if (this.Set(value ?? ""))
                 {
                     if (string.IsNullOrWhiteSpace(DeviceString))
                     {
@@ -162,26 +168,26 @@ namespace WindowsMonitors
 
         public string DeviceString
         {
-            get { return GetProperty<string>(); }
-            internal set { SetProperty(value ?? ""); }
+            get => this.Get<string>();
+            internal set => this.Set(value ?? "");
         }
 
         public NativeMethods.DisplayDeviceStateFlags State
         {
-            get { return GetProperty<NativeMethods.DisplayDeviceStateFlags>(); }
-            set { SetProperty(value); }
+            get => this.Get<NativeMethods.DisplayDeviceStateFlags>();
+            set => this.Set(value);
         }
 
         public string DeviceId
         {
-            get { return GetProperty<string>(); }
-            internal set { SetProperty(value); }
+            get => this.Get<string>();
+            internal set => this.Set(value);
         }
 
         public string DeviceKey
         {
-            get { return GetProperty<string>(); }
-            internal set { SetProperty(value); }
+            get => this.Get<string>();
+            internal set => this.Set(value);
         }
     }
 }

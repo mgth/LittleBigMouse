@@ -12,13 +12,11 @@ namespace LittleBigMouse_Control
     {
         public TestPatternType PatternType
         {
-            set { pattern.PatternType = value; }
-            get { return pattern.PatternType; }
+            set => pattern.PatternType = value; get => pattern.PatternType;
         }
         public Color PatternColor
         {
-            set { pattern.PatternColor = value; }
-            get { return pattern.PatternColor; }
+            set => pattern.PatternColor = value; get => pattern.PatternColor;
         }
         public TestPatternWindow()
         {
@@ -38,10 +36,10 @@ namespace LittleBigMouse_Control
         {
             if (s != null)
             {
-                Left = s.Bounds.TopLeft.Wpf.X;
-                Top = s.Bounds.TopLeft.Wpf.Y;
-                Width = s.Bounds.BottomRight.Wpf.X - s.Bounds.TopLeft.Wpf.X;
-                Height = s.Bounds.BottomRight.Wpf.Y - s.Bounds.TopLeft.Wpf.Y;
+                Left = s.Bounds.TopLeft.Dip.X;
+                Top = s.Bounds.TopLeft.Dip.Y;
+                Width = s.Bounds.BottomRight.Dip.X - s.Bounds.TopLeft.Dip.X;
+                Height = s.Bounds.BottomRight.Dip.Y - s.Bounds.TopLeft.Dip.Y;
 
                 Show();
             }

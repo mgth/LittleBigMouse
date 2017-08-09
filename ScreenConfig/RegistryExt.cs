@@ -1,19 +1,21 @@
-﻿using System.Globalization;
+﻿using System;
+using System.Globalization;
 using Microsoft.Win32;
-using NotifyChange;
 
 namespace LbmScreenConfig
 {
     public static class RegistryExt
     {
-        public static T GetKey<T>(this RegistryKey key, string keyName, T def = default(T))
+        public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null)
         {
-            if (key == null) return def;
+            if (def == null) def = () => default(T);
+
+            if (key == null) return def();
 
             object value = null;
 
             string sValue = key.GetValue(keyName, "").ToString();
-            if (sValue == "") return def;
+            if (sValue == "") return def();
 
             if (typeof(T) == typeof(double))
             {

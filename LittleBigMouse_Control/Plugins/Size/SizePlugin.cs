@@ -1,5 +1,7 @@
-﻿using LbmScreenConfig;
+﻿using Erp.Notify;
+using LbmScreenConfig;
 using LittleBigMouse_Control.PluginLocation;
+using LittleBigMouse_Control.Plugins.Location;
 
 namespace LittleBigMouse_Control.Plugins.Size
 {
@@ -15,10 +17,9 @@ namespace LittleBigMouse_Control.Plugins.Size
 
         public bool IsActivated
         {
-            get { return GetProperty<bool>(); }
-            set
+            get => this.Get<bool>(); set
             {
-                if (SetProperty(value))
+                if (this.Set(value))
                 {
                     if (value)
                     {

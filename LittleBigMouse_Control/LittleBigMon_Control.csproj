@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LittleBigMouse_Control</RootNamespace>
     <AssemblyName>LittleBigMouse_Control</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
@@ -81,9 +81,12 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="LiveCharts, Version=0.6.4.0, Culture=neutral, PublicKeyToken=bc51a8d89213f1fa, processorArchitecture=MSIL">
-      <HintPath>..\packages\LiveCharts.0.6.4.0\lib\net46\LiveCharts.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="ErpSystem, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\LimsMonographies\ErpMessageBus\bin\Debug\ErpSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="LiveCharts, Version=0.9.7.0, Culture=neutral, PublicKeyToken=0bc1f845d1ebb8df, processorArchitecture=MSIL">
+      <HintPath>..\packages\LiveCharts.0.9.7\lib\net45\LiveCharts.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.QualityTools.Testing.Fakes, Version=12.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -118,6 +121,11 @@
     <Compile Include="Plugins\Debug\DebugViewModel.cs" />
     <Compile Include="Plugins\Vcp\VcpScreenViewModel.cs" />
     <Compile Include="PresenterViewModel.cs" />
+    <Compile Include="Rulers\RulerViewModel.cs" />
+    <Compile Include="Rulers\Tester.xaml.cs">
+      <DependentUpon>Tester.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Rulers\TesterViewModel.cs" />
     <Compile Include="ScreenControlViewModel.cs" />
     <Compile Include="Plugins\Size\SizeScreenView.xaml.cs">
       <DependentUpon>SizeScreenView.xaml</DependentUpon>
@@ -139,7 +147,7 @@
     <Compile Include="ScreenFrameView.xaml.cs">
       <DependentUpon>ScreenFrameView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Ruler.xaml.cs">
+    <Compile Include="Rulers\Ruler.xaml.cs">
       <DependentUpon>Ruler.xaml</DependentUpon>
     </Compile>
     <Compile Include="ScreenFrameViewModel.cs" />
@@ -206,11 +214,15 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Rulers\Tester.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="ScreenFrameView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="Ruler.xaml">
+    <Page Include="Rulers\Ruler.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -286,9 +298,13 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\NotifyChange\NotifyChange\NotifyChange.csproj">
+    <ProjectReference Include="..\..\_ERP_\Erp\Base\Erp.Base.csproj">
+      <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
+      <Name>Erp.Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\_ERP_\Erp\Notify\Erp.Notify.csproj">
       <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
-      <Name>NotifyChange</Name>
+      <Name>Erp.Notify</Name>
     </ProjectReference>
     <ProjectReference Include="..\Argyll\Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>

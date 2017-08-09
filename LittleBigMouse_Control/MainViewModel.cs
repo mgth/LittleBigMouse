@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using Erp.Notify;
 using LbmScreenConfig;
 using LittleBigMouse_Control.Plugins;
 
@@ -38,23 +39,20 @@ namespace LittleBigMouse_Control
 
         public ScreenConfig Config
         {
-            get { return GetProperty<ScreenConfig>(); }
-            set { SetProperty(value); }
+            get => this.Get<ScreenConfig>(); set => this.Set(value);
         }
 
 
         public ViewModel Control
         {
-            get { return GetProperty<ViewModel>(); }
-            set { SetProperty(value);}
+            get => this.Get<ViewModel>(); set => this.Set(value);
         }
 
         public PresenterViewModel Presenter
         {
-            get { return GetProperty<PresenterViewModel>(); }
-            set
+            get => this.Get<PresenterViewModel>(); set
             {
-                if (SetAndWatch(value))
+                if (this.Set(value))
                 {
                     Presenter.MainViewModel = this;
                 }

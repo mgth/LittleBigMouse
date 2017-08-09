@@ -14,8 +14,7 @@ namespace Argyll
     {
         public ProbedColor Illuminant
         {
-            get { return _illuminant??this; }
-            set { _illuminant = value; }
+            get => _illuminant ?? this; set => _illuminant = value;
         }
 
         public abstract ProbedColorXYZ XYZ { get; }

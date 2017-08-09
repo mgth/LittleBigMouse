@@ -32,10 +32,10 @@ namespace LbmScreenConfig
 
         public bool Contains(AbsolutePoint p)
         {
-            if (p.Physical.X < TopLeft.Physical.X) return false;
-            if (p.Physical.X > BottomRight.Physical.X) return false;
-            if (p.Physical.Y < TopLeft.Physical.Y) return false;
-            if (p.Physical.Y > BottomLeft.Physical.Y) return false;
+            if (p.Mm.X < TopLeft.Mm.X) return false;
+            if (p.Mm.X > BottomRight.Mm.X) return false;
+            if (p.Mm.Y < TopLeft.Mm.Y) return false;
+            if (p.Mm.Y > BottomLeft.Mm.Y) return false;
             return true;
         }
     }
@@ -58,63 +58,72 @@ namespace LbmScreenConfig
         }
 
 
-        public virtual PhysicalPoint Physical 
+        public virtual PhysicalPoint Mm 
             => new PhysicalPoint(Config, Screen,
-            Screen.PhysicalLocation.X + (Pixel.X - Screen.PixelLocation.X) * Screen.PitchX,
-            Screen.PhysicalLocation.Y + (Pixel.Y - Screen.PixelLocation.Y) * Screen.PitchY
+            Screen.LocationInMm.X + (Pixel.X - Screen.LocationInPixels.X) * Screen.PitchX,
+            Screen.LocationInMm.Y + (Pixel.Y - Screen.LocationInPixels.Y) * Screen.PitchY
             );
 
         public abstract PixelPoint Pixel { get; }
 
-        public virtual WpfPoint Wpf
+        public virtual DipPoint Dip
         {
             get
             {
-                Process p = Process.GetCurrentProcess();
-
-                NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
-
-                NativeMethods.GetProcessDpiAwareness(p.Handle,out aw);
+                var aw = NativeMethods.GetThreadDpiAwarenessContext();
 
                 switch (aw)
                 {
-                    case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
-                        return new WpfPoint(Config, Screen,
-                            Pixel.X * Screen.PixelToWpfRatioX,
-                            Pixel.Y * Screen.PixelToWpfRatioY
+                    case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware:
+                        return new DipPoint(Config, Screen,
+                            Pixel.X * Screen.PixelToDipRatioX,
+                            Pixel.Y * Screen.PixelToDipRatioY
                             );
-                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
-                        return new WpfPoint(Config, Screen,
-                            Pixel.X * Screen.PixelToWpfRatioX,
-                            Pixel.Y * Screen.PixelToWpfRatioY
+                    case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware_V2:
+                        return new DipPoint(Config, Screen,
+                        //Screen.LocationInPixels.X + (Pixel.X - Screen.LocationInPixels.X) * Config.PrimaryScreen.PixelToDipRatioX,
+                        //Screen.LocationInPixels.Y + (Pixel.Y - Screen.LocationInPixels.Y) * Config.PrimaryScreen.PixelToDipRatioY
+                            Pixel.X * Screen.PixelToDipRatioX,
+                            Pixel.Y * Screen.PixelToDipRatioY
                             );
+                    case NativeMethods.DPI_Awareness_Context.System_Aware:
+                        return new DipPoint(Config, Screen,
+                            Pixel.X * Screen.PixelToDipRatioX,
+                            Pixel.Y * Screen.PixelToDipRatioY
+                            );
+                    case NativeMethods.DPI_Awareness_Context.Unaware:
                     default:
-                        return new WpfPoint(Config, Screen,
-                            Screen.PixelLocation.X + (Pixel.X - Screen.PixelLocation.X) * Screen.PixelToWpfRatioX,
-                            Screen.PixelLocation.Y + (Pixel.Y - Screen.PixelLocation.Y) * Screen.PixelToWpfRatioY
+                        return new DipPoint(Config, Screen,
+                            Screen.LocationInPixels.X + (Pixel.X - Screen.LocationInPixels.X) * Screen.PixelToDipRatioX,
+                            Screen.LocationInPixels.Y + (Pixel.Y - Screen.LocationInPixels.Y) * Screen.PixelToDipRatioY
                             );
                 }
             }
         }
 
-        public virtual WpfPoint MouseWpf
-        {
-            get
-            {
-                return new WpfPoint(Config, Screen,
-                    Screen.PixelLocation.X + (Pixel.X - Screen.PixelLocation.X)/*/Screen.WpfToPixelRatioX*/,
-                    Screen.PixelLocation.Y + (Pixel.Y - Screen.PixelLocation.Y)/*/Screen.WpfToPixelRatioY*/
-                    );
-            }
-        }
+        public virtual DipPoint MouseDip => new DipPoint(Config, Screen,
+            Screen.LocationInPixels.X + (Pixel.X - Screen.LocationInPixels.X)/*/Screen.WpfToPixelRatioX*/,
+            Screen.LocationInPixels.Y + (Pixel.Y - Screen.LocationInPixels.Y)/*/Screen.WpfToPixelRatioY*/
+        );
 
         public PhysicalPoint ToScreen(Screen s)
         {
-            return new PhysicalPoint(Config, s, Physical.X, Physical.Y);
+            return new PhysicalPoint(Config, s, Mm.X, Mm.Y);
         }
 
         public abstract bool IsInside(Screen screen = null);
-        public Screen TargetScreen => Config.AllScreens.FirstOrDefault(IsInside);
+        public Screen TargetScreen
+        {
+            get
+            {
+                var s = Config.AllScreens.FirstOrDefault(IsInside);
+                if (s == null)
+                {
+                    
+                }
+                return s;
+            }
+        }
     }
 
     public class PhysicalPoint : AbsolutePoint
@@ -126,16 +135,16 @@ namespace LbmScreenConfig
 
         public bool Eguals(AbsolutePoint p2)
         {
-            if (X != p2?.Physical.X) return false;
-            return Y == p2?.Physical.Y;
+            if (p2?.Mm == null || Math.Abs(X - p2.Mm.X) > double.Epsilon) return false;
+            return Equals(Y, p2.Mm.Y);
         }
 
 
-        public override PhysicalPoint Physical => this;
+        public override PhysicalPoint Mm => this;
 
         public override PixelPoint Pixel => new PixelPoint(Config, Screen,
-            Math.Round(Screen.PixelLocation.X + (X - Screen.PhysicalLocation.X) / Screen.PitchX), 
-            Math.Round(Screen.PixelLocation.Y + (Y - Screen.PhysicalLocation.Y) / Screen.PitchY)
+            Math.Round(Screen.LocationInPixels.X + (X - Screen.LocationInMm.X) / Screen.PitchX), 
+            Math.Round(Screen.LocationInPixels.Y + (Y - Screen.LocationInMm.Y) / Screen.PitchY)
             );
 
         public override bool IsInside(Screen s = null)
@@ -143,10 +152,10 @@ namespace LbmScreenConfig
             if (s == null) s = Screen;
             if (s == null) return false;
 
-            if (X < s.PhysicalLocation.X) return false;
-            if (X >= s.PhysicalLocation.X + s.PixelSize.Width * s .PitchX) return false;
-            if (Y < s.PhysicalLocation.Y) return false;
-            if (Y >= s.PhysicalLocation.Y + s.PixelSize.Height * s.PitchY) return false;
+            if (X < s.LocationInMm.X) return false;
+            if (X >= s.LocationInMm.X + s.SizeInPixels.Width * s .PitchX) return false;
+            if (Y < s.LocationInMm.Y) return false;
+            if (Y >= s.LocationInMm.Y + s.SizeInPixels.Height * s.PitchY) return false;
             return true;
         }
     }
@@ -168,10 +177,10 @@ namespace LbmScreenConfig
             if (screen == null) return false;
 
             if (
-                (X < screen.PixelLocation.X) ||
-                (Y < screen.PixelLocation.Y) ||
-                (X >= screen.PixelLocation.X + screen.PixelSize.Width) ||
-                (Y >= screen.PixelLocation.Y + screen.PixelSize.Height))
+                (X < screen.LocationInPixels.X) ||
+                (Y < screen.LocationInPixels.Y) ||
+                (X >= screen.LocationInPixels.X + screen.SizeInPixels.Width) ||
+                (Y >= screen.LocationInPixels.Y + screen.SizeInPixels.Height))
             {
 
                 return false;
@@ -186,11 +195,11 @@ namespace LbmScreenConfig
                 double x = X;
                 double y = Y;
 
-                if (x < Screen.PixelBounds.X) x = Screen.PixelBounds.X;
-                else if (x >= Screen.PixelBounds.Right) x = Screen.PixelBounds.Right - 1;
+                if (x < Screen.BoundsInPixels.X) x = Screen.BoundsInPixels.X;
+                else if (x >= Screen.BoundsInPixels.Right) x = Screen.BoundsInPixels.Right - 1;
 
-                if (y < Screen.PixelBounds.Y) y = Screen.PixelBounds.Y;
-                else if (y >= Screen.PixelBounds.Bottom) y = Screen.PixelBounds.Bottom - 1;
+                if (y < Screen.BoundsInPixels.Y) y = Screen.BoundsInPixels.Y;
+                else if (y >= Screen.BoundsInPixels.Bottom) y = Screen.BoundsInPixels.Bottom - 1;
 
                 return new PixelPoint(Config, Screen, Math.Round(x), Math.Round(y));
 
@@ -200,39 +209,35 @@ namespace LbmScreenConfig
     }
 
 
-    public class WpfPoint : AbsolutePoint
+    public class DipPoint : AbsolutePoint
     {
-        // screenOut.PixelLocation.X + (p.X - screenOut.PixelLocation.X) / (screenOut.DpiX/screenOut.EffectiveDpiX),
-        // screenOut.PixelLocation.Y + (p.Y - screenOut.PixelLocation.Y) / (screenOut.DpiY / screenOut.EffectiveDpiY)
+        // screenOut.LocationInPixels.X + (p.X - screenOut.LocationInPixels.X) / (screenOut.DpiX/screenOut.EffectiveDpiX),
+        // screenOut.LocationInPixels.Y + (p.Y - screenOut.LocationInPixels.Y) / (screenOut.DpiY / screenOut.EffectiveDpiY)
 
-        public WpfPoint(ScreenConfig config, Screen screen, double x, double y) : base(config, screen, x, y)
+        public DipPoint(ScreenConfig config, Screen screen, double x, double y) : base(config, screen, x, y)
         {
         }
 
-        public override WpfPoint Wpf => this;
+        public override DipPoint Dip => this;
 
         public override PixelPoint Pixel
         {
             get
             {
-                Process p = Process.GetCurrentProcess();
-
-                NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
-
-                NativeMethods.GetProcessDpiAwareness(p.Handle, out aw);
+                var aw = NativeMethods.GetThreadDpiAwarenessContext();
 
                 switch (aw)
                 {
-                   case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
-                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
+                   case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware:
+                    case NativeMethods.DPI_Awareness_Context.System_Aware:
                         return new PixelPoint(Config, Screen,
                             X * Screen.WpfToPixelRatioX,
                             Y * Screen.WpfToPixelRatioY
                             );
                     default:
                         return new PixelPoint(Config, Screen,
-                            Screen.PixelLocation.X + (X - Screen.PixelLocation.X) * Screen.WpfToPixelRatioX,
-                            Screen.PixelLocation.Y + (Y - Screen.PixelLocation.Y) * Screen.WpfToPixelRatioY
+                            Screen.LocationInPixels.X + (X - Screen.LocationInPixels.X) * Screen.WpfToPixelRatioX,
+                            Screen.LocationInPixels.Y + (Y - Screen.LocationInPixels.Y) * Screen.WpfToPixelRatioY
                             );
                 }
             }
@@ -243,8 +248,8 @@ namespace LbmScreenConfig
             if (screen == null) screen = Screen;
             if (screen == null) return false;
 
-            WpfPoint topleft = screen.Bounds.TopLeft.Wpf;
-            WpfPoint bottomRight = screen.Bounds.BottomRight.Wpf;
+            DipPoint topleft = screen.Bounds.TopLeft.Dip;
+            DipPoint bottomRight = screen.Bounds.BottomRight.Dip;
 
             if (X < topleft.X) return false;
             if (Y < topleft.Y) return false;

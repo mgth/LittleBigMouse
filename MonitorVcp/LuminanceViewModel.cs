@@ -1,19 +1,23 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows.Media;
+using Erp.Notify;
 using LbmScreenConfig;
-using NotifyChange;
 
 namespace MonitorVcp
 {
-    class LuminanceViewModel : Notifier
+    class LuminanceViewModel : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
         public ScreenConfig Config { get; set; }
 
 
-        private double Value_default
+        private double ValueDefault()
         {
-            get
-            {
                 double l = 0;
 
                 if (Config == null) return l;
@@ -27,21 +31,16 @@ namespace MonitorVcp
 
 
                 return l;
-            }
-        }
+         }
 
         public double Value
         {
-            get
-            {
-                return GetProperty<double>();
-
-            }
+            get => this.Get(ValueDefault);
 
             set
             {
                 if (Config != null)
-                    if (SetProperty(value))
+                    if (this.Set(value))
                     {
                         foreach (Screen screen in Config.AllScreens)
                         {

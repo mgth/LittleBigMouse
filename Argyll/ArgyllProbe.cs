@@ -1,15 +1,21 @@
-﻿using System;
+﻿using Erp.Notify;
+using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Xml.Serialization;
-using NotifyChange;
 
 namespace Argyll
 {
-    public class ArgyllProbe : Notifier
+    public class ArgyllProbe : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
         public ArgyllProbe()
         {
             ConfigFromDipcalGUI();
@@ -54,50 +60,42 @@ namespace Argyll
 
         public string Name
         {
-            get { return GetProperty<string>(); }
-            set { SetProperty(value); }
+            get => this.Get<string>(); set => this.Set(value);
         }
 
         public double SpectrumFrom
         {
-            get { return GetProperty<double>(); }
-            set { SetProperty(value); }
+            get => this.Get<double>(); set => this.Set(value);
         }
 
         public double SpectrumTo
         {
-            get { return GetProperty<double>(); }
-            set { SetProperty(value); }
+            get => this.Get<double>(); set => this.Set(value);
         }
 
         public int SpectrumSteps
         {
-            get { return GetProperty<int>(); }
-            set { SetProperty(value); }
+            get => this.Get<int>(); set => this.Set(value);
         }
 
         public double Cct
         {
-            get { return GetProperty<double>(); }
-            set { SetProperty(value); }
+            get => this.Get<double>(); set => this.Set(value);
         }
 
         public double Cri
         {
-            get { return GetProperty<double>(); }
-            set { SetProperty(value); }
+            get => this.Get<double>(); set => this.Set(value);
         }
 
         public double Tlci
         {
-            get { return GetProperty<double>(); }
-            set { SetProperty(value); }
+            get => this.Get<double>(); set => this.Set(value);
         }
 
         public double Lux
         {
-            get { return GetProperty<double>(); }
-            set { SetProperty(value); }
+            get => this.Get<double>(); set => this.Set(value);
         }
 
         public ObservableCollection<double> Spectrum { get; set; } = new ObservableCollection<double> {0};

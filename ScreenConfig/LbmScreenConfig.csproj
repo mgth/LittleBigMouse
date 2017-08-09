@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LbmScreenConfig</RootNamespace>
     <AssemblyName>LbmScreenConfig</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -50,6 +50,10 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="ErpSystem, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\LimsMonographies\ErpMessageBus\bin\Debug\ErpSystem.dll</HintPath>
+    </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
@@ -82,9 +86,13 @@
     <Compile Include="WindowInteropHelper.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\NotifyChange\NotifyChange\NotifyChange.csproj">
+    <ProjectReference Include="..\..\_ERP_\Erp\Base\Erp.Base.csproj">
+      <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
+      <Name>Erp.Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\_ERP_\Erp\Notify\Erp.Notify.csproj">
       <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
-      <Name>NotifyChange</Name>
+      <Name>Erp.Notify</Name>
     </ProjectReference>
     <ProjectReference Include="..\Argyll\Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>

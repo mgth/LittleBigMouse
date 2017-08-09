@@ -2,8 +2,8 @@
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
+using Erp.Notify;
 using Microsoft.Win32;
-using NotifyChange;
 using WinAPI;
 
 namespace WindowsMonitors
@@ -17,7 +17,7 @@ namespace WindowsMonitors
         }
         public void Init(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
-            using (Suspend())
+            using (this.Suspend())
             {
                 Adapter = adapter;
 
@@ -84,11 +84,11 @@ namespace WindowsMonitors
         }
         public bool AttachedToDesktop
         {
-            get { return GetProperty<bool>(); }
-            private set { SetProperty(value); }
+            get => this.Get<bool>();
+            private set => this.Set(value);
         }
 
-        [DependsOn(nameof(State))]
+        [TriggedOn(nameof(State))]
         void UpdateFromState()
         {
             AttachedToDesktop = (State & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != 0;
@@ -97,61 +97,54 @@ namespace WindowsMonitors
 
         public int PelsHeight
         {
-            get { return GetProperty<int>(); }
-            private set { SetProperty(value); }
+            get => this.Get<int>();
+            private set => this.Set(value);
         }
         //public int PelsHeight
         //{
-        //    get { return GetProperty<int>(); }
-        //    private set { SetProperty(value); }
+        //    get { return Get<int>(); }
+        //    private set { Set(value); }
         //}
         public int PelsWidth
         {
-            get { return GetProperty<int>(); }
-            private set { SetProperty(value); }
+            get => this.Get<int>();
+            private set => this.Set(value);
         }
 
         public int DisplayFixedOutput
         {
-            get { return GetProperty<int>(); }
-            private set { SetProperty(value); }
+            get => this.Get<int>(); private set => this.Set(value);
         }
 
         public int DisplayFrequency
         {
-            get { return GetProperty<int>(); }
-            private set { SetProperty(value); }
+            get => this.Get<int>(); private set => this.Set(value);
         }
 
         public int DisplayFlags
         {
-            get { return GetProperty<int>(); }
-            private set { SetProperty(value); }
+            get => this.Get<int>(); private set => this.Set(value);
         }
 
 
         public int BitsPerPixel
         {
-            get { return GetProperty<int>(); }
-            private set { SetProperty(value); }
+            get => this.Get<int>(); private set => this.Set(value);
         }
 
         public int DisplayOrientation
         {
-            get { return GetProperty<int>(); }
-            set { SetProperty(value); }
+            get => this.Get<int>(); set => this.Set(value);
         }
 
         public Point Position
         {
-            get { return GetProperty<Point>(); }
-            set { SetProperty(value); }
+            get => this.Get<Point>(); set => this.Set(value);
         }
 
         public uint Primary
         {
-            get { return GetProperty<uint>(); }
-            set
+            get => this.Get<uint>(); set
             {
                 // Must remove old primary screen before setting this one
                 if (value == 1)
@@ -162,43 +155,37 @@ namespace WindowsMonitors
                     }
                 }
 
-                SetProperty(value);
+                this.Set(value);
             }
         }
 
         public Rect MonitorArea
         {
-            get { return GetProperty<Rect>(); }
-            set { SetProperty(value); }
+            get => this.Get<Rect>(); set => this.Set(value);
         }
 
         public Rect WorkArea
         {
-            get { return GetProperty<Rect>(); }
-            set { SetProperty(value); }
+            get => this.Get<Rect>(); set => this.Set(value);
         }
 
         public IntPtr HMonitor
         {
-            get { return GetProperty<IntPtr>(); }
-            set { SetProperty(value); }
+            get => this.Get<IntPtr>(); set => this.Set(value);
         }
         public string HKeyName
         {
-            get { return GetProperty<string>(); }
-            set { SetProperty(value); }
+            get => this.Get<string>(); set => this.Set(value);
         }
 
         public string ManufacturerCode
         {
-            get { return GetProperty<string>(); }
-            private set { SetProperty(value); }
+            get => this.Get<string>(); private set => this.Set(value);
         }
 
         public byte[] Edid
         {
-            get { return GetProperty<byte[]>(); }
-            private set { SetProperty(value); }
+            get => this.Get<byte[]>(); private set => this.Set(value);
         }
 
         public void UpdateEdid()
@@ -253,7 +240,7 @@ namespace WindowsMonitors
 
             NativeMethods.SetupDiDestroyDeviceInfoList(devInfo);
         }
-        [DependsOn(nameof(Edid))]
+        [TriggedOn(nameof(Edid))]
         private void UpdateManufacturerCode()
         {
             String code;
@@ -269,11 +256,10 @@ namespace WindowsMonitors
 
         public string ProductCode
         {
-            get { return GetProperty<string>(); }
-            private set { SetProperty(value); }
+            get => this.Get<string>(); private set => this.Set(value);
         }
 
-        [DependsOn(nameof(Edid))]
+        [TriggedOn(nameof(Edid))]
         private void UpdateProductCode()
         {
             if (Edid == null || Edid.Length < 12) ProductCode = "0000";
@@ -283,11 +269,10 @@ namespace WindowsMonitors
 
         public string Serial
         {
-            get { return GetProperty<string>(); }
-            private set { SetProperty(value); }
+            get => this.Get<string>(); private set => this.Set(value);
         }
 
-        [DependsOn(nameof(Edid))]
+        [TriggedOn(nameof(Edid))]
         private void UpdateSerial()
         {
             if (Edid == null || Edid.Length < 16)
@@ -302,28 +287,25 @@ namespace WindowsMonitors
 
         public string Model
         {
-            get { return GetProperty<string>(); }
-            private set { SetProperty(value); }
+            get => this.Get<string>(); private set => this.Set(value);
         }
 
-        [DependsOn(nameof(Edid))]
+        [TriggedOn(nameof(Edid))]
         private void UpdateModel() { Model = Block((char)0xFC); }
         public string SerialNo
         {
-            get { return GetProperty<string>(); }
-            private set { SetProperty(value); }
+            get => this.Get<string>(); private set => this.Set(value);
         }
 
-        [DependsOn(nameof(Edid))]
+        [TriggedOn(nameof(Edid))]
         private void UpdateSerialNo() { SerialNo = Block((char)0xFF); }
 
         public Size PhysicalSize
         {
-            get { return GetProperty<Size>(); }
-            set { SetProperty(value); }
+            get => this.Get<Size>(); set => this.Set(value);
         }
 
-        [DependsOn(nameof(Edid))]
+        [TriggedOn(nameof(Edid))]
         private void UpdatePhysicalSize()
         {
             if (Edid != null && Edid.Length > 68)
@@ -412,11 +394,10 @@ namespace WindowsMonitors
         private NativeMethods.PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
         public IntPtr HPhysical
         {
-            get { return GetProperty<IntPtr>(); }
-            private set { SetProperty(value); }
+            get => this.Get<IntPtr>(); private set => this.Set(value);
         }
 
-        [DependsOn(nameof(HMonitor))]
+        [TriggedOn(nameof(HMonitor))]
         private void UpdateHPhysical()
         {
             uint pdwNumberOfPhysicalMonitors = 0;
@@ -434,14 +415,12 @@ namespace WindowsMonitors
 
         public double DeviceCapsHorzSize
         {
-            get { return GetProperty<double>(); }
-            private set { SetProperty(value); }
+            get => this.Get<double>(); private set => this.Set(value);
         }
 
         public double DeviceCapsVertSize
         {
-            get { return GetProperty<double>(); }
-            private set { SetProperty(value); }
+            get => this.Get<double>(); private set => this.Set(value);
         }
 
         public void UpdateDeviceCaps()
@@ -458,20 +437,17 @@ namespace WindowsMonitors
 
         public Vector EffectiveDpi
         {
-            get { return GetProperty<Vector>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Vector>(); private set => this.Set(value);
         }
 
         public Vector AngularDpi
         {
-            get { return GetProperty<Vector>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Vector>(); private set => this.Set(value);
         }
 
         public Vector RawDpi
         {
-            get { return GetProperty<Vector>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Vector>(); private set => this.Set(value);
         }
 
         private enum DpiType
@@ -483,7 +459,7 @@ namespace WindowsMonitors
         [DllImport("Shcore.dll")]
         private static extern IntPtr GetDpiForMonitor([In]IntPtr hmonitor, [In]DpiType dpiType, [Out]out uint dpiX, [Out]out uint dpiY);
 
-        [DependsOn(nameof(HMonitor))]
+        [TriggedOn(nameof(HMonitor))]
         private void UpdateDpiForMonitor()
         {
             uint x;
@@ -498,15 +474,10 @@ namespace WindowsMonitors
 
         public double ScaleFactor
         {
-            get { return GetProperty<double>(); }
-            private set { SetProperty(value); }
+            get => this.Get<double>(() => 1); private set => this.Set(value);
         }
 
-        public double ScaleFactor_default => 1;
-
-
-
-        [DependsOn(nameof(HMonitor))]
+        [TriggedOn(nameof(HMonitor))]
         public void UpdateScaleFactor()
         {
             int factor = 100;

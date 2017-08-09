@@ -54,25 +54,25 @@ namespace LittleBigMouse_Control.Plugins.Size
         private void Bottom_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             SetStaticPoint();
-            ViewModel.Screen.RealBottomBorder += WheelDelta(e);
+            ViewModel.Screen.BottomBorderInMm += WheelDelta(e);
         }
 
         private void Right_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             SetStaticPoint();
-            ViewModel.Screen.RealRightBorder += WheelDelta(e);
+            ViewModel.Screen.RightBorderInMm += WheelDelta(e);
         }
 
         private void Left_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             SetStaticPoint();
-            ViewModel.Screen.RealLeftBorder += WheelDelta(e);
+            ViewModel.Screen.LeftBorderInMm += WheelDelta(e);
         }
 
         private void Top_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             SetStaticPoint();
-            ViewModel.Screen.RealTopBorder += WheelDelta(e);
+            ViewModel.Screen.TopBorderInMm += WheelDelta(e);
         }
 
         private void OnKeyEnterUpdate(object sender, KeyEventArgs e)

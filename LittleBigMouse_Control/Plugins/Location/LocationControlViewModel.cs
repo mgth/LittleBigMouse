@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Input;
+using Erp.Notify;
 using LbmScreenConfig;
-using NotifyChange;
+using LittleBigMouse_Control.PluginLocation;
+using LittleBigMouse_Control.Rulers;
 
-namespace LittleBigMouse_Control.PluginLocation
+namespace LittleBigMouse_Control.Plugins.Location
 {
     class LocationControlViewModel : ViewModel
     {
@@ -13,10 +15,9 @@ namespace LittleBigMouse_Control.PluginLocation
 
         public ScreenConfig Config
         {
-            get { return GetProperty<ScreenConfig>(); }
-            set
+            get => this.Get<ScreenConfig>(); set
             {
-                if (SetAndWatch(value))
+                if (this.Set(value))
                 {
                     SaveCommand = new SaveCommand(Config);
                     StartCommand = new StartCommand(Config);
@@ -44,28 +45,14 @@ namespace LittleBigMouse_Control.PluginLocation
         public StartCommand StartCommand { get; private set; }
         public StopCommand StopCommand { get; private set; }
 
-        public bool ShowRulers
-        {
-            get { return GetProperty<bool>(); }
-            set { SetProperty(value); }
-        }
+        public bool ShowRulers { get => this.Get<bool>(); set => this.Set(value); }
+        public bool Running { get => this.Get<bool>(); private set => this.Set(value); }
 
-        public bool Running
-        {
-            get { return GetProperty<bool>(); }
-            private set { SetProperty(value); }
-        }
-
-        public bool LiveUpdate
-        {
-            get { return GetProperty<bool>(); }
-            set { SetProperty(value); }
-        }
+        public bool LiveUpdate { get => this.Get<bool>(); set => this.Set(value); }
 
         public bool LoadAtStartup
         {
-            get { return Config.LoadAtStartup; }
-            set
+            get => Config.LoadAtStartup; set
             {
                 Config.LoadAtStartup = value;
                 LittleBigMouseClient.Client.LoadAtStartup(value);
@@ -73,7 +60,8 @@ namespace LittleBigMouse_Control.PluginLocation
         }
 
 
-        [DependsOn(nameof(LiveUpdate), "Config.Saved")]
+        [TriggedOn(nameof(LiveUpdate))]
+        [TriggedOn("Config.Saved")]
         private void DoLiveUpdate()
         {
             if (LiveUpdate && !Config.Saved)
@@ -83,34 +71,58 @@ namespace LittleBigMouse_Control.PluginLocation
         }
 
         private readonly List<Ruler> _rulers = new List<Ruler>();
-        private void AddRuler(RulerSide side)
+        private void AddRuler(RulerViewModel.RulerSide side)
         {
             if (Config.Selected == null) return;
 
-            foreach (var sz in Config.AllScreens.Select(s => new Ruler(Config.Selected, s, side)))
+            foreach (var sz in Config.AllScreens.Select(s => new RulerViewModel(Config.Selected, s, side)))
             {
-                _rulers.Add(sz);
+                var r = new Ruler {DataContext = sz}; 
+                _rulers.Add(r);
             }
         }
 
-        [DependsOn("ShowRulers", "Config.Selected")]
+        private Tester _tester;
+        private void ShowTester()
+        {
+            if(_tester == null)
+                _tester = new Tester {DataContext = new TesterViewModel()};
+
+            _tester.Show();
+        }
+
+
+
+
+        [TriggedOn(nameof(ShowRulers))]
+        [TriggedOn("Config.Selected")]
         void UpdateRulers()
         {
-            foreach (Ruler sz in _rulers)
+            //if(ShowRulers)
+            //    ShowTester();
+            //else
+            //{
+            //    _tester?.Close();
+            //    _tester = null;
+            //}
+
+            //return;
+
+            foreach (var sz in _rulers)
             {
-                sz.Close();
+                if(!sz.IsClosing)
+                    sz.Close();
             }
             _rulers.Clear();
 
-            if (ShowRulers)
-            {
-                AddRuler(RulerSide.Left);
-                AddRuler(RulerSide.Right);
-                AddRuler(RulerSide.Top);
-                AddRuler(RulerSide.Bottom);
+            if (!ShowRulers) return;
 
-                foreach (Ruler ruler in _rulers) ruler.Enabled = true;
-            }
+            AddRuler(RulerViewModel.RulerSide.Left);
+            AddRuler(RulerViewModel.RulerSide.Right);
+            AddRuler(RulerViewModel.RulerSide.Top);
+            AddRuler(RulerViewModel.RulerSide.Bottom);
+
+            foreach (var ruler in _rulers) ruler.ViewModel.Enabled = true;
         }
     }
 

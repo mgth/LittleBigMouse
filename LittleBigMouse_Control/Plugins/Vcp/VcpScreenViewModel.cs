@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Media;
 using Argyll;
+using Erp.Notify;
 using MonitorVcp;
 
 namespace LittleBigMouse_Control.Plugins.Vcp
@@ -17,7 +18,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
 
         public ProbeLut Lut => Screen?.ProbeLut();
 
-        [DependsOn("Screen")]
+        [TriggedOn("Screen")]
         void InitLut()
         {
             Lut?.Load();

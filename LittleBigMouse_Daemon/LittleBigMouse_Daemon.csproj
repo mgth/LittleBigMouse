@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LittleBigMouse_Daemon</RootNamespace>
     <AssemblyName>LittleBigMouse_Daemon</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
@@ -133,9 +133,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\NotifyChange\NotifyChange\NotifyChange.csproj">
+    <ProjectReference Include="..\..\_ERP_\Erp\Notify\Erp.Notify.csproj">
       <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
-      <Name>NotifyChange</Name>
+      <Name>Erp.Notify</Name>
     </ProjectReference>
     <ProjectReference Include="..\NativeMethods\WinAPI.csproj">
       <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>

@@ -26,18 +26,25 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Management;
 using System.Windows;
 using WindowsMonitors;
-using NotifyChange;
+using Erp.Notify;
+
 // ReSharper disable CompareOfFloatsByEqualityOperator
 
 namespace LbmScreenConfig
 {
-    public class ScreenConfig : Notifier
+    public class ScreenConfig : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
         public static RegistryKey OpenRootRegKey(bool create = false)
         {
             using (RegistryKey key = Registry.CurrentUser)
@@ -72,8 +79,6 @@ namespace LbmScreenConfig
             MonitorsOnCollectionChanged(Monitors,
                 new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, Monitors));
             Monitors.CollectionChanged += MonitorsOnCollectionChanged;
-
-            Watch(AllScreens, "Screen");
         }
 
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
@@ -81,17 +86,16 @@ namespace LbmScreenConfig
             if (args.NewItems != null)
                 foreach (DisplayMonitor monitor in args.NewItems)
                 {
-                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
-                    if (screen == null)
-                    {
-                        screen = new Screen(this, monitor);
-                        AllScreens.Add(screen);
-                    }
+                    var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
+                    if (screen != null) continue;
+
+                    screen = new Screen(this, monitor);
+                    AllScreens.Add(screen);
                 }
             if (args.OldItems != null)
                 foreach (DisplayMonitor monitor in args.OldItems)
                 {
-                    Screen screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
+                    var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
 
                     if (screen != null) AllScreens.Remove(screen);
                 }
@@ -99,23 +103,23 @@ namespace LbmScreenConfig
             Load();
         }
 
-        public ObservableCollection<Screen> AllScreens { get; } = new ObservableCollection<Screen>();
+        public ObservableCollection<Screen> AllScreens => this.Get(()=>new ObservableCollection<Screen>());
 
-        public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => s != screen);
+        public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => !Equals(s, screen));
 
         public Screen Selected
         {
-            get { return GetProperty<Screen>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Screen>();
+            private set => this.Set(value);
         }
 
-        [DependsOn("Screen.Selected")]
+        [TriggedOn("AllScreens.Item.Selected")]
         public void UpdateSelected()
         {
             Selected = AllScreens.FirstOrDefault(screen => screen.Selected);
         }
 
-        private static readonly string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
+        private const string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
 
         internal static RegistryKey OpenConfigRegKey(string configId, bool create)
         {
@@ -141,20 +145,16 @@ namespace LbmScreenConfig
         public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Id, create);
 
 
+        [TriggedOn("AllScreens.Item.Id")]
         public string Id
         {
-            get { return GetProperty<string>(); }
-            private set { SetProperty(value); }
+            get => this.Get(IdDefault);
+            private set => this.Set(value);
         }
 
-        public String Id_default => AllScreens.OrderBy(s => s.Id)
+        public String IdDefault() => AllScreens.OrderBy(s => s.Id)
                     .Aggregate("", (current, screen) => current + (((current != "") ? "." : "") + screen.Id));
 
-        [DependsOn("Screen.Id")]
-        private void UpdateId()
-        {
-            Id = Id_default;
-        }
 
         public void MatchConfig(string id)
         {
@@ -315,20 +315,21 @@ namespace LbmScreenConfig
         /// </summary>
         public bool Moving
         {
-            get { return GetProperty<bool>(); }
-            set { SetProperty(value); }
+            get => this.Get<bool>();
+            set => this.Set(value);
         }
 
         /// <summary>
-        /// Physical Outside Bounds updated while moving (screen dragged on gui)
+        /// Mm Outside Bounds updated while moving (screen dragged on gui)
         /// </summary>
         public Rect PhysicalOutsideBounds
         {
-            get { return GetProperty<Rect>(); }
-            private set { if (SetProperty(value)) Saved = false; }
+            get => this.Get<Rect>();
+            private set { if (this.Set(value)) Saved = false; }
         }
 
-        [DependsOn(nameof(Moving), "Screen.PhysicalOutsideBounds")]
+        [TriggedOn(nameof(Moving))]
+        [TriggedOn("AllScreens.Item.OutsideBoundsInMm")]
         public void UpdatePhysicalOutsideBounds()
         {
             Rect outside = new Rect();
@@ -338,12 +339,12 @@ namespace LbmScreenConfig
             {
                 if (first)
                 {
-                    outside = s.PhysicalOutsideBounds;
+                    outside = s.OutsideBoundsInMm;
                     first = false;
                     continue;
                 }
 
-                outside.Union(s.PhysicalOutsideBounds);
+                outside.Union(s.OutsideBoundsInMm);
             }
 
             PhysicalOutsideBounds = outside;
@@ -351,12 +352,12 @@ namespace LbmScreenConfig
 
 
         /// <summary>
-        /// Physical Outside Bounds NOT updated while moving (screen dragged on gui)
+        /// Mm Outside Bounds NOT updated while moving (screen dragged on gui)
         /// </summary>
         public Rect MovingPhysicalOutsideBounds
         {
-            get { return GetProperty<Rect>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Rect>();
+            private set => this.Set(value);
         }
 
         public void ShiftMovingPhysicalBounds(Vector shift)
@@ -368,7 +369,8 @@ namespace LbmScreenConfig
             MovingPhysicalOutsideBounds = r;
         }
 
-        [DependsOn(nameof(Moving), nameof(PhysicalOutsideBounds))]
+        [TriggedOn(nameof(Moving))]
+        [TriggedOn(nameof(PhysicalOutsideBounds))]
         private void UpdateMovingPhysicalOutsideBounds()
         {
             if (Moving) return;
@@ -377,15 +379,15 @@ namespace LbmScreenConfig
 
 
         /// <summary>
-        /// Physical Bounds of overall screens without borders
+        /// Mm Bounds of overall screens without borders
         /// </summary>
         public Rect PhysicalBounds
         {
-            get { return GetProperty<Rect>(); }
-            private set { if (SetProperty(value)) Saved = false; }
+            get => this.Get<Rect>();
+            private set { if (this.Set(value)) Saved = false; }
         }
 
-        [DependsOn("Screen.PhysicalBounds")]
+        [TriggedOn("AllScreens.Item.BoundsInMm")]
         public void UpdatePhysicalBounds()
         {
             Rect inside = new Rect();
@@ -395,12 +397,12 @@ namespace LbmScreenConfig
             {
                 if (first)
                 {
-                    inside = s.PhysicalBounds;
+                    inside = s.BoundsInMm;
                     first = false;
                     continue;
                 }
 
-                inside.Union(s.PhysicalBounds);
+                inside.Union(s.BoundsInMm);
             }
 
             PhysicalBounds = inside;
@@ -412,14 +414,14 @@ namespace LbmScreenConfig
 
         public bool Enabled
         {
-            get { return GetProperty<bool>(); }
-            set { if (SetProperty(value)) Saved = false; }
+            get => this.Get<bool>();
+            set { if (this.Set(value)) Saved = false; }
         }
 
         public bool LoadAtStartup
         {
-            get { return GetProperty<bool>(); }
-            set { if (SetProperty(value)) { Saved = false; } }
+            get => this.Get<bool>();
+            set { if (this.Set(value)) { Saved = false; } }
         }
 
         public bool IsRatio100
@@ -428,8 +430,8 @@ namespace LbmScreenConfig
             {
                 foreach (Screen screen in AllScreens)
                 {
-                    if (screen.PixelToWpfRatioX != 1) return false;
-                    if (screen.PixelToWpfRatioY != 1) return false;
+                    if (screen.PixelToDipRatioX != 1) return false;
+                    if (screen.PixelToDipRatioY != 1) return false;
                 }
                 return true;
             }
@@ -439,35 +441,34 @@ namespace LbmScreenConfig
 
         public bool AdjustPointer
         {
-            get { return AdjustPointerAllowed && GetProperty<bool>(); }
-            set { if (SetProperty(value)) Saved = false; }
+            get => AdjustPointerAllowed && this.Get<bool>();
+            set { if (this.Set(value)) Saved = false; }
         }
 
         public bool AdjustSpeedAllowed => IsRatio100;
 
         public bool AdjustSpeed
         {
-            get { return AdjustSpeedAllowed && GetProperty<bool>(); }
-            set { if (SetProperty(value)) Saved = false; }
+            get => AdjustSpeedAllowed && this.Get<bool>();
+            set { if (this.Set(value)) Saved = false; }
         }
 
         public bool AllowCornerCrossing
         {
-            get { return GetProperty<bool>(); }
-            set { if (SetProperty(value)) Saved = false; }
+            get => this.Get<bool>();
+            set { if (this.Set(value)) Saved = false; }
         }
 
 
         public bool HomeCinema
         {
-            get { return GetProperty<bool>(); }
-            set { if (SetProperty(value)) Saved = false; }
+            get => this.Get<bool>();
+            set { if (this.Set(value)) Saved = false; }
         }
 
         public Rect ConfigLocation
         {
-            get { return GetProperty<Rect>(); }
-            set { SetProperty(value); }
+            get => this.Get<Rect>(); set => this.Set(value);
         }
 
 
@@ -506,16 +507,16 @@ namespace LbmScreenConfig
                     //  __| A
                     // B  |__
                     //  __|
-                    if (screenToPlace.PixelBounds.X == placedScreen.PixelBounds.Right)
+                    if (screenToPlace.BoundsInPixels.X == placedScreen.BoundsInPixels.Right)
                     {
-                        screenToPlace.PhysicalX = placedScreen.PhysicalOutsideBounds.Right + screenToPlace.LeftBorder;
+                        screenToPlace.XLocationInMm = placedScreen.OutsideBoundsInMm.Right + screenToPlace.LeftBorder;
                         done = true;
                     }
                     //B |___|_
                     //A  |    |
-                    if (screenToPlace.PixelBounds.Y == placedScreen.PixelBounds.Bottom)
+                    if (screenToPlace.BoundsInPixels.Y == placedScreen.BoundsInPixels.Bottom)
                     {
-                        screenToPlace.PhysicalY = placedScreen.PhysicalOutsideBounds.Bottom + screenToPlace.TopBorder;
+                        screenToPlace.YLocationInMm = placedScreen.OutsideBoundsInMm.Bottom + screenToPlace.TopBorder;
                         done = true;
                     }
 
@@ -523,20 +524,20 @@ namespace LbmScreenConfig
                     //  __| B
                     // A  |__
                     //  __|
-                    if (screenToPlace.PixelBounds.Right == placedScreen.PixelBounds.X)
+                    if (screenToPlace.BoundsInPixels.Right == placedScreen.BoundsInPixels.X)
                     {
-                        screenToPlace.PhysicalX = placedScreen.PhysicalOutsideBounds.Left -
-                                                  screenToPlace.PhysicalOutsideBounds.Width + screenToPlace.LeftBorder;
+                        screenToPlace.XLocationInMm = placedScreen.OutsideBoundsInMm.Left -
+                                                  screenToPlace.OutsideBoundsInMm.Width + screenToPlace.LeftBorder;
                         done = true;
                     }
 
                     //A |___|_
                     //B  |    |
 
-                    if (screenToPlace.PixelBounds.Bottom == placedScreen.PixelLocation.Y)
+                    if (screenToPlace.BoundsInPixels.Bottom == placedScreen.LocationInPixels.Y)
                     {
-                        screenToPlace.PhysicalY = placedScreen.PhysicalOutsideBounds.Top -
-                                                  screenToPlace.PhysicalOutsideBounds.Height + screenToPlace.TopBorder;
+                        screenToPlace.YLocationInMm = placedScreen.OutsideBoundsInMm.Top -
+                                                  screenToPlace.OutsideBoundsInMm.Height + screenToPlace.TopBorder;
                         done = true;
                     }
 
@@ -547,17 +548,17 @@ namespace LbmScreenConfig
                     //  __
                     // |
                     // |__
-                    if (screenToPlace.PixelBounds.X == placedScreen.PixelBounds.X)
+                    if (screenToPlace.BoundsInPixels.X == placedScreen.BoundsInPixels.X)
                     {
-                        screenToPlace.PhysicalX = placedScreen.PhysicalX;
+                        screenToPlace.XLocationInMm = placedScreen.XLocationInMm;
                         done = true;
                     }
 
                     //  ___   ___
                     // |   | |   |
-                    if (screenToPlace.PixelBounds.Y == placedScreen.PixelBounds.Y)
+                    if (screenToPlace.BoundsInPixels.Y == placedScreen.BoundsInPixels.Y)
                     {
-                        screenToPlace.PhysicalY = placedScreen.PhysicalY;
+                        screenToPlace.YLocationInMm = placedScreen.YLocationInMm;
                         done = true;
                     }
 
@@ -567,17 +568,17 @@ namespace LbmScreenConfig
                     // __
                     //   |
                     // __|
-                    if (screenToPlace.PixelBounds.Right == placedScreen.PixelBounds.Right)
+                    if (screenToPlace.BoundsInPixels.Right == placedScreen.BoundsInPixels.Right)
                     {
-                        screenToPlace.PhysicalX = placedScreen.PhysicalBounds.Right - screenToPlace.PhysicalBounds.Width;
+                        screenToPlace.XLocationInMm = placedScreen.BoundsInMm.Right - screenToPlace.BoundsInMm.Width;
                         done = true;
                     }
 
                     //|___||___|
-                    if (screenToPlace.PixelBounds.Bottom == placedScreen.PixelBounds.Bottom)
+                    if (screenToPlace.BoundsInPixels.Bottom == placedScreen.BoundsInPixels.Bottom)
                     {
-                        screenToPlace.PhysicalY = placedScreen.PhysicalBounds.Bottom -
-                                                  screenToPlace.PhysicalBounds.Height;
+                        screenToPlace.YLocationInMm = placedScreen.BoundsInMm.Bottom -
+                                                  screenToPlace.BoundsInMm.Height;
                         done = true;
                     }
                     if (done)
@@ -632,10 +633,9 @@ namespace LbmScreenConfig
 
         public bool AllowOverlaps
         {
-            get { return GetProperty<bool>(); }
-            set
+            get => this.Get<bool>(); set
             {
-                if (SetProperty(value))
+                if (this.Set(value))
                 {
                     Saved = false;
                 }
@@ -644,37 +644,20 @@ namespace LbmScreenConfig
 
         public bool AllowDiscontinuity
         {
-            get { return GetProperty<bool>(); }
-            set { if (SetProperty(value)) Saved = false; }
+            get => this.Get<bool>(); set { if (this.Set(value)) Saved = false; }
         }
 
         public bool Saved
         {
-            get { return GetProperty<bool>(); }
-            set
-            {
-                if (SetProperty(value))
-                    if (value == false)
-                    {
-                        
-                    }
-            }
+            get => this.Get<bool>(); set => this.Set(value);
         }
 
-        [DependsOn("Screen.EffectiveDpiX")]
-        public double MaxEffectiveDpiX {
-            get
-            {
-                return AllScreens.Select(screen => screen.EffectiveDpiX).Concat(new double[] {0}).Max();
-            }
-        }
-        [DependsOn("Screen.EffectiveDpiY")]
-        public double MaxEffectiveDpiY
-        {
-            get
-            {
-                return AllScreens.Select(screen => screen.EffectiveDpiY).Concat(new double[] { 0 }).Max();
-            }
-        }
+        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpiX")]
+        public double MaxEffectiveDpiX => this.Get( 
+            ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpiX).Max());
+
+        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpiY")]
+        public double MaxEffectiveDpiY => this.Get( 
+            ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpiY).Max());
     }
 }

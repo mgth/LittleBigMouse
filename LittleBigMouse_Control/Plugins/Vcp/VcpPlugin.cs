@@ -1,4 +1,5 @@
-﻿using LbmScreenConfig;
+﻿using Erp.Notify;
+using LbmScreenConfig;
 using LittleBigMouse_Control.VcpPlugin;
 
 namespace LittleBigMouse_Control.Plugins.Vcp
@@ -19,10 +20,9 @@ namespace LittleBigMouse_Control.Plugins.Vcp
 
         public bool IsActivated
         {
-            get { return GetProperty<bool>(); }
-            set
+            get => this.Get<bool>(); set
             {
-                if (!SetProperty(value)) return;
+                if (!this.Set(value)) return;
 
                 if (value)
                 {

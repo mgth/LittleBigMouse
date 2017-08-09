@@ -24,16 +24,17 @@
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
+using Erp.Notify;
 using System.Text;
 using System.Windows;
 using WindowsMonitors;
-using NotifyChange;
 using WinAPI;
 
 [assembly: InternalsVisibleTo("ScreenConfig")]
@@ -41,32 +42,45 @@ using WinAPI;
 namespace LbmScreenConfig
 {
     [DataContract]
-    public class Screen : Notifier
+    public class Screen : INotifyPropertyChanged
     {
-        public DisplayMonitor Monitor
+        public event PropertyChangedEventHandler PropertyChanged
         {
-            get { return GetProperty<DisplayMonitor>(); }
-            private set { SetAndWatch(value); }
+            add => this.Add(value);
+            remove => this.Remove(value);
         }
 
-        public ScreenConfig Config { get; }
+        public DisplayMonitor Monitor
+        {
+            get => this.Get<DisplayMonitor>();
+            private set => this.Set(value);
+        }
 
-        public IEnumerable<Screen> OtherScreens => Config.AllScreens.Where(s => s != this);
+        public ScreenConfig Config
+        {
+            get => this.Get<ScreenConfig>();
+            private set => this.Set(value);
+        }
+
+        [TriggedOn(nameof(Config), "AllScreens.Count")]
+        public IEnumerable<Screen> OtherScreens => this.Get(() => Config.AllScreens.Where(s => !Equals(s, this)));
 
         internal Screen(ScreenConfig config, DisplayMonitor monitor)
         {
-            Config = config;
-            Monitor = monitor;
-            Watch(Config,"Config");
+            using (this.Suspend())
+            {
+                Config = config;
+                Monitor = monitor;
+            }
 
-            // Todo : PhysicalX = PhysicalOveralBoundsWithoutThis.Right;
+            // Todo : XLocationInMm = OveralBoundsWithoutThisInMm.Right;
         }
 
 
         public override bool Equals(object obj)
         {
             Screen other = obj as Screen;
-            if (obj==null) return base.Equals(obj);
+            if (obj == null) return base.Equals(obj);
             if (other == null) return false;
             return Monitor.Equals(other.Monitor);
         }
@@ -82,57 +96,52 @@ namespace LbmScreenConfig
 
 
         // References properties
-        [DependsOn("Monitor.ManufacturerCode", "Monitor.ProductCode")]
-        public string PnpCode => Monitor.ManufacturerCode + Monitor.ProductCode;
+        [TriggedOn(nameof(Monitor), "ManufacturerCode")]
+        [TriggedOn(nameof(Monitor), "ProductCode")]
+        public string PnpCode => this.Get(() => Monitor.ManufacturerCode + Monitor.ProductCode);
 
-        [DependsOn(nameof(PnpCode), "Monitor.Serial")]
-        public string IdMonitor => PnpCode + "_" + Monitor.Serial;
+        [TriggedOn(nameof(PnpCode))]
+        [TriggedOn(nameof(Monitor), "Serial")]
+        public string IdMonitor => this.Get(() => PnpCode + "_" + Monitor.Serial);
 
-        [DependsOn(nameof(PixelSize))]
-        public string IdResolution => PixelSize.Width + "x" + PixelSize.Height;
+        [TriggedOn(nameof(SizeInPixels))]
+        public string IdResolution => this.Get(() => SizeInPixels.Width + "x" + SizeInPixels.Height);
 
-        [DependsOn(nameof(IdMonitor), "Monitor.DisplayOrientation")]
-        public string Id => IdMonitor + "_" + Monitor.DisplayOrientation.ToString();
+        [TriggedOn(nameof(IdMonitor))]
+        [TriggedOn("Monitor.DisplayOrientation")]
+        public string Id => this.Get(() => IdMonitor + "_" + Monitor.DisplayOrientation);
 
-        [DependsOn("Monitor.Primary")]
-        public bool Primary => (Monitor.Primary == 1);
+        [TriggedOn("Monitor.Primary")]
+        public bool Primary => this.Get(() => Monitor.Primary == 1);
 
 
-        public string PnpDeviceName => GetProperty<string>();
-
-        public string PnpDeviceName_default
+        public string PnpDeviceName => this.Get(() =>
         {
-            get
+            var name = Html.CleanupPnpName(Monitor.DeviceString);
+            using (RegistryKey key = OpenConfigRegKey())
             {
-                var name = Html.CleanupPnpName(Monitor.DeviceString);
-                using (RegistryKey key = OpenConfigRegKey())
-                {
-                    name = key.GetKey("PnpName", name);
-                }
-
-                if (name.ToLower() != "generic pnp monitor")
-                    return name;
-
-                return Html.GetPnpName(PnpCode);
+                name = key.GetKey("PnpName",()=>name);
             }
-        }
 
-        [DependsOn("Monitor.DeviceName")]
-        public int DeviceNo
+            if (name.ToLower() != "generic pnp monitor")
+                return name;
+
+            return Html.GetPnpName(PnpCode);
+        });
+
+        [TriggedOn(nameof(Monitor), "DeviceName")]
+        public int DeviceNo => this.Get(() =>
         {
-            get
-            {
-                var s = Monitor.DeviceName.Split('\\');
-                return s.Length < 4 ? 0 : int.Parse(s[3].Replace("DISPLAY", ""));
-            }
-        }
+            var s = Monitor.DeviceName.Split('\\');
+            return s.Length < 4 ? 0 : int.Parse(s[3].Replace("DISPLAY", ""));
+        });
 
         public bool Selected
         {
-            get { return GetProperty<bool>(); }
+            get => this.Get<bool>();
             set
             {
-                if (!SetProperty(value)) return;
+                if (!this.Set(value)) return;
                 if (!value) return;
                 foreach (Screen screen in Config.AllBut(this)) screen.Selected = false;
             }
@@ -140,353 +149,365 @@ namespace LbmScreenConfig
 
         public bool FixedAspectRatio
         {
-            get { return GetProperty<bool>(); }
-            set { SetProperty(value); }
+            get => this.Get<bool>();
+            set => this.Set(value);
         }
 
-        // Physical dimensions
+        // Mm dimensions
         // Natives
 
-        [DataMember]
-        public double PhysicalX
+        public double PhysicalXSystem => this.Get(()=>0);
+
+
+        [TriggedOn(nameof(Id))]
+        [TriggedOn(nameof(Config), "Id")]
+        public double PhysicalXSaved
         {
-            get
+            get => this.Get(() =>
             {
-                var value = GetProperty<double>();
-                return double.IsNaN(value) ? 0 : value;
-            }
+                using (var key = OpenConfigRegKey())
+                {
+                    return key.GetKey(nameof(XLocationInMm), () => double.NaN);
+                }
+            });
             set
             {
-                if (SetPhysicalX(value))
-                    Config.Saved = false;
+                if (this.Set(value)) Config.Saved = false;
             }
-        }
-
-        public double PhysicalX_default
-        {
-            get
-            {
-                using (RegistryKey key = OpenConfigRegKey())
-                {
-                    return key.GetKey(nameof(PhysicalX), double.NaN);
-                }
-            }
-        }
-
-
-
-        public bool SetPhysicalX(double value)
-        {
-            if (value == PhysicalX) return false;
-
-            if (Primary)
-            {
-                foreach (Screen s in Config.AllBut(this))
-                {
-                    s.SetPhysicalX(s.PhysicalX + PhysicalX - value);
-                }
-                return SetProperty(0.0, nameof(PhysicalX));
-            }
-            return SetProperty(value, nameof(PhysicalX));
         }
 
         [DataMember]
-        public double PhysicalY
+        [TriggedOn(nameof(PhysicalXSaved))]
+        [TriggedOn(nameof(PhysicalXSystem))]
+        public double XLocationInMm
         {
-            get
-            {
-                var value = GetProperty<double>();
-                return double.IsNaN(value) ? 0 : value;
-            }
+            get => this.Get(()=>double.IsNaN(PhysicalXSaved)?PhysicalXSystem : PhysicalXSaved);
+            
             set
             {
-                if (SetPhysicalY(value))
-                    Config.Saved = false;
+                if (value == XLocationInMm) return;
+
+                if (Primary)
+                {
+                    foreach (Screen s in Config.AllBut(this))
+                    {
+                        s.PhysicalXSaved = s.XLocationInMm + XLocationInMm - value;
+                    }
+                    PhysicalXSaved = 0.0;
+                    return;
+                }
+                PhysicalXSaved = value;
             }
         }
 
-        public bool SetPhysicalY(double value)
-        {
-            if (value == PhysicalY) return false;
+        public double PhysicalYSystem => this.Get(() => 0);
 
-            if (Primary)
-            {
-                foreach (Screen s in Config.AllBut(this))
-                {
-                    s.SetPhysicalY(s.PhysicalY + PhysicalY - value); //shift;
-                }
-                return SetProperty(0.0, nameof(PhysicalY));
-            }
-            return SetProperty(value, nameof(PhysicalY));
-        }
-        public double PhysicalY_default
+
+        [TriggedOn(nameof(Id))]
+        [TriggedOn(nameof(Config), "Id")]
+        public double PhysicalYSaved
         {
-            get
+            get => this.Get(() =>
             {
-                using (RegistryKey key = OpenConfigRegKey())
+                using (var key = OpenConfigRegKey())
                 {
-                    return key.GetKey(nameof(PhysicalY), double.NaN);
+                    return key.GetKey(nameof(YLocationInMm), () => double.NaN);
                 }
+            });
+            set
+            {
+                if (this.Set(value)) Config.Saved = false;
+            }
+        }
+
+        [DataMember]
+        [TriggedOn(nameof(PhysicalYSaved))]
+        [TriggedOn(nameof(PhysicalYSystem))]
+        public double YLocationInMm
+        {
+            get => this.Get(() => double.IsNaN(PhysicalYSaved) ? PhysicalYSystem : PhysicalYSaved);
+
+            set
+            {
+                if (value == YLocationInMm) return;
+
+                if (Primary)
+                {
+                    foreach (Screen s in Config.AllBut(this))
+                    {
+                        s.PhysicalYSaved = s.YLocationInMm + YLocationInMm - value; //shift;
+                    }
+                    PhysicalYSaved=0.0;
+                }
+                PhysicalYSaved = value;
             }
         }
 
         [DataMember]
 
-        [DependsOn("Monitor.DeviceCapsHorzSize")]
+        [TriggedOn(nameof(Monitor), "DeviceCapsHorzSize")]
+        public double RealPhysicalWidthSystem => this.Get(() => Monitor.DeviceCapsHorzSize);
+
+        [TriggedOn(nameof(Monitor), "DeviceCapsHorzSize")]
+        public double RealPhysicalWidthSaved
+        {
+            get => this.Get(() => LoadRotatedValue(DimNames, "Mm%", "Width", () => Double.NaN));
+            set
+            {
+                if (this.Set(value)) Config.Saved = false;
+            }
+        }
+
+        [TriggedOn(nameof(Id))]
+        [TriggedOn(nameof(RealPhysicalWidthSaved))]
+        [TriggedOn(nameof(RealPhysicalWidthSystem))]
         public double RealPhysicalWidth
         {
-            get
-            {
-                var value = GetProperty<double>();
-                return double.IsNaN(value) ? (Monitor?.DeviceCapsHorzSize ?? 0) : value;
-            }
+            get => this.Get(()=>double.IsNaN(RealPhysicalWidthSaved)?RealPhysicalWidthSystem:RealPhysicalWidthSaved);
             set
             {
-                double ratio = value/RealPhysicalWidth;
-                if (SetRealPhysicalWidth(value))
-                    Config.Saved = false;
-                if (FixedAspectRatio) SetRealPhysicalHeight(RealPhysicalHeight*ratio);
+                var ratio = value / RealPhysicalWidth;
+
+                RealPhysicalWidthSaved = value == RealPhysicalWidthSystem ? double.NaN : value;
+
+                if (FixedAspectRatio)
+                {
+                    FixedAspectRatio = false;
+                    RealPhysicalHeight = RealPhysicalHeight * ratio;
+                    FixedAspectRatio = true;
+                }
             }
         }
 
-        public double RealPhysicalWidth_default => LoadRotatedValue(DimNames,"Physical%","Width", double.NaN);
-
+        [TriggedOn(nameof(Monitor),"DisplayOrientation")]
+        [TriggedOn(nameof(RealPhysicalWidth))]
+        [TriggedOn(nameof(RealPhysicalHeight))]
         public double UnrotatedRealPhysicalWidth
         {
-            get { return (Monitor.DisplayOrientation%2 == 0) ? RealPhysicalWidth : RealPhysicalHeight; }
+            get => this.Get(()=>Monitor.DisplayOrientation % 2 == 0 ? RealPhysicalWidth : RealPhysicalHeight);
             set
             {
-                double ratio = value/UnrotatedRealPhysicalWidth;
-                if (SetRealPhysicalWidth(value) && FixedAspectRatio)
-                    SetUnrotatedRealPhysicalHeight(UnrotatedRealPhysicalHeight*ratio);
+                if (Monitor.DisplayOrientation % 2 == 0)
+                    RealPhysicalWidth = value;
+                else
+                    RealPhysicalHeight = value;
             }
         }
 
-        private bool SetUnrotatedRealPhysicalWidth(double value)
-        {
-            switch (Monitor.DisplayOrientation%2)
-            {
-                case 0:
-                    return SetRealPhysicalWidth(value);
-                case 1:
-                    return SetRealPhysicalHeight(value);
-            }
-            return false;
-        }
+        [TriggedOn(nameof(Monitor), "DisplayOrientation")]
+        [TriggedOn(nameof(RealPhysicalHeight))]
+        [TriggedOn(nameof(RealPhysicalWidth))]
 
         public double UnrotatedRealPhysicalHeight
         {
-            get { return (Monitor.DisplayOrientation%2 == 0) ? RealPhysicalHeight : RealPhysicalWidth; }
+            get => (Monitor.DisplayOrientation % 2 == 0) ? RealPhysicalHeight : RealPhysicalWidth;
             set
             {
-                double ratio = value/UnrotatedRealPhysicalHeight;
-                if (SetUnrotatedRealPhysicalHeight(value) && FixedAspectRatio)
-                    SetUnrotatedRealPhysicalWidth(UnrotatedRealPhysicalWidth*ratio);
+                if (Monitor.DisplayOrientation % 2 == 0)
+                    RealPhysicalHeight = value;
+                else 
+                    RealPhysicalWidth = value;
             }
         }
 
-        private bool SetUnrotatedRealPhysicalHeight(double value)
+        [TriggedOn(nameof(Monitor),"DeviceCapsVertSize")]
+        public double RealPhysicalHeightSystem => this.Get(() => Monitor?.DeviceCapsVertSize ?? 0);
+
+        public double RealPhysicalHeightSaved
         {
-            switch (Monitor.DisplayOrientation%2)
+            get => this.Get(() => LoadRotatedValue(DimNames, "Mm%", "Height", () => double.NaN));
+            set
             {
-                case 0:
-                    return SetRealPhysicalHeight(value);
-                case 1:
-                    return SetRealPhysicalWidth(value);
+                if (this.Set(value)) Config.Saved = false;
             }
-            return false;
-
         }
-
-        [DependsOn("Monitor.DeviceCapsHorzSize", "Monitor.DeviceCapsVertSize")]
-        public void InitPhysicalSize()
-        {
-            if (Monitor == null) return;
-            if (double.IsNaN(GetProperty<double>(nameof(RealPhysicalWidth))))
-                SetRealPhysicalWidth(Monitor.DeviceCapsHorzSize);
-            if (double.IsNaN(GetProperty<double>(nameof(RealPhysicalHeight))))
-                SetRealPhysicalHeight(Monitor.DeviceCapsVertSize);
-        }
-
-        private bool SetRealPhysicalWidth(double value)
-        {
-            return SetProperty(value, nameof(RealPhysicalWidth));
-        }
-
 
         [DataMember]
-        [DependsOn("Monitor.DeviceCapsVertSize")]
+        [TriggedOn(nameof(Id))]
+        [TriggedOn(nameof(RealPhysicalHeightSaved))]
+        [TriggedOn(nameof(RealPhysicalHeightSystem))]
         public double RealPhysicalHeight
         {
-            get
-            {
-                double rph = GetProperty<double>();
-                return double.IsNaN(rph) ? (Monitor?.DeviceCapsVertSize ?? 0) : rph;
-            }
+            get => this.Get(() => double.IsNaN(RealPhysicalHeightSaved)? RealPhysicalHeightSystem:RealPhysicalHeightSaved);
             set
             {
-                double ratio = value/RealPhysicalHeight;
-                if (SetRealPhysicalHeight(value))
-                    Config.Saved = false;
-                if (FixedAspectRatio) SetRealPhysicalWidth(RealPhysicalWidth*ratio);
+                double ratio = value / RealPhysicalHeight;
+                RealPhysicalHeightSaved = value;
+
+                if (FixedAspectRatio)
+                {
+                    FixedAspectRatio = false;
+                    RealPhysicalWidth = value * ratio;
+                    FixedAspectRatio = true;
+                }
             }
         }
 
-        public double RealPhysicalHeight_default => LoadRotatedValue(DimNames, "Physical%", "Height", double.NaN);
 
-        private bool SetRealPhysicalHeight(double value) => SetProperty(value, nameof(RealPhysicalHeight));
-
-        //public double[] AnchorsX => new[]
-        //{
-        //    PhysicalOutsideBounds.X,
-        //    PhysicalX,
-        //    PhysicalX + (PhysicalWidth/2),
-        //    PhysicalBounds.Right,
-        //    PhysicalOutsideBounds.Right,
-        //};
-
-        //public double[] AnchorsY => new[]
-        //{
-        //    PhysicalOutsideBounds.Y,
-        //    PhysicalY,
-        //    PhysicalY + (PhysicalHeight/2),
-        //    PhysicalBounds.Bottom,
-        //    PhysicalOutsideBounds.Bottom,
-        //};
-
-
-        [DependsOn(nameof(RealPhysicalWidth), nameof(PixelSize))]
+        [TriggedOn(nameof(RealPhysicalWidth))]
+        [TriggedOn(nameof(SizeInPixels))]
         //[DataMember]
         public double RealPitchX
         {
-            set { RealPhysicalWidth = PixelSize.Width*value; }
-            get { return RealPhysicalWidth/PixelSize.Width; }
+            get => this.Get(() => RealPhysicalWidth / SizeInPixels.Width);
+            set => RealPhysicalWidth = SizeInPixels.Width * value;
         }
 
-        [DependsOn(nameof(RealPhysicalHeight), nameof(PixelSize))]
-        //[DataMember]
+        /// <summary>
+        /// Final ratio to deal with screen distance
+        /// </summary>
+        [TriggedOn(nameof(RealPhysicalHeight))]
+        [TriggedOn(nameof(SizeInPixels))]
         public double RealPitchY
         {
-            set { RealPhysicalHeight = PixelSize.Height*value; }
-            get { return RealPhysicalHeight/PixelSize.Height; }
+            get => this.Get(() => RealPhysicalHeight / SizeInPixels.Height);
+            set => RealPhysicalHeight = SizeInPixels.Height * value;
         }
 
-        //[DataMember]
+        /// <summary>
+        /// Final ratio to deal with screen distance
+        /// </summary>
+        [TriggedOn(nameof(Id))]
         public double PhysicalRatioX
         {
             get
             {
-                var value = GetProperty<double>();
+                var value = this.Get(() => double.NaN);
                 return double.IsNaN(value) ? 1 : value;
             }
-            set { SetProperty((value == 1) ? double.NaN : value); }
+            set => this.Set((value == 1) ? double.NaN : value);
         }
-        public double PhysicalRatioX_default => double.NaN;
 
-        //[DataMember]
+        /// <summary>
+        /// Final ratio to deal with screen distance
+        /// </summary>
+        [TriggedOn(nameof(Id))]
         public double PhysicalRatioY
         {
             get
             {
-                var value = GetProperty<double>();
+                var value = this.Get(() => double.NaN);
                 return double.IsNaN(value) ? 1 : value;
             }
-            set { SetProperty((value == 1) ? double.NaN : value); }
+            set => this.Set((value == 1) ? double.NaN : value);
         }
-        public double PhysicalRatioY_default => double.NaN;
+
 
         //calculated
-        [DependsOn(nameof(PhysicalRatioX), nameof(RealPhysicalWidth))]
-        public double PhysicalWidth
-            => PhysicalRatioX*RealPhysicalWidth;
+        [TriggedOn(nameof(PhysicalRatioX))]
+        [TriggedOn(nameof(RealPhysicalWidth))]
+        public double WidthInMm => this.Get(()
+            => PhysicalRatioX * RealPhysicalWidth);
 
-        [DependsOn(nameof(PhysicalRatioY), nameof(RealPhysicalHeight))]
-        public double PhysicalHeight => PhysicalRatioY*RealPhysicalHeight;
+        [TriggedOn(nameof(PhysicalRatioY))]
+        [TriggedOn(nameof(RealPhysicalHeight))]
+        public double HeightInMm => this.Get(()
+            => PhysicalRatioY * RealPhysicalHeight);
 
-        [DependsOn(nameof(RealPitchX), nameof(PhysicalRatioX))]
-        public double PitchX => RealPitchX*PhysicalRatioX;
+        [TriggedOn(nameof(RealPitchX))]
+        [TriggedOn(nameof(PhysicalRatioX))]
+        public double PitchX => this.Get(()
+            => RealPitchX * PhysicalRatioX);
 
-        [DependsOn(nameof(RealPitchY), nameof(PhysicalRatioY))]
-        public double PitchY => RealPitchY*PhysicalRatioY;
+        [TriggedOn(nameof(RealPitchY))]
+        [TriggedOn(nameof(PhysicalRatioY))]
+        public double PitchY => this.Get(()
+            => RealPitchY * PhysicalRatioY);
 
-        [DependsOn(nameof(PhysicalX), nameof(PhysicalY))]
-        public Point PhysicalLocation
+        [TriggedOn(nameof(XLocationInMm))]
+        [TriggedOn(nameof(YLocationInMm))]
+        public Point LocationInMm
         {
-            get { return new Point(PhysicalX, PhysicalY); }
+            get => this.Get(() => new Point(XLocationInMm, YLocationInMm));
             set
             {
-                PhysicalX = value.X;
-                PhysicalY = value.Y;
-            }
-        }
-
-        [DependsOn(nameof(Monitor), nameof(PhysicalWidth), nameof(PhysicalHeight))]
-        private void UpdatePhysicalSize()
-        {
-            PhysicalSize = new Size(PhysicalWidth, PhysicalHeight);
-        }
-
-        public Size PhysicalSize
-        {
-            get
-            {
-                //if (_physicalSize.Width == 0 || _physicalSize.Width == 0) throw new Exception("Not initialised");
-                return GetProperty<Size>();
-            }
-            private set { SetProperty(value); }
-        }
-
-        [DependsOn(nameof(PhysicalLocation), nameof(PhysicalSize))]
-        public Rect PhysicalBounds => new Rect(
-            PhysicalLocation,
-            PhysicalSize
-            );
-
-        [DependsOn("Config.PhysicalBounds")]
-        public Rect PhysicalOveralBoundsWithoutThis
-        {
-            get
-            {
-                Rect r = new Rect();
-                bool first = true;
-                foreach (Screen s in Config.AllBut(this))
+                using (this.Suspend())
                 {
-                    if (first)
-                    {
-                        r = s.PhysicalBounds;
-                        first = false;
-                    }
-                    else
-                        r.Union(s.PhysicalBounds);
+                    XLocationInMm = value.X;
+                    YLocationInMm = value.Y;
                 }
-                return r;
             }
         }
+
+        /// <summary>
+        /// Mm screen size in mm
+        /// (display area without borders)
+        /// </summary>
+        //[TriggedOn(nameof(Monitor))]
+        [TriggedOn(nameof(WidthInMm))]
+        [TriggedOn(nameof(HeightInMm))]
+        public Size SizeInMm => this.Get(() => new Size(WidthInMm, HeightInMm));
+
+        /// <summary>
+        /// Mm screen bounds
+        /// </summary>
+        [TriggedOn(nameof(LocationInMm))]
+        [TriggedOn(nameof(SizeInMm))]
+        public Rect BoundsInMm => this.Get(() => new Rect(
+            LocationInMm,
+            SizeInMm
+        ));
+
+        [TriggedOn(nameof(Config), "AllScreens.Item.BoundsInMm")]
+        public Rect OveralBoundsWithoutThisInMm => this.Get(() =>
+        {
+            var r = new Rect();
+            var first = true;
+            foreach (var s in Config.AllBut(this))
+            {
+                if (first)
+                {
+                    r = s.BoundsInMm;
+                    first = false;
+                }
+                else
+                    r.Union(s.BoundsInMm);
+            }
+            return r;
+        });
+
 
         // Pixel native Dimensions 
-        [DependsOn("Monitor.MonitorArea")]
-        public Rect PixelBounds => Monitor.MonitorArea;
+        /// <summary>
+        /// Screen bounds in pixels
+        /// </summary>
+        [TriggedOn(nameof(Monitor), "MonitorArea")]
+        public Rect BoundsInPixels => this.Get(() => Monitor.MonitorArea);
 
-        [DependsOn(nameof(PixelBounds))]
-        public Size PixelSize => PixelBounds.Size;
+        /// <summary>
+        /// Screen size in pixels
+        /// </summary>
+        [TriggedOn(nameof(BoundsInPixels))]
+        public Size SizeInPixels => this.Get(() => BoundsInPixels.Size);
 
-        [DependsOn(nameof(PixelLocation), nameof(PixelSize))]
-        public AbsolutePoint BottomRight
-            => new PixelPoint(Config, this, PixelLocation.X + PixelSize.Width, PixelLocation.Y + PixelSize.Height);
+        [TriggedOn(nameof(LocationInPixels))]
+        [TriggedOn(nameof(SizeInPixels))]
+        public AbsolutePoint BottomRight => this.Get(()
+            => new PixelPoint(Config, this, LocationInPixels.X + SizeInPixels.Width, LocationInPixels.Y + SizeInPixels.Height));
 
-        [DependsOn(nameof(PixelBounds), nameof(BottomRight))]
-        public AbsoluteRectangle Bounds
-            => new AbsoluteRectangle(new PixelPoint(Config, this, PixelBounds.X, PixelBounds.Y), BottomRight);
+        [TriggedOn(nameof(BoundsInPixels))]
+        [TriggedOn(nameof(BottomRight))]
+        public AbsoluteRectangle Bounds => this.Get(()
+            => new AbsoluteRectangle(new PixelPoint(Config, this, BoundsInPixels.X, BoundsInPixels.Y).Inside, BottomRight.Pixel.Inside));
 
-        [DependsOn(nameof(PixelBounds))]
-        public PixelPoint PixelLocation => new PixelPoint(Config, this, PixelBounds.X, PixelBounds.Y);
+        /// <summary>
+        /// Screen location in pixels
+        /// (this is Windows location)
+        /// </summary>
+        [TriggedOn(nameof(BoundsInPixels))]
+        public PixelPoint LocationInPixels => this.Get(()
+            => new PixelPoint(Config, this, BoundsInPixels.X, BoundsInPixels.Y));
 
-        // Wpf
-        [DependsOn(nameof(PixelBounds), nameof(PixelToWpfRatioX))]
-        public double WpfWidth => PixelBounds.Width*PixelToWpfRatioX;
+        // Dip
+        [TriggedOn(nameof(BoundsInPixels))]
+        [TriggedOn(nameof(PixelToDipRatioX))]
+        public double WidthInDip => this.Get(() 
+            => BoundsInPixels.Width * PixelToDipRatioX);
 
-        [DependsOn(nameof(PixelBounds), nameof(PixelToWpfRatioY))]
-        public double WpfHeight => PixelBounds.Height*PixelToWpfRatioY;
+        [TriggedOn(nameof(BoundsInPixels))]
+        [TriggedOn(nameof(PixelToDipRatioY))]
+        public double HeightInDip => this.Get(()
+            => BoundsInPixels.Height * PixelToDipRatioY);
 
 
 
@@ -534,25 +555,11 @@ namespace LbmScreenConfig
             return path;
         }
 
-        [DependsOn("Config.Id")]
+        [TriggedOn("Config.Id")]
         void UpdateConfigId()
         {
-            PhysicalX = PhysicalX_default;
-            PhysicalY = PhysicalY_default;
-            PhysicalRatioX = PhysicalRatioX_default;
-            PhysicalRatioY = PhysicalRatioY_default;
-        }
-
-        [DependsOn("Id")]
-        void UpdateId()
-        {
-            RealLeftBorder = RealLeftBorder_default;
-            RealTopBorder = RealTopBorder_default;
-            RealRightBorder = RealRightBorder_default;
-            RealBottomBorder = RealBottomBorder_default;
-
-            RealPhysicalWidth = RealPhysicalWidth_default;
-            RealPhysicalHeight = RealPhysicalHeight_default;
+            PhysicalRatioX = double.NaN;
+            PhysicalRatioY = double.NaN;
         }
 
 
@@ -562,15 +569,11 @@ namespace LbmScreenConfig
             {
                 if (key != null)
                 {
-                    double left = GuiLocation.Left,
-                    top = GuiLocation.Top,
-                    width = GuiLocation.Width,
-                    height = GuiLocation.Height;
-                    left = key.GetKey("Left", left);
-                    width = key.GetKey("Width", width);
-                    top = key.GetKey("Top", top);
-                    height = key.GetKey("Height", height);
-                    SetProperty(new Rect(new Point(left, top), new Size(width, height)), nameof(GuiLocation));
+                    var left = key.GetKey("Left", ()=>GuiLocation.Left);
+                    var width = key.GetKey("Width", ()=>GuiLocation.Width);
+                    var top = key.GetKey("Top", ()=>GuiLocation.Top);
+                    var height = key.GetKey("Height", ()=>GuiLocation.Height);
+                    this.Set(new Rect(new Point(left, top), new Size(width, height)), nameof(GuiLocation));
                 }
             }
         }
@@ -591,13 +594,13 @@ namespace LbmScreenConfig
             {
                 if (key != null)
                 {
-                    SaveRotatedValue(SideNames, "%Border", "Left", GetProperty<double>(nameof(RealLeftBorder)));
-                    SaveRotatedValue(SideNames, "%Border", "Top", GetProperty<double>(nameof(RealTopBorder)));
-                    SaveRotatedValue(SideNames, "%Border", "Right", GetProperty<double>(nameof(RealRightBorder)));
-                    SaveRotatedValue(SideNames, "%Border", "Bottom", GetProperty<double>(nameof(RealBottomBorder)));
+                    SaveRotatedValue(SideNames, "%Border", "Left", this.Get<double>(nameof(LeftBorderInMm)));
+                    SaveRotatedValue(SideNames, "%Border", "Top", this.Get<double>(nameof(TopBorderInMm)));
+                    SaveRotatedValue(SideNames, "%Border", "Right", this.Get<double>(nameof(RightBorderInMm)));
+                    SaveRotatedValue(SideNames, "%Border", "Bottom", this.Get<double>(nameof(BottomBorderInMm)));
 
-                    SaveRotatedValue(DimNames, "Physical%", "Width", GetProperty<double>(nameof(RealPhysicalWidth)));
-                    SaveRotatedValue(DimNames, "Physical%", "Height", GetProperty<double>(nameof(RealPhysicalHeight)));
+                    SaveRotatedValue(DimNames, "Mm%", "Width", this.Get<double>(nameof(RealPhysicalWidthSaved)));
+                    SaveRotatedValue(DimNames, "Mm%", "Height", this.Get<double>(nameof(RealPhysicalHeightSaved)));
 
                     key.SetKey("PnpName", PnpDeviceName);
                     key.SetKey("DeviceId", Monitor.DeviceId);
@@ -608,15 +611,15 @@ namespace LbmScreenConfig
             {
                 if (key != null)
                 {
-                    key.SetKey( nameof(PhysicalX),GetProperty<double>(nameof(PhysicalX)));
-                    key.SetKey( nameof(PhysicalY), GetProperty<double>(nameof(PhysicalY)));
-                    key.SetKey( nameof(PhysicalRatioX), GetProperty<double>(nameof(PhysicalRatioX)) );
-                    key.SetKey( nameof(PhysicalRatioY), GetProperty<double>(nameof(PhysicalRatioY)));
+                    key.SetKey(nameof(XLocationInMm), this.Get<double>(nameof(PhysicalXSaved)));
+                    key.SetKey(nameof(YLocationInMm), this.Get<double>(nameof(PhysicalYSaved)));
+                    key.SetKey(nameof(PhysicalRatioX), this.Get<double>(nameof(PhysicalRatioX)));
+                    key.SetKey(nameof(PhysicalRatioY), this.Get<double>(nameof(PhysicalRatioY)));
 
-                    key.SetKey("PixelX", PixelLocation.X);
-                    key.SetKey("PixelY", PixelLocation.Y);
-                    key.SetKey("PixelWidth", PixelSize.Width);
-                    key.SetKey("PixelHeight", PixelSize.Width);
+                    key.SetKey("PixelX", LocationInPixels.X);
+                    key.SetKey("PixelY", LocationInPixels.Y);
+                    key.SetKey("PixelWidth", SizeInPixels.Width);
+                    key.SetKey("PixelHeight", SizeInPixels.Width);
 
                     key.SetKey("Primary", Primary);
                     key.SetKey("Orientation", Monitor.DisplayOrientation);
@@ -624,27 +627,29 @@ namespace LbmScreenConfig
             }
         }
 
-
-        public AbsoluteRectangle AbsoluteWorkingArea => new AbsoluteRectangle(
+        [TriggedOn(nameof(Monitor), "WorkArea")]
+        public AbsoluteRectangle AbsoluteWorkingArea => this.Get(() => new AbsoluteRectangle(
             new PixelPoint(Config, this, Monitor.WorkArea.X, Monitor.WorkArea.Y),
             new PixelPoint(Config, this, Monitor.WorkArea.Right, Monitor.WorkArea.Bottom)
-            );
+        ));
 
-        private static readonly List<string> SideNames = new List<string> { "Left", "Top", "Right", "Bottom" };
-        private static readonly List<string> DimNames = new List<string> { "Width", "Height" };
+        private static readonly List<string> SideNames = new List<string> {"Left", "Top", "Right", "Bottom"};
+        private static readonly List<string> DimNames = new List<string> {"Width", "Height"};
 
-        private double LoadRotatedValue(List<string> names, string name, string side, double def, bool fromConfig=false)
+        private double LoadRotatedValue(List<string> names, string name, string side, Func<double> def,
+            bool fromConfig = false)
         {
             int n = names.Count;
             int pos = (names.IndexOf(side) + Monitor.DisplayOrientation) % n;
-            using (RegistryKey key = fromConfig?OpenConfigRegKey():OpenMonitorRegKey())
+            using (RegistryKey key = fromConfig ? OpenConfigRegKey() : OpenMonitorRegKey())
             {
                 return key.GetKey(name.Replace("%", names[pos]), def);
             }
         }
 
 
-        private void SaveRotatedValue(List<string> names, string name, string side, double value, bool fromConfig = false)
+        private void SaveRotatedValue(List<string> names, string name, string side, double value,
+            bool fromConfig = false)
         {
             int n = names.Count;
             int pos = (names.IndexOf(side) + n - Monitor.DisplayOrientation) % n;
@@ -655,96 +660,94 @@ namespace LbmScreenConfig
         }
 
 
-        public double RealLeftBorder
+        [TriggedOn("Id")]
+        public double LeftBorderInMm
         {
-            get { return GetProperty<double>(); }
-            set { SetProperty((value < 0)?0:value); }
-        }
-        public double RealLeftBorder_default => LoadRotatedValue(SideNames,"%Border", "Left", 20.0);
-
-        public double RealRightBorder
-        {
-            get { return GetProperty<double>(); }
-            set { SetProperty((value < 0) ? 0 : value); }
-        }
-        public double RealRightBorder_default => LoadRotatedValue(SideNames, "%Border", "Right", 20.0);
-
-        public double RealTopBorder
-        {
-            get { return GetProperty<double>(); }
-            set { SetProperty((value < 0) ? 0 : value); }
-        }
-        public double RealTopBorder_default => LoadRotatedValue(SideNames, "%Border", "Top", 20.0);
-
-        public double RealBottomBorder
-        {
-            get { return GetProperty<double>(); }
-            set { SetProperty((value < 0) ? 0 : value); }
-        }
-        public double RealBottomBorder_default => LoadRotatedValue(SideNames, "%Border", "Bottom", 20.0);
-
-        [DependsOn(nameof(RealLeftBorder), nameof(PhysicalRatioX))]
-        public double LeftBorder => RealLeftBorder * PhysicalRatioX;
-
-        [DependsOn(nameof(RealRightBorder), nameof(PhysicalRatioX))]
-        public double RightBorder => RealRightBorder * PhysicalRatioX;
-
-        [DependsOn(nameof(RealTopBorder), nameof(PhysicalRatioY))]
-        public double TopBorder => RealTopBorder * PhysicalRatioY;
-
-        [DependsOn(nameof(RealBottomBorder), nameof(PhysicalRatioY))]
-        public double BottomBorder => RealBottomBorder * PhysicalRatioY;
-
-
-        public Rect PhysicalOutsideBounds
-        {
-            get { return GetProperty<Rect>(); }
-            private set { SetProperty(value); }
+            get => this.Get(() => LoadRotatedValue(SideNames, "%Border", "Left", ()=>20.0));
+            set => this.Set((value < 0) ? 0 : value);
         }
 
-        public Rect PhysicalOutsideBounds_default
+        [TriggedOn("Id")]
+        public double RightBorderInMm
         {
-            get
+            get => this.Get(() => LoadRotatedValue(SideNames, "%Border", "Right", ()=>20.0));
+            set => this.Set((value < 0) ? 0 : value);
+        }
+
+        [TriggedOn("Id")]
+        public double TopBorderInMm
+        {
+            get => this.Get(() => LoadRotatedValue(SideNames, "%Border", "Top", ()=>20.0));
+            set => this.Set((value < 0) ? 0 : value);
+        }
+
+        [TriggedOn("Id")]
+        public double BottomBorderInMm
+        {
+            get => this.Get(() => LoadRotatedValue(SideNames, "%Border", "Bottom", ()=>20.0));
+            set => this.Set((value < 0) ? 0 : value);
+        }
+
+        [TriggedOn(nameof(LeftBorderInMm))]
+        [TriggedOn(nameof(PhysicalRatioX))]
+        public double LeftBorder => this.Get(() => LeftBorderInMm * PhysicalRatioX);
+
+        [TriggedOn(nameof(RightBorderInMm))]
+        [TriggedOn(nameof(PhysicalRatioX))]
+        public double RightBorder => this.Get(() => RightBorderInMm * PhysicalRatioX);
+
+        [TriggedOn(nameof(TopBorderInMm))]
+        [TriggedOn(nameof(PhysicalRatioY))]
+        public double TopBorder => this.Get(() => TopBorderInMm * PhysicalRatioY);
+
+        [TriggedOn(nameof(BottomBorderInMm))]
+        [TriggedOn(nameof(PhysicalRatioY))]
+        public double BottomBorder => this.Get(() => BottomBorderInMm * PhysicalRatioY);
+
+
+        [TriggedOn(nameof(XLocationInMm))]
+        [TriggedOn(nameof(YLocationInMm))]
+        [TriggedOn(nameof(LeftBorder))]
+        [TriggedOn(nameof(TopBorder))]
+        [TriggedOn(nameof(RightBorder))]
+        [TriggedOn(nameof(BottomBorder))]
+        [TriggedOn(nameof(WidthInMm))]
+        [TriggedOn(nameof(HeightInMm))]
+        public Rect OutsideBoundsInMm
+        {
+            get => this.Get(() =>
             {
-                    double x = PhysicalX - LeftBorder;
-                    double y = PhysicalY - TopBorder;
-                    double w = PhysicalWidth + LeftBorder + RightBorder;
-                    double h = PhysicalHeight + TopBorder + BottomBorder;
-                    return new Rect(new Point(x, y), new Size(w, h));
-            }
+                double x = XLocationInMm - LeftBorder;
+                double y = YLocationInMm - TopBorder;
+                double w = WidthInMm + LeftBorder + RightBorder;
+                double h = HeightInMm + TopBorder + BottomBorder;
+                return new Rect(new Point(x, y), new Size(w, h));
+            });
         }
 
-        [DependsOn(
-            nameof(PhysicalX), nameof(PhysicalY), 
-            nameof(LeftBorder), nameof(TopBorder),nameof(RightBorder) , nameof(BottomBorder),
-            nameof(PhysicalWidth), nameof(PhysicalHeight))]
-        public void UpdatePhysicalOutsideBounds()
-        {
-            PhysicalOutsideBounds = PhysicalOutsideBounds_default;
-        }
 
         public Rect GuiLocation
         {
-            get { return GetProperty<Rect>(); }
-            set { SetProperty(value); }
+            get => this.Get(() => new Rect
+            {
+                Width = 0.5,
+                Height = (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
+                Y = 1 - (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
+                X = 1 - 0.5,
+            });
+            set => this.Set(value);
         }
-
-        public Rect GuiLocation_default => new Rect
-                    {
-                        Width = 0.5,
-                        Height = (9*Monitor.WorkArea.Width/16)/Monitor.WorkArea.Height,
-                        Y = 1 - (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
-                        X = 1 - 0.5,
-                    };
 
         public enum DpiType
         {
             Effective = 0,
             Angular = 1,
             Raw = 2,
-        }        //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510.aspx
+        } //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510.aspx
+
         [DllImport("Shcore.dll")]
-        private static extern IntPtr GetDpiForMonitor([In]IntPtr hmonitor, [In]DpiType dpiType, [Out]out uint dpiX, [Out]out uint dpiY);
+        private static extern IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX,
+            [Out] out uint dpiY);
 
 
         private void GetWinDpi()
@@ -753,6 +756,7 @@ namespace LbmScreenConfig
         }
 
         private uint _winDpiX = 0;
+
         public double WinDpiX
         {
             get
@@ -763,6 +767,7 @@ namespace LbmScreenConfig
         }
 
         private uint _winDpiY = 0;
+
         public double WinDpiY
         {
             get
@@ -774,166 +779,173 @@ namespace LbmScreenConfig
 
         public Point ScaledPoint(Point p)
         {
-            NativeMethods.POINT up = new NativeMethods.POINT((int)p.X, (int)p.Y);
+            NativeMethods.POINT up = new NativeMethods.POINT((int) p.X, (int) p.Y);
             NativeMethods.PhysicalToLogicalPoint(Monitor.HMonitor, ref up);
             return new Point(up.X, up.Y);
         }
-        public double RawDpiX
-        {
-            get
-            {
-                uint dpiX;
-                uint dpiY;
-                GetDpiForMonitor(Monitor.HMonitor, DpiType.Raw, out dpiX, out dpiY);
-                return dpiX;
-            }
-        }
-        public double RawDpiY
-        {
-            get
-            {
-                uint dpiX;
-                uint dpiY;
-                GetDpiForMonitor(Monitor.HMonitor, DpiType.Raw, out dpiX, out dpiY);
-                return dpiY;
-            }
-        }
 
-        public double EffectiveDpiX
+        [TriggedOn(nameof(Monitor), "HMonitor")]
+        public double RawDpiX => this.Get(() =>
         {
-            get
-            {
-                uint dpiX;
-                uint dpiY;
-                GetDpiForMonitor(Monitor.HMonitor, DpiType.Effective, out dpiX, out dpiY);
-                return dpiX;
-            }
-        }
-        public double EffectiveDpiY
+            uint dpiX;
+            uint dpiY;
+            GetDpiForMonitor(Monitor.HMonitor, DpiType.Raw, out dpiX, out dpiY);
+            return dpiX;
+        });
+
+        [TriggedOn(nameof(Monitor), "HMonitor")]
+        public double RawDpiY => this.Get(()=>
+        { 
+            uint dpiX;
+            uint dpiY;
+
+            GetDpiForMonitor(Monitor.HMonitor, DpiType.Raw, out dpiX, out dpiY);
+            return dpiY;
+        });
+
+        [TriggedOn(nameof(Monitor), "HMonitor")]
+        public double EffectiveDpiX => this.Get(() =>
         {
-            get
-            {
-                uint dpiX;
-                uint dpiY;
-                GetDpiForMonitor(Monitor.HMonitor, DpiType.Effective, out dpiX, out dpiY);
-                return dpiY;
-            }
-        }
-        public double DpiAwareAngularDpiX
+            uint dpiX;
+            uint dpiY;
+            GetDpiForMonitor(Monitor.HMonitor, DpiType.Effective, out dpiX, out dpiY);
+            return dpiX;
+        });
+
+        public double EffectiveDpiY => this.Get(() =>
         {
-            get
-            {
-                uint dpiX;
-                uint dpiY;
-                GetDpiForMonitor(Monitor.HMonitor, DpiType.Angular, out dpiX, out dpiY);
-                return dpiX;
-            }
-        }
-        public double DpiAwareAngularDpiY
+            uint dpiX;
+            uint dpiY;
+            GetDpiForMonitor(Monitor.HMonitor, DpiType.Effective, out dpiX, out dpiY);
+            return dpiY;
+        });
+
+        public double DpiAwareAngularDpiX => this.Get(() =>
         {
-            get
-            {
-                uint dpiX;
-                uint dpiY;
-                GetDpiForMonitor(Monitor.HMonitor, DpiType.Angular, out dpiX, out dpiY);
-                return dpiY;
-            }
-        }
+            uint dpiX;
+            uint dpiY;
+            GetDpiForMonitor(Monitor.HMonitor, DpiType.Angular, out dpiX, out dpiY);
+            return dpiX;
+        });
 
-        private NativeMethods.Process_DPI_Awareness DpiAwareness
+        public double DpiAwareAngularDpiY => this.Get(() =>
         {
-            get
-            {
-                Process p = Process.GetCurrentProcess();
+            uint dpiX;
+            uint dpiY;
+            GetDpiForMonitor(Monitor.HMonitor, DpiType.Angular, out dpiX, out dpiY);
+            return dpiY;
+        });
 
-                NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware;
+//        private NativeMethods.Process_DPI_Awareness DpiAwareness => this.Get(() =>
+//        {
+////            Process p = Process.GetCurrentProcess();
 
-                NativeMethods.GetProcessDpiAwareness(p.Handle, out aw);
+//            NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Per_Monitor_DPI_Aware;
 
-                return aw;
-            }
-        }
+//            NativeMethods.GetProcessDpiAwareness(/*p.Handle*/IntPtr.Zero, out aw);
 
+//            return aw;
+//        });
+
+        private NativeMethods.DPI_Awareness_Context DpiAwarenessContext => this.Get(NativeMethods.GetThreadDpiAwarenessContext);
 
         // This is the ratio used in system config
-        [DependsOn("RealDpiX", "AngularDpiX", "EffectiveDpiX")]
-        public double WpfToPixelRatioX
+        [TriggedOn(nameof(RealDpiX))]
+        [TriggedOn(nameof(DpiAwareAngularDpiX))]
+        [TriggedOn(nameof(EffectiveDpiX))]
+        [TriggedOn(nameof(Config), "MaxEffectiveDpiX")]
+        [TriggedOn(nameof(Config), "PrimaryScreen.EffectiveDpiX")]
+        [TriggedOn(nameof(DpiAwarenessContext))]
+        public double WpfToPixelRatioX => this.Get(() =>
         {
-            get
+            switch (DpiAwarenessContext)
             {
-                switch (DpiAwareness)
-                {
-                    case NativeMethods.Process_DPI_Awareness.Process_DPI_Unaware:
-                        return Math.Round((RealDpiX / DpiAwareAngularDpiX) * 20) / 20;
-                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
-                        return Config.PrimaryScreen.EffectiveDpiX / 96;
-                    case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
-                        return Config.MaxEffectiveDpiX / 96;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+                case NativeMethods.DPI_Awareness_Context.Unaware:
+                    //return (RealDpiX / DpiAwareAngularDpiX);
+                    return Math.Round((RealDpiX / DpiAwareAngularDpiX) * 10) / 10;
+                case NativeMethods.DPI_Awareness_Context.System_Aware:
+                    if (Config?.PrimaryScreen == null) return 1;
+                    return Config.PrimaryScreen.EffectiveDpiX / 96;
+                case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware:
+                    return EffectiveDpiX / 96;
+                    //return Config.MaxEffectiveDpiX / 96;
+                case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware_V2:
+                    return EffectiveDpiX / 96;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
-        }
+        });
 
-        [DependsOn("RealDpiY", "AngularDpiY", "EffectiveDpiY")]
-        public double WpfToPixelRatioY
+        [TriggedOn(nameof(RealDpiY))]
+        [TriggedOn(nameof(DpiAwareAngularDpiY))]
+        [TriggedOn(nameof(EffectiveDpiY))]
+        [TriggedOn(nameof(DpiAwarenessContext))]
+        [TriggedOn(nameof(Config), "PrimaryScreen.EffectiveDpiY")]
+        [TriggedOn(nameof(Config), "MaxEffectiveDpiY")]
+
+        public double WpfToPixelRatioY => this.Get(() =>
         {
-            get
-            {
-                switch (DpiAwareness)
+                switch (DpiAwarenessContext)
                 {
-                    case NativeMethods.Process_DPI_Awareness.Process_DPI_Unaware:
-                        return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
-                    case NativeMethods.Process_DPI_Awareness.Process_System_DPI_Aware:
+                    case NativeMethods.DPI_Awareness_Context.Unaware:
+                        return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 10) / 10;
+                        //return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
+                    case NativeMethods.DPI_Awareness_Context.System_Aware:
+                        if (Config?.PrimaryScreen == null) return 1;
                         return Config.PrimaryScreen.EffectiveDpiY / 96;
-                    case NativeMethods.Process_DPI_Awareness.Process_Per_Monitor_DPI_Aware:
-                        return Config.MaxEffectiveDpiY / 96;
-                    default:
+                    case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware:
+                        return EffectiveDpiY / 96;
+                        //return 2 * Config.MaxEffectiveDpiX / 96;
+                    case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware_V2:
+                        return EffectiveDpiY / 96;
+                //return Config.MaxEffectiveDpiY / 96;
+                default:
                         throw new ArgumentOutOfRangeException();
                 }
-            }
-        }
+        });
 
-        [DependsOn("WpfToPixelRatioX")]
-        public double PixelToWpfRatioX => 1 / WpfToPixelRatioX;
+        [TriggedOn(nameof(WpfToPixelRatioX))]
+        public double PixelToDipRatioX => 1 / WpfToPixelRatioX;
 
-        [DependsOn("WpfToPixelRatioY")]
-        public double PixelToWpfRatioY => 1 / WpfToPixelRatioY;
+        [TriggedOn(nameof(WpfToPixelRatioY))]
+        public double PixelToDipRatioY => 1 / WpfToPixelRatioY;
 
-        [DependsOn("PitchX")]
+        [TriggedOn(nameof(PitchX))]
         public double PhysicalToPixelRatioX => 1 / PitchX;
 
-        [DependsOn("PitchY")]
+        [TriggedOn(nameof(PitchY))]
         public double PhysicalToPixelRatioY => 1 / PitchY;
 
 
-        [DependsOn("PhysicalToPixelRatioX", "WpfToPixelRatioX")]
-        public double PhysicalToWpfRatioX => PhysicalToPixelRatioX / WpfToPixelRatioX;
+        [TriggedOn(nameof(PhysicalToPixelRatioX))]
+        [TriggedOn(nameof(WpfToPixelRatioX))]
+        public double MmToDipRatioX => this.Get(()=>PhysicalToPixelRatioX / WpfToPixelRatioX);
 
-        [DependsOn("PhysicalToPixelRatioY", "WpfToPixelRatioY")]
-        public double PhysicalToWpfRatioY => PhysicalToPixelRatioY / WpfToPixelRatioY;
+        [TriggedOn(nameof(PhysicalToPixelRatioY))]
+        [TriggedOn(nameof(WpfToPixelRatioY))]
+        public double MmToDipRatioY => this.Get(()=>PhysicalToPixelRatioY / WpfToPixelRatioY);
 
-        [DependsOn("RealPitchX")]
+        [TriggedOn(nameof(RealPitchX))]
         public double RealDpiX
         {
-            set { RealPitchX = 25.4 / value; }
-            get { return 25.4 / RealPitchX; }
+            get => 25.4 / RealPitchX;
+            set => RealPitchX = 25.4 / value; 
         }
 
-        [DependsOn("RealPitchY")]
+        [TriggedOn(nameof(RealPitchY))]
         public double RealDpiY
         {
-            set { RealPitchY = 25.4 / value; }
-            get { return 25.4 / RealPitchY; }
+            set => RealPitchY = 25.4 / value; get => 25.4 / RealPitchY;
         }
 
-        [DependsOn("PitchX")]
+        [TriggedOn(nameof(PitchX))]
         public double DpiX => 25.4 / PitchX;
 
-        [DependsOn("PitchY")]
+        [TriggedOn(nameof(PitchY))]
         public double DpiY => 25.4 / PitchY;
 
-        [DependsOn("PitchX", "PitchY")]
+        [TriggedOn(nameof(PitchX))]
+        [TriggedOn(nameof(PitchY))]
         public double RealDpiAvg
         {
             get
@@ -1005,10 +1017,10 @@ namespace LbmScreenConfig
             }
         }
 
-        double RightDistance(Screen screen) =>  PhysicalOutsideBounds.X - screen.PhysicalOutsideBounds.Right;
-        double LeftDistance(Screen screen) => screen.PhysicalOutsideBounds.X - PhysicalOutsideBounds.Right;
-        double TopDistance(Screen screen) => screen.PhysicalOutsideBounds.Y - PhysicalOutsideBounds.Bottom;
-        double BottomDistance(Screen screen) => PhysicalOutsideBounds.Y - screen.PhysicalOutsideBounds.Bottom;
+        double RightDistance(Screen screen) =>  OutsideBoundsInMm.X - screen.OutsideBoundsInMm.Right;
+        double LeftDistance(Screen screen) => screen.OutsideBoundsInMm.X - OutsideBoundsInMm.Right;
+        double TopDistance(Screen screen) => screen.OutsideBoundsInMm.Y - OutsideBoundsInMm.Bottom;
+        double BottomDistance(Screen screen) => OutsideBoundsInMm.Y - screen.OutsideBoundsInMm.Bottom;
 
         double RightDistanceToTouch(Screen screen, bool zero = false)
         {
@@ -1207,19 +1219,19 @@ namespace LbmScreenConfig
 
             if (moveLeft <= moveRight && moveLeft <= moveUp && moveLeft <= moveDown)
             {
-                s.PhysicalX -= moveLeft;
+                s.XLocationInMm -= moveLeft;
             }
             else if (moveRight <= moveLeft && moveRight <= moveUp && moveRight <= moveDown)
             {
-                s.PhysicalX += moveRight;
+                s.XLocationInMm += moveRight;
             }
             else if (moveUp <= moveRight && moveUp <= moveLeft && moveUp <= moveDown)
             {
-                s.PhysicalY -= moveUp;
+                s.YLocationInMm -= moveUp;
             }
             else
             {
-                s.PhysicalY += moveDown;
+                s.YLocationInMm += moveDown;
             }
             
             return true;
@@ -1227,10 +1239,10 @@ namespace LbmScreenConfig
 
         public bool PhysicalOverlapWith(Screen screen)
         {
-            if (PhysicalX >= screen.PhysicalBounds.Right) return false;
-            if (screen.PhysicalX >= PhysicalBounds.Right) return false;
-            if (PhysicalY >= screen.PhysicalBounds.Bottom) return false;
-            if (screen.PhysicalY >= PhysicalBounds.Bottom) return false;
+            if (XLocationInMm >= screen.BoundsInMm.Right) return false;
+            if (screen.XLocationInMm >= BoundsInMm.Right) return false;
+            if (YLocationInMm >= screen.BoundsInMm.Bottom) return false;
+            if (screen.YLocationInMm >= BoundsInMm.Bottom) return false;
 
             return true;
         }
@@ -1238,40 +1250,40 @@ namespace LbmScreenConfig
         public bool PhysicalTouch(Screen screen)
         {
             if (PhysicalOverlapWith(screen)) return false;
-            if (PhysicalX > screen.PhysicalBounds.Right) return false;
-            if (screen.PhysicalX > PhysicalBounds.Right) return false;
-            if (PhysicalY > screen.PhysicalBounds.Bottom) return false;
-            if (screen.PhysicalY > PhysicalBounds.Bottom) return false;
+            if (XLocationInMm > screen.BoundsInMm.Right) return false;
+            if (screen.XLocationInMm > BoundsInMm.Right) return false;
+            if (YLocationInMm > screen.BoundsInMm.Bottom) return false;
+            if (screen.YLocationInMm > BoundsInMm.Bottom) return false;
 
             return true;
         }
 
         public double MoveLeftToTouch(Screen screen)
         {
-            if (PhysicalY >= screen.PhysicalBounds.Bottom) return -1;
-            if (screen.PhysicalY >= PhysicalBounds.Bottom) return -1;
-            return PhysicalX - screen.PhysicalBounds.Right;
+            if (YLocationInMm >= screen.BoundsInMm.Bottom) return -1;
+            if (screen.YLocationInMm >= BoundsInMm.Bottom) return -1;
+            return XLocationInMm - screen.BoundsInMm.Right;
         }
 
         public double MoveRightToTouch(Screen screen)
         {
-            if (PhysicalY >= screen.PhysicalBounds.Bottom) return -1;
-            if (screen.PhysicalY >= PhysicalBounds.Bottom) return -1;
-            return screen.PhysicalX - PhysicalBounds.Right;
+            if (YLocationInMm >= screen.BoundsInMm.Bottom) return -1;
+            if (screen.YLocationInMm >= BoundsInMm.Bottom) return -1;
+            return screen.XLocationInMm - BoundsInMm.Right;
         }
 
         public double MoveUpToTouch(Screen screen)
         {
-            if (PhysicalX > screen.PhysicalBounds.Right) return -1;
-            if (screen.PhysicalX > PhysicalBounds.Right) return -1;
-            return PhysicalY - screen.PhysicalBounds.Bottom;
+            if (XLocationInMm > screen.BoundsInMm.Right) return -1;
+            if (screen.XLocationInMm > BoundsInMm.Right) return -1;
+            return YLocationInMm - screen.BoundsInMm.Bottom;
         }
 
         public double MoveDownToTouch(Screen screen)
         {
-            if (PhysicalX > screen.PhysicalBounds.Right) return -1;
-            if (screen.PhysicalX > PhysicalBounds.Right) return -1;
-            return screen.PhysicalY - PhysicalBounds.Bottom;
+            if (XLocationInMm > screen.BoundsInMm.Right) return -1;
+            if (screen.XLocationInMm > BoundsInMm.Right) return -1;
+            return screen.YLocationInMm - BoundsInMm.Bottom;
         }
 
 
@@ -1293,26 +1305,26 @@ namespace LbmScreenConfig
                 {
                     if (top > 0)
                     {
-                        PhysicalX += LeftDistance(screens);
-                        PhysicalY += TopDistance(screens);                                          
+                        XLocationInMm += LeftDistance(screens);
+                        YLocationInMm += TopDistance(screens);                                          
                     }
                     if (bottom > 0)
                     {
-                        PhysicalX += LeftDistance(screens);
-                        PhysicalY -= BottomDistance(screens);
+                        XLocationInMm += LeftDistance(screens);
+                        YLocationInMm -= BottomDistance(screens);
                     }
                 }
                 if (right > 0)
                 {
                     if (top > 0)
                     {
-                        PhysicalX -= RightDistance(screens);
-                        PhysicalY += TopDistance(screens);
+                        XLocationInMm -= RightDistance(screens);
+                        YLocationInMm += TopDistance(screens);
                     }
                     if (bottom > 0)
                     {
-                        PhysicalX -= RightDistance(screens);
-                        PhysicalY -= BottomDistance(screens);
+                        XLocationInMm -= RightDistance(screens);
+                        YLocationInMm -= BottomDistance(screens);
                     }
                 }
 
@@ -1327,29 +1339,29 @@ namespace LbmScreenConfig
 
                 if (top > 0 && left > 0)
                 {
-                    if (left < top) PhysicalX += left;
-                    else PhysicalY += top;
+                    if (left < top) XLocationInMm += left;
+                    else YLocationInMm += top;
                     return;
                 }
 
                 if (top > 0 && right > 0)
                 {
-                    if (right < top) PhysicalX -= right;
-                    else PhysicalY += top;
+                    if (right < top) XLocationInMm -= right;
+                    else YLocationInMm += top;
                     return;
                 }
 
                 if (bottom > 0 && right > 0)
                 {
-                    if (right < bottom) PhysicalX -= right;
-                    else PhysicalY -= bottom;
+                    if (right < bottom) XLocationInMm -= right;
+                    else YLocationInMm -= bottom;
                     return;
                 }
 
                 if (bottom > 0 && left > 0)
                 {
-                    if (left < bottom) PhysicalX += left;
-                    else PhysicalY -= bottom;
+                    if (left < bottom) XLocationInMm += left;
+                    else YLocationInMm -= bottom;
                     return;
                 }
 
@@ -1357,12 +1369,12 @@ namespace LbmScreenConfig
                 {
                     if (left >= 0)
                     {
-                        PhysicalX += left;
+                        XLocationInMm += left;
                         return;
                     }
                     if (right >= 0)
                     {
-                        PhysicalX -= right;
+                        XLocationInMm -= right;
                         return;
                     }
                 }
@@ -1372,12 +1384,12 @@ namespace LbmScreenConfig
                     //if (top >= 0)
                     if (top > 0)
                     {
-                        PhysicalY += top;
+                        YLocationInMm += top;
                         return;
                     }
                     if (bottom >= 0)
                     {
-                        PhysicalY -= bottom;
+                        YLocationInMm -= bottom;
                         return;
                     }
                 }
@@ -1387,17 +1399,17 @@ namespace LbmScreenConfig
             {
                 if (left > right && left > top && left > bottom)
                 {
-                    PhysicalX += left;
+                    XLocationInMm += left;
                 }
                 else if (right > top && right > bottom)
                 {
-                    PhysicalX -= right;
+                    XLocationInMm -= right;
                 }
                 else if (top > bottom)
                 {
-                    PhysicalY += top;
+                    YLocationInMm += top;
                 }
-                else PhysicalY -= bottom;
+                else YLocationInMm -= bottom;
             }
         }
     }

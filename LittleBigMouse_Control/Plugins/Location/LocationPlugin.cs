@@ -1,4 +1,5 @@
 ﻿using System.Windows.Controls;
+using Erp.Notify;
 using LbmScreenConfig;
 using LittleBigMouse_Control.Plugins;
 using LittleBigMouse_Control.Plugins.Location;
@@ -22,10 +23,9 @@ namespace LittleBigMouse_Control.PluginLocation
 
         public bool IsActivated
         {
-            get { return GetProperty<bool>(); }
-            set
+            get => this.Get<bool>(); set
             {
-                if (SetProperty(value))
+                if (this.Set(value))
                 {
                     MultiScreensView gui = MainViewModel.Presenter.View as MultiScreensView;
                     if (value)

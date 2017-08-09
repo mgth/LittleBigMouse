@@ -27,8 +27,7 @@ namespace MonitorVcp
 
         public ScreenConfig Config
         {
-            get { return (ScreenConfig)GetValue(ConfigProperty); }
-            set
+            get => (ScreenConfig)GetValue(ConfigProperty); set
             {
                 ViewModel.Config = value;
                 SetValue(ConfigProperty, value);

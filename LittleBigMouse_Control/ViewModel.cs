@@ -1,20 +1,24 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows;
-using NotifyChange;
+using Erp.Notify;
 
 namespace LittleBigMouse_Control
 {
-    public class ViewModel : Notifier
+    public class ViewModel : INotifyPropertyChanged
     {
         //public static DependencyProperty ViewProperty = DependencyProperty.Register(nameof(View),typeof(FrameworkElement),typeof(ViewModel));
         //public FrameworkElement View { get { return (FrameworkElement)GetValue(ViewProperty); } set {SetValue(ViewProperty,value);} }
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
 
         public FrameworkElement View
         {
-            get { return GetProperty<FrameworkElement>(); }
-            set { SetProperty(value); }
+            get => this.Get(GetNewView); set => this.Set(value);
         }
-        public FrameworkElement View_default => GetNewView();
 
         public virtual Type ViewType => null;
 

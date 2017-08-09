@@ -80,6 +80,8 @@ namespace LittleBigMouse_Daemon
                 }
             }
 
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+
             Hook.MouseMoveExt += OnMouseMoveExt;
             Hook.Enabled = true;
  //           LittleBigMouseDaemon.Callback?.OnStateChange();
@@ -120,6 +122,8 @@ namespace LittleBigMouse_Daemon
                     key.DeleteSubKey("InitialCursor");
                 }
             }
+
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Normal;
         }
 
 
@@ -160,16 +164,16 @@ namespace LittleBigMouse_Daemon
             // No move
             if (pIn.Equals(_oldPoint)) return;
 
-            Debug.Print(pIn.X + " , " + pIn.Y + " -> " + pIn.TargetScreen?.Monitor.Adapter.DeviceName);
+            //Debug.Print(pIn.X + " , " + pIn.Y + " -> " + pIn.TargetScreen?.Monitor.Adapter.DeviceName);
 
             // no screen change
-            if (oldScreen == null || pIn.TargetScreen == oldScreen)
+            if (oldScreen == null || Equals(pIn.TargetScreen, oldScreen))
             {
                 _oldPoint = pIn;
                 return;
             }
 
-            Screen screenOut = pIn.Physical.TargetScreen;
+            Screen screenOut = pIn.Mm.TargetScreen;
 
             Debug.Print("S>" + screenOut?.Monitor.Adapter.DeviceName);
 
@@ -182,20 +186,20 @@ namespace LittleBigMouse_Daemon
             if (screenOut == null)
             {
                 double dist = double.PositiveInfinity;// (100.0);
-                Segment seg = new Segment(_oldPoint.Physical.Point, pIn.Physical.Point);
+                Segment seg = new Segment(_oldPoint.Mm.Point, pIn.Mm.Point);
 
                 // Calculate side to enter screen when corner crossing not allowed.
-                Side side = seg.IntersectSide(_oldPoint.Screen.PhysicalBounds);
+                Side side = seg.IntersectSide(_oldPoint.Screen.BoundsInMm);
 
 
-                foreach (Screen screen in Config.AllScreens.Where(s => s != oldScreen))
+                foreach (Screen screen in Config.AllScreens.Where(s => !Equals(s, oldScreen)))
                 {
                     if (Config.AllowCornerCrossing)
                     {
-                        foreach ( Point p in seg.Line.Intersect(screen.PhysicalBounds) )
+                        foreach ( Point p in seg.Line.Intersect(screen.BoundsInMm) )
                         {
-                            Segment travel = new Segment(_oldPoint.Physical.Point, p);
-                            if (!travel.Rect.Contains(pIn.Physical.Point)) continue;
+                            Segment travel = new Segment(_oldPoint.Mm.Point, p);
+                            if (!travel.Rect.Contains(pIn.Mm.Point)) continue;
                             if (travel.Size > dist) continue;
 
                             dist = travel.Size;
@@ -212,19 +216,19 @@ namespace LittleBigMouse_Daemon
                             case Side.None:
                                 break;
                             case Side.Bottom:
-                                offset.Y = screen.PhysicalY - (oldScreen.PhysicalY + oldScreen.PhysicalHeight);
+                                offset.Y = seg.Rect.Height + screen.YLocationInMm - (oldScreen.YLocationInMm + oldScreen.HeightInMm);
                                 if (offset.Y < 0) offset.Y = 0;
                                 break;
                             case Side.Top:
-                                offset.Y = (screen.PhysicalY + screen.PhysicalHeight) - oldScreen.PhysicalY;
+                                offset.Y = -seg.Rect.Height + (screen.YLocationInMm + screen.HeightInMm) - oldScreen.YLocationInMm;
                                 if (offset.Y > 0) offset.Y = 0;
                                 break;
                             case Side.Right:
-                                offset.X = screen.PhysicalX - (oldScreen.PhysicalX + oldScreen.PhysicalWidth);
+                                offset.X = seg.Rect.Width + screen.XLocationInMm - (oldScreen.XLocationInMm + oldScreen.WidthInMm);
                                 if (offset.X < 0) offset.X = 0;
                                 break;
                             case Side.Left:
-                                offset.X = (screen.PhysicalX + screen.PhysicalWidth) - oldScreen.PhysicalX;
+                                offset.X = -seg.Rect.Width + (screen.XLocationInMm + screen.WidthInMm) - oldScreen.XLocationInMm;
                                 if (offset.X > 0) offset.X = 0;
                                 break;
                             default:
@@ -235,13 +239,17 @@ namespace LittleBigMouse_Daemon
 
                         if (offset.Length > 0 && offset.Length < dist)
                         {
-                            Point shiftedPoint = pIn.Physical.Point + offset;
+                            Point shiftedPoint = pIn.Mm.Point + offset;
                             PhysicalPoint shifted = new PhysicalPoint(Config, screen, shiftedPoint.X , shiftedPoint.Y);
-                            if (shifted.TargetScreen == screen)
+                            if (Equals(shifted.TargetScreen, screen))
                             {
                                 dist = offset.Length;
                                 pOut = shifted.Pixel;
                                 screenOut = screen;                                                                                 
+                            }
+                            else
+                            {
+                                
                             }
                         }
                     }
@@ -259,7 +267,7 @@ namespace LittleBigMouse_Daemon
 
 
             // Actual mouving mouse to new location
-            LbmMouse.CursorPos = pOut.Physical.ToScreen(screenOut).Pixel.Point;
+            LbmMouse.CursorPos = pOut.Mm.ToScreen(screenOut).Pixel.Inside.Point;
             Debug.Print(">" + LbmMouse.CursorPos.X + "," + LbmMouse.CursorPos.Y);
 
             // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used

@@ -3,8 +3,8 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Erp.Notify;
 using MonitorVcp;
-using NotifyChange;
 using Component = MonitorVcp.Component;
 
 namespace LittleBigMouse_Control.Plugins.Vcp
@@ -16,12 +16,14 @@ namespace LittleBigMouse_Control.Plugins.Vcp
     public partial class VcpSlider : UserControl, INotifyPropertyChanged
     {
         // PropertyChanged Handling
-        private readonly NotifierHelper _change;
-        public event PropertyChangedEventHandler PropertyChanged { add { _change.Add(value); } remove { _change.Remove(value); } }
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
 
         public VcpSlider()
         {
-            _change = new NotifierHelper(this);
             InitializeComponent();
         }
 
@@ -49,8 +51,7 @@ namespace LittleBigMouse_Control.Plugins.Vcp
 
         public MonitorLevel MonitorLevel
         {
-            get { return (MonitorLevel)GetValue(MonitorLevelProperty); }
-            set { SetValue(MonitorLevelProperty,value); }
+            get => (MonitorLevel)GetValue(MonitorLevelProperty); set => SetValue(MonitorLevelProperty, value);
         }
 
         private void ValueOnPropertyChanged(object sender, PropertyChangedEventArgs propertyChangedEventArgs)

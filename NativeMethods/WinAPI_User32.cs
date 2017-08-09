@@ -1144,13 +1144,20 @@ namespace WinAPI
 
     public enum Process_DPI_Awareness
     {
-        Process_DPI_Unaware = 0,
-        Process_System_DPI_Aware = 1,
-        Process_Per_Monitor_DPI_Aware = 2
+        Unaware = 0,
+        System_DPI_Aware = 1,
+        Per_Monitor_DPI_Aware = 2
     }
+    public enum DPI_Awareness_Context
+    {
+        Unaware = 16,
+        System_Aware = 17,
+        Per_Monitor_Aware = 18,
+        Per_Monitor_Aware_V2 = 34,
+        }
 
 
-    internal enum ScanCodeShort : short
+        internal enum ScanCodeShort : short
     {
         LBUTTON = 0,
         RBUTTON = 0,
@@ -1485,11 +1492,14 @@ namespace WinAPI
             out uint dpiY
             );
 
-        [DllImport("SHCore.dll", SetLastError = true)]
-        public static extern int GetProcessDpiAwareness(
-                IntPtr  hprocess,
-                out Process_DPI_Awareness value
-              );
+        //[DllImport("SHCore.dll", SetLastError = true)]
+        //public static extern int GetProcessDpiAwareness(
+        //        IntPtr  hprocess,
+        //        out Process_DPI_Awareness value
+        //      );
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern DPI_Awareness_Context GetThreadDpiAwarenessContext();
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetDesktopWindow();

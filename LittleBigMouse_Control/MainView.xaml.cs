@@ -42,14 +42,7 @@ namespace LittleBigMouse_Control
 
         public MainView()
         {
-            try
-            {
-                InitializeComponent();
-            }
-            catch (System.Windows.Markup.XamlParseException)
-            {
-                
-            }
+            InitializeComponent();
             _resizer = new WindowResizer(this,ResizeGrid);
 
 
@@ -96,7 +89,7 @@ namespace LittleBigMouse_Control
         //            return;
 
         //        Screen old = _locationScreen;
-        //        if (!_change.SetProperty(ref _locationScreen, value)) return;
+        //        if (!_change.Set(ref _locationScreen, value)) return;
 
         //        if (old!=null) old.PropertyChanged -= LocationScreenOnPropertyChanged;
         //        _locationScreen.PropertyChanged += LocationScreenOnPropertyChanged;
@@ -117,8 +110,8 @@ namespace LittleBigMouse_Control
 
         //public void SaveLocation()
         //{
-        //        Point topLeft = LocationScreen.AbsoluteWorkingArea.TopLeft.Wpf.Point; ;
-        //        Point bottomRight = LocationScreen.AbsoluteWorkingArea.BottomRight.Wpf.Point;
+        //        Point topLeft = LocationScreen.AbsoluteWorkingArea.TopLeft.Dip.Point; ;
+        //        Point bottomRight = LocationScreen.AbsoluteWorkingArea.BottomRight.Dip.Point;
 
         //        LocationScreen.GuiLocation = 
         //        new Rect(
@@ -141,11 +134,11 @@ namespace LittleBigMouse_Control
 
         //    LocationScreen = s;
 
-        //    //Point topLeft = LocationScreen.Bounds.TopLeft.Wpf.Point;
-        //    //Point bottomRight = LocationScreen.Bounds.BottomRight.Wpf.Point;
+        //    //Point topLeft = LocationScreen.Bounds.TopLeft.Dip.Point;
+        //    //Point bottomRight = LocationScreen.Bounds.BottomRight.Dip.Point;
 
-        //    Point topLeft = LocationScreen.AbsoluteWorkingArea.TopLeft.Wpf.Point;//Bounds.TopLeft.Wpf.Point;
-        //    Point bottomRight = LocationScreen.AbsoluteWorkingArea.BottomRight.Wpf.Point;//Bounds.BottomRight.Wpf.Point;
+        //    Point topLeft = LocationScreen.AbsoluteWorkingArea.TopLeft.Dip.Point;//Bounds.TopLeft.Dip.Point;
+        //    Point bottomRight = LocationScreen.AbsoluteWorkingArea.BottomRight.Dip.Point;//Bounds.BottomRight.Dip.Point;
 
         //    Top = topLeft.Y + (bottomRight.Y - topLeft.Y) * LocationScreen.GuiLocation.Top;
         //    Left =  topLeft.X + (bottomRight.X - topLeft.X) * LocationScreen.GuiLocation.Left;
@@ -176,31 +169,31 @@ namespace LittleBigMouse_Control
 
 
 
-        //[DependsOn("Location")]
+        //[TriggedOn("Location")]
         //public Screen DrawnOnScreen
         //{
         //    get
         //    {
-        //        var p1 = new WpfPoint(Config, Config.Selected, Left, Top);
+        //        var p1 = new DipPoint(Config, Config.Selected, Left, Top);
         //        return p1.TargetScreen;
         //    }
         //}
 
-        //[DependsOn("DrawnOnScreen","State", "ShowRulers")]
+        //[TriggedOn("DrawnOnScreen","State", "ShowRulers")]
         //public GridLength HorizontalResizerSize 
         //    => WindowState == WindowState.Maximized /*&& ShowRulers*/ ? 
-        //    new GridLength(30 * LocationScreen.PhysicalToWpfRatioX / ScaleFactor) : new GridLength(10);
+        //    new GridLength(30 * LocationScreen.MmToDipRatioX / ScaleFactor) : new GridLength(10);
 
-        //[DependsOn("DrawnOnScreen", "State", "ShowRulers")]
+        //[TriggedOn("DrawnOnScreen", "State", "ShowRulers")]
         //public GridLength VerticalResizerSize 
         //    => WindowState ==  WindowState.Maximized /*&& ShowRulers*/ ?
-        //    new GridLength(30 * LocationScreen.PhysicalToWpfRatioY / ScaleFactor) : new GridLength(10);
+        //    new GridLength(30 * LocationScreen.MmToDipRatioY / ScaleFactor) : new GridLength(10);
 
         //private void ConfigGui_OnLocationChanged(object sender, EventArgs e)
         //{
         //    if (_doNotSaveLocation) return;
 
-        //    AbsolutePoint p = new WpfPoint(Config,null,Left + Width/2,Top + Height/2);
+        //    AbsolutePoint p = new DipPoint(Config,null,Left + Width/2,Top + Height/2);
         //    if (p.TargetScreen != LocationScreen)
         //    {
         //        double width = Width / LocationScreen.WpfToPixelRatioX;

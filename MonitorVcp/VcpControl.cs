@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using WindowsMonitors;
+using Erp.Notify;
 using LbmScreenConfig;
-using NotifyChange;
 using WinAPI;
 
 namespace MonitorVcp
@@ -20,8 +22,13 @@ namespace MonitorVcp
         }
     }
     public enum Component { Red, Green, Blue, Brightness, Contrast }
-    public class VcpControl : Notifier
+    public class VcpControl : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
         public DisplayMonitor Monitor { get; }
 
         public VcpControl(DisplayMonitor monitor)
@@ -38,10 +45,10 @@ namespace MonitorVcp
 
         public bool Power
         {
-            get { return GetProperty<bool>(); }
+            get => this.Get<bool>();
             set
             {
-                if (!SetProperty(value)) return;
+                if (!this.Set(value)) return;
 
                 if (value)
                 {
@@ -106,8 +113,13 @@ namespace MonitorVcp
     public delegate bool VcpGetter(ref uint min, ref uint value, ref uint max, uint component = 0);
     public delegate bool VcpSetter(uint value, uint component = 0);
 
-    public class MonitorRgbLevel : Notifier
+    public class MonitorRgbLevel : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
         private readonly MonitorLevel[] _values = new MonitorLevel[3];
 
         public MonitorRgbLevel(VcpGetter getter, VcpSetter setter)
@@ -123,8 +135,13 @@ namespace MonitorVcp
         public MonitorLevel Blue => Channel(2);
     }
 
-    public class MonitorLevel : Notifier
+    public class MonitorLevel : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
 
         private readonly uint _component = 0;
 
@@ -167,7 +184,7 @@ namespace MonitorVcp
             {
                 Min = min;
                 Max = max;
-                SetProperty(value, "Value");               
+                this.Set(value, "Value");               
             }
         }
 
@@ -176,11 +193,10 @@ namespace MonitorVcp
 
         public uint Value
         {
-            get { return GetProperty<uint>(); }
-            set
+            get => this.Get<uint>(); set
             {
                 //lock(_lockValue)
-                if (SetProperty(value))
+                if (this.Set(value))
                 {
 
                     bool result = false;
@@ -189,16 +205,15 @@ namespace MonitorVcp
                     lock (LockDdcCi)
                             while (!result && tries-- > 0)
                             result = _componentSetter.Invoke(value, _component);
-                        //SetProperty(ref _valueAsync, value, "ValueAsync"); 
+                        //Set(ref _valueAsync, value, "ValueAsync"); 
                 }
             }
         }
 
-        [DependsOn("Value")]
+        [TriggedOn("Value")]
         public uint CheckedValue
         {
-            get { return Value;}
-            set
+            get => Value; set
             {
                 int tries = 10;
                 while (Value != value && tries-- > 0)
@@ -209,15 +224,14 @@ namespace MonitorVcp
             }
         }
 
-        [DependsOn("Value")]
+        [TriggedOn("Value")]
         public uint ValueAsync
         {
-            get { return GetProperty<uint>(); }
-            set
+            get => this.Get<uint>(); set
             {
                 //lock (_lockValue) //causes deadlock
                 {
-                    SetProperty(value);
+                    this.Set(value);
                     _threadSetter.Add(() =>
                     {
                         CheckedValue = value;
@@ -227,14 +241,12 @@ namespace MonitorVcp
         }
         public uint Min
         {
-            get { return GetProperty<uint>(); }
-            private set { SetProperty(value); }
+            get => this.Get<uint>(); private set => this.Set(value);
         }
 
         public uint Max
         {
-            get { return GetProperty<uint>(); }
-            private set { SetProperty(value); }
+            get => this.Get<uint>(); private set => this.Set(value);
         }
     }
 }

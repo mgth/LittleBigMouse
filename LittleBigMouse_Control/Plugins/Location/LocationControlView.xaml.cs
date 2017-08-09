@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using SystemColors1;
 using LbmScreenConfig;
+using LittleBigMouse_Control.Rulers;
 
 namespace LittleBigMouse_Control.PluginLocation
 {
@@ -54,19 +55,18 @@ namespace LittleBigMouse_Control.PluginLocation
 
         public bool ShowRulers
         {
-            get { return _showRulers; }
-            set
+            get => _showRulers; set
             {
-        //        if (Change.SetProperty(ref _showRulers, value))
+        //        if (Change.Set(ref _showRulers, value))
                 {
                     if (_showRulers)
                     {
-                        AddRuler(RulerSide.Left);
-                        AddRuler(RulerSide.Right);
-                        AddRuler(RulerSide.Top);
-                        AddRuler(RulerSide.Bottom);
+                        AddRuler(RulerViewModel.RulerSide.Left);
+                        AddRuler(RulerViewModel.RulerSide.Right);
+                        AddRuler(RulerViewModel.RulerSide.Top);
+                        AddRuler(RulerViewModel.RulerSide.Bottom);
 
-                        foreach (Ruler ruler in _rulers) ruler.Enabled = true;
+                        foreach (Ruler ruler in _rulers) ruler.ViewModel.Enabled = true;
 
                     }
                     else
@@ -84,7 +84,7 @@ namespace LittleBigMouse_Control.PluginLocation
         private readonly List<Ruler> _rulers = new List<Ruler>();
         private bool _liveUpdate = false;
 
-        private void AddRuler(RulerSide side)
+        private void AddRuler(RulerViewModel.RulerSide side)
         {
             //if (Config.Selected == null) return;
 
@@ -106,10 +106,9 @@ namespace LittleBigMouse_Control.PluginLocation
 
         public bool LiveUpdate
         {
-            get { return _liveUpdate; }
-            set
+            get => _liveUpdate; set
             {
-                //if (Change.SetProperty(ref _liveUpdate, value) && value)
+                //if (Change.Set(ref _liveUpdate, value) && value)
                 //    ActivateConfig();
                 //else
                 //{

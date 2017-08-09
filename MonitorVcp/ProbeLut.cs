@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Xml.Serialization;
 using Argyll;
+using Erp.Notify;
 using LbmScreenConfig;
-using NotifyChange;
 
 namespace MonitorVcp
 {
@@ -47,8 +48,13 @@ namespace MonitorVcp
 
 
    // [assembly:InternalsVisibleTo("ProbeLutExpendScreen")]
-    public class ProbeLut : Notifier
+    public class ProbeLut : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged
+        {
+            add => this.Add(value);
+            remove => this.Remove(value);
+        }
         public ProbedColor DIlluminant { get; }
 
         private readonly Screen _screen;
@@ -58,8 +64,6 @@ namespace MonitorVcp
         internal ProbeLut(Screen screen)
         {
             _screen = screen;
-            Watch(Vcp, "Vcp");
-            Watch(Vcp.Brightness, "Brightness");
         }
 
         public VcpControl Vcp => _screen.Monitor.Vcp();
@@ -182,7 +186,7 @@ namespace MonitorVcp
             Green = Vcp.Gain.Green.Value,
         };
 
-        [DependsOn("Brightness.Value")]
+        [TriggedOn("Brightness.Value")]
         public double Luminance
         {
             get
@@ -190,10 +194,7 @@ namespace MonitorVcp
                 Tune t = FromBrightness(Vcp.Brightness.Value);
                 return t.Y;
             }
-            set
-            {
-                SetLuminance(value);
-            }
+            set => SetLuminance(value);
         }
 
         public Double MaxLuminance => 

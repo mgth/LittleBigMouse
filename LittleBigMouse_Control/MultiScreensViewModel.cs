@@ -2,10 +2,11 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Security.RightsManagement;
 using System.Windows;
 using System.Windows.Controls;
+using Erp.Notify;
 using LbmScreenConfig;
-using NotifyChange;
 
 namespace LittleBigMouse_Control
 {
@@ -14,9 +15,11 @@ namespace LittleBigMouse_Control
         public override Type ViewType => typeof(MultiScreensView);
         public MultiScreensViewModel()
         {
-            ScreensCanvas.SizeChanged += (sender, args) => RaiseProperty("Size");
+            ScreensCanvas.SizeChanged += (sender, args) => Size = ScreensCanvas.RenderSize;
             ScreenFrames.CollectionChanged += ScreenFrames_CollectionChanged;
         }
+
+        public Size Size { get => this.Get<Size>(); private set => this.Set(value); }
 
         private void ScreenFrames_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
@@ -35,8 +38,7 @@ namespace LittleBigMouse_Control
 
         public ScreenConfig Config
         {
-            get { return GetProperty<ScreenConfig>(); }
-            set { SetAndWatch(value); }
+            get => this.Get<ScreenConfig>(); set => this.Set(value);
         }
 
         public Canvas ScreensCanvas { get; } = new Canvas();
@@ -45,7 +47,7 @@ namespace LittleBigMouse_Control
 
         public ObservableCollection<ScreenFrameViewModel> ScreenFrames = new ObservableCollection<ScreenFrameViewModel>();
 
-        [DependsOn("Config.Selected")]
+        [TriggedOn("Config.Selected")]
         private void BringSelectedToFront()
         {
             ScreenFrameViewModel frame = ScreenFrames.FirstOrDefault(vm => vm.Screen.Selected);
@@ -57,7 +59,7 @@ namespace LittleBigMouse_Control
         }
 
 
-        [DependsOn(nameof(Config))]
+        [TriggedOn(nameof(Config))]
         private void UpdateConfig()
         {
             if (Config == null) return;
@@ -86,7 +88,8 @@ namespace LittleBigMouse_Control
                 }
         }
 
-        [DependsOn("Size", "Config.MovingPhysicalOutsideBounds")]
+        [TriggedOn(nameof(Size))]
+        [TriggedOn("Config.MovingPhysicalOutsideBounds")]
         private void UpdateRatio()
         {
             if (Config == null) return;

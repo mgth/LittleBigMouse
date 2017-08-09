@@ -19,19 +19,11 @@ namespace LittleBigMouse_Control
         private readonly TestPattern _pattern = new TestPattern();
         public TestPatternType PatternType
         {
-            get { return _pattern.PatternType; }
-            set
-            {
-                _pattern.PatternType = value;
-            }
+            get => _pattern.PatternType; set => _pattern.PatternType = value;
         }
         public Color PatternColor
         {
-            get { return _pattern.PatternColor; }
-            set
-            {
-                _pattern.PatternColor = value;
-            }
+            get => _pattern.PatternColor; set => _pattern.PatternColor = value;
         }
 
         public TestPatternButton()
@@ -55,8 +47,7 @@ namespace LittleBigMouse_Control
         private TestPatternType _pattern = TestPatternType.Solid;
         public TestPatternType PatternType
         {
-            get { return _pattern; }
-            set
+            get => _pattern; set
             {
                 _pattern = value;
                 InvalidateVisual();
@@ -66,8 +57,7 @@ namespace LittleBigMouse_Control
         private Color _color = Colors.Black;
         public Color PatternColor
         {
-            get { return _color; }
-            set
+            get => _color; set
             {
                 _color = value;
                 InvalidateVisual();

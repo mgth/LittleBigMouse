@@ -4,9 +4,9 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using Erp.Notify;
 using LbmScreenConfig;
 using LittleBigMouse_Control.PluginLocation;
-using NotifyChange;
 
 namespace LittleBigMouse_Control.Plugins.Location
 {
@@ -16,29 +16,26 @@ namespace LittleBigMouse_Control.Plugins.Location
 
         public LocationPlugin Plugin
         {
-            get { return GetProperty<LocationPlugin>(); }
-            set { SetAndWatch(value); }
+            get => this.Get<LocationPlugin>(); set => this.Set(value);
         }
 
-        [DependsOn("Screen.PhysicalRatioX")]
+        [TriggedOn("Screen.PhysicalRatioX")]
         public double RatioX
         {
-            get { return Screen.PhysicalRatioX*100; }
-            set { Screen.PhysicalRatioX = value/100; Screen.Config.Compact(); }
+            get => Screen.PhysicalRatioX * 100; set { Screen.PhysicalRatioX = value/100; Screen.Config.Compact(); }
         }
 
-        [DependsOn("Screen.PhysicalRatioY")]
+        [TriggedOn("Screen.PhysicalRatioY")]
         public double RatioY
         {
-            get { return Screen.PhysicalRatioY * 100; }
-            set { Screen.PhysicalRatioY = value / 100; Screen.Config.Compact(); }
+            get => Screen.PhysicalRatioY * 100; set { Screen.PhysicalRatioY = value / 100; Screen.Config.Compact(); }
         }
 
-        [DependsOn("Screen.Orientation")]
+        [TriggedOn("Screen.Orientation")]
         public VerticalAlignment DpiVerticalAlignment
             => (Screen.Monitor.DisplayOrientation == 3) ? VerticalAlignment.Bottom : VerticalAlignment.Top;
 
-        [DependsOn("Screen.Orientation")]
+        [TriggedOn("Screen.Orientation")]
         public VerticalAlignment PnpNameVerticalAlignment
             => (Screen.Monitor.DisplayOrientation == 2) ? VerticalAlignment.Bottom : VerticalAlignment.Top;
 
@@ -51,8 +48,8 @@ namespace LittleBigMouse_Control.Plugins.Location
         private Vector ShiftScreen(Vector offset)
         {
             Point pos = _dragStartPosition + offset;
-            Screen.PhysicalLocation = pos;
-            Vector shift = Screen.PhysicalLocation - pos;
+            Screen.LocationInMm = pos;
+            Vector shift = Screen.LocationInMm - pos;
             Screen.Config.ShiftMovingPhysicalBounds(shift);
             _dragStartPosition += shift;
             return shift;
@@ -62,7 +59,7 @@ namespace LittleBigMouse_Control.Plugins.Location
         {
             _guiStartPosition = p;
             _guiLastPosition = _guiStartPosition;
-            _dragStartPosition = Screen.PhysicalLocation;
+            _dragStartPosition = Screen.LocationInMm;
             _dragLastPosition = _dragStartPosition;
 
             Screen.Config.Moving = true;
@@ -201,20 +198,20 @@ namespace LittleBigMouse_Control.Plugins.Location
         }
         public List<Anchor> VerticalAnchors(Screen s) => new List<Anchor>
                 {
-                     new Anchor(s,s.PhysicalOutsideBounds.X,new SolidColorBrush(Colors.Chartreuse)),
-                     new Anchor(s,s.PhysicalX,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(s,s.PhysicalX + s.PhysicalWidth /2,new SolidColorBrush(Colors.Red)),
-                     new Anchor(s,s.PhysicalBounds.Right,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(s,s.PhysicalOutsideBounds.Right,new SolidColorBrush(Colors.Chartreuse)),
+                     new Anchor(s,s.OutsideBoundsInMm.X,new SolidColorBrush(Colors.Chartreuse)),
+                     new Anchor(s,s.XLocationInMm,new SolidColorBrush(Colors.LightGreen)),
+                     new Anchor(s,s.XLocationInMm + s.WidthInMm /2,new SolidColorBrush(Colors.Red)),
+                     new Anchor(s,s.BoundsInMm.Right,new SolidColorBrush(Colors.LightGreen)),
+                     new Anchor(s,s.OutsideBoundsInMm.Right,new SolidColorBrush(Colors.Chartreuse)),
                 };
 
         public List<Anchor> HorizontalAnchors(Screen s) => new List<Anchor>
                 {
-                     new Anchor(s,s.PhysicalOutsideBounds.Y,new SolidColorBrush(Colors.Chartreuse)),
-                     new Anchor(s,s.PhysicalY,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(s,s.PhysicalY + s.PhysicalHeight /2,new SolidColorBrush(Colors.Red)),
-                     new Anchor(s,s.PhysicalBounds.Bottom,new SolidColorBrush(Colors.LightGreen)),
-                     new Anchor(s,s.PhysicalOutsideBounds.Bottom,new SolidColorBrush(Colors.Chartreuse)),
+                     new Anchor(s,s.OutsideBoundsInMm.Y,new SolidColorBrush(Colors.Chartreuse)),
+                     new Anchor(s,s.YLocationInMm,new SolidColorBrush(Colors.LightGreen)),
+                     new Anchor(s,s.YLocationInMm + s.HeightInMm /2,new SolidColorBrush(Colors.Red)),
+                     new Anchor(s,s.BoundsInMm.Bottom,new SolidColorBrush(Colors.LightGreen)),
+                     new Anchor(s,s.OutsideBoundsInMm.Bottom,new SolidColorBrush(Colors.Chartreuse)),
                 };
 
 

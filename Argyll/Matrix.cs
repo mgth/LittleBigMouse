@@ -50,8 +50,7 @@ namespace Argyll
         //<indexeur>
         public double this[int n, int p]
         {
-            get { return _matrice[n, p]; }
-            set { _matrice[n, p] = value; }
+            get => _matrice[n, p]; set => _matrice[n, p] = value;
         }
         //</indexeur>
 

@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using NotifyChange;
+using Erp.Notify;
 
 namespace LittleBigMouse_Control
 {
@@ -13,99 +13,96 @@ namespace LittleBigMouse_Control
 
         public ScreenControlViewModel ControlViewModel
         {
-            get { return GetProperty<ScreenControlViewModel>(); }
-            set { SetAndWatch(value); }
+            get => this.Get<ScreenControlViewModel>(); set => this.Set(value);
         }
 
          public MultiScreensViewModel Presenter
         {
-            get { return GetProperty<MultiScreensViewModel>(); }
-            set { SetAndWatch(value); }
+            get => this.Get<MultiScreensViewModel>(); set => this.Set(value);
         }
 
         public double Width
         {
-            get { return GetProperty<double>(); }
-            private set { SetProperty(value); }
+            get => this.Get<double>(); private set => this.Set(value);
         }
 
         public double Height
         {
-            get { return GetProperty<double>(); }
-            private set { SetProperty(value); }
+            get => this.Get<double>(); private set => this.Set(value);
         }
 
-        [DependsOn("Screen.PhysicalOutsideBounds", "Presenter.Ratio")]
+        [TriggedOn("Screen.OutsideBoundsInMm")]
+        [TriggedOn("Presenter.Ratio")]
         private void UpdateWidth() =>
-            Width = (Screen?.PhysicalOutsideBounds.Width??0) * (Presenter?.Ratio??1);
+            Width = (Screen?.OutsideBoundsInMm.Width??0) * (Presenter?.Ratio??1);
 
-        [DependsOn("Screen.PhysicalOutsideBounds", "Presenter.Ratio")]
+        [TriggedOn("Screen.OutsideBoundsInMm")]
+        [TriggedOn("Presenter.Ratio")]
         private void UpdateHeight() =>
-            Height = (Screen?.PhysicalOutsideBounds.Height??0) * (Presenter?.Ratio??1);
+            Height = (Screen?.OutsideBoundsInMm.Height??0) * (Presenter?.Ratio??1);
 
         //public Thickness Margin => new Thickness(
-        //    Presenter.PhysicalToUiX(Screen.PhysicalOutsideBounds.X),
-        //    Presenter.PhysicalToUiY(Screen.PhysicalOutsideBounds.Y),
+        //    Presenter.PhysicalToUiX(Screen.OutsideBoundsInMm.X),
+        //    Presenter.PhysicalToUiY(Screen.OutsideBoundsInMm.Y),
         //    0, 0);
 
         public Thickness Margin
         {
-            get { return GetProperty<Thickness>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Thickness>(); private set => this.Set(value);
         }
 
-        [DependsOn(
-            "Presenter.Size",
-            //"Screen.PhysicalX",
-            //"Screen.PhysicalY", 
-            "Config.MovingPhysicalOutsideBounds",
-            "Screen.PhysicalOutsideBounds",
-            //"Screen.LeftBorder",
-            //"Screen.TopBorder",
-            "Presenter.Ratio")]
+        [TriggedOn("Presenter.Size")]
+        [TriggedOn("Screen.Config.MovingPhysicalOutsideBounds")]
+        [TriggedOn("Screen.OutsideBoundsInMm")]
+        [TriggedOn("Presenter.Ratio")]
         private void UpdateMargin()
         {
             if (Presenter == null) return;
 
-            double x = Presenter.PhysicalToUiX(Screen.PhysicalOutsideBounds.X);
-            double y = Presenter.PhysicalToUiY(Screen.PhysicalOutsideBounds.Y);
+            double x = Presenter.PhysicalToUiX(Screen.OutsideBoundsInMm.X);
+            double y = Presenter.PhysicalToUiY(Screen.OutsideBoundsInMm.Y);
 
             Margin = new Thickness(x,y,0,0);
         }
 
 
-        [DependsOn("Presenter.Ratio")]
+        [TriggedOn("Presenter.Ratio")]
         public Thickness LogoPadding => new Thickness(4 * Presenter.Ratio);
 
-        [DependsOn("Presenter.Ratio")]
+        [TriggedOn("Presenter.Ratio")]
         private double Ratio => Presenter?.Ratio ?? 1;
 
-        [DependsOn("Screen.TopBorder", "Presenter.Ratio")]
+        [TriggedOn("Screen.TopBorder")]
+        [TriggedOn("Presenter.Ratio")]
         public GridLength TopBorder => new GridLength((Screen?.TopBorder??0) * Ratio);
-        [DependsOn("Screen.BottomBorder", "Presenter.Ratio")]
+        [TriggedOn("Screen.BottomBorder")]
+        [TriggedOn("Presenter.Ratio")]
         public GridLength BottomBorder => new GridLength((Screen?.BottomBorder??0) * Ratio);
 
-        [DependsOn("Screen.LeftBorder", "Presenter.Ratio")]
+        [TriggedOn("Screen.LeftBorder")]
+        [TriggedOn("Presenter.Ratio")]
         public GridLength LeftBorder => new GridLength((Screen?.LeftBorder??0) * Ratio);
 
-        [DependsOn("Screen.RightBorder", "Presenter.Ratio")]
+        [TriggedOn("Screen.RightBorder")]
+        [TriggedOn("Presenter.Ratio")]
         public GridLength RightBorder => new GridLength((Screen?.RightBorder??0) * Ratio);
 
         #region Unrotated
 
         public double UnrotatedWidth
         {
-            get {  return GetProperty<double>(); }
-            private set { SetProperty(value); }
+            get => this.Get<double>(); private set => this.Set(value);
         }
 
         public double UnrotatedHeight
         {
-            get { return GetProperty<double>();  }
-            private set { SetProperty(value); }
+            get => this.Get<double>(); private set => this.Set(value);
         }
 
-        [DependsOn("Screen", "Monitor.DisplayOrientation", "Width", "Height")]
+        [TriggedOn("Screen")]
+        [TriggedOn("Screen.Monitor.DisplayOrientation")]
+        [TriggedOn("Width")]
+        [TriggedOn("Height")]
         private void UpdateUnrotatedWidthHeight()
         {
             if(Screen?.Monitor == null) return;
@@ -124,29 +121,28 @@ namespace LittleBigMouse_Control
 
         public GridLength UnrotatedTopBorder
         {
-            get { return GetProperty<GridLength>(); }
-            private set { SetProperty(value); }
+            get => this.Get<GridLength>(); private set => this.Set(value);
         }
 
         public GridLength UnrotatedRightBorder
         {
-            get { return GetProperty<GridLength>(); }
-            private set { SetProperty(value); }
+            get => this.Get<GridLength>(); private set => this.Set(value);
         }
 
         public GridLength UnrotatedBottomBorder
         {
-            get { return GetProperty<GridLength>(); }
-            private set { SetProperty(value); }
+            get => this.Get<GridLength>(); private set => this.Set(value);
         }
 
         public GridLength UnrotatedLeftBorder
         {
-            get { return GetProperty<GridLength>(); }
-            private set { SetProperty(value); }
+            get => this.Get<GridLength>(); private set => this.Set(value);
         }
 
-        [DependsOn(nameof(LeftBorder), nameof(TopBorder), nameof(RightBorder), nameof(BottomBorder))]
+        [TriggedOn(nameof(LeftBorder))]
+        [TriggedOn(nameof(TopBorder))]
+        [TriggedOn(nameof(RightBorder))]
+        [TriggedOn(nameof(BottomBorder))]
         private void UpdateUnrotated()
         {
             if (Screen == null) return;
@@ -162,7 +158,8 @@ namespace LittleBigMouse_Control
         }
         #endregion
 
-        [DependsOn("Presenter.ScreenControlGetter", nameof(Screen))]
+        [TriggedOn("Presenter.ScreenControlGetter")]
+        [TriggedOn(nameof(Screen))]
         private void UpdateScreenGuiControl()
         {
             ControlViewModel 
@@ -175,11 +172,12 @@ namespace LittleBigMouse_Control
 
         public Transform ScreenOrientation
         {
-            get { return GetProperty<Transform>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Transform>(); private set => this.Set(value);
         }
 
-        [DependsOn("Monitor.DisplayOrientation", nameof(Width), nameof(Height))]
+        [TriggedOn("Screen.Monitor.DisplayOrientation")]
+        [TriggedOn(nameof(Width))]
+        [TriggedOn(nameof(Height))]
         public void UpddateScreenOrientation()
         {
             if (Screen?.Monitor == null) return;
@@ -207,11 +205,10 @@ namespace LittleBigMouse_Control
 
         public Viewbox Logo
         {
-            get { return GetProperty<Viewbox>(); }
-            private set { SetProperty(value); }
+            get => this.Get<Viewbox>(); private set => this.Set(value);
         }
 
-        [DependsOn("Screen", "Monitor.ManufacturerCode")]
+        [TriggedOn("Screen.Monitor.ManufacturerCode")]
         public void UpdateLogo()
         {
             if (Screen?.Monitor == null) return;

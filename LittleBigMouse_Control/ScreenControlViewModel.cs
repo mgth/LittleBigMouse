@@ -1,4 +1,5 @@
 ﻿using System.Windows.Controls;
+using Erp.Notify;
 
 namespace LittleBigMouse_Control
 {
@@ -6,8 +7,7 @@ namespace LittleBigMouse_Control
     {
         public ScreenFrameViewModel Frame
         {
-            get { return GetProperty<ScreenFrameViewModel>(); }
-            set { SetProperty(value); }
+            get => this.Get<ScreenFrameViewModel>(); set => this.Set(value);
         }
 
         public Grid CoverControl { get; } = new Grid();

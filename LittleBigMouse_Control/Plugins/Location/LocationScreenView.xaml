@@ -78,7 +78,7 @@
         </StackPanel>
 <!-- Y Position -->
         <TextBox 
-               Text="{Binding Path=Screen.PhysicalY, StringFormat=N1, FallbackValue=top.y}" 
+               Text="{Binding Path=Screen.YLocationInMm, StringFormat=N1, FallbackValue=top.y}" 
                 KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Center" 
                 VerticalAlignment="Top" 
@@ -86,7 +86,7 @@
 
 <!-- X Position -->
         <TextBox 
-                Text="{Binding Path=Screen.PhysicalX, StringFormat=N1, FallbackValue=left.x}" 
+                Text="{Binding Path=Screen.XLocationInMm, StringFormat=N1, FallbackValue=left.x}" 
                 KeyUp="OnKeyEnterUpdate" 
                 HorizontalAlignment="Left" 
                 VerticalAlignment="Center" 
@@ -97,11 +97,11 @@
                     HorizontalAlignment="Center"  
                     VerticalAlignment="Bottom">
             <Label 
-                   Content="{Binding Path=Screen.PhysicalBounds.Bottom,FallbackValue=bot.y}" 
+                   Content="{Binding Path=Screen.BoundsInMm.Bottom,FallbackValue=bot.y}" 
                    ContentStringFormat="#0.#" 
                    HorizontalAlignment="Center"/>
             <Label 
-                   Content="{Binding Path=Screen.PixelSize.Height,FallbackValue=pix.h}" 
+                   Content="{Binding Path=Screen.SizeInPixels.Height,FallbackValue=pix.h}" 
                    HorizontalAlignment="Center" Foreground="#FFD9DCEC"  
                    Visibility="{Binding Screen.Selected, Converter={StaticResource ToVisibilityConverter}}"
                    />
@@ -125,14 +125,14 @@
         <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
             
             <Label 
-                   Content="{Binding Path=Screen.PhysicalBounds.Right,FallbackValue=right.x}" 
+                   Content="{Binding Path=Screen.BoundsInMm.Right,FallbackValue=right.x}" 
                    ContentStringFormat="#0.#" 
                    HorizontalAlignment="Right"
                 />
             
             
             <Label 
-                  Content="{Binding Path=Screen.PixelSize.Width,FallbackValue=pix.w}" 
+                  Content="{Binding Path=Screen.SizeInPixels.Width,FallbackValue=pix.w}" 
                    HorizontalAlignment="Right" 
                    Foreground="#FFD9DCEC" 
                    Visibility="{Binding Screen.Selected, Converter={StaticResource ToVisibilityConverter}}"

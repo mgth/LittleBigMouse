@@ -82,6 +82,17 @@
     <Compile Include="RegistryExt.cs" />
     <Compile Include="Screen.cs" />
     <Compile Include="ScreenConfig.cs" />
+    <Compile Include="ScreenInverseRatio.cs" />
+    <Compile Include="ScreenRatio.cs" />
+    <Compile Include="ScreenRatioRegistry.cs" />
+    <Compile Include="ScreenRotate.cs" />
+    <Compile Include="ScreenScaleDip.cs" />
+    <Compile Include="ScreenScale.cs" />
+    <Compile Include="ScreenSize.cs" />
+    <Compile Include="ScreenSizeInMm.cs" />
+    <Compile Include="ScreenSizeInPixel.cs" />
+    <Compile Include="ScreenSizeWpf.cs" />
+    <Compile Include="ScreenTranslate.cs" />
     <Compile Include="WindowExt.cs" />
     <Compile Include="WindowInteropHelper.cs" />
   </ItemGroup>
@@ -90,9 +101,13 @@
       <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
       <Name>Erp.Base</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\_ERP_\Erp\Notify\Erp.Notify.csproj">
-      <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
-      <Name>Erp.Notify</Name>
+    <ProjectReference Include="..\..\_ERP_\Erp\Mvvm\Erp.Mvvm.csproj">
+      <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
+      <Name>Erp.Mvvm</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\_ERP_\Erp\Notify-4\Erp.Notify.4.csproj">
+      <Project>{593CB07F-8504-490A-96D6-2CC6034487D7}</Project>
+      <Name>Erp.Notify.4</Name>
     </ProjectReference>
     <ProjectReference Include="..\Argyll\Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>

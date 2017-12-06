@@ -55,21 +55,7 @@ namespace LittleBigMouse_Daemon
                 NativeMethods.GetCursorPos(out p);
                 return p;
             }
-            set
-            {
-                NativeMethods.SetCursorPos((int)value.X, (int)value.Y);
-
-                //User32.POINT newLocation;
-                //User32.GetCursorPos(out newLocation);
-
-                //if (newLocation.X != value.X || newLocation.Y != value.Y)
-                //{
-                //    MouseEvent(MOUSEEVENTF.MOVE | MOUSEEVENTF.ABSOLUTE, value.X, value.Y);
-                //                            //(DWORD)((65535.0f * x) / (w - 1) + 0.5f),
-                //                            //(DWORD)((65535.0f * y) / (h - 1) + 0.5f),
-                //                            //0, 0);                   
-                //}
-            }
+            set => NativeMethods.SetCursorPos((int)value.X, (int)value.Y);
         }
 
         static public double MouseSpeed
@@ -80,9 +66,7 @@ namespace LittleBigMouse_Daemon
                 return speed;
             }
 
-            set {
-                NativeMethods.SystemParametersInfo(NativeMethods.SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
-            }
+            set => NativeMethods.SystemParametersInfo(NativeMethods.SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
         }
         public static void SetCursor(string name, string fileName)
         {

@@ -5,6 +5,7 @@ using System.Linq;
 using System.ServiceModel;
 using System.ServiceModel.Description;
 using System.Windows;
+using WindowsMonitors;
 using LbmScreenConfig;
 using LittleBigMouseGeo;
 using Microsoft.Win32;
@@ -20,7 +21,7 @@ namespace LittleBigMouse_Daemon
         public ScreenConfig Config { get; private set; }
         private double _initMouseSpeed;
         public readonly MouseHookListener Hook = new MouseHookListener(new GlobalHooker());
-        private PixelPoint _oldPoint = null;
+        private Point? _oldPoint = null;
 
         private ServiceHost _host;
         public void StartServer(ILittleBigMouseService service)
@@ -136,6 +137,7 @@ namespace LittleBigMouse_Daemon
         public event EventHandler ConfigLoaded;
         public void LoadConfig()
         {
+            MonitorsService.D.UpdateDevices();
             LoadConfig(new ScreenConfig());
         }
         private void OnDisplaySettingsChanged(object sender, EventArgs e)
@@ -148,18 +150,16 @@ namespace LittleBigMouse_Daemon
             // If first time called just save that point
             if (_oldPoint == null)
             {
-                _oldPoint = new PixelPoint(Config, null, e.X, e.Y);
+                _oldPoint = new Point(e.X, e.Y);
                 return;
             }
 
 
             if (e.Clicked) return;
 
-            Screen oldScreen = _oldPoint.TargetScreen;
+            Screen oldScreen = Config.ScreenFromPixel(_oldPoint.Value);
 
-            PixelPoint pIn = new PixelPoint(
-                _oldPoint.Config,
-                oldScreen, e.X, e.Y);
+            Point pIn = new Point(e.X, e.Y);
 
             // No move
             if (pIn.Equals(_oldPoint)) return;
@@ -167,17 +167,19 @@ namespace LittleBigMouse_Daemon
             //Debug.Print(pIn.X + " , " + pIn.Y + " -> " + pIn.TargetScreen?.Monitor.Adapter.DeviceName);
 
             // no screen change
-            if (oldScreen == null || Equals(pIn.TargetScreen, oldScreen))
+            if (oldScreen == null || Equals(Config.ScreenFromPixel(pIn), oldScreen))
             {
                 _oldPoint = pIn;
                 return;
             }
 
-            Screen screenOut = pIn.Mm.TargetScreen;
+            Point oldpInMm = oldScreen.InMm.GetPoint(oldScreen.InPixel, _oldPoint.Value);
+            Point pInMm = oldScreen.InMm.GetPoint(oldScreen.InPixel, pIn);
+            Screen screenOut = null; //Config.ScreenFromMmPosition(pInMm);// pIn.Mm.TargetScreen;
 
-            Debug.Print("S>" + screenOut?.Monitor.Adapter.DeviceName);
+            Debug.Print(oldScreen?.Monitor.Adapter.DeviceName + "P:" + _oldPoint +  " --> P:" + pIn + " " + screenOut?.Monitor.Adapter.DeviceName);
 
-            PixelPoint pOut = pIn;
+            Point pOut = pIn;
 
 
             //
@@ -186,24 +188,24 @@ namespace LittleBigMouse_Daemon
             if (screenOut == null)
             {
                 double dist = double.PositiveInfinity;// (100.0);
-                Segment seg = new Segment(_oldPoint.Mm.Point, pIn.Mm.Point);
+                Segment seg = new Segment(oldpInMm, pInMm);
 
                 // Calculate side to enter screen when corner crossing not allowed.
-                Side side = seg.IntersectSide(_oldPoint.Screen.BoundsInMm);
+                Side side = seg.IntersectSide(oldScreen.InMm.Bounds);
 
 
                 foreach (Screen screen in Config.AllScreens.Where(s => !Equals(s, oldScreen)))
                 {
                     if (Config.AllowCornerCrossing)
                     {
-                        foreach ( Point p in seg.Line.Intersect(screen.BoundsInMm) )
+                        foreach ( Point p in seg.Line.Intersect(screen.InMm.Bounds) )
                         {
-                            Segment travel = new Segment(_oldPoint.Mm.Point, p);
-                            if (!travel.Rect.Contains(pIn.Mm.Point)) continue;
+                            Segment travel = new Segment(oldpInMm, p);
+                            if (!travel.Rect.Contains(pInMm)) continue;
                             if (travel.Size > dist) continue;
 
                             dist = travel.Size;
-                            pOut = (new PhysicalPoint(Config, screen, p.X, p.Y)).Pixel.Inside;
+                            pOut = screen.InPixel.GetPoint(screen.InMm, p);// (new PhysicalPoint(Config, screen, p.X, p.Y)).Pixel.Inside;
                             screenOut = screen;
                         }
                     }
@@ -216,19 +218,19 @@ namespace LittleBigMouse_Daemon
                             case Side.None:
                                 break;
                             case Side.Bottom:
-                                offset.Y = seg.Rect.Height + screen.YLocationInMm - (oldScreen.YLocationInMm + oldScreen.HeightInMm);
+                                offset.Y = seg.Rect.Height + screen.InMm.Y - (oldScreen.InMm.Y + oldScreen.InMm.Height);
                                 if (offset.Y < 0) offset.Y = 0;
                                 break;
                             case Side.Top:
-                                offset.Y = -seg.Rect.Height + (screen.YLocationInMm + screen.HeightInMm) - oldScreen.YLocationInMm;
+                                offset.Y = -seg.Rect.Height + (screen.InMm.Y + screen.InMm.Height) - oldScreen.InMm.Y;
                                 if (offset.Y > 0) offset.Y = 0;
                                 break;
                             case Side.Right:
-                                offset.X = seg.Rect.Width + screen.XLocationInMm - (oldScreen.XLocationInMm + oldScreen.WidthInMm);
+                                offset.X = seg.Rect.Width + screen.InMm.X - (oldScreen.InMm.X + oldScreen.InMm.Width);
                                 if (offset.X < 0) offset.X = 0;
                                 break;
                             case Side.Left:
-                                offset.X = -seg.Rect.Width + (screen.XLocationInMm + screen.WidthInMm) - oldScreen.XLocationInMm;
+                                offset.X = -seg.Rect.Width + (screen.InMm.X + screen.InMm.Width) - oldScreen.InMm.X;
                                 if (offset.X > 0) offset.X = 0;
                                 break;
                             default:
@@ -239,12 +241,13 @@ namespace LittleBigMouse_Daemon
 
                         if (offset.Length > 0 && offset.Length < dist)
                         {
-                            Point shiftedPoint = pIn.Mm.Point + offset;
-                            PhysicalPoint shifted = new PhysicalPoint(Config, screen, shiftedPoint.X , shiftedPoint.Y);
-                            if (Equals(shifted.TargetScreen, screen))
+                            Point shiftedPoint = pInMm + offset;
+                            
+                            if (Equals(Config.ScreenFromMmPosition(shiftedPoint), screen))
                             {
                                 dist = offset.Length;
-                                pOut = shifted.Pixel;
+                                pOut = screen.InPixel.GetPoint(screen.InMm,shiftedPoint);
+                                pOut = screen.InPixel.Inside(pOut);
                                 screenOut = screen;                                                                                 
                             }
                             else
@@ -260,14 +263,15 @@ namespace LittleBigMouse_Daemon
             if (screenOut == null)
             {
                 Debug.Print("Out");
-                LbmMouse.CursorPos = pIn.Inside.Point;
+                LbmMouse.CursorPos = _oldPoint.Value;//TODO : .Inside.Point;
                 e.Handled = true;
                 return;
             }
 
 
             // Actual mouving mouse to new location
-            LbmMouse.CursorPos = pOut.Mm.ToScreen(screenOut).Pixel.Inside.Point;
+            LbmMouse.CursorPos = pOut;//.Mm.ToScreen(screenOut).Pixel.Inside.Point;
+            Debug.Print(">" + pOut.X + "," + pOut.Y);
             Debug.Print(">" + LbmMouse.CursorPos.X + "," + LbmMouse.CursorPos.Y);
 
             // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used

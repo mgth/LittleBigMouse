@@ -1,12 +1,23 @@
-﻿using System.Linq;
+﻿using System.Collections;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Linq;
+using Erp.Notify;
 using WinAPI;
 
 namespace WindowsMonitors
 {
     public class DisplayAdapter : DisplayDevice
     {
+    
 //        public ObservableCollection<DisplayMonitor> Monitors { get; } = new ObservableCollection<DisplayMonitor>();
-        public DisplayAdapter(NativeMethods.DISPLAY_DEVICE dev)
+        public DisplayAdapter()
+        {
+            this.Subscribe();
+        }
+
+        public void Init(NativeMethods.DISPLAY_DEVICE dev, IList<DisplayMonitor> oldMonitors )
         {
             DeviceId = dev.DeviceID;
             DeviceKey = dev.DeviceKey;
@@ -14,34 +25,64 @@ namespace WindowsMonitors
             DeviceString = dev.DeviceString;
             State = dev.StateFlags;
 
+            //if ((dev.StateFlags & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) return;
+
             uint i = 0;
-            NativeMethods.DISPLAY_DEVICE mon = new NativeMethods.DISPLAY_DEVICE(true);
+            var mon = new NativeMethods.DISPLAY_DEVICE(true);
 
-            bool result = NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0);
+            var w = new Stopwatch();
 
-            if (result == false) // TODO
+            w.Start();
+
+            while (NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0))
             {
-                mon.DeviceID = DeviceName;
-                mon.DeviceName = DeviceName + @"\Monitor0";
-                mon.DeviceString = DeviceName.Split('\\').Last();
-                mon.StateFlags = NativeMethods.DisplayDeviceStateFlags.MultiDriver & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop;
-                result = true;
-            }
-
-            while (result)
-            {
-                if (TempMonitors.FirstOrDefault(d => d.DeviceId == mon.DeviceID) == null)
+                var monitor = MonitorsService.D.Monitors.FirstOrDefault(m => m.DeviceName == mon.DeviceName);
+                if (monitor != null)
                 {
-                    DisplayMonitor displayMonitor = AllMonitors.FirstOrDefault(d => d.DeviceId == mon.DeviceID);
-                    if (displayMonitor == null) displayMonitor = new DisplayMonitor(this, mon);
-                    else
-                        displayMonitor.Init(this, mon);
-
-                    TempMonitors.Add(displayMonitor);                    
+                    oldMonitors.Remove(monitor);
+                    monitor.Init(this,mon);
+                }
+                else
+                {
+                    monitor = new DisplayMonitor();
+                    monitor.Init(this,mon);
+                    MonitorsService.D.Monitors.Add(monitor);
                 }
 
-                result = NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0);
+                monitor.Timing = w.ElapsedMilliseconds;
+                w.Restart();
             }
         }
+
+        public ObservableCollection<DisplayMode> DisplayModes =>
+            this.Get(() => new ObservableCollection<DisplayMode>());
+        public DeviceCaps DeviceCaps =>
+            this.Get(() => new DeviceCaps(DeviceName));
+
+        public DisplayMode CurrentMode => this.Get(() =>
+        {
+            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
+
+            int i = 0;
+            if (NativeMethods.EnumDisplaySettingsEx(DeviceName, -1, ref devmode,0))
+            {
+                return new DisplayMode(devmode);
+            }
+            return null;
+        });
+
+        public void UpdateDevMode()
+        {
+            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
+
+            int i = 0;
+            while (NativeMethods.EnumDisplaySettingsEx(DeviceName, i, ref devmode,0))
+            {
+                DisplayModes.Add(new DisplayMode(devmode));
+                i++;
+            }
+        }
+
+
     }
 }

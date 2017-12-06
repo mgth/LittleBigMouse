@@ -6,7 +6,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using LittleBigMouse_Daemon.Annotations;
 using LbmScreenConfig;
-using MonitorVcp;
 using MouseKeyboardActivityMonitor;
 using MouseEventArgs = System.Windows.Forms.MouseEventArgs;
 
@@ -21,13 +20,13 @@ namespace LittleBigMouse_Daemon
         public static RoutedEvent AnimHideEvent = EventManager.RegisterRoutedEvent("AnimHide", RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(LuminanceWindow));
         public event RoutedEventHandler AnimShow
         {
-            add { AddHandler(AnimShowEvent, value); }
-            remove { RemoveHandler(AnimShowEvent, value); }
+            add => AddHandler(AnimShowEvent, value);
+            remove => RemoveHandler(AnimShowEvent, value);
         }
         public event RoutedEventHandler AnimHide
         {
-            add { AddHandler(AnimHideEvent, value); }
-            remove { RemoveHandler(AnimHideEvent, value); }
+            add => AddHandler(AnimHideEvent, value);
+            remove => RemoveHandler(AnimHideEvent, value);
         }
 
         public static double AutoHeight => 50;
@@ -102,7 +101,7 @@ namespace LittleBigMouse_Daemon
 
         private void LuminanceWindow_OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (this.Visibility == Visibility.Visible)
+            if (Visibility == Visibility.Visible)
             {
                 Hook.MouseWheel += HookOnMouseWheel;
                 RaiseEvent(new RoutedEventArgs(AnimShowEvent));

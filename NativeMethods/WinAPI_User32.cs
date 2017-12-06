@@ -1416,6 +1416,9 @@ namespace WinAPI
         [DllImport("user32.dll")]
         public static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
 
+        [DllImport("user32.dll")]
+        public static extern bool EnumDisplaySettingsEx(string deviceName, int modeNum, ref DEVMODE devMode, int dwFlags);
+
         //Monitor
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);

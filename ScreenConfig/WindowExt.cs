@@ -9,7 +9,7 @@ namespace LbmScreenConfig
     {
         public static void EnableBlur(this Window win)
         {
-            WindowInteropHelper windowHelper = new WindowInteropHelper(win);
+            var windowHelper = new WindowInteropHelper(win);
 
             var accent = new NativeMethods.AccentPolicy();
             var accentStructSize = Marshal.SizeOf(accent);
@@ -18,10 +18,12 @@ namespace LbmScreenConfig
             var accentPtr = Marshal.AllocHGlobal(accentStructSize);
             Marshal.StructureToPtr(accent, accentPtr, false);
 
-            var data = new NativeMethods.WindowCompositionAttributeData();
-            data.Attribute = NativeMethods.WindowCompositionAttribute.WCA_ACCENT_POLICY;
-            data.SizeOfData = accentStructSize;
-            data.Data = accentPtr;
+            var data = new NativeMethods.WindowCompositionAttributeData
+            {
+                Attribute = NativeMethods.WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                SizeOfData = accentStructSize,
+                Data = accentPtr
+            };
 
             NativeMethods.SetWindowCompositionAttribute(windowHelper.Handle, ref data);
 

@@ -41,7 +41,7 @@ namespace MonitorVcp
             Drive = new MonitorRgbLevel(GetDrive, SetDrive);
         }
 
-        public bool AlternatePower => Monitor.ManufacturerCode == "DEL";
+        public bool AlternatePower => Monitor.Edid.ManufacturerCode == "DEL";
 
         public bool Power
         {

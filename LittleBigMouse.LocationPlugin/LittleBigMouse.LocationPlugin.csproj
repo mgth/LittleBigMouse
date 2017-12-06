@@ -1,0 +1,242 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{BFE44D5E-B0E7-4185-BB9D-49D83FBA5539}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>LittleBigMouse.LocationPlugin</RootNamespace>
+    <AssemblyName>LittleBigMouse.LocationPlugin</AssemblyName>
+    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Plugins\Debug\DebugScreenView.xaml.cs">
+      <DependentUpon>DebugScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Debug\DebugViewModel.cs" />
+    <Compile Include="Plugins\Debug\ScreenDebugPlugin.cs" />
+    <Compile Include="Plugins\Default\DefaultScreenView.xaml.cs">
+      <DependentUpon>DefaultScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Default\DefaultScreenViewModel.cs" />
+    <Compile Include="Plugins\IPluginButton.cs" />
+    <Compile Include="Plugins\Location\Anchors\AnchorsView.xaml.cs">
+      <DependentUpon>AnchorsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Location\Anchors\AnchorsViewModel.cs" />
+    <Compile Include="Plugins\Location\LocationControlView.xaml.cs">
+      <DependentUpon>LocationControlView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Location\LocationControlViewModel.cs" />
+    <Compile Include="Plugins\Location\LocationScreenView.xaml.cs">
+      <DependentUpon>LocationScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Location\LocationScreenViewModel.cs" />
+    <Compile Include="Plugins\Location\Rulers\RulerView.xaml.cs">
+      <DependentUpon>RulerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Location\Rulers\RulerViewTop.xaml.cs">
+      <DependentUpon>RulerViewTop.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Location\Rulers\RulerPanelViewModel.cs" />
+    <Compile Include="Plugins\Location\Rulers\RulerViewModel.cs" />
+    <Compile Include="Plugins\Location\Rulers\Tester.xaml.cs">
+      <DependentUpon>Tester.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Location\Rulers\TesterViewModel.cs" />
+    <Compile Include="Plugins\Location\ScreenLocationPlugin.cs" />
+    <Compile Include="Plugins\Location\Rulers\RulerPanelView.xaml.cs">
+      <DependentUpon>RulerPanelView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Size\CotationMark.cs" />
+    <Compile Include="Plugins\Size\ScreenSizePlugin.cs" />
+    <Compile Include="Plugins\Size\SizeScreenView.xaml.cs">
+      <DependentUpon>SizeScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Size\SizeViewModel.cs" />
+    <Compile Include="Plugins\Vcp\LossyThread.cs" />
+    <Compile Include="Plugins\Vcp\VcpControlView.xaml.cs">
+      <DependentUpon>VcpControlView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Vcp\VcpControlViewModel.cs" />
+    <Compile Include="Plugins\Vcp\VcpPlugin.cs" />
+    <Compile Include="Plugins\Vcp\VcpScreenView.xaml.cs">
+      <DependentUpon>VcpScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Plugins\Vcp\VcpScreenViewModel.cs" />
+    <Compile Include="Plugins\Vcp\VcpSlider.xaml.cs">
+      <DependentUpon>VcpSlider.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="Plugins\Debug\DebugScreenView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Default\DefaultScreenView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Location\Anchors\AnchorsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Location\LocationControlView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Location\LocationScreenView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Location\Rulers\RulerView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Location\Rulers\RulerViewTop.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Location\Rulers\Tester.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Location\Rulers\RulerPanelView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Plugins\Size\SizeScreenView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Vcp\VcpControlView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Vcp\VcpScreenView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Plugins\Vcp\VcpSlider.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\_ERP_\Erp\Base\Erp.Base.csproj">
+      <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
+      <Name>Erp.Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\_ERP_\Erp\Mvvm\Erp.Mvvm.csproj">
+      <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
+      <Name>Erp.Mvvm</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\_ERP_\Erp\Notify-4\Erp.Notify.4.csproj">
+      <Project>{593CB07F-8504-490A-96D6-2CC6034487D7}</Project>
+      <Name>Erp.Notify.4</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Argyll\Argyll.csproj">
+      <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
+      <Name>Argyll</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\LittleBigMouse.ControlCore\LittleBigMouse.ControlCore.csproj">
+      <Project>{0d67ead5-811d-4933-9240-d6a2c0e98f34}</Project>
+      <Name>LittleBigMouse.ControlCore</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MonitorVcp\MonitorVcp.csproj">
+      <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>
+      <Name>MonitorVcp</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NativeMethods\WinAPI.csproj">
+      <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
+      <Name>WinAPI</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugin\Plugin.csproj">
+      <Project>{e34cc1c9-293c-4455-b3dd-5a582095432b}</Project>
+      <Name>Plugin</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ScreenConfig\LbmScreenConfig.csproj">
+      <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
+      <Name>LbmScreenConfig</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\WindowsMonitors\WindowsMonitors.csproj">
+      <Project>{0c90e881-b94c-4dc5-b2d0-ff6dc7601de4}</Project>
+      <Name>WindowsMonitors</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

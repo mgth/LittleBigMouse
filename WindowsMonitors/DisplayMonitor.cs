@@ -11,10 +11,12 @@ namespace WindowsMonitors
     public class DisplayMonitor : DisplayDevice
     {
         public DisplayAdapter Adapter { get; private set; }
-        public DisplayMonitor(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
+
+        public DisplayMonitor()
         {
-            Init(adapter, dev);
+            this.Subscribe();
         }
+
         public void Init(DisplayAdapter adapter, NativeMethods.DISPLAY_DEVICE dev)
         {
             using (this.Suspend())
@@ -26,31 +28,20 @@ namespace WindowsMonitors
                 DeviceName = dev.DeviceName;
                 DeviceString = dev.DeviceString;
                 State = dev.StateFlags;
-
-                UpdateDevMode();
-                UpdateDeviceCaps();
-                UpdateEdid();               
             }
         }
 
         public void Init(IntPtr hMonitor, NativeMethods.MONITORINFOEX mi)
         {
-            AttachedToDesktop = true;
-
-            Primary = mi.Flags;
+            Primary = mi.Flags == 1;
             MonitorArea = mi.Monitor;
             WorkArea = mi.WorkArea;
 
             HMonitor = hMonitor;
         }
 
-        public override bool Equals(Object obj)
-        {
-            if (obj == null) return false;
-            var other = obj as DisplayMonitor;
-            if (other == null) return base.Equals(obj);
-            return DeviceId == other.DeviceId;
-        }
+        public override bool Equals(object obj)=> obj is DisplayMonitor other ? DeviceName == other.DeviceName : base.Equals(obj);
+        
 
         public override int GetHashCode()
         {
@@ -65,93 +56,27 @@ namespace WindowsMonitors
         }
 
 
-        public void UpdateDevMode()
-        {
-            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
-            if (NativeMethods.EnumDisplaySettings(Adapter.DeviceName, -1, ref devmode))
-            {
-                // Orientation should be set before any dimension
-                if ((devmode.Fields & NativeMethods.DM.DisplayOrientation) != 0) DisplayOrientation = devmode.DisplayOrientation;
-
-                if ((devmode.Fields & NativeMethods.DM.Position) != 0) Position = new Point(devmode.Position.x, devmode.Position.y);
-                if ((devmode.Fields & NativeMethods.DM.BitsPerPixel) != 0) BitsPerPixel = devmode.BitsPerPel;
-                if ((devmode.Fields & NativeMethods.DM.PelsWidth) != 0) PelsWidth = devmode.PelsWidth;
-                if ((devmode.Fields & NativeMethods.DM.PelsHeight) != 0) PelsHeight = devmode.PelsHeight;
-                if ((devmode.Fields & NativeMethods.DM.DisplayFlags) != 0) DisplayFlags = devmode.DisplayFlags;
-                if ((devmode.Fields & NativeMethods.DM.DisplayFrequency) != 0) DisplayFrequency = devmode.DisplayFrequency;
-                if ((devmode.Fields & NativeMethods.DM.DisplayFixedOutput) != 0) DisplayFixedOutput = devmode.DisplayFixedOutput;
-            }
-        }
-        public bool AttachedToDesktop
-        {
-            get => this.Get<bool>();
-            private set => this.Set(value);
-        }
-
         [TriggedOn(nameof(State))]
-        void UpdateFromState()
+        public bool AttachedToDesktop => this.Get(()=> (State & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != 0);
+
+        public long Timing
         {
-            AttachedToDesktop = (State & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != 0;
+            get => this.Get<long>();
+            set => this.Set(value);
         }
 
 
-        public int PelsHeight
+        public bool Primary
         {
-            get => this.Get<int>();
-            private set => this.Set(value);
-        }
-        //public int PelsHeight
-        //{
-        //    get { return Get<int>(); }
-        //    private set { Set(value); }
-        //}
-        public int PelsWidth
-        {
-            get => this.Get<int>();
-            private set => this.Set(value);
-        }
-
-        public int DisplayFixedOutput
-        {
-            get => this.Get<int>(); private set => this.Set(value);
-        }
-
-        public int DisplayFrequency
-        {
-            get => this.Get<int>(); private set => this.Set(value);
-        }
-
-        public int DisplayFlags
-        {
-            get => this.Get<int>(); private set => this.Set(value);
-        }
-
-
-        public int BitsPerPixel
-        {
-            get => this.Get<int>(); private set => this.Set(value);
-        }
-
-        public int DisplayOrientation
-        {
-            get => this.Get<int>(); set => this.Set(value);
-        }
-
-        public Point Position
-        {
-            get => this.Get<Point>(); set => this.Set(value);
-        }
-
-        public uint Primary
-        {
-            get => this.Get<uint>(); set
+            get => this.Get(()=>false);
+            internal set
             {
                 // Must remove old primary screen before setting this one
-                if (value == 1)
+                if (value)
                 {
-                    foreach (DisplayMonitor monitor in AttachedMonitors.Where(m => m != this))
+                    foreach (DisplayMonitor monitor in MonitorsService.D.Monitors.Where(m => !m.Equals(this) ))
                     {
-                        monitor.Primary = 0;
+                        monitor.Primary = false;
                     }
                 }
 
@@ -178,17 +103,8 @@ namespace WindowsMonitors
             get => this.Get<string>(); set => this.Set(value);
         }
 
-        public string ManufacturerCode
-        {
-            get => this.Get<string>(); private set => this.Set(value);
-        }
 
-        public byte[] Edid
-        {
-            get => this.Get<byte[]>(); private set => this.Set(value);
-        }
-
-        public void UpdateEdid()
+        public Edid Edid => this.Get<Edid>(() =>
         {
             IntPtr devInfo = NativeMethods.SetupDiGetClassDevsEx(
                 ref NativeMethods.GUID_CLASS_MONITOR, //class GUID
@@ -197,154 +113,72 @@ namespace WindowsMonitors
                 NativeMethods.DIGCF_PRESENT | NativeMethods.DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
                 IntPtr.Zero, // device info, create a new one.
                 null, // machine name, local machine
-                 IntPtr.Zero
-            );// reserved
+                IntPtr.Zero
+            ); // reserved
 
-            if (devInfo == IntPtr.Zero)
-                return;
-
-            NativeMethods.SP_DEVINFO_DATA devInfoData = new NativeMethods.SP_DEVINFO_DATA(true);
-
-            uint i = 0;
-
-            do
+            try
             {
-                if (NativeMethods.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
+                if (devInfo == IntPtr.Zero) return null;
+
+                NativeMethods.SP_DEVINFO_DATA devInfoData = new NativeMethods.SP_DEVINFO_DATA(true);
+
+                uint i = 0;
+
+                do
                 {
-
-                    IntPtr hEdidRegKey = NativeMethods.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                        NativeMethods.DICS_FLAG_GLOBAL, 0, NativeMethods.DIREG_DEV, NativeMethods.KEY_READ);
-
-                    if (hEdidRegKey != IntPtr.Zero && (hEdidRegKey.ToInt32() != -1))
+                    if (NativeMethods.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                     {
-                        using (RegistryKey key = GetKeyFromPath(GetHKeyName(hEdidRegKey), 1))
-                        {
-                            string id = ((string[])key.GetValue("HardwareID"))[0] + "\\" + key.GetValue("Driver");
 
-                            if (id == DeviceId)
+                        IntPtr hEdidRegKey = NativeMethods.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
+                            NativeMethods.DICS_FLAG_GLOBAL, 0, NativeMethods.DIREG_DEV, NativeMethods.KEY_READ);
+
+                        try
+                        {
+                            if (hEdidRegKey != IntPtr.Zero && (hEdidRegKey.ToInt32() != -1))
                             {
-                                HKeyName = GetHKeyName(hEdidRegKey);
-                                using (RegistryKey keyEdid = GetKeyFromPath(HKeyName))
+                                using (RegistryKey key = GetKeyFromPath(GetHKeyName(hEdidRegKey), 1))
                                 {
-                                    Edid = (byte[])keyEdid.GetValue("EDID");
+                                    string id = ((string[]) key.GetValue("HardwareID"))[0] + "\\" +
+                                                key.GetValue("Driver");
+
+                                    if (id == DeviceId)
+                                    {
+                                        HKeyName = GetHKeyName(hEdidRegKey);
+                                        using (RegistryKey keyEdid = GetKeyFromPath(HKeyName))
+                                        {
+                                            return new Edid((byte[]) keyEdid.GetValue("EDID"));
+                                        }
+                                    }
                                 }
-                                NativeMethods.RegCloseKey(hEdidRegKey);
-                                return;
                             }
                         }
-                        NativeMethods.RegCloseKey(hEdidRegKey);
+                        finally
+                        {
+                            NativeMethods.RegCloseKey(hEdidRegKey);
+                        }
                     }
-                }
-                i++;
-            } while (NativeMethods.ERROR_NO_MORE_ITEMS != NativeMethods.GetLastError());
-
-            NativeMethods.SetupDiDestroyDeviceInfoList(devInfo);
-        }
-        [TriggedOn(nameof(Edid))]
-        private void UpdateManufacturerCode()
-        {
-            String code;
-            if (Edid==null || Edid.Length < 10) code = "XXX";
-            else
-            {
-                code = "" + (char)(64 + ((Edid[8] >> 2) & 0x1F));
-                code += (char)(64 + (((Edid[8] << 3) | (Edid[9] >> 5)) & 0x1F));
-                code += (char)(64 + (Edid[9] & 0x1F));
+                    i++;
+                } while (NativeMethods.ERROR_NO_MORE_ITEMS != NativeMethods.GetLastError());
             }
-            ManufacturerCode = code;
-        }
-
-        public string ProductCode
-        {
-            get => this.Get<string>(); private set => this.Set(value);
-        }
-
-        [TriggedOn(nameof(Edid))]
-        private void UpdateProductCode()
-        {
-            if (Edid == null || Edid.Length < 12) ProductCode = "0000";
-            else ProductCode = (Edid[10] + (Edid[11] << 8)).ToString("X4");
-
-        }
-
-        public string Serial
-        {
-            get => this.Get<string>(); private set => this.Set(value);
-        }
-
-        [TriggedOn(nameof(Edid))]
-        private void UpdateSerial()
-        {
-            if (Edid == null || Edid.Length < 16)
+            finally
             {
-                Serial = "00000000";
-                return;
+                NativeMethods.SetupDiDestroyDeviceInfoList(devInfo);
             }
-            string serial = "";
-            for (int i = 12; i <= 15; i++) serial = (Edid[i]).ToString("X2") + serial;
-            Serial = serial;
-        }
+            return null;
 
-        public string Model
-        {
-            get => this.Get<string>(); private set => this.Set(value);
-        }
+        });
 
-        [TriggedOn(nameof(Edid))]
-        private void UpdateModel() { Model = Block((char)0xFC); }
-        public string SerialNo
-        {
-            get => this.Get<string>(); private set => this.Set(value);
-        }
 
-        [TriggedOn(nameof(Edid))]
-        private void UpdateSerialNo() { SerialNo = Block((char)0xFF); }
-
-        public Size PhysicalSize
-        {
-            get => this.Get<Size>(); set => this.Set(value);
-        }
-
-        [TriggedOn(nameof(Edid))]
-        private void UpdatePhysicalSize()
-        {
-            if (Edid != null && Edid.Length > 68)
-            {
-                int w = ((Edid[68] & 0xF0) << 4) + Edid[66];
-                int h = ((Edid[68] & 0x0F) << 8) + Edid[67];
-
-                PhysicalSize  = new Size(w,h);
-            }
-        }
-
-        public string Block(char code)
-        {
-            if (Edid == null) return "";
-
-            for (int i = 54; i <= 108; i += 18)
-            {
-                if (i < Edid.Length && Edid[i] == 0 && Edid[i + 1] == 0 && Edid[i + 2] == 0 && Edid[i + 3] == code)
-                {
-                    string s = "";
-                    for (int j = i + 5; j < i + 18; j++)
-                    {
-                        char c = (char)Edid[j];
-                        if (c == (char)0x0A) break;
-                        s += c;
-                    }
-                    return s;
-                }
-            }
-            return "";
-        }
         public void AttachToDesktop(bool primary, Rect area, int orientation, bool apply = true)
         {
 
-            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
+            var devmode = new NativeMethods.DEVMODE(true)
+            {
+                DeviceName = Adapter.DeviceName,
+                Position = new NativeMethods.POINTL {x = (int) area.X, y = (int) area.Y}
+            };
 
-            devmode.DeviceName = Adapter.DeviceName /*+ @"\Monitor0"*/;
 
-            devmode.Position = new NativeMethods.POINTL { x = (int)area.X, y = (int)area.Y };
             devmode.Fields |= NativeMethods.DM.Position;
 
             devmode.PelsWidth = (int)area.Width;
@@ -357,7 +191,7 @@ namespace WindowsMonitors
             devmode.BitsPerPel = 32;
             devmode.Fields |= NativeMethods.DM.BitsPerPixel;
 
-            NativeMethods.ChangeDisplaySettingsFlags flag =
+            var flag =
                 NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY |
                 NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET;
 
@@ -386,69 +220,30 @@ namespace WindowsMonitors
             devmode.Fields = NativeMethods.DM.PelsWidth | NativeMethods.DM.PelsHeight /*| DM.BitsPerPixel*/ | NativeMethods.DM.Position
                         | NativeMethods.DM.DisplayFrequency | NativeMethods.DM.DisplayFlags;
 
-            NativeMethods.DISP_CHANGE ch = NativeMethods.ChangeDisplaySettingsEx(Adapter.DeviceName, ref devmode, IntPtr.Zero, NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
+            var ch = NativeMethods.ChangeDisplaySettingsEx(Adapter.DeviceName, ref devmode, IntPtr.Zero, NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
             if (ch == NativeMethods.DISP_CHANGE.Successful && apply)
                 ApplyDesktop();
         }
 
         private NativeMethods.PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
-        public IntPtr HPhysical
-        {
-            get => this.Get<IntPtr>(); private set => this.Set(value);
-        }
+
 
         [TriggedOn(nameof(HMonitor))]
-        private void UpdateHPhysical()
-        {
-            uint pdwNumberOfPhysicalMonitors = 0;
-
-            if (NativeMethods.GetNumberOfPhysicalMonitorsFromHMONITOR(HMonitor, ref pdwNumberOfPhysicalMonitors))
+        public IntPtr HPhysical => this.Get<IntPtr>(() =>
             {
+                uint pdwNumberOfPhysicalMonitors = 0;
+
+                if (!NativeMethods.GetNumberOfPhysicalMonitorsFromHMONITOR(HMonitor, ref pdwNumberOfPhysicalMonitors)) return IntPtr.Zero;
+
                 _pPhysicalMonitorArray = new NativeMethods.PHYSICAL_MONITOR[pdwNumberOfPhysicalMonitors];
 
-                if (NativeMethods.GetPhysicalMonitorsFromHMONITOR(HMonitor, pdwNumberOfPhysicalMonitors, _pPhysicalMonitorArray))
-                    HPhysical = _pPhysicalMonitorArray[0].hPhysicalMonitor;
+                if (!NativeMethods.GetPhysicalMonitorsFromHMONITOR(HMonitor, pdwNumberOfPhysicalMonitors, _pPhysicalMonitorArray)) return IntPtr.Zero;
+
+                return _pPhysicalMonitorArray[0].hPhysicalMonitor;
             }
-            else HPhysical = IntPtr.Zero;
-        }
+            );
 
 
-        public double DeviceCapsHorzSize
-        {
-            get => this.Get<double>(); private set => this.Set(value);
-        }
-
-        public double DeviceCapsVertSize
-        {
-            get => this.Get<double>(); private set => this.Set(value);
-        }
-
-        public void UpdateDeviceCaps()
-        {
-            IntPtr hdc = NativeMethods.CreateDC("DISPLAY", Adapter.DeviceName, null, IntPtr.Zero);
-
-            DeviceCapsHorzSize = NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.HORZSIZE);
-            DeviceCapsVertSize = NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.VERTSIZE);
-
-            // TODO : https://msdn.microsoft.com/en-us/library/windows/desktop/dd144877(v=vs.85).aspx
-
-            NativeMethods.DeleteDC(hdc);
-        }
-
-        public Vector EffectiveDpi
-        {
-            get => this.Get<Vector>(); private set => this.Set(value);
-        }
-
-        public Vector AngularDpi
-        {
-            get => this.Get<Vector>(); private set => this.Set(value);
-        }
-
-        public Vector RawDpi
-        {
-            get => this.Get<Vector>(); private set => this.Set(value);
-        }
 
         private enum DpiType
         {
@@ -456,34 +251,38 @@ namespace WindowsMonitors
             Angular = 1,
             Raw = 2,
         }        //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510.aspx
+
+        [TriggedOn(nameof(HMonitor))]
+        public Vector EffectiveDpi => this.Get(() =>
+        {
+            GetDpiForMonitor(HMonitor, DpiType.Effective, out var x, out var y);
+            return new Vector(x, y);
+        });
+
+        [TriggedOn(nameof(HMonitor))]
+        public Vector AngularDpi => this.Get(() =>
+        {
+            GetDpiForMonitor(HMonitor, DpiType.Angular, out var x, out var y);
+            return new Vector(x, y);
+        });
+
+        [TriggedOn(nameof(HMonitor))]
+        public Vector RawDpi => this.Get(() =>
+        {
+            GetDpiForMonitor(HMonitor, DpiType.Raw, out var x, out var y);
+            return new Vector(x, y);
+        });
+
         [DllImport("Shcore.dll")]
         private static extern IntPtr GetDpiForMonitor([In]IntPtr hmonitor, [In]DpiType dpiType, [Out]out uint dpiX, [Out]out uint dpiY);
 
+        //https://msdn.microsoft.com/fr-fr/library/windows/desktop/dn302060.aspx
         [TriggedOn(nameof(HMonitor))]
-        private void UpdateDpiForMonitor()
+        public double ScaleFactor => this.Get(() =>
         {
-            uint x;
-            uint y;
-            GetDpiForMonitor(HMonitor, DpiType.Effective, out x, out y);
-            EffectiveDpi = new Vector(x, y);
-            GetDpiForMonitor(HMonitor, DpiType.Angular, out x, out y);
-            AngularDpi = new Vector(x, y);
-            GetDpiForMonitor(HMonitor, DpiType.Raw, out x, out y);
-            RawDpi = new Vector(x, y);
-        }
-
-        public double ScaleFactor
-        {
-            get => this.Get<double>(() => 1); private set => this.Set(value);
-        }
-
-        [TriggedOn(nameof(HMonitor))]
-        public void UpdateScaleFactor()
-        {
-            int factor = 100;
+            var factor = 100;
             NativeMethods.GetScaleFactorForMonitor(HMonitor, ref factor);
-            ScaleFactor = ((double)factor) / 100;
-        }
-
+            return (double)factor / 100;
+        });
     }
 }

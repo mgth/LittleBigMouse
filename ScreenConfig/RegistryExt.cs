@@ -6,7 +6,7 @@ namespace LbmScreenConfig
 {
     public static class RegistryExt
     {
-        public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null)
+        public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null, Action ifLoaded=null)
         {
             if (def == null) def = () => default(T);
 
@@ -29,6 +29,8 @@ namespace LbmScreenConfig
             {
                 value = sValue == "1";
             }
+
+            ifLoaded?.Invoke();
 
             return (T) value;
         }

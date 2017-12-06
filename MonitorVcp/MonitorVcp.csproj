@@ -80,9 +80,9 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\_ERP_\Erp\Notify\Erp.Notify.csproj">
-      <Project>{2ae41f7c-3c65-4d85-a184-3adffd40d8e2}</Project>
-      <Name>Erp.Notify</Name>
+    <ProjectReference Include="..\..\_ERP_\Erp\Notify-4\Erp.Notify.4.csproj">
+      <Project>{593CB07F-8504-490A-96D6-2CC6034487D7}</Project>
+      <Name>Erp.Notify.4</Name>
     </ProjectReference>
     <ProjectReference Include="..\Argyll\Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>

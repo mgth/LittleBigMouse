@@ -103,7 +103,7 @@ namespace LittleBigMouse_Daemon
                 done = true;
                 foreach (ToolStripItem i in items)
                 {
-                    if (i.Tag == tag)
+                    if (i.Tag as string == tag)
                     {
                         _notify.ContextMenuStrip.Items.Remove(i);
                         done = false;

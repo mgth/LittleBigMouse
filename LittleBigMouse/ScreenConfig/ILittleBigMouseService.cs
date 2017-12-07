@@ -135,7 +135,7 @@ namespace LbmScreenConfig
         public void LauchServer(string args="")
         {
             var p = Process.GetCurrentProcess();
-            string filename = p.MainModule.FileName.Replace("Control", "Daemon").Replace(".vshost", "");
+            string filename = p.MainModule.FileName.Replace("_Control", "_Daemon").Replace(".vshost", "");
             Process.Start(filename,args);
             //Thread.Sleep(1000);
             //Init();

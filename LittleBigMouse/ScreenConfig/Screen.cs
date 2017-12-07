@@ -89,7 +89,9 @@ namespace LbmScreenConfig
 
         [TriggedOn(nameof(PnpCode))]
         [TriggedOn(nameof(Monitor),"Edid", "Serial")]
-        public string IdMonitor => this.Get(() => PnpCode + "_" + Monitor.Edid.Serial=="01010101"?Monitor.Edid.SerialNo:Monitor.Edid.Serial);
+        public string IdMonitor => this.Get(() => PnpCode + "_" +
+            // some hp monitors (at least E242) do not provide hex serial value-
+            (Monitor.Edid.Serial=="01010101"?Monitor.Edid.SerialNo:Monitor.Edid.Serial));
 
         [TriggedOn(nameof(InPixel))]
         public string IdResolution => this.Get(() => InPixel.Width + "x" + InPixel.Height);

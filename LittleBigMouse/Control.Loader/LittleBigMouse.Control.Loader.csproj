@@ -160,6 +160,10 @@
       <Project>{0d67ead5-811d-4933-9240-d6a2c0e98f34}</Project>
       <Name>LittleBigMouse.Control.Core</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Daemon\LittleBigMouse.Daemon.csproj">
+      <Project>{cea3e9df-4011-4041-bccf-6318dc7e76f4}</Project>
+      <Name>LittleBigMouse.Daemon</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Plugin\Location\LittleBigMouse.Plugin.Location.csproj">
       <Project>{bfe44d5e-b0e7-4185-bb9d-49d83fba5539}</Project>
       <Name>LittleBigMouse.Plugin.Location</Name>
@@ -167,6 +171,10 @@
     <ProjectReference Include="..\..\Hlab\Plugin\HLab.Plugin.csproj">
       <Project>{e34cc1c9-293c-4455-b3dd-5a582095432b}</Project>
       <Name>HLab.Plugin</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugin\Vcp\LittleBigMouse.Plugin.Vcp.csproj">
+      <Project>{730507c2-2f7e-4405-947d-76049fca1c46}</Project>
+      <Name>LittleBigMouse.Plugin.Vcp</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

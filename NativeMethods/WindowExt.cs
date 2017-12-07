@@ -1,4 +1,0 @@
-﻿namespace LittleBigMouse_Control
-{
-
-}

@@ -3,33 +3,33 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27128.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LbmScreenConfig", "ScreenConfig\LbmScreenConfig.csproj", "{3FBBF289-0B82-4089-80CA-67977A808C5D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Screen.Config", "LittleBigMouse\ScreenConfig\LittleBigMouse.Screen.Config.csproj", "{3FBBF289-0B82-4089-80CA-67977A808C5D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Daemon", "LittleBigMouse_Daemon\LittleBigMouse.Daemon.csproj", "{CEA3E9DF-4011-4041-BCCF-6318DC7E76F4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Daemon", "LittleBigMouse\Daemon\LittleBigMouse.Daemon.csproj", "{CEA3E9DF-4011-4041-BCCF-6318DC7E76F4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMon.ControlLoader", "LittleBigMouse_Control\LittleBigMon.ControlLoader.csproj", "{7AD2B3B1-3CDD-40D6-9135-E02C37001AFB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Control.Loader", "LittleBigMouse\Control.Loader\LittleBigMouse.Control.Loader.csproj", "{7AD2B3B1-3CDD-40D6-9135-E02C37001AFB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Argyll", "Argyll\Argyll.csproj", "{444F1148-7014-469B-8809-834FEDA0F730}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hlab.Argyll", "Hlab\Argyll\Hlab.Argyll.csproj", "{444F1148-7014-469B-8809-834FEDA0F730}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinAPI", "NativeMethods\WinAPI.csproj", "{641054C2-F89B-4ABE-97B4-EE841556E999}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Windows.API", "HLab\Windows.API\HLab.Windows.API.csproj", "{641054C2-F89B-4ABE-97B4-EE841556E999}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsMonitors", "WindowsMonitors\WindowsMonitors.csproj", "{0C90E881-B94C-4DC5-B2D0-FF6DC7601DE4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Windows.Monitors", "HLab\Windows.Monitors\HLab.Windows.Monitors.csproj", "{0C90E881-B94C-4DC5-B2D0-FF6DC7601DE4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonitorVcp", "MonitorVcp\MonitorVcp.csproj", "{543A85AB-37E8-4DB6-B51A-07B719A4DF2E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Windows.MonitorVcp", "Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj", "{543A85AB-37E8-4DB6-B51A-07B719A4DF2E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Erp.Base", "..\_ERP_\Erp\Base\Erp.Base.csproj", "{EDC4FE17-EDAE-42B1-80E4-FB5273F43D11}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hlab.Base", "Hlab\Base\Hlab.Base.csproj", "{EDC4FE17-EDAE-42B1-80E4-FB5273F43D11}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Plugin", "Plugin\Plugin.csproj", "{E34CC1C9-293C-4455-B3DD-5A582095432B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Plugin", "Hlab\Plugin\HLab.Plugin.csproj", "{E34CC1C9-293C-4455-B3DD-5A582095432B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.LocationPlugin", "LittleBigMouse.LocationPlugin\LittleBigMouse.LocationPlugin.csproj", "{BFE44D5E-B0E7-4185-BB9D-49D83FBA5539}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Plugin.Location", "LittleBigMouse\Plugin\Location\LittleBigMouse.Plugin.Location.csproj", "{BFE44D5E-B0E7-4185-BB9D-49D83FBA5539}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.ControlCore", "LittleBigMouse.ControlCore\LittleBigMouse.ControlCore.csproj", "{0D67EAD5-811D-4933-9240-D6A2C0E98F34}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Control.Core", "LittleBigMouse\Control.Core\LittleBigMouse.Control.Core.csproj", "{0D67EAD5-811D-4933-9240-D6A2C0E98F34}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{92E2BEC1-90BD-4AF6-8A41-F43964217787}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Mvvm", "Hlab\Mvvm\HLab.Mvvm.csproj", "{A3EAAA24-5913-471E-ADB1-402F64536A63}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Erp.Mvvm", "..\_ERP_\Erp\Mvvm\Erp.Mvvm.csproj", "{A3EAAA24-5913-471E-ADB1-402F64536A63}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Notify.4", "Hlab\Notify-4\HLab.Notify.4.csproj", "{593CB07F-8504-490A-96D6-2CC6034487D7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Erp.Notify.4", "..\_ERP_\Erp\Notify-4\Erp.Notify.4.csproj", "{593CB07F-8504-490A-96D6-2CC6034487D7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Plugin.Vcp", "LittleBigMouse\Plugin\Vcp\LittleBigMouse.Plugin.Vcp.csproj", "{730507C2-2F7E-4405-947D-76049FCA1C46}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -323,8 +323,8 @@ Global
 		{A3EAAA24-5913-471E-ADB1-402F64536A63}.Test|x86.Build.0 = Release|Any CPU
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|x64.Build.0 = Debug|Any CPU
+		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|x64.ActiveCfg = Debug|x64
+		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|x64.Build.0 = Debug|x64
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|x86.ActiveCfg = Debug|Any CPU
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Debug|x86.Build.0 = Debug|Any CPU
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -345,6 +345,30 @@ Global
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Test|x64.Build.0 = Release|Any CPU
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Test|x86.ActiveCfg = Release|Any CPU
 		{593CB07F-8504-490A-96D6-2CC6034487D7}.Test|x86.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Debug|x64.ActiveCfg = Debug|x64
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Debug|x64.Build.0 = Debug|x64
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Debug|x86.Build.0 = Debug|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Release|Any CPU.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Release|x64.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Release|x64.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Release|x86.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Release|x86.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.ReleaseLocal|Any CPU.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.ReleaseLocal|Any CPU.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.ReleaseLocal|x64.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.ReleaseLocal|x64.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.ReleaseLocal|x86.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.ReleaseLocal|x86.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Test|Any CPU.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Test|Any CPU.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Test|x64.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Test|x64.Build.0 = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Test|x86.ActiveCfg = Release|Any CPU
+		{730507C2-2F7E-4405-947D-76049FCA1C46}.Test|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -134,6 +134,7 @@
     <None Include="app.manifest">
       <SubType>Designer</SubType>
     </None>
+    <None Include="lbm.licenseheader" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>

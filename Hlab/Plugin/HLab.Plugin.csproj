@@ -98,5 +98,8 @@
       <Name>HLab.Mvvm</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="HLab.Plugin.licenseheader" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

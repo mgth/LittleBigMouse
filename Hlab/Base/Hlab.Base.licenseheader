@@ -1,7 +1,7 @@
 ﻿extensions: designer.cs generated.cs
 extensions: .cs .cpp .h
 /*
-  MouseControl - Mouse Managment in multi DPI monitors environment
+  %Project%
   Copyright (c) %CurrentYear% Mathieu GRENET.  All right reserved.
 
   This file is part of %Project%.

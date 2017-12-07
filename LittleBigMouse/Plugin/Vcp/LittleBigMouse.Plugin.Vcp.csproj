@@ -140,5 +140,8 @@
       <Name>LittleBigMouse.Plugin.Location</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="lbm.licenseheader" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

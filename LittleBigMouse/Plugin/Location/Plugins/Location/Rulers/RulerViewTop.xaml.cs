@@ -1,15 +1,15 @@
 ﻿/*
-  MouseControl - LbmMouse Managment in multi DPI monitors environment
-  Copyright (c) 2015 Mathieu GRENET.  All right reserved.
+  LittleBigMouse.Plugin.Location
+  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
 
-  This file is part of MouseControl.
+  This file is part of LittleBigMouse.Plugin.Location.
 
-    ArduixPL is free software: you can redistribute it and/or modify
+    LittleBigMouse.Plugin.Location is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    ArduixPL is distributed in the hope that it will be useful,
+    LittleBigMouse.Plugin.Location is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -20,7 +20,6 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows;

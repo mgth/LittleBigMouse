@@ -168,5 +168,8 @@
       <Name>HLab.Windows.Monitors</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="lbm.licenseheader" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

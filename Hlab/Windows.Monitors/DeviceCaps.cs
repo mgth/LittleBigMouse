@@ -1,15 +1,15 @@
 ﻿/*
-  WindowsMonitors - Windows Monitors Enumeration for .Net
+  HLab.Windows.Monitors
   Copyright (c) 2017 Mathieu GRENET.  All right reserved.
 
-  This file is part of WindowsMonitors.
+  This file is part of HLab.Windows.Monitors.
 
-    WindowsMonitors is free software: you can redistribute it and/or modify
+    HLab.Windows.Monitors is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    WindowsMonitors is distributed in the hope that it will be useful,
+    HLab.Windows.Monitors is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -20,7 +20,6 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-
 using System;
 using System.Windows;
 using WinAPI;

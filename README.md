@@ -20,4 +20,4 @@ Task Scheduler Managed Wrapper
 https://taskscheduler.codeplex.com/
 
 
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)]mathieu@lesbouys.net
+

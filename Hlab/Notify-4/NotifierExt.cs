@@ -49,26 +49,26 @@ namespace Hlab.Notify
 
         public static T Get<T>(this INotifyPropertyChanged n,
             [CallerMemberName] string propertyName = null)
-            => n.GetNotifier().Get<T>(old => default(T), propertyName);
+            => n.GetNotifier().Get<T>(n, old => default(T), propertyName);
 
         public static T Get<T>(this INotifyPropertyChanged n, Func<T> getter,
             [CallerMemberName] string propertyName = null)
-            => n.GetNotifier().Get<T>(old => getter(), propertyName);
+            => n.GetNotifier().Get<T>(n, old => getter(), propertyName);
 
         public static T Get<T>(this INotifyPropertyChanged n, Func<T, T> getter,
             [CallerMemberName] string propertyName = null)
-            => n.GetNotifier().Get<T>(getter, propertyName);
+            => n.GetNotifier().Get<T>(n, getter, propertyName);
 
         public static bool Set<T>(this INotifyPropertyChanged n,
             T value,
             Action<T, T> postUpdateAction,
             [CallerMemberName] string propertyName = null)
-            => n.GetNotifier().Set(value, propertyName, postUpdateAction);
+            => n.GetNotifier().Set(n, value, propertyName, postUpdateAction);
 
         public static bool Set<T>(this INotifyPropertyChanged n,
             T value,
             [CallerMemberName] string propertyName = null)
-            => n.GetNotifier().Set(value, propertyName, null);
+            => n.GetNotifier().Set(n, value, propertyName, null);
 
         public static void Subscribe(this INotifyPropertyChanged n)
         {
@@ -99,8 +99,8 @@ namespace Hlab.Notify
                     {
                         n.Subscribe(a =>
                         {
-                            if (notifier.IsSet(name))
-                                notifier.Get<ITriggable>(null, name).OnTrigged();
+                            if (notifier.IsSet(property))
+                                notifier.Get<ITriggable>(n,null, name).OnTrigged();
                             else
                                 notifier.OnPropertyChanged(name);
                             //property.GetMethod.Invoke(n, null);
@@ -112,8 +112,8 @@ namespace Hlab.Notify
                         n.Subscribe(a =>
                         {
 
-                            if (notifier.IsSet(name))
-                                notifier.Update(name);
+                            if (notifier.IsSet(property))
+                                notifier.Update(property);
                             else
                                 notifier.OnPropertyChanged(name);
                             //property.GetMethod.Invoke(n, null);
@@ -180,7 +180,9 @@ namespace Hlab.Notify
                 new ConcurrentDictionary<Tuple<Action<NotifierPropertyChangedEventArgs>, IList<string>>,
                     NotifyCollectionChangedEventHandler>();
 
-        public static void Subscribe(this INotifyPropertyChanged n, Action<NotifierPropertyChangedEventArgs> action,
+        public static void Subscribe(
+            this INotifyPropertyChanged n, 
+            Action<NotifierPropertyChangedEventArgs> action,
             IList<string> targets)
         {
             Debug.Assert(targets.Count > 0);
@@ -234,7 +236,9 @@ namespace Hlab.Notify
 
         }
 
-        public static void Subscribe(this INotifyCollectionChanged n, Action<NotifierPropertyChangedEventArgs> action,
+        public static void Subscribe(
+            this INotifyCollectionChanged n, 
+            Action<NotifierPropertyChangedEventArgs> action,
             IList<string> targets)
         {
             Debug.Assert(targets[0]=="Item");

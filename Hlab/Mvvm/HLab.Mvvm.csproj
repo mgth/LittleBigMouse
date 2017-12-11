@@ -91,6 +91,7 @@
     <Compile Include="Converters\GenericConverter.cs" />
     <Compile Include="Converters\MultiScaleConverter.cs" />
     <Compile Include="Converters\ScaleConverter.cs" />
+    <Compile Include="IViewAware.cs" />
     <Compile Include="Observables\ObservableCollectionNotifier.cs" />
     <Compile Include="Observables\ObservableFilter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

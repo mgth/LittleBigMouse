@@ -57,8 +57,8 @@ namespace Hlab.Mvvm
         {
             using (viewModel.Suspend())
             {
-                //var token = viewModel.Get<SuspenderToken>("EntityNullToken");
-                //if (token != null && viewModel != null) token.Dispose();
+                var token = viewModel.Get<SuspenderToken>("EntityNullToken");
+                if (token != null && viewModel != null) token.Dispose();
                 if (viewModel.Set(view, "Linked"))
                 {
                     //if (model == null) viewModel.Set<SuspenderToken>(viewModel.Suspend(), "EntityNullToken");

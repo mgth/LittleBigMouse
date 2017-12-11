@@ -48,6 +48,11 @@ namespace Hlab.Base
             }
         }
 
+        public void Register<TO>(Func<TO, T> factory)
+        {
+            Register(typeof(TO),(o) => factory((TO)o));
+        }
+
         public T Get(object target, Action<T> onCreate=null)
         {
             bool created = false;

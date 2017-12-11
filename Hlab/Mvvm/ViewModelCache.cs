@@ -84,6 +84,7 @@ namespace Hlab.Mvvm
                         break;
                 }
 
+                // TODO : 
                 switch (baseObject)
                 {
                     case INotifyPropertyChanged vm:

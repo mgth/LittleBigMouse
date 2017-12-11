@@ -86,10 +86,13 @@
   <ItemGroup>
     <Compile Include="ITriggable.cs" />
     <Compile Include="Notifier.cs" />
+    <Compile Include="NotifierClass.cs" />
     <Compile Include="NotifierEntry.cs" />
     <Compile Include="NotifierExt.cs" />
     <Compile Include="NotifierHandler.cs" />
+    <Compile Include="NotifierProperty.cs" />
     <Compile Include="NotifierService.cs" />
+    <Compile Include="PersistentNotifier.cs" />
     <Compile Include="TriggedOn.cs" />
   </ItemGroup>
   <ItemGroup>

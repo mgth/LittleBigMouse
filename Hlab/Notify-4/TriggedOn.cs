@@ -34,6 +34,23 @@ namespace Hlab.Notify
         }
     }
 
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
+    public class NotifierType : Attribute
+    {
+        private readonly Type _type;
+        public NotifierType(Type type)
+        {
+            _type = type;
+        }
+
+        public NotifierEntry GetEntry()
+        {
+            var entry = (NotifierEntry)Activator.CreateInstance(_type);
+
+
+            return entry;
+        }
+    }
 
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Method, AllowMultiple = true)]
     public class TriggedOn : Attribute

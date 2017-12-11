@@ -24,6 +24,7 @@ using System;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Reflection;
 using Hlab.Base;
 
 namespace Hlab.Notify
@@ -53,6 +54,11 @@ namespace Hlab.Notify
 
     public class Notifier /*: Notifier*/
     {
+        public Notifier(Type classType)
+        {
+            Class = NotifierService.D.GetNotifierClass(classType);
+        }
+
         private readonly ConcurrentDictionary<INotifyPropertyChanged,NotifierHandler> _weakTable = new ConcurrentDictionary<INotifyPropertyChanged, NotifierHandler>();
         public void Add(INotifyPropertyChanged obj, PropertyChangedEventHandler handler)
         {
@@ -65,6 +71,8 @@ namespace Hlab.Notify
             var h = _weakTable.GetOrAdd(obj, o => new NotifierHandler(o));
             if (h.Remove(handler)) _weakTable.TryRemove(obj, out h);
         }
+
+        public NotifierClass Class { get; }
 
         private Suspender _suspender;
         public Suspender Suspend => _suspender ?? (_suspender = new Suspender(OnPropertyChanged));
@@ -96,20 +104,26 @@ namespace Hlab.Notify
         }
 
 
-        protected readonly ConcurrentDictionary<string, NotifierEntry> Entries =
-            new ConcurrentDictionary<string, NotifierEntry>();
+        protected readonly ConcurrentDictionary<NotifierProperty, NotifierEntry> Entries =
+            new ConcurrentDictionary<NotifierProperty, NotifierEntry>();
 
-        public T Get<T>(Func<T, T> getter, string propertyName, Action postUpdateAction = null)
+
+        public T Get<T>(object target, Func<T, T> getter, string propertyName, Action postUpdateAction = null)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(propertyName), "propertyName cannot be null or empty");
+            return Get(target, getter, Class.GetProperty(propertyName), postUpdateAction);
+        }
+
+        public T Get<T>(object target, Func<T, T> getter, NotifierProperty property, Action postUpdateAction = null)
+        {
             try
             {
-                return Entries.GetOrAdd(propertyName,
-                    e => new NotifierEntry(this, a => getter.Invoke((T) (a ?? default(T))))).GetValue<T>();
+                return Entries.GetOrAdd(property,
+                    e => new NotifierEntry(this, property, a => getter.Invoke((T) (a ?? default(T))))).GetValue<T>();
             }
             catch (PropertyNotReady ex)
             {
-                if (Entries.TryRemove(propertyName, out var e))
+                if (Entries.TryRemove(property, out var e))
                 {
                     
                 };
@@ -117,7 +131,7 @@ namespace Hlab.Notify
             }
             catch (NullReferenceException ex)
             {
-                if (Entries.TryRemove(propertyName, out var e))
+                if (Entries.TryRemove(property, out var e))
                 {
                     
                 }
@@ -125,22 +139,31 @@ namespace Hlab.Notify
             }
 
         }
-        public bool Set<T>(T value, string propertyName, Action<T, T> postUpdateAction = null)
+
+
+        public bool Set<T>(object target, T value, string propertyName, Action<T, T> postUpdateAction = null)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(propertyName), "propertyName cannot be null or empty");
+
+            return Set(target, value, Class.GetProperty(propertyName), postUpdateAction);
+        }
+
+
+        public bool Set<T>(object target, T value, NotifierProperty property, Action<T, T> postUpdateAction = null)
+        {
             
             bool isnew = false;
 
-            var entry = (NotifierEntry) Entries.GetOrAdd(propertyName, (oldValue) =>
+            var entry = Entries.GetOrAdd(property, (oldValue) =>
                 {
                     isnew = true;
-                    return new NotifierEntry(this, n => value);
+                    return new NotifierEntry(this, property, n => value);
                 }
             );
 
             if (isnew)
             {
-                OnPropertyChanged(new NotifierPropertyChangedEventArgs(propertyName, default(T), value));
+                OnPropertyChanged(new NotifierPropertyChangedEventArgs(property.Name, default(T), value));
                 return true;
             }
 
@@ -149,24 +172,26 @@ namespace Hlab.Notify
             if (entry.SetValue(value))
             {
                 postUpdateAction?.Invoke(old, value);
-                OnPropertyChanged(new NotifierPropertyChangedEventArgs(propertyName, old, value));
+                OnPropertyChanged(new NotifierPropertyChangedEventArgs(property.Name, old, value));
                 return true;
             }
 
             return false;
         }
 
-        public bool IsSet(string propertyName) => Entries.ContainsKey(propertyName);
+        public bool IsSet(PropertyInfo property) => IsSet(Class.GetProperty(property));
+        public bool IsSet(NotifierProperty property) => Entries.ContainsKey(property);
 
-        public bool Update(string propertyName)
+        public bool Update(PropertyInfo property) => Update(Class.GetProperty(property));
+        public bool Update(NotifierProperty property)
         {
-            if (Entries.TryGetValue(propertyName, out var entry))
+            if (Entries.TryGetValue(property, out var entry))
             {
                 var old = entry.GetValue<object>();
 
                 if (entry.Update())
                 {
-                    OnPropertyChanged(new NotifierPropertyChangedEventArgs(propertyName, old, entry.GetValue<object>()));
+                    OnPropertyChanged(new NotifierPropertyChangedEventArgs(property.Name, old, entry.GetValue<object>()));
                     return true;
                 }
             }

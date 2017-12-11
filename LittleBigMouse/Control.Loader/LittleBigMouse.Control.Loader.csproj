@@ -172,10 +172,6 @@
       <Project>{e34cc1c9-293c-4455-b3dd-5a582095432b}</Project>
       <Name>HLab.Plugin</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Plugin\Vcp\LittleBigMouse.Plugin.Vcp.csproj">
-      <Project>{730507c2-2f7e-4405-947d-76049fca1c46}</Project>
-      <Name>LittleBigMouse.Plugin.Vcp</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="setup\LittleBigMouse.iss" />

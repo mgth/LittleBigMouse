@@ -20,6 +20,9 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System;
+using System.Collections.Concurrent;
 using Hlab.Base;
 
 namespace Hlab.Notify
@@ -28,11 +31,15 @@ namespace Hlab.Notify
     {
         protected NotifierService()
         {
-            Factory.Register(typeof(object),o=>new Notifier());
+            Factory.Register(typeof(object),o=>new Notifier(o.GetType()));
         }
 
         public Factory<Notifier> Factory { get; } = new Factory<Notifier>();
 
+        public ConcurrentDictionary<Type,NotifierClass> Classes = new ConcurrentDictionary<Type, NotifierClass>();
+
         public Notifier GetNotifier( /*INotifyPropertyChanged*/ object target) => Factory.Get(target);
+
+        public NotifierClass GetNotifierClass(Type type) => Classes.GetOrAdd(type, t => new NotifierClass(t));
     }
 }

@@ -22,6 +22,7 @@
 */
 using System;
 using System.Linq;
+using System.Reflection;
 
 namespace Hlab.Notify
 {
@@ -33,12 +34,15 @@ namespace Hlab.Notify
 
         protected Func<object, object> Getter;
 
-        public NotifierEntry(Notifier notifier, Func<object, object> getter)
+        public NotifierEntry(Notifier notifier, NotifierProperty property, Func<object, object> getter)
         {
             Notifier = notifier;
+            Property = property;
             Getter = getter;
             Value = getter(null);
         }
+
+        public NotifierProperty Property { get; }
 
         public T GetValue<T>() => (T)Value;
         //public object GetObjectValue() => Value;

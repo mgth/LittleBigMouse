@@ -216,24 +216,29 @@ namespace LittleBigMouse_Daemon
                 Side side = seg.IntersectSide(oldScreen.InMm.Bounds);
 
 
-                foreach (Screen screen in Config.AllScreens.Where(s => !Equals(s, oldScreen)))
+                if (Config.AllowCornerCrossing)
                 {
-                    if (Config.AllowCornerCrossing)
+                    foreach (var screen in Config.AllBut(oldScreen))
                     {
-                        foreach ( Point p in seg.Line.Intersect(screen.InMm.Bounds) )
+                        foreach (Point p in seg.Line.Intersect(screen.InMm.Bounds))
                         {
-                            Segment travel = new Segment(oldpInMm, p);
+                            var travel = new Segment(oldpInMm, p);
                             if (!travel.Rect.Contains(pInMm)) continue;
                             if (travel.Size > dist) continue;
 
                             dist = travel.Size;
-                            pOut = screen.InPixel.GetPoint(screen.InMm, p);// (new PhysicalPoint(Config, screen, p.X, p.Y)).Pixel.Inside;
+                            pOut = screen.InPixel.GetPoint(screen.InMm,
+                                p); // (new PhysicalPoint(Config, screen, p.X, p.Y)).Pixel.Inside;
+                            pOut = screen.InPixel.Inside(pOut);
                             screenOut = screen;
                         }
                     }
-                    else
+                }
+                else
+                {
+                    foreach (var screen in Config.AllBut(oldScreen))
                     {
-                        Vector offset = new Vector(0,0);
+                        Vector offset = new Vector(0, 0);
 
                         switch (side)
                         {
@@ -264,17 +269,17 @@ namespace LittleBigMouse_Daemon
                         if (offset.Length > 0 && offset.Length < dist)
                         {
                             Point shiftedPoint = pInMm + offset;
-                            
+
                             if (Equals(Config.ScreenFromMmPosition(shiftedPoint), screen))
                             {
                                 dist = offset.Length;
-                                pOut = screen.InPixel.GetPoint(screen.InMm,shiftedPoint);
+                                pOut = screen.InPixel.GetPoint(screen.InMm, shiftedPoint);
                                 pOut = screen.InPixel.Inside(pOut);
-                                screenOut = screen;                                                                                 
+                                screenOut = screen;
                             }
                             else
                             {
-                                
+
                             }
                         }
                     }

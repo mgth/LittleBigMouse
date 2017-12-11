@@ -77,7 +77,7 @@ namespace LittleBigMouse_Daemon
         private readonly double _origine;
         public double OrigineY => double.IsPositiveInfinity(Coef) ? 0 : _origine;
 
-        public double OrigineX => double.IsPositiveInfinity(Coef) ? _origine : (0 - _origine)/Coef;
+        public double OrigineX => (double.IsPositiveInfinity(Coef) || Coef==0) ? _origine : (0 - _origine)/Coef;
 
         public Point Origine => new Point(OrigineX, OrigineY);
 

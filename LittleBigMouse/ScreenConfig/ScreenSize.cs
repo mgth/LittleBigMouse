@@ -129,8 +129,8 @@ namespace LbmScreenConfig
 
         public Point Inside(Point p)
         {
-            var x = p.X < X ? X : p.X > Bounds.Right ? Bounds.Right : p.X;
-            var y = p.Y < Y ? Y : p.Y > Bounds.Bottom ? Bounds.Bottom : p.Y;
+            var x = p.X < X ? X : (p.X > Bounds.Right - 1) ? (Bounds.Right - 1) : p.X;
+            var y = p.Y < Y ? Y : (p.Y > Bounds.Bottom - 1) ? (Bounds.Bottom - 1) : p.Y;
 
             return new Point(x,y);
         }

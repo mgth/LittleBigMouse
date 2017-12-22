@@ -70,6 +70,7 @@
                     </MultiBinding>
                 </Label.FontSize>
             </Label>
+
         </StackPanel>
         
         <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10">
@@ -130,12 +131,17 @@
             Foreground="White"/>
                     <Label Padding="2,0" Foreground="AliceBlue">dpi</Label>
 </StackPanel>
+                <Label HorizontalAlignment="Right"
+                    Padding="0"
+                    Content="{Binding Path=Inches, FallbackValue=X.0}"  
+                    Foreground="AliceBlue">
+                </Label>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Label Padding="2,0" Foreground="AliceBlue" Content="{Binding Path=Model.InPixel.Width,FallbackValue=pix.w}"/>
                     <Label Padding="2,0"  Foreground="AliceBlue">x</Label>
                     <Label Padding="2,0" Foreground="AliceBlue" Content="{Binding Path=Model.InPixel.Height,FallbackValue=pix.h}"/>
-            </StackPanel>
+                </StackPanel>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Label Padding="2,0"

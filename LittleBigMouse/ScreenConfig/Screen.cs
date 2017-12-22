@@ -209,6 +209,11 @@ namespace LittleBigMouse.ScreenConfigs
         [TriggedOn(nameof(Id))]
         public ScreenRatio PhysicalRatio => this.Get(() => new ScreenRatioValue(1,1));
 
+        [TriggedOn(nameof(InMm), "Height")]
+        [TriggedOn(nameof(InMm), "Height")]
+        public double Diagonal => this.Get(() => Math.Sqrt(InMm.Width * InMm.Width + InMm.Height * InMm.Height));
+
+
 
 
 

@@ -36,6 +36,8 @@ namespace LittleBigMouse.Control.Core.Plugins.Default
             remove => this.Remove(value);
         }
 
+        public string Inches => this.Get(() => (Model.Diagonal / 25.4).ToString("##.#") +"\"");
+
 
         public DefaultScreenViewModel()
         {

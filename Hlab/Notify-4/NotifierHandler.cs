@@ -25,7 +25,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Threading;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public class NotifierHandler
     {

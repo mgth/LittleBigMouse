@@ -25,7 +25,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 
-namespace Hlab.Mvvm.Observables
+namespace HLab.Mvvm.Observables
 {
     public static class ObservableViewModelCollectionExt
     {

@@ -27,7 +27,7 @@ using System.Linq;
 using System.ServiceModel;
 using System.ServiceModel.Description;
 using System.Windows;
-using Hlab.Windows.MonitorVcp;
+using HLab.Windows.MonitorVcp;
 using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 using Microsoft.Win32;

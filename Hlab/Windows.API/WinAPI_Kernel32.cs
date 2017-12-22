@@ -20,9 +20,10 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Runtime.InteropServices;
 
-namespace WinAPI
+namespace HLab.Windows.API
 {
     [System.Security.SuppressUnmanagedCodeSecurity]
     public static partial class NativeMethods

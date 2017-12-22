@@ -22,7 +22,7 @@
 */
 using System;
 using System.Windows;
-using WinAPI;
+using HLab.Windows.API;
 
 namespace HLab.Windows.Monitors
 {

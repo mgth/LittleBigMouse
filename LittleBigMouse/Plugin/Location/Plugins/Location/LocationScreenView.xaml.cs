@@ -28,7 +28,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
-using Hlab.Mvvm;
+using HLab.Mvvm;
+using HLab.Windows.API;
 using LittleBigMouse.Control.Core;
 using LittleBigMouse.ScreenConfigs;
 using MultiScreensView = LittleBigMouse.Control.Core.MultiScreensView;
@@ -73,7 +74,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
                         ActualHeight * _staticPoint.Value.Y
                         ));
 
-                WinAPI.NativeMethods.SetCursorPos((int)p.X, (int)p.Y);
+                NativeMethods.SetCursorPos((int)p.X, (int)p.Y);
 
                 _staticPoint = null;
             }

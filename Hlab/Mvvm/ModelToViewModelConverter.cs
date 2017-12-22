@@ -26,7 +26,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public class ModelToViewModelConverter : IValueConverter
     {

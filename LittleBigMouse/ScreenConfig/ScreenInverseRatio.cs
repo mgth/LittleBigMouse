@@ -21,7 +21,7 @@
 	  http://www.mgth.fr
 */
 
-using Hlab.Notify;
+using HLab.Notify;
 
 namespace LittleBigMouse.ScreenConfigs
 {

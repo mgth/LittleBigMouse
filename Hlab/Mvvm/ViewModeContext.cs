@@ -24,9 +24,9 @@ using System;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Windows;
-using Hlab.Notify;
+using HLab.Notify;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public class ViewModeContext
     {

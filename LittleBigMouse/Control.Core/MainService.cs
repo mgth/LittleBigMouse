@@ -21,8 +21,8 @@
 	  http://www.mgth.fr
 */
 using System.Windows;
-using Hlab.Mvvm;
-using Hlab.Plugin;
+using HLab.Mvvm;
+using HLab.Plugin;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core

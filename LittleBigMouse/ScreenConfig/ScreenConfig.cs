@@ -30,7 +30,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Windows;
-using Hlab.Notify;
+using HLab.Notify;
 using HLab.Windows.Monitors;
 using Microsoft.Win32;
 

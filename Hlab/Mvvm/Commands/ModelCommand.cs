@@ -26,9 +26,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
-using Hlab.Notify;
+using HLab.Notify;
 
-namespace Hlab.Mvvm.Commands
+namespace HLab.Mvvm.Commands
 {
     public class ModelCommand : ICommand, ITriggable
     {

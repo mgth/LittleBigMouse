@@ -23,10 +23,10 @@
 using System;
 using System.ComponentModel;
 using System.Windows.Media;
-using Hlab.Notify;
+using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
 
-namespace Hlab.Windows.MonitorVcp
+namespace HLab.Windows.MonitorVcp
 {
     class LuminanceViewModel : INotifyPropertyChanged
     {

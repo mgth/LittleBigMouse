@@ -21,12 +21,12 @@
 	  http://www.mgth.fr
 */
 using System.ComponentModel;
-using Hlab.Base;
-using Hlab.Notify;
+using HLab.Base;
+using HLab.Notify;
 
 //using System.Data.Model;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public static class EntityExt
     {

@@ -22,7 +22,7 @@
 */
 using System.Windows.Controls;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     /// <summary>
     /// Logique d'interaction pour NotFoundView.xaml

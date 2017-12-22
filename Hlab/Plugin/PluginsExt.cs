@@ -26,7 +26,7 @@ using System.Globalization;
 using System.Resources;
 using System.Windows;
 
-namespace Hlab.Plugin
+namespace HLab.Plugin
 {
     public static class PluginsExt
     {

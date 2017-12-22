@@ -24,7 +24,7 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public class MvvmLink
     {

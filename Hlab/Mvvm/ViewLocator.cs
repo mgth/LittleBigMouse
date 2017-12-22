@@ -25,7 +25,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     /// <inheritdoc />
     /// <summary>

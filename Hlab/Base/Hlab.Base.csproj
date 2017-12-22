@@ -7,8 +7,8 @@
     <ProjectGuid>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Hlab.Base</RootNamespace>
-    <AssemblyName>Hlab.Base</AssemblyName>
+    <RootNamespace>HLab.Base</RootNamespace>
+    <AssemblyName>HLab.Base</AssemblyName>
     <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />

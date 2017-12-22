@@ -22,7 +22,7 @@
 */
 using System;
 
-namespace Hlab.Plugin
+namespace HLab.Plugin
 {
     public class OnRegisterPlugin : Attribute
     {

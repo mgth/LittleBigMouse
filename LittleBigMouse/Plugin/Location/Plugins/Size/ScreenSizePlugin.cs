@@ -20,8 +20,8 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using Hlab.Mvvm;
-using Hlab.Plugin;
+using HLab.Mvvm;
+using HLab.Plugin;
 using LittleBigMouse.Control.Core;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Size

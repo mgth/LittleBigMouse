@@ -7,8 +7,8 @@
     <ProjectGuid>{444F1148-7014-469B-8809-834FEDA0F730}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Hlab.Argyll</RootNamespace>
-    <AssemblyName>Hlab.Argyll</AssemblyName>
+    <RootNamespace>HLab.Argyll</RootNamespace>
+    <AssemblyName>HLab.Argyll</AssemblyName>
     <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />

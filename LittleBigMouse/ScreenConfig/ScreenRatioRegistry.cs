@@ -23,7 +23,7 @@
 
 using System;
 using System.Runtime.CompilerServices;
-using Hlab.Notify;
+using HLab.Notify;
 using Microsoft.Win32;
 
 namespace LittleBigMouse.ScreenConfigs

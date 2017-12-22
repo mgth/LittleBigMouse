@@ -20,7 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public abstract class ViewMode { }
     public class ViewModeDetail : ViewMode { }

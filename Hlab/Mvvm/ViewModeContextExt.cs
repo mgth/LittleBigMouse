@@ -22,7 +22,7 @@
 */
 using System.Windows;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public static class ViewModeContextExt
     {

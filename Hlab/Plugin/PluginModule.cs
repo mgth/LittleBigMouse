@@ -20,9 +20,9 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using Hlab.Base;
+using HLab.Base;
 
-namespace Hlab.Plugin
+namespace HLab.Plugin
 {
     public interface IPluginModule
     {

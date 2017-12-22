@@ -23,7 +23,7 @@
 using System;
 using System.Windows.Markup;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
 
 

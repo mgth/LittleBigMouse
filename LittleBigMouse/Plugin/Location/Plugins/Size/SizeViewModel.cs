@@ -24,8 +24,8 @@ using System;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
-using Hlab.Mvvm;
-using Hlab.Notify;
+using HLab.Mvvm;
+using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Size

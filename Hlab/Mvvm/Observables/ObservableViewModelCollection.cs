@@ -28,9 +28,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
-using Hlab.Notify;
+using HLab.Notify;
 
-namespace Hlab.Mvvm.Observables
+namespace HLab.Mvvm.Observables
 {
     public class ObservableViewModelCollection<T> : ObservableCollectionNotifier<T> , INotifyPropertyChanged
         where T : INotifyPropertyChanged

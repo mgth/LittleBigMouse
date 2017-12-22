@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:core="clr-namespace:LittleBigMouse.Control.Core"
-        xmlns:mvvm="clr-namespace:Hlab.Mvvm;assembly=Hlab.Mvvm"
+        xmlns:mvvm="clr-namespace:HLab.Mvvm;assembly=HLab.Mvvm"
         mc:Ignorable="d"
         Icon="MainIcon.ico"
         Title="Little Big LbmMouse"  Topmost="True"

@@ -29,7 +29,7 @@ using LittleBigMouse.ScreenConfigs;
 
 //using System.Drawing;
 
-namespace Hlab.Windows.MonitorVcp
+namespace HLab.Windows.MonitorVcp
 {
     /// <summary>
     /// Logique d'interaction pour Luminance.xaml

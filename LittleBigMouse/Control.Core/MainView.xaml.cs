@@ -23,7 +23,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Hlab.Mvvm;
+using HLab.Mvvm;
 using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 

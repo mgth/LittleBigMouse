@@ -25,9 +25,9 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Remoting.Messaging;
 using System.Windows;
-using Hlab.Notify;
+using HLab.Notify;
+using HLab.Windows.API;
 using Microsoft.Win32;
-using WinAPI;
 
 namespace HLab.Windows.Monitors
 {

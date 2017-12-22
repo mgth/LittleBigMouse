@@ -24,7 +24,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
 
     public class NotifierEntry

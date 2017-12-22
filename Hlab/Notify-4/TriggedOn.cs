@@ -23,7 +23,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public class PropertyNotReady : Exception
     {

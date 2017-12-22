@@ -20,7 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-namespace WinAPI
+namespace HLab.Windows.API
 {
 
 }

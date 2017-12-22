@@ -20,12 +20,14 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Runtime.InteropServices;
 using System.Security;
+
 // ReSharper disable InconsistentNaming
 
-namespace WinAPI
+namespace HLab.Windows.API
 {
     [SuppressUnmanagedCodeSecurity]
     public static partial class NativeMethods

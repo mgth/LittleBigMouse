@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public class NotifierClass
     {

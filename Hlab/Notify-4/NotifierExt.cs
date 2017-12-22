@@ -30,9 +30,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Hlab.Base;
+using HLab.Base;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public static class NotifierExt
     {

@@ -20,7 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using Hlab.Mvvm;
+using HLab.Mvvm;
 
 namespace LittleBigMouse.Plugin.Vcp
 {

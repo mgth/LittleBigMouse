@@ -24,7 +24,8 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Hlab.Mvvm;
+using HLab.Mvvm;
+using HLab.Windows.API;
 using LittleBigMouse.Control.Core;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Size
@@ -55,7 +56,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Size
                          ActualWidth * _staticPoint.Value.X, 
                          ActualHeight * _staticPoint.Value.Y
                          ));
-                    WinAPI.NativeMethods.SetCursorPos((int)p2.X, (int)p2.Y);
+                    NativeMethods.SetCursorPos((int)p2.X, (int)p2.Y);
 
                 _staticPoint = null;
             }

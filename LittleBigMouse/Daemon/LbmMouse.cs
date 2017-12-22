@@ -23,8 +23,8 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using HLab.Windows.API;
 using Microsoft.Win32;
-using WinAPI;
 
 namespace LittleBigMouse_Daemon
 {

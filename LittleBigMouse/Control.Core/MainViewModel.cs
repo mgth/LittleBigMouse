@@ -26,9 +26,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using Hlab.Mvvm;
-using Hlab.Mvvm.Commands;
-using Hlab.Notify;
+using HLab.Mvvm;
+using HLab.Mvvm.Commands;
+using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core

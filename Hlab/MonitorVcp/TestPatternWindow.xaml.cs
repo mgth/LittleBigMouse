@@ -26,7 +26,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using LittleBigMouse.ScreenConfigs;
 
-namespace Hlab.Windows.MonitorVcp
+namespace HLab.Windows.MonitorVcp
 {
     /// <summary>
     /// Logique d'interaction pour TestPatternWindow.xaml

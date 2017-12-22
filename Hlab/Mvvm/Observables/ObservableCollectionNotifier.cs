@@ -32,9 +32,9 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Threading;
-using Hlab.Notify;
+using HLab.Notify;
 
-namespace Hlab.Mvvm.Observables
+namespace HLab.Mvvm.Observables
 {
     public static class ObservableCollectionExt
     {

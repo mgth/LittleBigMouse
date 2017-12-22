@@ -22,9 +22,9 @@
 */
 using System;
 using System.ComponentModel;
-using Hlab.Mvvm;
-using Hlab.Mvvm.Commands;
-using Hlab.Notify;
+using HLab.Mvvm;
+using HLab.Mvvm.Commands;
+using HLab.Notify;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
 using Tester = LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.Tester;

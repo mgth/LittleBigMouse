@@ -21,9 +21,9 @@
 	  http://www.mgth.fr
 */
 using System.ComponentModel;
-using Hlab.Notify;
+using HLab.Notify;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public class ViewModel : INotifyPropertyChanged
     {

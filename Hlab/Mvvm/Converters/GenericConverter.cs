@@ -25,7 +25,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace Hlab.Mvvm.Converters
+namespace HLab.Mvvm.Converters
 {
 
     public class BooleanToStringConverter : BooleanToValueConverter<string> { }

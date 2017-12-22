@@ -20,7 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public interface ITriggable
     {

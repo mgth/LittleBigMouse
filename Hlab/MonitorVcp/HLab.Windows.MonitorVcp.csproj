@@ -7,8 +7,8 @@
     <ProjectGuid>{543A85AB-37E8-4DB6-B51A-07B719A4DF2E}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Hlab.Windows.MonitorVcp</RootNamespace>
-    <AssemblyName>Hlab.Windows.MonitorVcp</AssemblyName>
+    <RootNamespace>HLab.Windows.MonitorVcp</RootNamespace>
+    <AssemblyName>HLab.Windows.MonitorVcp</AssemblyName>
     <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />

@@ -26,7 +26,7 @@ using System.Text;
 // ReSharper disable InconsistentNaming
 // ReSharper disable CheckNamespace
 
-namespace WinAPI
+namespace HLab.Windows.API
 {
     [System.Security.SuppressUnmanagedCodeSecurity]
     public static partial class NativeMethods

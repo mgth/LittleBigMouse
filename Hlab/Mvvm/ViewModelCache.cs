@@ -26,9 +26,9 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
-using Hlab.Notify;
+using HLab.Notify;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public class ViewModelCache
     {

@@ -25,7 +25,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace Hlab.Mvvm.Converters
+namespace HLab.Mvvm.Converters
 {
     public class ScaleConverter : IValueConverter
     {

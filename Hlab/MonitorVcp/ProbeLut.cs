@@ -26,11 +26,11 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Xml.Serialization;
-using Hlab.Argyll;
-using Hlab.Notify;
+using HLab.Argyll;
+using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
 
-namespace Hlab.Windows.MonitorVcp
+namespace HLab.Windows.MonitorVcp
 {
 
     public class Tune

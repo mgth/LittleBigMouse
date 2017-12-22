@@ -23,7 +23,7 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using Hlab.Mvvm;
+using HLab.Mvvm;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
 

@@ -24,8 +24,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
-using Hlab.Notify;
-using WinAPI;
+using HLab.Notify;
+using HLab.Windows.API;
 
 namespace HLab.Windows.Monitors
 {

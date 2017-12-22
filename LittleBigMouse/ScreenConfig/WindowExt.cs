@@ -24,7 +24,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
-using WinAPI;
+using HLab.Windows.API;
 
 namespace LittleBigMouse.ScreenConfigs
 {

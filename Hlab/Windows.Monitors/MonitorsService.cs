@@ -26,11 +26,11 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using Hlab.Base;
-using Hlab.Mvvm.Observables;
-using Hlab.Notify;
+using HLab.Base;
+using HLab.Mvvm.Observables;
+using HLab.Notify;
+using HLab.Windows.API;
 using Microsoft.Win32;
-using WinAPI;
 
 namespace HLab.Windows.Monitors
 {

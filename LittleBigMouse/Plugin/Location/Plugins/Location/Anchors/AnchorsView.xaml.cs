@@ -21,7 +21,7 @@
 	  http://www.mgth.fr
 */
 using System.Windows.Controls;
-using Hlab.Mvvm;
+using HLab.Mvvm;
 using LittleBigMouse.Control.Core;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location.Anchors

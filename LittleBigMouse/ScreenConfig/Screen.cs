@@ -31,10 +31,10 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Windows;
-using Hlab.Notify;
+using HLab.Notify;
+using HLab.Windows.API;
 using HLab.Windows.Monitors;
 using Microsoft.Win32;
-using WinAPI;
 
 [assembly: InternalsVisibleTo("ScreenConfig")]
 

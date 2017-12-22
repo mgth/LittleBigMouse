@@ -23,9 +23,9 @@
 
 using System;
 using System.Collections.Concurrent;
-using Hlab.Base;
+using HLab.Base;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public class NotifierService : Singleton<NotifierService>
     {

@@ -23,12 +23,12 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows;
-using Hlab.Notify;
+using HLab.Notify;
+using HLab.Windows.API;
 using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
-using WinAPI;
 
-namespace Hlab.Windows.MonitorVcp
+namespace HLab.Windows.MonitorVcp
 {
     public static class VcpExpendMonitor
     {

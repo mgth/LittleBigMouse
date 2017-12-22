@@ -23,9 +23,9 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using Hlab.Notify;
+using HLab.Notify;
+using HLab.Windows.API;
 using Microsoft.Win32;
-using WinAPI;
 
 namespace HLab.Windows.Monitors
 {

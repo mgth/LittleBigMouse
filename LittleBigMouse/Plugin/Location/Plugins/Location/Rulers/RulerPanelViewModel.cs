@@ -21,8 +21,8 @@
 	  http://www.mgth.fr
 */
 using System.Windows;
-using Hlab.Mvvm;
-using Hlab.Notify;
+using HLab.Mvvm;
+using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers

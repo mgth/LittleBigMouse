@@ -23,9 +23,9 @@
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
-using Hlab.Base;
+using HLab.Base;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public static class ViewModelCollectionExt
     {

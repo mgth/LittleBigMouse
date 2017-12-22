@@ -25,9 +25,9 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
-using Hlab.Base;
+using HLab.Base;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public class NotifierPropertyChangedEventArgs : PropertyChangedEventArgs
     {

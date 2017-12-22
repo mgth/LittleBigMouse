@@ -25,7 +25,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public static class VisualTreeExt
     {

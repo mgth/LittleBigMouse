@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace Hlab.Notify.Properties {
+namespace HLab.Notify.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]

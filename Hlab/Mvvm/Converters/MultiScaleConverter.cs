@@ -25,7 +25,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Data;
 
-namespace Hlab.Mvvm.Converters
+namespace HLab.Mvvm.Converters
 {
     public class MultiScaleConverter : IMultiValueConverter
     {

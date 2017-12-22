@@ -29,10 +29,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
-using Hlab.Mvvm.Commands;
-using Hlab.Notify;
+using HLab.Mvvm.Commands;
+using HLab.Notify;
 
-namespace Hlab.Mvvm.Observables
+namespace HLab.Mvvm.Observables
 {
 
 

@@ -25,8 +25,8 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using Hlab.Notify;
-using Hlab.Windows.MonitorVcp;
+using HLab.Notify;
+using HLab.Windows.MonitorVcp;
 
 namespace LittleBigMouse.Plugin.Vcp
 {

@@ -23,10 +23,10 @@
 using System.Threading;
 using System.Windows;
 using System.Windows.Media;
-using Hlab.Argyll;
-using Hlab.Mvvm;
-using Hlab.Notify;
-using Hlab.Windows.MonitorVcp;
+using HLab.Argyll;
+using HLab.Mvvm;
+using HLab.Notify;
+using HLab.Windows.MonitorVcp;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Vcp

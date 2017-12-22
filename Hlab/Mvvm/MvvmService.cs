@@ -27,12 +27,12 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Windows;
-using Hlab.Base;
+using HLab.Base;
 
 
 ////using System.Data.Model;
 
-namespace Hlab.Mvvm
+namespace HLab.Mvvm
 {
     public class MvvmService : Singleton<MvvmService>
     {

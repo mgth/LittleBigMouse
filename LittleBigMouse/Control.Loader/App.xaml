@@ -1,7 +1,7 @@
 ﻿<Application x:Class="LittleBigMouse_Control.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:converters="clr-namespace:Hlab.Mvvm.Converters;assembly=Hlab.Mvvm">
+             xmlns:converters="clr-namespace:HLab.Mvvm.Converters;assembly=HLab.Mvvm">
     <Application.Resources>
         <converters:BoolToVisibilityConverter x:Key="ToVisibilityConverter" TrueValue="Visible" FalseValue="Hidden"/>
         <converters:ScaleConverter x:Key="Scale" />
@@ -21,7 +21,7 @@
                             <PathGeometry Figures="m 49.1 9.9 h 1.3 309.7 c 21.4 0 39.3 17.7 39.3 39.3 v 1.1 550 h 551.2 c 21.8 0 39.3 17.4 39.3 39.8 v 1.1 309.6 c 0 21.3 -17.5 39.3 -39.3 39.3 H 949.3 49.1 C 27.3 990.1 10 972.1 10 950.8 v -1 V 49.2 C 10 27.5 27.3 9.9 49.1 9.9 Z" FillRule="NonZero"/>
                         </Path.Data>
                     </Path>
-                    <Path Name="path4" Fill="{Binding RulerForegroundColor}">
+                    <Path Fill="{Binding RulerForegroundColor}">
                         <Path.Data>
                             <PathGeometry Figures="M49.1 9.9h1.3h309.7c21.4 0 39.3 17.7 39.3 39.3v1.1v550h551.2c21.8 0 39.3 17.4 39.3 39.8v1.1v309.6c0 21.3-17.5 39.3-39.3 39.3h-1.3H49.1c-21.8 0-39.1-18-39.1-39.3v-1V49.2C10 27.5 27.3 9.9 49.1 9.9L49.1 9.9z M207.1 588.2L207.1 588.2c-12.8 0-23.3-11-23.3-23.9c0-12.3 10.5-23.6 23.3-23.6h113.6v-51h-62.8c-12.8 0-23.5-10.2-23.5-23.3s10.7-23.9 23.5-23.9h62.8v-50.4H207.1c-12.8 0-23.3-11-23.3-23.9c0-13.2 10.5-23.8 23.3-23.8h113.6v-50.8h-62.8c-12.8 0-23.5-10.4-23.5-23.3c0-13.4 10.7-24.1 23.5-24.1h62.8v-50.5H207.1c-12.8 0-23.3-11-23.3-24.1c0-13.3 10.5-23.6 23.3-23.6h113.6V88.8H89v821.9h821.8V678.8H852v113.6c0 12.9-11.1 23.9-24.1 23.9c-13.2 0-23.5-11-23.5-23.9V678.8h-51v63.4c0 12.9-10.3 23.3-23.7 23.3c-13 0-23.9-10.4-23.9-23.3v-63.4h-50.8v113.6c0 12.9-10.7 23.9-23.9 23.9c-13 0-23.3-11-23.3-23.9V678.8h-51v63.4c0 12.9-10.7 23.3-23.7 23.3c-12.8 0-23.7-10.4-23.7-23.3v-63.4h-50.8v113.6c0 12.9-10.5 23.9-23.7 23.9c-13.2 0-23.5-11-23.5-23.9V678.8h-50.4h-0.9c-22.2 0-39.5-17.1-39.5-38.7v-51.8H207.1L207.1 588.2z" FillRule="NonZero"/>
                         </Path.Data>
@@ -132,7 +132,7 @@
         </Viewbox>
 
         <Viewbox x:Key="LogoAsus" x:Shared="false"  Stretch="Uniform">
-            <Canvas Name="Layer_1" Width="602.087" Height="117.912">
+            <Canvas Width="602.087" Height="117.912">
                 <Canvas.RenderTransform>
                     <TranslateTransform X="0" Y="0"/>
                 </Canvas.RenderTransform>
@@ -997,12 +997,12 @@
                         <Rectangle  Canvas.Left="343.28732" Canvas.Top="434.68964" Width="26.90851" Height="97.849121" Name="rect4215" Fill="#FFCCCCCC" Stroke="#FF000000"/>
                         <Rectangle  Canvas.Left="460.70627" Canvas.Top="438.38647" Width="23.64687" Height="15.11531" RadiusY="0" RadiusX="0" Name="rect4219" Fill="#FFCCCCCC" Stroke="#FF000000"/>
                         <Rectangle  Canvas.Left="460.70627" Canvas.Top="458.33652" Width="23.64687" Height="74.20224" RadiusY="0" RadiusX="0" Name="rect4221" Fill="#FFCCCCCC" Stroke="#FF000000"/>
-                        <Path  Name="Path4227" Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
+                        <Path Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
                             <Path.Data>
                                 <PathGeometry Figures="m 419.8457 457.25195 c -8.33202 -0.014 -18.70464 0.6471 -23.69336 2.58203 -7.98195 3.0959 -9.8589 5.27739 -12.08789 10.90625 -2.22899 5.62886 0.34375 13.125 0.34375 13.125 l 21.1836 -2.41796 c 0 0 4.45159 -6.4043 9.55664 -6.4043 5.10506 0 1.38086 4.75781 1.38086 4.75781 0 0 -38.51563 9.85601 -38.51563 28.4707 0 18.61468 12.3849 23.30353 17.2168 24.72852 4.83191 1.42499 16.70366 -6.28324 21.29883 -5.04102 4.59517 1.24222 4.49023 4.58008 4.49023 4.58008 l 24.60156 0 0 -58.30273 c -2.55471 -12.57563 -9.44902 -15.38667 -14.58593 -16.35938 -1.92635 -0.36476 -6.19024 -0.61659 -11.18946 -0.625 z m -7.57617 48.48633 a 4.0294456 4.7777715 0 0 1 4.0293 4.7793 4.0294456 4.7777715 0 0 1 -4.0293 4.77734 4.0294456 4.7777715 0 0 1 -4.0293 -4.77734 4.0294456 4.7777715 0 0 1 4.0293 -4.7793 z" FillRule="evenodd"/>
                             </Path.Data>
                         </Path>
-                        <Path  Name="Path4231" Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
+                        <Path Fill="#FFCCCCCC" StrokeThickness="1" Stroke="#FF000000" StrokeLineJoin="Miter" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat">
                             <Path.Data>
                                 <PathGeometry Figures="m 498.6228 532.53877 22.83146 0 -0.0582 -50.65858 c 0 0 0.0587 -3.03542 4.5283 -3.14349 4.0725 -0.0985 4.20269 2.93108 4.0335 2.93976 l 0.0582 7.64563 21.60834 -0.50665 0 -30.4789 -21.60834 0 c 0 0 -1.31421 3.0808 -3.12055 3.32485 -1.80634 0.24405 -5.44125 -3.32485 -5.44125 -3.32485 l -26.92958 0 0 11.21691 4.09812 0.21402 z" FillRule="evenodd"/>
                             </Path.Data>
@@ -1217,7 +1217,7 @@
         </Viewbox>
 
         <Viewbox x:Key="LogoMsi" x:Shared="false" Stretch="Uniform">
-            <Canvas Name="Layer_1" Width="415" Height="100">
+            <Canvas Width="415" Height="100">
                 <Canvas.RenderTransform>
                     <TranslateTransform X="0" Y="0"/>
                 </Canvas.RenderTransform>
@@ -1231,7 +1231,7 @@
                                 <PathGeometry Figures="M350.529 98l26.191-72.227c0 0-19.576 0-39.154 3.928L312.807 98    H350.529z M346.064 6.263l-5.027 13.874c19.697-3.934 39.152-3.934 39.152-3.934l5.027-13.869    C385.217 2.334 365.643 2.334 346.064 6.263z" FillRule="EvenOdd"/>
                             </Path.Data>
                         </Path>
-                        <Path Name="path4" Fill="#FFCCCCCC">
+                        <Path Fill="#FFCCCCCC">
                             <Path.Data>
                                 <PathGeometry Figures="M204.713 94.066c13.301 2.576 27.041 3.934 41.1 3.934h0.004    c22.313 0 31.482-2.219 43.059-8.131c9.861-5.043 16.344-10.393 19.129-19.609c2.387-7.898-0.664-15.352-7.742-20.092    c-7.08-4.742-13.939-6.984-22.084-11.477c-7.123-3.928-11.008-6.887-10.533-11.004c1.002-8.641 10.24-11.484 22.967-11.484l0 0    c12.4 0 24.539 1.123 36.316 3.27l4.789-13.209c-13.303-2.573-27.049-3.929-41.105-3.929l0 0c-22.313 0-31.479 2.22-43.055 8.13    c-9.865 5.043-16.348 10.393-19.133 19.615c-2.387 7.896 0.664 15.346 7.748 20.088c7.074 4.74 13.93 6.984 22.082 11.482    c7.119 3.926 11.008 6.881 10.525 11c-1.002 8.643-10.24 11.475-22.963 11.475h-0.004c-12.396 0-24.535-1.119-36.314-3.27    L204.713 94.066z" FillRule="EvenOdd"/>
                             </Path.Data>

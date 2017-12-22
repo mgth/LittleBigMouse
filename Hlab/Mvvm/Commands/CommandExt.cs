@@ -23,9 +23,9 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using Hlab.Notify;
+using HLab.Notify;
 
-namespace Hlab.Mvvm.Commands
+namespace HLab.Mvvm.Commands
 {
     public static  class CommandServiceExt
     {

@@ -23,7 +23,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows.Controls;
-using Hlab.Notify;
+using HLab.Notify;
 
 namespace LittleBigMouse.Plugin.Vcp
 {

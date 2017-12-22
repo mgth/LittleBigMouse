@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Hlab.Notify
+namespace HLab.Notify
 {
     public class NotifierProperty
     {

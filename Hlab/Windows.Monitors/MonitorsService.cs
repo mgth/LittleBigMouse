@@ -88,9 +88,6 @@ namespace HLab.Windows.Monitors
                 }
             }
 
-            var w = new Stopwatch();
-            w.Start();
-
             NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
                 delegate (IntPtr hMonitor, IntPtr hdcMonitor, ref NativeMethods.RECT lprcMonitor, IntPtr dwData)
                 {
@@ -102,19 +99,12 @@ namespace HLab.Windows.Monitors
                     foreach (DisplayMonitor monitor in monitors)
                     {
                         monitor.Init(hMonitor, mi);
-                        monitor.Timing = w.ElapsedMilliseconds;
-                        w.Restart();
                     }
 
                     return true;
                 }, IntPtr.Zero);
 
             DevicesUpdated?.Invoke(this, new EventArgs());
-
-            foreach (var monitor in Monitors)
-            {
-                Debug.Print(monitor.DeviceName + "\t" + monitor.Edid.Model + "\t" + monitor.Timing);
-            }
         }
 
         public event PropertyChangedEventHandler PropertyChanged

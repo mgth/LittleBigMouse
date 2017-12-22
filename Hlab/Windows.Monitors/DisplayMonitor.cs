@@ -23,6 +23,7 @@
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Remoting.Messaging;
 using System.Windows;
 using Hlab.Notify;
 using Microsoft.Win32;
@@ -72,7 +73,6 @@ namespace HLab.Windows.Monitors
 
         ~DisplayMonitor()
         {
-            //AttachedMonitors.Remove(this); TODO : this is not thread safe
             if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
                 NativeMethods.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }
@@ -81,10 +81,18 @@ namespace HLab.Windows.Monitors
         [TriggedOn(nameof(State))]
         public bool AttachedToDesktop => this.Get(()=> (State & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != 0);
 
-        public long Timing
+        public int MonitorNo
         {
-            get => this.Get<long>();
-            set => this.Set(value);
+            get
+            {
+                var i = 1;
+                foreach (var monitor in MonitorsService.D.AttachedMonitors.OrderBy(e => e.DeviceId.Split('\\').Last()))
+                {
+                    if(ReferenceEquals(monitor,this) ) return i;
+                    i++;
+                }
+                return 0;
+            }
         }
 
 

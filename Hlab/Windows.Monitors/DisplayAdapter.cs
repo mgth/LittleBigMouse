@@ -51,10 +51,6 @@ namespace HLab.Windows.Monitors
             uint i = 0;
             var mon = new NativeMethods.DISPLAY_DEVICE(true);
 
-            var w = new Stopwatch();
-
-            w.Start();
-
             while (NativeMethods.EnumDisplayDevices(DeviceName, i++, ref mon, 0))
             {
                 var monitor = MonitorsService.D.Monitors.FirstOrDefault(m => m.DeviceName == mon.DeviceName);
@@ -69,9 +65,6 @@ namespace HLab.Windows.Monitors
                     monitor.Init(this,mon);
                     MonitorsService.D.Monitors.Add(monitor);
                 }
-
-                monitor.Timing = w.ElapsedMilliseconds;
-                w.Restart();
             }
         }
 

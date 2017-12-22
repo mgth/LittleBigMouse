@@ -59,7 +59,7 @@
                    FontSize="{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
                     x:Name="lblName" 
                     Margin="0,-7,0,-5" 
-                    Content ="{Binding Path=Model.DeviceNo,FallbackValue=1}" 
+                    Content ="{Binding Path=Model.Monitor.MonitorNo,FallbackValue=1}" 
                     HorizontalAlignment="Center" 
                     VerticalAlignment="Center" 
                     VerticalContentAlignment="Center" 

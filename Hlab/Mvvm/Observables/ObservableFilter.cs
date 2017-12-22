@@ -116,6 +116,7 @@ namespace Hlab.Mvvm.Observables
             _list = list;
             if (_list == null) return this;
 
+            if(((IList)_list).Count>0)
             _list_CollectionChanged(null,
                 new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, _list as IList, 0));
 
@@ -152,6 +153,9 @@ namespace Hlab.Mvvm.Observables
                         {
                             if (Match(item))
                             {
+                                if(_collection.Contains(item))
+                                { }
+                                else
                                 _collection.Add(item);
                             }
                         }
@@ -209,7 +213,7 @@ namespace Hlab.Mvvm.Observables
             if(_list is IEnumerable<T> list)
             foreach (var item in list)
             {
-                if (Contains(item))
+                if (_collection.Contains(item))
                 {
                     if (!Match(item)) _collection.Remove(item);
                 }

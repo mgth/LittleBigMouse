@@ -7,8 +7,8 @@
     <ProjectGuid>{641054C2-F89B-4ABE-97B4-EE841556E999}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>WinAPI</RootNamespace>
-    <AssemblyName>WinAPI</AssemblyName>
+    <RootNamespace>HLab.Windows.API</RootNamespace>
+    <AssemblyName>HLab.Windows.API</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>

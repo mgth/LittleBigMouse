@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Daemon", "Li
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Control.Loader", "LittleBigMouse\Control.Loader\LittleBigMouse.Control.Loader.csproj", "{7AD2B3B1-3CDD-40D6-9135-E02C37001AFB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hlab.Argyll", "Hlab\Argyll\Hlab.Argyll.csproj", "{444F1148-7014-469B-8809-834FEDA0F730}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Argyll", "Hlab\Argyll\HLab.Argyll.csproj", "{444F1148-7014-469B-8809-834FEDA0F730}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Windows.API", "HLab\Windows.API\HLab.Windows.API.csproj", "{641054C2-F89B-4ABE-97B4-EE841556E999}"
 EndProject
@@ -17,7 +17,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Windows.Monitors", "HL
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Windows.MonitorVcp", "Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj", "{543A85AB-37E8-4DB6-B51A-07B719A4DF2E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hlab.Base", "Hlab\Base\Hlab.Base.csproj", "{5933D6A9-2F3C-4447-873F-438096DBCAD2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Base", "Hlab\Base\HLab.Base.csproj", "{5933D6A9-2F3C-4447-873F-438096DBCAD2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Plugin", "Hlab\Plugin\HLab.Plugin.csproj", "{E34CC1C9-293C-4455-B3DD-5A582095432B}"
 EndProject

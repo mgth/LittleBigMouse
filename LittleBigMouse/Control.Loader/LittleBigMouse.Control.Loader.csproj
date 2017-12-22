@@ -168,13 +168,13 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Hlab\Argyll\Hlab.Argyll.csproj">
+    <ProjectReference Include="..\..\Hlab\Argyll\HLab.Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
-      <Name>Hlab.Argyll</Name>
+      <Name>HLab.Argyll</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Base\Hlab.Base.csproj">
-      <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
-      <Name>Hlab.Base</Name>
+    <ProjectReference Include="..\..\Hlab\Base\HLab.Base.csproj">
+      <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
+      <Name>HLab.Base</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
       <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>

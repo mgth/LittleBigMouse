@@ -115,9 +115,9 @@
     <Compile Include="VisualTreeExt.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Base\Hlab.Base.csproj">
-      <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
-      <Name>Hlab.Base</Name>
+    <ProjectReference Include="..\Base\HLab.Base.csproj">
+      <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
+      <Name>HLab.Base</Name>
     </ProjectReference>
     <ProjectReference Include="..\Notify-4\HLab.Notify.4.csproj">
       <Project>{593cb07f-8504-490a-96d6-2cc6034487d7}</Project>

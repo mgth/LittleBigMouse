@@ -154,9 +154,9 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Hlab\Base\Hlab.Base.csproj">
-      <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
-      <Name>Hlab.Base</Name>
+    <ProjectReference Include="..\..\..\Hlab\Base\HLab.Base.csproj">
+      <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
+      <Name>HLab.Base</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
       <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
@@ -166,9 +166,9 @@
       <Project>{593CB07F-8504-490A-96D6-2CC6034487D7}</Project>
       <Name>HLab.Notify.4</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\Argyll\Hlab.Argyll.csproj">
+    <ProjectReference Include="..\..\..\Hlab\Argyll\HLab.Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
-      <Name>Hlab.Argyll</Name>
+      <Name>HLab.Argyll</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Control.Core\LittleBigMouse.Control.Core.csproj">
       <Project>{0d67ead5-811d-4933-9240-d6a2c0e98f34}</Project>

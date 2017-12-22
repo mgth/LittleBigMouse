@@ -110,9 +110,9 @@
       <Project>{593CB07F-8504-490A-96D6-2CC6034487D7}</Project>
       <Name>HLab.Notify.4</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Argyll\Hlab.Argyll.csproj">
+    <ProjectReference Include="..\Argyll\HLab.Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
-      <Name>Hlab.Argyll</Name>
+      <Name>HLab.Argyll</Name>
     </ProjectReference>
     <ProjectReference Include="..\Windows.API\HLab.Windows.API.csproj">
       <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>

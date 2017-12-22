@@ -99,13 +99,13 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Hlab\Argyll\Hlab.Argyll.csproj">
+    <ProjectReference Include="..\..\..\Hlab\Argyll\HLab.Argyll.csproj">
       <Project>{444F1148-7014-469B-8809-834FEDA0F730}</Project>
-      <Name>Hlab.Argyll</Name>
+      <Name>HLab.Argyll</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\Base\Hlab.Base.csproj">
-      <Project>{EDC4FE17-EDAE-42B1-80E4-FB5273F43D11}</Project>
-      <Name>Hlab.Base</Name>
+    <ProjectReference Include="..\..\..\Hlab\Base\HLab.Base.csproj">
+      <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
+      <Name>HLab.Base</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
       <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>

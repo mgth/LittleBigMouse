@@ -24,7 +24,7 @@ using System.Collections.Generic;
 using System.Configuration.Install;
 using System.Reflection;
 using System.ServiceProcess;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse_Daemon
 {

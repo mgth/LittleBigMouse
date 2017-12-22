@@ -80,6 +80,26 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>true</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>true</Prefer32Bit>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Windows" />
@@ -148,13 +168,33 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Hlab\Argyll\Hlab.Argyll.csproj">
+      <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
+      <Name>Hlab.Argyll</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Hlab\Base\Hlab.Base.csproj">
       <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
       <Name>Hlab.Base</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
+      <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>
+      <Name>HLab.Windows.MonitorVcp</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
       <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
       <Name>HLab.Mvvm</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Hlab\Notify-4\HLab.Notify.4.csproj">
+      <Project>{593cb07f-8504-490a-96d6-2cc6034487d7}</Project>
+      <Name>HLab.Notify.4</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\HLab\Windows.API\HLab.Windows.API.csproj">
+      <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
+      <Name>HLab.Windows.API</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\HLab\Windows.Monitors\HLab.Windows.Monitors.csproj">
+      <Project>{0c90e881-b94c-4dc5-b2d0-ff6dc7601de4}</Project>
+      <Name>HLab.Windows.Monitors</Name>
     </ProjectReference>
     <ProjectReference Include="..\Control.Core\LittleBigMouse.Control.Core.csproj">
       <Project>{0d67ead5-811d-4933-9240-d6a2c0e98f34}</Project>
@@ -172,6 +212,14 @@
       <Project>{e34cc1c9-293c-4455-b3dd-5a582095432b}</Project>
       <Name>HLab.Plugin</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Plugin\Vcp\LittleBigMouse.Plugin.Vcp.csproj">
+      <Project>{730507c2-2f7e-4405-947d-76049fca1c46}</Project>
+      <Name>LittleBigMouse.Plugin.Vcp</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ScreenConfig\LittleBigMouse.ScreenConfig.csproj">
+      <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
+      <Name>LittleBigMouse.ScreenConfig</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="setup\LittleBigMouse.iss" />
@@ -179,7 +227,7 @@
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>"C:\Program Files (x86)\Inno Setup 5\Compil32.exe" /cc ..\..\..\setup\LittleBigMouse.iss</PostBuildEvent>
+    <PostBuildEvent>::"C:\Program Files (x86)\Inno Setup 5\Compil32.exe" /cc ..\..\..\setup\LittleBigMouse.iss</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

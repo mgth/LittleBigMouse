@@ -28,7 +28,7 @@ using System.Runtime.InteropServices;
 using System.ServiceModel;
 using System.Windows;
 using System.Windows.Forms;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 using Microsoft.Win32.TaskScheduler;
 using Application = System.Windows.Application;
 

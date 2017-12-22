@@ -21,10 +21,10 @@
 	  http://www.mgth.fr
 */
 using System;
-using LbmScreenConfig;
 using System.ServiceModel;
 using System.ServiceProcess;
 using System.Threading;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse_Daemon
 {

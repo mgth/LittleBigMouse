@@ -25,7 +25,7 @@ using System.Windows;
 using System.Windows.Media;
 using Hlab.Mvvm;
 using Hlab.Notify;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
 {

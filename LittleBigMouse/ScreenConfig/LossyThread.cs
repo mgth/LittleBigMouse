@@ -20,11 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public class LossyThread
     {

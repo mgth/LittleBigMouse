@@ -20,11 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.ComponentModel;
 using Hlab.Notify;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public abstract class ScreenRatio : INotifyPropertyChanged
     {

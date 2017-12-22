@@ -20,10 +20,11 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Windows;
 using Hlab.Notify;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public static class ScreenTranslateExt
     {

@@ -20,11 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
 
-namespace Hlab.Base
+namespace Hlab.Mvvm
 {
     public static class VisualTreeExt
     {

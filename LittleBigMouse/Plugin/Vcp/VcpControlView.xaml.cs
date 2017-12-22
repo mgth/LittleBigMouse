@@ -24,8 +24,8 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using Hlab.Mvvm;
-using LbmScreenConfig;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
@@ -65,12 +65,7 @@ namespace LittleBigMouse.Plugin.Vcp
             LittleBigMouseClient.Client.Quit();
         }
 
-        private bool _showRulers = false;
-
-
-
         private readonly List<RulerView> _rulers = new List<RulerView>();
-        private bool _liveUpdate = false;
 
 
 

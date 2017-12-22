@@ -20,28 +20,29 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Runtime.CompilerServices;
 using Hlab.Notify;
 using Microsoft.Win32;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
 
     public class ScreenRatioRegistry : ScreenRatio
     {
         private readonly string _prefix;
 
-        public ScreenRatioRegistry(Screen screen,[CallerMemberName] string prefix = null)
+        public ScreenRatioRegistry(ScreenConfigs.Screen screen,[CallerMemberName] string prefix = null)
         {
             Screen = screen;
             _prefix = prefix;
             this.Subscribe();
         }
 
-        public Screen Screen
+        public ScreenConfigs.Screen Screen
         {
-            get => this.Get<Screen>();
+            get => this.Get<ScreenConfigs.Screen>();
             private set => this.Set(value);
         }
         public override double X

@@ -28,8 +28,7 @@ using System.Linq;
 using System.Xml.Serialization;
 using Hlab.Argyll;
 using Hlab.Notify;
-using LbmScreenConfig;
-using MonitorVcp;
+using LittleBigMouse.ScreenConfigs;
 
 namespace Hlab.Windows.MonitorVcp
 {

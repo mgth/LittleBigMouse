@@ -20,11 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.ComponentModel;
 using System.Windows;
 using Hlab.Notify;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public abstract class ScreenSize : INotifyPropertyChanged
     {
@@ -51,7 +52,7 @@ namespace LbmScreenConfig
         }
 
         [TriggedOn(nameof(Source),"Screen")]
-        public Screen Screen
+        public ScreenConfigs.Screen Screen
         {
             get => this.Get(()=>Source?.Screen);
             protected set => this.Set(value);

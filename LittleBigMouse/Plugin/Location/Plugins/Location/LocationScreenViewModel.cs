@@ -24,10 +24,10 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Media;
-using LbmScreenConfig;
 using Hlab.Mvvm;
 using Hlab.Notify;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
+using LittleBigMouse.ScreenConfigs;
 using RulerView = LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.RulerView;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location

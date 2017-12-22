@@ -27,7 +27,7 @@ using Hlab.Argyll;
 using Hlab.Mvvm;
 using Hlab.Notify;
 using Hlab.Windows.MonitorVcp;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Vcp
 {

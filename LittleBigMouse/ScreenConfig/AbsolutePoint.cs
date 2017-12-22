@@ -20,7 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     //public class AbsoluteRectangle
     //{

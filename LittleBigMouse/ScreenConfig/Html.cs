@@ -20,12 +20,13 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.IO;
 using System.Net;
 using System.Text.RegularExpressions;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     class Html
     {

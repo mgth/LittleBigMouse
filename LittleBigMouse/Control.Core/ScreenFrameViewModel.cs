@@ -26,7 +26,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Hlab.Mvvm;
 using Hlab.Notify;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {

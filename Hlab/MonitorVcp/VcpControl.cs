@@ -25,7 +25,7 @@ using System.ComponentModel;
 using System.Windows;
 using Hlab.Notify;
 using HLab.Windows.Monitors;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 using WinAPI;
 
 namespace Hlab.Windows.MonitorVcp

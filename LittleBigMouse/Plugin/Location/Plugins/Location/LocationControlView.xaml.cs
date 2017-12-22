@@ -26,9 +26,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Hlab.Mvvm;
-using LbmScreenConfig;
 using LittleBigMouse.Control.Core;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location
 {

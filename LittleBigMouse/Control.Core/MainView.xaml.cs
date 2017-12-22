@@ -25,7 +25,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Hlab.Mvvm;
 using HLab.Windows.Monitors;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {

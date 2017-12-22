@@ -20,11 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Globalization;
 using Microsoft.Win32;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public static class RegistryExt
     {

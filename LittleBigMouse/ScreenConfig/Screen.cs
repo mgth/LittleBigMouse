@@ -20,7 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using Microsoft.Win32;
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -33,11 +33,12 @@ using System.Text;
 using System.Windows;
 using Hlab.Notify;
 using HLab.Windows.Monitors;
+using Microsoft.Win32;
 using WinAPI;
 
 [assembly: InternalsVisibleTo("ScreenConfig")]
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     [DataContract]
     public class Screen : INotifyPropertyChanged

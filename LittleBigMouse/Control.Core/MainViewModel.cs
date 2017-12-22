@@ -29,7 +29,7 @@ using System.Windows.Controls.Primitives;
 using Hlab.Mvvm;
 using Hlab.Mvvm.Commands;
 using Hlab.Notify;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {

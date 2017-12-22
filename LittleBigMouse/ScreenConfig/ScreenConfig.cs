@@ -20,7 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using Microsoft.Win32;
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -32,10 +32,11 @@ using System.Management;
 using System.Windows;
 using Hlab.Notify;
 using HLab.Windows.Monitors;
+using Microsoft.Win32;
 
 // ReSharper disable CompareOfFloatsByEqualityOperator
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public class ScreenConfig : INotifyPropertyChanged
     {
@@ -71,7 +72,7 @@ namespace LbmScreenConfig
             }
         }
 
-        public Screen ScreenFromPixel(Point pixel)
+        public ScreenConfigs.Screen ScreenFromPixel(Point pixel)
         {
             foreach (var screen in AllScreens)
             {
@@ -80,7 +81,7 @@ namespace LbmScreenConfig
 
             return null; 
         }
-        public Screen ScreenFromMmPosition(Point mm)
+        public ScreenConfigs.Screen ScreenFromMmPosition(Point mm)
         {
             foreach (var screen in AllScreens)
             {
@@ -110,7 +111,7 @@ namespace LbmScreenConfig
                     var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
                     if (screen != null) continue;
 
-                    screen = new Screen(this, monitor);
+                    screen = new ScreenConfigs.Screen(this, monitor);
                     AllScreens.Add(screen);
                 }
             if (args.OldItems != null)
@@ -124,13 +125,13 @@ namespace LbmScreenConfig
             Load();
         }
 
-        public ObservableCollection<Screen> AllScreens => this.Get(()=>new ObservableCollection<Screen>());
+        public ObservableCollection<ScreenConfigs.Screen> AllScreens => this.Get(()=>new ObservableCollection<ScreenConfigs.Screen>());
 
-        public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => !Equals(s, screen));
+        public IEnumerable<ScreenConfigs.Screen> AllBut(ScreenConfigs.Screen screen) => AllScreens.Where(s => !Equals(s, screen));
 
-        public Screen Selected
+        public ScreenConfigs.Screen Selected
         {
-            get => this.Get<Screen>();
+            get => this.Get<ScreenConfigs.Screen>();
             private set => this.Set(value);
         }
 
@@ -241,7 +242,7 @@ namespace LbmScreenConfig
             bool primary = false;
             int orientation = 0;
 
-            using (RegistryKey monkey = Screen.OpenConfigRegKey(configId, monitorId))
+            using (RegistryKey monkey = ScreenConfigs.Screen.OpenConfigRegKey(configId, monitorId))
             {
                 area.X = double.Parse(monkey.GetValue("PixelX").ToString());
                 area.Y = double.Parse(monkey.GetValue("PixelY").ToString());
@@ -298,7 +299,7 @@ namespace LbmScreenConfig
                     }
                 }
 
-                foreach (Screen s in AllScreens)
+                foreach (ScreenConfigs.Screen s in AllScreens)
                 {
                     s.Load();
                 }
@@ -324,7 +325,7 @@ namespace LbmScreenConfig
                     k.SetValue("LoadAtStartup", LoadAtStartup ? "1" : "0");
                     k.SetValue("HomeCinema", HomeCinema ? "1" : "0");
 
-                    foreach (Screen s in AllScreens)
+                    foreach (ScreenConfigs.Screen s in AllScreens)
                         s.Save(k);
 
                     Saved = true;
@@ -334,7 +335,7 @@ namespace LbmScreenConfig
             }
         }
 
-        public Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
+        public ScreenConfigs.Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
 
         ///// <summary>
         ///// Moving is true when screen is dragged on gui
@@ -444,7 +445,7 @@ namespace LbmScreenConfig
         {
             get
             {
-                foreach (Screen screen in AllScreens)
+                foreach (ScreenConfigs.Screen screen in AllScreens)
                 {
                     if (screen.PixelToDipRatio.X != 1) return false;
                     if (screen.PixelToDipRatio.Y != 1) return false;
@@ -498,22 +499,22 @@ namespace LbmScreenConfig
                 _compacting = true;
             }
             // List all screens not positioned
-            List<Screen> unatachedScreens = placeall?AllScreens.ToList():AllScreens.Where(s => !s.Placed).ToList();
+            List<ScreenConfigs.Screen> unatachedScreens = placeall?AllScreens.ToList():AllScreens.Where(s => !s.Placed).ToList();
 
             // start with primary screen
-            Queue<Screen> todo = new Queue<Screen>();
+            Queue<ScreenConfigs.Screen> todo = new Queue<ScreenConfigs.Screen>();
             todo.Enqueue(PrimaryScreen);
 
             while (todo.Count > 0)
             {
-                foreach (Screen s2 in todo)
+                foreach (ScreenConfigs.Screen s2 in todo)
                 {
                     unatachedScreens.Remove(s2);
                 }
 
-                Screen placedScreen = todo.Dequeue();
+                ScreenConfigs.Screen placedScreen = todo.Dequeue();
 
-                foreach (Screen screenToPlace in unatachedScreens)
+                foreach (ScreenConfigs.Screen screenToPlace in unatachedScreens)
                 {
                     if (screenToPlace == placedScreen) continue;
 
@@ -626,13 +627,13 @@ namespace LbmScreenConfig
                 _compacting = true;
             }
 
-            List<Screen> done = new List<Screen> {PrimaryScreen};
+            List<ScreenConfigs.Screen> done = new List<ScreenConfigs.Screen> {PrimaryScreen};
 
-            List<Screen> todo = AllBut(PrimaryScreen).OrderBy(s => s.Distance(PrimaryScreen)).ToList();
+            List<ScreenConfigs.Screen> todo = AllBut(PrimaryScreen).OrderBy(s => s.Distance(PrimaryScreen)).ToList();
 
             while (todo.Count > 0)
             {
-                Screen screen = todo[0];
+                ScreenConfigs.Screen screen = todo[0];
                 todo.Remove(screen);
 
                 screen.PlaceAuto(done);

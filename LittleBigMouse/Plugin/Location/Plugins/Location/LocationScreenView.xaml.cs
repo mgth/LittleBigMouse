@@ -28,10 +28,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
-using LbmScreenConfig;
-using Hlab.Base;
 using Hlab.Mvvm;
 using LittleBigMouse.Control.Core;
+using LittleBigMouse.ScreenConfigs;
 using MultiScreensView = LittleBigMouse.Control.Core.MultiScreensView;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location

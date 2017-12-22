@@ -20,15 +20,16 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
-using Hlab.Windows.MonitorVcp;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
+
 //using System.Drawing;
 
-namespace MonitorVcp
+namespace Hlab.Windows.MonitorVcp
 {
     /// <summary>
     /// Logique d'interaction pour Luminance.xaml

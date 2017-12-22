@@ -20,13 +20,15 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Collections.Generic;
-//using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 
-namespace LbmScreenConfig
+//using System.Drawing;
+
+namespace LittleBigMouse.ScreenConfigs
 {
     // TODO: Add a listener for WM_SETTINGCHANGE to detect changes of the active color scheme automatically.
     //   Add a listener for WM_SETTINGCHANGE and trigger an event, like ActiveSetChanged.

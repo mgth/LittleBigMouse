@@ -131,9 +131,9 @@
       <Project>{E34CC1C9-293C-4455-B3DD-5A582095432B}</Project>
       <Name>HLab.Plugin</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\ScreenConfig\LittleBigMouse.Screen.Config.csproj">
+    <ProjectReference Include="..\..\ScreenConfig\LittleBigMouse.ScreenConfig.csproj">
       <Project>{3FBBF289-0B82-4089-80CA-67977A808C5D}</Project>
-      <Name>LittleBigMouse.Screen.Config</Name>
+      <Name>LittleBigMouse.ScreenConfig</Name>
     </ProjectReference>
     <ProjectReference Include="..\Location\LittleBigMouse.Plugin.Location.csproj">
       <Project>{BFE44D5E-B0E7-4185-BB9D-49D83FBA5539}</Project>

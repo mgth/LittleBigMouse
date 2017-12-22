@@ -20,12 +20,13 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using WinAPI;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public static class WindowExt
     {

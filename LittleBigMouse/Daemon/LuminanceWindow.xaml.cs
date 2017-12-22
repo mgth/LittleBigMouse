@@ -26,7 +26,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 using LittleBigMouse_Daemon.Properties;
 using MouseKeyboardActivityMonitor;
 using MouseEventArgs = System.Windows.Forms.MouseEventArgs;

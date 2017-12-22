@@ -20,16 +20,17 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Runtime.CompilerServices;
 using Hlab.Notify;
 using Microsoft.Win32;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     public class ScreenSizeInPixels : ScreenSize
     {
-        public ScreenSizeInPixels(Screen screen)
+        public ScreenSizeInPixels(ScreenConfigs.Screen screen)
         {
             Screen = screen;
             this.Subscribe();

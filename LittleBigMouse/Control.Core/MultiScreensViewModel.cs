@@ -25,7 +25,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using Hlab.Mvvm;
 using Hlab.Notify;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {

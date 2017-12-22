@@ -20,10 +20,11 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     /// <summary>
     /// Create a New INI file to store or load data

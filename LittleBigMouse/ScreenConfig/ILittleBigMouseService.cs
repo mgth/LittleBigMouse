@@ -20,13 +20,14 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.ServiceModel;
 using System.ServiceModel.Description;
 
-namespace LbmScreenConfig
+namespace LittleBigMouse.ScreenConfigs
 {
     //    public class LittleBigMouseClient : DuplexClientBase<ILittleBigMouseService>, ILittleBigMouseService
     public class LittleBigMouseClient : ClientBase<ILittleBigMouseService>, ILittleBigMouseService

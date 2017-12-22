@@ -23,7 +23,7 @@
 using System.Windows;
 using Hlab.Mvvm;
 using Hlab.Plugin;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {

@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:monitorVcp="clr-namespace:MonitorVcp;assembly=Hlab.Windows.MonitorVcp"
+             xmlns:monitorVcp="clr-namespace:Hlab.Windows.MonitorVcp;assembly=Hlab.Windows.MonitorVcp"
              mc:Ignorable="d" 
              d:DesignHeight="50" d:DesignWidth="600">
 

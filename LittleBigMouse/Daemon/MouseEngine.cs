@@ -29,9 +29,8 @@ using System.ServiceModel.Description;
 using System.Windows;
 using Hlab.Windows.MonitorVcp;
 using HLab.Windows.Monitors;
-using LbmScreenConfig;
+using LittleBigMouse.ScreenConfigs;
 using Microsoft.Win32;
-using MonitorVcp;
 using MouseKeyboardActivityMonitor;
 using MouseKeyboardActivityMonitor.WinApi;
 

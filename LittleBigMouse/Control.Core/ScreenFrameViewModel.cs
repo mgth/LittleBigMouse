@@ -171,8 +171,7 @@ namespace LittleBigMouse.Control.Core
                 case "stn":
                 case "kyk":
                 case "sem":
-                    //Logo = (Viewbox)Application.Current.FindResource("LogoSam"); return;
-                        Logo = (Viewbox)Application.Current.FindResource("LogoViewsonic"); return;
+                    Logo = (Viewbox)Application.Current.FindResource("LogoSam"); return;
                 case "del":
                 case "dll":
                     Logo = (Viewbox)Application.Current.FindResource("LogoDel"); return;

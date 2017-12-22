@@ -162,51 +162,106 @@ namespace LittleBigMouse.Control.Core
 
                 switch (Model.Monitor.Edid.ManufacturerCode.ToLower())
                 {
-                    case "sam":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoSam");
-                        return;
-                    case "del":
+
+                // https://github.com/OCSInventory-NG/WindowsAgent/blob/master/SysInfo/ISA_PNPID.cpp
+
+                case "sam":
+                case "skt":
+                case "sse":
+                case "stn":
+                case "kyk":
+                case "sem":
+                    //Logo = (Viewbox)Application.Current.FindResource("LogoSam"); return;
+                        Logo = (Viewbox)Application.Current.FindResource("LogoViewsonic"); return;
+                case "del":
+                case "dll":
                     Logo = (Viewbox)Application.Current.FindResource("LogoDel"); return;
+                case "che":
+                case "ali":
+                case "acr":
                 case "api":
                     Logo = (Viewbox)Application.Current.FindResource("LogoAcer"); return;
                 case "atk":
+                case "aci":
+                case "asu":
                     Logo = (Viewbox)Application.Current.FindResource("LogoAsus"); return;
                 case "eiz":
+                case "egd":
+                case "enc":
                     Logo = (Viewbox)Application.Current.FindResource("LogoEizo"); return;
                 case "ben":
-                    case "bnq":
+                case "bnq":
                     Logo = (Viewbox)Application.Current.FindResource("LogoBenq"); return;
                 case "nec":
+                case "nct":
+                case "nmv":
                     Logo = (Viewbox)Application.Current.FindResource("LogoNec"); return;
                 case "hpq":
+                case "hpd":
+                case "hpc":
                     Logo = (Viewbox)Application.Current.FindResource("LogoHp"); return;
                 case "lg":
+                case "lgs":
                     Logo = (Viewbox)Application.Current.FindResource("LogoLg"); return;
-                case "Apl":
+                case "apl":
+                case "app":
                     Logo = (Viewbox)Application.Current.FindResource("LogoApple"); return;
+                case "fdt":
                 case "fuj":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoFujitsu"); return;
+                case "fmi":
+                case "fml":
+                case "fpe":
+                case "fus":
+                case "fjs":
+                case "fjc":
+                case "ftl":
+                   Logo = (Viewbox)Application.Current.FindResource("LogoFujitsu"); return;
                 case "ibm":
+                case "cdt":
                     Logo = (Viewbox)Application.Current.FindResource("LogoIbm"); return;
                 case "mat":
+                case "mdo":
+                case "plf":
+                case "mei":
                     Logo = (Viewbox)Application.Current.FindResource("LogoPanasonic"); return;
                 case "sny":
+                case "son":
+                case "ser":
                     Logo = (Viewbox)Application.Current.FindResource("LogoSony"); return;
+                case "tai":
+                case "tsb":
                 case "tos":
+                case "tgc":
+                case "lcd":
+                case "pcs":
+                case "tli":
                     Logo = (Viewbox)Application.Current.FindResource("LogoToshiba"); return;
                 case "aoc":
                     Logo = (Viewbox)Application.Current.FindResource("LogoAoc"); return;
                 case "ivm":
                     Logo = (Viewbox)Application.Current.FindResource("LogoIiyama"); return;
                 case "len":
+                case "lnv":
+                case "lin":
                     Logo = (Viewbox)Application.Current.FindResource("LogoLenovo"); return;
+                case "pca":
+                case "phs":
                 case "phl":
+                case "phe":
+                case "psc":
                     Logo = (Viewbox)Application.Current.FindResource("LogoPhilips"); return;
                 case "hei":
                     Logo = (Viewbox)Application.Current.FindResource("LogoYundai"); return;
                 case "cpq":
                     Logo = (Viewbox)Application.Current.FindResource("LogoCompaq"); return;
+                case "hit":
+                case "hcp":
+                case "hce":
+                case "hec":
+                case "hic":
                 case "htc":
+                case "mxl":
+                case "hel":
                     Logo = (Viewbox)Application.Current.FindResource("LogoHitachi"); return;
                 case "hyo":
                     Logo = (Viewbox)Application.Current.FindResource("LogoQnix"); return;
@@ -214,6 +269,10 @@ namespace LittleBigMouse.Control.Core
                     Logo = (Viewbox)Application.Current.FindResource("LogoIolair"); return;
                 case "otm":
                     Logo = (Viewbox)Application.Current.FindResource("LogoOptoma"); return;
+                case "vsc":
+                    Logo = (Viewbox)Application.Current.FindResource("LogoViewsonic"); return;
+                case "msg":
+                    Logo = (Viewbox)Application.Current.FindResource("LogoMsi"); return;
                 default:
                     Logo = (Viewbox)Application.Current.FindResource("LogoLbm"); return;
             }

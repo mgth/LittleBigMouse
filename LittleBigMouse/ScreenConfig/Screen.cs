@@ -212,9 +212,6 @@ namespace LittleBigMouse.ScreenConfigs
 
 
 
-
-
-
         //calculated
 
 

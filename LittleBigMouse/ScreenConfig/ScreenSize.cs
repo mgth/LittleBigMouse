@@ -27,13 +27,8 @@ using HLab.Notify;
 
 namespace LittleBigMouse.ScreenConfigs
 {
-    public abstract class ScreenSize : INotifyPropertyChanged
+    public abstract class ScreenSize : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
         public ScreenSize Source
         {
             get => this.Get<ScreenSize>();

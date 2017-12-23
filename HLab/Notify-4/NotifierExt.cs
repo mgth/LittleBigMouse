@@ -70,59 +70,8 @@ namespace HLab.Notify
             [CallerMemberName] string propertyName = null)
             => n.GetNotifier().Set(n, value, propertyName, null);
 
-        public static void Subscribe(this INotifyPropertyChanged n)
-        {
-            var notifier = n.GetNotifier();
-
-            foreach (var method in n.GetType().GetMethods())
-            {
-                foreach (var triggedOn in method.GetCustomAttributes().OfType<TriggedOn>())
-                {
-                    switch (method.GetParameters().Length)
-                    {
-                        case 0:
-                            n.Subscribe(args => method.Invoke(n, null), triggedOn.Pathes);
-                            break;
-                        case 1:
-                            n.Subscribe(args => method.Invoke(n, new object[]{ args }), triggedOn.Pathes);
-                            break;
-                    }                   
-                }
-            }
-
-            foreach (var property in n.GetType().GetProperties())
-            {
-                var name = property.Name;
-                foreach (var triggedOn in property.GetCustomAttributes().OfType<TriggedOn>())
-                {
-                    if (typeof(ITriggable).IsAssignableFrom(property.PropertyType))
-                    {
-                        n.Subscribe(a =>
-                        {
-                            if (notifier.IsSet(property))
-                                notifier.Get<ITriggable>(n,null, name).OnTrigged();
-                            else
-                                notifier.OnPropertyChanged(name);
-                            //property.GetMethod.Invoke(n, null);
-
-                        }, triggedOn.Pathes);                        
-                    }
-                    else
-                    {
-                        n.Subscribe(a =>
-                        {
-
-                            if (notifier.IsSet(property))
-                                notifier.Update(property);
-                            else
-                                notifier.OnPropertyChanged(name);
-                            //property.GetMethod.Invoke(n, null);
-
-                        }, triggedOn.Pathes);
-                    }
-                }
-            }
-        }
+        public static void Subscribe(this INotifyPropertyChanged n) => n.GetNotifier().Subscribe(n);
+        
 
         public static void UnSubscribe(this INotifyPropertyChanged n, Action<NotifierPropertyChangedEventArgs> action,
             IList<string> targets)

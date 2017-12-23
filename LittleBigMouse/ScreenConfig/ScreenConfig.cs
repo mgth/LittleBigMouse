@@ -38,13 +38,8 @@ using Microsoft.Win32;
 
 namespace LittleBigMouse.ScreenConfigs
 {
-    public class ScreenConfig : INotifyPropertyChanged
+    public class ScreenConfig : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
         public static RegistryKey OpenRootRegKey(bool create = false)
         {
             using (RegistryKey key = Registry.CurrentUser)

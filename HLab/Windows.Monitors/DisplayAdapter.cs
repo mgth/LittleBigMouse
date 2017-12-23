@@ -32,7 +32,6 @@ namespace HLab.Windows.Monitors
     public class DisplayAdapter : DisplayDevice
     {
     
-//        public ObservableCollection<DisplayMonitor> Monitors { get; } = new ObservableCollection<DisplayMonitor>();
         public DisplayAdapter()
         {
             this.Subscribe();
@@ -45,8 +44,6 @@ namespace HLab.Windows.Monitors
             DeviceName = dev.DeviceName;
             DeviceString = dev.DeviceString;
             State = dev.StateFlags;
-
-            //if ((dev.StateFlags & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) return;
 
             uint i = 0;
             var mon = new NativeMethods.DISPLAY_DEVICE(true);

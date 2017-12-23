@@ -90,6 +90,8 @@
     <Compile Include="NotifierEntry.cs" />
     <Compile Include="NotifierExt.cs" />
     <Compile Include="NotifierHandler.cs" />
+    <Compile Include="NotifierObject.cs" />
+    <Compile Include="NotifierObjectExt.cs" />
     <Compile Include="NotifierProperty.cs" />
     <Compile Include="NotifierService.cs" />
     <Compile Include="PersistentNotifier.cs" />

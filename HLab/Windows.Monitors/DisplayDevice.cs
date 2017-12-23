@@ -29,13 +29,13 @@ using Microsoft.Win32;
 
 namespace HLab.Windows.Monitors
 {
-    public class DisplayDevice : INotifyPropertyChanged
+    public class DisplayDevice : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
+        //public event PropertyChangedEventHandler PropertyChanged
+        //{
+        //    add => this.Add(value);
+        //    remove => this.Remove(value);
+        //}
 
         public static RegistryKey GetKeyFromPath(string path, int parent = 0)
         {

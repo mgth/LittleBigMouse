@@ -79,6 +79,12 @@
     <Compile Include="ColorsWindow.xaml.cs">
       <DependentUpon>ColorsWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Devices\DevicesView.xaml.cs">
+      <DependentUpon>DevicesView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Devices\DeviceView.xaml.cs">
+      <DependentUpon>DeviceView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="IPresenterViewModel.cs" />
     <Compile Include="IScreenControlView.cs" />
     <Compile Include="MainService.cs" />
@@ -114,6 +120,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="Devices\DevicesView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Devices\DeviceView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="MainView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -144,7 +158,7 @@
       <Name>HLab.Base</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
-      <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
+      <Project>{a3eaaa24-5913-471e-adb1-402f64536a63}</Project>
       <Name>HLab.Mvvm</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Hlab\Notify-4\HLab.Notify.4.csproj">
@@ -159,13 +173,13 @@
       <Project>{e34cc1c9-293c-4455-b3dd-5a582095432b}</Project>
       <Name>HLab.Plugin</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ScreenConfig\LittleBigMouse.ScreenConfig.csproj">
-      <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
-      <Name>LittleBigMouse.ScreenConfig</Name>
-    </ProjectReference>
     <ProjectReference Include="..\..\HLab\Windows.Monitors\HLab.Windows.Monitors.csproj">
       <Project>{0c90e881-b94c-4dc5-b2d0-ff6dc7601de4}</Project>
       <Name>HLab.Windows.Monitors</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ScreenConfig\LittleBigMouse.ScreenConfig.csproj">
+      <Project>{3fbbf289-0b82-4089-80ca-67977a808c5d}</Project>
+      <Name>LittleBigMouse.ScreenConfig</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

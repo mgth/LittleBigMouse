@@ -86,6 +86,7 @@
     <Compile Include="DisplayMonitor.cs" />
     <Compile Include="Edid.cs" />
     <Compile Include="MonitorsService.cs" />
+    <Compile Include="PhysicalAdapter.cs" />
     <Compile Include="Properties\Annotations.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

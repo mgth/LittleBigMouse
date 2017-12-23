@@ -24,6 +24,7 @@ using System;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
 using HLab.Base;
 
@@ -197,5 +198,59 @@ namespace HLab.Notify
             }
             return false;
         }
+
+        public void Subscribe(INotifyPropertyChanged n)
+        {
+            foreach (var method in n.GetType().GetMethods())
+            {
+                foreach (var triggedOn in method.GetCustomAttributes().OfType<TriggedOn>())
+                {
+                    switch (method.GetParameters().Length)
+                    {
+                        case 0:
+                            n.Subscribe(args => method.Invoke(n, null), triggedOn.Pathes);
+                            break;
+                        case 1:
+                            n.Subscribe(args => method.Invoke(n, new object[] { args }), triggedOn.Pathes);
+                            break;
+                    }
+                }
+            }
+
+            foreach (var property in n.GetType().GetProperties())
+            {
+                var name = property.Name;
+                foreach (var triggedOn in property.GetCustomAttributes().OfType<TriggedOn>())
+                {
+                    if (typeof(ITriggable).IsAssignableFrom(property.PropertyType))
+                    {
+                        n.Subscribe(a =>
+                        {
+                            if (IsSet(property))
+                                Get<ITriggable>(n, null, name).OnTrigged();
+                            else
+                                OnPropertyChanged(name);
+                            //property.GetMethod.Invoke(n, null);
+
+                        }, triggedOn.Pathes);
+                    }
+                    else
+                    {
+                        n.Subscribe(a =>
+                        {
+
+                            if (IsSet(property))
+                                Update(property);
+                            else
+                                OnPropertyChanged(name);
+                            //property.GetMethod.Invoke(n, null);
+
+                        }, triggedOn.Pathes);
+                    }
+                }
+            }
+        }
+
+
     }
 }

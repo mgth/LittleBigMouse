@@ -41,13 +41,8 @@ using Microsoft.Win32;
 namespace LittleBigMouse.ScreenConfigs
 {
     [DataContract]
-    public class Screen : INotifyPropertyChanged
+    public class Screen : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
         internal Screen(ScreenConfig config, DisplayMonitor monitor)
         {
             Config = config;

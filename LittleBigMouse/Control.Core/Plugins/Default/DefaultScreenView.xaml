@@ -61,7 +61,7 @@
                Foreground="GhostWhite"/>
             <Label 
                 Padding="0"
-                Content="{Binding Path=Model.Monitor.DeviceName, FallbackValue=XXX000}"  
+                Content="{Binding Path=Model.Monitor.AttachedDevice.DeviceName, FallbackValue=XXX000}"  
                 Foreground="LightBlue">
                 <Label.FontSize>
                     <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.03">
@@ -88,7 +88,7 @@
             </Label.FontSize>
             </Label>
         <Label Margin ="-5" HorizontalAlignment="Right"
-               Content="{Binding Path=Model.Monitor.Adapter.DeviceString, FallbackValue=xxx}"  
+               Content="{Binding Path=Model.Monitor.AttachedDisplay.DeviceString, FallbackValue=xxx}"  
                Foreground="GhostWhite">
             <Label.FontSize>
                 <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.04">
@@ -145,7 +145,7 @@
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Label Padding="2,0"
-                Content="{Binding Path=Model.Monitor.Adapter.CurrentMode.DisplayFrequency, FallbackValue=xx}" 
+                Content="{Binding Path=Model.Monitor.AttachedDisplay.CurrentMode.DisplayFrequency, FallbackValue=xx}" 
                 ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" 
                 
                 Foreground="White"/>

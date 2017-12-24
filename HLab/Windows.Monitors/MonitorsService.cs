@@ -23,9 +23,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.ComponentModel.Design.Serialization;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Windows;
 using HLab.Base;
 using HLab.Mvvm.Observables;
 using HLab.Notify;
@@ -45,47 +49,59 @@ namespace HLab.Windows.Monitors
             this.Subscribe();
         }
 
+        public ObservableCollection<PhysicalAdapter> Adapters => this.Get(() => new ObservableCollection<PhysicalAdapter>());
+        //public ObservableCollection<Display> Displays => this.Get(() => new ObservableCollection<Display>());
 
-        public ObservableCollectionNotifier<DisplayAdapter> Adapters => this.Get(() => new ObservableCollectionNotifier<DisplayAdapter>());
-        public ObservableCollectionNotifier<DisplayMonitor> Monitors => this.Get(() => new ObservableCollectionNotifier<DisplayMonitor>());
+        public ObservableCollection<DisplayDevice> Devices => this.Get(() => new ObservableCollection<DisplayDevice>());
+
+        public ObservableCollection<Monitor> Monitors => this.Get(() => new ObservableCollection<Monitor>());
 
         [TriggedOn(nameof(Monitors),"Item","AttachedToDesktop")]
-        public ObservableFilter<DisplayMonitor> AttachedMonitors => this.Get(()=> new ObservableFilter<DisplayMonitor>()
+        public ObservableFilter<Monitor> AttachedMonitors => this.Get(()=> new ObservableFilter<Monitor>()
             .AddFilter(m => m.AttachedToDesktop)
             .Link(Monitors)
         );
 
         [TriggedOn(nameof(Monitors), "Item","AttachedToDesktop")]
-        public ObservableFilter<DisplayMonitor> UnattachedMonitors => this.Get(()=> new ObservableFilter<DisplayMonitor>()
+        public ObservableFilter<Monitor> UnattachedMonitors => this.Get(()=> new ObservableFilter<Monitor>()
             .AddFilter(m => !m.AttachedToDesktop)
             .Link(Monitors)
         );
 
-
+        public Monitor GetOrAddMonitor(string deviceId,Func<Monitor> get)
+        {
+            var monitor = Monitors.FirstOrDefault(m => m.DeviceId == deviceId);
+            if (monitor == null)
+            {
+                monitor = get();
+                Monitors.Add(monitor);
+            }
+            return monitor;
+        }
+        public PhysicalAdapter GetOrAddAdapter(string deviceId, Func<PhysicalAdapter> get)
+        {
+            var adapter = Adapters.FirstOrDefault(m => m.DeviceId == deviceId);
+            if (adapter == null)
+            {
+                adapter = get();
+                Adapters.Add(adapter);
+            }
+            return adapter;
+            
+        }
 
 
         public void UpdateDevices()
         {
-            List<DisplayAdapter> oldAdapters = Adapters.ToList();
-            List<DisplayMonitor> oldMonitors = Monitors.ToList();
+            List<DisplayDevice> oldDevices = Devices.ToList();
 
-            NativeMethods.DISPLAY_DEVICE dev = new NativeMethods.DISPLAY_DEVICE(true);
-            uint i = 0;
 
-            while (NativeMethods.EnumDisplayDevices(null, i++, ref dev, 0))
+            var device = new DisplayDevice();
+            device.Init(null,new NativeMethods.DISPLAY_DEVICE(true){DeviceID = "ROOT",DeviceName = null}, oldDevices );
+
+            foreach (var d in oldDevices)
             {
-                var adapter = oldAdapters.FirstOrDefault(a => a.DeviceName == dev.DeviceName);
-                if (adapter != null)
-                {
-                    oldAdapters.Remove(adapter);
-                    adapter.Init(dev,oldMonitors);
-                }
-                else
-                {
-                    adapter = new DisplayAdapter();
-                    adapter.Init(dev,oldMonitors);
-                    Adapters.Add(adapter);                    
-                }
+                Devices.Remove(d);
             }
 
             NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
@@ -95,8 +111,8 @@ namespace HLab.Windows.Monitors
                     var success = NativeMethods.GetMonitorInfo(hMonitor, ref mi);
                     if (!success) return true;
 
-                    IList monitors = AttachedMonitors.Where(d => d.Adapter.DeviceName == mi.DeviceName).ToList();
-                    foreach (DisplayMonitor monitor in monitors)
+                    IList monitors = AttachedMonitors.Where(d => d.AttachedDisplay?.DeviceName == mi.DeviceName).ToList();
+                    foreach (Monitor monitor in monitors)
                     {
                         monitor.Init(hMonitor, mi);
                     }
@@ -105,6 +121,55 @@ namespace HLab.Windows.Monitors
                 }, IntPtr.Zero);
 
             DevicesUpdated?.Invoke(this, new EventArgs());
+        }
+
+        public void AttachToDesktop(string deviceName, bool primary, Rect area, int orientation, bool apply = true)
+        {
+
+            var devmode = new NativeMethods.DEVMODE(true)
+            {
+                DeviceName = deviceName,
+                Position = new NativeMethods.POINTL { x = (int)area.X, y = (int)area.Y },
+                PelsWidth = (int)area.Width,
+                PelsHeight = (int)area.Height,
+                DisplayOrientation = orientation,
+                BitsPerPel = 32,
+                Fields = NativeMethods.DM.Position | NativeMethods.DM.PelsHeight | NativeMethods.DM.PelsWidth | NativeMethods.DM.DisplayOrientation | NativeMethods.DM.BitsPerPixel
+            };
+
+            var flag =
+                NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY |
+                NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET;
+
+            if (primary) flag |= NativeMethods.ChangeDisplaySettingsFlags.CDS_SET_PRIMARY;
+
+
+            var ch = NativeMethods.ChangeDisplaySettingsEx(deviceName, ref devmode, IntPtr.Zero, flag, IntPtr.Zero);
+
+            if (ch == NativeMethods.DISP_CHANGE.Successful && apply)
+                ApplyDesktop();
+        }
+
+        public void DetachFromDesktop(string deviceName, bool apply = true)
+        {
+            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE();
+            devmode.Size = (short)Marshal.SizeOf(devmode);
+
+            devmode.DeviceName = deviceName;
+            devmode.PelsHeight = 0;
+            devmode.PelsWidth = 0;
+            devmode.Fields = NativeMethods.DM.PelsWidth | NativeMethods.DM.PelsHeight /*| DM.BitsPerPixel*/ | NativeMethods.DM.Position
+                             | NativeMethods.DM.DisplayFrequency | NativeMethods.DM.DisplayFlags;
+
+            var ch = NativeMethods.ChangeDisplaySettingsEx(deviceName, ref devmode, IntPtr.Zero, NativeMethods.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | NativeMethods.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
+            if (ch == NativeMethods.DISP_CHANGE.Successful && apply)
+                ApplyDesktop();
+        }
+
+
+        public void ApplyDesktop()
+        {
+            NativeMethods.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
         }
 
         public event PropertyChangedEventHandler PropertyChanged

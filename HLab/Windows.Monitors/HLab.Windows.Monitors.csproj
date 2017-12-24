@@ -80,11 +80,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DeviceCaps.cs" />
-    <Compile Include="DisplayAdapter.cs" />
     <Compile Include="DisplayDevice.cs" />
     <Compile Include="DisplayMode.cs" />
-    <Compile Include="DisplayMonitor.cs" />
     <Compile Include="Edid.cs" />
+    <Compile Include="Monitor.cs" />
     <Compile Include="MonitorsService.cs" />
     <Compile Include="PhysicalAdapter.cs" />
     <Compile Include="Properties\Annotations.cs" />

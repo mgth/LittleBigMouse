@@ -21,7 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System.ComponentModel;
 using System.Windows;
 using HLab.Notify;
 
@@ -47,9 +46,9 @@ namespace LittleBigMouse.ScreenConfigs
         }
 
         [TriggedOn(nameof(Source),"Screen")]
-        public ScreenConfigs.Screen Screen
+        public Screen Screen
         {
-            get => this.Get(()=>Source?.Screen);
+            get => this.Get(()=>Source.Screen);
             protected set => this.Set(value);
         }
 

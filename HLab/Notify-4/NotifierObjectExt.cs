@@ -35,6 +35,6 @@ namespace HLab.Notify
             [CallerMemberName] string propertyName = null)
             => n.Notifier.Set(n, value, propertyName, null);
 
-        public static void Subscribe(this INotifierObject n) => n.Notifier.Subscribe(n);
+        //public static void Subscribe(this INotifierObject n) => n.Notifier.Subscribe(n);
     }
 }

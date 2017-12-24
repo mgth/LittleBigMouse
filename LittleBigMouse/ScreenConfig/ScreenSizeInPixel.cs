@@ -30,7 +30,7 @@ namespace LittleBigMouse.ScreenConfigs
 {
     public class ScreenSizeInPixels : ScreenSize
     {
-        public ScreenSizeInPixels(ScreenConfigs.Screen screen)
+        public ScreenSizeInPixels(Screen screen)
         {
             Screen = screen;
             this.Subscribe();

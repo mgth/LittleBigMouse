@@ -24,6 +24,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace LittleBigMouse.ScreenConfigs
@@ -187,7 +188,7 @@ namespace LittleBigMouse.ScreenConfigs
                 if (post != "" && post != null)
                 {
                     request.Method = "POST";
-                    byte[] array = System.Text.Encoding.UTF8.GetBytes(post /*+ "&__VIEWSTATE=" + ViewState*/);
+                    byte[] array = Encoding.UTF8.GetBytes(post /*+ "&__VIEWSTATE=" + ViewState*/);
                     request.ContentLength = array.Length;
                     request.ContentType = "application/x-www-form-urlencoded";
                     Stream data = request.GetRequestStream();
@@ -199,7 +200,7 @@ namespace LittleBigMouse.ScreenConfigs
 
                 // make request for web page
                 HttpWebResponse response = (HttpWebResponse)request.GetResponse();
-                StreamReader websrc = new StreamReader(response.GetResponseStream(), System.Text.Encoding.GetEncoding("iso-8859-1"));
+                StreamReader websrc = new StreamReader(response.GetResponseStream(), Encoding.GetEncoding("iso-8859-1"));
                 string html = websrc.ReadToEnd();
                 response.Close();
 
@@ -216,7 +217,7 @@ namespace LittleBigMouse.ScreenConfigs
                 {
                     return "";
                 }
-                else return "";
+                return "";
             }
             catch (IOException)
             {

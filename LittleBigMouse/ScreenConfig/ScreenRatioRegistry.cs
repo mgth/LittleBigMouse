@@ -33,16 +33,16 @@ namespace LittleBigMouse.ScreenConfigs
     {
         private readonly string _prefix;
 
-        public ScreenRatioRegistry(ScreenConfigs.Screen screen,[CallerMemberName] string prefix = null)
+        public ScreenRatioRegistry(Screen screen,[CallerMemberName] string prefix = null)
         {
             Screen = screen;
             _prefix = prefix;
             this.Subscribe();
         }
 
-        public ScreenConfigs.Screen Screen
+        public Screen Screen
         {
-            get => this.Get<ScreenConfigs.Screen>();
+            get => this.Get<Screen>();
             private set => this.Set(value);
         }
         public override double X

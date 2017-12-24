@@ -25,7 +25,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -67,7 +66,7 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-        public ScreenConfigs.Screen ScreenFromPixel(Point pixel)
+        public Screen ScreenFromPixel(Point pixel)
         {
             foreach (var screen in AllScreens)
             {
@@ -76,7 +75,7 @@ namespace LittleBigMouse.ScreenConfigs
 
             return null; 
         }
-        public ScreenConfigs.Screen ScreenFromMmPosition(Point mm)
+        public Screen ScreenFromMmPosition(Point mm)
         {
             foreach (var screen in AllScreens)
             {
@@ -101,16 +100,16 @@ namespace LittleBigMouse.ScreenConfigs
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
         {
             if (args.NewItems != null)
-                foreach (var monitor in args.NewItems.OfType<DisplayMonitor>())
+                foreach (var monitor in args.NewItems.OfType<Monitor>())
                 {
                     var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
                     if (screen != null) continue;
 
-                    screen = new ScreenConfigs.Screen(this, monitor);
+                    screen = new Screen(this, monitor);
                     AllScreens.Add(screen);
                 }
             if (args.OldItems != null)
-                foreach (var monitor in args.OldItems.OfType<DisplayMonitor>())
+                foreach (var monitor in args.OldItems.OfType<Monitor>())
                 {
                     var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
 
@@ -120,13 +119,13 @@ namespace LittleBigMouse.ScreenConfigs
             Load();
         }
 
-        public ObservableCollection<ScreenConfigs.Screen> AllScreens => this.Get(()=>new ObservableCollection<ScreenConfigs.Screen>());
+        public ObservableCollection<Screen> AllScreens => this.Get(()=>new ObservableCollection<Screen>());
 
-        public IEnumerable<ScreenConfigs.Screen> AllBut(ScreenConfigs.Screen screen) => AllScreens.Where(s => !Equals(s, screen));
+        public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => !Equals(s, screen));
 
-        public ScreenConfigs.Screen Selected
+        public Screen Selected
         {
-            get => this.Get<ScreenConfigs.Screen>();
+            get => this.Get<Screen>();
             private set => this.Set(value);
         }
 
@@ -190,7 +189,7 @@ namespace LittleBigMouse.ScreenConfigs
                         }
                         else
                         {
-                            screen.Monitor.DetachFromDesktop(false);
+                            MonitorsService.D.DetachFromDesktop(screen.Monitor.AttachedDisplay.DeviceName, false);
                         }
                     }
 
@@ -199,7 +198,7 @@ namespace LittleBigMouse.ScreenConfigs
                         AttachToDesktop(id, s, false);
                     }
 
-                    DisplayMonitor.ApplyDesktop();
+                    MonitorsService.D.ApplyDesktop();
                 }
             }
         }
@@ -216,7 +215,7 @@ namespace LittleBigMouse.ScreenConfigs
                     foreach (string s in todo)
                     {
                         //string s2 = s.Substring(0, s.Length - 2);
-                        DisplayMonitor m = MonitorsService.D.Monitors.FirstOrDefault(
+                        Monitor m = MonitorsService.D.Monitors.FirstOrDefault(
                             d => s == d.Edid.ManufacturerCode + d.Edid.ProductCode + "_" + d.Edid.Serial);
 
                         if (m == null) return false;
@@ -237,7 +236,7 @@ namespace LittleBigMouse.ScreenConfigs
             bool primary = false;
             int orientation = 0;
 
-            using (RegistryKey monkey = ScreenConfigs.Screen.OpenConfigRegKey(configId, monitorId))
+            using (RegistryKey monkey = Screen.OpenConfigRegKey(configId, monitorId))
             {
                 area.X = double.Parse(monkey.GetValue("PixelX").ToString());
                 area.Y = double.Parse(monkey.GetValue("PixelY").ToString());
@@ -248,10 +247,11 @@ namespace LittleBigMouse.ScreenConfigs
                 orientation = (int) double.Parse(monkey.GetValue("Orientation").ToString());
             }
 
-            DisplayMonitor monitor = MonitorsService.D.Monitors.FirstOrDefault(
+            Monitor monitor = MonitorsService.D.Monitors.FirstOrDefault(
                 d => monitorId == d.Edid.ManufacturerCode + d.Edid.ProductCode + "_" + d.Edid.Serial);
 
-            monitor?.AttachToDesktop(primary, area, orientation, apply);
+            if(monitor!=null)
+            MonitorsService.D.AttachToDesktop(monitor.AttachedDisplay.DeviceName, primary, area, orientation, apply);
         }
 
         public void EnumWmi()
@@ -294,7 +294,7 @@ namespace LittleBigMouse.ScreenConfigs
                     }
                 }
 
-                foreach (ScreenConfigs.Screen s in AllScreens)
+                foreach (Screen s in AllScreens)
                 {
                     s.Load();
                 }
@@ -320,7 +320,7 @@ namespace LittleBigMouse.ScreenConfigs
                     k.SetValue("LoadAtStartup", LoadAtStartup ? "1" : "0");
                     k.SetValue("HomeCinema", HomeCinema ? "1" : "0");
 
-                    foreach (ScreenConfigs.Screen s in AllScreens)
+                    foreach (Screen s in AllScreens)
                         s.Save(k);
 
                     Saved = true;
@@ -330,7 +330,7 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-        public ScreenConfigs.Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
+        public Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
 
         ///// <summary>
         ///// Moving is true when screen is dragged on gui
@@ -440,7 +440,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             get
             {
-                foreach (ScreenConfigs.Screen screen in AllScreens)
+                foreach (Screen screen in AllScreens)
                 {
                     if (screen.PixelToDipRatio.X != 1) return false;
                     if (screen.PixelToDipRatio.Y != 1) return false;
@@ -494,22 +494,22 @@ namespace LittleBigMouse.ScreenConfigs
                 _compacting = true;
             }
             // List all screens not positioned
-            List<ScreenConfigs.Screen> unatachedScreens = placeall?AllScreens.ToList():AllScreens.Where(s => !s.Placed).ToList();
+            List<Screen> unatachedScreens = placeall?AllScreens.ToList():AllScreens.Where(s => !s.Placed).ToList();
 
             // start with primary screen
-            Queue<ScreenConfigs.Screen> todo = new Queue<ScreenConfigs.Screen>();
+            Queue<Screen> todo = new Queue<Screen>();
             todo.Enqueue(PrimaryScreen);
 
             while (todo.Count > 0)
             {
-                foreach (ScreenConfigs.Screen s2 in todo)
+                foreach (Screen s2 in todo)
                 {
                     unatachedScreens.Remove(s2);
                 }
 
-                ScreenConfigs.Screen placedScreen = todo.Dequeue();
+                Screen placedScreen = todo.Dequeue();
 
-                foreach (ScreenConfigs.Screen screenToPlace in unatachedScreens)
+                foreach (Screen screenToPlace in unatachedScreens)
                 {
                     if (screenToPlace == placedScreen) continue;
 
@@ -607,7 +607,7 @@ namespace LittleBigMouse.ScreenConfigs
         }
 
         private readonly object _compactLock = new object();
-        private bool _compacting = false;
+        private bool _compacting;
 
         public void Compact()
         {
@@ -622,13 +622,13 @@ namespace LittleBigMouse.ScreenConfigs
                 _compacting = true;
             }
 
-            List<ScreenConfigs.Screen> done = new List<ScreenConfigs.Screen> {PrimaryScreen};
+            List<Screen> done = new List<Screen> {PrimaryScreen};
 
-            List<ScreenConfigs.Screen> todo = AllBut(PrimaryScreen).OrderBy(s => s.Distance(PrimaryScreen)).ToList();
+            List<Screen> todo = AllBut(PrimaryScreen).OrderBy(s => s.Distance(PrimaryScreen)).ToList();
 
             while (todo.Count > 0)
             {
-                ScreenConfigs.Screen screen = todo[0];
+                Screen screen = todo[0];
                 todo.Remove(screen);
 
                 screen.PlaceAuto(done);
@@ -673,10 +673,6 @@ namespace LittleBigMouse.ScreenConfigs
         public double MaxEffectiveDpiY => this.Get( 
             ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.Y).Max());
 
-        [TriggedOn(nameof(AllScreens),"Item","DeviceNoAbs")]
-        public int DeviceNoAbsMin => this.Get(() =>
-        {
-            return AllScreens.Count == 0 ? 0 : AllScreens.Min(s => s.DeviceNoAbs);
-        });
+
     }
 }

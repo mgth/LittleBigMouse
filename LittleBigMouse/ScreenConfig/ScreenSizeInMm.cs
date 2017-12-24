@@ -24,6 +24,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using HLab.Notify;
+using HLab.Windows.Monitors;
 using Microsoft.Win32;
 
 namespace LittleBigMouse.ScreenConfigs
@@ -33,21 +34,23 @@ namespace LittleBigMouse.ScreenConfigs
     /// </summary>
     public class ScreenSizeInMm : ScreenSize
     {
-        public ScreenSizeInMm(ScreenConfigs.Screen screen)
+        public ScreenSizeInMm(Screen screen)
         {
             Screen = screen;
             this.Subscribe();
         }
 
+        [TriggedOn(nameof(Screen), "Monitor", "AttachedDisplay")]
+        public DisplayDevice AttachedDisplay => this.Get(() => Screen.Monitor.AttachedDisplay);
 
-        [TriggedOn("Screen", "Orientation")]
-        [TriggedOn("Screen", "Monitor","Adapter", "DeviceCaps","Size")]
+        [TriggedOn(nameof(Screen), "Orientation")]
+        [TriggedOn(nameof(Screen), "Monitor", "AttachedDisplay", "DeviceCaps","Size")]
         public override double Width
         {
             get => this.Get(() => LoadValueMonitor(
                 () => Screen.Orientation % 2 == 0
-                ? Screen.Monitor.Adapter.DeviceCaps.Size.Width
-                : Screen.Monitor.Adapter.DeviceCaps.Size.Height
+                ? Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Width
+                : Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Height
                 , "InMm.Width"));
 
             set => this.Set(value, (oldValue, newValue) =>
@@ -65,13 +68,13 @@ namespace LittleBigMouse.ScreenConfigs
         }
 
         [TriggedOn("Screen","Orientation")]
-        [TriggedOn("Screen", "Monitor", "Adapter", "DeviceCaps", "Size")]
+        [TriggedOn("Screen", "Monitor", "AttachedDisplay", "DeviceCaps", "Size")]
         public override double Height
         {
             get => this.Get(() => LoadValueMonitor(
                 ()=>Screen.Orientation % 2 == 0 
-                ? Screen.Monitor.Adapter.DeviceCaps.Size.Height 
-                : Screen.Monitor.Adapter.DeviceCaps.Size.Width
+                ? Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Height 
+                : Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Width
                 ,"InMm.Height"));
             set
             {

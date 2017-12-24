@@ -32,8 +32,8 @@ namespace HLab.Windows.MonitorVcp
 {
     public static class VcpExpendMonitor
     {
-        private static readonly Dictionary<DisplayMonitor, VcpControl> AllVcp = new Dictionary<DisplayMonitor, VcpControl>();
-        public static VcpControl Vcp(this DisplayMonitor monitor)
+        private static readonly Dictionary<Monitor, VcpControl> AllVcp = new Dictionary<Monitor, VcpControl>();
+        public static VcpControl Vcp(this Monitor monitor)
         {
             if (AllVcp.ContainsKey(monitor)) return AllVcp[monitor];
 
@@ -50,9 +50,9 @@ namespace HLab.Windows.MonitorVcp
             add => this.Add(value);
             remove => this.Remove(value);
         }
-        public DisplayMonitor Monitor { get; }
+        public Monitor Monitor { get; }
 
-        public VcpControl(DisplayMonitor monitor)
+        public VcpControl(Monitor monitor)
         {
             Monitor = monitor;
             Brightness = new MonitorLevel(GetBrightness, SetBrightness);

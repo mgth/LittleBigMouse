@@ -22,7 +22,6 @@
 */
 
 using System;
-using System.ComponentModel;
 using HLab.Notify;
 
 namespace LittleBigMouse.ScreenConfigs

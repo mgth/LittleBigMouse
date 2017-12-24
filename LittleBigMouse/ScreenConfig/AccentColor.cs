@@ -103,7 +103,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             get
             {
-                UInt32 nativeColor = UXTheme.GetImmersiveColorFromColorSetEx(this._colorSet, colorType, false, 0);
+                UInt32 nativeColor = UXTheme.GetImmersiveColorFromColorSetEx(_colorSet, colorType, false, 0);
                 //if (nativeColor == 0)
                 //    throw new InvalidOperationException();
                 return Color.FromArgb(
@@ -117,8 +117,8 @@ namespace LittleBigMouse.ScreenConfigs
 
         private AccentColorSet(UInt32 colorSet, Boolean active)
         {
-            this._colorSet = colorSet;
-            this.Active = active;
+            _colorSet = colorSet;
+            Active = active;
         }
 
         private static AccentColorSet[] _allSets;

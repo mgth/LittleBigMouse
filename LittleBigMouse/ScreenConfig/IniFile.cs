@@ -60,7 +60,7 @@ namespace LittleBigMouse.ScreenConfigs
         /// value Name
         public void WriteValue(string section, string key, string value)
         {
-            WritePrivateProfileString(section, key, value, this.Path);
+            WritePrivateProfileString(section, key, value, Path);
         }
 
         /// <summary>
@@ -74,7 +74,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             StringBuilder temp = new StringBuilder(255);
             int i = GetPrivateProfileString(section, key, def, temp,
-                                            255, this.Path);
+                                            255, Path);
             return temp.ToString();
 
         }

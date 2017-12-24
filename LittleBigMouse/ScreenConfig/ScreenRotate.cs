@@ -36,9 +36,9 @@ namespace LittleBigMouse.ScreenConfigs
     {
         public ScreenRotate(ScreenSize source, int rotation = 0)
         {
-            this.Subscribe();
             Source = source;
             _rotation = rotation;
+            this.Subscribe();
 
         }
 
@@ -61,7 +61,7 @@ namespace LittleBigMouse.ScreenConfigs
         [TriggedOn(nameof(Rotation))]
         public override double Width
         {
-            get => this.Get(() => (Rotation % 2 == 0 ? Source.Width : Source.Height));
+            get => this.Get(() => Rotation % 2 == 0 ? Source.Width : Source.Height);
             set
             {
                 switch (Rotation % 2)

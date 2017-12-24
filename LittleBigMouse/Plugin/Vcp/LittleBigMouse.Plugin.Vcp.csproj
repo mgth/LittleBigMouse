@@ -100,19 +100,23 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Hlab\Argyll\HLab.Argyll.csproj">
-      <Project>{444F1148-7014-469B-8809-834FEDA0F730}</Project>
+      <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
       <Name>HLab.Argyll</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\Hlab\Base\HLab.Base.csproj">
       <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
       <Name>HLab.Base</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\..\Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
+      <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>
+      <Name>HLab.Windows.MonitorVcp</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
-      <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
+      <Project>{a3eaaa24-5913-471e-adb1-402f64536a63}</Project>
       <Name>HLab.Mvvm</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\Hlab\Notify-4\HLab.Notify.4.csproj">
-      <Project>{593CB07F-8504-490A-96D6-2CC6034487D7}</Project>
+      <Project>{593cb07f-8504-490a-96d6-2cc6034487d7}</Project>
       <Name>HLab.Notify.4</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\HLab\Windows.Monitors\HLab.Windows.Monitors.csproj">
@@ -122,10 +126,6 @@
     <ProjectReference Include="..\..\Control.Core\LittleBigMouse.Control.Core.csproj">
       <Project>{0d67ead5-811d-4933-9240-d6a2c0e98f34}</Project>
       <Name>LittleBigMouse.Control.Core</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
-      <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>
-      <Name>HLab.Windows.MonitorVcp</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\Hlab\Plugin\HLab.Plugin.csproj">
       <Project>{E34CC1C9-293C-4455-B3DD-5A582095432B}</Project>

@@ -198,7 +198,7 @@ namespace LittleBigMouse_Daemon
             Point pInMm = oldScreen.InMm.GetPoint(oldScreen.InPixel, pIn);
             Screen screenOut = null; //Config.ScreenFromMmPosition(pInMm);// pIn.Mm.TargetScreen;
 
-            Debug.Print(oldScreen?.Monitor.Adapter.DeviceName + "P:" + _oldPoint +  " --> P:" + pIn + " " + screenOut?.Monitor.Adapter.DeviceName);
+            Debug.Print(oldScreen?.Monitor.AttachedDisplay.DeviceName + "P:" + _oldPoint +  " --> P:" + pIn + " " + screenOut?.Monitor.AttachedDisplay.DeviceName);
 
             Point pOut = pIn;
 
@@ -263,7 +263,7 @@ namespace LittleBigMouse_Daemon
                                 throw new ArgumentOutOfRangeException();
                         }
 
-                        Debug.Print(screen.Monitor.Adapter.DeviceName + " = " + offset.Length);
+                        Debug.Print(screen.Monitor.AttachedDisplay.DeviceName + " = " + offset.Length);
 
                         if (offset.Length > 0 && offset.Length < dist)
                         {

@@ -229,7 +229,8 @@ namespace HLab.Notify
                             if (IsSet(property))
                                 Get<ITriggable>(n, null, name).OnTrigged();
                             else
-                                OnPropertyChanged(name);
+                                //OnPropertyChanged(name);
+                                OnPropertyChanged(new NotifierPropertyChangedEventArgs(property.Name, null, null));
                             //property.GetMethod.Invoke(n, null);
 
                         }, triggedOn.Pathes);
@@ -238,11 +239,11 @@ namespace HLab.Notify
                     {
                         n.Subscribe(a =>
                         {
-
                             if (IsSet(property))
                                 Update(property);
                             else
-                                OnPropertyChanged(name);
+                                //OnPropertyChanged(name);
+                                OnPropertyChanged(new NotifierPropertyChangedEventArgs(property.Name, null, null));
                             //property.GetMethod.Invoke(n, null);
 
                         }, triggedOn.Pathes);

@@ -23,7 +23,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -43,16 +42,17 @@ namespace LittleBigMouse.ScreenConfigs
     [DataContract]
     public class Screen : NotifierObject
     {
-        internal Screen(ScreenConfig config, DisplayMonitor monitor)
+        public MonitorsService Service => this.Get(() => MonitorsService.D);
+        internal Screen(ScreenConfig config, Monitor monitor)
         {
             Config = config;
             Monitor = monitor;
             this.Subscribe();
         }
 
-        public DisplayMonitor Monitor
+        public Monitor Monitor
         {
-            get => this.Get<DisplayMonitor>();
+            get => this.Get<Monitor>();
             private set => this.Set(value);
         }
 
@@ -99,8 +99,8 @@ namespace LittleBigMouse.ScreenConfigs
         [TriggedOn(nameof(Monitor),"Primary")]
         public bool Primary => this.Get(() => Monitor.Primary);
 
-        [TriggedOn(nameof(Monitor), "Adapter", "CurrentMode", "DisplayOrientation")]
-        public int Orientation => this.Get(() => Monitor.Adapter.CurrentMode.DisplayOrientation);
+        [TriggedOn(nameof(Monitor), "AttachedDisplay", "CurrentMode", "DisplayOrientation")]
+        public int Orientation => this.Get(() => Monitor.AttachedDisplay.CurrentMode.DisplayOrientation);
 
         public string PnpDeviceName => this.Get(() =>
         {
@@ -113,17 +113,6 @@ namespace LittleBigMouse.ScreenConfigs
             return name.ToLower() != "generic pnp monitor" ? name : Html.GetPnpName(PnpCode);
         });
 
-        [TriggedOn(nameof(Monitor), "DeviceName")]
-        public int DeviceNoAbs => this.Get(() =>
-        {
-            var s = Monitor.DeviceName.Split('\\');
-            return s.Length < 4 ? 0 : int.Parse(s[3].Replace("DISPLAY", ""));
-        });
-
-
-        [TriggedOn(nameof(DeviceNoAbs))]
-        [TriggedOn(nameof(Config),"DeviceNoAbsMin")]
-        public int DeviceNo => this.Get(() => DeviceNoAbs - Config.DeviceNoAbsMin + 1);
 
         public bool Selected
         {
@@ -339,10 +328,10 @@ namespace LittleBigMouse.ScreenConfigs
                     key.SetKey("BottomBorder",Physical.BottomBorder);
                     key.SetKey("LeftBorder",Physical.LeftBorder);
 
-                    if(Math.Abs(Physical.Height - Monitor.Adapter.DeviceCaps.Size.Height) > double.Epsilon)
+                    if(Math.Abs(Physical.Height - Monitor.AttachedDisplay.DeviceCaps.Size.Height) > double.Epsilon)
                         key.SetKey("Height",Physical.Height);
 
-                    if(Math.Abs(Physical.Width - Monitor.Adapter.DeviceCaps.Size.Width) > double.Epsilon)
+                    if(Math.Abs(Physical.Width - Monitor.AttachedDisplay.DeviceCaps.Size.Width) > double.Epsilon)
                         key.SetKey("Whidth",Physical.Width);
 
                     key.SetKey("PnpName", PnpDeviceName);
@@ -411,7 +400,7 @@ namespace LittleBigMouse.ScreenConfigs
                 Width = 0.5,
                 Height = (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
                 Y = 1 - (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
-                X = 1 - 0.5,
+                X = 1 - 0.5
             });
             set => this.Set(value);
         }
@@ -420,7 +409,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             Effective = 0,
             Angular = 1,
-            Raw = 2,
+            Raw = 2
         } //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510.aspx
 
         [DllImport("Shcore.dll")]
@@ -634,7 +623,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             get
             {
-                IntPtr hdc = NativeMethods.CreateDC("DISPLAY", Monitor.Adapter.DeviceName, null, IntPtr.Zero);
+                IntPtr hdc = NativeMethods.CreateDC("DISPLAY", Monitor.AttachedDisplay.DeviceName, null, IntPtr.Zero);
                 double dpi = NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.LOGPIXELSX);
                 NativeMethods.DeleteDC(hdc);
                 return dpi;

@@ -39,7 +39,7 @@ namespace LittleBigMouse.Control.Core
 
         public MainView()
         {
-            MonitorsService.D.UpdateDevices();
+//            MonitorsService.D.UpdateDevices();
             InitializeComponent();
             _resizer = new WindowResizer(this,ResizeGrid);
         }

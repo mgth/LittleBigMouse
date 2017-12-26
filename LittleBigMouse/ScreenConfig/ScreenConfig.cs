@@ -93,6 +93,8 @@ namespace LittleBigMouse.ScreenConfigs
             MonitorsService.D.AttachedMonitors.CollectionChanged += MonitorsOnCollectionChanged;
             this.Subscribe();
 
+            MonitorsService.D.UpdateDevices();
+
             SetPhysicalAuto(false);
 
         }

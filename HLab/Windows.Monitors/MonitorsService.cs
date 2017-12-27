@@ -46,7 +46,7 @@ namespace HLab.Windows.Monitors
         private MonitorsService()
         {
             SystemEvents.DisplaySettingsChanged += (sender, eventArgs) => UpdateDevices();
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public ObservableCollection<PhysicalAdapter> Adapters => this.Get(() => new ObservableCollection<PhysicalAdapter>());
@@ -55,6 +55,9 @@ namespace HLab.Windows.Monitors
         public ObservableCollection<DisplayDevice> Devices => this.Get(() => new ObservableCollection<DisplayDevice>());
 
         public ObservableCollection<Monitor> Monitors => this.Get(() => new ObservableCollection<Monitor>());
+        [TriggedOn(nameof(Monitors), "Item", "AttachedToDesktop")]
+        public void test()
+        { }
 
         [TriggedOn(nameof(Monitors),"Item","AttachedToDesktop")]
         public ObservableFilter<Monitor> AttachedMonitors => this.Get(()=> new ObservableFilter<Monitor>()

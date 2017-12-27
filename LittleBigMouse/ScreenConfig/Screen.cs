@@ -47,7 +47,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             Config = config;
             Monitor = monitor;
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public Monitor Monitor

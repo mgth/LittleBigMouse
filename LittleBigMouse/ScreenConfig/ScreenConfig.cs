@@ -91,7 +91,7 @@ namespace LittleBigMouse.ScreenConfigs
                 new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, MonitorsService.D.AttachedMonitors));
 
             MonitorsService.D.AttachedMonitors.CollectionChanged += MonitorsOnCollectionChanged;
-            this.Subscribe();
+            this.SubscribeNotifier();
 
             MonitorsService.D.UpdateDevices();
 

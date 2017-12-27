@@ -38,7 +38,7 @@ namespace LittleBigMouse.ScreenConfigs
                 Source = source;
                 Ratio = ratio;
             }
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public ScreenRatio Ratio

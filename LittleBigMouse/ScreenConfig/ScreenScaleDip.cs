@@ -37,7 +37,7 @@ namespace LittleBigMouse.ScreenConfigs
             {
                 Source = source;
             }
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         [TriggedOn("Screen.PixelToDipRatio")]

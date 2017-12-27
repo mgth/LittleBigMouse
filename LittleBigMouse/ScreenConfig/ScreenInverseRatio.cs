@@ -40,7 +40,7 @@ namespace LittleBigMouse.ScreenConfigs
         public ScreenInverseRatio(ScreenRatio ratio)
         {
             Source = ratio;
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         [TriggedOn(nameof(Source), "X")]

@@ -37,7 +37,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             Source = source;
             Translation = translation ?? new Vector();
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public Vector Translation

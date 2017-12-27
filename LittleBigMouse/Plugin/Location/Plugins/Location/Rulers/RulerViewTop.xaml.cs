@@ -20,6 +20,8 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System;
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
@@ -99,23 +101,40 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
             var penIn = new Pen(Brushes.WhiteSmoke,1);
             var penOut = new Pen(new SolidColorBrush(Color.FromScRgb(0.7f, 0.7f, 0.7f, 0.7f)),1);
 
-            //int mm = (int)rulerLengthOut - (int)ViewModel.DrawOn.InMm.Height;
-            var mm = (int)rulerStart;
 
+            //   neg     0 actual ruler    L    outside positive
+            // |---------|-----------------|----------|
+            // r0        r1                r2         r3
+
+            var r0 = 0;
+            var r1 = zero;
+            var r2 = zero + rulerInLength * lengthRatio;
+            var r3 = zero + rulerEnd * lengthRatio;
             if (vertical)
             {
-                dx.DrawRectangle(ViewModel.BackgroundOut, null,new Rect(new Point(0,0),new Point(rwidth,zero)));
-                dx.DrawRectangle(ViewModel.BackgroundOut, null,new Rect(new Point(0, zero + rulerInLength * lengthRatio),new Point(rwidth, zero + rulerEnd * lengthRatio)));
-                dx.DrawRectangle(ViewModel.Background, null,new Rect(new Point(0,zero),new Point(rwidth,zero + rulerInLength * lengthRatio)));
+                if(r0<r3 && r1>r0)
+                    dx.DrawRectangle(ViewModel.BackgroundOut, null,new Rect(new Point(0,0),new Point(rwidth, Math.Min(r1,r3))));
+
+                if(r2<r3)
+                    dx.DrawRectangle(ViewModel.BackgroundOut, null,new Rect(new Point(0, r2),new Point(rwidth, r3)));
+
+                if(r1<r3 && r2>r0)
+                    dx.DrawRectangle(ViewModel.Background, null,new Rect(new Point(0,Math.Max(r1,r0)),new Point(rwidth,Math.Min(r2,r3))));
             }
             else
             {
-                dx.DrawRectangle(ViewModel.BackgroundOut, null, new Rect(new Point(0, 0), new Point(zero, rwidth)));
-                dx.DrawRectangle(ViewModel.BackgroundOut, null, new Rect(new Point(zero + rulerInLength * lengthRatio,0), new Point(zero + rulerEnd * lengthRatio, rwidth)));
-                dx.DrawRectangle(ViewModel.Background, null,new Rect(new Point(zero,0),new Point(zero + rulerInLength * lengthRatio,rwidth)));
+                if (r0 < r3 && r1 > r0)
+                    dx.DrawRectangle(ViewModel.BackgroundOut, null, new Rect(new Point(0, 0), new Point(Math.Min(r1, r3), rwidth)));
+
+                if (r2 < r3)
+                    dx.DrawRectangle(ViewModel.BackgroundOut, null, new Rect(new Point(r2, 0), new Point(r3, rwidth)));
+
+                if (r1 < r3 && r2 > r0)
+                    dx.DrawRectangle(ViewModel.Background, null,new Rect(new Point(zero,0),new Point(Math.Min(r2, r3), rwidth)));
             }
 
-            while (mm < (int)rulerEnd + 1)
+            var mm = (int)rulerStart;
+            while (mm < (int)rulerEnd)
             {
                 var pos = zero + mm * lengthRatio;
 
@@ -181,7 +200,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
                 var y0 = /*y + */(vertical ? pos : (revert ? rwidth - size : 0));
                 var y1 = /*y +*/ (vertical ? pos : ((revert) ? rwidth : size));
 
-                pen.Thickness = 0.1 * lengthRatio;
+                pen.Thickness = 0.25 * lengthRatio;
 
                 dx.DrawLine(pen, new Point(x0, y0), new Point(x1, y1));
                 mm++;

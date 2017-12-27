@@ -34,7 +34,7 @@ namespace LittleBigMouse.ScreenConfigs
         public ScreenSizeWpf(ScreenSize source)
         {
             Source = source;
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public ScreenRatio Ratio

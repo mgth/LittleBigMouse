@@ -208,10 +208,13 @@ namespace HLab.Notify
                     switch (method.GetParameters().Length)
                     {
                         case 0:
-                            n.Subscribe(args => method.Invoke(n, null), triggedOn.Pathes);
+                            n.SubscribeNotifier((s,args) => method.Invoke(n, null), triggedOn.Pathes);
                             break;
                         case 1:
-                            n.Subscribe(args => method.Invoke(n, new object[] { args }), triggedOn.Pathes);
+                            n.SubscribeNotifier((s, args) => method.Invoke(n, new object[] { args }), triggedOn.Pathes);
+                            break;
+                        case 2:
+                            n.SubscribeNotifier((s, args) => method.Invoke(n, new object[] { s, args }), triggedOn.Pathes);
                             break;
                     }
                 }
@@ -224,7 +227,7 @@ namespace HLab.Notify
                 {
                     if (typeof(ITriggable).IsAssignableFrom(property.PropertyType))
                     {
-                        n.Subscribe(a =>
+                        n.SubscribeNotifier((s,a) =>
                         {
                             if (IsSet(property))
                                 Get<ITriggable>(n, null, name).OnTrigged();
@@ -237,7 +240,7 @@ namespace HLab.Notify
                     }
                     else
                     {
-                        n.Subscribe(a =>
+                        n.SubscribeNotifier((s,a) =>
                         {
                             if (IsSet(property))
                                 Update(property);

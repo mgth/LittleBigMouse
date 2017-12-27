@@ -33,7 +33,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
     {
         public RulerViewModel(Screen screen, Screen drawOn, RulerSide side)
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
             using (this.Suspend())
             {
                 Side = side;

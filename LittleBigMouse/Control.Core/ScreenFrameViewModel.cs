@@ -34,7 +34,7 @@ namespace LittleBigMouse.Control.Core
     {
         public ScreenFrameViewModel()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public Screen Model => this.Get<Screen>();

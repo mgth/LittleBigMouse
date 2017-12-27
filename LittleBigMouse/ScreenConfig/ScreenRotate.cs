@@ -38,7 +38,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             Source = source;
             _rotation = rotation;
-            this.Subscribe();
+            this.SubscribeNotifier();
 
         }
 

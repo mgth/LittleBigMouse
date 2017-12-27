@@ -120,7 +120,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
         {
             LittleBigMouseClient.Client.StateChanged += Client_StateChanged;
             Client_StateChanged();
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
 

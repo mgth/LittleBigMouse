@@ -48,7 +48,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Size
 
             InsideCoverControl.LayoutUpdated += OnFrameSizeChanged;
 
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
 

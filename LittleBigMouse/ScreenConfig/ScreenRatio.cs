@@ -39,13 +39,13 @@ namespace LittleBigMouse.ScreenConfigs
         {
             X = x;
             Y = y;
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
         public ScreenRatioValue(double r)
         {
             X = r;
             Y = r;
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public override double X

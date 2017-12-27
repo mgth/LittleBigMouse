@@ -15,7 +15,7 @@
         AllowsTransparency="True"
         Topmost="True"
         >
-    <Grid>
+    <Grid Margin="7">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{Binding RulerWidth}"/>
                 <ColumnDefinition Width="*"/>

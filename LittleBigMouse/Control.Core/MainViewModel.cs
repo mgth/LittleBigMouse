@@ -37,7 +37,7 @@ namespace LittleBigMouse.Control.Core
     {
         public MainViewModel()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public ScreenConfig Config

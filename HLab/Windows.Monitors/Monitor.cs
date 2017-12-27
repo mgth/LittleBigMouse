@@ -170,7 +170,7 @@ namespace HLab.Windows.Monitors
 
         public Monitor()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         [TriggedOn(nameof(HMonitor))]

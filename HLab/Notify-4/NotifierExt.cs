@@ -70,10 +70,10 @@ namespace HLab.Notify
             [CallerMemberName] string propertyName = null)
             => n.GetNotifier().Set(n, value, propertyName, null);
 
-        public static void Subscribe(this INotifyPropertyChanged n) => n.GetNotifier().Subscribe(n);
+        public static void SubscribeNotifier(this INotifyPropertyChanged n) => n.GetNotifier().Subscribe(n);
         
 
-        public static void UnSubscribe(this INotifyPropertyChanged n, Action<NotifierPropertyChangedEventArgs> action,
+        public static void UnSubscribeNotifier(this INotifyPropertyChanged n, PropertyChangedEventHandler action,
             IList<string> targets)
         {
             if (PropertiesHandlers.TryRemove(Tuple.Create(action, targets), out PropertyChangedEventHandler h))
@@ -82,116 +82,111 @@ namespace HLab.Notify
                 {
                     if (n.GetType().GetProperty(targets[0])?.GetValue(n) is INotifyPropertyChanged value)
                     {
-                        value.UnSubscribe(action, targets.Skip(1).ToArray());
+                        value.UnSubscribeNotifier(action, targets.Skip(1).ToArray());
                     }
                 }
                 n.PropertyChanged -= h;
             }
         }
-        public static void UnSubscribe(this INotifyCollectionChanged n, Action<NotifierPropertyChangedEventArgs> action,
+        public static void UnSubscribeNotifier(this INotifyCollectionChanged n, PropertyChangedEventHandler action,
             IList<string> targets)
         {
             if (CollectionHandlers.TryRemove(Tuple.Create(action, targets), out NotifyCollectionChangedEventHandler h))
             {
                 if (targets.Count > 1)
                 {
+                    var newTargets = targets.Skip(1).ToArray();
+
                     if (n is IList oldItems)
                         foreach (var item in oldItems)
                         {
-                            if (targets.Count > 1)
-                            {
-                                var newTargets = targets.Skip(1).ToArray();
-
-                                if (item is INotifyCollectionChanged oldCollection)
-                                    oldCollection.UnSubscribe(action, newTargets);
-
-                                if (item is INotifyPropertyChanged oldValue)
-                                    oldValue.UnSubscribe(action, newTargets);
-
-                            }
-
-                            action(new NotifierPropertyChangedEventArgs("Item", item, null));
+                            UnSubscribeNotifier(item,action,newTargets);
+                            action(n, new NotifierPropertyChangedEventArgs("Item", item, null));
                         }
                 }
                 n.CollectionChanged -= h;
             }
         }
 
+        public static void UnSubscribeNotifier(object n, PropertyChangedEventHandler action,
+            IList<string> targets)
+        {
+                if (n is INotifyCollectionChanged oldCollection)
+                    oldCollection.UnSubscribeNotifier(action, targets);
+
+                if (n is INotifyPropertyChanged oldValue)
+                    oldValue.UnSubscribeNotifier(action, targets);
+        }
+
         private static readonly
-            ConcurrentDictionary<Tuple<Action<NotifierPropertyChangedEventArgs>, IList<string>>, PropertyChangedEventHandler>
+            ConcurrentDictionary<Tuple<PropertyChangedEventHandler, IList<string>>, PropertyChangedEventHandler>
             PropertiesHandlers =
-                new ConcurrentDictionary<Tuple<Action<NotifierPropertyChangedEventArgs>, IList<string>>,
+                new ConcurrentDictionary<Tuple<PropertyChangedEventHandler, IList<string>>,
                     PropertyChangedEventHandler>();
 
         private static readonly
-            ConcurrentDictionary<Tuple<Action<NotifierPropertyChangedEventArgs>, IList<string>>, NotifyCollectionChangedEventHandler>
+            ConcurrentDictionary<Tuple<PropertyChangedEventHandler, IList<string>>, NotifyCollectionChangedEventHandler>
             CollectionHandlers =
-                new ConcurrentDictionary<Tuple<Action<NotifierPropertyChangedEventArgs>, IList<string>>,
+                new ConcurrentDictionary<Tuple<PropertyChangedEventHandler, IList<string>>,
                     NotifyCollectionChangedEventHandler>();
 
-        public static void Subscribe(
+        public static void SubscribeNotifier(
             this INotifyPropertyChanged n, 
-            Action<NotifierPropertyChangedEventArgs> action,
+            PropertyChangedEventHandler action,
             IList<string> targets)
         {
             Debug.Assert(targets.Count > 0);
+            var target = targets[0];
 
             {
-                void H(object sender, PropertyChangedEventArgs args)
-                {
-                    if (args.PropertyName == targets[0] && args is NotifierPropertyChangedEventArgs argt)
-                    {
-                        action(argt);
-                    }
-                }
-
-
-                n.PropertyChanged += H;
-                PropertiesHandlers.TryAdd(Tuple.Create(action, targets), H);
+                n.GetBroker().Subscribe(target,action);
+                PropertiesHandlers.TryAdd(Tuple.Create(action, targets), action);
             }
 
             if (targets.Count > 1)
             {
+                var newTargets = targets.Skip(1).ToArray();
+                var newTarget = newTargets[0];
                 void H(object sender, PropertyChangedEventArgs args)
                 {
-                    if (args.PropertyName == targets[0] && args is NotifierPropertyChangedEventArgs argt)
-                    {
-                        var newTargets = targets.Skip(1).ToArray();
+                        if (args is NotifierPropertyChangedEventArgs argt)
+                        {
+                            if (argt.OldValue is INotifyCollectionChanged oldCollection && newTarget == "Item")
+                                oldCollection.UnSubscribeNotifier(action, newTargets);
 
-                        if (argt.OldValue is INotifyCollectionChanged oldCollection && newTargets[0] == "Item")
-                            oldCollection.UnSubscribe(action, newTargets);
+                            if (argt.OldValue is INotifyPropertyChanged oldValue)
+                                oldValue.UnSubscribeNotifier(action, newTargets);
 
-                        if (argt.OldValue is INotifyPropertyChanged oldValue)
-                            oldValue.UnSubscribe(action, newTargets);
+                            if (argt.NewValue is INotifyPropertyChanged newValue)
+                                newValue.SubscribeNotifier(action, newTargets);
 
-                        if (argt.NewValue is INotifyPropertyChanged newValue)
-                            newValue.Subscribe(action, newTargets);
+                            if (argt.NewValue is INotifyCollectionChanged newCollection && newTarget=="Item")
+                                newCollection.SubscribeNotifier(action, newTargets);                            
+                        }
 
-                        if (argt.NewValue is INotifyCollectionChanged newCollection && newTargets[0]=="Item")
-                            newCollection.Subscribe(action, newTargets);
+                        action(sender, args);
 
-                        action(argt);
-                    }
                 }
 
 
-                var property = n.GetType().GetProperty(targets[0]);
-                if(property!=null && !(n is INotifyCollectionChanged && targets[0]=="Item"))
+                var property = n.GetType().GetProperty(target);
+                if(property!=null && !(n is INotifyCollectionChanged && target=="Item"))
                     H(null, new NotifierPropertyChangedEventArgs(targets[0], null, property.GetValue(n)));
 
-                n.PropertyChanged += H;
+                n.GetBroker().Subscribe(target,H);
                 PropertiesHandlers.TryAdd(Tuple.Create(action, targets), H);
             }
 
         }
 
-        public static void Subscribe(
-            this INotifyCollectionChanged n, 
-            Action<NotifierPropertyChangedEventArgs> action,
+        public static void SubscribeNotifier(
+            this INotifyCollectionChanged n,
+            PropertyChangedEventHandler action,
             IList<string> targets)
         {
             Debug.Assert(targets[0]=="Item");
 
+            var newTargets = targets.Skip(1).ToArray();
 
             void H(object sender, NotifyCollectionChangedEventArgs args)
             {
@@ -199,7 +194,6 @@ namespace HLab.Notify
                 //{
                 //    action(argt);
                 //}
-                var newTargets = targets.Skip(1).ToArray();
 
                 if (args.NewItems!=null)
                     foreach (var item in args.NewItems)
@@ -208,14 +202,14 @@ namespace HLab.Notify
                         {
 
                             if (item is INotifyPropertyChanged newValue)
-                                newValue.Subscribe(action, newTargets);
+                                newValue.SubscribeNotifier(action, newTargets);
 
                             if (item is INotifyCollectionChanged newCollection)
-                                newCollection.Subscribe(action, newTargets);
+                                newCollection.SubscribeNotifier(action, newTargets);
 
                         }
 
-                        action(new NotifierPropertyChangedEventArgs("Item",null,item));
+                        action(sender, new NotifierPropertyChangedEventArgs("Item",null,item));
                     }
 
                 if(args.OldItems!=null)
@@ -224,14 +218,14 @@ namespace HLab.Notify
                         if (targets.Count > 1)
                         {
                             if (item is INotifyCollectionChanged oldCollection)
-                                oldCollection.UnSubscribe(action, newTargets);
+                                oldCollection.UnSubscribeNotifier(action, newTargets);
 
                             if (item is INotifyPropertyChanged oldValue)
-                                oldValue.UnSubscribe(action, newTargets);
+                                oldValue.UnSubscribeNotifier(action, newTargets);
 
                         }
 
-                        action(new NotifierPropertyChangedEventArgs("Item",item,null));
+                        action(sender, new NotifierPropertyChangedEventArgs("Item",item,null));
                     }
             }
 

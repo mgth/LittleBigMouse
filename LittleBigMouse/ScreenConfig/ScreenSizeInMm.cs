@@ -37,7 +37,7 @@ namespace LittleBigMouse.ScreenConfigs
         public ScreenSizeInMm(Screen screen)
         {
             Screen = screen;
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         [TriggedOn(nameof(Screen), "Monitor", "AttachedDisplay")]

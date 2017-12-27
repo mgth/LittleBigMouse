@@ -31,7 +31,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Anchors
     {
         public AnchorsViewModel()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public ScreenConfig Model => this.GetModel();

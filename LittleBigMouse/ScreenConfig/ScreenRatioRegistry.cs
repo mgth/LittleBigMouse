@@ -37,7 +37,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             Screen = screen;
             _prefix = prefix;
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public Screen Screen

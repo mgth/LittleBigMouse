@@ -95,6 +95,7 @@
     <Compile Include="NotifierProperty.cs" />
     <Compile Include="NotifierService.cs" />
     <Compile Include="PersistentNotifier.cs" />
+    <Compile Include="PropertyChangedBroker.cs" />
     <Compile Include="TriggedOn.cs" />
   </ItemGroup>
   <ItemGroup>

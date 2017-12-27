@@ -63,7 +63,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
 
         public LocationScreenViewModel()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
 
@@ -108,6 +108,8 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
 
                 panel.Height = s.Bounds.Height/* - 20*/;
                 panel.Width = s.Bounds.Width/* - 20*/;
+
+                panel.WindowState = WindowState.Maximized;
 
                 _panels.Add(panel);
             }

@@ -41,7 +41,7 @@ namespace LittleBigMouse.Control.Core.Plugins.Default
 
         public DefaultScreenViewModel()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
     }
 }

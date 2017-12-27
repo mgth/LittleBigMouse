@@ -33,7 +33,7 @@ namespace LittleBigMouse.Control.Core
     {
         public MultiScreensViewModel()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public MainViewModel MainViewModel

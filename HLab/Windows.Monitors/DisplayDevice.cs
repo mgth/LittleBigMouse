@@ -36,7 +36,7 @@ namespace HLab.Windows.Monitors
     {
         public DisplayDevice()
         {
-            this.Subscribe();
+            this.SubscribeNotifier();
         }
 
         public MonitorsService Service => this.Get(()=>MonitorsService.D);

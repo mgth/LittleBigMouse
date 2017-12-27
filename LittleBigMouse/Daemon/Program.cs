@@ -29,14 +29,13 @@ using LittleBigMouse.ScreenConfigs;
 namespace LittleBigMouse_Daemon
 {
     [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
-    class Program
+    internal class Program
     {
         private const string Unique = "LittleBigMouse_Daemon";
         [STAThread]
         public static void Main(string[] args)
         {
-            bool firstInstance;
-            Mutex mutex = new Mutex(true, Unique + Environment.UserName, out firstInstance);
+            var mutex = new Mutex(true, Unique + Environment.UserName, out var firstInstance);
 
             if (!firstInstance)
             {
@@ -47,7 +46,7 @@ namespace LittleBigMouse_Daemon
 
             if (Environment.UserInteractive)
             {
-                LittleBigMouseDaemon daemon = new LittleBigMouseDaemon(args);
+                var daemon = new LittleBigMouseDaemon(args);
                 daemon.Run();
             }
             else

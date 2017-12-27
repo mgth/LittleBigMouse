@@ -289,7 +289,7 @@ namespace LittleBigMouse_Daemon
             if (screenOut == null)
             {
                 Debug.Print("Out");
-                LbmMouse.CursorPos = _oldPoint.Value;//TODO : .Inside.Point;
+                LbmMouse.CursorPos = oldScreen.InPixel.Inside(pIn); //   _oldPoint.Value; fix #40
                 e.Handled = true;
                 return;
             }

@@ -482,7 +482,7 @@ namespace LittleBigMouse.ScreenConfigs
         [TriggedOn(nameof(DpiAwareAngularDpi))]
         [TriggedOn(nameof(EffectiveDpi))]
         [TriggedOn(nameof(DpiAwarenessContext))]
-        [TriggedOn(nameof(Config), "PrimaryScreen", "EffectiveDpiY")]
+        [TriggedOn(nameof(Config), "PrimaryScreen", "EffectiveDpi","Y")]
         [TriggedOn(nameof(Config), "MaxEffectiveDpiY")]
 
         public ScreenRatio WpfToPixelRatio => this.Get(() =>

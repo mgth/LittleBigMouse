@@ -473,7 +473,7 @@ namespace LittleBigMouse.ScreenConfigs
 //            return aw;
 //        });
 
-        private NativeMethods.DPI_Awareness_Context DpiAwarenessContext => this.Get(NativeMethods.GetThreadDpiAwarenessContext);
+        public NativeMethods.DPI_Awareness_Context DpiAwarenessContext => this.Get(NativeMethods.GetThreadDpiAwarenessContext);
 
         // This is the ratio used in system config
 

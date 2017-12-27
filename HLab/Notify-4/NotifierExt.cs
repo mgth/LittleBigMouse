@@ -130,18 +130,39 @@ namespace HLab.Notify
                 new ConcurrentDictionary<Tuple<PropertyChangedEventHandler, IList<string>>,
                     NotifyCollectionChangedEventHandler>();
 
+        private static void Unsubscribe(object value, IList<string> targets, PropertyChangedEventHandler handler)
+        {
+            if (value is INotifyCollectionChanged oldCollection && targets[0] == "Item")
+            {
+                oldCollection.UnSubscribeNotifier(handler, targets);
+                return;
+            }
+
+            if (value is INotifyPropertyChanged oldNotifier)
+                oldNotifier.UnSubscribeNotifier(handler, targets);
+        }
+        private static void Subscribe(object value, IList<string> targets, PropertyChangedEventHandler handler)
+        {
+            if (value is INotifyCollectionChanged newCollection && targets[0] == "Item")
+            {
+                newCollection.SubscribeNotifier(handler, targets);
+                return;
+            }
+
+            if (value is INotifyPropertyChanged newNotifier)
+                newNotifier.SubscribeNotifier(handler, targets);
+        }
+
+
         public static void SubscribeNotifier(
             this INotifyPropertyChanged n, 
-            PropertyChangedEventHandler action,
+            PropertyChangedEventHandler handler,
             IList<string> targets)
         {
             Debug.Assert(targets.Count > 0);
             var target = targets[0];
 
-            {
-                n.GetBroker().Subscribe(target,action);
-                PropertiesHandlers.TryAdd(Tuple.Create(action, targets), action);
-            }
+            var broker = n.GetBroker();
 
             if (targets.Count > 1)
             {
@@ -149,34 +170,25 @@ namespace HLab.Notify
                 var newTarget = newTargets[0];
                 void H(object sender, PropertyChangedEventArgs args)
                 {
-                        if (args is NotifierPropertyChangedEventArgs argt)
-                        {
-                            if (argt.OldValue is INotifyCollectionChanged oldCollection && newTarget == "Item")
-                                oldCollection.UnSubscribeNotifier(action, newTargets);
-
-                            if (argt.OldValue is INotifyPropertyChanged oldValue)
-                                oldValue.UnSubscribeNotifier(action, newTargets);
-
-                            if (argt.NewValue is INotifyPropertyChanged newValue)
-                                newValue.SubscribeNotifier(action, newTargets);
-
-                            if (argt.NewValue is INotifyCollectionChanged newCollection && newTarget=="Item")
-                                newCollection.SubscribeNotifier(action, newTargets);                            
-                        }
-
-                        action(sender, args);
-
+                    if (args is NotifierPropertyChangedEventArgs argt)
+                    {
+                        Unsubscribe(argt.OldValue,newTargets,handler);
+                        Subscribe(argt.NewValue,newTargets,handler);
+                    }
+                    //handler(sender, args);
                 }
 
+                var value = broker.Subscribe(target,H);
 
-                var property = n.GetType().GetProperty(target);
-                if(property!=null && !(n is INotifyCollectionChanged && target=="Item"))
-                    H(null, new NotifierPropertyChangedEventArgs(targets[0], null, property.GetValue(n)));
+                if(value!=null)
+                    Subscribe(value,newTargets,handler);
 
-                n.GetBroker().Subscribe(target,H);
-                PropertiesHandlers.TryAdd(Tuple.Create(action, targets), H);
+                PropertiesHandlers.TryAdd(Tuple.Create(handler, targets), H);
             }
 
+            //if (n is INotifyCollectionChanged && target == "Item") return;
+            broker.Subscribe(target, handler);
+            PropertiesHandlers.TryAdd(Tuple.Create(handler, targets), handler);
         }
 
         public static void SubscribeNotifier(

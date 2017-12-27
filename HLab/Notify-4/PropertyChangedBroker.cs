@@ -15,18 +15,25 @@ namespace HLab.Notify
         public event PropertyChangedEventHandler PropertyChanged;
 
         private object _oldValue = null;
+        private object _target = null;
         private readonly PropertyInfo _property;
         public PropertyChangedHolder(object target, string property)
         {
+            _target = target;
             _property = target.GetType().GetProperty(property);
+            if(_property==null)
+            { }
         }
 
         public virtual void OnPropertyChanged(object sender, PropertyChangedEventArgs args)
         {
             var newValue = _property.GetValue(sender);
-            PropertyChanged?.Invoke(sender, new NotifierPropertyChangedEventArgs(args.PropertyName,_oldValue,newValue));
+            PropertyChanged?.Invoke(_target, new NotifierPropertyChangedEventArgs(args.PropertyName,_oldValue,newValue));
             _oldValue = newValue;
         }
+        public object Value() => _property.GetValue(_target);
+
+        public object OldValue() => _oldValue;
     }
 
     public static class PropertyChangedBrokerExt
@@ -50,16 +57,25 @@ namespace HLab.Notify
             target.PropertyChanged += Target_PropertyChanged;
         }
 
+        private PropertyChangedHolder GetHolder(string propertyName)
+        {
+            return _holders.GetOrAdd(propertyName, n => new PropertyChangedHolder(_target,n));
+        }
+
         private void Target_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if(_holders.TryGetValue(e.PropertyName,out var holder)) holder.OnPropertyChanged(sender,e);
         }
 
-        public void Subscribe(string propertyName, PropertyChangedEventHandler handler)
+        public object Subscribe(string propertyName, PropertyChangedEventHandler handler)
         {
-            var holder = _holders.GetOrAdd(propertyName, n => new PropertyChangedHolder(_target,n));
+            var holder = GetHolder(propertyName);
+            var value = holder.Value();
             holder.PropertyChanged += handler;
+
+            return value;
         }
+
         public void UnSubscribe(string propertyName, PropertyChangedEventHandler handler)
         {
             if(_holders.TryGetValue(propertyName,out var holder))

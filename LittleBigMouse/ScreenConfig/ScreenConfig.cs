@@ -400,7 +400,7 @@ namespace LittleBigMouse.ScreenConfigs
         /// <summary>
         /// Mm Bounds of overall screens without borders
         /// </summary>
-        [TriggedOn(nameof(AllScreens), "Item", "BoundsInMm")]
+        [TriggedOn(nameof(AllScreens), "Item", "InMm", "Bounds")]
         public Rect PhysicalBounds => this.Get(() =>
         {
             var inside = new Rect();
@@ -667,11 +667,11 @@ namespace LittleBigMouse.ScreenConfigs
             get => this.Get<bool>(); set => this.Set(value);
         }
 
-        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpiX")]
+        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpi","X")]
         public double MaxEffectiveDpiX => this.Get( 
             ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.X).Max());
 
-        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpiY")]
+        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpi","Y")]
         public double MaxEffectiveDpiY => this.Get( 
             ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.Y).Max());
 

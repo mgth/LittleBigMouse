@@ -302,7 +302,7 @@ namespace LittleBigMouse.ScreenConfigs
                     InMm.X = key.GetKey("XLocationInMm", () => InMm.X, ()=>Placed=true);
                     InMm.Y = key.GetKey("YLocationInMm", () => InMm.Y, ()=>Placed=true);
                     PhysicalRatio.X = key.GetKey("PhysicalRatioX", () => PhysicalRatio.X);
-                    PhysicalRatio.Y = key.GetKey("PhysicalRatioy", () => PhysicalRatio.Y);
+                    PhysicalRatio.Y = key.GetKey("PhysicalRatioY", () => PhysicalRatio.Y);
                 }
             }
 
@@ -346,7 +346,7 @@ namespace LittleBigMouse.ScreenConfigs
                     key.SetKey("XLocationInMm", InMm.X);
                     key.SetKey("YLocationInMm", InMm.Y);
                     key.SetKey("PhysicalRatioX", PhysicalRatio.X);
-                    key.SetKey("PhysicalRatioy", PhysicalRatio.Y);
+                    key.SetKey("PhysicalRatioY", PhysicalRatio.Y);
 
                     key.SetKey("PixelX", InPixel.X);
                     key.SetKey("PixelY", InPixel.Y);

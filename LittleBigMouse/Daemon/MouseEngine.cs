@@ -158,6 +158,8 @@ namespace LittleBigMouse_Daemon
         public event EventHandler ConfigLoaded;
         public void LoadConfig()
         {
+            if(Config!=null) Config.Load();
+            else
             LoadConfig(new ScreenConfig());
         }
         private void OnDisplaySettingsChanged(object sender, EventArgs e)

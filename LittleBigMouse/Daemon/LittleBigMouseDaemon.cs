@@ -209,7 +209,7 @@ namespace LittleBigMouse_Daemon
             if (pp.Length > 0) return;
 
             var p = Process.GetCurrentProcess();
-            string filename = p.MainModule.FileName.Replace("Daemon", "Control").Replace(".vshost", "");
+            string filename = p.MainModule.FileName.Replace("_Daemon", "_Control").Replace(".vshost", "");
             Process.Start(filename, "--startcontrol");
         }
 

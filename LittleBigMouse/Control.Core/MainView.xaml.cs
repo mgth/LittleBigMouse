@@ -20,9 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using HLab.Mvvm;
 using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
@@ -48,7 +51,6 @@ namespace LittleBigMouse.Control.Core
         {
             this.EnableBlur();
         }
-
 
         //private Screen _locationScreen;
         //public Screen LocationScreen

@@ -92,6 +92,7 @@ namespace LittleBigMouse.ScreenConfigs
             try { Channel.Start(); }
             catch (EndpointNotFoundException) { LauchServer("--start"); }
             catch (CommunicationException) { }
+            catch (TimeoutException) { }
             //catch (FaultException) { }
         }
 
@@ -100,6 +101,7 @@ namespace LittleBigMouse.ScreenConfigs
             try { Channel.Stop(); }
             catch (EndpointNotFoundException) { }
             catch (CommunicationException) { }
+            catch (TimeoutException) { }
             //catch (FaultException) { }
         }
         public void CommandLine(IList<string> args)

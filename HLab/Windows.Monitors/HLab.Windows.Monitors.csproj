@@ -68,8 +68,11 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Xaml" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -79,7 +82,12 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="WindowMessage.cs" />
+    <Compile Include="WindowMessageParameter.cs" />
     <Compile Include="DeviceCaps.cs" />
+    <Compile Include="DispalyChangesView.xaml.cs">
+      <DependentUpon>DispalyChangesView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="DisplayDevice.cs" />
     <Compile Include="DisplayMode.cs" />
     <Compile Include="Edid.cs" />
@@ -109,6 +117,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="lbm.licenseheader" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="DispalyChangesView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

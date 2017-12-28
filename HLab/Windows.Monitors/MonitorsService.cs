@@ -42,10 +42,12 @@ namespace HLab.Windows.Monitors
     {
 
         public event EventHandler DevicesUpdated;
-
+        private readonly Window _displayChanges = new DispalyChangesView();
         private MonitorsService()
         {
-            SystemEvents.DisplaySettingsChanged += (sender, eventArgs) => UpdateDevices();
+            _displayChanges.Show();
+            _displayChanges.Hide();
+
             this.SubscribeNotifier();
         }
 

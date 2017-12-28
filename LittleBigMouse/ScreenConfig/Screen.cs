@@ -100,7 +100,7 @@ namespace LittleBigMouse.ScreenConfigs
         public bool Primary => this.Get(() => Monitor.Primary);
 
         [TriggedOn(nameof(Monitor), "AttachedDisplay", "CurrentMode", "DisplayOrientation")]
-        public int Orientation => this.Get(() => Monitor.AttachedDisplay.CurrentMode.DisplayOrientation);
+        public int Orientation => this.Get(() => Monitor.AttachedDisplay?.CurrentMode.DisplayOrientation??0);
 
         public string PnpDeviceName => this.Get(() =>
         {

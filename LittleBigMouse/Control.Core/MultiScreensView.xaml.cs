@@ -64,7 +64,7 @@ namespace LittleBigMouse.Control.Core
                 {
                     foreach (var element in Canvas.Children.OfType<FrameworkElement>().ToList())
                     {
-                        if(element.DataContext is ScreenFrameView view && ReferenceEquals(view.ViewModel.Model,s))
+                        if(element is ScreenFrameView view && ReferenceEquals(view.ViewModel.Model,s))
                             Canvas.Children.Remove(element);
                     }
                 }

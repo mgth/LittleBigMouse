@@ -49,8 +49,8 @@ namespace LittleBigMouse.ScreenConfigs
         {
             get => this.Get(() => LoadValueMonitor(
                 () => Screen.Orientation % 2 == 0
-                ? Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Width
-                : Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Height
+                ? Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Width??0
+                : Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Height??0
                 , "InMm.Width"));
 
             set => this.Set(value, (oldValue, newValue) =>
@@ -73,8 +73,8 @@ namespace LittleBigMouse.ScreenConfigs
         {
             get => this.Get(() => LoadValueMonitor(
                 ()=>Screen.Orientation % 2 == 0 
-                ? Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Height 
-                : Screen.Monitor.AttachedDisplay.DeviceCaps.Size.Width
+                ? Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Height??0 
+                : Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Width??0
                 ,"InMm.Height"));
             set
             {

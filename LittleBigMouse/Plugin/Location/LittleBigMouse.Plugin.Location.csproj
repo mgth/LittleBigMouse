@@ -7,8 +7,8 @@
     <ProjectGuid>{BFE44D5E-B0E7-4185-BB9D-49D83FBA5539}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>LittleBigMouse.LocationPlugin</RootNamespace>
-    <AssemblyName>LittleBigMouse.LocationPlugin</AssemblyName>
+    <RootNamespace>LittleBigMouse.Plugin.Location</RootNamespace>
+    <AssemblyName>LittleBigMouse.Plugin.Location</AssemblyName>
     <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />

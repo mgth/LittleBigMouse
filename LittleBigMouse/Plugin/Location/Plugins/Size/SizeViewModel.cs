@@ -108,7 +108,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Size
         }
 
 
-        [TriggedOn(nameof(Model), "PhysicalRotated", "FinalWidth")]
+        [TriggedOn(nameof(Model), "PhysicalRotated", "Width")]
         public double Width
         {
             get => Model.PhysicalRotated.Width;

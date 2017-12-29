@@ -57,7 +57,7 @@ namespace HLab.Argyll
                     _dispcalIni = new IniFile(
                         Path.Combine(
                             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                            @"dispcalGui\dispcalGUI.ini"
+                            @"DisplayCAL\DisplayCAL.ini"
                             ));
 
                 return _dispcalIni;
@@ -262,6 +262,8 @@ namespace HLab.Argyll
         {
             CIE_1931_2,
             CIE_1964_10,
+            CIE_2012_10,
+            CIE_2012_2,
             SB_1955_2,
             JV_1978_2,
             Shaw,
@@ -323,6 +325,12 @@ namespace HLab.Argyll
                     break;
                 case "1978_2":
                     Observer = ObserverEnum.JV_1978_2;
+                    break;
+                case "2012_2":
+                    Observer = ObserverEnum.CIE_2012_2;
+                    break;
+                case "2012_10":
+                    Observer = ObserverEnum.CIE_2012_10;
                     break;
             }
         }
@@ -410,24 +418,34 @@ namespace HLab.Argyll
 
         public void ExecSpotRead()
         {
-            Process[] aProc = Process.GetProcessesByName("Spotread");
-            for (int i = 0; i < aProc.Length; i++)
+            var aProc = Process.GetProcessesByName("Spotread");
+            foreach (var t in aProc)
             {
-                aProc[i].Kill();
-                if (!aProc[i].HasExited)
-                    aProc[i].WaitForExit();
+                try
+                {
+                    t.Kill();
+                    if (!t.HasExited)
+                        t.WaitForExit();
+                    
+                }
+                catch (Exception) { }
             }
 
-            Process p = new Process();
+            var p = new Process
+            {
+                StartInfo =
+                {
+                    FileName = Path.Combine(ArgyllPath, @"Spotread.exe"),
+                    Arguments = SpotReadArgs,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    RedirectStandardInput = true,
+                    CreateNoWindow = true
+                }
+            };
 
-            p.StartInfo.FileName = Path.Combine(ArgyllPath, @"Spotread.exe");
             //                p.StartInfo.Arguments = "-N -O -Y A";
-            p.StartInfo.Arguments = SpotReadArgs;
-            p.StartInfo.UseShellExecute = false;
-            p.StartInfo.RedirectStandardOutput = true;
-            p.StartInfo.RedirectStandardError = true;
-            p.StartInfo.RedirectStandardInput = true;
-            p.StartInfo.CreateNoWindow = true;
 
             try
             {

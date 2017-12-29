@@ -40,7 +40,7 @@ namespace LittleBigMouse.Plugin.Vcp
 
         public ProbeLut Lut => Model?.ProbeLut();
 
-        [TriggedOn("Screen")]
+        [TriggedOn("Model")]
         void InitLut()
         {
             Lut?.Load();

@@ -37,7 +37,7 @@ namespace HLab.Windows.Monitors
         private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             var message = (WindowMessage)msg;
-            var subCode = (WindowMessageParameter)wParam.ToInt32();
+            var subCode = (WindowMessageParameter)wParam.ToInt64();
 
             if (message == WindowMessage.WM_DISPLAYCHANGE /*|| message == WindowMessage.WM_WININICHANGE*/)
             {

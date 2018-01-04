@@ -19,7 +19,12 @@ namespace HLab.Windows.Monitors
             if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
                 NativeMethods.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }
-        public MonitorsService Service => this.Get(() => MonitorsService.D);
+        public MonitorsService Service
+        {
+            get => this.Get<MonitorsService>();
+            private set => this.Set(value);
+        }
+
         public string DeviceKey
         {
             get => this.Get<string>();
@@ -168,8 +173,9 @@ namespace HLab.Windows.Monitors
 
         private NativeMethods.PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
 
-        public Monitor()
+        public Monitor(MonitorsService service)
         {
+            Service = service;
             this.SubscribeNotifier();
         }
 

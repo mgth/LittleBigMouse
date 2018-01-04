@@ -20,6 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.ComponentModel;
 using HLab.Mvvm;
@@ -29,7 +30,7 @@ using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
 using Tester = LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.Tester;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location
+namespace LittleBigMouse.Plugin.Location.Plugins.Location
 {
     class LocationControlViewModel : IViewModel<ScreenConfig>
     {
@@ -66,15 +67,14 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
             {
                 Config.Enabled = true;
 
-                if (!Config.Saved) Config.Save();
+                if (!Config.Saved)
+                    Config.Save();
+
+                LittleBigMouseClient.Client.LoadConfig();
 
                 if (!Running)
                     LittleBigMouseClient.Client.Start();
-                else
-                {
-                    Config.Save();
-                    LittleBigMouseClient.Client.LoadConfig();
-                }
+
                 Client_StateChanged();
             }, 
             () => !(Running && Config.Saved));

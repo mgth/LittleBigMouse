@@ -38,7 +38,14 @@ using Microsoft.Win32;
 
 namespace HLab.Windows.Monitors
 {
-    public class MonitorsService : Singleton<MonitorsService>, INotifyPropertyChanged
+    public interface IMonitorsService
+    {
+        ObservableCollection<Monitor> Monitors { get; }
+        ObservableFilter<Monitor> AttachedMonitors { get; }
+    }
+
+
+    public class MonitorsService : Singleton<MonitorsService>, INotifyPropertyChanged, IMonitorsService
     {
 
         public event EventHandler DevicesUpdated;
@@ -47,6 +54,8 @@ namespace HLab.Windows.Monitors
         {
             _displayChanges.Show();
             _displayChanges.Hide();
+
+            UpdateDevices();
 
             this.SubscribeNotifier();
         }
@@ -57,9 +66,6 @@ namespace HLab.Windows.Monitors
         public ObservableCollection<DisplayDevice> Devices => this.Get(() => new ObservableCollection<DisplayDevice>());
 
         public ObservableCollection<Monitor> Monitors => this.Get(() => new ObservableCollection<Monitor>());
-        [TriggedOn(nameof(Monitors), "Item", "AttachedToDesktop")]
-        public void test()
-        { }
 
         [TriggedOn(nameof(Monitors),"Item","AttachedToDesktop")]
         public ObservableFilter<Monitor> AttachedMonitors => this.Get(()=> new ObservableFilter<Monitor>()
@@ -101,7 +107,7 @@ namespace HLab.Windows.Monitors
             List<DisplayDevice> oldDevices = Devices.ToList();
 
 
-            var device = new DisplayDevice();
+            var device = new DisplayDevice(this);
             device.Init(null,new NativeMethods.DISPLAY_DEVICE(true){DeviceID = "ROOT",DeviceName = null}, oldDevices );
 
             foreach (var d in oldDevices)

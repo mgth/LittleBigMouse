@@ -21,12 +21,15 @@
 	  http://www.mgth.fr
 */
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.ServiceModel;
 using System.ServiceModel.Description;
+using System.Threading;
 using System.Windows;
+using HLab.Windows.API;
 using HLab.Windows.MonitorVcp;
 using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
@@ -37,14 +40,17 @@ using MouseKeyboardActivityMonitor.WinApi;
 namespace LittleBigMouse_Daemon
 {
     [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
-    public class MouseEngine 
+    public class MouseEngine
     {
         public ScreenConfig Config { get; private set; }
+
+        private Zones _zones;
+
         private double _initMouseSpeed;
         public readonly MouseHookListener Hook = new MouseHookListener(new GlobalHooker());
-        private Point? _oldPoint = null;
 
         private ServiceHost _host;
+
         public void StartServer(ILittleBigMouseService service)
         {
             if (_host == null)
@@ -58,8 +64,9 @@ namespace LittleBigMouse_Daemon
                 _host.Description.Behaviors.Add(smb);
             }
 
-            _host.Open();          
+            _host.Open();
         }
+
         public void StopServer()
         {
             _host.Close();
@@ -72,14 +79,11 @@ namespace LittleBigMouse_Daemon
 
         public void Start()
         {
-            if (Hook.Enabled) return;
+            Stop();
 
-            if (Config == null)
-                LoadConfig();
+            LoadConfig();
 
             if (Config == null || !Config.Enabled) return;
-
-            SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
             using (RegistryKey key = ScreenConfig.OpenRootRegKey(true))
             {
@@ -88,9 +92,10 @@ namespace LittleBigMouse_Daemon
                 if (string.IsNullOrEmpty(ms))
                 {
                     _initMouseSpeed = LbmMouse.MouseSpeed;
-                    key.SetValue("InitialMouseSpeed", _initMouseSpeed.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
+                    key.SetValue("InitialMouseSpeed", _initMouseSpeed.ToString(CultureInfo.InvariantCulture),
+                        RegistryValueKind.String);
                 }
-                else 
+                else
                     double.TryParse(ms, out _initMouseSpeed);
 
                 using (RegistryKey savekey = key.CreateSubKey("InitialCursor"))
@@ -104,20 +109,40 @@ namespace LittleBigMouse_Daemon
 
             Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
 
-            Hook.MouseMoveExt += OnMouseMoveExt;
+
+            _handler = OnMouseMoveExtFirst;
+            Hook.MouseMoveExt += _handler;
+
+            if (Config.AdjustPointer)
+                ZoneChanged += AdjustPointer;
+
+            if (Config.AdjustSpeed)
+                ZoneChanged += AdjustSpeed;
+
+            if(Config.HomeCinema)
+                ZoneChanged += HomeCinema;
+
+
             Hook.Enabled = true;
- //           LittleBigMouseDaemon.Callback?.OnStateChange();
         }
 
         public void Stop()
         {
-            SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
-
             if (!Hook.Enabled) return;
 
-            Hook.MouseMoveExt -= OnMouseMoveExt;
+            Hook.MouseMoveExt -= _handler;
+
+            if (Config.AdjustPointer)
+                ZoneChanged -= AdjustPointer;
+
+            if (Config.AdjustSpeed)
+                ZoneChanged -= AdjustSpeed;
+
+            if (Config.HomeCinema)
+                ZoneChanged -= HomeCinema;
+
+
             Hook.Enabled = false;
- //           LittleBigMouseDaemon.Callback?.OnStateChange();
 
             if (Config == null) return;
 
@@ -152,182 +177,296 @@ namespace LittleBigMouse_Daemon
         public void LoadConfig(ScreenConfig config)
         {
             Config = config;
-            ConfigLoaded?.Invoke(config,null);
+            ConfigLoaded?.Invoke(config, null);
         }
 
         public event EventHandler ConfigLoaded;
+
         public void LoadConfig()
         {
-            if(Config!=null) Config.Load();
-            else
-            LoadConfig(new ScreenConfig());
-        }
-        private void OnDisplaySettingsChanged(object sender, EventArgs e)
-        {
-            LoadConfig();
-        }
+            LoadConfig(new ScreenConfig(MonitorsService.D));
 
-        private void OnMouseMoveExt(object sender, MouseEventExtArgs e)
-        {
-            // If first time called just save that point
-            if (_oldPoint == null)
+            _zones = new Zones();
+            foreach (var screen in Config.AllScreens)
             {
-                _oldPoint = new Point(e.X, e.Y);
-                return;
+                _zones.Add(new Zone(screen));
             }
 
 
+            if (Config.LoopX)
+            {
+                foreach (var screen in Config.AllScreens)
+                {
+                    var main = _zones.Main.FirstOrDefault(e => ReferenceEquals(e.Screen, screen));
+                    _zones.Add(new Zone(screen,main,-Config.PhysicalOutsideBounds.Width,0));
+                    _zones.Add(new Zone(screen,main,Config.PhysicalOutsideBounds.Width,0));
+                }
+            }
+
+            if (Config.LoopY)
+            {
+                foreach (var screen in Config.AllScreens)
+                {
+                    var main = _zones.Main.FirstOrDefault(e => ReferenceEquals(e.Screen,screen));
+                    _zones.Add(new Zone(screen,main, 0,-Config.PhysicalOutsideBounds.Height));
+                    _zones.Add(new Zone(screen,main, 0,Config.PhysicalOutsideBounds.Height));
+                }
+            }
+        }
+
+        private readonly Stopwatch _timer = new Stopwatch();
+        private int _count = -10;
+
+        //private void OnMouseMoveExt(object sender, MouseEventExtArgs e)
+        //{
+        //    //_timer.Start();
+        //    //try
+        //    //{
+        //    if (e.Clicked) return;
+        //    var pIn = new Point(e.X, e.Y);
+
+        //    if (_oldZone.ContainsPx(pIn))
+        //    {
+        //        _oldPoint = pIn;
+        //        e.Handled = false;
+        //        return;
+        //    }
+
+        //    e.Handled = _handler(pIn);
+
+        //    //}
+        //    //finally
+        //    //{
+        //    //    _timer.Stop();
+        //    //    _count++;               
+        //    //}
+        //}
+
+        private void PrintResult()
+        {
+            Console.WriteLine("AVG :" + _timer.ElapsedTicks / _count);
+            Console.WriteLine("AVG :" + _timer.Elapsed.TotalMilliseconds / _count);
+        }
+
+
+        private EventHandler<MouseEventExtArgs> _handler;
+        private Point _oldPoint;
+        private Zone _oldZone;
+
+        private void OnMouseMoveExtFirst(object sender, MouseEventExtArgs e)
+        {
+            _oldPoint = new Point(e.X,e.Y);
+            //_oldScreenRect = Config.ScreenFromPixel(_oldPoint).InPixel.Bounds;
+            _oldZone = _zones.FromPx(_oldPoint);
+
+            Hook.MouseMoveExt -= _handler;
+
+            if (Config.AllowCornerCrossing)
+                _handler = MouseMoveCross;
+            else
+            {
+                _handler = MouseMovestraight;
+            }
+
+            Hook.MouseMoveExt += _handler;
+
+            e.Handled = false;
+        }
+
+        public event EventHandler<ZoneChangeEventArgs> ZoneChanged;
+
+        private void MouseMovestraight(object sender, MouseEventExtArgs e)
+        {
             if (e.Clicked) return;
+            var pIn = new Point(e.X, e.Y);
 
-            Screen oldScreen = Config.ScreenFromPixel(_oldPoint.Value);
-
-            Point pIn = new Point(e.X, e.Y);
-
-            // No move
-            if (pIn.Equals(_oldPoint)) return;
-
-            //Debug.Print(pIn.X + " , " + pIn.Y + " -> " + pIn.TargetScreen?.Monitor.Adapter.DeviceName);
-
-            // no screen change
-            if (oldScreen == null || Equals(Config.ScreenFromPixel(pIn), oldScreen))
+            if (_oldZone.ContainsPx(pIn))
             {
                 _oldPoint = pIn;
+                e.Handled = false;
                 return;
             }
 
-            Point oldpInMm = oldScreen.InMm.GetPoint(oldScreen.InPixel, _oldPoint.Value);
-            Point pInMm = oldScreen.InMm.GetPoint(oldScreen.InPixel, pIn);
-            Screen screenOut = null; //Config.ScreenFromMmPosition(pInMm);// pIn.Mm.TargetScreen;
+            //Point oldpInMm = _oldZone.Px2Mm(_oldPoint);
+            Point pInMm = _oldZone.Px2Mm(pIn);
+            Zone zoneOut = null;
 
-            Debug.Print(oldScreen?.Monitor.AttachedDisplay.DeviceName + "P:" + _oldPoint +  " --> P:" + pIn + " " + screenOut?.Monitor.AttachedDisplay.DeviceName);
+            var minDx = 0.0;
+            var minDy = 0.0;
 
-            Point pOut = pIn;
-
-
-            //
-            // Allow Corner Jump
-            //
-            if (screenOut == null)
+            if (pIn.Y > _oldZone.Px.Bottom)
             {
-                double dist = double.PositiveInfinity;// (100.0);
-                Segment seg = new Segment(oldpInMm, pInMm);
-
-                // Calculate side to enter screen when corner crossing not allowed.
-                Side side = seg.IntersectSide(oldScreen.InMm.Bounds);
-
-
-                if (Config.AllowCornerCrossing)
+                foreach (var zone in _zones.All/*.Where(z => z.Mm.Top > _oldZone.Mm.Bottom)*/)
                 {
-                    foreach (var screen in Config.AllBut(oldScreen))
-                    {
-                        foreach (Point p in seg.Line.Intersect(screen.InMm.Bounds))
-                        {
-                            var travel = new Segment(oldpInMm, p);
-                            if (!travel.Rect.Contains(pInMm)) continue;
-                            if (travel.Size > dist) continue;
+                    if (zone.Mm.Left > pInMm.X || zone.Mm.Right < pInMm.X) continue;
+                    var dy = zone.Mm.Top - _oldZone.Mm.Bottom;
 
-                            dist = travel.Size;
-                            pOut = screen.InPixel.GetPoint(screen.InMm,
-                                p); // (new PhysicalPoint(Config, screen, p.X, p.Y)).Pixel.Inside;
-                            pOut = screen.InPixel.Inside(pOut);
-                            screenOut = screen;
-                        }
-                    }
+                    if (dy < 0) continue;
+                    if (dy > minDy && minDy > 0) continue;
+                         
+                    
+                    // = pInMm + new Vector(0, dy);
+                    minDy = dy;
+                    zoneOut = zone;
                 }
-                else
+            }
+            else if (pIn.Y < _oldZone.Px.Top)
+            {
+                foreach (var zone in _zones.All/*.Where(z => !ReferenceEquals(z, _oldZone))*/)
                 {
-                    foreach (var screen in Config.AllBut(oldScreen))
-                    {
-                        Vector offset = new Vector(0, 0);
+                    if (zone.Mm.Left > pInMm.X || zone.Mm.Right < pInMm.X) continue;
+                    var dy = zone.Mm.Bottom - _oldZone.Mm.Top;
 
-                        switch (side)
-                        {
-                            case Side.None:
-                                break;
-                            case Side.Bottom:
-                                offset.Y = seg.Rect.Height + screen.InMm.Y - (oldScreen.InMm.Y + oldScreen.InMm.Height);
-                                if (offset.Y < 0) offset.Y = 0;
-                                break;
-                            case Side.Top:
-                                offset.Y = -seg.Rect.Height + (screen.InMm.Y + screen.InMm.Height) - oldScreen.InMm.Y;
-                                if (offset.Y > 0) offset.Y = 0;
-                                break;
-                            case Side.Right:
-                                offset.X = seg.Rect.Width + screen.InMm.X - (oldScreen.InMm.X + oldScreen.InMm.Width);
-                                if (offset.X < 0) offset.X = 0;
-                                break;
-                            case Side.Left:
-                                offset.X = -seg.Rect.Width + (screen.InMm.X + screen.InMm.Width) - oldScreen.InMm.X;
-                                if (offset.X > 0) offset.X = 0;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
+                    if (dy > 0) continue;
+                    if (dy < minDy && minDy < 0) continue;
 
-                        Debug.Print(screen.Monitor.AttachedDisplay.DeviceName + " = " + offset.Length);
-
-                        if (offset.Length > 0 && offset.Length < dist)
-                        {
-                            Point shiftedPoint = pInMm + offset;
-
-                            if (Equals(Config.ScreenFromMmPosition(shiftedPoint), screen))
-                            {
-                                dist = offset.Length;
-                                pOut = screen.InPixel.GetPoint(screen.InMm, shiftedPoint);
-                                pOut = screen.InPixel.Inside(pOut);
-                                screenOut = screen;
-                            }
-                            else
-                            {
-
-                            }
-                        }
-                    }
+                    minDy= dy;
+                    zoneOut = zone;
                 }
             }
 
-            // if new position is not within another screen
-            if (screenOut == null)
+            if (pIn.X > _oldZone.Px.Right)
             {
-                Debug.Print("Out");
-                LbmMouse.CursorPos = oldScreen.InPixel.Inside(pIn); //   _oldPoint.Value; fix #40
+                foreach (var zone in _zones.All)
+                {
+                    if (zone.Mm.Top > pInMm.Y || zone.Mm.Bottom < pInMm.Y) continue;
+                    var dx = zone.Mm.Left - _oldZone.Mm.Right;
+
+                    if (dx < 0) continue;
+                    if (dx > minDx && minDx > 0) continue;
+
+                    minDx = dx;
+                    zoneOut = zone;
+                }
+            }
+            else if (pIn.X < _oldZone.Px.Left)
+            {
+                foreach (var zone in _zones.All)
+                {
+                    if (zone.Mm.Top > pInMm.Y || zone.Mm.Bottom < pInMm.Y) continue;
+                    var dx = zone.Mm.Right - _oldZone.Mm.Left;
+
+                    if (dx < minDx && minDx < 0) continue;
+                    if (dx > 0) continue;
+
+                    minDx = dx;
+                    zoneOut = zone;
+                }
+            }
+
+            if (zoneOut == null)
+            {
+                LbmMouse.CursorPos = _oldZone.InsidePx(pIn);
                 e.Handled = true;
                 return;
             }
 
-
-            // Actual mouving mouse to new location
-            LbmMouse.CursorPos = pOut;//.Mm.ToScreen(screenOut).Pixel.Inside.Point;
-            Debug.Print(">" + pOut.X + "," + pOut.Y);
-            Debug.Print(">" + LbmMouse.CursorPos.X + "," + LbmMouse.CursorPos.Y);
-
-            // Adjust pointer size to dpi ratio : should not be usefull if windows screen ratio is used
-            if (Config.AdjustPointer)
-            {
-                if (screenOut.RealDpiAvg > 110)
-                {
-                    LbmMouse.SetCursorAero(screenOut.RealDpiAvg > 138 ? 3 : 2);
-                }
-                else LbmMouse.SetCursorAero(1);
-            }
-
-
-            // Adjust pointer speed to dpi ratio : should not be usefull if windows screen ratio is used
-            if (Config.AdjustSpeed)
-            {
-                LbmMouse.MouseSpeed = Math.Round((5.0/96.0)*screenOut.RealDpiAvg, 0);
-            }
-
-            if (Config.HomeCinema)
-            {
-                oldScreen.Monitor.Vcp().Power = false;
-            }
-            screenOut.Monitor.Vcp().Power = true;
-
+            var pOut = zoneOut.Mm2Px(new Point(pInMm.X+minDx,pInMm.Y+minDy));
+            pOut = zoneOut.InsidePx(pOut);
+            _oldZone = zoneOut.Main;
             _oldPoint = pOut;
+            LbmMouse.CursorPos = pOut;
+            ZoneChanged?.Invoke(this, new ZoneChangeEventArgs(_oldZone, zoneOut));
             e.Handled = true;
         }
 
+        private void MouseMoveCross(object sender, MouseEventExtArgs e)
+        {
+            if (e.Clicked) return;
+            var pIn = new Point(e.X, e.Y);
+
+            if (_oldZone.ContainsPx(pIn))
+            {
+                _oldPoint = pIn;
+                e.Handled = false;
+                return;
+            }
+            //if (_count >= 0) _timer.Start();
+            //try
+            //{
+            Point oldpInMm = _oldZone.Px2Mm(_oldPoint);
+                Point pInMm = _oldZone.Px2Mm(pIn);
+                Zone zoneOut = null;
+
+                    var seg = new Segment(oldpInMm, pInMm);
+                    var minDist = double.PositiveInfinity;
+
+                    var pOutInMm = pInMm;
+
+                    foreach (var zone in _zones.All.Where(z => !ReferenceEquals(z, _oldZone)))
+                    {
+                        foreach (var p in seg.Line.Intersect(zone.Mm))
+                        {
+                            var travel = new Segment(oldpInMm, p);
+                            if (!travel.Rect.Contains(pInMm)) continue;
+                            var dist = travel.SizeSquared;
+                            if (dist > minDist) continue;
+
+                            minDist = dist;
+                            zoneOut = zone;
+                            pOutInMm = p;
+                        }
+                    }
+
+                    if (zoneOut == null)
+                    {
+                        LbmMouse.CursorPos = _oldZone.InsidePx(pIn);
+                        e.Handled = true;
+                        return;
+                    }
+
+                    var pOut = zoneOut.Mm2Px(pOutInMm);
+                    pOut = zoneOut.InsidePx(pOut);
+                    _oldZone = zoneOut.Main;
+                    _oldPoint = pOut;
+                    LbmMouse.CursorPos = pOut;
+                    ZoneChanged?.Invoke(this, new ZoneChangeEventArgs(_oldZone, zoneOut));
+                    e.Handled = true;
+                    return;
+
+            //}
+
+            //finally
+            //{
+            //    if (_count >= 0) _timer.Stop();
+            //    _count++;
+            //}
+        }
+
+        public class ZoneChangeEventArgs : EventArgs
+        {
+            public ZoneChangeEventArgs(Zone oldZone, Zone newZone)
+            {
+                OldZone = oldZone;
+                NewZone = newZone;
+            }
+
+            public Zone OldZone { get; }
+            public Zone NewZone { get; }
+        }
+
+        private void AdjustPointer(object sender, ZoneChangeEventArgs args)
+        {
+            if (args.NewZone.Dpi - args.OldZone.Dpi < 1) return;
+            if (args.NewZone.Dpi > 110)
+            {
+                    LbmMouse.SetCursorAero(args.NewZone.Dpi > 138 ? 3 : 2);
+            }
+            else LbmMouse.SetCursorAero(1);            
+        }
+
+        private void AdjustSpeed(object sender, ZoneChangeEventArgs args)
+        {
+            LbmMouse.MouseSpeed = Math.Round((5.0/96.0)* args.NewZone.Dpi, 0);
+        }
+
+        private void HomeCinema(object sender, ZoneChangeEventArgs args)
+        {
+            args.OldZone.Screen.Monitor.Vcp().Power = false;
+            args.NewZone.Screen.Monitor.Vcp().Power = true;
+        }
+
+ 
         public void MatchConfig(string configId)
         {
             Config.MatchConfig(configId);

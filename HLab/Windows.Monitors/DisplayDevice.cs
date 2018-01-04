@@ -34,12 +34,17 @@ namespace HLab.Windows.Monitors
 {
     public class DisplayDevice : NotifierObject
     {
-        public DisplayDevice()
+        public DisplayDevice(MonitorsService service)
         {
+            Service = service;
             this.SubscribeNotifier();
         }
 
-        public MonitorsService Service => this.Get(()=>MonitorsService.D);
+        public MonitorsService Service
+        {
+            get => this.Get<MonitorsService>();
+            private set => this.Set(value);
+        }
 
         public void Init(DisplayDevice parent, NativeMethods.DISPLAY_DEVICE dev, IList<DisplayDevice> oldDevices)
         {
@@ -57,13 +62,13 @@ namespace HLab.Windows.Monitors
                 case "ROOT":
                     break;
                 case "MONITOR":
-                    var mon = Service.GetOrAddMonitor(DeviceId, () => new Monitor {DeviceId = DeviceId});
+                    var mon = Service.GetOrAddMonitor(DeviceId, () => new Monitor(Service) {DeviceId = DeviceId});
                     mon.DeviceKey = DeviceKey;
                     mon.DeviceString = DeviceString;
                     mon.AttachedToDesktop = AttachedToDesktop;
                     break;
                 case "PCI":
-                    Service.GetOrAddAdapter(DeviceId, () => new PhysicalAdapter
+                    Service.GetOrAddAdapter(DeviceId, () => new PhysicalAdapter(Service)
                     {
                         DeviceId = DeviceId,
                         DeviceString = DeviceString
@@ -81,7 +86,7 @@ namespace HLab.Windows.Monitors
 
             while (NativeMethods.EnumDisplayDevices(DeviceName, i++, ref child, 0))
             {
-                var device = MonitorsService.D.Devices.FirstOrDefault(m => m.DeviceName == child.DeviceName);
+                var device = Service.Devices.FirstOrDefault(m => m.DeviceName == child.DeviceName);
                 if (device != null)
                 {
                     oldDevices.Remove(device);
@@ -89,9 +94,9 @@ namespace HLab.Windows.Monitors
                 }
                 else
                 {
-                    device = new DisplayDevice();
+                    device = new DisplayDevice(Service);
                     device.Init(this, child,oldDevices);
-                    MonitorsService.D.Devices.Add(device);
+                    Service.Devices.Add(device);
                 }
                 child = new NativeMethods.DISPLAY_DEVICE(true);
             }

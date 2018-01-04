@@ -10,7 +10,17 @@ namespace HLab.Windows.Monitors
 {
     public class PhysicalAdapter : NotifierObject
     {
-        public MonitorsService Service => this.Get(()=>MonitorsService.D);
+        public PhysicalAdapter(MonitorsService service)
+        {
+            Service = service;
+            this.SubscribeNotifier();
+        }
+
+        public MonitorsService Service
+        {
+            get => this.Get<MonitorsService>();
+            private set => this.Set(value);
+        }
 
         public string DeviceString
         {
@@ -24,7 +34,7 @@ namespace HLab.Windows.Monitors
         }
 
         [TriggedOn(nameof(DeviceId))]
-        [TriggedOn(nameof(Service),"Displays","Item","DeviceId")]
+        [TriggedOn(nameof(Service), "Devices", "Item","DeviceId")]
         public ObservableFilter<DisplayDevice> Displays => this.Get(() => new ObservableFilter<DisplayDevice>()
             .AddFilter(a => a.DeviceId == DeviceId)
             .Link(Service.Devices)

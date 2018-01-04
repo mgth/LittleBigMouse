@@ -76,6 +76,7 @@ namespace LittleBigMouse.ScreenConfigs
             try { Channel.LoadConfig(); }
             catch (EndpointNotFoundException) { LauchServer("--loadconfig"); }
             catch (CommunicationException) { }
+            catch (TimeoutException) { }
             //catch (FaultException) { }
         }
 
@@ -139,7 +140,8 @@ namespace LittleBigMouse.ScreenConfigs
         {
             var p = Process.GetCurrentProcess();
             string filename = p.MainModule.FileName.Replace("_Control", "_Daemon").Replace(".vshost", "");
-            Process.Start(filename,args);
+            var process = Process.Start(filename,args);
+
             //Thread.Sleep(1000);
             //Init();
         }

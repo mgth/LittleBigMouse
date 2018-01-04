@@ -85,18 +85,16 @@ namespace LittleBigMouse.ScreenConfigs
             return null;
         }
 
-        public ScreenConfig()
-        {
-            MonitorsOnCollectionChanged(MonitorsService.D.AttachedMonitors,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, MonitorsService.D.AttachedMonitors));
 
-            MonitorsService.D.AttachedMonitors.CollectionChanged += MonitorsOnCollectionChanged;
+
+        public ScreenConfig(IMonitorsService monitorsService)
+        {
             this.SubscribeNotifier();
 
-            MonitorsService.D.UpdateDevices();
+            MonitorsOnCollectionChanged(monitorsService.AttachedMonitors,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, MonitorsService.D.AttachedMonitors));
 
-            SetPhysicalAuto(false);
-
+            monitorsService.AttachedMonitors.CollectionChanged += MonitorsOnCollectionChanged;
         }
 
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
@@ -119,6 +117,7 @@ namespace LittleBigMouse.ScreenConfigs
                 }
 
             Load();
+            SetPhysicalAuto(false);
         }
 
         public ObservableCollection<Screen> AllScreens => this.Get(()=>new ObservableCollection<Screen>());
@@ -164,15 +163,8 @@ namespace LittleBigMouse.ScreenConfigs
 
 
         [TriggedOn(nameof(AllScreens),"Item","Id")]
-        public string Id
-        {
-            get => this.Get(IdDefault);
-            private set => this.Set(value);
-        }
-
-        public string IdDefault() => AllScreens.OrderBy(s => s.Id)
-                    .Aggregate("", (current, screen) => current + (((current != "") ? "." : "") + screen.Id));
-
+        public string Id => this.Get(() => AllScreens.OrderBy(s => s.Id)
+                    .Aggregate("", (current, screen) => current + (current != "" ? "." : "") + screen.Id));
 
         public void MatchConfig(string id)
         {
@@ -293,6 +285,8 @@ namespace LittleBigMouse.ScreenConfigs
                         AllowDiscontinuity = k.GetValue("AllowDiscontinuity", 0).ToString() == "1";
                         LoadAtStartup = k.GetValue("LoadAtStartup", 0).ToString() == "1";
                         HomeCinema = k.GetValue("HomeCinema", 0).ToString() == "1";
+                        LoopX = k.GetValue("LoopX", 0).ToString() == "1";
+                        LoopY = k.GetValue("LoopY", 0).ToString() == "1";
                     }
                 }
 
@@ -321,6 +315,8 @@ namespace LittleBigMouse.ScreenConfigs
                     k.SetValue("AllowDiscontinuity", AllowDiscontinuity ? "1" : "0");
                     k.SetValue("LoadAtStartup", LoadAtStartup ? "1" : "0");
                     k.SetValue("HomeCinema", HomeCinema ? "1" : "0");
+                    k.SetValue("LoopX", LoopX ? "1" : "0");
+                    k.SetValue("LoopY", LoopY ? "1" : "0");
 
                     foreach (Screen s in AllScreens)
                         s.Save(k);
@@ -438,6 +434,23 @@ namespace LittleBigMouse.ScreenConfigs
             set { if (this.Set(value)) { Saved = false; } }
         }
 
+        //[TriggedOn(nameof(AllowCornerCrossing))]
+        public bool LoopAllowed => true;
+
+        [TriggedOn(nameof(LoopAllowed))]
+        public bool LoopX
+        {
+            get => LoopAllowed && this.Get<bool>();
+            set { if (this.Set(value)) { Saved = false; } }
+        }
+        [TriggedOn(nameof(LoopAllowed))]
+        public bool LoopY
+        {
+            get => LoopAllowed && this.Get<bool>();
+            set { if (this.Set(value)) { Saved = false; } }
+        }
+
+        [TriggedOn(nameof(AllScreens),"Item","PixelToDipRatio")]
         public bool IsRatio100
         {
             get
@@ -451,6 +464,7 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        [TriggedOn(nameof(IsRatio100))]
         public bool AdjustPointerAllowed => IsRatio100;
 
         public bool AdjustPointer

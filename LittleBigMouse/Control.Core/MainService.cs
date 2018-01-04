@@ -23,6 +23,7 @@
 using System.Windows;
 using HLab.Mvvm;
 using HLab.Plugin;
+using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
@@ -34,7 +35,9 @@ namespace LittleBigMouse.Control.Core
         {
             var viewModel = D.MainViewModel;
 
-            var config = new ScreenConfig();
+            var m = MonitorsService.D;
+
+            var config = new ScreenConfig(m);
 
             viewModel.Config = config;
             viewModel.Presenter = new  MultiScreensViewModel { Config = config };

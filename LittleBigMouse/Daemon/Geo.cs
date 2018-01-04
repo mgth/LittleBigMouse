@@ -163,16 +163,17 @@ namespace LittleBigMouse_Daemon
         public Line Line => _line ?? (_line = Line.fromSegment(this));
 
         public Rect Rect => new Rect(A, B);
-
-        public double Size
+        public double SizeSquared
         {
             get
             {
                 Rect r = Rect;
-                return Math.Sqrt(r.Width * r.Width + r.Height * r.Height);
+                return r.Width * r.Width + r.Height * r.Height;
             }
 
         }
+
+        public double Size => Math.Sqrt(SizeSquared);
 
         public Point? Intersect(Line l)
         {

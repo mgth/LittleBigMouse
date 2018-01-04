@@ -201,6 +201,7 @@ namespace LittleBigMouse.Control.Core
                     Logo = (Viewbox)Application.Current.FindResource("LogoHp"); return;
                 case "lg":
                 case "lgs":
+                case "gsm"://GoldStar 
                     Logo = (Viewbox)Application.Current.FindResource("LogoLg"); return;
                 case "apl":
                 case "app":

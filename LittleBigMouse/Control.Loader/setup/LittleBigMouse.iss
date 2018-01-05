@@ -4,7 +4,7 @@
 
 [Setup]
 AppName=Little Big Mouse
-AppVersion=#AppVer
+AppVersion={#AppVer}
 DefaultDirName={pf}\LittleBigMouse
 DefaultGroupName=Little Big Mouse
 UninstallDisplayIcon={app}\LittleBigMouse_Control.exe

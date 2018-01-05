@@ -20,6 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Collections.Generic;
 using System.Windows;
@@ -31,10 +32,11 @@ using System.Windows.Shapes;
 using HLab.Mvvm;
 using HLab.Windows.API;
 using LittleBigMouse.Control.Core;
+using LittleBigMouse.LocationPlugin.Plugins.Location;
 using LittleBigMouse.ScreenConfigs;
 using MultiScreensView = LittleBigMouse.Control.Core.MultiScreensView;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location
+namespace LittleBigMouse.Plugin.Location.Plugins.Location
 {
     class SizeScreenContentView : UserControl, IView<ViewModeScreenLocation, LocationScreenViewModel>, IViewScreenFrameTopLayer
     {

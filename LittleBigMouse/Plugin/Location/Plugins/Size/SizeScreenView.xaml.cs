@@ -27,6 +27,7 @@ using System.Windows.Input;
 using HLab.Mvvm;
 using HLab.Windows.API;
 using LittleBigMouse.Control.Core;
+using LittleBigMouse.Plugin.Location.Plugins.Size;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Size
 {

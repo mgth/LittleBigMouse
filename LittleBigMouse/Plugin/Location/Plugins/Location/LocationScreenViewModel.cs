@@ -27,6 +27,7 @@ using System.Windows.Media;
 using HLab.Mvvm;
 using HLab.Notify;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
+using LittleBigMouse.Plugin.Location.Plugins.Location;
 using LittleBigMouse.ScreenConfigs;
 using RulerView = LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.RulerView;
 

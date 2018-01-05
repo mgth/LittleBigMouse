@@ -20,11 +20,13 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using HLab.Mvvm;
+using HLab.Mvvm.Icons;
 using HLab.Plugin;
 using LittleBigMouse.Control.Core;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location
+namespace LittleBigMouse.Plugin.Location.Plugins.Location
 {
     class ViewModeScreenLocation : ViewMode { }
 
@@ -32,7 +34,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
     {
         public override void Register()
         {
-            MainService.D.MainViewModel.AddButton("Location",
+            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconLocation"),
                 ()=> MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenLocation),
                 ()=> MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
         }

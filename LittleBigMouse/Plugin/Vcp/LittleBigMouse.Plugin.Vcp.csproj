@@ -143,5 +143,8 @@
   <ItemGroup>
     <None Include="lbm.licenseheader" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\IconVcp.svg" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

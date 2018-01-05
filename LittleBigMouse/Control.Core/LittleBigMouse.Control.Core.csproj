@@ -185,5 +185,14 @@
   <ItemGroup>
     <None Include="lbm.licenseheader" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\IconClose.svg" />
+    <EmbeddedResource Include="Icons\IconDebug.svg" />
+    <EmbeddedResource Include="Icons\IconFullscreen.svg" />
+    <EmbeddedResource Include="Icons\IconUnfullscreen.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\IconPinned.svg" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

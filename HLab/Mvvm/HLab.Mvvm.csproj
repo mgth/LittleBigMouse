@@ -91,6 +91,10 @@
     <Compile Include="Converters\GenericConverter.cs" />
     <Compile Include="Converters\MultiScaleConverter.cs" />
     <Compile Include="Converters\ScaleConverter.cs" />
+    <Compile Include="Icons\IconService.cs" />
+    <Compile Include="Icons\IconView.xaml.cs">
+      <DependentUpon>IconView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="IViewAware.cs" />
     <Compile Include="Observables\ObservableCollectionNotifier.cs" />
     <Compile Include="Observables\ObservableFilter.cs" />
@@ -125,6 +129,10 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Page Include="Icons\IconView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="NotFoundView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -132,6 +140,14 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="HLab.Mvvm.licenseheader" />
+    <None Include="Icons\svg2xaml.xsl.bak" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Icons\colors.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Icons\svg2xaml.old.xsl" />
+    <EmbeddedResource Include="Icons\svg2xaml.xsl" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

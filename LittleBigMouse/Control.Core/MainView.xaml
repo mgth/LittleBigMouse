@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:core="clr-namespace:LittleBigMouse.Control.Core"
         xmlns:mvvm="clr-namespace:HLab.Mvvm;assembly=HLab.Mvvm"
+        xmlns:icons="clr-namespace:HLab.Mvvm.Icons;assembly=HLab.Mvvm"
         mc:Ignorable="d"
         Icon="MainIcon.ico"
         Title="Little Big LbmMouse"  Topmost="True"
@@ -25,6 +26,45 @@
     <!--<Grid Background="#FF2D2D30">-->
     <Window.Resources>
         <Style x:Key="ButtonStyle" BasedOn="{StaticResource {x:Type ToggleButton}}" TargetType="RadioButton" />
+
+        <Style TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="#373737" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border CornerRadius="4" Background="{TemplateBinding Background}">
+                            <Grid>
+                                <!--<Path x:Name="PathIcon" Width="15" Height="25" Stretch="Fill" Fill="#4C87B3" HorizontalAlignment="Left" Margin="17,0,0,0" Data="F1 M 30.0833,22.1667L 50.6665,37.6043L 50.6665,38.7918L 30.0833,53.8333L 30.0833,22.1667 Z "/>-->
+                                <ContentPresenter x:Name="MyContentPresenter" Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0" />
+                                <Grid x:Name="GridDisabled"/>
+                            </Grid>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="DimGray" />
+                                <Setter Property="Foreground" Value="White" />
+                                <!--<Setter TargetName="PathIcon" Property="Fill" Value="Black" />-->
+                            </Trigger>
+
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="Black" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="GridDisabled" Property="Background" Value="#80000000" />
+                            </Trigger>
+
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <Grid x:Name="ResizeGrid">
         <Grid.RowDefinitions>
@@ -55,8 +95,36 @@
                 </Grid.ColumnDefinitions>
                 <ContentControl Grid.Column="0" Content="{Binding ButtonPanel}" Background="Black"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Command="{Binding MaximizeCommand}">/\</Button>
-                    <Button Command="{Binding CloseCommand}">X</Button>
+                    <Button Command="{Binding PinnedCommand}">
+                        <icons:IconView 
+                            VerticalAlignment="Top"
+                            HorizontalAlignment="Right"
+                            AssemblyName="LittleBigMouse.Control.Core"
+                            SourceName="IconPinned"
+                            Width="20"
+                            Height="10"
+                        />
+                    </Button>
+                    <Button Command="{Binding MaximizeCommand}">
+                        <icons:IconView 
+                            VerticalAlignment="Top"
+                            HorizontalAlignment="Right"
+                            AssemblyName="LittleBigMouse.Control.Core"
+                            SourceName="IconFullscreen"
+                            Width="20"
+                            Height="10"
+                            />
+                    </Button>
+                    <Button Command="{Binding CloseCommand}">
+                        <icons:IconView 
+                            VerticalAlignment="Top"
+                            HorizontalAlignment="Right"
+                            AssemblyName="LittleBigMouse.Control.Core"
+                            SourceName="IconClose"
+                            Width="20"
+                            Height="10"
+                            />
+                    </Button>
                 </StackPanel>
             </Grid>
            

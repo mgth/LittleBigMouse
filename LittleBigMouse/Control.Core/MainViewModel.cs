@@ -26,6 +26,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using HLab.Mvvm;
 using HLab.Mvvm.Commands;
 using HLab.Notify;
@@ -121,12 +122,18 @@ namespace LittleBigMouse.Control.Core
         };
        
 
-        public void AddButton(string caption, Action activate, Action deactivate)
+        public void AddButton(object content, Action activate, Action deactivate)
         {
             var tb = new ToggleButton
             {
+                Height = 40,
+                Width = 40,
+                Background = new SolidColorBrush(Colors.Black),
+                //Margin = new Thickness(5),
+                Padding = new Thickness(5),
+                BorderBrush = new SolidColorBrush(Colors.Black),
                 //Style = (Style)MainView.Resources["ButtonStyle"],
-                Content = caption,
+                Content = content,
             };
 
             tb.Checked += (sender, args) =>

@@ -198,5 +198,17 @@
   <ItemGroup>
     <None Include="lbm.licenseheader" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Icons\colors.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <EmbeddedResource Include="Icons\IconSave.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\IconLocation.svg" />
+    <EmbeddedResource Include="Icons\IconSize.svg" />
+    <EmbeddedResource Include="Icons\IconStart.svg" />
+    <EmbeddedResource Include="Icons\IconStop.svg" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

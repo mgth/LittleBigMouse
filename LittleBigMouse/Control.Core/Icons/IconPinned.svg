@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="74.223915mm"
+   height="73.466476mm"
+   viewBox="0 0 74.223915 73.466476"
+   version="1.1"
+   id="svg23"
+   inkscape:version="0.92.2 (5c3e80d, 2017-08-06)"
+   sodipodi:docname="IconPinned.svg">
+  <defs
+     id="defs17" />
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="3.1392857"
+     inkscape:cx="67.812895"
+     inkscape:cy="133.65852"
+     inkscape:document-units="mm"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0"
+     inkscape:window-width="3840"
+     inkscape:window-height="2035"
+     inkscape:window-x="3827"
+     inkscape:window-y="-13"
+     inkscape:window-maximized="1" />
+  <metadata
+     id="metadata20">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Calque 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-80.169965,-136.43305)">
+    <path
+       style="fill:#f2f2f2;stroke-width:0.26458332"
+       d="m 113.0477,138.6352 c -2.75243,-2.8593 -7.27016,-2.94533 -10.12946,-0.1929 l -1.27512,1.22747 c -2.859296,2.75243 -2.94533,7.27015 -0.1929,10.12945 l 13.68955,14.22107 -34.969805,40.59896 4.966007,5.28028 41.962708,-33.45601 13.68847,14.21995 c 2.75243,2.8593 7.27016,2.94533 10.12946,0.1929 l 1.27512,-1.22746 c 2.8593,-2.75243 2.94533,-7.27016 0.1929,-10.12945 z"
+       id="rect25"
+       inkscape:connector-curvature="0" />
+  </g>
+</svg>

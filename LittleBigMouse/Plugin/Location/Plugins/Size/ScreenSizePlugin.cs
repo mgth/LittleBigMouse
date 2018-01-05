@@ -20,18 +20,22 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System.Windows;
+using System.Windows.Controls;
 using HLab.Mvvm;
+using HLab.Mvvm.Icons;
 using HLab.Plugin;
 using LittleBigMouse.Control.Core;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Size
+namespace LittleBigMouse.Plugin.Location.Plugins.Size
 {
     public class ViewModeScreenSize : ViewMode { }
     internal class ScreenSizePlugin : PluginModule<ScreenSizePlugin>
     {
         public override void Register()
         {
-            MainService.D.MainViewModel.AddButton("Size",
+            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconSize"),
                 () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenSize),
                 () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
         }

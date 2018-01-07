@@ -106,6 +106,11 @@ namespace LittleBigMouse_Daemon
             return _engine.Hook.Enabled;
         }
 
+        public void Update()
+        {
+            throw new System.NotImplementedException();
+        }
+
         private static void InstallService()
         {
             try

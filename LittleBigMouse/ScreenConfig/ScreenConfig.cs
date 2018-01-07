@@ -285,8 +285,10 @@ namespace LittleBigMouse.ScreenConfigs
                         AllowDiscontinuity = k.GetValue("AllowDiscontinuity", 0).ToString() == "1";
                         LoadAtStartup = k.GetValue("LoadAtStartup", 0).ToString() == "1";
                         HomeCinema = k.GetValue("HomeCinema", 0).ToString() == "1";
+                        Pinned = k.GetValue("Pinned", 0).ToString() == "1";
                         LoopX = k.GetValue("LoopX", 0).ToString() == "1";
                         LoopY = k.GetValue("LoopY", 0).ToString() == "1";
+                        AutoUpdate = k.GetValue("AutoUpdate", 0).ToString() == "1";
                     }
                 }
 
@@ -315,8 +317,10 @@ namespace LittleBigMouse.ScreenConfigs
                     k.SetValue("AllowDiscontinuity", AllowDiscontinuity ? "1" : "0");
                     k.SetValue("LoadAtStartup", LoadAtStartup ? "1" : "0");
                     k.SetValue("HomeCinema", HomeCinema ? "1" : "0");
+                    k.SetValue("Pinned", Pinned ? "1" : "0");
                     k.SetValue("LoopX", LoopX ? "1" : "0");
                     k.SetValue("LoopY", LoopY ? "1" : "0");
+                    k.SetValue("AutoUpdate", AutoUpdate ? "1" : "0");
 
                     foreach (Screen s in AllScreens)
                         s.Save(k);
@@ -325,6 +329,15 @@ namespace LittleBigMouse.ScreenConfigs
                     return true;
                 }
                 return false;
+            }
+        }
+
+        public bool AutoUpdate
+        {
+            get => this.Get<bool>();
+            set
+            {
+                if (this.Set(value)) Saved = false;
             }
         }
 
@@ -489,6 +502,11 @@ namespace LittleBigMouse.ScreenConfigs
 
 
         public bool HomeCinema
+        {
+            get => this.Get<bool>();
+            set { if (this.Set(value)) Saved = false; }
+        }
+        public bool Pinned
         {
             get => this.Get<bool>();
             set { if (this.Set(value)) Saved = false; }

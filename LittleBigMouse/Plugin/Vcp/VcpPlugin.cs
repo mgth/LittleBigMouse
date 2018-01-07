@@ -34,7 +34,7 @@ namespace LittleBigMouse.Plugin.Vcp
         public override void Register()
         {
 #if DEBUG
-            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconVcp"),
+            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconVcp"),"Vcp control",
                 () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenVcp),
                 () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
 #endif

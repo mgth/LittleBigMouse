@@ -29,7 +29,7 @@
                     <CheckBox   Content="Allow Corner Crossing" IsChecked="{Binding Path=Config.AllowCornerCrossing, Mode=TwoWay}" Foreground="LightGray"/>
                 </StackPanel>
                 <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
-                    <CheckBox   Content="Live Update"  IsChecked="{Binding Path=LiveUpdate, Mode=TwoWay}" Foreground="LightGray"/>
+                    <CheckBox   Content="Auto Check for update"  IsChecked="{Binding Path=Config.AutoUpdate, Mode=TwoWay}" Foreground="LightGray"/>
                     <CheckBox   Content="Load at startup"  IsChecked="{Binding Path=LoadAtStartup, Mode=TwoWay}" Foreground="LightGray"/>
                     <CheckBox   Content="Enabled" IsChecked="{Binding Path=Config.Enabled, Mode=TwoWay}" Foreground="LightGray"/>
                 </StackPanel>
@@ -39,17 +39,17 @@
             <Button MinWidth="50" Margin="10,0,0,0" Command="{Binding CmdOk}">Ok</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdApply}">Apply</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdCancel}">Cancel</Button>-->
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}">
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}" ToolTip="Apply/Start">
                 <icons:IconView 
                     AssemblyName="LittleBigMouse.Plugin.Location"
                     SourceName="IconStart"/>
             </Button>
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StopCommand}">
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StopCommand}" ToolTip="Stop">
                 <icons:IconView 
                     AssemblyName="LittleBigMouse.Plugin.Location"
                     SourceName="IconStop"/>
             </Button>
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding SaveCommand}">
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding SaveCommand}" ToolTip="Save">
                 <icons:IconView 
                     AssemblyName="LittleBigMouse.Plugin.Location"
                     SourceName="IconSave"/>

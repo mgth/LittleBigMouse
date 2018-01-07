@@ -1139,7 +1139,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
       </xsl:choose>
     </xsl:when>
     <xsl:otherwise>
-      <xsl:variable name="named_color_hex" select="document('colors.xml')/colors/color[@name = translate($colorspec, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')]/@hex" />
+      <xsl:variable name="named_color_hex" select="document('Icons/colors.xml')/colors/color[@name = translate($colorspec, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')]/@hex" />
       <xsl:choose>
         <xsl:when test="$named_color_hex and $named_color_hex != ''">
           <xsl:value-of select="'#'" />

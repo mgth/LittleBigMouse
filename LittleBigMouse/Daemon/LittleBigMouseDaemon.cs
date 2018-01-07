@@ -29,6 +29,7 @@ using System.ServiceModel;
 using System.Windows;
 using System.Windows.Forms;
 using LittleBigMouse.ScreenConfigs;
+using LittleBigMouse_Daemon.Updater;
 using Microsoft.Win32.TaskScheduler;
 using Application = System.Windows.Application;
 
@@ -40,7 +41,7 @@ namespace LittleBigMouse_Daemon
         private const string ServiceName = "LittleBigMouse";
         private MouseEngine _engine;
         private Notify _notify;
-        private IList<string> _args;
+        private readonly IList<string> _args;
 
         public LittleBigMouseDaemon(IList<string> args)
         {
@@ -73,6 +74,7 @@ namespace LittleBigMouse_Daemon
 
             //_notify.AddMenu("Brightness", Brightness);
 
+            _notify.AddMenu(-1,"Check for update",CheckUpdate);
             _notify.AddMenu(-1,"Open", Open);
             _notify.AddMenu(-1,"Start", Start);
             _notify.AddMenu(-1,"Stop", Stop);
@@ -134,6 +136,7 @@ namespace LittleBigMouse_Daemon
                 switch (s.ToLower())
                 {
                     case "--exit":
+                    case "--quit":
                         Quit();
                         break;
                     case "--load":
@@ -151,6 +154,9 @@ namespace LittleBigMouse_Daemon
                     case "--unschedule":
                         LoadAtStartup(false);
                         break;
+                    case "--update":
+                        CheckUpdateAsync();
+                        break;
                 }
             }
         }
@@ -158,6 +164,11 @@ namespace LittleBigMouse_Daemon
         public bool Running()
         {
             return _engine.Hook.Enabled;
+        }
+
+        public void Update()
+        {
+            CheckUpdateAsync();
         }
 
         public void LoadAtStartup(bool state = true)
@@ -174,6 +185,8 @@ namespace LittleBigMouse_Daemon
         public void LoadConfig()
         {
             _engine.LoadConfig();
+            if (_engine.Config.AutoUpdate)
+                CheckUpdateAsync();
         }
 
         private void Quit(object sender, EventArgs e) { Quit(); }
@@ -197,6 +210,32 @@ namespace LittleBigMouse_Daemon
             _notify.SetOff();
         }
         private void Open(object sender, EventArgs eventArgs) { Open(); }
+
+        private void CheckUpdate(object sender, EventArgs eventArgs) { CheckUpdateAsync(); }
+
+        private async System.Threading.Tasks.Task CheckUpdateAsync()
+        {
+            var updater = new ApplicationUpdateViewModel();
+
+            await updater.CheckVersion();
+
+            if (updater.NewVersionFound)
+            {
+                var updaterView = new ApplicationUpdateView
+                {
+                    DataContext = updater
+                };
+                updaterView.ShowDialog();
+
+                if (updater.Updated)
+                {
+                    Application.Current.Shutdown();
+                    return;
+                }
+            }
+        }
+
+
         [DllImport("user32")]
         private static extern bool SetForegroundWindow(IntPtr hwnd);
         private void Open()

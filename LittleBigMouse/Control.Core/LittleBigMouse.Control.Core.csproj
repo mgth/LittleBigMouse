@@ -67,10 +67,15 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\Newtonsoft.Json.11.0.1-beta3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Net.Http" />
     <Reference Include="System.Runtime.Remoting" />
     <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />
@@ -153,6 +158,10 @@
     <Resource Include="MainIcon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\GraphQL\GraphQL.csproj">
+      <Project>{8ac1366a-4d8a-4ec9-bd5b-886b2e8d9cff}</Project>
+      <Name>GraphQL</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Hlab\Base\HLab.Base.csproj">
       <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
       <Name>HLab.Base</Name>
@@ -183,7 +192,9 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.config" />
     <None Include="lbm.licenseheader" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Icons\IconClose.svg" />

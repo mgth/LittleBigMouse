@@ -21,16 +21,24 @@
 	  http://www.mgth.fr
 */
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using GraphQL.Client;
+using GraphQL.Common.Request;
 using HLab.Mvvm;
 using HLab.Mvvm.Commands;
 using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace LittleBigMouse.Control.Core
 {
@@ -47,12 +55,15 @@ namespace LittleBigMouse.Control.Core
             set => this.Set(value);
         }
 
-        public ViewModeContext Context => this.Get(() => MvvmService.D.MainViewModeContext.AddCreator<ScreenFrameViewModel>(vm => vm.Presenter = Presenter as MultiScreensViewModel));
+        public ViewModeContext Context => this.Get(() =>
+            MvvmService.D.MainViewModeContext.AddCreator<ScreenFrameViewModel>(vm =>
+                vm.Presenter = Presenter as MultiScreensViewModel));
 
 
         public INotifyPropertyChanged Control
         {
-            get => this.Get<INotifyPropertyChanged>(); set => this.Set(value);
+            get => this.Get<INotifyPropertyChanged>();
+            set => this.Set(value);
         }
 
         public IPresenterViewModel Presenter
@@ -76,7 +87,8 @@ namespace LittleBigMouse.Control.Core
                     return;
                 }
 
-                MessageBoxResult result = MessageBox.Show("Save your changes before exiting ?", "Confirmation", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                MessageBoxResult result = MessageBox.Show("Save your changes before exiting ?", "Confirmation",
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
                 if (result == MessageBoxResult.Yes)
                 {
                     Config.Save();
@@ -91,6 +103,27 @@ namespace LittleBigMouse.Control.Core
             },
             () => true
         );
+
+
+
+
+        static async void GraphQl(string q)
+        {
+            // ... Target page.
+            string page = "https://api.github.com/graphql";
+
+            // ... Use HttpClient.
+            using (HttpClient client = new HttpClient())
+            //using (HttpResponseMessage response = await client.GetAsync(page))
+            //using (HttpContent content = response.Content)
+            {
+                client.BaseAddress = new Uri(page);
+                var content = new FormUrlEncodedContent(new []{new KeyValuePair<string, string>(q,q)});
+                // ... Read the string.
+                var response = client.PostAsync("",content).Result;
+            }
+        }
+
 
         public ModelCommand MaximizeCommand => this.GetCommand(
             () =>
@@ -122,16 +155,17 @@ namespace LittleBigMouse.Control.Core
         };
        
 
-        public void AddButton(object content, Action activate, Action deactivate)
+        public void AddButton(object content, string toolTip, Action activate, Action deactivate)
         {
             var tb = new ToggleButton
             {
+                ToolTip = toolTip,
                 Height = 40,
                 Width = 40,
-                Background = new SolidColorBrush(Colors.Black),
-                //Margin = new Thickness(5),
+                //Background = new SolidColorBrush(Colors.Black),
+                Margin = new Thickness(5),
                 Padding = new Thickness(5),
-                BorderBrush = new SolidColorBrush(Colors.Black),
+                //BorderBrush = new SolidColorBrush(Colors.Black),
                 //Style = (Style)MainView.Resources["ButtonStyle"],
                 Content = content,
             };

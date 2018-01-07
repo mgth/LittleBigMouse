@@ -34,7 +34,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
     {
         public override void Register()
         {
-            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconLocation"),
+            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconLocation"),"Location",
                 ()=> MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenLocation),
                 ()=> MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
         }

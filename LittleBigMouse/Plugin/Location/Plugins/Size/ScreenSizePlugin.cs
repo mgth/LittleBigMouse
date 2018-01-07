@@ -35,7 +35,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
     {
         public override void Register()
         {
-            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconSize"),
+            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconSize"),"Size",
                 () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenSize),
                 () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
         }

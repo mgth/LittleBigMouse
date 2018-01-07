@@ -27,7 +27,7 @@ namespace LittleBigMouse_Daemon
 {
     public class Notify //: IDisposable
     {
-        private readonly System.Windows.Forms.NotifyIcon _notify;
+        private readonly NotifyIcon _notify;
 
         public Notify()
         {

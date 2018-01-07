@@ -1,6 +1,6 @@
 ; -- LittleBigMouse.iss --
-;#define AppVer GetFileVersion('..\bin\x64\Release\LittleBigMouse_Control.exe')
-#define AppVer '4.0-beta7'
+#define AppVer GetFileVersion('..\bin\x64\Release\LittleBigMouse_Control.exe')
+;#define AppVer '4.0-beta7'
 
 [Setup]
 AppName=Little Big Mouse
@@ -17,9 +17,11 @@ OutputBaseFilename=LittleBigMouse_{#AppVer}
 [Files]
 Source: "..\bin\x64\Release\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode
 Source: "..\bin\x64\Release\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode
+Source: "..\bin\x64\Release\*.xml"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs
 
 Source: "..\bin\x86\Release\*.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode
 Source: "..\bin\x86\Release\*.dll"; DestDir: "{app}"; Check: not Is64BitInstallMode
+Source: "..\bin\x64\Release\*.xml"; DestDir: "{app}"; Check: not Is64BitInstallMode; Flags: recursesubdirs
 
 [Icons]
 Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse_Control.exe"
@@ -28,5 +30,4 @@ Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse_Control.exe"
 Filename: {app}\LittleBigMouse_Control.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
 
 [UninstallRun]
-Filename: "{app}\LittleBigMouse_Daemon.exe"; Parameters: "--unschedule"
-Filename: "{app}\LittleBigMouse_Daemon.exe"; Parameters: "--exit"
+Filename: "{app}\LittleBigMouse_Daemon.exe"; Parameters: "--unschedule --exit"

@@ -114,30 +114,11 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
         }
 
 
-        private Tester _tester;
-
         public LocationControlViewModel()
         {
             LittleBigMouseClient.Client.StateChanged += Client_StateChanged;
             Client_StateChanged();
             this.SubscribeNotifier();
         }
-
-
-        private void ShowTester()
-        {
-            if(_tester == null)
-                _tester = new Tester {DataContext = new TesterViewModel()};
-
-            _tester.Show();
-        }
-
-
-
-
-
     }
-
- 
-    
 }

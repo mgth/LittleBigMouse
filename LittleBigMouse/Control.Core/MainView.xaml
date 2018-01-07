@@ -146,7 +146,7 @@
                             Height="10"
                         />
                     </ToggleButton>
-                    <Button Command="{Binding MaximizeCommand}">
+                    <Button Command="{Binding MaximizeCommand}" Click="ButtonBase_OnClick">
                         <icons:IconView 
                             VerticalAlignment="Top"
                             HorizontalAlignment="Right"

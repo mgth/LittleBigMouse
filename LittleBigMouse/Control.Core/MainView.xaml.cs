@@ -185,6 +185,10 @@ namespace LittleBigMouse.Control.Core
                 
         //    SaveLocation();
         //}
+        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
     }
 
     public static class FrameworkElementExt

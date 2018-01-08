@@ -49,10 +49,10 @@
                     AssemblyName="LittleBigMouse.Plugin.Location"
                     SourceName="IconStop"/>
             </Button>
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding SaveCommand}" ToolTip="Save">
-                <icons:IconView 
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding UndoCommand}" ToolTip="Undo">
+                <icons:IconView Height="20"
                     AssemblyName="LittleBigMouse.Plugin.Location"
-                    SourceName="IconSave"/>
+                    SourceName="IconUndo"/>
             </Button>
         </StackPanel>
 

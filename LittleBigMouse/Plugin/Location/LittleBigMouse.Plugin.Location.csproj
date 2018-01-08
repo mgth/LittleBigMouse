@@ -203,6 +203,7 @@
     <Content Include="Icons\colors.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <EmbeddedResource Include="Icons\IconUndo.svg" />
     <EmbeddedResource Include="Icons\IconSave.svg" />
   </ItemGroup>
   <ItemGroup>

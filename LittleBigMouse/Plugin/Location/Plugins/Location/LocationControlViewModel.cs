@@ -59,6 +59,13 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
             },
         ()=>Config.Saved == false
         );
+        [TriggedOn(nameof(Config), "Saved")]
+        public ModelCommand UndoCommand => this.GetCommand(() =>
+            {
+                Config.Load();
+            },
+            () => Config.Saved == false
+        );
 
         [TriggedOn(nameof(Running))]
         [TriggedOn(nameof(Config),"Saved")]

@@ -19,5 +19,7 @@ and
 Task Scheduler Managed Wrapper
 https://taskscheduler.codeplex.com/
 
-
+## Donation
+If this project help you, you can give me a cup of coffee :) 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=YLGYPSHWTQ5UW&lc=FR&item_name=Mgth&currency_code=EUR&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted)
 

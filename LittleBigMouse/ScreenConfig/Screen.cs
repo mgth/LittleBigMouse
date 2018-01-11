@@ -328,11 +328,14 @@ namespace LittleBigMouse.ScreenConfigs
                     key.SetKey("BottomBorder",Physical.BottomBorder);
                     key.SetKey("LeftBorder",Physical.LeftBorder);
 
-                    if(Math.Abs(Physical.Height - Monitor.AttachedDisplay.DeviceCaps.Size.Height) > double.Epsilon)
-                        key.SetKey("Height",Physical.Height);
+                    if (Monitor.AttachedDisplay != null)
+                    {
+                        if(Math.Abs(Physical.Height - Monitor.AttachedDisplay.DeviceCaps.Size.Height) > double.Epsilon)
+                            key.SetKey("Height",Physical.Height);
 
-                    if(Math.Abs(Physical.Width - Monitor.AttachedDisplay.DeviceCaps.Size.Width) > double.Epsilon)
-                        key.SetKey("Whidth",Physical.Width);
+                        if(Math.Abs(Physical.Width - Monitor.AttachedDisplay.DeviceCaps.Size.Width) > double.Epsilon)
+                            key.SetKey("Whidth",Physical.Width);                        
+                    }
 
                     key.SetKey("PnpName", PnpDeviceName);
                     key.SetKey("DeviceId", Monitor.DeviceId);

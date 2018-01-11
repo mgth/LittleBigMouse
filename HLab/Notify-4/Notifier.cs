@@ -73,6 +73,8 @@ namespace HLab.Notify
             if (h.Remove(handler)) _weakTable.TryRemove(obj, out h);
         }
 
+        public object Target => _weakTable.Select(k => k.Key).FirstOrDefault();
+
         public NotifierClass Class { get; }
 
         private Suspender _suspender;
@@ -120,7 +122,7 @@ namespace HLab.Notify
             try
             {
                 return Entries.GetOrAdd(property,
-                    e => new NotifierEntry(this, property, a => getter.Invoke((T) (a ?? default(T))))).GetValue<T>();
+                    p => p.GetNewEntry(this, a => getter.Invoke((T) (a ?? default(T))))).GetValue<T>();
             }
             catch (PropertyNotReady ex)
             {
@@ -153,12 +155,12 @@ namespace HLab.Notify
         public bool Set<T>(object target, T value, NotifierProperty property, Action<T, T> postUpdateAction = null)
         {
             
-            bool isnew = false;
+            var isnew = false;
 
             var entry = Entries.GetOrAdd(property, (oldValue) =>
                 {
                     isnew = true;
-                    return new NotifierEntry(this, property, n => value);
+                    return property.GetNewEntry(this, n => value);
                 }
             );
 

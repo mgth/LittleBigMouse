@@ -72,6 +72,9 @@ namespace HLab.Notify
                         if (eq) return false;
                     }
                 }
+
+                Property.AddOneToMany(Value,value,Notifier.Target);
+
                 Value = value;
                 return true;
             }
@@ -79,4 +82,5 @@ namespace HLab.Notify
 
         protected object Value;
     }
+
 }

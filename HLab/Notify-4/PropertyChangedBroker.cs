@@ -15,7 +15,7 @@ namespace HLab.Notify
         public event PropertyChangedEventHandler PropertyChanged;
 
         private object _oldValue = null;
-        private object _target = null;
+        private readonly object _target = null;
         private readonly PropertyInfo _property;
         public PropertyChangedHolder(object target, string property)
         {

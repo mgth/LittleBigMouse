@@ -75,6 +75,22 @@ namespace HLab.Notify
     }
 
 
+    public enum Persistency {
+        OnChange,
+        OnSave
+    }
+
+    [AttributeUsage(AttributeTargets.Property)]
+    public class Persistent : Attribute
+    {
+        public  Persistency Persistency { get; } 
+        public Persistent(Persistency persistency)
+        {
+            Persistency = persistency;
+        }
+    }
+
+
 
 
 }

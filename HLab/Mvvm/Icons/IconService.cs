@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,7 +19,7 @@ namespace HLab.Mvvm.Icons
     class IconCache
     {
         private readonly object _lockCache = new object();
-        private readonly Dictionary<string, UIElement> _cache = new Dictionary<string, UIElement>();
+        private readonly ConcurrentDictionary<string, UIElement> _cache = new ConcurrentDictionary<string, UIElement>();
         private readonly Assembly _assembly;
 
         public IconCache(Assembly assembly)
@@ -30,12 +31,7 @@ namespace HLab.Mvvm.Icons
         {
             lock (_lockCache)
             {
-                if (_cache.TryGetValue(name, out UIElement ui))
-                {
-                    return ui;
-                }
-                ui = f(_assembly, name);
-                return ui;
+                return _cache.GetOrAdd(name,n => f(_assembly, n));
             }
         }
     }
@@ -78,52 +74,61 @@ namespace HLab.Mvvm.Icons
             }
         }
 
+        private XslCompiledTransform _transform;
+
+        private XslCompiledTransform Transform
+        {
+            get
+            {
+                if (_transform == null)
+                {
+                    using (var xslStream = Assembly.GetAssembly(this.GetType())
+                        .GetManifestResourceStream("HLab.Mvvm.Icons.svg2xaml.xsl"))
+                    {
+                        if (xslStream == null) throw new IOException("xsl file not found");
+                        using (var stylesheet = XmlReader.Create(xslStream))
+                        {
+                            var settings = new XsltSettings { EnableDocumentFunction = true };
+                            _transform = new XslCompiledTransform();
+                            _transform.Load(stylesheet, settings, new XmlUrlResolver());
+                        }
+                    }
+                }
+                return _transform;
+            }
+        }
+
         public UIElement GetFromSvg(Assembly assembly, string name)
         {
-            string[] resources = assembly.GetManifestResourceNames();
-
-            using (var xslStream = Assembly.GetAssembly(this.GetType()).GetManifestResourceStream("HLab.Mvvm.Icons.svg2xaml.xsl"))
+            using (var s = new MemoryStream())
             {
-                if (xslStream == null) throw new IOException("xsl file not found");
-                using (var stylesheet = XmlReader.Create(xslStream))
+                using (
+                    var svg =
+                        assembly.GetManifestResourceStream(assembly.GetName().Name + ".Icons." +
+                                                            name.Replace("/", ".") + ".svg"))
                 {
-                    var t = new XslCompiledTransform();
-
-                    XsltSettings settings = new XsltSettings {EnableDocumentFunction = true};
-
-                    t.Load(stylesheet, settings, new XmlUrlResolver());
-
-                    using (var s = new MemoryStream())
+                    if (svg == null) return null;
+                    using (var svgReader = XmlReader.Create(svg))
                     {
-                        using (
-                            var svg =
-                                assembly.GetManifestResourceStream(assembly.GetName().Name + ".Icons." +
-                                                                   name.Replace("/", ".") + ".svg"))
+                        using (var w = XmlWriter.Create(s))
                         {
-                            if (svg == null) return null;
-                            using (var svgReader = XmlReader.Create(svg))
-                            {
-                                using (var w = XmlWriter.Create(s))
-                                {
-                                    t.Transform(svgReader, w);
-                                }
-                                try
-                                {
-                                    s.Seek(0, SeekOrigin.Begin);
-                                    var sz = Encoding.UTF8.GetString(s.ToArray());
-
-                                    using (var reader = XmlReader.Create(s))
-                                        return (UIElement) System.Windows.Markup.XamlReader.Load(reader);
-                                }
-                                catch (IOException)
-                                {
-                                    return null;
-                                }
-                            }
+                            Transform.Transform(svgReader, w);
                         }
-                    }                    
+                        try
+                        {
+                            s.Seek(0, SeekOrigin.Begin);
+                            var sz = Encoding.UTF8.GetString(s.ToArray());
+
+                            using (var reader = XmlReader.Create(s))
+                                return (UIElement) System.Windows.Markup.XamlReader.Load(reader);
+                        }
+                        catch (IOException)
+                        {
+                            return null;
+                        }
+                    }
                 }
-            }
+            }                    
         }
 
         public BitmapSource GetIconBitmap(string name, Size size)

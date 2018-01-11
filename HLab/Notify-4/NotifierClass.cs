@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.Linq;
 using System.Reflection;
 
 namespace HLab.Notify
@@ -18,13 +21,17 @@ namespace HLab.Notify
         }
 
         public NotifierProperty GetProperty(PropertyInfo property) =>
-            Properties.GetOrAdd(property, p => new NotifierPropertyReflexion(ClassType, p));
+            Properties.GetOrAdd(property, GetNewProperty);
         
 
         public NotifierProperty GetProperty(string name) => PropertiesByName.GetOrAdd(name, n =>
         {
             var property = ClassType.GetProperty(n);
-            return property == null ? new NotifierProperty(ClassType, n) : GetProperty(property);
+            return property == null ? GetNewPropertyByName(n): GetProperty(property);                        
         });
+
+        protected NotifierProperty GetNewPropertyByName(string name) => new NotifierProperty(this, name);
+        protected NotifierProperty GetNewProperty(PropertyInfo property) => new NotifierPropertyReflexion(this, property);
+
     }
 }

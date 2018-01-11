@@ -32,6 +32,7 @@ using System.Windows;
 using HLab.Notify;
 using HLab.Windows.Monitors;
 using Microsoft.Win32;
+using Newtonsoft.Json;
 
 // ReSharper disable CompareOfFloatsByEqualityOperator
 
@@ -120,21 +121,14 @@ namespace LittleBigMouse.ScreenConfigs
             SetPhysicalAuto(false);
         }
 
+        [JsonProperty]
         public ObservableCollection<Screen> AllScreens => this.Get(()=>new ObservableCollection<Screen>());
 
         public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => !Equals(s, screen));
 
-        public Screen Selected
-        {
-            get => this.Get<Screen>();
-            private set => this.Set(value);
-        }
-
         [TriggedOn(nameof(AllScreens),"Item","Selected")]
-        public void UpdateSelected()
-        {
-            Selected = AllScreens.FirstOrDefault(screen => screen.Selected);
-        }
+        public Screen Selected => this.Get(()=>AllScreens.FirstOrDefault(screen => screen.Selected));
+
 
         private const string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
 
@@ -161,7 +155,7 @@ namespace LittleBigMouse.ScreenConfigs
 
         public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Id, create);
 
-
+        [JsonProperty]
         [TriggedOn(nameof(AllScreens),"Item","Id")]
         public string Id => this.Get(() => AllScreens.OrderBy(s => s.Id)
                     .Aggregate("", (current, screen) => current + (current != "" ? "." : "") + screen.Id));
@@ -332,6 +326,7 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        [JsonProperty]
         public bool AutoUpdate
         {
             get => this.Get<bool>();
@@ -341,6 +336,7 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        [JsonProperty]
         public Screen PrimaryScreen => AllScreens.FirstOrDefault(s => s.Primary);
 
         ///// <summary>
@@ -356,6 +352,7 @@ namespace LittleBigMouse.ScreenConfigs
         /// Mm Outside Bounds updated while moving (screen dragged on gui)
         /// </summary>
         //[TriggedOn(nameof(Moving))]
+        [JsonProperty]
         [TriggedOn(nameof(AllScreens), "Item", "InMm.OutsideBounds")]
         public Rect PhysicalOutsideBounds => this.Get(() =>
         {
@@ -409,6 +406,7 @@ namespace LittleBigMouse.ScreenConfigs
         /// <summary>
         /// Mm Bounds of overall screens without borders
         /// </summary>
+        [JsonProperty]
         [TriggedOn(nameof(AllScreens), "Item", "InMm", "Bounds")]
         public Rect PhysicalBounds => this.Get(() =>
         {
@@ -435,12 +433,14 @@ namespace LittleBigMouse.ScreenConfigs
         /// 
         /// </summary>
 
+        [JsonProperty]
         public bool Enabled
         {
             get => this.Get<bool>();
             set { if (this.Set(value)) Saved = false; }
         }
 
+        [JsonProperty]
         public bool LoadAtStartup
         {
             get => this.Get<bool>();
@@ -448,14 +448,18 @@ namespace LittleBigMouse.ScreenConfigs
         }
 
         //[TriggedOn(nameof(AllowCornerCrossing))]
+        [JsonProperty]
         public bool LoopAllowed => true;
 
+        [JsonProperty]
         [TriggedOn(nameof(LoopAllowed))]
         public bool LoopX
         {
             get => LoopAllowed && this.Get<bool>();
             set { if (this.Set(value)) { Saved = false; } }
         }
+
+        [JsonProperty]
         [TriggedOn(nameof(LoopAllowed))]
         public bool LoopY
         {
@@ -463,6 +467,7 @@ namespace LittleBigMouse.ScreenConfigs
             set { if (this.Set(value)) { Saved = false; } }
         }
 
+        [JsonProperty]
         [TriggedOn(nameof(AllScreens),"Item","PixelToDipRatio")]
         public bool IsRatio100
         {
@@ -477,44 +482,54 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        [JsonProperty]
         [TriggedOn(nameof(IsRatio100))]
         public bool AdjustPointerAllowed => IsRatio100;
 
+        [JsonProperty]
         public bool AdjustPointer
         {
             get => AdjustPointerAllowed && this.Get<bool>();
             set { if (this.Set(value)) Saved = false; }
         }
 
+        [JsonProperty]
         public bool AdjustSpeedAllowed => IsRatio100;
 
+
+        [JsonProperty]
         public bool AdjustSpeed
         {
             get => AdjustSpeedAllowed && this.Get<bool>();
             set { if (this.Set(value)) Saved = false; }
         }
 
+        [JsonProperty]
         public bool AllowCornerCrossing
         {
             get => this.Get<bool>();
             set { if (this.Set(value)) Saved = false; }
         }
 
-
+        [JsonProperty]
         public bool HomeCinema
         {
             get => this.Get<bool>();
             set { if (this.Set(value)) Saved = false; }
         }
+
+        [JsonProperty]
         public bool Pinned
         {
             get => this.Get<bool>();
             set { if (this.Set(value)) Saved = false; }
         }
 
-        public Rect ConfigLocation
+        [JsonProperty]
+       public Rect ConfigLocation
         {
-            get => this.Get<Rect>(); set => this.Set(value);
+            get => this.Get<Rect>();
+            set => this.Set(value);
         }
 
 
@@ -678,6 +693,7 @@ namespace LittleBigMouse.ScreenConfigs
         }
 
 
+        [JsonProperty]
         public bool AllowOverlaps
         {
             get => this.Get<bool>(); set
@@ -689,24 +705,28 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        [JsonProperty]
         public bool AllowDiscontinuity
         {
-            get => this.Get<bool>(); set { if (this.Set(value)) Saved = false; }
+            get => this.Get<bool>();
+            set { if (this.Set(value)) Saved = false; }
         }
 
         public bool Saved
         {
-            get => this.Get<bool>(); set => this.Set(value);
+            get => this.Get<bool>();
+            set => this.Set(value);
         }
 
+        [JsonProperty]
         [TriggedOn(nameof(AllScreens),"Item.EffectiveDpi","X")]
         public double MaxEffectiveDpiX => this.Get( 
             ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.X).Max());
 
+        [JsonProperty]
         [TriggedOn(nameof(AllScreens),"Item.EffectiveDpi","Y")]
         public double MaxEffectiveDpiY => this.Get( 
             ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.Y).Max());
-
 
     }
 }

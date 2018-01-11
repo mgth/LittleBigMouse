@@ -29,6 +29,7 @@ using System.Runtime.InteropServices;
 using HLab.Notify;
 using HLab.Windows.API;
 using Microsoft.Win32;
+using Newtonsoft.Json;
 
 namespace HLab.Windows.Monitors
 {
@@ -102,17 +103,23 @@ namespace HLab.Windows.Monitors
             }
         }
 
+        [JsonProperty]
         [TriggedOn(nameof(State))]
         public bool AttachedToDesktop =>
             this.Get(() => (State & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != 0);
 
 
+        [JsonProperty]
         public ObservableCollection<DisplayMode> DisplayModes =>
             this.Get(() => new ObservableCollection<DisplayMode>());
+
+
+        [JsonProperty]
         public DeviceCaps DeviceCaps =>
             this.Get(() => new DeviceCaps(DeviceName));
 
 
+        [JsonProperty]
         public DisplayMode CurrentMode => this.Get(() =>
         {
             NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
@@ -137,6 +144,7 @@ namespace HLab.Windows.Monitors
             }
         }
 
+        [JsonProperty]
         public string DeviceName
         {
             get => this.Get<string>();
@@ -158,24 +166,28 @@ namespace HLab.Windows.Monitors
             protected set => this.Set(value);
         }
 
+        [JsonProperty]
         public string DeviceString
         {
             get => this.Get<string>();
             protected set => this.Set(value ?? "");
         }
 
+        [JsonProperty]
         public NativeMethods.DisplayDeviceStateFlags State
         {
             get => this.Get<NativeMethods.DisplayDeviceStateFlags>();
             protected set => this.Set(value);
         }
 
+        [JsonProperty]
         public string DeviceId
         {
             get => this.Get<string>();
             protected set => this.Set(value);
         }
 
+        [JsonProperty]
         public string DeviceKey
         {
             get => this.Get<string>();

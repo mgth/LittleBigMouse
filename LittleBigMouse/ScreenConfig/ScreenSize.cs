@@ -23,6 +23,7 @@
 
 using System.Windows;
 using HLab.Notify;
+using Newtonsoft.Json;
 
 namespace LittleBigMouse.ScreenConfigs
 {
@@ -52,15 +53,32 @@ namespace LittleBigMouse.ScreenConfigs
             protected set => this.Set(value);
         }
 
+        //[JsonProperty]
         public abstract double Width { get; set; }
+        //[JsonProperty]
         public abstract double Height { get; set; }
+        //[JsonProperty]
         public abstract double X { get; set; }
+        //[JsonProperty]
         public abstract double Y { get; set; }
+        //[JsonProperty]
         public abstract double TopBorder { get; set; }
+        //[JsonProperty]
         public abstract double BottomBorder { get; set; }
+        //[JsonProperty]
         public abstract double LeftBorder { get; set; }
+        //[JsonProperty]
         public abstract double RightBorder { get; set; }
 
+        [JsonProperty]
+        [TriggedOn(nameof(LeftBorder))]
+        [TriggedOn(nameof(RightBorder))]
+        [TriggedOn(nameof(TopBorder))]
+        [TriggedOn(nameof(BottomBorder))]
+        public Thickness Borders =>
+            this.Get(() => new Thickness(LeftBorder, TopBorder, RightBorder, BottomBorder));
+
+        //[JsonProperty]
         [TriggedOn(nameof(X))]
         [TriggedOn(nameof(Y))]
         public Point Location
@@ -75,6 +93,7 @@ namespace LittleBigMouse.ScreenConfigs
                 }
             }
         }
+        //[JsonProperty]
         [TriggedOn(nameof(Width))]
         [TriggedOn(nameof(Height))]
         public Size Size
@@ -90,22 +109,26 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        [JsonProperty]
         [TriggedOn(nameof(Size))]
         [TriggedOn(nameof(Location))]
         public Rect Bounds => this.Get(() => new Rect(
             Location,
             Size));
 
+        //[JsonProperty]
         [TriggedOn(nameof(LeftBorder))]
         [TriggedOn(nameof(RightBorder))]
         [TriggedOn(nameof(Width))]
         public double OutsideWidth => this.Get(() => Width + LeftBorder + RightBorder);
 
+        //[JsonProperty]
         [TriggedOn(nameof(TopBorder))]
         [TriggedOn(nameof(BottomBorder))]
         [TriggedOn(nameof(Height))]
         public double OutsideHeight => this.Get(() => Height + TopBorder + BottomBorder);
 
+        //[JsonProperty]
         [TriggedOn(nameof(X))]
         [TriggedOn(nameof(LeftBorder))]
         public double OutsideX
@@ -114,6 +137,7 @@ namespace LittleBigMouse.ScreenConfigs
             set => X = value + LeftBorder;
         }
 
+        //[JsonProperty]
         [TriggedOn(nameof(Y))]
         [TriggedOn(nameof(TopBorder))]
         public double OutsideY
@@ -130,6 +154,7 @@ namespace LittleBigMouse.ScreenConfigs
             return new Point(x,y);
         }
 
+        [JsonProperty]
         [TriggedOn(nameof(OutsideX))]
         [TriggedOn(nameof(OutsideY))]
         [TriggedOn(nameof(OutsideWidth))]

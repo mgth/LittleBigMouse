@@ -22,17 +22,25 @@
 */
 using System.Windows;
 using HLab.Windows.API;
+using Newtonsoft.Json;
 
 namespace HLab.Windows.Monitors
 {
     public class DisplayMode
     {
+        [JsonProperty]
         public Point Position { get; }
+        [JsonProperty]
         public int BitsPerPixel { get; }
+        [JsonProperty]
         public Size Pels { get; }
+        [JsonProperty]
         public int DisplayFlags { get; }
+        [JsonProperty]
         public int DisplayFrequency { get; }
+        [JsonProperty]
         public int DisplayFixedOutput { get; }
+        [JsonProperty]
         public int DisplayOrientation { get; }
         public DisplayMode(NativeMethods.DEVMODE devmode)
         {

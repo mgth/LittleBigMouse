@@ -23,12 +23,15 @@
 
 using System;
 using HLab.Notify;
+using Newtonsoft.Json;
 
 namespace LittleBigMouse.ScreenConfigs
 {
     public abstract class ScreenRatio : NotifierObject
     {
+        [JsonProperty]
         public abstract double X { get; set; }
+        [JsonProperty]
         public abstract double Y { get; set; }
 
     }

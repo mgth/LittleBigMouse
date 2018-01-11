@@ -9,6 +9,7 @@ using HLab.Mvvm.Observables;
 using HLab.Notify;
 using HLab.Windows.API;
 using Microsoft.Win32;
+using Newtonsoft.Json;
 
 namespace HLab.Windows.Monitors
 {
@@ -25,23 +26,28 @@ namespace HLab.Windows.Monitors
             private set => this.Set(value);
         }
 
+        [JsonProperty]
         public string DeviceKey
         {
             get => this.Get<string>();
             internal set => this.Set(value);
         }
+
+        [JsonProperty]
         public string DeviceId
         {
             get => this.Get<string>();
             internal set => this.Set(value);
         }
 
+        [JsonProperty]
         public string DeviceString
         {
             get => this.Get<string>();
             internal set => this.Set(value ?? "");
         }
 
+        [JsonProperty]
         [TriggedOn(nameof(DeviceId))]
         [TriggedOn(nameof(Service), "Devices", "Item", "DeviceId")]
         public ObservableFilter<DisplayDevice> Devices => this.Get(() => new ObservableFilter<DisplayDevice>()
@@ -49,9 +55,11 @@ namespace HLab.Windows.Monitors
             .Link(Service.Devices)
         );
 
+        [JsonProperty]
         [TriggedOn(nameof(Devices),"Item","AttachedToDesktop")]
         public DisplayDevice AttachedDevice => this.Get(() => Devices.FirstOrDefault(d => d.AttachedToDesktop));
 
+        [JsonProperty]
         [TriggedOn(nameof(AttachedDevice),"Parent")]
         public DisplayDevice AttachedDisplay => this.Get(() => AttachedDevice?.Parent);
 
@@ -63,32 +71,43 @@ namespace HLab.Windows.Monitors
 
             HMonitor = hMonitor;
         }
+
+        [JsonProperty]
         public Rect MonitorArea
         {
-            get => this.Get<Rect>(); private set => this.Set(value);
+            get => this.Get<Rect>();
+            private set => this.Set(value);
         }
 
+        [JsonProperty]
         public Rect WorkArea
         {
-            get => this.Get<Rect>(); private set => this.Set(value);
+            get => this.Get<Rect>();
+            private set => this.Set(value);
         }
 
         public IntPtr HMonitor
         {
-            get => this.Get<IntPtr>(); private set => this.Set(value);
+            get => this.Get<IntPtr>();
+            private set => this.Set(value);
         }
+
+        [JsonProperty]
         public string HKeyName
         {
-            get => this.Get<string>(); set => this.Set(value);
+            get => this.Get<string>();
+            set => this.Set(value);
         }
 
 
+        [JsonProperty]
         public bool AttachedToDesktop
         {
             get => this.Get<bool>();
             internal set => this.Set(value);
         }
 
+        [JsonProperty]
         public bool Primary
         {
             get => this.Get(() => false);
@@ -106,6 +125,8 @@ namespace HLab.Windows.Monitors
                 this.Set(value);
             }
         }
+
+        [JsonProperty]
         public Edid Edid => this.Get<Edid>(() =>
         {
             IntPtr devInfo = NativeMethods.SetupDiGetClassDevsEx(
@@ -200,6 +221,7 @@ namespace HLab.Windows.Monitors
             Raw = 2,
         }        //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510.aspx
 
+        [JsonProperty]
         [TriggedOn(nameof(HMonitor))]
         public Vector EffectiveDpi => this.Get(() =>
         {
@@ -207,6 +229,7 @@ namespace HLab.Windows.Monitors
             return new Vector(x, y);
         });
 
+        [JsonProperty]
         [TriggedOn(nameof(HMonitor))]
         public Vector AngularDpi => this.Get(() =>
         {
@@ -214,6 +237,7 @@ namespace HLab.Windows.Monitors
             return new Vector(x, y);
         });
 
+        [JsonProperty]
         [TriggedOn(nameof(HMonitor))]
         public Vector RawDpi => this.Get(() =>
         {
@@ -225,6 +249,7 @@ namespace HLab.Windows.Monitors
         private static extern IntPtr GetDpiForMonitor([In]IntPtr hmonitor, [In]DpiType dpiType, [Out]out uint dpiX, [Out]out uint dpiY);
 
         //https://msdn.microsoft.com/fr-fr/library/windows/desktop/dn302060.aspx
+        [JsonProperty]
         [TriggedOn(nameof(HMonitor))]
         public double ScaleFactor => this.Get(() =>
         {
@@ -232,12 +257,15 @@ namespace HLab.Windows.Monitors
             NativeMethods.GetScaleFactorForMonitor(HMonitor, ref factor);
             return (double)factor / 100;
         });
+
+        [JsonProperty]
+        [TriggedOn("Service.Monitors")]
         public int MonitorNo
         {
             get
             {
                 var i = 1;
-                foreach (var monitor in MonitorsService.D.Monitors.OrderBy(e => e.DeviceId.Split('\\').Last()))
+                foreach (var monitor in Service.Monitors.OrderBy(e => e.DeviceId.Split('\\').Last()))
                 {
                     if (ReferenceEquals(monitor, this)) return i;
                     if(monitor.AttachedToDesktop) i++;
@@ -297,7 +325,81 @@ namespace HLab.Windows.Monitors
             Marshal.FreeHGlobal(pKNI);
             return result;
         }
+        private void OpenRegKey(string keystring)
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Applets\Regedit\Lastkey", true))
+            {
+                //key;
+            }
+        }
+
+        public void DisplayValues(Action<string,string, RoutedEventHandler, bool> addValue)
+        {
+            addValue("Registry", HKeyName, (sender, args) => { OpenRegKey(HKeyName); },false);
 
 
+            // EnumDisplaySettings
+            addValue("", "EnumDisplaySettings", null, true);
+            addValue("DisplayOrientation", AttachedDisplay.CurrentMode.DisplayOrientation.ToString(), null, false);
+            addValue("Position", AttachedDisplay.CurrentMode.Position.ToString(), null, false);
+            addValue("Pels", AttachedDisplay.CurrentMode.Pels.ToString(), null, false);
+            addValue("BitsPerPixel", AttachedDisplay.CurrentMode.BitsPerPixel.ToString(), null, false);
+            addValue("DisplayFrequency", AttachedDisplay.CurrentMode.DisplayFrequency.ToString(), null, false);
+            addValue("DisplayFlags", AttachedDisplay.CurrentMode.DisplayFlags.ToString(), null, false);
+            addValue("DisplayFixedOutput", AttachedDisplay.CurrentMode.DisplayFixedOutput.ToString(), null, false);
+
+            // GetDeviceCaps
+            addValue("", "GetDeviceCaps", null, true);
+            addValue("Size", AttachedDisplay.DeviceCaps.Size.ToString(), null, false);
+            addValue("Res", AttachedDisplay.DeviceCaps.Resolution.ToString(), null, false);
+            addValue("LogPixels", AttachedDisplay.DeviceCaps.LogPixels.ToString(), null, false);
+            addValue("BitsPixel", AttachedDisplay.DeviceCaps.BitsPixel.ToString(), null, false);
+            //AddValue("Color Planes", Monitor.Adapter.DeviceCaps.Planes.ToString());
+            addValue("Aspect", AttachedDisplay.DeviceCaps.Aspect.ToString(), null, false);
+            //AddValue("BltAlignment", Monitor.Adapter.DeviceCaps.BltAlignment.ToString());
+
+            //GetDpiForMonitor
+            addValue("", "GetDpiForMonitor", null, true);
+            addValue("EffectiveDpi", EffectiveDpi.ToString(), null, false);
+            addValue("AngularDpi", AngularDpi.ToString(), null, false);
+            addValue("RawDpi", RawDpi.ToString(), null, false);
+
+            // GetMonitorInfo
+            addValue("", "GetMonitorInfo", null, true);
+            addValue("Primary", Primary.ToString(), null, false);
+            addValue("MonitorArea", MonitorArea.ToString(), null, false);
+            addValue("WorkArea", WorkArea.ToString(), null, false);
+
+            addValue("HMonitor", HMonitor.ToString(), null, false);
+
+            // EDID
+            addValue("", "EDID", null, true);
+            addValue("ManufacturerCode", Edid.ManufacturerCode, null, false);
+            addValue("ProductCode", Edid.ProductCode, null, false);
+            addValue("Serial", Edid.Serial, null, false);
+            addValue("Model", Edid.Model, null, false);
+            addValue("SerialNo", Edid.SerialNo, null, false);
+            addValue("SizeInMm", Edid.PhysicalSize.ToString(), null, false);
+
+            // GetScaleFactorForMonitor
+            addValue("", "GetScaleFactorForMonitor", null, true);
+            addValue("ScaleFactor", ScaleFactor.ToString(), null, false);
+
+            // EnumDisplayDevices
+            addValue("", "EnumDisplayDevices", null, true);
+            addValue("DeviceId", AttachedDisplay.DeviceId, null, false);
+            addValue("DeviceKey", AttachedDisplay.DeviceKey, null, false);
+            addValue("DeviceString", AttachedDisplay.DeviceString, null, false);
+            addValue("DeviceName", AttachedDisplay.DeviceName, null, false);
+            addValue("StateFlags", AttachedDisplay.State.ToString(), null, false);
+
+            addValue("", "EnumDisplayDevices", null, true);
+            addValue("DeviceId",DeviceId, null, false);
+            addValue("DeviceKey", DeviceKey, null, false);
+            addValue("DeviceString", DeviceString, null, false);
+            addValue("DeviceName", AttachedDevice.DeviceName, null, false);
+            addValue("StateFlags", AttachedDevice.State.ToString(), null, false);
+
+        }
     }
 }

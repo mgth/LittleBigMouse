@@ -39,6 +39,11 @@
             <Button MinWidth="50" Margin="10,0,0,0" Command="{Binding CmdOk}">Ok</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdApply}">Apply</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdCancel}">Cancel</Button>-->
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CopyCommand}" ToolTip="Copy config to clipboard">
+                <icons:IconView 
+                    AssemblyName="LittleBigMouse.Plugin.Location"
+                    SourceName="IconCopyConfig"/>
+            </Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}" ToolTip="Apply/Start">
                 <icons:IconView 
                     AssemblyName="LittleBigMouse.Plugin.Location"

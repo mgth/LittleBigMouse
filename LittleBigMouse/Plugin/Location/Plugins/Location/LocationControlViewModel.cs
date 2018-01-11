@@ -22,12 +22,21 @@
 */
 
 using System;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
+using System.Runtime.Serialization;
+using System.Windows;
+using System.Xml;
+using System.Xml.Serialization;
 using HLab.Mvvm;
 using HLab.Mvvm.Commands;
 using HLab.Notify;
+using HLab.Windows.Monitors;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
+using Newtonsoft.Json;
+using Formatting = System.Xml.Formatting;
 using Tester = LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.Tester;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Location
@@ -49,6 +58,23 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
         {
             Running = LittleBigMouseClient.Client.Running();
         }
+
+        private class JsonExport
+        {
+            [JsonProperty]
+            public ScreenConfig Config { get; set; }
+            [JsonProperty]
+            public ObservableCollection<Monitor> Monitors { get; set; }
+        }
+
+        public ModelCommand CopyCommand => this.GetCommand(() =>
+            {
+                var export = new JsonExport{Config=Model,Monitors = MonitorsService.D.Monitors};
+                var json = JsonConvert.SerializeObject(export, Newtonsoft.Json.Formatting.Indented);
+                Clipboard.SetText(json);
+            },
+        ()=>true
+        );
 
         public String StatStopLabel => LittleBigMouseClient.Client.Running()?"Stop":"Start";
 

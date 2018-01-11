@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -12,6 +13,7 @@ namespace HLab.Notify
         Notifier Notifier { get; }
     }
 
+    [DataContract]
     public class NotifierObject : INotifierObject
     {
         public event PropertyChangedEventHandler PropertyChanged

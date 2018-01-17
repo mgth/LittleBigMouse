@@ -6,17 +6,25 @@
                       xmlns:controls="http://metro.mahapps.com/winfx/xaml/controls"
              mc:Ignorable="d" 
                       Width="400"
-                      Height="220"
+                      Height="260"
                       WindowStartupLocation="CenterScreen"
-                      Title="Update"
+                      Title="Update Little Big Mouse"
              d:DesignHeight="300" d:DesignWidth="300"
                       Background="White">
-    <DockPanel>
-        <Label DockPanel.Dock="Top" FontWeight="Bold" Content="{Binding Message,FallbackValue=New version available}"/>
+    <DockPanel Margin="10">
+        <TextBlock 
+            
+            DockPanel.Dock="Top" 
+            FontWeight="Bold" 
+            Text="{Binding Message,FallbackValue=New version available}"
+            TextWrapping="WrapWithOverflow"
+            />
+        
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
             <Label>Current Version :</Label>
             <Label Content="{Binding CurrentVersion}"/>
         </StackPanel>
+        
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
             <Label>Online version :</Label>
             <Label Content="{Binding NewVersion}"/>

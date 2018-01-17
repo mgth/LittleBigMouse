@@ -24,6 +24,7 @@ using System;
 using System.ServiceModel;
 using System.ServiceProcess;
 using System.Threading;
+using System.Windows;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse_Daemon
@@ -46,7 +47,7 @@ namespace LittleBigMouse_Daemon
 
             if (Environment.UserInteractive)
             {
-                var daemon = new LittleBigMouseDaemon(args);
+                var daemon = new LittleBigMouseDaemon(args) {ShutdownMode = ShutdownMode.OnExplicitShutdown};
                 daemon.Run();
             }
             else

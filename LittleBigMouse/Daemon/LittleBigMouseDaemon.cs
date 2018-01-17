@@ -113,8 +113,7 @@ namespace LittleBigMouse_Daemon
 
         private void MatchConfig(object sender, EventArgs e)
         {
-            var menu = sender as ToolStripMenuItem;
-            if (menu != null)
+            if (sender is ToolStripMenuItem menu)
             {
                 _engine.MatchConfig(menu.Text);
             }

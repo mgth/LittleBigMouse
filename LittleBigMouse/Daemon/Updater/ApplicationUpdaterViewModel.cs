@@ -184,6 +184,8 @@ namespace LittleBigMouse_Daemon.Updater
 
                 var name = json[0]["name"].Value<string>();
 
+                Message = json[0]["body"].ToString();
+
                 Url = json[0]["assets"][0]["browser_download_url"].ToString();
 
                 if (Version.TryParse(name, out var onlineVersion))

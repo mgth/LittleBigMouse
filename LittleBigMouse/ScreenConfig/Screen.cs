@@ -43,7 +43,7 @@ namespace LittleBigMouse.ScreenConfigs
     public class Screen : NotifierObject
     {
         public MonitorsService Service => this.Get(() => MonitorsService.D);
-        internal Screen(ScreenConfig config, Monitor monitor)
+        internal Screen(ScreenConfig config, Monitor monitor) : base(false)
         {
             Config = config;
             Monitor = monitor;
@@ -80,16 +80,17 @@ namespace LittleBigMouse.ScreenConfigs
 
         // References properties
         [JsonProperty]
-        [TriggedOn(nameof(Monitor),"Edid" , "ManufacturerCode")]
-        [TriggedOn(nameof(Monitor),"Edid", "ProductCode")]
+        [TriggedOn(nameof(Monitor), "Edid" , "ManufacturerCode")]
+        [TriggedOn(nameof(Monitor), "Edid", "ProductCode")]
         public string PnpCode => this.Get(() => Monitor.Edid.ManufacturerCode + Monitor.Edid.ProductCode);
 
         [JsonProperty]
         [TriggedOn(nameof(PnpCode))]
-        [TriggedOn(nameof(Monitor),"Edid", "Serial")]
+        [TriggedOn(nameof(Monitor),"Edid", "SerialNo")]
+        [TriggedOn(nameof(Monitor),"DeviceId")]
         public string IdMonitor => this.Get(() => PnpCode + "_" +
             // some hp monitors (at least E242) do not provide hex serial value-
-            (Monitor.Edid.Serial=="01010101"?Monitor.Edid.SerialNo:Monitor.Edid.Serial));
+            (Monitor.Edid.SerialNo== "1234567890123" ? Monitor.DeviceId.Split('\\').Last() : Monitor.Edid.SerialNo));
 
         [JsonProperty]
         [TriggedOn(nameof(InPixel))]
@@ -108,18 +109,6 @@ namespace LittleBigMouse.ScreenConfigs
         [TriggedOn(nameof(Monitor), "AttachedDisplay", "CurrentMode", "DisplayOrientation")]
         public int Orientation => this.Get(() => Monitor.AttachedDisplay?.CurrentMode.DisplayOrientation??0);
 
-        [JsonProperty]
-        public string PnpDeviceName => this.Get(() =>
-        {
-            var name = Html.CleanupPnpName(Monitor.DeviceString);
-            using (var key = OpenConfigRegKey())
-            {
-                name = key.GetKey("PnpName",()=>name);
-            }
-
-            return name.ToLower() != "generic pnp monitor" ? name : Html.GetPnpName(PnpCode);
-        });
-
 
         public bool Selected
         {
@@ -132,11 +121,6 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-        public bool FixedAspectRatio
-        {
-            get => this.Get(()=>true);
-            set => this.Set(value);
-        }
         public bool Placed
         {
             get => this.Get(()=>false);
@@ -146,19 +130,61 @@ namespace LittleBigMouse.ScreenConfigs
         // Mm dimensions
         // Natives
 
-        [JsonProperty]
-        public ScreenSize Physical => this.Get(() => new ScreenSizeInMm(this));
+        [TriggedOn(nameof(PnpCode))]
+        public ScreenModel ScreenModel => this.Get( ()=>Config.GetScreenModel(PnpCode, Monitor) );
+
 
         [JsonProperty]
-        [TriggedOn(nameof(Physical))]
+        [TriggedOn(nameof(ScreenModel), "Physical")]
         [TriggedOn(nameof(Orientation))]
-        public ScreenSize PhysicalRotated => this.Get(() => Physical.Rotate(Orientation));
+        public ScreenSize PhysicalRotated => this.Get(() => ScreenModel.Physical.Rotate(Orientation));
 
         //Mm
         [JsonProperty]
         [TriggedOn(nameof(PhysicalRotated))]
         [TriggedOn(nameof(PhysicalRatio))]
-        public ScreenSize InMm => this.Get(() => PhysicalRotated.Scale(PhysicalRatio));
+        public ScreenSize InMm => this.Get(() => PhysicalRotated.Scale(PhysicalRatio).Locate());
+
+        [TriggedOn(nameof(InMm),"X")]
+        public double InMmX
+        {
+            get => InMm.X;
+            set
+            {
+                if (Primary)
+                {
+                    foreach (var screen in Config.AllBut(this))
+                    {
+                        screen.InMm.X -= value;
+                    }
+                }
+                else InMm.X = value;
+            }
+        }
+
+        public double InMmY
+        {
+            get => InMm.Y;
+            set
+            {
+                if (Primary)
+                {
+                    foreach (var screen in Config.AllBut(this))
+                    {
+                        screen.InMm.Y -= value;
+                    }
+                }
+                else InMm.Y = value;
+            }
+        }
+
+        [TriggedOn(nameof(InMm), "X")]
+        [TriggedOn(nameof(InMm), "Y")]
+        public void SetSaved()
+        {
+            Config.Saved = false;
+        }
+
 
         [JsonProperty]
         [TriggedOn(nameof(InMm))]
@@ -173,7 +199,7 @@ namespace LittleBigMouse.ScreenConfigs
         // Dip
         [JsonProperty]
         [TriggedOn(nameof(InPixel))]
-         public ScreenSize InDip => this.Get(() => InPixel.ScaleDip());
+         public ScreenSize InDip => this.Get(() => InPixel.ScaleDip(this));
 
 
         [JsonProperty]
@@ -317,12 +343,12 @@ namespace LittleBigMouse.ScreenConfigs
                     PhysicalRatio.Y = key.GetKey("PhysicalRatioY", () => PhysicalRatio.Y);
                 }
             }
-
-
         }
 
         public void Save(RegistryKey baseKey)
         {
+            ScreenModel.Save(baseKey);
+
             using (RegistryKey key = OpenGuiLocationRegKey(true))
             {
                 key.SetKey("Left", GuiLocation.Left);
@@ -333,25 +359,7 @@ namespace LittleBigMouse.ScreenConfigs
 
             using (RegistryKey key = OpenMonitorRegKey(true))
             {
-                if (key != null)
-                {
-                    key.SetKey("TopBorder",Physical.TopBorder);
-                    key.SetKey("RightBorder",Physical.RightBorder);
-                    key.SetKey("BottomBorder",Physical.BottomBorder);
-                    key.SetKey("LeftBorder",Physical.LeftBorder);
-
-                    if (Monitor.AttachedDisplay != null)
-                    {
-                        if(Math.Abs(Physical.Height - Monitor.AttachedDisplay.DeviceCaps.Size.Height) > double.Epsilon)
-                            key.SetKey("Height",Physical.Height);
-
-                        if(Math.Abs(Physical.Width - Monitor.AttachedDisplay.DeviceCaps.Size.Width) > double.Epsilon)
-                            key.SetKey("Whidth",Physical.Width);                        
-                    }
-
-                    key.SetKey("PnpName", PnpDeviceName);
-                    key.SetKey("DeviceId", Monitor.DeviceId);
-                }
+                key?.SetKey("DeviceId", Monitor.DeviceId);
             }
 
             using (RegistryKey key = OpenConfigRegKey(true))
@@ -594,11 +602,11 @@ namespace LittleBigMouse.ScreenConfigs
         [TriggedOn(nameof(InMm), "X")]
         public double XMoving
         {
-            get => this.Get(() => InMm.X);
+            get => this.Get(() => InMmX);
             set
             {
                 if (Moving) this.Set(value);
-                else InMm.X = value;
+                else InMmX = value;
             }
         }
 
@@ -606,11 +614,11 @@ namespace LittleBigMouse.ScreenConfigs
         [TriggedOn(nameof(InMm), "Y")]
         public double YMoving
         {
-            get => this.Get(() => InMm.Y);
+            get => this.Get(() => InMmY);
             set
             {
                 if (Moving) this.Set(value);
-                else InMm.Y = value;
+                else InMmY = value;
             }
         }
         /*

@@ -21,10 +21,11 @@
 	  http://www.mgth.fr
 */
 using HLab.Mvvm;
+using HLab.Notify;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
-    class VcpControlViewModel : ViewModel
+    class VcpControlViewModel : NotifierObject
     {
     }
 }

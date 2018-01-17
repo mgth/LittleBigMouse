@@ -23,6 +23,8 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 
 namespace HLab.Notify
@@ -65,6 +67,10 @@ namespace HLab.Notify
                 {
                     d.Dispatcher.BeginInvoke(DispatcherPriority.DataBind,
                         new Action(() => handler(_target, args)));
+
+                    //var uiContext = TaskScheduler.FromCurrentSynchronizationContext();
+                    //Task.Factory.StartNew(() => handler(_target, args), CancellationToken.None, TaskCreationOptions.None, uiContext);
+
                 }
                 else
                 {

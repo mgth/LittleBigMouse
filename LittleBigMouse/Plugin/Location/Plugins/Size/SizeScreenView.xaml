@@ -114,7 +114,7 @@
                 </Viewbox.Height>
                    
                    
-            <CheckBox  IsChecked="{Binding Model.FixedAspectRatio}" />
+            <CheckBox  IsChecked="{Binding Model.Physical.FixedAspectRatio}" />
                  </Viewbox>
            
 <!-- Outside Dimensions -->

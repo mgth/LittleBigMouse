@@ -35,6 +35,14 @@ namespace HLab.Notify
             [CallerMemberName] string propertyName = null)
             => n.Notifier.Set(n, value, propertyName, null);
 
+        public static bool SetOneToMany<T,TNotifier>(this TNotifier n,
+            T value,
+            Func<T,IList<TNotifier>> getCollection,
+            [CallerMemberName] string propertyName = null)
+            where TNotifier : INotifierObject
+
+            => n.Notifier.SetOneToMany(n, value, getCollection, propertyName);
+
         //public static void Subscribe(this INotifierObject n) => n.Notifier.Subscribe(n);
     }
 }

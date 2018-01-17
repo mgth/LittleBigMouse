@@ -10,7 +10,7 @@ namespace HLab.Windows.Monitors
 {
     public class PhysicalAdapter : NotifierObject
     {
-        public PhysicalAdapter(MonitorsService service)
+        public PhysicalAdapter(MonitorsService service) : base(false)
         {
             Service = service;
             this.SubscribeNotifier();

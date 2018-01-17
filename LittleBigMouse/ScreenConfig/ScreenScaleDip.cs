@@ -27,14 +27,17 @@ namespace LittleBigMouse.ScreenConfigs
 {
     public static class ScreenScaleDipExt
     {
-        public static ScreenSize ScaleDip(this ScreenSize source) => new ScreenScaleDip(source);
+        public static ScreenSize ScaleDip(this ScreenSize source, Screen screen) => new ScreenScaleDip(source, screen);
     }
     public class ScreenScaleDip : ScreenSize
     {
-        public ScreenScaleDip(ScreenSize source)
+        public Screen Screen { get; }
+
+        public ScreenScaleDip(ScreenSize source, Screen screen)
         {
             using (this.Suspend())
             {
+                Screen = screen;
                 Source = source;
             }
             this.SubscribeNotifier();

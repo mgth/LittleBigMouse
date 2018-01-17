@@ -17,7 +17,7 @@
         </Grid.RowDefinitions>
         <StackPanel Grid.Column="0" Grid.RowSpan="2" Orientation="Horizontal">
 
-            <Grid>
+            <!--<Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
@@ -31,7 +31,7 @@
                     </Slider.Background>
                 </Slider>
                 <TextBox Grid.Row="1" x:Name="TextBox" Text="{Binding Lut.Luminance, StringFormat=N0}"/>
-            </Grid>
+            </Grid>-->
 
             <vcp:VcpSlider MonitorLevel="{Binding Vcp.Brightness}" Component="Brightness"/>
             <vcp:VcpSlider MonitorLevel="{Binding Vcp.Contrast}" Component="Contrast"/>
@@ -44,7 +44,7 @@
                 
         </local:Curve>-->
 
-        <StackPanel  Grid.Column="1" Grid.Row="1" Orientation="Horizontal">
+        <!--<StackPanel  Grid.Column="1" Grid.Row="1" Orientation="Horizontal">
             <Button             
             Click="Probe_OnClick"
                     Content="Probe"
@@ -72,7 +72,7 @@
             Click="Save_OnClick"
                     Content="Save"
             />
-        </StackPanel>
+        </StackPanel>-->
         
         <!--<StackPanel Margin="30" HorizontalAlignment="Right" VerticalAlignment="Bottom">
             <Button                 

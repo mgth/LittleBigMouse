@@ -34,130 +34,96 @@ namespace LittleBigMouse.ScreenConfigs
     /// </summary>
     public class ScreenSizeInMm : ScreenSize
     {
-        public ScreenSizeInMm(Screen screen)
+        public ScreenModel ScreenModel { get; }
+        public ScreenSizeInMm(ScreenModel screen)
         {
-            Screen = screen;
+            ScreenModel = screen;
             this.SubscribeNotifier();
         }
 
-        [TriggedOn(nameof(Screen), "Monitor", "AttachedDisplay")]
-        public DisplayDevice AttachedDisplay => this.Get(() => Screen.Monitor.AttachedDisplay);
+        public bool Saved
+        {
+            get => this.Get<bool>();
+            set => this.Set(value);
+        }
 
-        [TriggedOn(nameof(Screen), "Orientation")]
-        [TriggedOn(nameof(Screen), "Monitor", "AttachedDisplay", "DeviceCaps","Size")]
+        public bool FixedAspectRatio
+        {
+            get => this.Get(() => true);
+            set => this.Set(value);
+        }
+
         public override double Width
         {
-            get => this.Get(() => LoadValueMonitor(
-                () => Screen.Orientation % 2 == 0
-                ? Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Width??0
-                : Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Height??0
-                , "InMm.Width"));
+            get => this.Get(() => 0.0);
 
             set => this.Set(value, (oldValue, newValue) =>
             {
-                if (Screen.FixedAspectRatio)
+                if (FixedAspectRatio)
                 {
                     var ratio = newValue / oldValue;
-                    Screen.FixedAspectRatio = false;
+                    FixedAspectRatio = false;
                     Height *= ratio;
-                    Screen.FixedAspectRatio = true;
+                    FixedAspectRatio = true;
                 }
 
-                Screen.Config.Saved = false;
+                Saved = false;
             });
         }
 
-        [TriggedOn("Screen","Orientation")]
-        [TriggedOn("Screen", "Monitor", "AttachedDisplay", "DeviceCaps", "Size")]
         public override double Height
         {
-            get => this.Get(() => LoadValueMonitor(
-                ()=>Screen.Orientation % 2 == 0 
-                ? Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Height??0 
-                : Screen.Monitor.AttachedDisplay?.DeviceCaps.Size.Width??0
-                ,"InMm.Height"));
+            get => this.Get(() => 0.0);
             set
             {
                 this.Set(value, (oldValue, newValue) =>
                 {
-                    if (Screen.FixedAspectRatio)
+                    if (FixedAspectRatio)
                     {
                         var ratio = newValue / oldValue;
-                        Screen.FixedAspectRatio = false;
+                        FixedAspectRatio = false;
                         Width *= ratio;
-                        Screen.FixedAspectRatio = true;
+                        FixedAspectRatio = true;
                     }
 
-                    Screen.Config.Saved = false;
+                    Saved = false;
                 } );
             }
         }
 
         public override double X
         {
-            get => this.Get(() => LoadValueConfig(() => 0, "InMm.X"));
-            set
-            {
-                if (Screen.Primary)
-                {
-                    foreach (var screen in Screen.Config.AllBut(Screen))
-                    {
-                        screen.InMm.X -= value;
-                    }
-                }
-                else if (this.Set(value)) Screen.Config.Saved = false;
-            }
+            get => this.Get(()=>0.0);
+            set => this.Set(value);
         }
+
         public override double Y
         {
-            get => this.Get(() => LoadValueConfig(() => 0,"InMm.Y"));
-            set
-            {
-                if (Screen.Primary)
-                {
-                    foreach (var screen in Screen.Config.AllBut(Screen))
-                    {
-                        screen.InMm.Y -= value;
-                    }
-                }
-                else if (this.Set(value)) Screen.Config.Saved = false;
-            }
+            get => this.Get(() => 0.0);
+            set => this.Set(value);
         }
+
+
         public override double TopBorder
         {
-            get => this.Get(() => LoadValueMonitor(() => 20));
-            set { if (this.Set(value)) Screen.Config.Saved = false; }
+            get => this.Get(() => 20.0);
+            set => this.Set(value);
         }
         public override double BottomBorder
         {
-            get => this.Get(() => LoadValueMonitor(() => 20));
-            set { if (this.Set(value)) Screen.Config.Saved = false; }
+            get => this.Get(() => 20.0);
+            set => this.Set(value);
         }
         public override double LeftBorder
         {
-            get => this.Get(() => LoadValueMonitor(() => 20));
-            set { if (this.Set(value)) Screen.Config.Saved = false; }
+            get => this.Get(() => 20.0);
+            set => this.Set(value);
         }
         public override double RightBorder
         {
-            get => this.Get(() => LoadValueMonitor(()=>20));
-            set { if (this.Set(value)) Screen.Config.Saved = false; }
+            get => this.Get(() => 20.0);
+            set => this.Set(value);
         }
-        private double LoadValueMonitor(Func<double> def, [CallerMemberName]string name = null)
-        {
-            if(Screen==null) throw new PropertyNotReady(0.0); 
 
-            using (RegistryKey key = Screen.OpenMonitorRegKey())
-            {
-                return key.GetKey(name, def);
-            }
-        }
-        private double LoadValueConfig(Func<double> def, [CallerMemberName]string name = null)
-        {
-            using (RegistryKey key = Screen.OpenConfigRegKey())
-            {
-                return key.GetKey(name, def);
-            }
-        }
     }
 }

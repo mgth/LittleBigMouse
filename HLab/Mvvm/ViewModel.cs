@@ -25,12 +25,12 @@ using HLab.Notify;
 
 namespace HLab.Mvvm
 {
-    public class ViewModel : INotifyPropertyChanged
+    public class ViewModel<T> : NotifierObject, IViewModel<T>
     {
-        public event PropertyChangedEventHandler PropertyChanged
+        protected ViewModel(bool init = true) : base(init)
         {
-            add => this.Add(value);
-            remove => this.Remove(value);
         }
+
+        public T Model => this.Get<T>();
     }
 }

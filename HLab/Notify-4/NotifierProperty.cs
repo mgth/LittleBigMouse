@@ -32,7 +32,6 @@ namespace HLab.Notify
 
         public void AddOneToMany(object oldValue, object newValue, object target)
         {
-            if (Name == "Group") { }
 
             if (oldValue!=null && _weakOneToMany.TryGetValue(oldValue, out var oldCollection))
             {
@@ -40,6 +39,8 @@ namespace HLab.Notify
             }
             if (newValue!=null && _weakOneToMany.TryGetValue(newValue, out var newCollection))
             {
+                if(target.GetType().Name=="MatchersGroup") { }
+                if (Name == "Group") { }
                 newCollection.Add(target);
             }
         }

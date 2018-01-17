@@ -20,26 +20,27 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Windows;
 using System.Windows.Media;
-using HLab.Mvvm;
 using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
 {
-    public class RulerViewModel : ViewModel
+    public class RulerViewModel : NotifierObject
     {
-        public RulerViewModel(Screen screen, Screen drawOn, RulerSide side)
+        public Screen Screen { get; }
+        public RulerSide Side { get; }
+        public Screen DrawOn { get; }
+
+        public RulerViewModel(Screen screen, Screen drawOn, RulerSide side) : base(false)
         {
+            Side = side;
+            Screen = screen;
+            DrawOn = drawOn;                
             this.SubscribeNotifier();
-            using (this.Suspend())
-            {
-                Side = side;
-                Screen = screen;
-                DrawOn = drawOn;                
-            }
         }
         public enum RulerSide
         {
@@ -48,23 +49,10 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
             Left,
             Right
         }
-        public RulerSide Side
-        {
-            get => this.Get<RulerSide>(); set => this.Set(value);
-        }
+
         public bool Enabled
         {
             get => this.Get<bool>();
-            set => this.Set(value);
-        }
-        public Screen DrawOn
-        {
-            get => this.Get<Screen>();
-            set => this.Set(value);
-        }
-        public Screen Screen
-        {
-            get => this.Get<Screen>();
             set => this.Set(value);
         }
 

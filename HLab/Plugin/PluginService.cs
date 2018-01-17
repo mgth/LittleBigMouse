@@ -25,11 +25,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using HLab.Base;
 using HLab.Mvvm;
 
 namespace HLab.Plugin
 {
-    public class PluginService : HLab.Base.Singleton<PluginService>
+    public class PluginService : Singleton<PluginService>
     {
         private readonly List<IPluginModule> _modules = new List<IPluginModule>();
         public void Register()

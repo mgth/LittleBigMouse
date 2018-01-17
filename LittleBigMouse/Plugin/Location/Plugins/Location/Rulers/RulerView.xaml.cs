@@ -25,6 +25,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using HLab.Windows.API;
+using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
 {

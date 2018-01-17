@@ -31,10 +31,8 @@ using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
-    class ScreenVcpViewModel : ViewModel, IViewModel<Screen>
+    class ScreenVcpViewModel : ViewModel<Screen>
     {
-        public Screen Model => this.GetModel();
-
         public VcpControl Vcp => Model?.Monitor?.Vcp();
 
 

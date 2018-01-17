@@ -20,12 +20,12 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using HLab.Mvvm;
+
 using HLab.Notify;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
 {
-    public class TesterViewModel : ViewModel
+    public class TesterViewModel : NotifierObject
     {
         public double LeftInDip
         {

@@ -29,9 +29,9 @@ using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {
-    public class MultiScreensViewModel : ViewModel, IPresenterViewModel
+    public class MultiScreensViewModel : NotifierObject, IPresenterViewModel
     {
-        public MultiScreensViewModel()
+        public MultiScreensViewModel() : base(false)
         {
             this.SubscribeNotifier();
         }

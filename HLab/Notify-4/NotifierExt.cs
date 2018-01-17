@@ -252,12 +252,12 @@ namespace HLab.Notify
             n.CollectionChanged += H;
         }
 
-        public static void SubscribeOneToMany<T>(
-            this object target, 
-            IList<T> list,
-            string property)
-        {
-            NotifierService.D.GetNotifierClass(typeof(T)).GetProperty(property).RegisterOneToMany(target,(IList)list);
-        }
+        //public static void SubscribeOneToMany<T>(
+        //    this object target, 
+        //    IList<T> list,
+        //    string property)
+        //{
+        //    NotifierService.D.GetNotifierClass(typeof(T)).GetProperty(property).RegisterOneToMany(target,(IList)list);
+        //}
     }
     }

@@ -42,11 +42,11 @@ using Newtonsoft.Json.Linq;
 
 namespace LittleBigMouse.Control.Core
 {
-    public class MainViewModel : ViewModel
+    public class MainViewModel : NotifierObject
     {
-        public MainViewModel()
+        public MainViewModel() : base()
         {
-            this.SubscribeNotifier();
+            //this.SubscribeNotifier();
         }
 
         public ScreenConfig Config

@@ -23,13 +23,14 @@
 using System.Windows;
 using HLab.Mvvm;
 using HLab.Notify;
+using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
 {
-    public class RulerPanelViewModel : ViewModel
+    public class RulerPanelViewModel : NotifierObject
     {
-        public RulerPanelViewModel(Screen screen, Screen drawOn)
+        public RulerPanelViewModel(Screen screen, Screen drawOn) : base()
         {
             using (this.Suspend())
             {

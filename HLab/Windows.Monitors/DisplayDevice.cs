@@ -35,7 +35,7 @@ namespace HLab.Windows.Monitors
 {
     public class DisplayDevice : NotifierObject
     {
-        public DisplayDevice(MonitorsService service)
+        public DisplayDevice(MonitorsService service) : base(false)
         {
             Service = service;
             this.SubscribeNotifier();

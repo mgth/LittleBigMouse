@@ -100,6 +100,8 @@
     <Compile Include="Screen.cs" />
     <Compile Include="ScreenConfig.cs" />
     <Compile Include="ScreenInverseRatio.cs" />
+    <Compile Include="ScreenLocate.cs" />
+    <Compile Include="ScreenModel.cs" />
     <Compile Include="ScreenRatio.cs" />
     <Compile Include="ScreenRatioRegistry.cs" />
     <Compile Include="ScreenRotate.cs" />
@@ -141,6 +143,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.config" />
     <None Include="lbm.licenseheader" />
     <None Include="packages.config" />
   </ItemGroup>

@@ -20,22 +20,22 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using HLab.Mvvm;
 using HLab.Notify;
+using LittleBigMouse.LocationPlugin.Plugins.Size;
 using LittleBigMouse.ScreenConfigs;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Size
+namespace LittleBigMouse.Plugin.Location.Plugins.Size
 {
-    class ScreenSizeViewModel : ViewModel, IViewModel<Screen>
+    class ScreenSizeViewModel : ViewModel<Screen>
     //ScreenControlViewModel
     {
-        public Screen Model => this.GetModel();
-
-        public ScreenSizeViewModel()
+        public ScreenSizeViewModel() : base(false)
         {
             var canvas = new Canvas { Effect = _effect };
 

@@ -29,6 +29,8 @@ namespace LittleBigMouse.ScreenConfigs
 {
     public abstract class ScreenRatio : NotifierObject
     {
+        protected ScreenRatio() : base(false) {}
+
         [JsonProperty]
         public abstract double X { get; set; }
         [JsonProperty]

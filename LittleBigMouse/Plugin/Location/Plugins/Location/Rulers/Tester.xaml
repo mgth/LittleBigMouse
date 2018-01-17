@@ -1,4 +1,4 @@
-﻿<Window x:Class="LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.Tester"
+﻿<Window x:Class="LittleBigMouse.Plugin.Location.Plugins.Location.Rulers.Tester"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 

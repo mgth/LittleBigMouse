@@ -29,6 +29,8 @@ namespace LittleBigMouse.ScreenConfigs
 {
     public abstract class ScreenSize : NotifierObject
     {
+        protected ScreenSize() : base(false) { }
+
         public ScreenSize Source
         {
             get => this.Get<ScreenSize>();
@@ -37,21 +39,18 @@ namespace LittleBigMouse.ScreenConfigs
 
         public Point GetPoint(ScreenSize source, Point point)
         {
-            if(!ReferenceEquals(Screen,source.Screen))
-            { }
-
             var x = (point.X - source.X) / source.Width;
             var y = (point.Y - source.Y) / source.Height;
 
             return new Point(X + x*Width, Y+y*Height);
         }
 
-        [TriggedOn(nameof(Source),"Screen")]
-        public Screen Screen
-        {
-            get => this.Get(()=>Source.Screen);
-            protected set => this.Set(value);
-        }
+        //[TriggedOn(nameof(Source),"Screen")]
+        //public Screen Screen
+        //{
+        //    get => this.Get(()=>Source.Screen);
+        //    protected set => this.Set(value);
+        //}
 
         //[JsonProperty]
         public abstract double Width { get; set; }

@@ -22,6 +22,7 @@
 */
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
@@ -151,6 +152,17 @@ namespace HLab.Notify
             return Set(target, value, Class.GetProperty(propertyName), postUpdateAction);
         }
 
+        public bool SetOneToMany<T, TNotifier>(TNotifier target, T value, Func<T, IList<TNotifier>> getCollection, string propertyName)
+            where TNotifier : INotifierObject
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(propertyName), "propertyName cannot be null or empty");
+
+            return Set(target, value, Class.GetProperty(propertyName), (oldValue, newValue) =>
+            {
+                if(oldValue!=null) getCollection(oldValue).Remove(target);
+                if(newValue!=null) getCollection(newValue).Add(target);
+            });
+        }
 
         public bool Set<T>(object target, T value, NotifierProperty property, Action<T, T> postUpdateAction = null)
         {
@@ -164,15 +176,9 @@ namespace HLab.Notify
                 }
             );
 
-            if (isnew)
-            {
-                OnPropertyChanged(new NotifierPropertyChangedEventArgs(property.Name, default(T), value));
-                return true;
-            }
+            var old = isnew?default(T):entry.GetValue<T>();
 
-            var old = entry.GetValue<T>();
-
-            if (entry.SetValue(value))
+            if (isnew || entry.SetValue(value))
             {
                 postUpdateAction?.Invoke(old, value);
                 OnPropertyChanged(new NotifierPropertyChangedEventArgs(property.Name, old, value));
@@ -201,8 +207,14 @@ namespace HLab.Notify
             return false;
         }
 
+
+
+        private bool _subscribed = false;
         public void Subscribe(INotifyPropertyChanged n)
         {
+            if(_subscribed) throw new InvalidOperationException("Notifier subscribed twice");
+            _subscribed = true;
+
             foreach (var method in n.GetType().GetMethods())
             {
                 foreach (var triggedOn in method.GetCustomAttributes().OfType<TriggedOn>())
@@ -256,7 +268,5 @@ namespace HLab.Notify
                 }
             }
         }
-
-
     }
 }

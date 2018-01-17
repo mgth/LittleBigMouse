@@ -65,6 +65,7 @@ namespace HLab.Windows.Monitors
 
         public ObservableCollection<DisplayDevice> Devices => this.Get(() => new ObservableCollection<DisplayDevice>());
 
+
         public ObservableCollection<Monitor> Monitors => this.Get(() => new ObservableCollection<Monitor>());
 
         [TriggedOn(nameof(Monitors),"Item","AttachedToDesktop")]

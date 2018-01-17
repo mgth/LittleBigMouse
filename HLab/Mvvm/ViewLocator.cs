@@ -24,6 +24,7 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 
 namespace HLab.Mvvm
 {
@@ -152,6 +153,14 @@ namespace HLab.Mvvm
         public ViewLocator()
         {
             this.DataContextChanged += ViewLocator_DataContextChanged;
+
+            var b = new Binding
+            {
+                Source = this,
+                Path = new PropertyPath("DataContext"),
+               Mode = BindingMode.OneWay
+            };
+            BindingOperations.SetBinding(this, ModelProperty, b);
         }
 
         private void ViewLocator_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -159,9 +168,15 @@ namespace HLab.Mvvm
             //TODO : problème dans lbm mais insipensable dans erp
             //if (sender is ViewLocator vl && ReferenceEquals(vl.Model, e.OldValue))
             //{
-            //    var oldModel = vl.Model;
-            //    vl.Model = e.NewValue;
-            //    vl.Update(oldModel, vl.ViewMode, vl.ViewClass);
+            //    if(vl.Model != null)
+            //    { }
+
+            //    if (GetBindingExpression(ModelProperty).Status == BindingStatus.Unattached)
+            //    {
+            //        var oldModel = vl.Model;
+            //        vl.Model = e.NewValue;
+            //        vl.Update(oldModel, vl.ViewMode, vl.ViewClass);
+            //    }
             //}
         }
 

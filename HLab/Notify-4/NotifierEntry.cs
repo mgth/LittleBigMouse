@@ -39,7 +39,7 @@ namespace HLab.Notify
             Notifier = notifier;
             Property = property;
             Getter = getter;
-            Value = getter(null);
+            SetValue(getter(null));
         }
 
         public NotifierProperty Property { get; }
@@ -73,7 +73,7 @@ namespace HLab.Notify
                     }
                 }
 
-                Property.AddOneToMany(Value,value,Notifier.Target);
+                Property.AddOneToMany(Value,value, Notifier.Target);
 
                 Value = value;
                 return true;

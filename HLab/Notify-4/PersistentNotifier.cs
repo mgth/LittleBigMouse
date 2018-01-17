@@ -56,11 +56,30 @@ namespace HLab.Notify
         protected readonly ConcurrentBag<PropertyInfo> Dirty = new ConcurrentBag<PropertyInfo>();
         public bool IsDirty => Dirty.Count > 0;
 
+        public bool Loading { get; private set; } = false;
 
         private readonly object _source;
         public Persister(INotifyPropertyChanged obj)
         {
             _source = obj;
+            foreach (var property in _source.GetType().GetProperties())
+            {
+                foreach (var unused in property.GetCustomAttributes().OfType<Persistent>())
+                {
+                    Dirty.Add(property);
+                    //switch (attr.Persistency)
+                    //{
+                    //    case Persistency.OnChange:
+                    //        Save(property);
+                    //        break;
+                    //    case Persistency.OnSave:
+                    //        Dirty.Add(property);
+                    //        break;
+                    //    default:
+                    //        throw new ArgumentOutOfRangeException();
+                    //}
+                }
+            }
             obj.PropertyChanged += Obj_PropertyChanged;
         }
 
@@ -98,6 +117,8 @@ namespace HLab.Notify
 
         public virtual void Load()
         {
+            Loading = true;
+
             foreach (var property in _source.GetType().GetProperties())
             {
                 foreach (var unused in property.GetCustomAttributes().OfType<Persistent>())
@@ -106,6 +127,8 @@ namespace HLab.Notify
                 }
             }
             while(Dirty.TryTake(out var unused2));
+
+            Loading = false;
         }
 
         protected void Load(PropertyInfo property)

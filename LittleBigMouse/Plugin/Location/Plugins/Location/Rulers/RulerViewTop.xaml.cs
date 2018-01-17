@@ -27,6 +27,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
 
 namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
 {

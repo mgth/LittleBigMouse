@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -88,7 +89,7 @@ namespace LittleBigMouse.ScreenConfigs
 
 
 
-        public ScreenConfig(IMonitorsService monitorsService)
+        public ScreenConfig(IMonitorsService monitorsService) : base(false)
         {
             this.SubscribeNotifier();
 
@@ -728,5 +729,12 @@ namespace LittleBigMouse.ScreenConfigs
         public double MaxEffectiveDpiY => this.Get( 
             ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.Y).Max());
 
+
+        public ConcurrentDictionary<string,ScreenModel> ScreenModels = new ConcurrentDictionary<string,ScreenModel>();
+
+        public ScreenModel GetScreenModel(string pnpCode, Monitor monitor)
+        {
+            return ScreenModels.GetOrAdd(pnpCode, s => new ScreenModel(s, this).Load(monitor));
+        }
     }
 }

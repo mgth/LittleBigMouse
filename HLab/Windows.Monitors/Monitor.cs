@@ -194,10 +194,10 @@ namespace HLab.Windows.Monitors
 
         private NativeMethods.PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
 
-        public Monitor(MonitorsService service)
+        public Monitor(MonitorsService service):base(false)
         {
             Service = service;
-            this.SubscribeNotifier();
+            Notifier.Subscribe(this);
         }
 
         [TriggedOn(nameof(HMonitor))]

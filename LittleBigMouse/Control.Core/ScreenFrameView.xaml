@@ -124,7 +124,7 @@
                 Grid.Column="1" 
                     FontWeight="Black"
                     Opacity="0.75"
-                Content="{Binding Path=Model.PnpDeviceName, FallbackValue=Unknown}">
+                Content="{Binding Path=Model.ScreenModel.PnpDeviceName, FallbackValue=Unknown}">
 
                     <Label.FontSize>
                         <Binding ElementName="TopRow" Path="ActualHeight" Converter="{StaticResource Scale}" ConverterParameter="0.7"

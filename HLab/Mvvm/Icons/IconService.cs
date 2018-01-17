@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Xml;
@@ -54,6 +55,9 @@ namespace HLab.Mvvm.Icons
         }
         public UIElement GetIcon(Assembly assembly, string name)
         {
+
+            return GetIconXaml(assembly, name) ?? GetFromSvg(assembly, name);
+
             var cache = _cache.GetValue(assembly, a => new IconCache(a));
 
             return cache.Get(name,(a,n)=> GetIconXaml(a, n) ?? GetFromSvg(a, n));
@@ -74,13 +78,14 @@ namespace HLab.Mvvm.Icons
             }
         }
 
-        private XslCompiledTransform _transform;
+        private XslCompiledTransform _transformSvg;
+        private XslCompiledTransform _transformHtml;
 
-        private XslCompiledTransform Transform
+        private XslCompiledTransform TransformSvg
         {
             get
             {
-                if (_transform == null)
+                if (_transformSvg == null)
                 {
                     using (var xslStream = Assembly.GetAssembly(this.GetType())
                         .GetManifestResourceStream("HLab.Mvvm.Icons.svg2xaml.xsl"))
@@ -89,13 +94,73 @@ namespace HLab.Mvvm.Icons
                         using (var stylesheet = XmlReader.Create(xslStream))
                         {
                             var settings = new XsltSettings { EnableDocumentFunction = true };
-                            _transform = new XslCompiledTransform();
-                            _transform.Load(stylesheet, settings, new XmlUrlResolver());
+                            _transformSvg = new XslCompiledTransform();
+                            _transformSvg.Load(stylesheet, settings, new XmlUrlResolver());
                         }
                     }
                 }
-                return _transform;
+                return _transformSvg;
             }
+        }
+        private XslCompiledTransform TransformHtml
+        {
+            get
+            {
+                if (_transformHtml == null)
+                {
+                    using (var xslStream = Assembly.GetAssembly(this.GetType())
+                        .GetManifestResourceStream("HLab.Mvvm.Icons.html2xaml.xslt"))
+                    {
+                        if (xslStream == null) throw new IOException("xsl file not found");
+                        using (var stylesheet = XmlReader.Create(xslStream))
+                        {
+                            var settings = new XsltSettings { EnableDocumentFunction = true };
+                            _transformHtml = new XslCompiledTransform();
+                            _transformHtml.Load(stylesheet, settings, new XmlUrlResolver());
+                        }
+                    }
+                }
+                return _transformHtml;
+            }
+        }
+
+        public TextBlock GetFromHtml(string html)
+        {
+            TextBlock textBlock = null;
+            Application.Current.Dispatcher.Invoke(
+            () =>
+            {
+                using (var s = new MemoryStream())
+                {
+                    using (var stringReader = new StringReader(html))
+                    {
+                        using (var htmlReader = XmlReader.Create(stringReader))
+                        {
+                            using (var w = XmlWriter.Create(s))
+                            {
+                                TransformHtml.Transform(htmlReader, w);
+                            }
+
+                            try
+                            {
+                                s.Seek(0, SeekOrigin.Begin);
+
+                                var sz = Encoding.UTF8.GetString(s.ToArray());
+                                using (var reader = XmlReader.Create(s))
+                                {
+                                    textBlock = (TextBlock) System.Windows.Markup.XamlReader.Load(reader);
+                                    // Code to run on the GUI thread.
+                                }
+                                    
+                            }
+                            catch (IOException)
+                            {
+                            }
+                        }
+                    }
+                }
+            });
+            return textBlock;
         }
 
         public UIElement GetFromSvg(Assembly assembly, string name)
@@ -112,15 +177,18 @@ namespace HLab.Mvvm.Icons
                     {
                         using (var w = XmlWriter.Create(s))
                         {
-                            Transform.Transform(svgReader, w);
+                            TransformSvg.Transform(svgReader, w);
                         }
                         try
                         {
                             s.Seek(0, SeekOrigin.Begin);
-                            var sz = Encoding.UTF8.GetString(s.ToArray());
+                            //var sz = Encoding.UTF8.GetString(s.ToArray());
 
                             using (var reader = XmlReader.Create(s))
-                                return (UIElement) System.Windows.Markup.XamlReader.Load(reader);
+                            {
+                                var icon = (UIElement) System.Windows.Markup.XamlReader.Load(reader);
+                                return icon;
+                            }
                         }
                         catch (IOException)
                         {

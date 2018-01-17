@@ -21,7 +21,6 @@
 	  http://www.mgth.fr
 */
 using System.Windows;
-using HLab.Mvvm;
 using HLab.Plugin;
 
 namespace LittleBigMouse_Control
@@ -34,7 +33,6 @@ namespace LittleBigMouse_Control
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-
             PluginService.D.Register();
         }
     }

@@ -22,12 +22,14 @@ namespace HLab.Notify
             remove => this.Remove(value);
         }
 
-        protected NotifierObject()
+        protected NotifierObject(bool init = true)
         {
-            _notifier = new Lazy<Notifier>(()=>NotifierService.D.GetNotifier(this)) ;
+            //_notifier = new Lazy<Notifier>(()=>NotifierService.D.GetNotifier(this)) ;
+            Notifier = NotifierService.D.GetNotifier(this);
+            if(init) Notifier.Subscribe(this);
         }
 
-        private readonly Lazy<Notifier> _notifier;
-        public Notifier Notifier => _notifier.Value;
+        //private readonly Lazy<Notifier> _notifier;
+        public Notifier Notifier { get; }//=> _notifier.Value;
     }
 }

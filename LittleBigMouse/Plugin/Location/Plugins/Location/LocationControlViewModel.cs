@@ -37,7 +37,7 @@ using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
 using Newtonsoft.Json;
 using Formatting = System.Xml.Formatting;
-using Tester = LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.Tester;
+using Tester = LittleBigMouse.Plugin.Location.Plugins.Location.Rulers.Tester;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Location
 {

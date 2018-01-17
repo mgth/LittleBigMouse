@@ -30,6 +30,8 @@ namespace LittleBigMouse.ScreenConfigs
 {
     public class ScreenSizeInPixels : ScreenSize
     {
+        public Screen Screen { get; }
+
         public ScreenSizeInPixels(Screen screen)
         {
             Screen = screen;

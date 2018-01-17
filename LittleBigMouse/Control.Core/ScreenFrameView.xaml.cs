@@ -94,8 +94,7 @@ namespace LittleBigMouse.Control.Core
 
         private void ResetSize_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.Model.Physical.Height = double.NaN;
-            ViewModel.Model.Physical.Width = double.NaN;
+            ViewModel.Model.ScreenModel.InitSize(ViewModel.Model.Monitor);
         }
         public double GetRatio()
         {

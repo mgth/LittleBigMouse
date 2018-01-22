@@ -57,7 +57,7 @@ namespace LittleBigMouse.ScreenConfigs
         {
             get => this.Get(() => 0.0);
 
-            set => this.Set(value, (oldValue, newValue) =>
+            set => this.Set(Math.Max(value, 0), (oldValue, newValue) =>
             {
                 if (FixedAspectRatio)
                 {
@@ -76,7 +76,7 @@ namespace LittleBigMouse.ScreenConfigs
             get => this.Get(() => 0.0);
             set
             {
-                this.Set(value, (oldValue, newValue) =>
+                this.Set(Math.Max(value, 0), (oldValue, newValue) =>
                 {
                     if (FixedAspectRatio)
                     {
@@ -107,22 +107,22 @@ namespace LittleBigMouse.ScreenConfigs
         public override double TopBorder
         {
             get => this.Get(() => 20.0);
-            set => this.Set(value);
+            set => this.Set(Math.Max(value,0.0));
         }
         public override double BottomBorder
         {
             get => this.Get(() => 20.0);
-            set => this.Set(value);
+            set => this.Set(Math.Max(value, 0.0));
         }
         public override double LeftBorder
         {
             get => this.Get(() => 20.0);
-            set => this.Set(value);
+            set => this.Set(Math.Max(value, 0.0));
         }
         public override double RightBorder
         {
             get => this.Get(() => 20.0);
-            set => this.Set(value);
+            set => this.Set(Math.Max(value, 0.0));
         }
 
     }

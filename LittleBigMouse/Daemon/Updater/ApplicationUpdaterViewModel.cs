@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using HLab.Mvvm;
 using HLab.Mvvm.Commands;
 using HLab.Notify;
 using Newtonsoft.Json.Linq;
@@ -14,19 +15,8 @@ using Application = System.Windows.Application;
 
 namespace LittleBigMouse_Daemon.Updater
 {
-    public class ApplicationUpdateViewModel : INotifyPropertyChanged
+    public class ApplicationUpdateViewModel : NotifierObject
     {
-        public ApplicationUpdateViewModel()
-        {
-            this.SubscribeNotifier();
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
-
         public void Show()
         {
             var view = new ApplicationUpdateView
@@ -62,19 +52,19 @@ namespace LittleBigMouse_Daemon.Updater
         }
 
         // http://www.chmp.org/sites/default/files/apps/sampling/
-        public String Url
+        public string Url
         {
             get => this.Get<string>();
             set => this.Set(value);
         }
 
-        public String FileName
+        public string FileName
         {
             get => this.Get<string>();
             set => this.Set(value);
         }
 
-        public String Message
+        public string Message
         {
             get => this.Get<string>();
             set => this.Set(value);
@@ -94,25 +84,24 @@ namespace LittleBigMouse_Daemon.Updater
             var filename = Url.Split('/').Last(); //FileName.Replace("{version}", NewVersion.ToString());
             var path = Path.GetTempPath() + filename;
 
-            Thread thread = new Thread(() =>
+            var thread = new Thread(() =>
             {
-                WebClient client = new WebClient();
-                client.DownloadProgressChanged +=
-                    new DownloadProgressChangedEventHandler(client_DownloadProgressChanged);
-                client.DownloadFileCompleted += new AsyncCompletedEventHandler(client_DownloadFileCompleted);
+                var client = new WebClient();
+                client.DownloadProgressChanged += client_DownloadProgressChanged;
+                client.DownloadFileCompleted += client_DownloadFileCompleted;
                 client.DownloadFileAsync(new Uri(Url), path);
             });
             thread.Start();
         }
 
-        void client_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+        private void client_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
-            double bytesIn = double.Parse(e.BytesReceived.ToString());
-            double totalBytes = double.Parse(e.TotalBytesToReceive.ToString());
+            var bytesIn = double.Parse(e.BytesReceived.ToString());
+            var totalBytes = double.Parse(e.TotalBytesToReceive.ToString());
             Progress = bytesIn / totalBytes * 100;
         }
 
-        void client_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        private void client_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             RunUpdate();
         }

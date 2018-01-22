@@ -22,34 +22,24 @@
 */
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Windows;
 using HLab.Notify;
 using HLab.Windows.API;
-using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
+using Monitor = HLab.Windows.Monitors.Monitor;
 
 namespace HLab.Windows.MonitorVcp
 {
     public static class VcpExpendMonitor
     {
-        private static readonly Dictionary<Monitor, VcpControl> AllVcp = new Dictionary<Monitor, VcpControl>();
-        public static VcpControl Vcp(this Monitor monitor)
-        {
-            if (AllVcp.ContainsKey(monitor)) return AllVcp[monitor];
-
-            VcpControl vcp = new VcpControl(monitor);
-            AllVcp.Add(monitor, vcp);
-            return vcp;
-        }
+        private static readonly ConditionalWeakTable<Monitor, VcpControl> AllVcp = new ConditionalWeakTable<Monitor, VcpControl>();
+        public static VcpControl Vcp(this Monitor monitor) => AllVcp.GetValue(monitor, m => new VcpControl(monitor));
     }
     public enum VcpComponent { Red, Green, Blue, Brightness, Contrast }
-    public class VcpControl : INotifyPropertyChanged
+    public class VcpControl : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
         public Monitor Monitor { get; }
 
         public VcpControl(Monitor monitor)
@@ -97,50 +87,36 @@ namespace HLab.Windows.MonitorVcp
         public MonitorRgbLevel Gain { get; }
         public MonitorRgbLevel Drive { get; }
 
-        private bool GetBrightness(ref uint min, ref uint value, ref uint max, uint component = 0)
-        {
-            return NativeMethods.GetMonitorBrightness(Monitor.HPhysical, ref min, ref value, ref max);
-        }
-        private bool SetBrightness(uint value, uint component = 0)
-        {
-            return NativeMethods.SetMonitorBrightness(Monitor.HPhysical, value);
-        }
-        private bool GetContrast(ref uint min, ref uint value, ref uint max, uint component = 0)
-        {
-            return NativeMethods.GetMonitorContrast(Monitor.HPhysical, ref min, ref value, ref max);
-        }
-        private bool SetContrast(uint value, uint component = 0)
-        {
-            return NativeMethods.SetMonitorContrast(Monitor.HPhysical, value);
-        }
-        private bool GetGain(ref uint min, ref uint value, ref uint max, uint component)
-        {
-            return NativeMethods.GetMonitorRedGreenOrBlueGain(Monitor.HPhysical, component, ref min, ref value, ref max);
-        }
-        private bool SetGain(uint value, uint component)
-        {
-            return NativeMethods.SetMonitorRedGreenOrBlueGain(Monitor.HPhysical, component, value);
-        }
-        private bool GetDrive(ref uint min, ref uint value, ref uint max, uint component)
-        {
-            return NativeMethods.GetMonitorRedGreenOrBlueDrive(Monitor.HPhysical, component, ref min, ref value, ref max);
-        }
-        private bool SetDrive(uint component, uint value)
-        {
-            return NativeMethods.SetMonitorRedGreenOrBlueDrive(Monitor.HPhysical, component, value);
-        }
+        private bool GetBrightness(ref uint min, ref uint value, ref uint max, uint component = 0) 
+            => NativeMethods.GetMonitorBrightness(Monitor.HPhysical, ref min, ref value, ref max);
+
+        private bool SetBrightness(uint value, uint component = 0) 
+            => NativeMethods.SetMonitorBrightness(Monitor.HPhysical, value);
+
+        private bool GetContrast(ref uint min, ref uint value, ref uint max, uint component = 0) 
+            => NativeMethods.GetMonitorContrast(Monitor.HPhysical, ref min, ref value, ref max);
+
+        private bool SetContrast(uint value, uint component = 0) 
+            => NativeMethods.SetMonitorContrast(Monitor.HPhysical, value);
+
+        private bool GetGain(ref uint min, ref uint value, ref uint max, uint component) 
+            => NativeMethods.GetMonitorRedGreenOrBlueGain(Monitor.HPhysical, component, ref min, ref value, ref max);
+
+        private bool SetGain(uint value, uint component) 
+            => NativeMethods.SetMonitorRedGreenOrBlueGain(Monitor.HPhysical, component, value);
+
+        private bool GetDrive(ref uint min, ref uint value, ref uint max, uint component) 
+            => NativeMethods.GetMonitorRedGreenOrBlueDrive(Monitor.HPhysical, component, ref min, ref value, ref max);
+
+        private bool SetDrive(uint component, uint value) 
+            => NativeMethods.SetMonitorRedGreenOrBlueDrive(Monitor.HPhysical, component, value);
     }
 
     public delegate bool VcpGetter(ref uint min, ref uint value, ref uint max, uint component = 0);
     public delegate bool VcpSetter(uint value, uint component = 0);
 
-    public class MonitorRgbLevel : INotifyPropertyChanged
+    public class MonitorRgbLevel : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
         private readonly MonitorLevel[] _values = new MonitorLevel[3];
 
         public MonitorRgbLevel(VcpGetter getter, VcpSetter setter)
@@ -156,14 +132,8 @@ namespace HLab.Windows.MonitorVcp
         public MonitorLevel Blue => Channel(2);
     }
 
-    public class MonitorLevel : INotifyPropertyChanged
+    public class MonitorLevel : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
-
         private readonly uint _component = 0;
 
         private readonly VcpSetter _componentSetter = null;
@@ -194,22 +164,22 @@ namespace HLab.Windows.MonitorVcp
             uint max = 0;
             uint value = 0;
 
-            bool result = false;
-            int tries = 10;
+            var result = false;
+            var tries = 100;
 
-            lock (LockDdcCi) 
-                while(!result && tries-- > 0)
+                while (!result && tries-- > 0)
+                {
+                    lock (LockDdcCi)
                     result = _componentGetter.Invoke(ref min, ref value, ref max, _component);
+                }
 
-            if (result)
-            {
-                Min = min;
-                Max = max;
-                this.Set(value, "Value");               
-            }
+            if (!result) return;
+
+            Min = min;
+            Max = max;
+            this.Set(value, "Value");
         }
 
-        private readonly object _lockValue = new object();
         private readonly LossyThread _threadSetter;
 
         public uint Value
@@ -236,7 +206,7 @@ namespace HLab.Windows.MonitorVcp
         {
             get => Value; set
             {
-                int tries = 10;
+                int tries = 100;
                 while (Value != value && tries-- > 0)
                 {
                     Value = value;

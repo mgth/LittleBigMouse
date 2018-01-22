@@ -52,8 +52,8 @@ namespace HLab.Windows.MonitorVcp
         [XmlAttribute]
         public double Blue;
 
-        public double MaxGain => (new double[]{Red, Green, Blue}).Max();
-        public double MinGain => (new double[] { Red, Green, Blue }).Min();
+        public double MaxGain => new[]{Red, Green, Blue}.Max();
+        public double MinGain => new[] { Red, Green, Blue }.Min();
     }
         public static class ProbeLutExpendScreen
         {
@@ -70,13 +70,8 @@ namespace HLab.Windows.MonitorVcp
 
 
    // [assembly:InternalsVisibleTo("ProbeLutExpendScreen")]
-    public class ProbeLut : INotifyPropertyChanged
+    public class ProbeLut : NotifierObject
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
         public ProbedColor DIlluminant { get; }
 
         private readonly Screen _screen;

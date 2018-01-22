@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -138,7 +139,17 @@ namespace HLab.Mvvm.Icons
                         {
                             using (var w = XmlWriter.Create(s))
                             {
-                                TransformHtml.Transform(htmlReader, w);
+                                try
+                                {
+                                    TransformHtml.Transform(htmlReader, w);
+                                }
+                                catch (XmlException)
+                                {
+                                    using (var sw = new StreamWriter(s))
+                                    {
+                                        sw.Write(Regex.Replace(html, "<.*?>", string.Empty));
+                                    }
+                                }
                             }
 
                             try

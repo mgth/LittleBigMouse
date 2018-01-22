@@ -41,7 +41,11 @@ namespace HLab.Notify
 
         protected override void Save(string entry, object value)
         {
-            Registry.CurrentUser.CreateSubKey(Key,true).SetValue(entry,value);
+            if(value==null)
+                try{Registry.CurrentUser.OpenSubKey(Key,true)?.DeleteValue(entry);}
+                catch (ArgumentException) { }
+            else
+                Registry.CurrentUser.CreateSubKey(Key,true).SetValue(entry,value);
         }
     }
 

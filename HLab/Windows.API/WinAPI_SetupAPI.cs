@@ -50,7 +50,7 @@ namespace HLab.Windows.API
 
         public static Guid GUID_CLASS_MONITOR = new Guid(0x4d36e96e, 0xe325, 0x11ce, 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18);
         const int MAX_DEVICE_ID_LEN = 200;
-        const int MAX_PATH = 260;
+        public const int MAX_PATH = 260;
 
         public const int DIGCF_PRESENT = 0x2;
         public const int DIGCF_PROFILE = 0x8;

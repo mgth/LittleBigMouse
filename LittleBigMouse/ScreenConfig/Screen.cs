@@ -1079,6 +1079,8 @@ namespace LittleBigMouse.ScreenConfigs
                 else InMm.Y -= bottom;
             }
         }
-    }
+
+
+}
 }
 

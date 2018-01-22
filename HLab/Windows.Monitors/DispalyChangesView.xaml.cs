@@ -38,6 +38,10 @@ namespace HLab.Windows.Monitors
         {
             var message = (WindowMessage)msg;
             var subCode = (WindowMessageParameter)wParam.ToInt64();
+            if (message == WindowMessage.WM_WININICHANGE)
+            {
+                //MonitorsService.D.UpdateDevices();
+            }
 
             if (message == WindowMessage.WM_DISPLAYCHANGE /*|| message == WindowMessage.WM_WININICHANGE*/)
             {

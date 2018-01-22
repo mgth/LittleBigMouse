@@ -20,10 +20,13 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using HLab.Mvvm;
 using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
@@ -154,6 +157,51 @@ namespace LittleBigMouse.Control.Core
         {
             get => this.Get<Viewbox>(); private set => this.Set(value);
         }
+
+        [TriggedOn("Model.Config.WallpaperStyle")]
+        public Stretch WallPaperStretch => this.Get(() =>
+        {
+            switch (Model.Config.WallpaperStyle)
+            {
+                case 0:
+                    return Stretch.None;
+                case 2:
+                    return Stretch.Fill;
+                case 6:
+                    return Stretch.Uniform;
+                case 10:
+                    return Stretch.UniformToFill;
+                case 22: // stretched across all screens
+                default:
+                    return Stretch.None;
+            }
+        });
+
+        [TriggedOn(nameof(WallPaperStretch))]
+        [TriggedOn("Model.Config.WallPaperPath")]
+        public Image WallPaper => this.Get(() =>
+        {
+            try
+            {
+                return new Image
+                {
+                    Source = new BitmapImage(new Uri(Model.Config.WallPaperPath)),
+                    Stretch = WallPaperStretch,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        });
+
+        public Brush BackgroundColor => this.Get(() => new SolidColorBrush(
+            Color.FromRgb(
+                (byte)Model.Config.BackGroundColor[0],
+                (byte)Model.Config.BackGroundColor[1],
+                (byte)Model.Config.BackGroundColor[2]
+            )));
 
         [TriggedOn(nameof(Model),"Monitor","Edid","ManufacturerCode")]
         public void UpdateLogo()

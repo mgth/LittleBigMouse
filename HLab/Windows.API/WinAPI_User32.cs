@@ -1582,5 +1582,11 @@ namespace HLab.Windows.API
             public int GradientColor;
             public int AnimationId;
         }
+
+        public const uint SPI_GETDESKWALLPAPER = 0x73;
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern int SystemParametersInfo(UInt32 uAction, int uParam, string lpvParam, int fuWinIni);
+
     }
 }

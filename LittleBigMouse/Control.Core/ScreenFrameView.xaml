@@ -189,6 +189,10 @@
                     </ContentControl.Effect>
                 </ContentControl>
             </Grid>
+
+            <Grid Grid.Column="1" Grid.Row="1" Background="{Binding BackgroundColor}"/>
+            
+            <ContentControl Grid.Column="1" Grid.Row="1" Content="{Binding WallPaper}"/>
             
             <mvvm:ViewLocator 
                 Grid.Column="1" Grid.Row="1" 

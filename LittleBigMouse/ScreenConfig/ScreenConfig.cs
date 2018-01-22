@@ -31,6 +31,7 @@ using System.Linq;
 using System.Management;
 using System.Windows;
 using HLab.Notify;
+using HLab.Windows.API;
 using HLab.Windows.Monitors;
 using Microsoft.Win32;
 using Newtonsoft.Json;
@@ -93,11 +94,62 @@ namespace LittleBigMouse.ScreenConfigs
         {
             this.SubscribeNotifier();
 
+            SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
+
             MonitorsOnCollectionChanged(monitorsService.AttachedMonitors,
                 new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, MonitorsService.D.AttachedMonitors));
 
             monitorsService.AttachedMonitors.CollectionChanged += MonitorsOnCollectionChanged;
         }
+
+        private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+        {
+            Notifier.Update(GetType().GetProperty("WallPaperPath"));
+        }
+
+        public string WallPaperPath => this.Get(GetCurrentDesktopWallpaper);
+
+        public string GetCurrentDesktopWallpaper()
+        {
+            string currentWallpaper = new string('\0', NativeMethods.MAX_PATH);
+            NativeMethods.SystemParametersInfo(NativeMethods.SPI_GETDESKWALLPAPER, currentWallpaper.Length, currentWallpaper, 0);
+            return currentWallpaper.Substring(0, currentWallpaper.IndexOf('\0'));
+        }
+
+        public bool TiledWallPaper => this.Get(() =>
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", false))
+            {
+                if (key == null) return false;
+                return key.GetValue("WallpaperStyle","0").ToString() == "1";
+            }
+        });
+
+        public int WallpaperStyle => this.Get(() =>
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", false))
+            {
+                if (key == null) return 0;
+
+                if(int.TryParse(key.GetValue("WallpaperStyle","0").ToString(),out var value))
+                {
+                    return value;
+                }
+                return 0;
+            }
+        });
+
+        public int[] BackGroundColor => this.Get<int[]>(() =>
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Colors", false))
+            {
+                if (key == null) return new []{0,0,0};
+                var s = key.GetValue("Background", "0 0 0").ToString();
+                var ss = s.Split(' ');
+                var i = ss.Select(int.Parse).ToArray();
+                return i;
+            }
+        });
 
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
         {

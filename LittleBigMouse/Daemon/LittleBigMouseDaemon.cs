@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.ServiceModel;
@@ -248,7 +249,16 @@ namespace LittleBigMouse_Daemon
 
             var p = Process.GetCurrentProcess();
             string filename = p.MainModule.FileName.Replace("_Daemon", "_Control").Replace(".vshost", "");
-            Process.Start(filename, "--startcontrol");
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = filename,
+                WorkingDirectory = Path.GetDirectoryName(p.MainModule.FileName),
+                Arguments = "-startcontrol",
+                UseShellExecute = false
+            };
+
+            Process.Start(startInfo);
         }
 
         /*

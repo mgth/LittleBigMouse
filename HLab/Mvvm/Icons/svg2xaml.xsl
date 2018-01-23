@@ -35,7 +35,9 @@ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 xmlns:exsl="http://exslt.org/common"
 xmlns:libxslt="http://exslt.org/common"
 xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
+exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape"
+>
+
 
 <xsl:strip-space elements="*" />
 <xsl:output method="xml" encoding="UTF-8" indent="yes"/>

@@ -157,9 +157,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Icons\colors.xml">
+    <EmbeddedResource Include="Icons\colors.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
+    </EmbeddedResource>
     <EmbeddedResource Include="Icons\html2xaml.xslt" />
     <Content Include="Icons\svg2xaml.old.xsl" />
     <EmbeddedResource Include="Icons\svg2xaml.xsl" />

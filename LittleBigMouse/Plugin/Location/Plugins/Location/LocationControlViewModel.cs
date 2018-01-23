@@ -103,9 +103,9 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
                 if (!Config.Saved)
                     Config.Save();
 
-                LittleBigMouseClient.Client.LoadConfig();
+                //LittleBigMouseClient.Client.LoadConfig();
 
-                if (!Running)
+                //if (!Running)
                     LittleBigMouseClient.Client.Start();
 
                 Client_StateChanged();

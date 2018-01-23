@@ -39,7 +39,7 @@ namespace LittleBigMouse_Daemon
     [ServiceBehavior(ConcurrencyMode = ConcurrencyMode.Reentrant, InstanceContextMode = InstanceContextMode.Single)]
     class LittleBigMouseDaemon : Application, ILittleBigMouseService
     {
-        private const string ServiceName = "LittleBigMouse";
+        private string ServiceName { get; } = "LittleBigMouse_" + System.Security.Principal.WindowsIdentity.GetCurrent().Name.Replace('\\','_');
         private MouseEngine _engine;
         private Notify _notify;
         private readonly IList<string> _args;
@@ -288,13 +288,14 @@ namespace LittleBigMouse_Daemon
         {
             using (TaskService ts = new TaskService())
             {
+                ts.RootFolder.DeleteTask("LittleBigMouse", false); //TODO : 
                 ts.RootFolder.DeleteTask(ServiceName, false);
 
                 TaskDefinition td = ts.NewTask();
                 td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
                 td.Triggers.Add(
                     //new BootTrigger());
-                    new LogonTrigger());
+                    new LogonTrigger{UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name });
 
                 //var p = Process.GetCurrentProcess();
                 //string filename = p.MainModule.FileName.Replace(".vshost", "");
@@ -317,6 +318,7 @@ namespace LittleBigMouse_Daemon
         {
             using (TaskService ts = new TaskService())
             {
+                ts.RootFolder.DeleteTask("LittleBigMouse", false); //TODO : 
                 ts.RootFolder.DeleteTask(ServiceName, false);
             }
 

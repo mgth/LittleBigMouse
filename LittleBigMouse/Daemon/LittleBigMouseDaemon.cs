@@ -288,10 +288,10 @@ namespace LittleBigMouse_Daemon
         {
             using (TaskService ts = new TaskService())
             {
-                ts.RootFolder.DeleteTask("LittleBigMouse", false); //TODO : 
+                ts.RootFolder.DeleteTask("LittleBigMouse", false); //TODO : remove this in one or two releases
                 ts.RootFolder.DeleteTask(ServiceName, false);
 
-                TaskDefinition td = ts.NewTask();
+                var td = ts.NewTask();
                 td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
                 td.Triggers.Add(
                     //new BootTrigger());
@@ -299,10 +299,10 @@ namespace LittleBigMouse_Daemon
 
                 //var p = Process.GetCurrentProcess();
                 //string filename = p.MainModule.FileName.Replace(".vshost", "");
-                string filename = AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName.Replace(".vshost", "");
+                var filename = AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName.Replace(".vshost", "");
 
                 td.Actions.Add(
-                    new ExecAction(filename,"--start")
+                    new ExecAction(filename,"--start", AppDomain.CurrentDomain.BaseDirectory)
                     );
 
                 td.Principal.RunLevel = TaskRunLevel.Highest;
@@ -318,7 +318,7 @@ namespace LittleBigMouse_Daemon
         {
             using (TaskService ts = new TaskService())
             {
-                ts.RootFolder.DeleteTask("LittleBigMouse", false); //TODO : 
+                ts.RootFolder.DeleteTask("LittleBigMouse", false); //TODO : remove this in one or two releases
                 ts.RootFolder.DeleteTask(ServiceName, false);
             }
 

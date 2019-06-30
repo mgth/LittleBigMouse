@@ -25,7 +25,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using HLab.Notify;
+using HLab.Base.Wpf;
 using HLab.Windows.MonitorVcp;
 
 namespace LittleBigMouse.Plugin.Vcp
@@ -34,45 +34,41 @@ namespace LittleBigMouse.Plugin.Vcp
     /// Logique d'interaction pour VcpSlider.xaml
     /// </summary>
     
-    public partial class VcpSlider : UserControl, INotifyPropertyChanged
+    public partial class VcpSlider : UserControl
     {
-        // PropertyChanged Handling
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
+        class H : DependencyHelper<VcpSlider> { }
 
         public VcpSlider()
         {
             InitializeComponent();
+
+            SetEnabled(false);
         }
 
 
-        public static DependencyProperty MonitorLevelProperty = DependencyProperty.Register(
-            "MonitorLevel",
-            typeof(MonitorLevel),
-            typeof(VcpSlider),
-            new FrameworkPropertyMetadata(OnMonitorLevelProperty)
-            );
+        public static DependencyProperty MonitorLevelProperty = H.Property<MonitorLevel>()
+            .OnChange((c, e) =>
+            {
+                if(e.OldValue!=null)
+                    e.OldValue.PropertyChanged -= c.ValueOnPropertyChanged;
 
-        private static void OnMonitorLevelProperty(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            var slider = (d as VcpSlider);
-            if (slider == null) return;
+                if (e.NewValue != null)
+                {
+                    e.NewValue.PropertyChanged += c.ValueOnPropertyChanged;
 
-            var old = (MonitorLevel) e.OldValue;
-            if (old != null)
-                old.PropertyChanged -= slider.ValueOnPropertyChanged;
+                    c.SetMinimum(e.NewValue.Min);
+                    c.SetMaximum(e.NewValue.Max);
+                    c.SetValue(e.NewValue.Value);
+                    c.SetEnabled(e.NewValue.Enabled);
+                    c.SetMoving(e.NewValue.Moving);
+                }
+            }).Register();
 
-            var newLevel = ((MonitorLevel)e.NewValue);
-            if (newLevel!=null)
-                newLevel.PropertyChanged += slider.ValueOnPropertyChanged;
-        }
 
         public MonitorLevel MonitorLevel
         {
-            get => (MonitorLevel)GetValue(MonitorLevelProperty); set => SetValue(MonitorLevelProperty, value);
+            get => (MonitorLevel)GetValue(MonitorLevelProperty);
+            set => SetValue(MonitorLevelProperty, value);
         }
 
         private void ValueOnPropertyChanged(object sender, PropertyChangedEventArgs propertyChangedEventArgs)
@@ -83,52 +79,94 @@ namespace LittleBigMouse.Plugin.Vcp
             switch (propertyChangedEventArgs.PropertyName)
             {
                 case "Min":
-                    Dispatcher.Invoke(delegate { Slider.Minimum = level.Min; });
+                    SetMinimum(level.Min);
                     break;
                 case "Max":
-                    Dispatcher.Invoke( delegate { Slider.Maximum = level.Max; });
+                    SetMaximum(level.Max);
                     break;
                 case "Value":
-                    Dispatcher.Invoke(delegate
-                    {
-                        Slider.Value = level.Value;
-                        TextBox.Text = level.Value.ToString();
-                    });
+                    SetValue(level.Value);
                     break;
+                case "Enabled":
+                    SetEnabled(level.Enabled);
+                    break;
+                case "Moving":
+                     SetMoving(level.Moving);
+                   break;
             }
-            
         }
 
-        public Color Color
+        private void SetMaximum(double max) => Dispatcher.Invoke(()=>Slider.Maximum = max);
+        private void SetMinimum(double min) => Dispatcher.Invoke(()=>Slider.Minimum = min);
+        private void SetValue(double value) => Dispatcher.Invoke(()=>
         {
-            get
+            Slider.Value = value;
+            TextBox.Text = value.ToString();
+        });
+        private void SetMoving(bool moving) => Dispatcher.Invoke(()=>
+        {
+            TextBox.Background = new SolidColorBrush(moving?Colors.Orange:Colors.LightGreen);
+        });
+        private void SetEnabled(bool enabled) => Dispatcher.Invoke(()=>
+        {
+            Slider.IsEnabled = enabled;
+            TextBox.IsEnabled = enabled;
+        });
+        //        private void SetValue(MonitorLevel level) => Dispatcher.Invoke(()=>Slider.Value = level.Value);
+
+        public static DependencyProperty ComponentProperty = H.Property<VcpComponent>()
+            .Default(VcpComponent.Brightness)
+            .OnChange((c, e) =>
             {
-                switch (Component)
+                switch (e.NewValue)
                 {
                     case VcpComponent.Red:
-                        return Colors.Red;
+                        c.SetColor( Color.FromArgb(255,255,0,0) );
+                        break;
                     case VcpComponent.Green:
-                        return Colors.Lime;
+                        c.SetColor(Color.FromArgb(255, 0, 255, 0));
+                        break;
                     case VcpComponent.Blue:
-                        return Colors.Blue;
+                        c.SetColor(Color.FromArgb(255,0, 0, 255));
+                        break;
                     case VcpComponent.Brightness:
-                        return Colors.White;
+                        c.SetColor(Color.FromArgb(255, 255, 255, 255));
+                        break;
                     case VcpComponent.Contrast:
-                        return Colors.Gray;
-                     default:
-                        throw new ArgumentOutOfRangeException(nameof(Component), Component, null);
+                        c.SetColor(Color.FromArgb(255, 30, 30, 30));
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(Component), e.NewValue, null);
                 }
 
-            }
+            })
+            .Register();
+
+        private void SetColor(Color c)
+        {
+            Slider.Foreground = new SolidColorBrush(
+                Color.FromScRgb(c.ScA * 0.7f, c.ScR* 0.8f , c.ScG* 0.8f, c.ScB * 0.8f)
+            );
+            Slider.Background = new SolidColorBrush(
+                Color.FromScRgb(c.ScA * 0.6f, c.ScR* 0.2f , c.ScG* 0.2f, c.ScB * 0.2f)
+            );
+            Slider.BorderBrush = new SolidColorBrush(
+                Color.FromScRgb(c.ScA * 0.9f, c.ScR * 0.5f+0.5f, c.ScG * 0.5f + 0.5f, c.ScB * 0.5f + 0.5f)
+            );
+
         }
 
-        public VcpComponent Component { get; set; }
+        public VcpComponent Component
+        {
+            get => (VcpComponent)GetValue(ComponentProperty);
+            set => SetValue(ComponentProperty,value);
+        }
 
         private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (MonitorLevel == null) return;
 
-            MonitorLevel.ValueAsync = (uint)Slider.Value;
+            MonitorLevel.Value = (uint)Slider.Value;
         }
     }
 }

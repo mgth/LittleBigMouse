@@ -26,11 +26,12 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {
-    public class ViewModeMultiScreenBackgound : ViewMode { }
+    public class ViewModeMultiScreenBackground : ViewMode { }
 
     /// <summary>
     /// Logique d'interaction pour MultiScreensGui.xaml
@@ -58,26 +59,38 @@ namespace LittleBigMouse.Control.Core
 
         private void AllScreens_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
-            if (e.OldItems != null)
+            switch (e.Action)
             {
-                foreach (var s in e.OldItems.OfType<Screen>())
-                {
-                    foreach (var element in Canvas.Children.OfType<FrameworkElement>().ToList())
+                case NotifyCollectionChangedAction.Add:
+                    if (e.NewItems != null)
                     {
-                        if(element is ScreenFrameView view && ReferenceEquals(view.ViewModel.Model,s))
-                            Canvas.Children.Remove(element);
+                        foreach (var s in e.NewItems.OfType<Screen>())
+                        {
+                            var view = ViewModel.MvvmContext.GetView<ViewModeDefault>(s, typeof(IViewClassDefault));
+                            Canvas.Children.Add((UIElement)view);
+                        }
                     }
-                }
-                
-            }
-
-            if (e.NewItems != null)
-            {
-                foreach (var s in e.NewItems.OfType<Screen>())
-                {
-                    var view = ViewModel.Context.GetView<ViewModeDefault>(s, typeof(IViewClassDefault));
-                    Canvas.Children.Add(view);
-                }
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                    if (e.OldItems != null)
+                    {
+                        foreach (var s in e.OldItems.OfType<Screen>())
+                        {
+                            foreach (var element in Canvas.Children.OfType<FrameworkElement>().ToList())
+                            {
+                                if (element is ScreenFrameView view && ReferenceEquals(view.ViewModel.Model, s))
+                                    Canvas.Children.Remove(element);
+                            }
+                        }
+                    }
+                    else throw  new ArgumentException("OldItems should not be null for remove Action");
+                    break;
+                case NotifyCollectionChangedAction.Replace:
+                case NotifyCollectionChangedAction.Move:
+                case NotifyCollectionChangedAction.Reset:
+                    throw new NotImplementedException();
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 

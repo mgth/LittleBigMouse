@@ -25,6 +25,8 @@ using System.ServiceModel;
 using System.ServiceProcess;
 using System.Threading;
 using System.Windows;
+using HLab.Notify.Wpf;
+using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse_Daemon
@@ -32,11 +34,11 @@ namespace LittleBigMouse_Daemon
     [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
     internal class Program
     {
-        private const string Unique = "LittleBigMouse_Daemon";
+        private const string UNIQUE = "LittleBigMouse_Daemon";
         [STAThread]
         public static void Main(string[] args)
         {
-            var mutex = new Mutex(true, Unique + Environment.UserName, out var firstInstance);
+            var mutex = new Mutex(true, UNIQUE + Environment.UserName, out var firstInstance);
 
             if (!firstInstance)
             {
@@ -52,9 +54,10 @@ namespace LittleBigMouse_Daemon
             }
             else
             {
+                var evt = new EventHandlerServiceWpf();
                 var servicesToRun = new ServiceBase[]
                 {
-                    new LittleBigMouseService()
+                    new LittleBigMouseService(new MonitorsService())
                 };
                 ServiceBase.Run(servicesToRun);
             }

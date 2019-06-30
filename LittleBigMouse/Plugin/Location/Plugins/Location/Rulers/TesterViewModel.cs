@@ -21,44 +21,52 @@
 	  http://www.mgth.fr
 */
 
-using HLab.Notify;
+using HLab.Notify.PropertyChanged;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
 {
-    public class TesterViewModel : NotifierObject
+    public class TesterViewModel : N<TesterViewModel>
     {
         public double LeftInDip
         {
-            get => this.Get(() => default(double));
-            set => this.Set(value);
+            get => _leftInDip.Get();
+            set => _leftInDip.Set(value);
         }
+        private readonly IProperty<double> _leftInDip = H.Property<double>();
 
         public double RightInDip
         {
-            get => this.Get(() => default(double));
-            set => this.Set(value);
+            get => _rightInDip.Get();
+            set => _rightInDip.Set(value);
         }
+        private readonly IProperty<double> _rightInDip = H.Property<double>();
 
         public double TopInDip
         {
-            get => this.Get(() => default(double));
-            set => this.Set(value);
+            get => _topInDip.Get();
+            set => _topInDip.Set(value);
         }
+        private readonly IProperty<double> _topInDip = H.Property<double>();
 
         public double BottomInDip
         {
-            get => this.Get(() => default(double));
-            set => this.Set(value);
+            get => _bottomInDip.Get();
+            set => _bottomInDip.Set(value);
         }
+        private readonly IProperty<double> _bottomInDip = H.Property<double>();
+
         public double HeightInDip
         {
-            get => this.Get(() => default(double));
-            set => this.Set(value);
+            get => _heightInDip.Get();
+            set => _heightInDip.Set(value);
         }
+        private readonly IProperty<double> _heightInDip = H.Property<double>();
+
         public double WidthInDip
         {
-            get => this.Get(() => default(double));
-            set => this.Set(value);
+            get => _widthInDip.Get();
+            set => _widthInDip.Set(value);
         }
+        private readonly IProperty<double> _widthInDip = H.Property<double>();
     }
 }

@@ -27,6 +27,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
 using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 
@@ -145,7 +146,7 @@ namespace LittleBigMouse.Control.Core
 
 
 
-        //[TriggedOn("Location")]
+        //[TriggerOn("Location")]
         //public Screen DrawnOnScreen
         //{
         //    get
@@ -155,12 +156,12 @@ namespace LittleBigMouse.Control.Core
         //    }
         //}
 
-        //[TriggedOn("DrawnOnScreen","State", "ShowRulers")]
+        //[TriggerOn("DrawnOnScreen","State", "ShowRulers")]
         //public GridLength HorizontalResizerSize 
         //    => WindowState == WindowState.Maximized /*&& ShowRulers*/ ? 
         //    new GridLength(30 * LocationScreen.MmToDipRatioX / ScaleFactor) : new GridLength(10);
 
-        //[TriggedOn("DrawnOnScreen", "State", "ShowRulers")]
+        //[TriggerOn("DrawnOnScreen", "State", "ShowRulers")]
         //public GridLength VerticalResizerSize 
         //    => WindowState ==  WindowState.Maximized /*&& ShowRulers*/ ?
         //    new GridLength(30 * LocationScreen.MmToDipRatioY / ScaleFactor) : new GridLength(10);

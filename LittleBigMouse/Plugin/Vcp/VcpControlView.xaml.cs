@@ -20,11 +20,10 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using System.Collections.Generic;
+
 using System.Windows;
 using System.Windows.Controls;
-using HLab.Mvvm;
-using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
+using HLab.Mvvm.Annotations;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Vcp
@@ -64,10 +63,6 @@ namespace LittleBigMouse.Plugin.Vcp
         {
             LittleBigMouseClient.Client.Quit();
         }
-
-        private readonly List<RulerView> _rulers = new List<RulerView>();
-
-
 
         private void ButtonBase_OnClick(object sender, RoutedEventArgs routedEventArgs)
         {

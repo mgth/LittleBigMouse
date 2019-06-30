@@ -3,16 +3,18 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using HLab.Notify;
+using HLab.Base;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using HLab.Windows.Monitors;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 
 namespace LittleBigMouse.ScreenConfigs
 {
-    public class ScreenModel : NotifierObject
+    public class ScreenModel : N<ScreenModel>
     {
+        [JsonIgnore]
         public ScreenConfig Config { get; }
         public string PnpCode { get; }
 
@@ -20,32 +22,36 @@ namespace LittleBigMouse.ScreenConfigs
         {
             Config = config;
             PnpCode = pnpCode;
+            Initialize();
         }
 
+        private readonly IProperty<string> _pnpDevice = H.Property<string>(nameof(PnpDeviceName));
         [JsonProperty]
         public string PnpDeviceName
         {
-            get => this.Get<string>();
+            get => _pnpDevice.Get();
             private set
             {
-                if (this.Set(value)) Saved = false;
+                if (_pnpDevice.Set(value)) Saved = false;
             }
         }
 
 
-        [TriggedOn(nameof(Physical), "TopBorder")]
-        [TriggedOn(nameof(Physical), "RightBorder")]
-        [TriggedOn(nameof(Physical), "BottomBorder")]
-        [TriggedOn(nameof(Physical), "LeftBorder")]
-        [TriggedOn(nameof(Physical), "Height")]
-        [TriggedOn(nameof(Physical), "Width")]
+        [TriggerOn(nameof(Physical), "TopBorder")]
+        [TriggerOn(nameof(Physical), "RightBorder")]
+        [TriggerOn(nameof(Physical), "BottomBorder")]
+        [TriggerOn(nameof(Physical), "LeftBorder")]
+        [TriggerOn(nameof(Physical), "Height")]
+        [TriggerOn(nameof(Physical), "Width")]
         public void SetSaved()
         {
             Saved = false;
         }
 
-        [JsonProperty]
-        public ScreenSizeInMm Physical => this.Get(() => new ScreenSizeInMm(this));
+        [JsonProperty] public ScreenSizeInMm Physical => _physical.Get();
+        private readonly IProperty<ScreenSizeInMm> _physical = H.Property<ScreenSizeInMm>(c => c
+            .Set(e => new ScreenSizeInMm(e))
+        );
 
         public void Save(RegistryKey baseKey)
         {
@@ -147,10 +153,11 @@ namespace LittleBigMouse.ScreenConfigs
             return OpenMonitorRegKey(PnpCode, create);
         }
 
+        private readonly IProperty<bool> _saved = H.Property<bool>(nameof(Saved));
         public bool Saved
         {
-            get => this.Get<bool>();
-            set => this.Set(value);
+            get => _saved.Get();
+            set => _saved.Set(value);
         }
 
     }

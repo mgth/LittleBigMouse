@@ -25,32 +25,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
-using System.Windows.Media;
-using HLab.Mvvm;
-using LittleBigMouse.ScreenConfigs;
+using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Wpf;
 
 namespace LittleBigMouse.Control.Core
 {
-    public static class ViewScreenFrameLayerExtention
-    {
-        public static ScreenFrameView GetFrame<T>(this T layer)
-            where T : UserControl, IViewScreenFrameLayer
-            => layer.FindParent<ScreenFrameView>();
-
-    }
-
-
-    public interface IViewScreenFrameLayer  : IViewClass
-    {
-//        ScreenFrameView Frame { get;}
-    }
-    public interface IViewScreenFrameContent : IViewScreenFrameLayer
-    {
-    }
-    public interface IViewScreenFrameTopLayer : IViewScreenFrameLayer
-    {
-    }
-
     public partial class ScreenFrameView : UserControl , IView<ViewModeDefault, ScreenFrameViewModel>, IViewClassDefault
     {
         public ScreenFrameViewModel ViewModel => DataContext as ScreenFrameViewModel;
@@ -58,8 +37,6 @@ namespace LittleBigMouse.Control.Core
         public ScreenFrameView()
         {
             LayoutUpdated += ScreenFrameView_LayoutUpdated;
-
-
             InitializeComponent();
         }
 
@@ -70,9 +47,7 @@ namespace LittleBigMouse.Control.Core
             ViewModel.Ratio = Presenter.GetRatio();
         }
 
-
         public MultiScreensView Presenter => this.FindParent<MultiScreensView>();
-
 
         private void TextBox_MouseWheel(object sender, MouseWheelEventArgs e)
         {
@@ -111,21 +86,6 @@ namespace LittleBigMouse.Control.Core
             }
             return 1;
 
-        }
-    }
-
-    public class Anchor
-    {
-        public Screen Screen { get; }
-        public double Pos { get; }
-        public Brush Brush { get; }
-        public DoubleCollection StrokeDashArray { get; }
-        public Anchor(Screen screen, double pos, Brush brush, DoubleCollection strokeDashArray )
-        {
-            Screen = screen;
-            Pos = pos;
-            Brush = brush;
-            StrokeDashArray = strokeDashArray;
         }
     }
 }

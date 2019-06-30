@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LittleBigMouse_Control</RootNamespace>
     <AssemblyName>LittleBigMouse_Control</AssemblyName>
-    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
@@ -101,9 +101,22 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="ControlzEx, Version=4.0.0.0, Culture=neutral, PublicKeyToken=69f1c32f803d307e, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\ControlzEx.4.0.0-alpha0290\lib\net462\ControlzEx.dll</HintPath>
+    </Reference>
+    <Reference Include="MahApps.Metro, Version=2.0.0.0, Culture=neutral, PublicKeyToken=51482d6f650b2b3f, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\MahApps.Metro.2.0.0-alpha0316\lib\net47\MahApps.Metro.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Microsoft.Xaml.Behaviors, Version=1.0.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\Microsoft.Xaml.Behaviors.Wpf.1.0.1\lib\net45\Microsoft.Xaml.Behaviors.dll</HintPath>
+    </Reference>
+    <Reference Include="PresentationFramework.Aero" />
+    <Reference Include="PresentationFramework.Aero2" />
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Runtime.Serialization" />
@@ -117,6 +130,21 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+    <Reference Include="Xceed.Wpf.AvalonDock, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock.Themes.Aero, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.Themes.Aero.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock.Themes.Metro, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.Themes.Metro.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock.Themes.VS2010, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.Themes.VS2010.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.Toolkit, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.Toolkit.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
@@ -150,6 +178,7 @@
       <SubType>Designer</SubType>
     </None>
     <None Include="lbm.licenseheader" />
+    <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -175,31 +204,71 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Hlab\Argyll\HLab.Argyll.csproj">
+    <ProjectReference Include="..\..\..\HLab.System\Argyll\HLab.Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
       <Name>HLab.Argyll</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Base\HLab.Base.csproj">
-      <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
-      <Name>HLab.Base</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
+    <ProjectReference Include="..\..\..\HLab.System\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
       <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>
       <Name>HLab.Windows.MonitorVcp</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
+    <ProjectReference Include="..\..\..\HLab\HLab.Base\HLab.Base.csproj">
+      <Project>{edc4fe17-edae-42b1-80e4-fb5273f43d11}</Project>
+      <Name>HLab.Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Core.Annotations\HLab.Core.Annotations.csproj">
+      <Project>{10c3b514-5f74-4428-a36b-7b9b1bb5c789}</Project>
+      <Name>HLab.Core.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Core\HLab.Core.csproj">
+      <Project>{e2ff593a-e2d4-45f7-b53a-3af3f7199e6a}</Project>
+      <Name>HLab.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.DependencyInjection.Annotations\HLab.DependencyInjection.Annotations.csproj">
+      <Project>{ee881c21-1e2a-41a0-adb9-177b53435699}</Project>
+      <Name>HLab.DependencyInjection.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.DependencyInjection\HLab.DependencyInjection.csproj">
+      <Project>{a1e2f148-8602-4b8a-a8d6-72b4e917a445}</Project>
+      <Name>HLab.DependencyInjection</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj">
+      <Project>{17cffa1d-3c93-4ecf-9b0a-27de5d71dd90}</Project>
+      <Name>HLab.Mvvm.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj">
+      <Project>{8ff8b90d-3611-48e3-9355-e0b776e882b1}</Project>
+      <Name>HLab.Mvvm.Wpf</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj">
       <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
       <Name>HLab.Mvvm</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Notify-4\HLab.Notify.4.csproj">
-      <Project>{593cb07f-8504-490a-96d6-2cc6034487d7}</Project>
-      <Name>HLab.Notify.4</Name>
+    <ProjectReference Include="..\..\..\HLab\HLab.Notify.Annotations\HLab.Notify.Annotations.csproj">
+      <Project>{ffaadefc-bd31-46ab-b955-b58ddcafe13b}</Project>
+      <Name>HLab.Notify.Annotations</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\HLab\Windows.API\HLab.Windows.API.csproj">
+    <ProjectReference Include="..\..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj">
+      <Project>{8573f088-69e7-44e4-a774-4130e568fd56}</Project>
+      <Name>HLab.Notify.PropertyChanged</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Notify.Wpf\HLab.Notify.Wpf.csproj">
+      <Project>{267bdc6c-00bb-457c-8097-8ed6d4761122}</Project>
+      <Name>HLab.Notify.Wpf</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Notify\HLab.Notify.csproj">
+      <Project>{fb6c1cc8-1992-40ae-92b0-3fb490eee30a}</Project>
+      <Name>HLab.Notify</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\MouseTest\MouseHooker\MouseHooker.csproj">
+      <Project>{07903dd6-2383-4e68-91cb-64f31f04640c}</Project>
+      <Name>MouseHooker</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\Windows.API\HLab.Windows.API.csproj">
       <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
       <Name>HLab.Windows.API</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\HLab\Windows.Monitors\HLab.Windows.Monitors.csproj">
+    <ProjectReference Include="..\..\..\HLab.System\Windows.Monitors\HLab.Windows.Monitors.csproj">
       <Project>{0c90e881-b94c-4dc5-b2d0-ff6dc7601de4}</Project>
       <Name>HLab.Windows.Monitors</Name>
     </ProjectReference>
@@ -215,10 +284,6 @@
       <Project>{bfe44d5e-b0e7-4185-bb9d-49d83fba5539}</Project>
       <Name>LittleBigMouse.Plugin.Location</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Plugin\HLab.Plugin.csproj">
-      <Project>{e34cc1c9-293c-4455-b3dd-5a582095432b}</Project>
-      <Name>HLab.Plugin</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Plugin\Vcp\LittleBigMouse.Plugin.Vcp.csproj">
       <Project>{730507c2-2f7e-4405-947d-76049fca1c46}</Project>
       <Name>LittleBigMouse.Plugin.Vcp</Name>
@@ -231,7 +296,16 @@
   <ItemGroup>
     <Content Include="setup\LittleBigMouse.iss" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Page Include="Converters.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Icons.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>"C:\Program Files (x86)\Inno Setup 5\Compil32.exe" /cc ..\..\..\setup\LittleBigMouse.iss</PostBuildEvent>

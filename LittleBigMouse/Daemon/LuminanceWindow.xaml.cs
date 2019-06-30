@@ -26,9 +26,9 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using Gma.System.MouseKeyHook;
 using LittleBigMouse.ScreenConfigs;
 using LittleBigMouse_Daemon.Properties;
-using MouseKeyboardActivityMonitor;
 using MouseEventArgs = System.Windows.Forms.MouseEventArgs;
 
 namespace LittleBigMouse_Daemon
@@ -119,7 +119,7 @@ namespace LittleBigMouse_Daemon
         }
 
 
-        public MouseHookListener Hook = null;
+        public IKeyboardMouseEvents Hook = null;
 
         private void LuminanceWindow_OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {

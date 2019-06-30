@@ -30,34 +30,37 @@ namespace LittleBigMouse_Daemon
 {
     class LbmMouse
     {
-        private static void MouseEvent(NativeMethods.MOUSEEVENTF evt, double x, double y)
+        public static uint MouseEvent(NativeMethods.MOUSEEVENTF evt, double x, double y)
         {
-            NativeMethods.InputUnion[] input = new NativeMethods.InputUnion[1];
-            input[0] = new NativeMethods.InputUnion()
+            NativeMethods.InputUnion[] input = {
+            new NativeMethods.InputUnion
             {
-                mi = new NativeMethods.MOUSEINPUT()
+                type = 0,
+                mi = new NativeMethods.MOUSEINPUT
                 {
                     dwFlags = evt ,
                     dx = (int)x,
                     dy = (int)y,
+                    time = 0,
+                    mouseData = 0,
+                    dwExtraInfo = UIntPtr.Zero
                 }
-            };
+            }};
 
-            uint res = NativeMethods.SendInput(1, input, Marshal.SizeOf(input));
+            return NativeMethods.SendInput((uint)input.Length, input, Marshal.SizeOf<NativeMethods.InputUnion>());
         }
 
         public static Point CursorPos
         {
             get
             {
-                NativeMethods.POINT p=new NativeMethods.POINT();
-                NativeMethods.GetCursorPos(out p);
+                NativeMethods.GetCursorPos(out var p);
                 return p;
             }
             set => NativeMethods.SetCursorPos((int)value.X, (int)value.Y);
         }
 
-        static public double MouseSpeed
+        public static double MouseSpeed
         {
             get {
                 uint speed = 0;

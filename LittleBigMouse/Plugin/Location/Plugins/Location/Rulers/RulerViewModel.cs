@@ -24,23 +24,50 @@
 using System;
 using System.Windows;
 using System.Windows.Media;
-using HLab.Notify;
+using HLab.Notify.PropertyChanged;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
 {
-    public class RulerViewModel : NotifierObject
+    public class RulerViewModel : N<RulerViewModel>
     {
         public Screen Screen { get; }
         public RulerSide Side { get; }
         public Screen DrawOn { get; }
 
-        public RulerViewModel(Screen screen, Screen drawOn, RulerSide side) : base(false)
+        public RulerViewModel(Screen screen, Screen drawOn, RulerSide side)
         {
             Side = side;
+            switch (side)
+            {
+                case RulerSide.Top:
+                    Vertical = false;
+                    Horizontal = true;
+                    Revert = false;
+                    break;
+                case RulerSide.Bottom:
+                    Vertical = false;
+                    Horizontal = true;
+                    Revert = true;
+                    break;
+                case RulerSide.Left:
+                    Vertical = true;
+                    Horizontal = false;
+                    Revert = false;
+                    break;
+                case RulerSide.Right:
+                    Vertical = true;
+                    Horizontal = false;
+                    Revert = true;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(side), side, null);
+            }
             Screen = screen;
-            DrawOn = drawOn;                
-            this.SubscribeNotifier();
+            DrawOn = drawOn;
+            Background = GetBackground(ReferenceEquals(DrawOn, Screen) ? Colors.DarkGreen : Colors.DarkBlue);
+            BackgroundOut = GetBackground(Colors.Black);
+            Initialize();
         }
         public enum RulerSide
         {
@@ -50,31 +77,36 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
             Right
         }
 
+        private readonly IProperty<bool> _enable = H.Property<bool>();
         public bool Enabled
         {
-            get => this.Get<bool>();
-            set => this.Set(value);
+            get => _enable.Get();
+            set => _enable.Set(value);
         }
 
-        [TriggedOn(nameof(RatioX))]
-        [TriggedOn(nameof(DrawOn), "XMoving")]
-        [TriggedOn(nameof(Screen), "XMoving")]
-        public double ZeroX => this.Get(() //=> 0);
-          => RatioX * (Screen.XMoving - DrawOn.XMoving));
+        public double ZeroX => _zeroX.Get();
+        private readonly IProperty<double> _zeroX = H.Property<double>(c => c
+            .On(e => e.RatioX)
+            .On(e => e.DrawOn.XMoving)
+            .On(e => e.Screen.XMoving)
+            .Set(e => e.RatioX * (e.Screen.XMoving - e.DrawOn.XMoving))
+        );
 
-        [TriggedOn(nameof(RatioY))]
-        [TriggedOn(nameof(DrawOn), "YMoving")]
-        [TriggedOn(nameof(Screen), "YMoving")]
-        public double ZeroY => this.Get(()//=> 0);
-             => RatioY * (Screen.YMoving - DrawOn.YMoving));
+        public double ZeroY => _zeroY.Get();
+        private readonly IProperty<double> _zeroY = H.Property<double>(c => c
+            .On(e => e.RatioY)
+            .On(e => e.DrawOn.YMoving)
+            .On(e => e.Screen.YMoving)
+            .Set(e => e.RatioY * (e.Screen.YMoving - e.DrawOn.YMoving))
+        );
 
-
-
-        [TriggedOn(nameof(ZeroY))]
-        [TriggedOn(nameof(ZeroX))]
-        public Thickness Margin => this.Get<Thickness>(()
-                
-            => Vertical ? new Thickness( 0, ZeroY, 0, 0 ) : new Thickness( ZeroX, 0, 0, 0 ));
+        public Thickness Margin => _margin.Get();
+        private readonly IProperty<Thickness> _margin = H.Property<Thickness>( c => c
+            .On(e => e.RatioY)
+            .On(e => e.DrawOn.YMoving)
+            .On(e => e.Screen.YMoving)
+            .Set(e => new Thickness((!e.Horizontal) ? e.ZeroX : 0, e.Vertical ? e.ZeroY : 0, 0, 0))
+        );
 
 
         public Brush GetBrush(double x1, double y1, double x2, double y2, Color c1)
@@ -96,103 +128,104 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
             };
         }
 
-
-        [TriggedOn(nameof(Side))]
-        public Brush Background => this.Get(() =>
+        public Brush Background { get; }
+        public Brush BackgroundOut { get; }
+        private Brush GetBackground(Color color) 
         {
-            var c = ReferenceEquals(DrawOn, Screen) ? Colors.DarkGreen : Colors.DarkBlue;
 
-            c = Color.Multiply(c,0.7f);
+            var c = Color.Multiply(color,0.7f);
 
             switch (Side)
             {
-                case RulerSide.Top: return GetBrush(0.5, 0, 0.5, 1, c);
-                case RulerSide.Bottom: return GetBrush(0.5, 1, 0.5, 0, c);
-                case RulerSide.Left: return GetBrush(0, 0.5, 1, 0.5, c);
-                case RulerSide.Right: return GetBrush(1, 0.5, 0, 0.5, c);
+                case RulerSide.Top:
+                    return GetBrush(0.5, 0, 0.5, 1, c);
+                case RulerSide.Bottom:
+                    return GetBrush(0.5, 1, 0.5, 0, c);
+                case RulerSide.Left:
+                    return GetBrush(0, 0.5, 1, 0.5, c);
+                case RulerSide.Right:
+                    return GetBrush(1, 0.5, 0, 0.5, c);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
-        });
-
-        [TriggedOn(nameof(Side))]
-        public Brush BackgroundOut => this.Get(() =>
-        {
-            var c = Color.Multiply(Colors.Black,0.7f);
-
-            switch (Side)
-            {
-                case RulerSide.Top: return GetBrush(0.5, 0, 0.5, 1, c);
-                case RulerSide.Bottom: return GetBrush(0.5, 1, 0.5, 0, c);
-                case RulerSide.Left: return GetBrush(0, 0.5, 1, 0.5, c);
-                case RulerSide.Right: return GetBrush(1, 0.5, 0, 0.5, c);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        });
-
-        [TriggedOn(nameof(Side))]
-        public bool Vertical => this.Get(()=>Side == RulerSide.Left) || (Side == RulerSide.Right);
-
-        [TriggedOn(nameof(Vertical))]
-        public bool Horizontal => this.Get(()=>!Vertical);
-
-        [TriggedOn(nameof(Side))]
-        public bool Revert => this.Get(() => Side == RulerSide.Right || Side == RulerSide.Bottom);
+        }
 
 
-        [TriggedOn(nameof(DrawOn), "InDip", "Height")]
-        [TriggedOn(nameof(DrawOn), "InMm", "Height")]
-        public double RatioY => this.Get(() => DrawOn.InDip.Height / DrawOn.InMm.Height);
+        public bool Vertical { get; }
+        public bool Horizontal { get; }
+        public bool Revert { get; }
 
-        [TriggedOn(nameof(DrawOn), "InDip", "Height")]
-        [TriggedOn(nameof(DrawOn), "InMm", "Height")]
-        public double RatioX => this.Get(() => DrawOn.InDip.Width / DrawOn.InMm.Width);
+        public double RatioX => _ratioX.Get();
+        private readonly IProperty<double> _ratioX = H.Property<double>( c => c
+            .On(e => e.DrawOn.InDip.Width)
+            .On(e => e.DrawOn.InMm.Width)
+            .Set(e => e.DrawOn.InDip.Width / e.DrawOn.InMm.Width)
+        );
 
-        [TriggedOn(nameof(Vertical))]
-        [TriggedOn(nameof(RatioY))]
-        [TriggedOn(nameof(Screen), "InMm", "Height")]
-        //public double RulerHeight => this.Get(() => DrawOn.MmToDipRatio.Y * (Vertical ? Screen.InMm.Height : double.NaN));
-        public double RulerHeight => this.Get(() => Vertical ? (Screen.InMm.Height * RatioY) : double.NaN);
+        public double RatioY => _ratioY.Get();
+        private readonly IProperty<double> _ratioY = H.Property<double>( c => c
+            .On(e => e.DrawOn.InDip.Height)
+            .On(e => e.DrawOn.InMm.Height)
+            .Set(e => e.DrawOn.InDip.Height / e.DrawOn.InMm.Height)
+        );
 
+        public double RulerHeight => _rulerHeight.Get();
+        private readonly IProperty<double> _rulerHeight = H.Property<double>(c => c
+                .On(e => e.RatioY)
+                .On(e => e.Screen.InMm.Height)
+                .Set(e => e.Vertical ? (e.Screen.InMm.Height * e.RatioY) : double.NaN)
+        );
 
-        [TriggedOn(nameof(Horizontal))]
-        [TriggedOn(nameof(RatioX))]
-        [TriggedOn(nameof(Screen),"InMm","Width")]
-        public double RulerWidth => this.Get(() => Horizontal ? Screen.InMm.Width * RatioX : double.NaN);
+        public double RulerWidth => _rulerWidth.Get();
+        private readonly IProperty<double> _rulerWidth = H.Property<double>( c => c
+                .On(e => e.RatioX)
+                .On(e => e.Screen.InMm.Width)
+                .Set(e => e.Horizontal ? (e.Screen.InMm.Width * e.RatioX) : double.NaN)
+            );
 
-        [TriggedOn(nameof(Vertical))]
-        [TriggedOn(nameof(Screen),"InMm","Width")]
-        [TriggedOn(nameof(Screen),"InMm","Height")]
-        public double RulerLength => this.Get(()=> Vertical ? Screen.InMm.Height : Screen.InMm.Width);
+        public double RulerLength => _rulerLength.Get();
+        private readonly IProperty<double> _rulerLength = H.Property<double>(c => c
+                .On(e => e.Screen.InMm.Width)
+                .On(e => e.Screen.InMm.Height)
+                .Set(e => e.Vertical ? (e.Screen.InMm.Height * e.Screen.InMm.Width) : double.NaN)
+            );
 
-        [TriggedOn(nameof(Vertical))]
-        [TriggedOn(nameof(DrawOn),"InMm","Height")]
-        [TriggedOn(nameof(DrawOn),"InMm","Width")]
-        [TriggedOn(nameof(RulerStart))]
-        public double RulerEnd => this.Get(()=> RulerStart + (Vertical ? DrawOn.InMm.Height : DrawOn.InMm.Width));
+        public double RulerEnd => _rulerEnd.Get();
+        private readonly IProperty<double> _rulerEnd = H.Property<double>(c => c
+            .On(e => e.DrawOn.InMm.Height)
+            .On(e => e.DrawOn.InMm.Width)
+            .On(e => e.RulerStart)
+            .Set(e => e.RulerStart + (e.Vertical ? e.DrawOn.InMm.Height : e.DrawOn.InMm.Width))
+        );
 
-        [TriggedOn(nameof(Vertical))]
-        [TriggedOn(nameof(DrawOn),"XMoving")]
-        [TriggedOn(nameof(DrawOn),"YMoving")]
-        [TriggedOn(nameof(Screen),"XMoving")]
-        [TriggedOn(nameof(Screen),"YMoving")]
-        public double RulerStart => this.Get(()=> Vertical? DrawOn.YMoving - Screen.YMoving : DrawOn.XMoving - Screen.XMoving);
+        public double RulerStart => _rulerStart.Get();
+        private readonly IProperty<double> _rulerStart = H.Property<double>(c => c
+            .On(e => e.DrawOn.XMoving)
+            .On(e => e.DrawOn.YMoving)
+            .On(e => e.Screen.XMoving)
+            .On(e => e.Screen.YMoving)
+            .Set(e => e.Vertical ? e.DrawOn.YMoving - e.Screen.YMoving : e.DrawOn.XMoving - e.Screen.XMoving)
+        );
 
-        [TriggedOn(nameof(Vertical))]
-        [TriggedOn(nameof(RatioX))]
-        [TriggedOn(nameof(RatioY))]
-        public double LengthRatio => this.Get(() => Vertical ? RatioY : RatioX);
+        public double LengthRatio => _lengthRatio.Get();
+        private readonly IProperty<double> _lengthRatio = H.Property<double>(c => c
+            .On(e => e.RatioX)
+            .On(e => e.RatioY)
+            .Set(e => e.Vertical ? e.RatioY : e.RatioX)
+        );
 
-        [TriggedOn(nameof(Vertical))]
-        [TriggedOn(nameof(RatioX))]
-        [TriggedOn(nameof(RatioY))]
-        public double SizeRatio => this.Get(() => Vertical ? RatioX : RatioY);
+        public double SizeRatio => _sizeRatio.Get();
+        private readonly IProperty<double> _sizeRatio = H.Property<double>(c => c
+            .On(e => e.RatioX)
+            .On(e => e.RatioY)
+            .Set(e => e.Vertical ? e.RatioX : e.RatioY)
+        );
 
-        [TriggedOn(nameof(Vertical))]
-        [TriggedOn(nameof(ZeroX))]
-        [TriggedOn(nameof(ZeroY))]
-        public double Zero => this.Get(() =>  Vertical ? ZeroY : ZeroX);
-
+        public double Zero => _zero.Get();
+        private readonly IProperty<double> _zero = H.Property<double>(c => c
+            .On(e => e.ZeroX)
+            .On(e => e.ZeroY)
+            .Set(e => e.Vertical ? e.ZeroY : e.ZeroX)
+        );
     }
 }

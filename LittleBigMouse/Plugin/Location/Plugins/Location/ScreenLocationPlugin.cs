@@ -21,22 +21,33 @@
 	  http://www.mgth.fr
 */
 
-using HLab.Mvvm;
-using HLab.Mvvm.Icons;
-using HLab.Plugin;
+using HLab.Core.Annotations;
+using HLab.DependencyInjection.Annotations;
+using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Wpf.Icons;
 using LittleBigMouse.Control.Core;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Location
 {
     class ViewModeScreenLocation : ViewMode { }
 
-    class ScreenLocationPlugin : PluginModule<ScreenLocationPlugin>
+    class ScreenLocationPlugin : IPreBootloader
     {
-        public override void Register()
+        private MainService _mainService;
+        private IIconService _iconService;
+
+        [Import]
+        public ScreenLocationPlugin(MainService mainService, IIconService iconService)
         {
-            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconLocation"),"Location",
-                ()=> MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenLocation),
-                ()=> MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
+            _mainService = mainService;
+            _iconService = iconService;
+        }
+
+        public void Load()
+        {
+            _mainService.MainViewModel.AddButton(_iconService.GetIcon("Icons/IconLocation"),"Location",
+                ()=> _mainService.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenLocation),
+                ()=> _mainService.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
         }
 
     }

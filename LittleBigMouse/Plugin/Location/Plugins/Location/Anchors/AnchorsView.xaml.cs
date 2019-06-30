@@ -20,16 +20,18 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Windows.Controls;
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
 using LittleBigMouse.Control.Core;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location.Anchors
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Anchors
 {
     /// <summary>
     /// Logique d'interaction pour AnchorsView.xaml
     /// </summary>
-    public partial class AnchorsView : UserControl , IView<ViewModeMultiScreenBackgound, AnchorsViewModel>
+    public partial class AnchorsView : UserControl , IView<ViewModeMultiScreenBackground, AnchorsViewModel>
     {
         public AnchorsView()
         {

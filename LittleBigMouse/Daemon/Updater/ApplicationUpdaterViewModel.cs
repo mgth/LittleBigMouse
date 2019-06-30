@@ -7,15 +7,16 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using HLab.Mvvm;
-using HLab.Mvvm.Commands;
-using HLab.Notify;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using Newtonsoft.Json.Linq;
 using Application = System.Windows.Application;
 
 namespace LittleBigMouse_Daemon.Updater
 {
-    public class ApplicationUpdateViewModel : NotifierObject
+    public class ApplicationUpdateViewModel : ViewModel<ApplicationUpdateViewModel>
     {
         public void Show()
         {
@@ -28,56 +29,70 @@ namespace LittleBigMouse_Daemon.Updater
 
         public double Progress
         {
-            get => this.Get<double>();
-            set => this.Set(value);
+            get => _progress.Get();
+            set => _progress.Set(value);
         }
+        private readonly IProperty<double> _progress = H.Property<double>();
 
         public bool Updated
         {
-            get => this.Get<bool>(() => false);
-            set => this.Set(value);
+            get => _updated.Get();
+            set => _updated.Set(value);
         }
+        private readonly IProperty<bool> _updated = H.Property<bool>();
 
-        public Version CurrentVersion => this.Get(() =>
+        public Version CurrentVersion => _currentVersion.Get();
+        private readonly IProperty<Version> _currentVersion = H.Property<Version>();
+
+        [TriggerOn]
+        private void _setVersion()
         {
             var v = FileVersionInfo.GetVersionInfo("LittleBigMouse_Control.exe").FileVersion;
-            if (Version.TryParse(v, out var version)) return version;
-            return null;
-        });
+            if (Version.TryParse(v, out var version)) _currentVersion.Set(version) ;
+            _currentVersion.Set(null);
+        }
 
         public Version NewVersion
         {
-            get => this.Get<Version>();
-            set => this.Set(value);
+            get => _newVersion.Get();
+            set => _newVersion.Set(value);
         }
+        private readonly IProperty<Version> _newVersion = H.Property<Version>();
 
         // http://www.chmp.org/sites/default/files/apps/sampling/
         public string Url
         {
-            get => this.Get<string>();
-            set => this.Set(value);
+            get => _url.Get();
+            set => _url.Set(value);
         }
+        private readonly IProperty<string> _url = H.Property<string>(nameof(Url));
 
         public string FileName
         {
-            get => this.Get<string>();
-            set => this.Set(value);
+            get => _fileName.Get();
+            set => _fileName.Set(value);
         }
+        private readonly IProperty<string> _fileName = H.Property<string>();
 
+        private readonly IProperty<string> _message = H.Property<string>();
         public string Message
         {
-            get => this.Get<string>();
-            set => this.Set(value);
+            get => _message.Get();
+            set => _message.Set(value);
         }
 
-        [TriggedOn(nameof(NewVersionFound))]
-        public ModelCommand UpdateCommand => this.GetCommand(Update, () => NewVersionFound);
+        public ICommand UpdateCommand => _updateCommand.Get();
+        private readonly IProperty<ICommand> _updateCommand = H.Property<ICommand>(
+            nameof(NewVersionFound), c=>c
+                .On(nameof(NewVersionFound))
+                .Command(e => e.Update(),e => e.NewVersionFound));
 
-        [TriggedOn(nameof(NewVersion))]
+
+        [TriggerOn(nameof(NewVersion))]
 #if DEBUG
-        public bool NewVersionFound => this.Get(() => true);
+        public bool NewVersionFound => true;
 #else
-        public bool NewVersionFound => this.Get(() => NewVersion > CurrentVersion);
+        public bool NewVersionFound => NewVersion > CurrentVersion;
 #endif
         private void Update()
         {

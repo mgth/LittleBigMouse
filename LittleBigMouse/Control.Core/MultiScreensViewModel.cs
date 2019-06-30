@@ -24,46 +24,52 @@ using System;
 using System.Collections.ObjectModel;
 using System.Windows;
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
 using HLab.Notify;
+using HLab.Notify.PropertyChanged;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {
-    public class MultiScreensViewModel : NotifierObject, IPresenterViewModel
+    public class MultiScreensViewModel : ViewModel<MultiScreensViewModel>, IPresenterViewModel, IMvvmContextProvider
     {
-        public MultiScreensViewModel() : base(false)
+        public MultiScreensViewModel(ScreenConfig config)
         {
-            this.SubscribeNotifier();
+            Initialize();
+            Config = config;
         }
 
         public MainViewModel MainViewModel
         {
-            get => this.Get<MainViewModel>();
-            set => this.Set(value);
+            get => _mainViewModel.Get();
+            set => _mainViewModel.Set(value);
         }
+        private readonly IProperty<MainViewModel> _mainViewModel = H.Property<MainViewModel>();
 
         public Type ViewMode
         {
-            get => this.Get(() => typeof(ViewModeDefault/*ViewModeScreenLocation*/));
-            set => this.Set(value);
+            get => _viewMode.Get();
+            set => _viewMode.Set(value);
         }
+        private readonly IProperty<Type> _viewMode 
+            = H.Property<Type>(nameof(ViewMode), c=>c
+                .Set(e => typeof(ViewModeDefault/*ViewModeScreenLocation*/)));
 
-        public ViewModeContext Context => this.Get(
-            () => new ViewModeContext(nameof(MultiScreensViewModel))
-            .AddCreator<ScreenFrameViewModel>(vm => vm.Presenter = this ));
-
-        public Size Size { get => this.Get<Size>(); set => this.Set(value); }
+        // private readonly IProperty<Size> _size = H.Property<Size>(nameof(Size));
+        // public Size Size { get => _size.Get(); set => _size.Set(value); }
+        // public ObservableCollection<ScreenFrameViewModel> ScreenFrames = new ObservableCollection<ScreenFrameViewModel>();
 
 
         public ScreenConfig Config
         {
-            get => this.Get<ScreenConfig>();
-            set => this.Set(value);
+            get => _config.Get();
+            set => _config.Set(value);
         }
+        private readonly IProperty<ScreenConfig> _config = H.Property<ScreenConfig>(nameof(Config));
 
-
-        public ObservableCollection<ScreenFrameViewModel> ScreenFrames = new ObservableCollection<ScreenFrameViewModel>();
-
-
+        public void ConfigureMvvmContext(IMvvmContext ctx)
+        {
+            ctx.AddCreator<ScreenFrameViewModel>(vm => vm.Presenter = this);
+        }
     }
 }

@@ -29,6 +29,10 @@ using System.Runtime.InteropServices;
 using System.ServiceModel;
 using System.Windows;
 using System.Windows.Forms;
+using HLab.Base;
+using HLab.Notify.PropertyChanged;
+using HLab.Notify.Wpf;
+using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 using LittleBigMouse_Daemon.Updater;
 using Microsoft.Win32.TaskScheduler;
@@ -41,17 +45,20 @@ namespace LittleBigMouse_Daemon
     {
         private string ServiceName { get; } = "LittleBigMouse_" + System.Security.Principal.WindowsIdentity.GetCurrent().Name.Replace('\\','_');
         private MouseEngine _engine;
+        private readonly IMonitorsService _monitorsService;
         private Notify _notify;
         private readonly IList<string> _args;
 
         public LittleBigMouseDaemon(IList<string> args)
         {
-
+            NotifyHelper.EventHandlerService = new EventHandlerServiceWpf();
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Startup += OnStartup;
             Exit += OnExit;
             Deactivated += OnDeactivated;
             _args = args;
+            _monitorsService = new MonitorsService();
+            _screenConfig = new ScreenConfig(_monitorsService);
         }
 
        // public static ILittleBigMouseCallback Callback;
@@ -60,7 +67,7 @@ namespace LittleBigMouse_Daemon
         {
 
             _notify = new Notify();
-            _engine = new MouseEngine();
+            _engine = new MouseEngine(_monitorsService);
 
             _engine.ConfigLoaded += _engine_ConfigLoaded;
 
@@ -90,6 +97,8 @@ namespace LittleBigMouse_Daemon
             UpdateConfig();
         }
 
+        private readonly ScreenConfig _screenConfig;
+
         public void UpdateConfig()
         {
             _notify.RemoveMenu("config");
@@ -98,7 +107,7 @@ namespace LittleBigMouse_Daemon
             {
                 bool chk = configName==_engine.Config?.Id;
 
-                if (ScreenConfig.IsDoableConfig(configName))
+                if (_screenConfig.IsDoableConfig(configName))
                     _notify.AddMenu(0,configName, MatchConfig, "config", chk);
             }
 
@@ -163,7 +172,7 @@ namespace LittleBigMouse_Daemon
 
         public bool Running()
         {
-            return _engine.Hook.Enabled;
+            return true; // TODO  : _engine.Hook.Enabled;
         }
 
         public void Update()

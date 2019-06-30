@@ -27,9 +27,8 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
 {
     /// <summary>
     /// Logique d'interaction pour Sizer.xaml

@@ -21,40 +21,43 @@
 	  http://www.mgth.fr
 */
 
-using HLab.Notify;
+
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 
 namespace LittleBigMouse.ScreenConfigs
 {
     public static class ScreenInverseRatioExt
     {
-        public static ScreenRatio Inverse(this ScreenRatio source) => new ScreenInverseRatio(source);
     }
-    public class ScreenInverseRatio : ScreenRatio
+    public class ScreenInverseRatio : ScreenRatio<ScreenInverseRatio>
     {
-        public ScreenRatio Source
-        {
-            get => this.Get<ScreenRatio>();
-            private set => this.Set(value);
-        }
-
-        public ScreenInverseRatio(ScreenRatio ratio)
+        public ScreenInverseRatio(IScreenRatio ratio)
         {
             Source = ratio;
-            this.SubscribeNotifier();
+            Initialize();
         }
 
-        [TriggedOn(nameof(Source), "X")]
+        public IScreenRatio Source { get; }
+
         public override double X
         {
-            get => this.Get(()=> 1/Source.X);
+            get => _x.Get();
             set => Source.X = 1/value;
         }
+        private readonly IProperty<double> _x = H.Property<double>(c => c
+             .On(e => e.Source.X)
+            .Set(e => 1 / e.Source.X)
+        );
 
-        [TriggedOn(nameof(Source), "Y")]
         public override double Y
         {
-            get => this.Get(()=> 1/Source.Y);
+            get => _y.Get();
             set => Source.Y = 1/value;
         }
+        private readonly IProperty<double> _y = H.Property<double>(c => c
+             .On(e => e.Source.Y)
+            .Set(e => 1 / e.Source.Y)
+        );
     }
 }

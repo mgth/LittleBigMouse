@@ -20,58 +20,55 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Windows;
 using System.Windows.Media;
 using HLab.Mvvm;
 using HLab.Notify;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
-using LittleBigMouse.Plugin.Location.Plugins.Location;
+using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
-using RulerView = LittleBigMouse.LocationPlugin.Plugins.Location.Rulers.RulerView;
+using RulerView = LittleBigMouse.Plugin.Location.Plugins.Location.Rulers.RulerView;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location
+namespace LittleBigMouse.Plugin.Location.Plugins.Location
 {
-    class LocationScreenViewModel : IViewModel<Screen>
+    class LocationScreenViewModel : ViewModel<LocationScreenViewModel,Screen>
     {
-        public Screen Model => this.GetModel();
-        public event PropertyChangedEventHandler PropertyChanged
+        public LocationScreenViewModel()
         {
-            add => this.Add(value);
-            remove => this.Remove(value);
+            Initialize();
         }
-
 
         public ScreenLocationPlugin Plugin
         {
-            get => this.Get<ScreenLocationPlugin>(); set => this.Set(value);
+            get => _plugin.Get();
+            set => _plugin.Set(value);
         }
+        private readonly IProperty<ScreenLocationPlugin> _plugin = H.Property<ScreenLocationPlugin>();
 
         public bool Ruler
         {
-            get => this.Get(() => false);
-            set => this.Set(value);
+            get => _ruler.Get();
+            set => _ruler.Set(value);
         }
+        private readonly IProperty<bool> _ruler = H.Property<bool>();
+
         public bool RulerMouseOver
         {
-            get => this.Get(() => false);
-            set => this.Set(value);
+            get => _rulerMouseOver.Get();
+            set => _rulerMouseOver.Set(value);
         }
+        private readonly IProperty<bool> _rulerMouseOver = H.Property<bool>();
 
 
         private readonly List<RulerView> _rulers = new List<RulerView>();
 
-        public LocationScreenViewModel()
-        {
-            this.SubscribeNotifier();
-        }
-
-
-
         private readonly List<RulerPanelView> _panels = new List<RulerPanelView>();
 
-        [TriggedOn(nameof(Model), "Selected")]
+        [TriggerOn(nameof(Model), "Selected")]
         public void UpdateSelected()
         {
             if (Model == null) return;
@@ -80,7 +77,7 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
             Ruler = false;
         }
 
-        [TriggedOn(nameof(Ruler))]
+        [TriggerOn(nameof(Ruler))]
         public void UpdateRulers()
         {
             foreach (var panel in _panels)
@@ -116,20 +113,23 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
             }
         }
 
+        private readonly IProperty<Brush> _rulerForegroundColor = H.Property<Brush>();
+        public Brush RulerForegroundColor => _rulerForegroundColor.Get();
+        [TriggerOn(nameof(Ruler))]
+        [TriggerOn(nameof(RulerMouseOver))]
+        private void _setRulerForegroundColor() => _rulerForegroundColor.Set(Ruler ? new SolidColorBrush(Colors.White): RulerMouseOver?new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.Black));
 
-        [TriggedOn(nameof(Ruler))]
-        [TriggedOn(nameof(RulerMouseOver))]
-        public Brush RulerForegroundColor => this.Get(() => Ruler ? new SolidColorBrush(Colors.White): RulerMouseOver?new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.Black));
-
-        [TriggedOn(nameof(Ruler))]
-        [TriggedOn(nameof(RulerMouseOver))]
-        public Brush RulerBackgroundColor => this.Get(() => RulerMouseOver ? new SolidColorBrush(Colors.DarkBlue) : Ruler ? new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.White));
+        private readonly IProperty<Brush> _rulerBackgroundColor = H.Property<Brush>();
+        public Brush RulerBackgroundColor => _rulerBackgroundColor.Get();
+        [TriggerOn(nameof(Ruler))]
+        [TriggerOn(nameof(RulerMouseOver))]
+        private void _set_RulerBackgroundColor() => _rulerBackgroundColor.Set(RulerMouseOver ? new SolidColorBrush(Colors.DarkBlue) : Ruler ? new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.White));
 
 
-        [TriggedOn(nameof(Model),"PhysicalRatio","X")]
+        [TriggerOn(nameof(Model),"PhysicalRatio","X")]
         public double RatioX
         {
-            get => this.Get(()=> Model.PhysicalRatio.X * 100);
+            get => Model.PhysicalRatio.X * 100;
             set
             {
                 Model.PhysicalRatio.X = value/100;
@@ -137,10 +137,10 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
             }
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRatio","Y")]
+        [TriggerOn(nameof(Model), "PhysicalRatio","Y")]
         public double RatioY
         {
-            get => this.Get(()=> Model.PhysicalRatio.Y * 100);
+            get => Model.PhysicalRatio.Y * 100;
             set
             {
                 Model.PhysicalRatio.Y = value / 100;
@@ -148,13 +148,13 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location
             }
         }
 
-        [TriggedOn(nameof(Model), "Orientation")]
+        [TriggerOn(nameof(Model), "Orientation")]
         public VerticalAlignment DpiVerticalAlignment
-            => this.Get(()=> Model.Orientation == 3 ? VerticalAlignment.Bottom : VerticalAlignment.Top);
+            => Model.Orientation == 3 ? VerticalAlignment.Bottom : VerticalAlignment.Top;
 
-        [TriggedOn(nameof(Model), "Orientation")]
+        [TriggerOn(nameof(Model), "Orientation")]
         public VerticalAlignment PnpNameVerticalAlignment
-            => this.Get(()=> Model.Orientation == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Top);
+            => Model.Orientation == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Top;
 
 
 

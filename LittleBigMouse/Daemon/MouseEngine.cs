@@ -25,17 +25,19 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.ServiceModel;
 using System.ServiceModel.Description;
 using System.Threading;
 using System.Windows;
+using HLab.DependencyInjection.Annotations;
 using HLab.Windows.API;
-using HLab.Windows.MonitorVcp;
 using HLab.Windows.Monitors;
+using HLab.Windows.MonitorVcp;
 using LittleBigMouse.ScreenConfigs;
 using Microsoft.Win32;
-using MouseKeyboardActivityMonitor;
-using MouseKeyboardActivityMonitor.WinApi;
+using MouseHooker;
+//using static HLab.Windows.API.NativeMethods;
 
 namespace LittleBigMouse_Daemon
 {
@@ -47,7 +49,8 @@ namespace LittleBigMouse_Daemon
         private Zones _zones;
 
         private double _initMouseSpeed;
-        public readonly MouseHookListener Hook = new MouseHookListener(new GlobalHooker());
+        //public readonly IMouseHooker Hook = new MouseHookerWinEvent();
+        public readonly IMouseHooker Hook = new MouseHookerWindowsHook();
 
         private ServiceHost _host;
 
@@ -56,14 +59,13 @@ namespace LittleBigMouse_Daemon
             if (_host == null)
             {
                 _host = new ServiceHost(service, LittleBigMouseClient.Address);
-                ServiceMetadataBehavior smb = new ServiceMetadataBehavior
+                var smb = new ServiceMetadataBehavior
                 {
                     MetadataExporter = { PolicyVersion = PolicyVersion.Policy15 }
                 };
 
                 _host.Description.Behaviors.Add(smb);
             }
-
             _host.Open();
         }
 
@@ -111,7 +113,7 @@ namespace LittleBigMouse_Daemon
 
 
             _handler = OnMouseMoveExtFirst;
-            Hook.MouseMoveExt += _handler;
+            Hook.MouseMove += _handler;
 
             if (Config.AdjustPointer)
                 ZoneChanged += AdjustPointer;
@@ -122,15 +124,16 @@ namespace LittleBigMouse_Daemon
             if(Config.HomeCinema)
                 ZoneChanged += HomeCinema;
 
-
-            Hook.Enabled = true;
+            Hook.Hook();
         }
 
         public void Stop()
         {
-            if (!Hook.Enabled) return;
+            // TODO : if (!Hook.Enabled) return;
 
-            Hook.MouseMoveExt -= _handler;
+            if (Config == null) return;
+
+            Hook.MouseMove -= _handler;
 
             if (Config.AdjustPointer)
                 ZoneChanged -= AdjustPointer;
@@ -141,8 +144,7 @@ namespace LittleBigMouse_Daemon
             if (Config.HomeCinema)
                 ZoneChanged -= HomeCinema;
 
-
-            Hook.Enabled = false;
+            Hook.UnHook();
 
             if (Config == null) return;
 
@@ -182,9 +184,11 @@ namespace LittleBigMouse_Daemon
 
         public event EventHandler ConfigLoaded;
 
+        private readonly IMonitorsService _monitorService;
+
         public void LoadConfig()
         {
-            LoadConfig(new ScreenConfig(MonitorsService.D));
+            LoadConfig(new ScreenConfig(_monitorService));
 
             _zones = new Zones();
             foreach (var screen in Config.AllScreens)
@@ -249,36 +253,91 @@ namespace LittleBigMouse_Daemon
         }
 
 
-        private EventHandler<MouseEventExtArgs> _handler;
+        private EventHandler<HookMouseEventArg> _handler;
         private Point _oldPoint;
         private Zone _oldZone;
 
-        private void OnMouseMoveExtFirst(object sender, MouseEventExtArgs e)
+        [Import]
+        public MouseEngine(IMonitorsService monitorService)
         {
-            _oldPoint = new Point(e.X,e.Y);
+            _monitorService = monitorService;
+        }
+
+        private void OnMouseMoveExtFirst(object sender, HookMouseEventArg e)
+        {
+            _oldPoint = e.Point; //new Point(e.X,e.Y);
             //_oldScreenRect = Config.ScreenFromPixel(_oldPoint).InPixel.Bounds;
             _oldZone = _zones.FromPx(_oldPoint);
 
-            Hook.MouseMoveExt -= _handler;
+            Hook.MouseMove -= _handler;
 
             if (Config.AllowCornerCrossing)
                 _handler = MouseMoveCross;
             else
             {
-                _handler = MouseMovestraight;
+                _handler = MouseMoveStraight;
             }
 
-            Hook.MouseMoveExt += _handler;
+            Hook.MouseMove += _handler;
 
-            e.Handled = false;
+            //e.Handled = false;
         }
 
         public event EventHandler<ZoneChangeEventArgs> ZoneChanged;
 
-        private void MouseMovestraight(object sender, MouseEventExtArgs e)
+        [DllImport("user32", SetLastError = true)]
+        private static extern IntPtr OpenInputDesktop(uint dwFlags,
+            bool fInherit,
+            uint dwDesiredAccess);
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool SetThreadDesktop(IntPtr hDesktop);
+        [DllImport("user32.dll")]
+        private static extern bool SwitchDesktop(IntPtr hDesktop);
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetThreadDesktop(int dwThreadId);
+
+        [DllImport("kernel32.dll")]
+        public static extern int GetCurrentThreadId();
+        enum DESKTOP_ACCESS : uint
         {
-            if (e.Clicked) return;
-            var pIn = new Point(e.X, e.Y);
+            DESKTOP_NONE = 0,
+            DESKTOP_READOBJECTS = 0x0001,
+            DESKTOP_CREATEWINDOW = 0x0002,
+            DESKTOP_CREATEMENU = 0x0004,
+            DESKTOP_HOOKCONTROL = 0x0008,
+            DESKTOP_JOURNALRECORD = 0x0010,
+            DESKTOP_JOURNALPLAYBACK = 0x0020,
+            DESKTOP_ENUMERATE = 0x0040,
+            DESKTOP_WRITEOBJECTS = 0x0080,
+            DESKTOP_SWITCHDESKTOP = 0x0100,
+
+            GENERIC_ALL = (DESKTOP_READOBJECTS | DESKTOP_CREATEWINDOW | DESKTOP_CREATEMENU |
+                           DESKTOP_HOOKCONTROL | DESKTOP_JOURNALRECORD | DESKTOP_JOURNALPLAYBACK |
+                           DESKTOP_ENUMERATE | DESKTOP_WRITEOBJECTS | DESKTOP_SWITCHDESKTOP),
+        }
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindowStations(EnumWindowStationsDelegate lpEnumFunc, IntPtr lParam);
+
+        private delegate bool EnumWindowStationsDelegate(string windowsStation, IntPtr lParam);
+
+        private static bool EnumWindowStationsCallback(string windowStation, IntPtr lParam)
+        {
+            GCHandle gch = GCHandle.FromIntPtr(lParam);
+            IList<string> list = gch.Target as List<string>;
+
+            if (null == list)
+            {
+                return (false);
+            }
+
+            list.Add(windowStation);
+
+            return (true);
+        }
+        private void MouseMoveStraight(object sender, HookMouseEventArg e)
+        {
+            //TODO : if (e.Clicked) return;
+            var pIn = e.Point; 
 
             if (_oldZone.ContainsPx(pIn))
             {
@@ -286,6 +345,7 @@ namespace LittleBigMouse_Daemon
                 e.Handled = false;
                 return;
             }
+
 
             //Point oldpInMm = _oldZone.Px2Mm(_oldPoint);
             Point pInMm = _oldZone.Px2Mm(pIn);
@@ -365,20 +425,95 @@ namespace LittleBigMouse_Daemon
             pOut = zoneOut.InsidePx(pOut);
             _oldZone = zoneOut.Main;
             _oldPoint = pOut;
+
+            //IntPtr hwnd = OpenInputDesktop(0, false, DESKTOP_SWITCHDESKTOP);
+            //SetThreadDesktop(hwnd);
+
+            //var movement = new INPUT { Type = (UInt32)0 };
+            //movement.Data.Mouse.Flags = (UInt32)(MouseFlag.Move | MouseFlag.Absolute | MouseFlag.VirtualDesk);
+            //movement.Data.Mouse.X = (int)pOut.X;
+            //movement.Data.Mouse.Y = (int)pOut.Y;
+
+            //INPUT[] inputs = {movement};
+
+            //SendInput((UInt32)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
+
             LbmMouse.CursorPos = pOut;
+
+            var p = LbmMouse.CursorPos;
+            if (Math.Abs(pOut.X - p.X) >= 1 || Math.Abs(pOut.Y - p.Y) >= 1)
+            {
+                IntPtr hOldDesktop = GetThreadDesktop(GetCurrentThreadId());
+                IntPtr hwnd = OpenInputDesktop(0, true, (uint)DESKTOP_ACCESS.GENERIC_ALL);
+
+                Thread t = new Thread(() =>
+                {
+                SwitchDesktop(hwnd);
+                    var b = SetThreadDesktop(hwnd);
+
+                    var b2 = LbmMouse.MouseEvent(
+                        NativeMethods.MOUSEEVENTF.ABSOLUTE | NativeMethods.MOUSEEVENTF.MOVE 
+                        |NativeMethods.MOUSEEVENTF.VIRTUALDESK
+                        , pOut.X, pOut.Y);
+                    if (b2 == 0)
+                    {
+                        var s = NativeMethods.GetLastError();
+                    }
+
+                    //LbmMouse.CursorPos = pOut;
+                    var b3 = NativeMethods.SetCursorPos((int)pOut.X, (int)pOut.Y);
+
+                    if (b3==false)
+                    {
+                        var s = NativeMethods.GetLastError();
+                    }
+
+                    //    IList<string> list = new List<string>();
+                    //    GCHandle gch = GCHandle.Alloc(list);
+                    //    EnumWindowStationsDelegate childProc = new EnumWindowStationsDelegate(EnumWindowStationsCallback);
+
+                    //    EnumWindowStations(childProc, GCHandle.ToIntPtr(gch));
+
+
+                    //}
+                });
+
+                t.Start();
+                t.Join();
+
+                SwitchDesktop(hOldDesktop);
+
+                //var w = new Window
+                //{
+                //    WindowStyle = WindowStyle.None,
+                //    Visibility = Visibility.Collapsed,
+                //    Width = 0,
+                //    Height = 0
+                //};
+                //w.Show();
+
+                ////const int DESKTOP_SWITCHDESKTOP = 256;
+                ////IntPtr hwnd = OpenInputDesktop(0, false, 0x00020000);
+                ////var b = SetThreadDesktop(hwnd);
+
+                //LbmMouse.CursorPos = pOut;
+
+                //w.Close();
+            }
+
             ZoneChanged?.Invoke(this, new ZoneChangeEventArgs(_oldZone, zoneOut));
             e.Handled = true;
         }
 
-        private void MouseMoveCross(object sender, MouseEventExtArgs e)
+        private void MouseMoveCross(object sender, HookMouseEventArg e)
         {
-            if (e.Clicked) return;
-            var pIn = new Point(e.X, e.Y);
+            // TODO : if (e.Clicked) return;
+            var pIn = e.Point; //new Point(e.X, e.Y);
 
             if (_oldZone.ContainsPx(pIn))
             {
                 _oldPoint = pIn;
-                e.Handled = false;
+                // TODO : e.Handled = false;
                 return;
             }
             //if (_count >= 0) _timer.Start();
@@ -411,7 +546,7 @@ namespace LittleBigMouse_Daemon
                     if (zoneOut == null)
                     {
                         LbmMouse.CursorPos = _oldZone.InsidePx(pIn);
-                        e.Handled = true;
+                        // TODO : e.Handled = true;
                         return;
                     }
 
@@ -421,7 +556,7 @@ namespace LittleBigMouse_Daemon
                     _oldPoint = pOut;
                     LbmMouse.CursorPos = pOut;
                     ZoneChanged?.Invoke(this, new ZoneChangeEventArgs(_oldZone, zoneOut));
-                    e.Handled = true;
+                    // TODO : e.Handled = true;
                     return;
 
             //}

@@ -4,8 +4,9 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:core="clr-namespace:LittleBigMouse.Control.Core"
-             xmlns:converters="clr-namespace:HLab.Mvvm.Converters;assembly=HLab.Mvvm"
              xmlns:mvvm="clr-namespace:HLab.Mvvm;assembly=HLab.Mvvm"
+             xmlns:converters="clr-namespace:HLab.Mvvm.Wpf.Converters;assembly=HLab.Mvvm.Wpf"
+             xmlns:wpf="clr-namespace:HLab.Mvvm.Wpf;assembly=HLab.Mvvm.Wpf"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300"
              HorizontalAlignment="Left"
@@ -18,6 +19,7 @@
              Foreground="White"
              x:Name="UserControl"
              Margin="{Binding Margin}"
+             d:DataContext="{d:DesignInstance Type=core:ScreenFrameViewModel, IsDesignTimeCreatable=True}"
              >
     <UserControl.ContextMenu>
         <ContextMenu>
@@ -99,7 +101,7 @@
 
             </Grid>
 
-            <!-- Grid Contening objects that will be rotated -->
+            <!-- Grid Containing objects that will be rotated -->
             <Grid              
               Width="{Binding UnrotatedWidth, FallbackValue=320}"
               Height="{Binding UnrotatedHeight, FallbackValue=180}"
@@ -157,11 +159,11 @@
             Grid.Row="2" 
             Grid.Column="1" 
                 Grid.ColumnSpan="2"
-                Content="{Binding Path=PowerButton}"/>
+                Content="{Binding PowerButton}"/>
             </Grid>
         <Grid               
-              Width="{Binding Path=Width, FallbackValue=320}"
-              Height="{Binding Path=Height, FallbackValue=180}">
+              Width="{Binding Width, FallbackValue=320}"
+              Height="{Binding Height, FallbackValue=180}">
 
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{Binding LeftBorder,FallbackValue=20}"/>
@@ -194,20 +196,12 @@
             
             <ContentControl Grid.Column="1" Grid.Row="1" Content="{Binding WallPaper}"/>
             
-            <mvvm:ViewLocator 
+            <ContentControl 
                 Grid.Column="1" Grid.Row="1" 
-                ViewMode="{Binding Presenter.ViewMode}"
-                ViewClass="{x:Type core:IViewScreenFrameContent}"
-                Model="{Binding Model}"
-                />
-            
-            <!--<mvvm:ViewLocator 
-                Grid.Column="0" Grid.Row="0"
-                Grid.ColumnSpan="3" Grid.RowSpan="3" 
-                ViewMode="{Binding Presenter.ViewMode}"
-                ViewClass="{x:Type controlCore:IViewScreenFrameTopLayer}"
-                Model="{Binding Model}"
-            />-->
+                wpf:ViewLocator.ViewClass="{x:Type core:IViewScreenFrameContent}"
+                wpf:ViewLocator.ViewMode="{Binding Presenter.ViewMode}"
+                Content="{Binding Model}"/>
+
         </Grid>
     </Canvas>
 </UserControl>

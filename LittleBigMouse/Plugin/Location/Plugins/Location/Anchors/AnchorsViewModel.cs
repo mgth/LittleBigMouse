@@ -20,26 +20,13 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using System.ComponentModel;
+
 using HLab.Mvvm;
-using HLab.Notify;
 using LittleBigMouse.ScreenConfigs;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location.Anchors
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Anchors
 {
-    class AnchorsViewModel : IViewModel<ScreenConfig>
+    class AnchorsViewModel : ViewModel<AnchorsViewModel,ScreenConfig>
     {
-        public AnchorsViewModel()
-        {
-            this.SubscribeNotifier();
-        }
-
-        public ScreenConfig Model => this.GetModel();
-
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
     }
 }

@@ -21,7 +21,7 @@ Source: "..\bin\x64\Release\*.xml"; DestDir: "{app}"; Check: Is64BitInstallMode;
 
 Source: "..\bin\x86\Release\*.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode
 Source: "..\bin\x86\Release\*.dll"; DestDir: "{app}"; Check: not Is64BitInstallMode
-Source: "..\bin\x64\Release\*.xml"; DestDir: "{app}"; Check: not Is64BitInstallMode; Flags: recursesubdirs
+Source: "..\bin\x86\Release\*.xml"; DestDir: "{app}"; Check: not Is64BitInstallMode; Flags: recursesubdirs
 
 [Icons]
 Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse_Control.exe"

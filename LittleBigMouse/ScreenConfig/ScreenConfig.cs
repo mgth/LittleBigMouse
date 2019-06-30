@@ -30,7 +30,11 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Windows;
-using HLab.Notify;
+using HLab.Base;
+using HLab.DependencyInjection.Annotations;
+using HLab.Mvvm;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using HLab.Windows.API;
 using HLab.Windows.Monitors;
 using Microsoft.Win32;
@@ -40,8 +44,35 @@ using Newtonsoft.Json;
 
 namespace LittleBigMouse.ScreenConfigs
 {
-    public class ScreenConfig : NotifierObject
+    public class ScreenConfig : N<ScreenConfig>
     {
+        [Import]
+        public ScreenConfig(IMonitorsService monitorsService)
+        {
+            MonitorsService = monitorsService;
+
+            Initialize();
+
+            _wallPaperPath.Set(GetCurrentDesktopWallpaper());
+
+            SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
+
+            MonitorsOnCollectionChanged(monitorsService.AttachedMonitors,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, monitorsService.AttachedMonitors.ToList()));
+
+            monitorsService.AttachedMonitors.CollectionChanged += MonitorsOnCollectionChanged;
+        }
+
+        internal IMonitorsService MonitorsService { get; }
+
+        private readonly IProperty<string> _id = H.Property<string>(c => c
+            .On(e => e.AllScreens.Item().Id)
+            .Set(e => e.AllScreens.OrderBy(s => s.Id)
+                .Aggregate("", (current, screen) => current + (current != "" ? "." : "") + screen.Id)));
+
+
+        [JsonProperty]
+        public string Id => _id.Get();
         public static RegistryKey OpenRootRegKey(bool create = false)
         {
             using (RegistryKey key = Registry.CurrentUser)
@@ -90,24 +121,14 @@ namespace LittleBigMouse.ScreenConfigs
 
 
 
-        public ScreenConfig(IMonitorsService monitorsService) : base(false)
-        {
-            this.SubscribeNotifier();
-
-            SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
-
-            MonitorsOnCollectionChanged(monitorsService.AttachedMonitors,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, MonitorsService.D.AttachedMonitors));
-
-            monitorsService.AttachedMonitors.CollectionChanged += MonitorsOnCollectionChanged;
-        }
 
         private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
         {
-            Notifier.Update(GetType().GetProperty("WallPaperPath"));
+            _wallPaperPath.Set(GetCurrentDesktopWallpaper());
         }
 
-        public string WallPaperPath => this.Get(GetCurrentDesktopWallpaper);
+        public string WallPaperPath => _wallPaperPath.Get();
+        private readonly IProperty<string> _wallPaperPath = H.Property<string>();
 
         public string GetCurrentDesktopWallpaper()
         {
@@ -116,71 +137,95 @@ namespace LittleBigMouse.ScreenConfigs
             return currentWallpaper.Substring(0, currentWallpaper.IndexOf('\0'));
         }
 
-        public bool TiledWallPaper => this.Get(() =>
-        {
-            using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", false))
-            {
-                if (key == null) return false;
-                return key.GetValue("WallpaperStyle","0").ToString() == "1";
-            }
-        });
-
-        public int WallpaperStyle => this.Get(() =>
-        {
-            using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", false))
-            {
-                if (key == null) return 0;
-
-                if(int.TryParse(key.GetValue("WallpaperStyle","0").ToString(),out var value))
+        private readonly IProperty<bool> _tiledWallpaper = H.Property<bool>(c => c
+                 .Set(s =>
                 {
-                    return value;
-                }
-                return 0;
-            }
-        });
+                    using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", false))
+                    {
+                        if (key == null) return false;
+                        return key.GetValue("WallpaperStyle","0").ToString() == "1";
+                    }
+                } ));
+            
+        public bool TiledWallPaper => _tiledWallpaper.Get();
 
-        public int[] BackGroundColor => this.Get<int[]>(() =>
-        {
-            using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Colors", false))
-            {
-                if (key == null) return new []{0,0,0};
-                var s = key.GetValue("Background", "0 0 0").ToString();
-                var ss = s.Split(' ');
-                var i = ss.Select(int.Parse).ToArray();
-                return i;
-            }
-        });
+        private readonly IProperty<int> _wallpaperStyle = H.Property<int>(nameof(WallpaperStyle), c => c
+                 .Set(s =>
+                {
+                    using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", false))
+                    {
+                        if (key == null) return 0;
+
+                        if(int.TryParse(key.GetValue("WallpaperStyle","0").ToString(),out var value))
+                        {
+                            return value;
+                        }
+                        return 0;
+                    }
+                })) ;
+        public int WallpaperStyle => _wallpaperStyle.Get();
+
+        private readonly IProperty<int[]> _backgroundColor = H.Property<int[]>(nameof(BackGroundColor), c => c
+             .Set(e => 
+                {
+                    using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Colors", false))
+                    {
+                        if (key == null) return new []{0,0,0};
+                        var s = key.GetValue("Background", "0 0 0").ToString();
+                        var ss = s.Split(' ');
+                        var i = ss.Select(int.Parse).ToArray();
+                        return i;
+                    }
+                }
+            ));
+        public int[] BackGroundColor => _backgroundColor.Get();
 
         private void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
         {
-            if (args.NewItems != null)
-                foreach (var monitor in args.NewItems.OfType<Monitor>())
-                {
-                    var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
-                    if (screen != null) continue;
+            switch (args.Action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    if (args.NewItems != null)
+                        foreach (var monitor in args.NewItems.OfType<Monitor>())
+                        {
+                            var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
+                            if (screen != null) continue;
 
-                    screen = new Screen(this, monitor);
-                    AllScreens.Add(screen);
-                }
-            if (args.OldItems != null)
-                foreach (var monitor in args.OldItems.OfType<Monitor>())
-                {
-                    var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
+                            screen = new Screen(this, monitor);
+                            AllScreens.Add(screen);
+                        }
+                    break;
 
-                    if (screen != null) AllScreens.Remove(screen);
-                }
+                case NotifyCollectionChangedAction.Remove:
+                    if (args.OldItems != null)
+                        foreach (var monitor in args.OldItems.OfType<Monitor>())
+                        {
+                            var screen = AllScreens.FirstOrDefault(s => s.Monitor.Equals(monitor));
+
+                            if (screen != null) AllScreens.Remove(screen);
+                        }
+                    break;
+
+                case NotifyCollectionChangedAction.Replace:
+                case NotifyCollectionChangedAction.Move:
+                case NotifyCollectionChangedAction.Reset:
+                    throw new NotImplementedException();
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
 
             Load();
             SetPhysicalAuto(false);
         }
 
         [JsonProperty]
-        public ObservableCollection<Screen> AllScreens => this.Get(()=>new ObservableCollection<Screen>());
+        public ObservableCollectionSafe<Screen> AllScreens { get; } = new ObservableCollectionSafe<Screen>();
 
         public IEnumerable<Screen> AllBut(Screen screen) => AllScreens.Where(s => !Equals(s, screen));
 
-        [TriggedOn(nameof(AllScreens),"Item","Selected")]
-        public Screen Selected => this.Get(()=>AllScreens.FirstOrDefault(screen => screen.Selected));
+        [TriggerOn(nameof(AllScreens),"Item","Selected")]
+        public Screen Selected => AllScreens.FirstOrDefault(screen => screen.Selected);
 
 
         private const string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
@@ -208,10 +253,7 @@ namespace LittleBigMouse.ScreenConfigs
 
         public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Id, create);
 
-        [JsonProperty]
-        [TriggedOn(nameof(AllScreens),"Item","Id")]
-        public string Id => this.Get(() => AllScreens.OrderBy(s => s.Id)
-                    .Aggregate("", (current, screen) => current + (current != "" ? "." : "") + screen.Id));
+
 
         public void MatchConfig(string id)
         {
@@ -223,14 +265,14 @@ namespace LittleBigMouse.ScreenConfigs
 
                     foreach (var screen in AllScreens)
                     {
-                        if (todo.Contains(screen.IdMonitor))
+                        if (todo.Contains(screen.Monitor.IdMonitor))
                         {
-                            AttachToDesktop(id, screen.IdMonitor, false);
-                            todo.Remove(screen.IdMonitor);
+                            AttachToDesktop(id, screen.Monitor.IdMonitor, false);
+                            todo.Remove(screen.Monitor.IdMonitor);
                         }
                         else
                         {
-                            MonitorsService.D.DetachFromDesktop(screen.Monitor.AttachedDisplay.DeviceName, false);
+                            MonitorsService.DetachFromDesktop(screen.Monitor.AttachedDisplay.DeviceName, false);
                         }
                     }
 
@@ -239,12 +281,12 @@ namespace LittleBigMouse.ScreenConfigs
                         AttachToDesktop(id, s, false);
                     }
 
-                    MonitorsService.D.ApplyDesktop();
+                    MonitorsService.ApplyDesktop();
                 }
             }
         }
 
-        public static bool IsDoableConfig(String id)
+        public bool IsDoableConfig(String id)
         {
             using (RegistryKey rootkey = OpenRootRegKey())
             {
@@ -252,12 +294,10 @@ namespace LittleBigMouse.ScreenConfigs
                 {
                     List<string> todo = key.GetSubKeyNames().ToList();
 
-                    // ReSharper disable once LoopCanBeConvertedToQuery
                     foreach (string s in todo)
                     {
-                        //string s2 = s.Substring(0, s.Length - 2);
-                        Monitor m = MonitorsService.D.Monitors.FirstOrDefault(
-                            d => s == d.Edid.ManufacturerCode + d.Edid.ProductCode + "_" + d.Edid.Serial);
+                        Monitor m = MonitorsService.Monitors.FirstOrDefault(
+                            d => s == d.IdMonitor);
 
                         if (m == null) return false;
                     }
@@ -266,7 +306,7 @@ namespace LittleBigMouse.ScreenConfigs
             return true;
         }
 
-        public static void AttachToDesktop(string configId, string monitorId, bool apply = true)
+        public void AttachToDesktop(string configId, string monitorId, bool apply = true)
         {
             //using (RegistryKey monkey = Screen.OpenMonitorRegKey(monitorId))
             //{
@@ -288,11 +328,11 @@ namespace LittleBigMouse.ScreenConfigs
                 orientation = (int) double.Parse(monkey.GetValue("Orientation").ToString());
             }
 
-            Monitor monitor = MonitorsService.D.Monitors.FirstOrDefault(
+            Monitor monitor = MonitorsService.Monitors.FirstOrDefault(
                 d => monitorId == d.Edid.ManufacturerCode + d.Edid.ProductCode + "_" + d.Edid.Serial);
 
             if(monitor!=null)
-            MonitorsService.D.AttachToDesktop(monitor.AttachedDisplay.DeviceName, primary, area, orientation, apply);
+                MonitorsService.AttachToDesktop(monitor.AttachedDisplay.DeviceName, primary, area, orientation, apply);
         }
 
         public void EnumWmi()
@@ -318,7 +358,7 @@ namespace LittleBigMouse.ScreenConfigs
 //            Moving = true; //TODO : Hugly hack
             //SetPhysicalAuto();
 
-            using (this.Suspend())
+//            using (this.Suspend())
             {
                 using (var k = OpenConfigRegKey())
                 {
@@ -379,13 +419,14 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        private readonly IProperty<bool> _autoUpdate = H.Property<bool>(nameof(AutoUpdate));
         [JsonProperty]
         public bool AutoUpdate
         {
-            get => this.Get<bool>();
+            get => _autoUpdate.Get();
             set
             {
-                if (this.Set(value)) Saved = false;
+                if (_autoUpdate.Set(value)) Saved = false;
             }
         }
 
@@ -404,29 +445,34 @@ namespace LittleBigMouse.ScreenConfigs
         /// <summary>
         /// Mm Outside Bounds updated while moving (screen dragged on gui)
         /// </summary>
-        //[TriggedOn(nameof(Moving))]
-        [JsonProperty]
-        [TriggedOn(nameof(AllScreens), "Item", "InMm.OutsideBounds")]
-        public Rect PhysicalOutsideBounds => this.Get(() =>
-        {
-            var outside = new Rect();
+        //[TriggerOn(nameof(Moving))]
 
-            var first = true;
-            foreach (var s in AllScreens)
-            {
-                if (first)
+        private IProperty<Rect> _physicalOutsideBounds = H.Property< Rect>(nameof(PhysicalOutsideBounds), c => c
+
+             .On(nameof(AllScreens), "Item", "InMm", "OutsideBounds")
+            .Set(e =>
                 {
-                    outside = s.InMm.OutsideBounds;
-                    first = false;
-                    continue;
+                    var outside = new Rect();
+
+                    var first = true;
+                    foreach (var s in e.AllScreens)
+                    {
+                        if (first)
+                        {
+                            outside = s.InMm.OutsideBounds;
+                            first = false;
+                            continue;
+                        }
+
+                        outside.Union(s.InMm.OutsideBounds);
+                    }
+
+                    return outside;
                 }
+            ));
 
-                outside.Union(s.InMm.OutsideBounds);
-            }
-
-            return outside;
-
-        });
+        [JsonProperty]
+        public Rect PhysicalOutsideBounds => _physicalOutsideBounds.Get();
 
 
         /// <summary>
@@ -447,8 +493,8 @@ namespace LittleBigMouse.ScreenConfigs
         //    MovingPhysicalOutsideBounds = r;
         //}
 
-        //[TriggedOn(nameof(Moving))]
-        //[TriggedOn(nameof(PhysicalOutsideBounds))]
+        //[TriggerOn(nameof(Moving))]
+        //[TriggerOn(nameof(PhysicalOutsideBounds))]
         //private void UpdateMovingPhysicalOutsideBounds()
         //{
         //    if (Moving) return;
@@ -456,32 +502,39 @@ namespace LittleBigMouse.ScreenConfigs
         //}
 
 
+        private IProperty<Rect> _physicalBounds = H.Property< Rect>(nameof(PhysicalBounds), c => c
+
+
+             .On(nameof(AllScreens), "Item", "InMm", "Bounds")
+            .Set(e =>
+                {
+                    var inside = new Rect();
+
+                    var first = true;
+                    foreach (var s in e.AllScreens)
+                    {
+                        if (first)
+                        {
+                            inside = s.InMm.Bounds;
+                            first = false;
+                            continue;
+                        }
+
+                        inside.Union(s.InMm.Bounds);
+                    }
+
+                    return inside;
+                }
+            ));
+
         /// <summary>
         /// Mm Bounds of overall screens without borders
         /// </summary>
         [JsonProperty]
-        [TriggedOn(nameof(AllScreens), "Item", "InMm", "Bounds")]
-        public Rect PhysicalBounds => this.Get(() =>
-        {
-            var inside = new Rect();
-
-            var first = true;
-            foreach (var s in AllScreens)
-            {
-                if (first)
-                {
-                    inside = s.InMm.Bounds;
-                    first = false;
-                    continue;
-                }
-
-                inside.Union(s.InMm.Bounds);
-            }
-
-            return inside;               
-        });
+        public Rect PhysicalBounds => _physicalBounds.Get();
 
 
+        private readonly IProperty<bool> _enabled = H.Property< bool>(nameof(Enabled));
         /// <summary>
         /// 
         /// </summary>
@@ -489,100 +542,116 @@ namespace LittleBigMouse.ScreenConfigs
         [JsonProperty]
         public bool Enabled
         {
-            get => this.Get<bool>();
-            set { if (this.Set(value)) Saved = false; }
+            get => _enabled.Get();
+            set { if (_enabled.Set(value)) Saved = false; }
         }
 
+        private readonly IProperty<bool> _loadAtStartup = H.Property< bool>(nameof(LoadAtStartup));
         [JsonProperty]
         public bool LoadAtStartup
         {
-            get => this.Get<bool>();
-            set { if (this.Set(value)) { Saved = false; } }
+            get => _loadAtStartup.Get();
+            set { if (_loadAtStartup.Set(value)) { Saved = false; } }
         }
 
-        //[TriggedOn(nameof(AllowCornerCrossing))]
+        //[TriggerOn(nameof(AllowCornerCrossing))]
         [JsonProperty]
         public bool LoopAllowed => true;
 
+
+        private readonly IProperty<bool> _loopX = H.Property< bool>(nameof(LoopX), c => c
+             .On(nameof(LoopAllowed)));
         [JsonProperty]
-        [TriggedOn(nameof(LoopAllowed))]
         public bool LoopX
         {
-            get => LoopAllowed && this.Get<bool>();
-            set { if (this.Set(value)) { Saved = false; } }
+            get => _loopX.Get() && LoopAllowed;
+            set { if (_loopX.Set(value)) { Saved = false; } }
         }
 
+        private readonly IProperty<bool> _loopY = H.Property<bool>(nameof(LoopY), c => c
+             .On(nameof(LoopAllowed)));
         [JsonProperty]
-        [TriggedOn(nameof(LoopAllowed))]
         public bool LoopY
         {
-            get => LoopAllowed && this.Get<bool>();
-            set { if (this.Set(value)) { Saved = false; } }
+            get => LoopAllowed && _loopY.Get();
+            set { if (_loopY.Set(value)) { Saved = false; } }
         }
 
-        [JsonProperty]
-        [TriggedOn(nameof(AllScreens),"Item","PixelToDipRatio")]
-        public bool IsRatio100
+
+        private readonly IProperty<bool> _isRation100 = H.Property<bool>(nameof(IsRatio100), c => c
+                 //.TriggerOn(c => c.AllScreens.Item().PixelToDipRatio)
+                 .On(nameof(AllScreens),"Item","PixelToDipRatio")
+                .Set(e => e._getIsRatio100()))
+            ;
+        //[TriggerOn(nameof(AllScreens),"Item","PixelToDipRatio")]
+        private bool _getIsRatio100()
         {
-            get
+            foreach (Screen screen in AllScreens)
             {
-                foreach (Screen screen in AllScreens)
-                {
-                    if (screen.PixelToDipRatio.X != 1) return false;
-                    if (screen.PixelToDipRatio.Y != 1) return false;
-                }
-                return true;
+                if (screen.PixelToDipRatio.X != 1) return false;
+                if (screen.PixelToDipRatio.Y != 1) return false;
             }
+            return true;
         }
 
         [JsonProperty]
-        [TriggedOn(nameof(IsRatio100))]
+        public bool IsRatio100 => _isRation100.Get();
+
+        [JsonProperty]
+        [TriggerOn(nameof(IsRatio100))]
         public bool AdjustPointerAllowed => IsRatio100;
 
+
+        private IProperty<bool> _adjustPointer = H.Property<bool>(nameof(AdjustPointer));
         [JsonProperty]
         public bool AdjustPointer
         {
-            get => AdjustPointerAllowed && this.Get<bool>();
-            set { if (this.Set(value)) Saved = false; }
+            get => AdjustPointerAllowed && _adjustPointer.Get();
+            set { if (_adjustPointer.Set(value)) Saved = false; }
         }
 
         [JsonProperty]
+        [TriggerOn(nameof(IsRatio100))]
         public bool AdjustSpeedAllowed => IsRatio100;
 
-
+        private readonly IProperty<bool> _adjustSpeed = H.Property< bool>(nameof(AdjustSpeed));
         [JsonProperty]
         public bool AdjustSpeed
         {
-            get => AdjustSpeedAllowed && this.Get<bool>();
-            set { if (this.Set(value)) Saved = false; }
+            get => AdjustSpeedAllowed && _adjustSpeed.Get();
+            set { if (_adjustSpeed.Set(value)) Saved = false; }
         }
 
+        private readonly IProperty<bool> _allowCornerCrossing = H.Property< bool>(nameof(AllowCornerCrossing));
         [JsonProperty]
         public bool AllowCornerCrossing
         {
-            get => this.Get<bool>();
-            set { if (this.Set(value)) Saved = false; }
+            get => _allowCornerCrossing.Get();
+            set { if (_allowCornerCrossing.Set(value)) Saved = false; }
         }
 
+        private readonly IProperty<bool> _homeCinema = H.Property< bool>(nameof(HomeCinema));
         [JsonProperty]
         public bool HomeCinema
         {
-            get => this.Get<bool>();
-            set { if (this.Set(value)) Saved = false; }
+            get => _homeCinema.Get();
+            set { if (_homeCinema.Set(value)) Saved = false; }
         }
 
+        private readonly IProperty<bool> _pinned = H.Property< bool>(nameof(Pinned));
         [JsonProperty]
         public bool Pinned
         {
-            get => this.Get<bool>();
-            set { if (this.Set(value)) Saved = false; }
+            get => _pinned.Get();
+            set { if (_pinned.Set(value)) Saved = false; }
         }
 
+        private readonly IProperty<Rect> _configLocation = H.Property< Rect>(nameof(ConfigLocation));
         [JsonProperty]
        public Rect ConfigLocation
         {
-            get => this.Get<Rect>();
-            set => this.Set(value);
+            get => _configLocation.Get();
+            set => _configLocation.Set(value);
         }
 
 
@@ -745,41 +814,43 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-
+        private readonly IProperty<bool> _allowOverlaps = H.Property<bool>(nameof(AllowOverlaps));
         [JsonProperty]
         public bool AllowOverlaps
         {
-            get => this.Get<bool>(); set
+            get => _allowOverlaps.Get();
+            set
             {
-                if (this.Set(value))
+                if (_allowOverlaps.Set(value))
                 {
                     Saved = false;
                 }
-            }
+            } 
         }
 
+        private readonly IProperty<bool> _allowDiscontinuity = H.Property<bool>(nameof(AllowDiscontinuity));
         [JsonProperty]
         public bool AllowDiscontinuity
         {
-            get => this.Get<bool>();
-            set { if (this.Set(value)) Saved = false; }
+            get => _allowDiscontinuity.Get();
+            set { if (_allowDiscontinuity.Set(value)) Saved = false; }
         }
 
+        private readonly IProperty<bool> _saved 
+            = H.Property<bool>(nameof(Saved));
         public bool Saved
         {
-            get => this.Get<bool>();
-            set => this.Set(value);
+            get => _saved.Get();
+            set => _saved.Set(value);
         }
 
         [JsonProperty]
-        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpi","X")]
-        public double MaxEffectiveDpiX => this.Get( 
-            ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.X).Max());
+        [TriggerOn(nameof(AllScreens),"Item.EffectiveDpi","X")]
+        public double MaxEffectiveDpiX => AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.X).Max();
 
         [JsonProperty]
-        [TriggedOn(nameof(AllScreens),"Item.EffectiveDpi","Y")]
-        public double MaxEffectiveDpiY => this.Get( 
-            ()=>AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.Y).Max());
+        [TriggerOn(nameof(AllScreens),"Item.EffectiveDpi","Y")]
+        public double MaxEffectiveDpiY => AllScreens.Count==0?0:AllScreens.Select(screen => screen.EffectiveDpi.Y).Max();
 
 
         public ConcurrentDictionary<string,ScreenModel> ScreenModels = new ConcurrentDictionary<string,ScreenModel>();

@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LittleBigMouse.ScreenConfigs</RootNamespace>
     <AssemblyName>LittleBigMouse.ScreenConfigs</AssemblyName>
-    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -21,6 +21,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>8.0</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
     <OutputPath>bin\x64\Release\</OutputPath>
@@ -68,8 +69,11 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\Newtonsoft.Json.11.0.1-beta3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    <Reference Include="HLab.Notify.Annotations">
+      <HintPath>..\..\..\HLab\HLab.Notify.Annotations\bin\x64\Debug\netstandard2.0\HLab.Notify.Annotations.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Packages\Newtonsoft.Json.12.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
@@ -91,6 +95,7 @@
   <ItemGroup>
     <Compile Include="AbsolutePoint.cs" />
     <Compile Include="AccentColor.cs" />
+    <Compile Include="Dimensions\_ScreenRatioExt.cs" />
     <Compile Include="Html.cs" />
     <Compile Include="ILittleBigMouseService.cs" />
     <Compile Include="IniFile.cs" />
@@ -100,46 +105,55 @@
     <Compile Include="Screen.cs" />
     <Compile Include="ScreenConfig.cs" />
     <Compile Include="ScreenInverseRatio.cs" />
-    <Compile Include="ScreenLocate.cs" />
+    <Compile Include="Dimensions\ScreenLocate.cs" />
     <Compile Include="ScreenModel.cs" />
-    <Compile Include="ScreenRatio.cs" />
-    <Compile Include="ScreenRatioRegistry.cs" />
-    <Compile Include="ScreenRotate.cs" />
-    <Compile Include="ScreenScaleDip.cs" />
-    <Compile Include="ScreenScale.cs" />
-    <Compile Include="ScreenSize.cs" />
-    <Compile Include="ScreenSizeInMm.cs" />
-    <Compile Include="ScreenSizeInPixel.cs" />
-    <Compile Include="ScreenSizeWpf.cs" />
-    <Compile Include="ScreenTranslate.cs" />
+    <Compile Include="Dimensions\ScreenRatio.cs" />
+    <Compile Include="Dimensions\ScreenRatioRatio.cs" />
+    <Compile Include="Dimensions\ScreenRatioRegistry.cs" />
+    <Compile Include="Dimensions\ScreenRotate.cs" />
+    <Compile Include="Dimensions\ScreenScaleDip.cs" />
+    <Compile Include="Dimensions\ScreenScale.cs" />
+    <Compile Include="Dimensions\ScreenSize.cs" />
+    <Compile Include="Dimensions\ScreenSizeInMm.cs" />
+    <Compile Include="Dimensions\ScreenSizeInPixel.cs" />
+    <Compile Include="Dimensions\ScreenSizeWpf.cs" />
+    <Compile Include="Dimensions\ScreenTranslate.cs" />
     <Compile Include="WindowExt.cs" />
     <Compile Include="WindowInteropHelper.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Hlab\Base\HLab.Base.csproj">
-      <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
+    <ProjectReference Include="..\..\..\HLab\HLab.Base\HLab.Base.csproj">
+      <Project>{EDC4FE17-EDAE-42B1-80E4-FB5273F43D11}</Project>
       <Name>HLab.Base</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
-      <Project>{A3EAAA24-5913-471E-ADB1-402F64536A63}</Project>
+    <ProjectReference Include="..\..\..\HLab\HLab.DependencyInjection.Annotations\HLab.DependencyInjection.Annotations.csproj">
+      <Project>{EE881C21-1E2A-41A0-ADB9-177B53435699}</Project>
+      <Name>HLab.DependencyInjection.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj">
+      <Project>{17cffa1d-3c93-4ecf-9b0a-27de5d71dd90}</Project>
+      <Name>HLab.Mvvm.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj">
+      <Project>{a3eaaa24-5913-471e-adb1-402f64536a63}</Project>
       <Name>HLab.Mvvm</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Argyll\HLab.Argyll.csproj">
-      <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
-      <Name>HLab.Argyll</Name>
-      <EmbedInteropTypes>False</EmbedInteropTypes>
+    <ProjectReference Include="..\..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj">
+      <Project>{8573F088-69E7-44E4-A774-4130E568FD56}</Project>
+      <Name>HLab.Notify.PropertyChanged</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Hlab\Notify-4\HLab.Notify.4.csproj">
-      <Project>{593cb07f-8504-490a-96d6-2cc6034487d7}</Project>
-      <Name>HLab.Notify.4</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\HLab\Windows.API\HLab.Windows.API.csproj">
+    <ProjectReference Include="..\..\..\HLab\Windows.API\HLab.Windows.API.csproj">
       <Project>{641054c2-f89b-4abe-97b4-ee841556e999}</Project>
       <Name>HLab.Windows.API</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\HLab\Windows.Monitors\HLab.Windows.Monitors.csproj">
+    <ProjectReference Include="..\..\..\HLab.System\Windows.Monitors\HLab.Windows.Monitors.csproj">
       <Project>{0c90e881-b94c-4dc5-b2d0-ff6dc7601de4}</Project>
       <Name>HLab.Windows.Monitors</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\HLab.System\Argyll\HLab.Argyll.csproj">
+      <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
+      <Name>HLab.Argyll</Name>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

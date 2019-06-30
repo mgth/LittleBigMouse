@@ -26,17 +26,19 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using HLab.Mvvm;
-using HLab.Notify;
+using HLab.Notify.Annotations;
 using LittleBigMouse.LocationPlugin.Plugins.Size;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Size
 {
-    class ScreenSizeViewModel : ViewModel<Screen>
+    class ScreenSizeViewModel : ViewModel<ScreenSizeViewModel,Screen>
     //ScreenControlViewModel
     {
-        public ScreenSizeViewModel() : base(false)
+        public ScreenSizeViewModel()
         {
+            Initialize();
+
             var canvas = new Canvas { Effect = _effect };
 
             _ousideHorizontalCotation.AddTo(canvas);
@@ -48,7 +50,6 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
 
             InsideCoverControl.LayoutUpdated += OnFrameSizeChanged;
 
-            this.SubscribeNotifier();
         }
 
 
@@ -96,7 +97,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             _ousideHorizontalCotation.SetPoints(arrow, x2, y + (h/8)-(h/128),x2+w2,y + (h/8)-(h/128));
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRotated", "Height")]
+        [TriggerOn(nameof(Model), "PhysicalRotated", "Height")]
         public double Height
         {
             get => Model.PhysicalRotated.Height;
@@ -108,7 +109,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
         }
 
 
-        [TriggedOn(nameof(Model), "PhysicalRotated", "Width")]
+        [TriggerOn(nameof(Model), "PhysicalRotated", "Width")]
         public double Width
         {
             get => Model.PhysicalRotated.Width;
@@ -119,7 +120,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             }
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRotated", "TopBorder")]
+        [TriggerOn(nameof(Model), "PhysicalRotated", "TopBorder")]
         public double TopBorder
         {
             get => Model.PhysicalRotated.TopBorder;
@@ -130,7 +131,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             }
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRotated","RightBorder")]
+        [TriggerOn(nameof(Model), "PhysicalRotated","RightBorder")]
         public double RightBorder
         {
             get => Model.PhysicalRotated.RightBorder;
@@ -141,7 +142,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             }
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRotated","BottomBorder")]
+        [TriggerOn(nameof(Model), "PhysicalRotated","BottomBorder")]
         public double BottomBorder
         {
             get => Model.PhysicalRotated.BottomBorder;
@@ -152,7 +153,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             }
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRotated","LeftBorder")]
+        [TriggerOn(nameof(Model), "PhysicalRotated","LeftBorder")]
         public double LeftBorder
         {
             get => Model.PhysicalRotated.LeftBorder;
@@ -163,7 +164,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             }
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRotated", "OutsideHeight")]
+        [TriggerOn(nameof(Model), "PhysicalRotated", "OutsideHeight")]
         public double OutsideHeight
         {
             get => Model.PhysicalRotated.OutsideHeight;
@@ -175,7 +176,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             }
         }
 
-        [TriggedOn(nameof(Model), "PhysicalRotated","OutsideWidth")]
+        [TriggerOn(nameof(Model), "PhysicalRotated","OutsideWidth")]
         public double OutsideWidth
         {
             get => Model.PhysicalRotated.OutsideWidth;

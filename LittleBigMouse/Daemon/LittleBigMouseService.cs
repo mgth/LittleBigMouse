@@ -24,6 +24,8 @@ using System.Collections.Generic;
 using System.Configuration.Install;
 using System.Reflection;
 using System.ServiceProcess;
+using HLab.Base;
+using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse_Daemon
@@ -31,10 +33,17 @@ namespace LittleBigMouse_Daemon
     class LittleBigMouseService : ServiceBase, ILittleBigMouseService
     {
         private MouseEngine _engine;
+        private readonly IMonitorsService _monitorService;
+
+        public LittleBigMouseService(IMonitorsService monitorService)
+        {
+            _monitorService = monitorService;
+        }
+
         protected override void OnStart(string[] args)
         {
             base.OnStart(args);
-            _engine = new MouseEngine();
+            _engine = new MouseEngine(_monitorService);
             _engine.Start();
         }
         protected override void OnStop()
@@ -103,7 +112,7 @@ namespace LittleBigMouse_Daemon
 
         public bool Running()
         {
-            return _engine.Hook.Enabled;
+            return true; // TODO : _engine.Hook.Enabled;
         }
 
         public void Update()

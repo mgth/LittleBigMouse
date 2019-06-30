@@ -30,6 +30,8 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Wpf;
 using HLab.Windows.API;
 using LittleBigMouse.Control.Core;
 using LittleBigMouse.LocationPlugin.Plugins.Location;
@@ -169,9 +171,10 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
             //Todo : Plugin.ActivateConfig();
         }
 
-        MultiScreensView Presenter => this.FindParent<MultiScreensView>();
-
-
+        MultiScreensView Presenter
+        {
+            get { return this.FindVisualParent<MultiScreensView>(); }
+        }
 
 
         public void Move(Point newGuiPosition)

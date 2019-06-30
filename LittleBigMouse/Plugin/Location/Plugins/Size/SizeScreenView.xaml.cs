@@ -20,16 +20,17 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
 using HLab.Windows.API;
 using LittleBigMouse.Control.Core;
-using LittleBigMouse.Plugin.Location.Plugins.Size;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Size
+namespace LittleBigMouse.Plugin.Location.Plugins.Size
 {
     class SizeScreenContentView : UserControl, IView<ViewModeScreenSize, ScreenSizeViewModel>, IViewScreenFrameTopLayer 
     {

@@ -21,8 +21,8 @@
 	  http://www.mgth.fr
 */
 using System.Windows.Controls;
-using HLab.Base;
-using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Wpf;
 
 namespace LittleBigMouse.Control.Core.Plugins.Default
 {

@@ -4,8 +4,9 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:core="clr-namespace:LittleBigMouse.Control.Core"
-        xmlns:mvvm="clr-namespace:HLab.Mvvm;assembly=HLab.Mvvm"
-        xmlns:icons="clr-namespace:HLab.Mvvm.Icons;assembly=HLab.Mvvm"
+        xmlns:icons="clr-namespace:HLab.Mvvm.Wpf.Icons;assembly=HLab.Mvvm.Wpf"
+        xmlns:mvvm="clr-namespace:HLab.Mvvm.Wpf;assembly=HLab.Mvvm.Wpf"
+        xmlns:annotations="clr-namespace:HLab.Mvvm.Annotations;assembly=HLab.Mvvm.Annotations"
         mc:Ignorable="d"
         Icon="MainIcon.ico"
         Title="Little Big LbmMouse"  
@@ -16,7 +17,7 @@
         AllowsTransparency="True"
         MouseDown="OnMouseDown"
         Loaded="Window_Loaded"
-        mvvm:ViewLocator.ViewModeContext ="{Binding Context}"
+        WindowState="{Binding WindowState}"
          >
         <!--xmlns:src="clr-namespace:NativeHelpers;assembly=NativeHelpers"-->
     <!--Left ="{Binding Path=LocationLeft, Mode=TwoWay}"
@@ -106,7 +107,7 @@
         </Style>
 
     </Window.Resources>
-    <Grid x:Name="ResizeGrid">
+    <Grid x:Name="ResizeGrid" icons:IconView.IconService="{Binding IconService}">
         <Grid.RowDefinitions>
             <RowDefinition Height="{Binding Path=VerticalResizerSize, FallbackValue=10}"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
@@ -140,8 +141,7 @@
                         <icons:IconView 
                             VerticalAlignment="Top"
                             HorizontalAlignment="Right"
-                            AssemblyName="LittleBigMouse.Control.Core"
-                            SourceName="IconPinned"
+                            Id="Icons/IconPinned"
                             Width="20"
                             Height="10"
                         />
@@ -150,8 +150,7 @@
                         <icons:IconView 
                             VerticalAlignment="Top"
                             HorizontalAlignment="Right"
-                            AssemblyName="LittleBigMouse.Control.Core"
-                            SourceName="IconFullscreen"
+                            Id="Icons/IconFullscreen"
                             Width="20"
                             Height="10"
                             />
@@ -160,8 +159,7 @@
                         <icons:IconView 
                             VerticalAlignment="Top"
                             HorizontalAlignment="Right"
-                            AssemblyName="LittleBigMouse.Control.Core"
-                            SourceName="IconClose"
+                            Id="Icons/IconClose"
                             Width="20"
                             Height="10"
                             />
@@ -174,6 +172,7 @@
             <Border Grid.Row="2" Grid.Column="0" Background="#C0000000">
                 <mvvm:ViewLocator
                     ViewClass="{x:Type core:IScreenControlView}"
+                    ViewMode="{x:Type annotations:ViewModeDefault}"
                     Model="{Binding Config}"
                     />
             </Border>

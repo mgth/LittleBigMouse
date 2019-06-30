@@ -24,6 +24,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
 using LittleBigMouse.Control.Core;
 
 namespace LittleBigMouse.Plugin.Vcp
@@ -110,5 +111,6 @@ namespace LittleBigMouse.Plugin.Vcp
         {
             ViewModel?.Save();
         }
+
     }
 }

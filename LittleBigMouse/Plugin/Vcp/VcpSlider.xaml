@@ -10,25 +10,22 @@
              >
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="8*"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*"/>
         </Grid.RowDefinitions>
         <Slider 
+            Style="{DynamicResource MahApps.Metro.Styles.FlatSlider}"
             HorizontalAlignment="Center" 
-            Grid.Row="0" 
+            Grid.Row="1" 
             Orientation="Vertical" 
             x:Name="Slider" 
             ValueChanged="Slider_OnValueChanged" 
             SmallChange="1" 
             LargeChange="10" 
-            Maximum="100">
-            <Slider.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="Black" Offset="1"/>
-                    <GradientStop Color="{Binding Color,  RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type vcp:VcpSlider}}}" Offset="0"/>
-                </LinearGradientBrush>
-            </Slider.Background>
-            </Slider>
-        <TextBox Grid.Row="1" x:Name="TextBox"/>
+            Maximum="100"/>
+        <TextBox BorderThickness="0" Opacity="0.6" Foreground="#B0000000" Width="25" TextAlignment="Center" FontSize="11" FontWeight="Bold" Grid.Row="3" x:Name="TextBox"/>
     </Grid>
 </UserControl>

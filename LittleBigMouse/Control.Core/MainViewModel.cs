@@ -23,88 +23,92 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Media;
-using GraphQL.Client;
-using GraphQL.Common.Request;
+using System.Windows.Input;
+using HLab.DependencyInjection.Annotations;
 using HLab.Mvvm;
-using HLab.Mvvm.Commands;
-using HLab.Notify;
+using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Wpf.Icons;
+using HLab.Notify.PropertyChanged;
 using LittleBigMouse.ScreenConfigs;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace LittleBigMouse.Control.Core
 {
-    public class MainViewModel : NotifierObject
+    public class MainViewModel : ViewModel<MainViewModel>, IMvvmContextProvider
     {
-        public MainViewModel() : base()
+        [Import]
+        public MainViewModel(IIconService iconService)
         {
-            //this.SubscribeNotifier();
+            IconService = iconService;
+            Initialize();
         }
 
+        public IIconService IconService { get; }
+
+        private readonly IProperty<ScreenConfig> _config = H.Property<ScreenConfig>();
         public ScreenConfig Config
         {
-            get => this.Get<ScreenConfig>();
-            set => this.Set(value);
+            get => _config.Get();
+            set => _config.Set(value);
         }
-
-        public ViewModeContext Context => this.Get(() =>
-            MvvmService.D.MainViewModeContext.AddCreator<ScreenFrameViewModel>(vm =>
-                vm.Presenter = Presenter as MultiScreensViewModel));
 
 
         public INotifyPropertyChanged Control
         {
-            get => this.Get<INotifyPropertyChanged>();
-            set => this.Set(value);
+            get => _control.Get();
+            set => _control.Set(value);
         }
+        private readonly IProperty<INotifyPropertyChanged> _control = H.Property<INotifyPropertyChanged>(nameof(Control));
 
         public IPresenterViewModel Presenter
         {
-            get => this.Get<IPresenterViewModel>();
+            get => _presenter.Get();
             set
             {
-                if (this.Set(value))
+                if (_presenter.Set(value))
                 {
                     Presenter.MainViewModel = this;
                 }
             }
         }
+        private readonly IProperty<IPresenterViewModel> _presenter = H.Property<IPresenterViewModel>(nameof(Presenter));
 
-        public ModelCommand CloseCommand => this.GetCommand(
-            () =>
-            {
-                if (Config.Saved)
-                {
-                    Application.Current.Shutdown();
-                    return;
-                }
 
-                MessageBoxResult result = MessageBox.Show("Save your changes before exiting ?", "Confirmation",
-                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-                if (result == MessageBoxResult.Yes)
-                {
-                    Config.Save();
-                    Application.Current.Shutdown();
-                }
-
-                if (result == MessageBoxResult.No)
-                {
-                    Application.Current.Shutdown();
-                }
-
-            },
-            () => true
+        public ICommand CloseCommand => _closeCommand.Get();
+        private readonly IProperty<ICommand> _closeCommand 
+            = H.Property<ICommand>(nameof(CloseCommand), c => c
+            .Command( 
+                e => e.Close(),
+                e => true
+            )
         );
 
+        private void Close()
+        {
+            if (Config.Saved)
+            {
+                Application.Current.Shutdown();
+                return;
+            }
 
+            MessageBoxResult result = MessageBox.Show("Save your changes before exiting ?", "Confirmation",
+                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                Config.Save();
+                Application.Current.Shutdown();
+            }
+
+            if (result == MessageBoxResult.No)
+            {
+                Application.Current.Shutdown();
+            }
+
+        }
 
 
         static async void GraphQl(string q)
@@ -124,23 +128,30 @@ namespace LittleBigMouse.Control.Core
             }
         }
 
+        private readonly IProperty<WindowState> _windowState = H.Property<WindowState>(nameof(WindowState));
+        public WindowState WindowState
+        {
+            get => _windowState.Get();
+            set => _windowState.Set(value);
+        }
 
-        public ModelCommand MaximizeCommand => this.GetCommand(
-            () =>
-            {
-                var w = Application.Current.MainWindow;
-                if (w != null)
-                {
-                    if (w.WindowState == WindowState.Normal)
-                        w.WindowState = WindowState.Maximized;
-                    else
+        public ICommand MaximizeCommand => _maximizeCommand.Get();
+        private readonly IProperty<ICommand> _maximizeCommand = H.Property<ICommand>(nameof(MaximizeCommand),c=>c
+            .Set(e => e.CommandService.Get(
+                    () =>
                     {
-                        w.WindowState = WindowState.Normal;
-                    }
-                }
-            },
-            () => true
+                        if (e.WindowState != WindowState.Normal)
+                            e.WindowState = WindowState.Maximized;
+                        else
+                        {
+                            e.WindowState = WindowState.Normal;
+                        }
+                    },
+                    () => true
+                    )
+            )
         );
+
 
         public void UnMaximize()
         {
@@ -188,5 +199,9 @@ namespace LittleBigMouse.Control.Core
             ButtonPanel.Children.Add(tb);
         }
 
+        public void ConfigureMvvmContext(IMvvmContext ctx)
+        {
+            ctx.AddCreator<ScreenFrameViewModel>(vm => vm.Presenter = Presenter as MultiScreensViewModel);
+        }
     }
 }

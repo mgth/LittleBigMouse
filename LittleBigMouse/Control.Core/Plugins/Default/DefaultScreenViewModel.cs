@@ -20,28 +20,22 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using System.ComponentModel;
+
 using HLab.Mvvm;
-using HLab.Notify;
+using HLab.Notify.Annotations;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core.Plugins.Default
 {
-    class DefaultScreenViewModel : IViewModel<Screen>
+    class DefaultScreenViewModel : ViewModel<DefaultScreenViewModel,Screen>
     {
-        public Screen Model => this.GetModel();
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
-
-        public string Inches => this.Get(() => (Model.Diagonal / 25.4).ToString("##.#") +"\"");
-
-
         public DefaultScreenViewModel()
         {
-            this.SubscribeNotifier();
+            Initialize();
         }
+
+        [TriggerOn(nameof(Model),"Diagonal")]
+        public string Inches => (Model.Diagonal / 25.4).ToString("##.#") +"\"";
+
     }
 }

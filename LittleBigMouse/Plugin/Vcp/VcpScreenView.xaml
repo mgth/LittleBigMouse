@@ -4,6 +4,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vcp="clr-namespace:LittleBigMouse.Plugin.Vcp"
+             xmlns:monitorVcp="clr-namespace:HLab.Windows.MonitorVcp;assembly=HLab.Windows.MonitorVcp"
+             xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300" >
     <Grid x:Name="Grid">
@@ -32,12 +34,106 @@
                 </Slider>
                 <TextBox Grid.Row="1" x:Name="TextBox" Text="{Binding Lut.Luminance, StringFormat=N0}"/>
             </Grid>-->
+            <Label Foreground="White" Content="Brightness" VerticalAlignment="Center" Visibility="{Binding BrightnessVisibility}">
+                <Label.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </Label.LayoutTransform>
+            </Label>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Brightness}" Component="Brightness" Visibility="{Binding BrightnessVisibility}"/>
 
-            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Brightness}" Component="Brightness"/>
-            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Contrast}" Component="Contrast"/>
-            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Gain.Red}" Component="Red"/>
-            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Gain.Green}" Component="Green"/>
-            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Gain.Blue}" Component="Blue"/>
+
+            <Label Foreground="White" Content="Contrast" VerticalAlignment="Center" Visibility="{Binding ContrastVisibility}">
+                <Label.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </Label.LayoutTransform>
+            </Label>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Contrast}" Component="Contrast" Visibility="{Binding ContrastVisibility}"/>
+
+
+            <Label Foreground="White" Content="Gain" VerticalAlignment="Center" Visibility="{Binding GainVisibility}">
+                <Label.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </Label.LayoutTransform>
+            </Label>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Gain.Red}" Component="Red" Visibility="{Binding GainVisibility}"/>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Gain.Green}" Component="Green" Visibility="{Binding GainVisibility}"/>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Gain.Blue}" Component="Blue" Visibility="{Binding GainVisibility}"/>
+
+            <Label Foreground="White" Content="Drive" VerticalAlignment="Center" Visibility="{Binding DriveVisibility}">
+                <Label.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </Label.LayoutTransform>
+            </Label>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Drive.Red}" Component="Red" Visibility="{Binding DriveVisibility}"/>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Drive.Green}" Component="Green" Visibility="{Binding DriveVisibility}"/>
+            <vcp:VcpSlider MonitorLevel="{Binding Vcp.Drive.Blue}" Component="Blue" Visibility="{Binding DriveVisibility}"/>
+            <Rectangle Width="20"/>
+            <StackPanel VerticalAlignment="Center" Orientation="Vertical" Visibility="{Binding AnywayVisibility}">
+                <Label Foreground="White">DDC/CI not available</Label>
+                <Button Height="20" Command="{Binding AnywayCommand}">Try anyway</Button>
+
+            </StackPanel>
+            <StackPanel VerticalAlignment="Center" Orientation="Vertical">
+
+                <xctk:ColorPicker 
+                    SelectedColor="{Binding ColorA}"
+                    ColorMode="ColorCanvas"
+                    ShowTabHeaders="False"
+                    Background="Black"
+                />
+                <xctk:ColorPicker 
+                    SelectedColor="{Binding ColorB}"
+                    ColorMode="ColorCanvas"
+                    ShowTabHeaders="False"
+                    Background="Black"
+                />
+
+                <Button
+                    Command="{Binding TestPatternCommand}" 
+                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
+                    <monitorVcp:TestPattern Height="28" Width="50"
+                        PatternColorA="{Binding ColorA}"
+                        PatternColorB="{Binding ColorB}"
+                        PatternType="Chessboard" />
+                </Button>
+
+                <Button
+                    Command="{Binding TestPatternCommand}" 
+                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
+                    <monitorVcp:TestPattern Height="28" Width="50"
+                        PatternColorA="{Binding ColorA}"
+                        PatternColorB="{Binding ColorB}"
+                        PatternType="Grid" />
+                </Button>
+
+                <Button
+                    Command="{Binding TestPatternCommand}" 
+                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
+                    <monitorVcp:TestPattern Height="28" Width="50"
+                        PatternColorA="{Binding ColorA}"
+                        PatternColorB="{Binding ColorB}"
+                        PatternType="Solid" />
+                </Button>
+
+                <Button
+                    Command="{Binding TestPatternCommand}" 
+                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
+                    <monitorVcp:TestPattern Height="28" Width="50"
+                    PatternColorA="{Binding ColorA}"
+                    PatternColorB="{Binding ColorB}"
+                    PatternType="RgbGradient" />
+                </Button>
+
+                <Button
+                    Command="{Binding TestPatternCommand}" 
+                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
+                    <monitorVcp:TestPattern Height="28" Width="50"
+                    PatternColorA="{Binding ColorA}"
+                    PatternColorB="{Binding ColorB}"
+                    PatternType="Circle" />
+                </Button>
+
+            </StackPanel>
         </StackPanel>
 
         <!--<local:Curve x:Name="Curve" Grid.Column="1">
@@ -73,7 +169,7 @@
                     Content="Save"
             />
         </StackPanel>-->
-        
+
         <!--<StackPanel Margin="30" HorizontalAlignment="Right" VerticalAlignment="Bottom">
             <Button                 
                 Width="50"  

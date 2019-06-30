@@ -20,14 +20,16 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using HLab.Mvvm.Annotations;
 using HLab.Windows.API;
-using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
+using LittleBigMouse.ScreenConfigs;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
 {
     /// <summary>
     /// Logique d'interaction pour Sizer.xaml
@@ -36,21 +38,14 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
 
 
  
-    public partial class RulerView : UserControl
+    public partial class RulerView : UserControl, IView<RulerViewModel>
     {
         public RulerView()
         {
             InitializeComponent();
         }
 
-
-
-
         public RulerViewModel ViewModel => DataContext as RulerViewModel;
-
-
-
-
 
         private Point _oldPoint;
         private Point _dragStartPoint;
@@ -107,7 +102,6 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
         }
 
         private bool Moving { get; set; } = false;
-        private bool Refresh { get; set; } = true;
         public bool InvertControl { get; set; } = true;
 
         private void Ruler_OnMouseWheel(object sender, MouseWheelEventArgs e)
@@ -151,7 +145,6 @@ namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
             var source = (HwndSource)PresentationSource.FromVisual(this);
             if(source!=null)
             NativeMethods.SendMessage(source.Handle, NativeMethods.WM_SETREDRAW, true, 0);
-            //Refresh();
         }
 
     }

@@ -30,14 +30,8 @@ namespace LittleBigMouse.Plugin.Vcp
     /// <summary>
     /// Logique d'interaction pour Curve.xaml
     /// </summary>
-    public partial class Curve : UserControl, INotifyPropertyChanged
+    public partial class Curve : UserControl
     {
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
-        }
-
         private IList<double> _points;
         public Curve()
         {

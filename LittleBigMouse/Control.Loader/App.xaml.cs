@@ -20,8 +20,13 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System.Reflection;
 using System.Windows;
-using HLab.Plugin;
+using HLab.Core;
+using HLab.Core.Annotations;
+using HLab.Mvvm;
+using HLab.Notify.Wpf;
 
 namespace LittleBigMouse_Control
 {
@@ -33,7 +38,12 @@ namespace LittleBigMouse_Control
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            PluginService.D.Register();
+
+            var boot = new Bootloader();
+
+            boot.Container.ExportAssembly(Assembly.GetAssembly(typeof(EventHandlerServiceWpf)));
+
+            boot.Boot();
         }
     }
 

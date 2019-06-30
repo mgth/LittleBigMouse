@@ -27,43 +27,49 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization;
+using System.ServiceModel.PeerResolvers;
 using System.Text;
 using System.Windows;
-using HLab.Notify;
+using HLab.Base;
+using HLab.DependencyInjection.Annotations;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using HLab.Windows.API;
 using HLab.Windows.Monitors;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 [assembly: InternalsVisibleTo("ScreenConfig")]
 
 namespace LittleBigMouse.ScreenConfigs
 {
-    public class Screen : NotifierObject
+    public class Screen : N<Screen>
     {
-        public MonitorsService Service => this.Get(() => MonitorsService.D);
-        internal Screen(ScreenConfig config, Monitor monitor) : base(false)
+        [JsonIgnore] public ScreenConfig Config { get; }
+        public Monitor Monitor { get; }
+
+        internal Screen(ScreenConfig config, Monitor monitor)
         {
             Config = config;
             Monitor = monitor;
-            this.SubscribeNotifier();
+
+            Initialize();
         }
 
-        public Monitor Monitor
+        [TriggerOn(nameof(Monitor), "AttachedDisplay")]
+        private void UpdateModel()
         {
-            get => this.Get<Monitor>();
-            private set => this.Set(value);
+            ScreenModel.Load(Monitor);
         }
 
-        public ScreenConfig Config
-        {
-            get => this.Get<ScreenConfig>();
-            private set => this.Set(value);
-        }
 
-        [TriggedOn(nameof(Config), "AllScreens", "Count")]
-        public IEnumerable<Screen> OtherScreens => this.Get(() => Config.AllScreens.Where(s => !Equals(s, this)));
+        private readonly IProperty<IEnumerable<Screen>> _otherScreens = H.Property<IEnumerable<Screen>>(c => c
+                .On(e => e.Config.AllScreens.Count)
+                .Set(e => e.Config.AllScreens.Where(s => !Equals(s, e)))
+        );
+
+        [JsonIgnore] public IEnumerable<Screen> OtherScreens => _otherScreens.Get();
 
 
 
@@ -79,73 +85,87 @@ namespace LittleBigMouse.ScreenConfigs
 
 
         // References properties
-        [JsonProperty]
-        [TriggedOn(nameof(Monitor), "Edid" , "ManufacturerCode")]
-        [TriggedOn(nameof(Monitor), "Edid", "ProductCode")]
-        public string PnpCode => this.Get(() => Monitor.Edid.ManufacturerCode + Monitor.Edid.ProductCode);
+        [JsonProperty] public string Id => _id.Get();
 
-        [JsonProperty]
-        [TriggedOn(nameof(PnpCode))]
-        [TriggedOn(nameof(Monitor),"Edid", "SerialNo")]
-        [TriggedOn(nameof(Monitor),"DeviceId")]
-        public string IdMonitor => this.Get(() => PnpCode + "_" +
-            // some hp monitors (at least E242) do not provide hex serial value-
-            (Monitor.Edid.SerialNo== "1234567890123" ? Monitor.DeviceId.Split('\\').Last() : Monitor.Edid.SerialNo));
+        private readonly IProperty<string> _id = H.Property<string>(c => c
+            .On(e => e.Monitor.IdMonitor)
+            .On(e => e.Orientation)
+            .Set(e => e.Monitor.IdMonitor + "_" + e.Orientation)
+        );
 
-        [JsonProperty]
-        [TriggedOn(nameof(InPixel))]
-        public string IdResolution => this.Get(() => InPixel.Width + "x" + InPixel.Height);
 
-        [JsonProperty]
-        [TriggedOn(nameof(IdMonitor))]
-        [TriggedOn(nameof(Orientation))]
-        public string Id => this.Get(() => IdMonitor + "_" + Orientation);
+        [JsonProperty] public string IdResolution => _idResolution.Get();
 
-        [JsonProperty]
-        [TriggedOn(nameof(Monitor),"Primary")]
-        public bool Primary => this.Get(() => Monitor.Primary);
+        private readonly IProperty<string> _idResolution = H.Property<string>(c => c
+            .On(e => e.InPixel)
+            .Set(e => e.InPixel.Width + "x" + e.InPixel.Height)
+        );
 
-        [JsonProperty]
-        [TriggedOn(nameof(Monitor), "AttachedDisplay", "CurrentMode", "DisplayOrientation")]
-        public int Orientation => this.Get(() => Monitor.AttachedDisplay?.CurrentMode.DisplayOrientation??0);
+        [JsonProperty] public bool Primary => _primary.Get();
+        private readonly IProperty<bool> _primary = H.Property<bool>(c => c
+            .On(e => e.Monitor.Primary)
+            .Set(e => e.Monitor.Primary)
+        );
 
+        [JsonProperty] public int Orientation => _orientation.Get();
+        private readonly IProperty<int> _orientation = H.Property<int>(c => c
+            .On(e => e.Monitor.AttachedDisplay.CurrentMode.DisplayOrientation)
+            .Set(s => s.Monitor.AttachedDisplay?.CurrentMode.DisplayOrientation ?? 0)
+        );
 
         public bool Selected
         {
-            get => this.Get<bool>();
+            get => _selected.Get();
             set
             {
-                if (!this.Set(value)) return;
+                if (!_selected.Set(value)) return;
                 if (!value) return;
                 foreach (var screen in Config.AllBut(this)) screen.Selected = false;
             }
         }
+        private readonly IProperty<bool> _selected = H.Property<bool>(nameof(Selected));
 
         public bool Placed
         {
-            get => this.Get(()=>false);
-            set => this.Set(value);
+            get => _placed.Get();
+            set => _placed.Set(value);
         }
+        private readonly IProperty<bool> _placed = H.Property<bool>(nameof(Placed));
 
         // Mm dimensions
         // Natives
 
-        [TriggedOn(nameof(PnpCode))]
-        public ScreenModel ScreenModel => this.Get( ()=>Config.GetScreenModel(PnpCode, Monitor) );
+        public ScreenModel ScreenModel => _screenModel.Get();
+
+        private readonly IProperty<ScreenModel> _screenModel = H.Property<ScreenModel>(nameof(ScreenModel),
+            c => c
+                .On(e => e.Monitor.PnpCode)
+                .On(e => e.Monitor)
+                .NotNull(e => e.Config).NotNull(e => e.Monitor.PnpCode).NotNull(e => e.Monitor)
+                .Set(s => s.Config.GetScreenModel(s.Monitor.PnpCode, s.Monitor)));
+
+        [JsonProperty] public IScreenSize PhysicalRotated => _physicalRotated.Get();
+
+        private readonly IProperty<IScreenSize> _physicalRotated =
+            H.Property<IScreenSize>(nameof(PhysicalRotated), c => c
+                .On(e => e.ScreenModel.Physical)
+                .On(e => e.Orientation)
+                .NotNull(e => e.ScreenModel)
+                .Set(s => s.ScreenModel.Physical.Rotate(s.Orientation)));
 
 
-        [JsonProperty]
-        [TriggedOn(nameof(ScreenModel), "Physical")]
-        [TriggedOn(nameof(Orientation))]
-        public ScreenSize PhysicalRotated => this.Get(() => ScreenModel.Physical.Rotate(Orientation));
 
         //Mm
-        [JsonProperty]
-        [TriggedOn(nameof(PhysicalRotated))]
-        [TriggedOn(nameof(PhysicalRatio))]
-        public ScreenSize InMm => this.Get(() => PhysicalRotated.Scale(PhysicalRatio).Locate());
+        [JsonProperty] public IScreenSize InMm => _inMm.Get();
+        private readonly IProperty<IScreenSize> _inMm = H.Property<IScreenSize>(c => c
+            .On(e => e.PhysicalRotated)
+            .On(e => e.PhysicalRatio)
+            .NotNull(e => e.PhysicalRotated)
+            .Set(e => e.PhysicalRotated.Scale(e.PhysicalRatio).Locate())
+        );
 
-        [TriggedOn(nameof(InMm),"X")]
+
+        [TriggerOn(nameof(InMm), "X")]
         public double InMmX
         {
             get => InMm.X;
@@ -178,8 +198,8 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-        [TriggedOn(nameof(InMm), "X")]
-        [TriggedOn(nameof(InMm), "Y")]
+        [TriggerOn(nameof(InMm), "X")]
+        [TriggerOn(nameof(InMm), "Y")]
         public void SetSaved()
         {
             Config.Saved = false;
@@ -187,33 +207,33 @@ namespace LittleBigMouse.ScreenConfigs
 
 
         [JsonProperty]
-        [TriggedOn(nameof(InMm))]
-        [TriggedOn(nameof(Orientation))]
-        public ScreenSize InMmUnrotated => this.Get(() => InMm.Rotate(4-Orientation));
-
+        public IScreenSize InMmUnrotated => _inMmUnrotated.Get();
+        private readonly IProperty<IScreenSize> _inMmUnrotated = H.Property<IScreenSize>(c => c
+            .On(e => e.InMm)
+            .On(e => e.Orientation)
+            .Set(e => e.InMm.Rotate(4 - e.Orientation))
+        );
 
         //Pixel
-        [JsonProperty]
-        public ScreenSize InPixel => this.Get(() => new ScreenSizeInPixels(this));
+        [JsonProperty] public IScreenSize InPixel => _inPixel.Get();
+        private readonly IProperty<IScreenSize> _inPixel = H.Property<IScreenSize>(c => c
+            .Set(s => new ScreenSizeInPixels(s))
+        );
+
 
         // Dip
-        [JsonProperty]
-        [TriggedOn(nameof(InPixel))]
-         public ScreenSize InDip => this.Get(() => InPixel.ScaleDip(this));
+        [JsonProperty] public IScreenSize InDip => _inDip.Get();
+        private readonly IProperty<IScreenSize> _inDip = H.Property<IScreenSize>(nameof(InDip), c => c
+            .On(e => e.InPixel)
+            .Set(s => s.InPixel.ScaleDip(s)));
+
+
 
 
         [JsonProperty]
-        [TriggedOn(nameof(PhysicalRotated), "Width")]
-        [TriggedOn(nameof(PhysicalRotated), "Height")]
-        [TriggedOn(nameof(InPixel), "Width")]
-        [TriggedOn(nameof(InPixel), "Height")]
-        //[DataMember]
-        public ScreenRatio RealPitch
+        public IScreenRatio RealPitch
         {
-            get => this.Get(() => new ScreenRatioValue(
-                PhysicalRotated.Width / InPixel.Width,
-                PhysicalRotated.Height / InPixel.Height
-                ));
+            get => _realPitch.Get();
             set
             {
                 PhysicalRotated.Width = InPixel.Width * value.X;
@@ -221,50 +241,66 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
+        private readonly IProperty<IScreenRatio> _realPitch = H.Property<IScreenRatio>(c => c
+            .On(e => e.PhysicalRotated.Width)
+            .On(e => e.PhysicalRotated.Height)
+            .On(e => e.InPixel.Width)
+            .On(e => e.InPixel.Height)
+            .Set(e => new ScreenRatioValue(
+                e.PhysicalRotated.Width / e.InPixel.Width,
+                e.PhysicalRotated.Height / e.InPixel.Height)));
 
         /// <summary>
         /// Final ratio to deal with screen distance
         /// </summary>
         [JsonProperty]
-        [TriggedOn(nameof(Id))]
-        public ScreenRatio PhysicalRatio => this.Get(() => new ScreenRatioValue(1,1));
+        public IScreenRatio PhysicalRatio => _physicalRatio.Get();
+        private readonly IProperty<IScreenRatio> _physicalRatio = H.Property<IScreenRatio>(c=>c
+                .Set(e => new ScreenRatioValue(1.0, 1.0))
+        );
 
-        [TriggedOn(nameof(InMm), "Height")]
-        [TriggedOn(nameof(InMm), "Height")]
-        public double Diagonal => this.Get(() => Math.Sqrt(InMm.Width * InMm.Width + InMm.Height * InMm.Height));
-
-
-
+        public double Diagonal => _diagonal.Get();
+        private readonly IProperty<double> _diagonal = H.Property<double>(c => c
+                .On(e => e.InMm.Height)
+                .On(e => e.InMm.Width)
+                .Set(e => Math.Sqrt(e.InMm.Width * e.InMm.Width + e.InMm.Height * e.InMm.Height))
+        );
 
 
         //calculated
-
-
         [JsonProperty]
-        [TriggedOn(nameof(RealPitch))]
-        [TriggedOn(nameof(PhysicalRatio))]
-        public ScreenRatio Pitch => this.Get(()
-            => RealPitch.Multiply(PhysicalRatio));
+        public IScreenRatio Pitch => _pitch.Get();
+        private readonly IProperty<IScreenRatio> _pitch
+            = H.Property<IScreenRatio>(c => c
+                .On(e => e.RealPitch)
+                .On(e => e.PhysicalRatio)
+                .Set(e => e.RealPitch.Multiply(e.PhysicalRatio))
+            );
 
 
-        [JsonProperty]
-        [TriggedOn(nameof(Config), "AllScreens.Item.InMm.Bounds")]
-        public Rect OveralBoundsWithoutThisInMm => this.Get(() =>
-        {
-            var r = new Rect();
-            var first = true;
-            foreach (var s in Config.AllBut(this))
-            {
-                if (first)
+        [JsonProperty] public Rect OverallBoundsWithoutThisInMm => _overallBoundsWithoutThisInMm.Get();
+        private readonly IProperty<Rect> _overallBoundsWithoutThisInMm 
+            = H.Property<Rect>(c => c
+                .On(e => e.Config.AllScreens.Item().InMm.Bounds)
+                .Set(e =>
                 {
-                    r = s.InMm.Bounds;
-                    first = false;
-                }
-                else
-                    r.Union(s.InMm.Bounds);
-            }
-            return r;
-        });
+                    var result = new Rect();
+                    var first = true;
+                    foreach (var screen in e.Config.AllBut(e))
+                    {
+                        if (first)
+                        {
+                            result = screen.InMm.Bounds;
+                            first = false;
+                        }
+                        else
+                            result.Union(screen.InMm.Bounds);
+                    }
+
+                    return result;
+                })
+
+        ); 
 
 
 
@@ -285,7 +321,7 @@ namespace LittleBigMouse.ScreenConfigs
 
         public RegistryKey OpenMonitorRegKey(bool create = false)
         {
-            return OpenMonitorRegKey(IdMonitor, create);
+            return OpenMonitorRegKey(Monitor.IdMonitor, create);
         }
 
         public RegistryKey OpenGuiLocationRegKey(bool create = false)
@@ -306,7 +342,7 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-        public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Config.Id, IdMonitor, create);
+        public RegistryKey OpenConfigRegKey(bool create = false) => OpenConfigRegKey(Config.Id, Monitor.IdMonitor, create);
 
         public string ConfigPath(bool create = false)
         {
@@ -329,7 +365,7 @@ namespace LittleBigMouse.ScreenConfigs
                     var width = key.GetKey("Width", ()=>GuiLocation.Width);
                     var top = key.GetKey("Top", ()=>GuiLocation.Top);
                     var height = key.GetKey("Height", ()=>GuiLocation.Height);
-                    this.Set(new Rect(new Point(left, top), new Size(width, height)), nameof(GuiLocation));
+                    _guiLocation.Set(new Rect(new Point(left, top), new Size(width, height)));
                 }
             }
 
@@ -382,7 +418,7 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-        //[TriggedOn(nameof(Monitor), "WorkArea")]
+        //[TriggerOn(nameof(Monitor), "WorkArea")]
         //public AbsoluteRectangle AbsoluteWorkingArea => this.Get(() => new AbsoluteRectangle(
         //    new PixelPoint(Config, this, Monitor.WorkArea.X, Monitor.WorkArea.Y),
         //    new PixelPoint(Config, this, Monitor.WorkArea.Right, Monitor.WorkArea.Bottom)
@@ -415,19 +451,19 @@ namespace LittleBigMouse.ScreenConfigs
         }
 
 
-
         [JsonProperty]
         public Rect GuiLocation
         {
-            get => this.Get(() => new Rect
-            {
-                Width = 0.5,
-                Height = (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
-                Y = 1 - (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
-                X = 1 - 0.5
-            });
-            set => this.Set(value);
+            get => _guiLocation.Get();
+            //{
+            //    Width = 0.5,
+            //    Height = (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
+            //    Y = 1 - (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
+            //    X = 1 - 0.5
+            //});
+            set => _guiLocation.Set(value);
         }
+        private readonly IProperty<Rect> _guiLocation = H.Property<Rect>();
 
         public enum DpiType
         {
@@ -441,54 +477,38 @@ namespace LittleBigMouse.ScreenConfigs
             [Out] out uint dpiY);
 
 
+        private readonly IProperty<double> _winDpiX = H.Property<double>(nameof(WinDpiX), c => c
+            .On(e => e.EffectiveDpi.X)
+            .Set(e => e.EffectiveDpi.X)
+        );
         [JsonProperty]
-        [TriggedOn(nameof(Monitor), "HMonitor")]
-        public double WinDpiX => this.Get(() =>
-        {
-            GetDpiForMonitor(Monitor.HMonitor, DpiType.Effective, out var dpiX, out var dpiY);
-            this.Set(dpiY, "WinDpiY");
-            return dpiX;
-        });
+        public double WinDpiX => _winDpiX.Get();
 
+        private readonly IProperty<double> _winDpiY = H.Property<double>(nameof(WinDpiY), c => c
+            .On(e => e.EffectiveDpi.Y)
+            .Set(e => e.EffectiveDpi.Y)
+        );
         [JsonProperty]
-        [TriggedOn(nameof(Monitor), "HMonitor")]
-        public double WinDpiY => this.Get(()=>
-        {
-            GetDpiForMonitor(Monitor.HMonitor, DpiType.Effective, out var dpiX, out var dpiY);
-            this.Set(dpiX, "WinDpiX");
-            return dpiY;
-        });
+        public double WinDpiY => _winDpiY.Get();
 
-        public Point ScaledPoint(Point p)
-        {
-            NativeMethods.POINT up = new NativeMethods.POINT((int) p.X, (int) p.Y);
-            NativeMethods.PhysicalToLogicalPoint(Monitor.HMonitor, ref up);
-            return new Point(up.X, up.Y);
-        }
 
-        [JsonProperty]
-        [TriggedOn(nameof(Monitor), "HMonitor")]
-        public ScreenRatio RawDpi => this.Get(() =>
-        {
-            GetDpiForMonitor(Monitor.HMonitor, DpiType.Raw, out var dpiX, out var dpiY);
-            return new ScreenRatioValue(dpiX, dpiY);
-        });
+        [JsonProperty] public IScreenRatio RawDpi => _rawDpi.Get();
+        private readonly IProperty<IScreenRatio> _rawDpi = H.Property<IScreenRatio>(c => c
+            .On(e => e.Monitor.RawDpi)
+            .Set(e => new ScreenRatioValue(e.Monitor.RawDpi))
+        );
 
-        [JsonProperty]
-        [TriggedOn(nameof(Monitor), "HMonitor")]
-        public ScreenRatio EffectiveDpi => this.Get(() =>
-        {
-            GetDpiForMonitor(Monitor.HMonitor, DpiType.Effective, out var dpiX, out var dpiY);
-            return new ScreenRatioValue(dpiX,dpiY);
-        });
+        [JsonProperty] public IScreenRatio EffectiveDpi => _effectiveDpi.Get();
+        private readonly IProperty<IScreenRatio> _effectiveDpi = H.Property<IScreenRatio>(c => c
+            .On(e => e.Monitor.EffectiveDpi)
+            .Set(e => new ScreenRatioValue(e.Monitor.EffectiveDpi))
+        );
 
-        [JsonProperty]
-        [TriggedOn(nameof(Monitor), "HMonitor")]
-        public ScreenRatio DpiAwareAngularDpi => this.Get(() =>
-        {
-            GetDpiForMonitor(Monitor.HMonitor, DpiType.Angular, out var dpiX, out var dpiY);
-            return new ScreenRatioValue(dpiX, dpiY);
-        });
+        private readonly IProperty<IScreenRatio> _dpiAwareAngularDpi = H.Property<IScreenRatio>(c => c
+            .On(e => e.Monitor.AngularDpi)
+            .Set(e => new ScreenRatioValue(e.Monitor.AngularDpi))
+        );
+        [JsonProperty] public IScreenRatio DpiAwareAngularDpi => _dpiAwareAngularDpi.Get();
 
 
 //        private NativeMethods.Process_DPI_Awareness DpiAwareness => this.Get(() =>
@@ -502,158 +522,171 @@ namespace LittleBigMouse.ScreenConfigs
 //            return aw;
 //        });
 
-        public NativeMethods.DPI_Awareness_Context DpiAwarenessContext => this.Get(NativeMethods.GetThreadDpiAwarenessContext);
+
+        public NativeMethods.DPI_Awareness_Context DpiAwarenessContext => _dpiAwarenessContext.Get();
+        private readonly IProperty<NativeMethods.DPI_Awareness_Context> _dpiAwarenessContext 
+            = H.Property<NativeMethods.DPI_Awareness_Context>(c => c
+                 .Set(s => NativeMethods.GetThreadDpiAwarenessContext())
+            );
+
 
         // This is the ratio used in system config
 
-        [TriggedOn(nameof(RealDpi),"X")]
-        [TriggedOn(nameof(RealDpi),"Y")]
-        [TriggedOn(nameof(DpiAwareAngularDpi))]
-        [TriggedOn(nameof(EffectiveDpi))]
-        [TriggedOn(nameof(DpiAwarenessContext))]
-        [TriggedOn(nameof(Config), "PrimaryScreen", "EffectiveDpi","Y")]
-        [TriggedOn(nameof(Config), "MaxEffectiveDpiY")]
-
-        [JsonProperty]
-        public ScreenRatio WpfToPixelRatio => this.Get(() =>
+        public IScreenRatio UpdateWpfToPixelRatio()
         {
-                switch (DpiAwarenessContext)
-                {
-                    case NativeMethods.DPI_Awareness_Context.Unaware:
-                        return new ScreenRatioValue(
-                            Math.Round((RealDpi.X / DpiAwareAngularDpi.X) * 10) / 10,
-                            Math.Round((RealDpi.Y / DpiAwareAngularDpi.Y) * 10) / 10
-                        );;
+            switch (DpiAwarenessContext)
+            {
+                case NativeMethods.DPI_Awareness_Context.Unaware:
+                    if (RealDpi == null) return null;
+                    if (DpiAwareAngularDpi == null) return null;
+                    return new ScreenRatioValue(
+                        Math.Round((RealDpi.X / DpiAwareAngularDpi.X) * 10) / 10,
+                        Math.Round((RealDpi.Y / DpiAwareAngularDpi.Y) * 10) / 10 );
                 //return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
 
-                    case NativeMethods.DPI_Awareness_Context.System_Aware:
-                            if (Config?.PrimaryScreen == null) return new ScreenRatioValue(1,1);
-                            return new ScreenRatioValue(
-                                Config.PrimaryScreen.EffectiveDpi.X / 96,
-                                Config.PrimaryScreen.EffectiveDpi.Y / 96
-                            ); ;
+                case NativeMethods.DPI_Awareness_Context.System_Aware:
+                    if (Config?.PrimaryScreen == null) return new ScreenRatioValue(1, 1);
+                    else return new ScreenRatioValue(
+                        Config.PrimaryScreen.EffectiveDpi.X / 96,
+                        Config.PrimaryScreen.EffectiveDpi.Y / 96
+                    );
 
-                    case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware:
-                        return new ScreenRatioValue(
-                            EffectiveDpi.X / 96,
-                            EffectiveDpi.Y / 96
-                        ); ;
+                case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware:
+                    return new ScreenRatioValue(
+                        EffectiveDpi.X / 96,
+                        EffectiveDpi.Y / 96
+                    );
 
-                    case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware_V2:
-                        return new ScreenRatioValue(
-                            EffectiveDpi.X / 96,
-                            EffectiveDpi.Y / 96
-                            //DpiAwareAngularDpi.X / 96,
-                            //DpiAwareAngularDpi.Y / 96
-                        ); ;
+                case NativeMethods.DPI_Awareness_Context.Per_Monitor_Aware_V2:
+                    return new ScreenRatioValue(
+                        EffectiveDpi.X / 96,
+                        EffectiveDpi.Y / 96
+                        //DpiAwareAngularDpi.X / 96,
+                        //DpiAwareAngularDpi.Y / 96
+                    );
 
+                case NativeMethods.DPI_Awareness_Context.Unset:
                 default:
-                        throw new ArgumentOutOfRangeException();
-                }
-        });
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        private readonly IProperty<IScreenRatio> _wpfToPixelRatio 
+                = H.Property<IScreenRatio>(c => c.On(e => e.RealDpi.X)
+            .On(e => e.RealDpi.Y)
+            .On(e => e.EffectiveDpi)
+            .On(e => e.DpiAwarenessContext)
+            .On(e => e.Config.PrimaryScreen.EffectiveDpi.Y)
+            .On(e => e.Config.MaxEffectiveDpiY)
+            .Set(s => s.UpdateWpfToPixelRatio())
+            );
 
         [JsonProperty]
-        [TriggedOn(nameof(WpfToPixelRatio))]
-        public ScreenRatio PixelToDipRatio => WpfToPixelRatio.Inverse();
+        public IScreenRatio WpfToPixelRatio => _wpfToPixelRatio.Get();
 
         [JsonProperty]
-        [TriggedOn(nameof(Pitch))]
-        public ScreenRatio PhysicalToPixelRatio => this.Get(()=>Pitch.Inverse());
-
-
-        [JsonProperty]
-        [TriggedOn(nameof(PhysicalRatio))]
-        [TriggedOn(nameof(PhysicalToPixelRatio))]
-        [TriggedOn(nameof(WpfToPixelRatio))]
-        public ScreenRatio MmToDipRatio => this.Get(()=>PhysicalToPixelRatio.Multiply(WpfToPixelRatio.Inverse()).Multiply(PhysicalRatio));
-
+        [TriggerOn(nameof(WpfToPixelRatio))]
+        public IScreenRatio PixelToDipRatio => WpfToPixelRatio.Inverse();
 
         [JsonProperty]
-        [TriggedOn(nameof(RealPitch))]
-        public ScreenRatio RealDpi => this.Get(()=>new ScreenRatioValue(25.4).Multiply(RealPitch.Inverse()));
-
-
-        [JsonProperty]
-        [TriggedOn(nameof(Pitch))]
-        public ScreenRatio DpiX => new ScreenRatioValue(25.4).Multiply(Pitch.Inverse());
+        [TriggerOn(nameof(Pitch))]
+        public IScreenRatio PhysicalToPixelRatio => Pitch.Inverse();
 
 
         [JsonProperty]
-        [TriggedOn(nameof(RealDpi),"X")]
-        [TriggedOn(nameof(RealDpi),"Y")]
-        public double RealDpiAvg => Math.Sqrt(RealDpi.X * RealDpi.X + RealDpi.Y * RealDpi.Y) / Math.Sqrt(2) ;
+        [TriggerOn(nameof(PhysicalRatio))]
+        [TriggerOn(nameof(PhysicalToPixelRatio))]
+        [TriggerOn(nameof(WpfToPixelRatio))]
+        public IScreenRatio MmToDipRatio => PhysicalToPixelRatio.Multiply(WpfToPixelRatio.Inverse()).Multiply(PhysicalRatio);
 
+
+        [JsonProperty]
+        public IScreenRatio RealDpi => _realDpi.Get();
+        private readonly IProperty<IScreenRatio> _realDpi = H.Property<IScreenRatio>();
+
+        [TriggerOn(nameof(RealPitch))]
+        public void _setRealDpi()
+        {
+            _realDpi.Set(new ScreenRatioValue(25.4).Multiply(RealPitch.Inverse()));
+        }
+
+
+        [JsonProperty]
+        public IScreenRatio DpiX => _dpiX.Get();
+        private readonly IProperty<IScreenRatio> _dpiX = H.Property<IScreenRatio>(nameof(DpiX));
+        [TriggerOn(nameof(Pitch))]
+        public void _setDpiX()
+        {
+            _dpiX.Set(new ScreenRatioValue(25.4).Multiply(Pitch.Inverse()));
+        }
+
+
+        private readonly IProperty<double> _realDpiAvg = H.Property<double>(nameof(RealDpiAvg), c => c
+             .On(nameof(RealDpi), "X")
+            .On(nameof(RealDpi), "Y")
+            .Set(s =>
+            {
+                if (s.RealDpi == null) return double.NaN;
+                return Math.Sqrt(s.RealDpi.X * s.RealDpi.X + s.RealDpi.Y * s.RealDpi.Y) / Math.Sqrt(2);
+            }));
+
+        [JsonProperty]
+        public double RealDpiAvg => _realDpiAvg.Get();
+
+        private readonly IProperty<bool> _moving = H.Property<bool>(nameof(Moving));
         public bool Moving
         {
-            get => this.Get(() => false);
+            get => _moving.Get();
             set
             {
                 var x = XMoving;
                 var y = YMoving;
 
-                if (!this.Set(value) || value) return;
-
-                InMm.X = x;
-                InMm.Y = y;
+                if (_moving.Set(value) || value)
+                {
+                    InMm.X = x;
+                    InMm.Y = y;
+                }
             }
         }
 
-        [TriggedOn(nameof(Moving))]
-        [TriggedOn(nameof(InMm), "X")]
+        private readonly IProperty<double> _xMoving = H.Property<double>(c=>c
+            .On(nameof(Moving))
+            .On(nameof(InMm), "X")
+            .Do((e,property) =>
+            {
+                if(!e.Moving)
+                    property.Set(e.InMm.X);
+                })
+        );
         public double XMoving
         {
-            get => this.Get(() => InMmX);
+            get => _xMoving.Get();
             set
             {
-                if (Moving) this.Set(value);
+                if (Moving) _xMoving.Set(value);
                 else InMmX = value;
             }
         }
 
-        [TriggedOn(nameof(Moving))]
-        [TriggedOn(nameof(InMm), "Y")]
+        private readonly IProperty<double> _yMoving = H.Property<double>(c => c
+            .On(nameof(Moving))
+            .On(nameof(InMm), "Y")
+            .Do((e, property) =>
+            {
+                if (!e.Moving)
+                    property.Set(e.InMm.Y);
+            })
+        );
         public double YMoving
         {
-            get => this.Get(() => InMmY);
+            get => _yMoving.Get();
             set
             {
-                if (Moving) this.Set(value);
+                if (Moving) _yMoving.Set(value);
                 else InMmY = value;
             }
         }
-        /*
-                private double _graphicsDpiX = 0;
-                private double GraphicsDpiX
-                {
-                    get
-                    {
-                        if (_graphicsDpiX != 0) return _graphicsDpiX;
-
-                        IntPtr hdc = Gdi32.CreateDC(null, DeviceName, null, IntPtr.Zero);
-                        System.Drawing.Graphics gfx = System.Drawing.Graphics.FromHdc(hdc);
-                        _graphicsDpiX = gfx.DpiX;
-                        gfx.Dispose();
-                        Gdi32.DeleteDC(hdc);
-                        return _graphicsDpiX;
-                    }
-                }
-
-                private double _graphicsDpiY = 0;
-                private double GraphicsDpiY
-                {
-                    get
-                    {
-                        if (_graphicsDpiY != 0) return _graphicsDpiY;
-
-                        IntPtr hdc = Gdi32.CreateDC(null, DeviceName, null, IntPtr.Zero);
-                        System.Drawing.Graphics gfx = System.Drawing.Graphics.FromHdc(hdc);
-                        _graphicsDpiY = gfx.DpiY;
-                        gfx.Dispose();
-                        Gdi32.DeleteDC(hdc);
-                        return _graphicsDpiY;
-                    }
-                }
-                */
 
         private double LogPixelSx
         {
@@ -666,30 +699,13 @@ namespace LittleBigMouse.ScreenConfigs
             }
         }
 
-        [JsonProperty]
-        public string CapabilitiesString
-        {
-            get
-            {
-                IntPtr hMonitor = Monitor.HMonitor; //HPhysical;
 
-                uint len = 0;
-                if (!NativeMethods.DDCCIGetCapabilitiesStringLength(hMonitor, ref len)) return "-1-";
+        private double RightDistance(Screen screen) =>  InMm.OutsideBounds.X - screen.InMm.OutsideBounds.Right;
+        private double LeftDistance(Screen screen) => screen.InMm.OutsideBounds.X - InMm.OutsideBounds.Right;
+        private double TopDistance(Screen screen) => screen.InMm.OutsideBounds.Y - InMm.OutsideBounds.Bottom;
+        private double BottomDistance(Screen screen) => InMm.OutsideBounds.Y - screen.InMm.OutsideBounds.Bottom;
 
-                StringBuilder s = new StringBuilder((int)len + 1);
-
-                if (!NativeMethods.DDCCIGetCapabilitiesString(hMonitor, s, len)) return "-2-";
-
-                return s.ToString();
-            }
-        }
-
-        double RightDistance(Screen screen) =>  InMm.OutsideBounds.X - screen.InMm.OutsideBounds.Right;
-        double LeftDistance(Screen screen) => screen.InMm.OutsideBounds.X - InMm.OutsideBounds.Right;
-        double TopDistance(Screen screen) => screen.InMm.OutsideBounds.Y - InMm.OutsideBounds.Bottom;
-        double BottomDistance(Screen screen) => InMm.OutsideBounds.Y - screen.InMm.OutsideBounds.Bottom;
-
-        double RightDistanceToTouch(Screen screen, bool zero = false)
+        private double RightDistanceToTouch(Screen screen, bool zero = false)
         {
             double top = TopDistance(screen);
             if ( top > 0 || (zero && top == 0) ) return double.PositiveInfinity;

@@ -29,184 +29,261 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using HLab.Mvvm;
 using HLab.Notify;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {
-    public class ScreenFrameViewModel : IViewModel<Screen>
+    public class ScreenFrameViewModel : ViewModel<ScreenFrameViewModel,Screen>
     {
         public ScreenFrameViewModel()
         {
-            this.SubscribeNotifier();
-        }
-
-        public Screen Model => this.Get<Screen>();
-
-        public event PropertyChangedEventHandler PropertyChanged
-        {
-            add => this.Add(value);
-            remove => this.Remove(value);
+            Initialize();
         }
 
         public MultiScreensViewModel Presenter
         {
-            get => this.Get<MultiScreensViewModel>();
-            set => this.Set(value);
+            get => _presenter.Get();
+            set => _presenter.Set(value);
         }
+        private readonly IProperty<MultiScreensViewModel> _presenter = H.Property<MultiScreensViewModel>(nameof(Presenter),c=>c);
 
-        [TriggedOn(nameof(Model), "Orientation")]
-        [TriggedOn(nameof(Height))]
-        [TriggedOn(nameof(Width))]
-        public TransformGroup Rotation => this.Get(() =>
-        {
-            var t = new TransformGroup();
-            if (Model.Orientation > 0)
-                t.Children.Add(new RotateTransform(90 * Model.Orientation));
-
-            switch (Model.Orientation)
+        public TransformGroup Rotation => _rotation.Get();
+        private readonly IProperty<TransformGroup> _rotation = H.Property<TransformGroup>(nameof(Rotation), c => c
+        
+            .On(e => e.Model.Orientation)
+            .On(e => e.Height)
+            .On(e => e.Width)
+            .Set( e => 
             {
-                case 1:
-                    t.Children.Add(new TranslateTransform(Width, 0));
-                    break;
-                case 2:
-                    t.Children.Add(new TranslateTransform(Width, Height));
-                    break;
-                case 3:
-                    t.Children.Add(new TranslateTransform(0, Height));
-                    break;
-            }
+                var t = new TransformGroup();
+                if (e.Model.Orientation > 0)
+                    t.Children.Add(new RotateTransform(90 * e.Model.Orientation));
 
-            return t;
-        });
+                switch (e.Model.Orientation)
+                {
+                    case 1:
+                        t.Children.Add(new TranslateTransform(e.Width, 0));
+                        break;
+                    case 2:
+                        t.Children.Add(new TranslateTransform(e.Width, e.Height));
+                        break;
+                    case 3:
+                        t.Children.Add(new TranslateTransform(0, e.Height));
+                        break;
+                }
+
+                return t;
+            }
+                ));
 
 
 
         public double Ratio
         {
-            get => this.Get(() => 1.0);
-            set => this.Set(value);
+            get => _ratio.Get();
+            set => _ratio.Set(value);
         }
-
-        [TriggedOn(nameof(Ratio))]
-        public Thickness LogoPadding => this.Get(() => new Thickness(4 * Ratio));
-
+        private readonly IProperty<double> _ratio = H.Property<double>(nameof(Ratio), c=> c
+            .Set(e => 1.0));
 
 
+        public Thickness LogoPadding => _logoPadding.Get();
+        private readonly IProperty<Thickness> _logoPadding = H.Property<Thickness>(nameof(LogoPadding), c => c
+                .On(e => e.Ratio)
+                .Set(e => new Thickness(4 * e.Ratio))
+        );
 
 
         private GridLength GetLength(double l) => new GridLength(GetSize(l));
         private double GetSize(double l) => l * Ratio;
 
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn("Model.XMoving")]
-        [TriggedOn("Model.YMoving")]
-        [TriggedOn("Model.Config.PhysicalOutsideBounds.Left")]
-        [TriggedOn("Model.Config.PhysicalOutsideBounds.Top")]
-        [TriggedOn("Model.Config.PhysicalOutsideBounds.Height")]
-        [TriggedOn("Model.Config.PhysicalOutsideBounds.Width")]
-        [TriggedOn("Model.InMm.LeftBorder")]
-        [TriggedOn("Model.InMm.TopBorder")]
-        public Thickness Margin => this.Get(() => new Thickness(
-            GetSize(Model.XMoving - Model.InMm.LeftBorder - Model.Config.PhysicalOutsideBounds.Left - Model.Config.PhysicalOutsideBounds.Width/2),
-            GetSize(Model.YMoving - Model.InMm.TopBorder - Model.Config.PhysicalOutsideBounds.Top - Model.Config.PhysicalOutsideBounds.Height/2),0,0
-        ));
+        public Thickness Margin => _margin.Get();
+        private readonly IProperty<Thickness> _margin 
+            = H.Property<Thickness>(nameof(Margin), c => c
+                .On(e => e.Ratio)
+                .On(e => e.Model.XMoving)
+                .On(e => e.Model.YMoving)
+                .On(e => e.Model.Config.PhysicalOutsideBounds.Left)
+                .On(e => e.Model.Config.PhysicalOutsideBounds.Top)
+                .On(e => e.Model.Config.PhysicalOutsideBounds.Height)
+                .On(e => e.Model.Config.PhysicalOutsideBounds.Width)
+                .On(e => e.Model.InMm.LeftBorder)
+                .On(e => e.Model.InMm.TopBorder)
+                .Set(e => new Thickness(
+                    e.GetSize(e.Model.XMoving - e.Model.InMm.LeftBorder - e.Model.Config.PhysicalOutsideBounds.Left - e.Model.Config.PhysicalOutsideBounds.Width/2),
+                    e.GetSize(e.Model.YMoving - e.Model.InMm.TopBorder - e.Model.Config.PhysicalOutsideBounds.Top - e.Model.Config.PhysicalOutsideBounds.Height/2),0,0
+        ))
+            );
+
+        // Height
+        public double Height => _height.Get();
+        private readonly IProperty<double> _height = H.Property<double>(nameof(Height), c => c
+                .On(e => e.Ratio)
+                .On(e => e.Model.InMm.OutsideHeight)
+                .Set( (e => e.GetSize(e.Model.InMm.OutsideHeight)))
+        );
+
+        // Width
+        public double Width => _width.Get();
+        private readonly IProperty<double> _width = H.Property<double>(nameof(Width), c => c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMm.OutsideWidth)
+            .Set( (e => e.GetSize(e.Model.InMm.OutsideWidth)))
+        );
+
+        // TopBorder
+        public GridLength TopBorder => _topBorder.Get();
+        private readonly IProperty<GridLength> _topBorder = H.Property<GridLength>(c=>c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMm.TopBorder)
+            .Set(e => e.GetLength(e.Model.InMm.TopBorder))
+        );
+
+        // RightBorder
+        public GridLength RightBorder => _rightBorder.Get();
+        private readonly IProperty<GridLength> _rightBorder = H.Property<GridLength>(nameof(RightBorder), c => c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMm.RightBorder)
+            .Set(e => e.GetLength(e.Model.InMm.RightBorder))
+        );
+
+        // BottomBorder
+        public GridLength BottomBorder => _bottomBorder.Get();
+        private readonly IProperty<GridLength> _bottomBorder = H.Property<GridLength>(nameof(BottomBorder), c => c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMm.BottomBorder)
+            .Set(e => e.GetLength(e.Model.InMm.BottomBorder))        
+        );
+
+        // LeftBorder
+        public GridLength LeftBorder => _leftBorder.Get();
+        private readonly IProperty<GridLength> _leftBorder = H.Property<GridLength>(nameof(LeftBorder), c => c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMm.LeftBorder)   
+            .Set(e => e.GetLength(e.Model.InMm.LeftBorder))
+        );
 
 
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn("Model.InMm.OutsideHeight")]
-        public double Height => this.Get(() => GetSize(Model.InMm.OutsideHeight));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn("Model.InMm.OutsideWidth")]
-        public double Width => this.Get(() => GetSize(Model.InMm.OutsideWidth));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn("Model.InMm.TopBorder")]
-        public GridLength TopBorder => this.Get(() => GetLength(Model.InMm.TopBorder));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn("Model.InMm.RightBorder")]
-        public GridLength RightBorder => this.Get(() => GetLength(Model.InMm.RightBorder));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn("Model.InMm.BottomBorder")]
-        public GridLength BottomBorder => this.Get(() => GetLength(Model.InMm.BottomBorder));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn("Model.InMm.LeftBorder")]
-        public GridLength LeftBorder => this.Get(() => GetLength(Model.InMm.LeftBorder));
+        // UnrotatedHeight
+        public double UnrotatedHeight => _unrotatedHeight.Get();
+        private readonly IProperty<double> _unrotatedHeight = H.Property<double>(nameof(UnrotatedHeight), c => c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMmUnrotated.OutsideHeight)
+            .Set(e => e.GetSize(e.Model.InMmUnrotated.OutsideHeight))
+        );
+
+        // UnrotatedWidth
+        public double UnrotatedWidth => _unrotatedWidth.Get();
+        private readonly IProperty<double> _unrotatedWidth = H.Property<double>(nameof(UnrotatedWidth), c => c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMmUnrotated.OutsideWidth)
+            .Set(e => e.GetSize(e.Model.InMmUnrotated.OutsideWidth))
+            );
+
+
+        // UnrotatedTopBorder
+        public GridLength UnrotatedTopBorder => _unrotatedTopBorder.Get();
+        private readonly IProperty<GridLength> _unrotatedTopBorder = H.Property<GridLength>(nameof(UnrotatedTopBorder),c=>c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMmUnrotated.TopBorder)
+            .Set(e => e.GetLength(e.Model.InMmUnrotated.TopBorder))
+            );
+
+        // UnrotatedRightBorder
+        public GridLength UnrotatedRightBorder => _unrotatedRightBorder.Get();
+        private readonly IProperty<GridLength> _unrotatedRightBorder = H.Property<GridLength>(nameof(UnrotatedRightBorder),c=>c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMmUnrotated.RightBorder)
+            .Set(e => e.GetLength(e.Model.InMmUnrotated.RightBorder))
+        );
+
+        // UnrotatedBottomBorder
+        public GridLength UnrotatedBottomBorder => _unrotatedBottomBorder.Get();
+        private readonly IProperty<GridLength> _unrotatedBottomBorder = H.Property<GridLength>(nameof(UnrotatedBottomBorder),c=>c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMmUnrotated.BottomBorder)
+            .Set(e => e.GetLength(e.Model.InMmUnrotated.BottomBorder))           
+        );
+
+        // UnrotatedLeftBorder
+        public GridLength UnrotatedLeftBorder => _unrotatedLeftBorder.Get();
+        private readonly IProperty<GridLength> _unrotatedLeftBorder = H.Property<GridLength>(nameof(UnrotatedLeftBorder),c=>c
+            .On(e => e.Ratio)
+            .On(e => e.Model.InMmUnrotated.LeftBorder)
+            .Set(e => e.GetLength(e.Model.InMmUnrotated.LeftBorder))                   
+        );
 
 
 
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn(nameof(Model),"InMmUnrotated","OutsideHeight")]
-        public double UnrotatedHeight => this.Get(()=> GetSize(Model.InMmUnrotated.OutsideHeight));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn(nameof(Model), "InMmUnrotated","OutsideWidth")]
-        public double UnrotatedWidth => this.Get(()=> GetSize(Model.InMmUnrotated.OutsideWidth));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn(nameof(Model), "InMmUnrotated","TopBorder")]
-        public GridLength UnrotatedTopBorder => this.Get(() => GetLength(Model.InMmUnrotated.TopBorder));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn(nameof(Model), "InMmUnrotated","RightBorder")]
-        public GridLength UnrotatedRightBorder => this.Get(() => GetLength(Model.InMmUnrotated.RightBorder));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn(nameof(Model), "InMmUnrotated","BottomBorder")]
-        public GridLength UnrotatedBottomBorder => this.Get(() => GetLength(Model.InMmUnrotated.BottomBorder));
-        [TriggedOn(nameof(Ratio))]
-        [TriggedOn(nameof(Model), "InMmUnrotated","LeftBorder")]
-        public GridLength UnrotatedLeftBorder => this.Get(() => GetLength(Model.InMmUnrotated.LeftBorder));
- 
-
-         public Viewbox Logo
-        {
-            get => this.Get<Viewbox>(); private set => this.Set(value);
-        }
-
-        [TriggedOn("Model.Config.WallpaperStyle")]
-        public Stretch WallPaperStretch => this.Get(() =>
-        {
-            switch (Model.Config.WallpaperStyle)
+        public Stretch WallPaperStretch => _wallPaperStretch.Get();
+        private readonly IProperty<Stretch> _wallPaperStretch = H.Property<Stretch>(nameof(WallPaperStretch), c => c
+            .On(e => e.Model.Config.WallpaperStyle)
+            .Set(e =>
             {
-                case 0:
-                    return Stretch.None;
-                case 2:
-                    return Stretch.Fill;
-                case 6:
-                    return Stretch.Uniform;
-                case 10:
-                    return Stretch.UniformToFill;
-                case 22: // stretched across all screens
-                default:
-                    return Stretch.None;
-            }
-        });
-
-        [TriggedOn(nameof(WallPaperStretch))]
-        [TriggedOn("Model.Config.WallPaperPath")]
-        public Image WallPaper => this.Get(() =>
-        {
-            try
-            {
-                return new Image
+                switch (e.Model.Config.WallpaperStyle)
                 {
-                    Source = new BitmapImage(new Uri(Model.Config.WallPaperPath)),
-                    Stretch = WallPaperStretch,
-                    HorizontalAlignment = HorizontalAlignment.Center
-                };
-            }
-            catch (Exception)
+                    case 0:
+                        return Stretch.None;
+                    case 2:
+                        return Stretch.Fill;
+                    case 6:
+                        return Stretch.Uniform;
+                    case 10:
+                        return Stretch.UniformToFill;
+                    case 22: // stretched across all screens
+                    default:
+                        return Stretch.None;
+                }
+            })
+        
+        );
+
+
+        public Image WallPaper => _wallPaper.Get();
+        private readonly IProperty<Image> _wallPaper = H.Property<Image>(nameof(WallPaper),c => c
+            .On(e => e.WallPaperStretch)
+            .On(e => e.Model.Config.WallPaperPath)
+            .Set(e =>
             {
-                return null;
-            }
-        });
+                try
+                {
+                    return new Image
+                    {
+                        Source = new BitmapImage(new Uri(e.Model.Config.WallPaperPath)),
+                        Stretch = e.WallPaperStretch,
+                        HorizontalAlignment = HorizontalAlignment.Center
+                    };
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            })
+        );
 
-        public Brush BackgroundColor => this.Get(() => new SolidColorBrush(
-            Color.FromRgb(
-                (byte)Model.Config.BackGroundColor[0],
-                (byte)Model.Config.BackGroundColor[1],
-                (byte)Model.Config.BackGroundColor[2]
-            )));
+        public Brush BackgroundColor => _backgroundColor.Get();
+        private readonly IProperty<Brush> _backgroundColor = H.Property<Brush>(nameof(BackgroundColor),c=>c
+            .On(e => e.Model.Config.BackGroundColor)
+            .Set(e => new SolidColorBrush(
+                Color.FromRgb(
+                    (byte)e.Model.Config.BackGroundColor[0],
+                    (byte)e.Model.Config.BackGroundColor[1],
+                    (byte)e.Model.Config.BackGroundColor[2])))
+        );
 
-        [TriggedOn(nameof(Model),"Monitor","Edid","ManufacturerCode")]
-        public void UpdateLogo()
+
+
+        public Viewbox Logo => _logo.Get();
+        private readonly IProperty<Viewbox> _logo = H.Property<Viewbox>(nameof(Logo), c => c
+            .Set(e => e.GetLogo())
+        
+        );
+
+        public Viewbox GetLogo()
         {
-            if (Model?.Monitor?.Edid?.ManufacturerCode == null) return;
+            if (Model?.Monitor?.Edid?.ManufacturerCode == null) return null;
 
                 switch (Model.Monitor.Edid.ManufacturerCode.ToLower())
                 {
@@ -219,41 +296,41 @@ namespace LittleBigMouse.Control.Core
                 case "stn":
                 case "kyk":
                 case "sem":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoSam"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoSam"); 
                 case "del":
                 case "dll":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoDel"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoDel"); 
                 case "che":
                 case "ali":
                 case "acr":
                 case "api":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoAcer"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoAcer"); 
                 case "atk":
                 case "aci":
                 case "asu":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoAsus"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoAsus"); 
                 case "eiz":
                 case "egd":
                 case "enc":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoEizo"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoEizo"); 
                 case "ben":
                 case "bnq":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoBenq"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoBenq");
                 case "nec":
                 case "nct":
                 case "nmv":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoNec"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoNec"); 
                 case "hpq":
                 case "hpd":
                 case "hpc":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoHp"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoHp");
                 case "lg":
                 case "lgs":
                 case "gsm"://GoldStar 
-                    Logo = (Viewbox)Application.Current.FindResource("LogoLg"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoLg"); 
                 case "apl":
                 case "app":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoApple"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoApple");
                 case "fdt":
                 case "fuj":
                 case "fmi":
@@ -263,19 +340,19 @@ namespace LittleBigMouse.Control.Core
                 case "fjs":
                 case "fjc":
                 case "ftl":
-                   Logo = (Viewbox)Application.Current.FindResource("LogoFujitsu"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoFujitsu");
                 case "ibm":
                 case "cdt":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoIbm"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoIbm");
                 case "mat":
                 case "mdo":
                 case "plf":
                 case "mei":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoPanasonic"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoPanasonic");
                 case "sny":
                 case "son":
                 case "ser":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoSony"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoSony");
                 case "tai":
                 case "tsb":
                 case "tos":
@@ -283,25 +360,25 @@ namespace LittleBigMouse.Control.Core
                 case "lcd":
                 case "pcs":
                 case "tli":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoToshiba"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoToshiba");
                 case "aoc":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoAoc"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoAoc");
                 case "ivm":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoIiyama"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoIiyama");
                 case "len":
                 case "lnv":
                 case "lin":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoLenovo"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoLenovo");
                 case "pca":
                 case "phs":
                 case "phl":
                 case "phe":
                 case "psc":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoPhilips"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoPhilips");
                 case "hei":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoYundai"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoYundai");
                 case "cpq":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoCompaq"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoCompaq");
                 case "hit":
                 case "hcp":
                 case "hce":
@@ -310,19 +387,19 @@ namespace LittleBigMouse.Control.Core
                 case "htc":
                 case "mxl":
                 case "hel":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoHitachi"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoHitachi");
                 case "hyo":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoQnix"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoQnix");
                 case "nts":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoIolair"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoIolair");
                 case "otm":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoOptoma"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoOptoma");
                 case "vsc":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoViewsonic"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoViewsonic");
                 case "msg":
-                    Logo = (Viewbox)Application.Current.FindResource("LogoMsi"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoMsi");
                 default:
-                    Logo = (Viewbox)Application.Current.FindResource("LogoLbm"); return;
+                    return (Viewbox)Application.Current.FindResource("LogoLbm");
             }
             }
 

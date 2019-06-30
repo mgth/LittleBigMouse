@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:icons="clr-namespace:HLab.Mvvm.Icons;assembly=HLab.Mvvm"
+             xmlns:icons="clr-namespace:HLab.Mvvm.Wpf.Icons;assembly=HLab.Mvvm.Wpf"
              mc:Ignorable="d" 
              d:DesignHeight="50" d:DesignWidth="800">
     <Grid>
@@ -40,24 +40,16 @@
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdApply}">Apply</Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CmdCancel}">Cancel</Button>-->
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CopyCommand}" ToolTip="Copy config to clipboard">
-                <icons:IconView 
-                    AssemblyName="LittleBigMouse.Plugin.Location"
-                    SourceName="IconCopyConfig"/>
+                <icons:IconView Id="Icons/IconCopyConfig"/>
             </Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}" ToolTip="Apply/Start">
-                <icons:IconView 
-                    AssemblyName="LittleBigMouse.Plugin.Location"
-                    SourceName="IconStart"/>
+                <icons:IconView Id="Icons/IconStart"/>
             </Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StopCommand}" ToolTip="Stop">
-                <icons:IconView 
-                    AssemblyName="LittleBigMouse.Plugin.Location"
-                    SourceName="IconStop"/>
+                <icons:IconView Id="Icons/IconStop"/>
             </Button>
             <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding UndoCommand}" ToolTip="Undo">
-                <icons:IconView Height="20"
-                    AssemblyName="LittleBigMouse.Plugin.Location"
-                    SourceName="IconUndo"/>
+                <icons:IconView Height="20" Id="Icons/IconUndo"/>
             </Button>
         </StackPanel>
 

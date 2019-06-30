@@ -20,31 +20,59 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System;
 using System.Windows;
+using HLab.Core.Annotations;
+using HLab.DependencyInjection.Annotations;
 using HLab.Mvvm;
-using HLab.Plugin;
+using HLab.Mvvm.Annotations;
 using HLab.Windows.Monitors;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Control.Core
 {
-    public class MainService : PluginModule<MainService>
+    public class MainBootloader : IPreBootloader
     {
-        public MainViewModel MainViewModel { get; } = new MainViewModel();
-        public override void Register()
+        [Import]
+        public MainBootloader(MainService mainService, IMvvmService mvvmService)
         {
-            var viewModel = D.MainViewModel;
+            _mainService = mainService;
+            _mvvmService = mvvmService;
+        }
 
-            var m = MonitorsService.D;
+        private readonly MainService _mainService;
+        private readonly IMvvmService _mvvmService;
 
-            var config = new ScreenConfig(m);
+        [Import] private Func<ScreenConfig,MultiScreensViewModel> _getViewModel;
 
-            viewModel.Config = config;
-            viewModel.Presenter = new  MultiScreensViewModel { Config = config };
+        public void Load()
+        {
+            var viewModel = _mainService.MainViewModel;
 
-            var view = (Window)MvvmService.D.MainViewModeContext.GetView<ViewModeDefault>(viewModel, typeof(IViewClassDefault));
+            viewModel.Config = _mainService.Config;
+
+            viewModel.Presenter = _getViewModel(_mainService.Config);
+
+            var view = (Window)_mvvmService.MainContext.GetView<ViewModeDefault>(viewModel, typeof(IViewClassDefault));
 
             view.Show();
         }
+
+    }
+
+    [Export(typeof(MainService)),Singleton]
+    public class MainService
+    {
+        public ScreenConfig Config {get;}
+        public MainViewModel MainViewModel { get; }
+
+        [Import]
+        public MainService(MainViewModel mainViewModel, IMvvmService mvvmService, IMonitorsService monitorsService, ScreenConfig config)
+        {
+           MainViewModel = mainViewModel;
+           Config = config;
+        }
+
     }
 }

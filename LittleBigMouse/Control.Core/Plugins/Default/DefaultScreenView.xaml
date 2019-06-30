@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:converters="clr-namespace:HLab.Mvvm.Converters;assembly=HLab.Mvvm"
+             xmlns:converters="clr-namespace:HLab.Mvvm.Wpf.Converters;assembly=HLab.Mvvm.Wpf"
              mc:Ignorable="d" 
               d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
@@ -57,7 +57,7 @@
         <!-- PNP Code -->
         <StackPanel VerticalAlignment="{Binding PnpNameVerticalAlignment}" Margin="5" >
         <Label Padding="0"
-               Content="{Binding Path=Model.PnpCode, FallbackValue=XXX000}"  
+               Content="{Binding Path=Model.Monitor.PnpCode, FallbackValue=XXX000}"  
                Foreground="GhostWhite"/>
             <Label 
                 Padding="0"

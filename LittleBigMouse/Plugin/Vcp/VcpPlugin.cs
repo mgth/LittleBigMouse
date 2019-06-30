@@ -20,22 +20,35 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System.Xml.Serialization;
+using HLab.Core.Annotations;
+using HLab.DependencyInjection.Annotations;
 using HLab.Mvvm;
-using HLab.Mvvm.Icons;
-using HLab.Plugin;
+using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Wpf.Icons;
 using LittleBigMouse.Control.Core;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
     class ViewModeScreenVcp : ViewMode { }
 
-    class VcpPlugin : PluginModule<VcpPlugin>
+    class VcpPlugin : IPreBootloader
     {
-        public override void Register()
+        private readonly IIconService _iconService;
+        private readonly MainService _mainService;
+
+        [Import] public VcpPlugin(IIconService iconService, MainService mainService)
         {
-            MainService.D.MainViewModel.AddButton(IconService.D.GetIcon("IconVcp"),"Vcp control",
-                () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenVcp),
-                () => MainService.D.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
+            _iconService = iconService;
+            _mainService = mainService;
+        }
+
+        public void Load()
+        {
+            _mainService.MainViewModel.AddButton(_iconService.GetIcon("Icons/IconVcp"),"Vcp control",
+                () => _mainService.MainViewModel.Presenter.ViewMode = typeof(ViewModeScreenVcp),
+                () => _mainService.MainViewModel.Presenter.ViewMode = typeof(ViewModeDefault));
         }
     }
 }

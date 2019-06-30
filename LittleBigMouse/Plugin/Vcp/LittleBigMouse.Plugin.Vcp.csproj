@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LittleBigMouse.Plugin.Vcp</RootNamespace>
     <AssemblyName>LittleBigMouse.Plugin.Vcp</AssemblyName>
-    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -47,10 +48,45 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
   <ItemGroup>
+    <Reference Include="ControlzEx, Version=4.0.0.0, Culture=neutral, PublicKeyToken=69f1c32f803d307e, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\ControlzEx.4.0.0-alpha0290\lib\net462\ControlzEx.dll</HintPath>
+    </Reference>
+    <Reference Include="HLab.Base.Wpf">
+      <HintPath>..\..\..\..\HLab\HLab.Base.Wpf\bin\Debug\HLab.Base.Wpf.dll</HintPath>
+    </Reference>
+    <Reference Include="HLab.Notify.Annotations">
+      <HintPath>..\..\..\..\HLab\HLab.Notify.Annotations\bin\x64\Debug\netstandard2.0\HLab.Notify.Annotations.dll</HintPath>
+    </Reference>
+    <Reference Include="MahApps.Metro, Version=2.0.0.0, Culture=neutral, PublicKeyToken=51482d6f650b2b3f, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\MahApps.Metro.2.0.0-alpha0316\lib\net47\MahApps.Metro.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Xaml.Behaviors, Version=1.0.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\Microsoft.Xaml.Behaviors.Wpf.1.0.1\lib\net45\Microsoft.Xaml.Behaviors.dll</HintPath>
+    </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="System.Xaml" />
@@ -61,12 +97,34 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
+    <Reference Include="Xceed.Wpf.AvalonDock, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock.Themes.Aero, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.Themes.Aero.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock.Themes.Metro, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.Themes.Metro.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock.Themes.VS2010, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.AvalonDock.Themes.VS2010.dll</HintPath>
+    </Reference>
+    <Reference Include="Xceed.Wpf.Toolkit, Version=3.5.0.0, Culture=neutral, PublicKeyToken=3e4669d2f30244f4, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\Packages\Extended.Wpf.Toolkit.3.5.0\lib\net40\Xceed.Wpf.Toolkit.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ColorPicker.xaml.cs">
+      <DependentUpon>ColorPicker.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="ComponentSlider.xaml.cs">
+      <DependentUpon>ComponentSlider.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Curve.xaml.cs">
       <DependentUpon>Curve.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TestViewModel.cs" />
     <Compile Include="VcpControlView.xaml.cs">
       <DependentUpon>VcpControlView.xaml</DependentUpon>
     </Compile>
@@ -75,12 +133,20 @@
     <Compile Include="VcpScreenView.xaml.cs">
       <DependentUpon>VcpScreenView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="VcpScreenViewModel.cs" />
+    <Compile Include="ScreenVcpViewModel.cs" />
     <Compile Include="VcpSlider.xaml.cs">
       <DependentUpon>VcpSlider.xaml</DependentUpon>
     </Compile>
   </ItemGroup>
   <ItemGroup>
+    <Page Include="ColorPicker.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="ComponentSlider.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Curve.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -99,37 +165,49 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Hlab\Argyll\HLab.Argyll.csproj">
+    <ProjectReference Include="..\..\..\..\HLab.System\Argyll\HLab.Argyll.csproj">
       <Project>{444f1148-7014-469b-8809-834feda0f730}</Project>
       <Name>HLab.Argyll</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\Base\HLab.Base.csproj">
-      <Project>{5933D6A9-2F3C-4447-873F-438096DBCAD2}</Project>
-      <Name>HLab.Base</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
-      <Project>{543a85ab-37e8-4db6-b51a-07b719a4df2e}</Project>
+    <ProjectReference Include="..\..\..\..\HLab.System\MonitorVcp\HLab.Windows.MonitorVcp.csproj">
+      <Project>{543A85AB-37E8-4DB6-B51A-07B719A4DF2E}</Project>
       <Name>HLab.Windows.MonitorVcp</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\Mvvm\HLab.Mvvm.csproj">
+    <ProjectReference Include="..\..\..\..\HLab\HLab.Base\HLab.Base.csproj">
+      <Project>{EDC4FE17-EDAE-42B1-80E4-FB5273F43D11}</Project>
+      <Name>HLab.Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\HLab\HLab.Core.Annotations\HLab.Core.Annotations.csproj">
+      <Project>{10C3B514-5F74-4428-A36B-7B9B1BB5C789}</Project>
+      <Name>HLab.Core.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\HLab\HLab.DependencyInjection.Annotations\HLab.DependencyInjection.Annotations.csproj">
+      <Project>{EE881C21-1E2A-41A0-ADB9-177B53435699}</Project>
+      <Name>HLab.DependencyInjection.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj">
+      <Project>{17CFFA1D-3C93-4ECF-9B0A-27DE5D71DD90}</Project>
+      <Name>HLab.Mvvm.Annotations</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj">
+      <Project>{8FF8B90D-3611-48E3-9355-E0B776E882B1}</Project>
+      <Name>HLab.Mvvm.Wpf</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj">
       <Project>{a3eaaa24-5913-471e-adb1-402f64536a63}</Project>
       <Name>HLab.Mvvm</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\Notify-4\HLab.Notify.4.csproj">
-      <Project>{593cb07f-8504-490a-96d6-2cc6034487d7}</Project>
-      <Name>HLab.Notify.4</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\HLab\Windows.Monitors\HLab.Windows.Monitors.csproj">
+    <ProjectReference Include="..\..\..\..\HLab.System\Windows.Monitors\HLab.Windows.Monitors.csproj">
       <Project>{0C90E881-B94C-4DC5-B2D0-FF6DC7601DE4}</Project>
       <Name>HLab.Windows.Monitors</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj">
+      <Project>{8573F088-69E7-44E4-A774-4130E568FD56}</Project>
+      <Name>HLab.Notify.PropertyChanged</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Control.Core\LittleBigMouse.Control.Core.csproj">
       <Project>{0d67ead5-811d-4933-9240-d6a2c0e98f34}</Project>
       <Name>LittleBigMouse.Control.Core</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\Hlab\Plugin\HLab.Plugin.csproj">
-      <Project>{E34CC1C9-293C-4455-B3DD-5A582095432B}</Project>
-      <Name>HLab.Plugin</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\ScreenConfig\LittleBigMouse.ScreenConfig.csproj">
       <Project>{3FBBF289-0B82-4089-80CA-67977A808C5D}</Project>
@@ -143,9 +221,15 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="lbm.licenseheader" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Icons\IconVcp.svg" />
+    <Resource Include="Icons\IconVcp.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Icons\colors.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

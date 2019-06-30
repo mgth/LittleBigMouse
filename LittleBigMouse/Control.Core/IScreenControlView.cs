@@ -21,10 +21,11 @@
 	  http://www.mgth.fr
 */
 using HLab.Mvvm;
+using HLab.Mvvm.Annotations;
 
 namespace LittleBigMouse.Control.Core
 {
-    public interface IScreenControlView : IViewClassDefault
+    public interface IScreenControlView : IViewClass
     {
     }
 }

@@ -2,9 +2,9 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:LittleBigMouse.LocationPlugin.Plugins.Location"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:rulers1="clr-namespace:LittleBigMouse.LocationPlugin.Plugins.Location.Rulers"
+             xmlns:rulers="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location.Rulers"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300"
             WindowStyle="None"
@@ -27,11 +27,11 @@
             <RowDefinition Height="{Binding RulerHeight}"/>
         </Grid.RowDefinitions>
 
-        <rulers1:RulerView HorizontalAlignment="Left" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" DataContext="{Binding TopRuler}"/>
-        <rulers1:RulerView HorizontalAlignment="Left" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" DataContext="{Binding BottomRuler}"/>
+        <rulers:RulerView HorizontalAlignment="Left" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" DataContext="{Binding TopRuler}"/>
+        <rulers:RulerView HorizontalAlignment="Left" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" DataContext="{Binding BottomRuler}"/>
         
-        <rulers1:RulerView VerticalAlignment="Top" Grid.Row="0" Grid.Column="0" Grid.RowSpan="3" DataContext="{Binding LeftRuler}"/>
-        <rulers1:RulerView VerticalAlignment="Top" Grid.Row="0" Grid.Column="2"  Grid.RowSpan="3" DataContext="{Binding RightRuler}"/>
+        <rulers:RulerView VerticalAlignment="Top" Grid.Row="0" Grid.Column="0" Grid.RowSpan="3" DataContext="{Binding LeftRuler}"/>
+        <rulers:RulerView VerticalAlignment="Top" Grid.Row="0" Grid.Column="2"  Grid.RowSpan="3" DataContext="{Binding RightRuler}"/>
         
     </Grid>
 </Window>

@@ -24,34 +24,32 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
-using System.Runtime.Serialization;
 using System.Windows;
-using System.Xml;
-using System.Xml.Serialization;
+using System.Windows.Input;
+using HLab.Base.Extensions;
+using HLab.DependencyInjection.Annotations;
 using HLab.Mvvm;
 using HLab.Mvvm.Commands;
-using HLab.Notify;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using HLab.Windows.Monitors;
-using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
 using Newtonsoft.Json;
-using Formatting = System.Xml.Formatting;
-using Tester = LittleBigMouse.Plugin.Location.Plugins.Location.Rulers.Tester;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Location
 {
-    class LocationControlViewModel : IViewModel<ScreenConfig>
+    class LocationControlViewModel : ViewModel<LocationControlViewModel,ScreenConfig>
     {
-        public ScreenConfig Model => this.GetModel();
-        public event PropertyChangedEventHandler PropertyChanged
+        private readonly IMonitorsService _monitorsService;
+
+        public LocationControlViewModel()
         {
-            add => this.Add(value);
-            remove => this.Remove(value);
         }
 
-        [TriggedOn(nameof(Model))]
-        public ScreenConfig Config => this.Get(()=>Model);
+
+
+        [TriggerOn(nameof(Model))]
+        public ScreenConfig Config => Model;
 
 
         private void Client_StateChanged()
@@ -64,67 +62,98 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
             [JsonProperty]
             public ScreenConfig Config { get; set; }
             [JsonProperty]
-            public ObservableCollection<Monitor> Monitors { get; set; }
+            public ObservableCollectionSafe<Monitor> Monitors { get; set; }
         }
 
-        public ModelCommand CopyCommand => this.GetCommand(() =>
+        public ICommand CopyCommand => _copyCommand.Get();
+        private readonly IProperty<ICommand> _copyCommand 
+            = H.Property<ICommand>(nameof(CopyCommand), c =>c
+        .Command(
+            e =>
             {
-                var export = new JsonExport{Config=Model,Monitors = MonitorsService.D.Monitors};
+                var export = new JsonExport
+                {
+                    Config = e.Model,
+                    Monitors = e._monitorsService.Monitors
+                };
                 var json = JsonConvert.SerializeObject(export, Newtonsoft.Json.Formatting.Indented);
                 Clipboard.SetText(json);
             },
-        ()=>true
-        );
+            e => true)
+       );
 
         public String StatStopLabel => LittleBigMouseClient.Client.Running()?"Stop":"Start";
 
-        [TriggedOn(nameof(Config),"Saved")]
-        public ModelCommand SaveCommand => this.GetCommand(() =>
-            {
-                Config.Save();
-            },
-        ()=>Config.Saved == false
-        );
-        [TriggedOn(nameof(Config), "Saved")]
-        public ModelCommand UndoCommand => this.GetCommand(() =>
-            {
-                Config.Load();
-            },
-            () => Config.Saved == false
-        );
+        
+        public ICommand SaveCommand => _saveCommand.Get();
+        private readonly IProperty<ICommand> _saveCommand = H.Property< ICommand>(
+            nameof(SaveCommand), c => c
+                .On(nameof(Config), "Saved")               
+                .Command(
+                e => { e.Config.Save(); },
+                e => e.Config.Saved == false));
 
-        [TriggedOn(nameof(Running))]
-        [TriggedOn(nameof(Config),"Saved")]
-        public ModelCommand StartCommand => this.GetCommand(
-            () =>
-            {
-                Config.Enabled = true;
 
-                if (!Config.Saved)
-                    Config.Save();
 
-                //LittleBigMouseClient.Client.LoadConfig();
+        public ICommand UndoCommand => _undoCommand.Get();
+        private readonly IProperty<ICommand> _undoCommand = H.Property< ICommand>(
+            nameof(UndoCommand), c => c
+                .On(nameof(Config), "Saved")
+                .Command(
+                    e => { e.Config.Load(); },
+                    e => e.Config.Saved == false));
 
-                //if (!Running)
-                    LittleBigMouseClient.Client.Start();
+        public ICommand StartCommand => _startCommand.Get();
+        private readonly IProperty<ICommand> _startCommand = H.Property< ICommand>(
+            nameof(StartCommand), c => c
+                .On(e => e.Config.Saved)
+                .On(e => e.Running)
+                .NotNull(e => e.Config)
+                .Command(
+                    e => {
+                        e.Config.Enabled = true;
 
-                Client_StateChanged();
-            }, 
-            () => !(Running && Config.Saved));
+                        if (!e.Config.Saved)
+                            e.Config.Save();
 
-        [TriggedOn(nameof(Running))]
-        public ModelCommand StopCommand => this.GetCommand(
-            () => {
-                LittleBigMouseClient.Client.Stop();
-                Client_StateChanged();
-            },
-            () => Running);
+                        //LittleBigMouseClient.Client.LoadConfig();
 
+                        //if (!Running)
+                        LittleBigMouseClient.Client.Start();
+
+                        e.Client_StateChanged();
+                    },
+                    e => !(e.Running && (e.Config?.Saved??true))));
+
+
+
+
+
+
+
+
+        public ICommand StopCommand => _stopCommand.Get();
+        private readonly IProperty<ICommand> _stopCommand = H.Property< ICommand>(
+            nameof(StopCommand), c => c
+                .On(nameof(Running))
+                .Command(
+                    e => {
+                        LittleBigMouseClient.Client.Stop();
+                        e.Client_StateChanged();
+                    },
+                    e => e.Running ));
+
+        private readonly IProperty<bool> _running = H.Property< bool>(nameof(Running));
         public bool Running {
-            get => this.Get<bool>();
-            private set => this.Set(value); }
+            get => _running.Get();
+            private set => _running.Set(value); }
 
-        public bool LiveUpdate { get => this.Get<bool>(); set => this.Set(value); }
+        private readonly IProperty<bool> _liveUpdate = H.Property< bool>(nameof(LiveUpdate));
+        public bool LiveUpdate
+        {
+            get => _liveUpdate.Get();
+            set => _liveUpdate.Set(value);
+        }
 
         public bool LoadAtStartup
         {
@@ -136,8 +165,8 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
         }
 
 
-        [TriggedOn(nameof(LiveUpdate))]
-        [TriggedOn(nameof(Model),"Saved")]
+        [TriggerOn(nameof(LiveUpdate))]
+        [TriggerOn(nameof(Model),"Saved")]
         private void DoLiveUpdate()
         {
             if (LiveUpdate && !Config.Saved)
@@ -146,12 +175,13 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
             }
         }
 
-
-        public LocationControlViewModel()
+        [Import(InjectLocation.AfterConstructor)]
+        public LocationControlViewModel(IMonitorsService monitorsService)
         {
+            _monitorsService = monitorsService;
             LittleBigMouseClient.Client.StateChanged += Client_StateChanged;
+            Initialize();
             Client_StateChanged();
-            this.SubscribeNotifier();
         }
     }
 }

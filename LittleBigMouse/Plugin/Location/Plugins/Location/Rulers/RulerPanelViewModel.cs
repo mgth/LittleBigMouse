@@ -20,54 +20,61 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System;
 using System.Windows;
-using HLab.Mvvm;
-using HLab.Notify;
-using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
+using HLab.Notify.Annotations;
+using HLab.Notify.PropertyChanged;
 using LittleBigMouse.ScreenConfigs;
 
-namespace LittleBigMouse.LocationPlugin.Plugins.Location.Rulers
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
 {
-    public class RulerPanelViewModel : NotifierObject
+    public class RulerPanelViewModel : N<RulerPanelViewModel>
     {
-        public RulerPanelViewModel(Screen screen, Screen drawOn) : base()
+        public RulerPanelViewModel(Screen screen, Screen drawOn)
         {
-            using (this.Suspend())
-            {
-                Screen = screen;
-                DrawOn = drawOn;                
-            }
+            Screen = screen;
+            DrawOn = drawOn;
+            TopRuler = new RulerViewModel(Screen, DrawOn, RulerViewModel.RulerSide.Top);
+            RightRuler = new RulerViewModel(Screen, DrawOn, RulerViewModel.RulerSide.Right);
+            BottomRuler = new RulerViewModel(Screen, DrawOn, RulerViewModel.RulerSide.Bottom);
+            LeftRuler = new RulerViewModel(Screen, DrawOn, RulerViewModel.RulerSide.Left);
+            Initialize();
         }
+        public Screen Screen { get; }
+        public Screen DrawOn { get; }
+        public RulerViewModel TopRuler { get; }
+        public RulerViewModel RightRuler { get; }
+        public RulerViewModel BottomRuler { get; }
+        public RulerViewModel LeftRuler { get; }
+
+
+        private readonly IProperty<bool> _enabled =H.Property<bool>();
         public bool Enabled
         {
-            get => this.Get<bool>(); set => this.Set(value);
+            get => _enabled.Get();
+            set => _enabled.Set(value);
         }
-        public Screen DrawOn
-        {
-            get => this.Get<Screen>();
-            set => this.Set(value);
-        }
-        public Screen Screen
-        {
-            get => this.Get<Screen>();
-            set => this.Set(value);
-        }
+
         public Visibility Visibility
         {
-            get => this.Get<Visibility>(); set => this.Set(value);
+            get => _visibility.Get();
+            set => _visibility.Set(value);
         }
+        private readonly IProperty<Visibility> _visibility 
+            = H.Property<Visibility>(nameof(Visibility));
 
-        public RulerViewModel TopRuler => this.Get(()=>new RulerViewModel(Screen,DrawOn,RulerViewModel.RulerSide.Top));
-        public RulerViewModel RightRuler => this.Get(()=>new RulerViewModel(Screen,DrawOn,RulerViewModel.RulerSide.Right));
-        public RulerViewModel BottomRuler => this.Get(()=>new RulerViewModel(Screen,DrawOn,RulerViewModel.RulerSide.Bottom));
-        public RulerViewModel LeftRuler => this.Get(()=>new RulerViewModel(Screen,DrawOn,RulerViewModel.RulerSide.Left));
+        
+        public double RulerWidth => _rulerWidth.Get();
+        private readonly IProperty<double> _rulerWidth = H.Property<double>(c => c
+            .On(e => e.DrawOn.MmToDipRatio.X)
+            .Set(e => 30 * e.DrawOn.MmToDipRatio.X)
+        );
 
-        [TriggedOn(nameof(DrawOn), "MmToDipRatio", "X")]
-        public double RulerWidth => this.Get(() //=> 0);
-            => 30 * DrawOn.MmToDipRatio.X);
-
-        [TriggedOn(nameof(DrawOn), "MmToDipRatio", "Y")]
-        public double RulerHeight => this.Get(()
-            => 30 * DrawOn.MmToDipRatio.Y);
+        public double RulerHeight => _rulerHeight.Get();
+        private readonly IProperty<double> _rulerHeight = H.Property<double>(c => c
+            .On(e => e.DrawOn.MmToDipRatio.Y)
+            .Set(e => 30 * e.DrawOn.MmToDipRatio.Y)
+        );
     }
 }

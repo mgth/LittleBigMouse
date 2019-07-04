@@ -47,11 +47,13 @@ namespace LittleBigMouse.Plugin.Vcp
         {
             Initialize();
 
-            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circles).Set(Color.FromRgb(5,5,5), Colors.Black));
-            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circles).Set(Color.FromRgb(250,250,250),Colors.White ));
+            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circles).Set(Colors.White, Colors.Black));
             TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circle).Set(Color.FromRgb(0xFF,0x80,0x00),Colors.Black) );
             TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Gradient).SetRgb() );
-            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Gamma).Set(Orientation.Vertical).SetRgb() );
+            TestPatterns.Add(_getButtonPattern(this)
+                .Set(TestPatternType.Gamma)
+                .Set(Colors.White,Colors.Black)
+                .Set(Orientation.Vertical).SetRgb());
 
         }
 

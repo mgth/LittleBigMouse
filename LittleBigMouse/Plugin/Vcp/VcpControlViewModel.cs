@@ -20,8 +20,7 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using HLab.Mvvm;
-using HLab.Notify;
+
 using HLab.Notify.PropertyChanged;
 
 namespace LittleBigMouse.Plugin.Vcp

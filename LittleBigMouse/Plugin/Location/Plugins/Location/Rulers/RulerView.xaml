@@ -3,8 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:rulers="clr-namespace:LittleBigMouse.LocationPlugin.Plugins.Location.Rulers"
-             xmlns:rulers1="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location.Rulers"
+             xmlns:rulers="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location.Rulers"
              mc:Ignorable="d"
         Background="Transparent"
         MouseMove="Window_MouseMove"
@@ -19,10 +18,12 @@
    
     -->
 
-    <Border x:Name="Border"
+    <Grid><Border x:Name="Border"
         Opacity="1" 
         Background="{Binding Transparent}" 
-            >
-        <rulers1:RulerViewTop/>
-    </Border>
+            />
+        
+        <rulers:RulerViewTop/>
+    
+    </Grid>
 </UserControl>

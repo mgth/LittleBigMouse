@@ -28,9 +28,9 @@ using HLab.Mvvm;
 using HLab.Notify;
 using HLab.Notify.Annotations;
 using HLab.Notify.PropertyChanged;
-using LittleBigMouse.LocationPlugin.Plugins.Location.Rulers;
 using LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
 using LittleBigMouse.ScreenConfigs;
+using RulerPanelView = LittleBigMouse.Plugin.Location.Plugins.Location.Rulers.RulerPanelView;
 using RulerView = LittleBigMouse.Plugin.Location.Plugins.Location.Rulers.RulerView;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Location
@@ -39,7 +39,6 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
     {
         public LocationScreenViewModel()
         {
-            Initialize();
         }
 
         public ScreenLocationPlugin Plugin
@@ -96,16 +95,13 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
 
                 var panel = new RulerPanelView
                 {
-                    Left = s.Bounds.Left,
-                    Top = s.Bounds.Top,
+                    Left = s.Bounds.Left+s.Bounds.Width/4, // if <=Left or >=Left+Width/2  panel maximize to wrong screen
+                    Top = s.Bounds.Top+s.Bounds.Height/4,
                     Width = 0, //s.Bounds.Width/* - 20*/,
                     Height = 0, //s.Bounds.Height/* - 20*/,
                     DataContext = new RulerPanelViewModel(Model,screen)
                 };
                 panel .Show();
-
-                panel.Height = s.Bounds.Height/* - 20*/;
-                panel.Width = s.Bounds.Width/* - 20*/;
 
                 panel.WindowState = WindowState.Maximized;
 
@@ -113,53 +109,60 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
             }
         }
 
-        private readonly IProperty<Brush> _rulerForegroundColor = H.Property<Brush>();
         public Brush RulerForegroundColor => _rulerForegroundColor.Get();
-        [TriggerOn(nameof(Ruler))]
-        [TriggerOn(nameof(RulerMouseOver))]
-        private void _setRulerForegroundColor() => _rulerForegroundColor.Set(Ruler ? new SolidColorBrush(Colors.White): RulerMouseOver?new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.Black));
+        private readonly IProperty<Brush> _rulerForegroundColor = H.Property<Brush>(c => c
+            .On(e => e.Ruler)
+            .On(e => e.RulerMouseOver)
+            .Set(e => e.Ruler ? new SolidColorBrush(Colors.White) : e.RulerMouseOver ? new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.Black))
+        );
 
-        private readonly IProperty<Brush> _rulerBackgroundColor = H.Property<Brush>();
         public Brush RulerBackgroundColor => _rulerBackgroundColor.Get();
-        [TriggerOn(nameof(Ruler))]
-        [TriggerOn(nameof(RulerMouseOver))]
-        private void _set_RulerBackgroundColor() => _rulerBackgroundColor.Set(RulerMouseOver ? new SolidColorBrush(Colors.DarkBlue) : Ruler ? new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.White));
+        private readonly IProperty<Brush> _rulerBackgroundColor = H.Property<Brush>(c => c
+            .On(e => e.Ruler)
+            .On(e => e.RulerMouseOver)
+            .Set(e => e.RulerMouseOver ? new SolidColorBrush(Colors.DarkBlue) : e.Ruler ? new SolidColorBrush(Colors.Black) : new SolidColorBrush(Colors.White))
+        );
 
 
-        [TriggerOn(nameof(Model),"PhysicalRatio","X")]
         public double RatioX
         {
-            get => Model.PhysicalRatio.X * 100;
+            get => _ratioX.Get();
             set
             {
                 Model.PhysicalRatio.X = value/100;
                 Model.Config.Compact();
             }
         }
+        private readonly IProperty<double> _ratioX = H.Property<double>(c => c
+            .On(e => e.Model.PhysicalRatio.X)
+            .Set(e => e.Model.PhysicalRatio.X * 100)
+        );
 
-        [TriggerOn(nameof(Model), "PhysicalRatio","Y")]
         public double RatioY
         {
-            get => Model.PhysicalRatio.Y * 100;
+            get => _ratioY.Get();
             set
             {
                 Model.PhysicalRatio.Y = value / 100;
                 Model.Config.Compact();
             }
         }
+        private readonly IProperty<double> _ratioY = H.Property<double>(c => c
+            .On(e => e.Model.PhysicalRatio.Y)
+            .Set(e => e.Model.PhysicalRatio.Y * 100)
+        );
 
-        [TriggerOn(nameof(Model), "Orientation")]
-        public VerticalAlignment DpiVerticalAlignment
-            => Model.Orientation == 3 ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+        public VerticalAlignment DpiVerticalAlignment => _dpiVerticalAlignment.Get();
+        private readonly IProperty<VerticalAlignment> _dpiVerticalAlignment = H.Property<VerticalAlignment>(c => c
+            .On(e => e.Model.Orientation)
+            .Set(e => e.Model.Orientation == 3 ? VerticalAlignment.Bottom : VerticalAlignment.Top)
+        );
 
-        [TriggerOn(nameof(Model), "Orientation")]
-        public VerticalAlignment PnpNameVerticalAlignment
-            => Model.Orientation == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Top;
-
-
-
-
-
+        public VerticalAlignment PnpNameVerticalAlignment => _pnpNameVerticalAlignment.Get();
+        private readonly IProperty<VerticalAlignment> _pnpNameVerticalAlignment = H.Property<VerticalAlignment>(c => c
+            .On(e => e.Model.Orientation)
+            .Set(e => e.Model.Orientation == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Top)
+        );
 
     }
 }

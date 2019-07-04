@@ -4,12 +4,14 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:icons="clr-namespace:HLab.Mvvm.Wpf.Icons;assembly=HLab.Mvvm.Wpf"
+             xmlns:location="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location"
              mc:Ignorable="d" 
-             d:DesignHeight="50" d:DesignWidth="800">
+             d:DesignHeight="50" d:DesignWidth="800"
+             d:DataContext="{d:DesignInstance Type=location:LocationControlViewModel, IsDesignTimeCreatable=True}">
     <Grid>
         <StackPanel  Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
             <!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
-            <StackPanel Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right">
+            <StackPanel Margin="5" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right">
                 <!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                     <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
                 </StackPanel>-->

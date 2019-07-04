@@ -283,6 +283,9 @@ namespace LittleBigMouse.Control.Core
 
         public Viewbox GetLogo()
         {
+            var dev = Model?.Monitor?.AttachedDevice?.Parent?.DeviceString;
+            if(dev !=null && dev.ToLower().Contains("spacedesk")) return (Viewbox)Application.Current.FindResource("LogoSpacedesk"); 
+
             if (Model?.Monitor?.Edid?.ManufacturerCode == null) return null;
 
                 switch (Model.Monitor.Edid.ManufacturerCode.ToLower())

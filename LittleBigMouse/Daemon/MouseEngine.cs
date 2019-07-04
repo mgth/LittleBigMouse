@@ -121,7 +121,7 @@ namespace LittleBigMouse_Daemon
             if (Config.AdjustSpeed)
                 ZoneChanged += AdjustSpeed;
 
-            if(Config.HomeCinema)
+            if (Config.HomeCinema)
                 ZoneChanged += HomeCinema;
 
             Hook.Hook();
@@ -202,8 +202,8 @@ namespace LittleBigMouse_Daemon
                 foreach (var screen in Config.AllScreens)
                 {
                     var main = _zones.Main.FirstOrDefault(e => ReferenceEquals(e.Screen, screen));
-                    _zones.Add(new Zone(screen,main,-Config.PhysicalOutsideBounds.Width,0));
-                    _zones.Add(new Zone(screen,main,Config.PhysicalOutsideBounds.Width,0));
+                    _zones.Add(new Zone(screen, main, -Config.PhysicalOutsideBounds.Width, 0));
+                    _zones.Add(new Zone(screen, main, Config.PhysicalOutsideBounds.Width, 0));
                 }
             }
 
@@ -211,9 +211,9 @@ namespace LittleBigMouse_Daemon
             {
                 foreach (var screen in Config.AllScreens)
                 {
-                    var main = _zones.Main.FirstOrDefault(e => ReferenceEquals(e.Screen,screen));
-                    _zones.Add(new Zone(screen,main, 0,-Config.PhysicalOutsideBounds.Height));
-                    _zones.Add(new Zone(screen,main, 0,Config.PhysicalOutsideBounds.Height));
+                    var main = _zones.Main.FirstOrDefault(e => ReferenceEquals(e.Screen, screen));
+                    _zones.Add(new Zone(screen, main, 0, -Config.PhysicalOutsideBounds.Height));
+                    _zones.Add(new Zone(screen, main, 0, Config.PhysicalOutsideBounds.Height));
                 }
             }
         }
@@ -337,7 +337,7 @@ namespace LittleBigMouse_Daemon
         private void MouseMoveStraight(object sender, HookMouseEventArg e)
         {
             //TODO : if (e.Clicked) return;
-            var pIn = e.Point; 
+            var pIn = e.Point;
 
             if (_oldZone.ContainsPx(pIn))
             {
@@ -363,8 +363,8 @@ namespace LittleBigMouse_Daemon
 
                     if (dy < 0) continue;
                     if (dy > minDy && minDy > 0) continue;
-                         
-                    
+
+
                     // = pInMm + new Vector(0, dy);
                     minDy = dy;
                     zoneOut = zone;
@@ -380,7 +380,7 @@ namespace LittleBigMouse_Daemon
                     if (dy > 0) continue;
                     if (dy < minDy && minDy < 0) continue;
 
-                    minDy= dy;
+                    minDy = dy;
                     zoneOut = zone;
                 }
             }
@@ -421,7 +421,7 @@ namespace LittleBigMouse_Daemon
                 return;
             }
 
-            var pOut = zoneOut.Mm2Px(new Point(pInMm.X+minDx,pInMm.Y+minDy));
+            var pOut = zoneOut.Mm2Px(new Point(pInMm.X + minDx, pInMm.Y + minDy));
             pOut = zoneOut.InsidePx(pOut);
             _oldZone = zoneOut.Main;
             _oldPoint = pOut;
@@ -448,12 +448,12 @@ namespace LittleBigMouse_Daemon
 
                 Thread t = new Thread(() =>
                 {
-                SwitchDesktop(hwnd);
+                    SwitchDesktop(hwnd);
                     var b = SetThreadDesktop(hwnd);
 
                     var b2 = LbmMouse.MouseEvent(
-                        NativeMethods.MOUSEEVENTF.ABSOLUTE | NativeMethods.MOUSEEVENTF.MOVE 
-                        |NativeMethods.MOUSEEVENTF.VIRTUALDESK
+                        NativeMethods.MOUSEEVENTF.ABSOLUTE | NativeMethods.MOUSEEVENTF.MOVE
+                        | NativeMethods.MOUSEEVENTF.VIRTUALDESK
                         , pOut.X, pOut.Y);
                     if (b2 == 0)
                     {
@@ -463,7 +463,7 @@ namespace LittleBigMouse_Daemon
                     //LbmMouse.CursorPos = pOut;
                     var b3 = NativeMethods.SetCursorPos((int)pOut.X, (int)pOut.Y);
 
-                    if (b3==false)
+                    if (b3 == false)
                     {
                         var s = NativeMethods.GetLastError();
                     }
@@ -508,56 +508,54 @@ namespace LittleBigMouse_Daemon
         private void MouseMoveCross(object sender, HookMouseEventArg e)
         {
             // TODO : if (e.Clicked) return;
-            var pIn = e.Point; //new Point(e.X, e.Y);
+            var pIn = e.Point;
 
             if (_oldZone.ContainsPx(pIn))
             {
                 _oldPoint = pIn;
-                // TODO : e.Handled = false;
+                e.Handled = false;
                 return;
             }
-            //if (_count >= 0) _timer.Start();
-            //try
-            //{
-            Point oldpInMm = _oldZone.Px2Mm(_oldPoint);
-                Point pInMm = _oldZone.Px2Mm(pIn);
-                Zone zoneOut = null;
 
-                    var seg = new Segment(oldpInMm, pInMm);
-                    var minDist = double.PositiveInfinity;
+            var pInMmOld = _oldZone.Px2Mm(_oldPoint);
+            var pInMm = _oldZone.Px2Mm(pIn);
+            Zone zoneOut = null;
 
-                    var pOutInMm = pInMm;
+            var trip = new Segment(pInMmOld, pInMm);
+            var minDist = double.PositiveInfinity;
 
-                    foreach (var zone in _zones.All.Where(z => !ReferenceEquals(z, _oldZone)))
-                    {
-                        foreach (var p in seg.Line.Intersect(zone.Mm))
-                        {
-                            var travel = new Segment(oldpInMm, p);
-                            if (!travel.Rect.Contains(pInMm)) continue;
-                            var dist = travel.SizeSquared;
-                            if (dist > minDist) continue;
+            var pOutInMm = pInMm;
 
-                            minDist = dist;
-                            zoneOut = zone;
-                            pOutInMm = p;
-                        }
-                    }
+            foreach (var zone in _zones.All.Where(z => !ReferenceEquals(z, _oldZone)))
+            {
+                foreach (var p in trip.Line.Intersect(zone.Mm))
+                {
+                    var travel = new Segment(pInMmOld, p);
+                    if (!travel.Rect.Contains(pInMm)) continue;
+                    var dist = travel.SizeSquared;
+                    if (dist > minDist) continue;
 
-                    if (zoneOut == null)
-                    {
-                        LbmMouse.CursorPos = _oldZone.InsidePx(pIn);
-                        // TODO : e.Handled = true;
-                        return;
-                    }
+                    minDist = dist;
+                    zoneOut = zone;
+                    pOutInMm = p;
+                }
+            }
 
-                    var pOut = zoneOut.Mm2Px(pOutInMm);
-                    pOut = zoneOut.InsidePx(pOut);
-                    _oldZone = zoneOut.Main;
-                    _oldPoint = pOut;
-                    LbmMouse.CursorPos = pOut;
-                    ZoneChanged?.Invoke(this, new ZoneChangeEventArgs(_oldZone, zoneOut));
-                    // TODO : e.Handled = true;
-                    return;
+            if (zoneOut == null)
+            {
+                LbmMouse.CursorPos = _oldZone.InsidePx(pIn);
+                e.Handled = true;
+                return;
+            }
+
+            var pOut = zoneOut.Mm2Px(pOutInMm);
+            pOut = zoneOut.InsidePx(pOut);
+            _oldZone = zoneOut.Main;
+            _oldPoint = pOut;
+            LbmMouse.CursorPos = pOut;
+            ZoneChanged?.Invoke(this, new ZoneChangeEventArgs(_oldZone, zoneOut));
+            e.Handled = true;
+            return;
 
             //}
 
@@ -585,14 +583,14 @@ namespace LittleBigMouse_Daemon
             if (args.NewZone.Dpi - args.OldZone.Dpi < 1) return;
             if (args.NewZone.Dpi > 110)
             {
-                    LbmMouse.SetCursorAero(args.NewZone.Dpi > 138 ? 3 : 2);
+                LbmMouse.SetCursorAero(args.NewZone.Dpi > 138 ? 3 : 2);
             }
-            else LbmMouse.SetCursorAero(1);            
+            else LbmMouse.SetCursorAero(1);
         }
 
         private void AdjustSpeed(object sender, ZoneChangeEventArgs args)
         {
-            LbmMouse.MouseSpeed = Math.Round((5.0/96.0)* args.NewZone.Dpi, 0);
+            LbmMouse.MouseSpeed = Math.Round((5.0 / 96.0) * args.NewZone.Dpi, 0);
         }
 
         private void HomeCinema(object sender, ZoneChangeEventArgs args)
@@ -601,7 +599,7 @@ namespace LittleBigMouse_Daemon
             args.NewZone.Screen.Monitor.Vcp().Power = true;
         }
 
- 
+
         public void MatchConfig(string configId)
         {
             Config.MatchConfig(configId);

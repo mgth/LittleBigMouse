@@ -34,7 +34,6 @@ using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Wpf;
 using HLab.Windows.API;
 using LittleBigMouse.Control.Core;
-using LittleBigMouse.LocationPlugin.Plugins.Location;
 using LittleBigMouse.ScreenConfigs;
 using MultiScreensView = LittleBigMouse.Control.Core.MultiScreensView;
 

@@ -104,11 +104,9 @@
     <Compile Include="Plugins\Location\Rulers\RulerView.xaml.cs">
       <DependentUpon>RulerView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Plugins\Location\Rulers\RulerViewTop.xaml.cs">
-      <DependentUpon>RulerViewTop.xaml</DependentUpon>
-    </Compile>
     <Compile Include="Plugins\Location\Rulers\RulerPanelViewModel.cs" />
     <Compile Include="Plugins\Location\Rulers\RulerViewModel.cs" />
+    <Compile Include="Plugins\Location\Rulers\RulurViewTop.cs" />
     <Compile Include="Plugins\Location\Rulers\Tester.xaml.cs">
       <DependentUpon>Tester.xaml</DependentUpon>
     </Compile>
@@ -126,6 +124,13 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Resource Include="Icons\Ruler.xaml">
+      <Generator>MSBuild:UpdateDesignTimeXaml</Generator>
+    </Resource>
+    <Page Include="Icons\Spacedesk.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Plugins\Location\Anchors\AnchorsView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -139,10 +144,6 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Plugins\Location\Rulers\RulerView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="Plugins\Location\Rulers\RulerViewTop.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

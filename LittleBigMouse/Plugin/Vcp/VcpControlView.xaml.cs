@@ -31,7 +31,7 @@ namespace LittleBigMouse.Plugin.Vcp
     /// <summary>
     /// Logique d'interaction pour ControlGuiSizer.xaml
     /// </summary>
-    public partial class VcpControlView : UserControl, IView<ViewModeScreenVcp, ScreenVcpViewModel>
+    public partial class VcpControlView : UserControl, IView<ViewModeScreenVcp, VcpScreenViewModel>
     {
 
         public VcpControlView()

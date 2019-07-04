@@ -7,17 +7,18 @@
              xmlns:monitorVcp="clr-namespace:HLab.Windows.MonitorVcp;assembly=HLab.Windows.MonitorVcp"
              xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300" >
+             d:DataContext="{d:DesignInstance  vcp:VcpScreenViewModel}"
+             d:DesignHeight="300" d:DesignWidth="615.613" >
     <Grid x:Name="Grid">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width ="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width ="Auto"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <StackPanel Grid.Column="0" Grid.RowSpan="2" Orientation="Horizontal">
+        <DockPanel Grid.Column="0" Grid.RowSpan="2">
 
             <!--<Grid>
                 <Grid.RowDefinitions>
@@ -73,68 +74,8 @@
                 <Button Height="20" Command="{Binding AnywayCommand}">Try anyway</Button>
 
             </StackPanel>
-            <StackPanel VerticalAlignment="Center" Orientation="Vertical">
-
-                <xctk:ColorPicker 
-                    SelectedColor="{Binding ColorA}"
-                    ColorMode="ColorCanvas"
-                    ShowTabHeaders="False"
-                    Background="Black"
-                />
-                <xctk:ColorPicker 
-                    SelectedColor="{Binding ColorB}"
-                    ColorMode="ColorCanvas"
-                    ShowTabHeaders="False"
-                    Background="Black"
-                />
-
-                <Button
-                    Command="{Binding TestPatternCommand}" 
-                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
-                    <monitorVcp:TestPattern Height="28" Width="50"
-                        PatternColorA="{Binding ColorA}"
-                        PatternColorB="{Binding ColorB}"
-                        PatternType="Chessboard" />
-                </Button>
-
-                <Button
-                    Command="{Binding TestPatternCommand}" 
-                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
-                    <monitorVcp:TestPattern Height="28" Width="50"
-                        PatternColorA="{Binding ColorA}"
-                        PatternColorB="{Binding ColorB}"
-                        PatternType="Grid" />
-                </Button>
-
-                <Button
-                    Command="{Binding TestPatternCommand}" 
-                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
-                    <monitorVcp:TestPattern Height="28" Width="50"
-                        PatternColorA="{Binding ColorA}"
-                        PatternColorB="{Binding ColorB}"
-                        PatternType="Solid" />
-                </Button>
-
-                <Button
-                    Command="{Binding TestPatternCommand}" 
-                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
-                    <monitorVcp:TestPattern Height="28" Width="50"
-                    PatternColorA="{Binding ColorA}"
-                    PatternColorB="{Binding ColorB}"
-                    PatternType="RgbGradient" />
-                </Button>
-
-                <Button
-                    Command="{Binding TestPatternCommand}" 
-                    CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
-                    <monitorVcp:TestPattern Height="28" Width="50"
-                    PatternColorA="{Binding ColorA}"
-                    PatternColorB="{Binding ColorB}"
-                    PatternType="Circle" />
-                </Button>
-
-            </StackPanel>
-        </StackPanel>
+            <ItemsControl VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}"/>
+        </DockPanel>
 
         <!--<local:Curve x:Name="Curve" Grid.Column="1">
                 

@@ -29,15 +29,15 @@ using LittleBigMouse.Control.Core;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
-    class SizeScreenContentView : UserControl, IView<ViewModeScreenVcp, ScreenVcpViewModel>, IViewScreenFrameContent
+    class SizeScreenContentView : UserControl, IView<ViewModeScreenVcp, VcpScreenViewModel>, IViewScreenFrameContent
     {
     }
     /// <summary>
     /// Logique d'interaction pour ScreenGuiSizer.xaml
     /// </summary>
-    public partial class VcpScreenView : UserControl , IView<ViewModeScreenVcp,ScreenVcpViewModel>, IViewScreenFrameContent
+    public partial class VcpScreenView : UserControl , IView<ViewModeScreenVcp,VcpScreenViewModel>, IViewScreenFrameContent
     {
-        private ScreenVcpViewModel ViewModel => (DataContext as ScreenVcpViewModel);
+        private VcpScreenViewModel ViewModel => (DataContext as VcpScreenViewModel);
 
         public VcpScreenView()
         {

@@ -18,6 +18,7 @@
         MouseDown="OnMouseDown"
         Loaded="Window_Loaded"
         WindowState="{Binding WindowState}"
+        d:DataContext="{d:DesignInstance  core:MainViewModel}"
          >
         <!--xmlns:src="clr-namespace:NativeHelpers;assembly=NativeHelpers"-->
     <!--Left ="{Binding Path=LocationLeft, Mode=TwoWay}"
@@ -170,6 +171,14 @@
             <mvvm:ViewLocator Grid.Row="1" Model="{Binding Presenter}"/>
 
             <Border Grid.Row="2" Grid.Column="0" Background="#C0000000">
+                <mvvm:ViewLocator
+                    ViewClass="{x:Type core:IScreenControlView}"
+                    ViewMode="{x:Type annotations:ViewModeDefault}"
+                    Model="{Binding Config}"
+                    />
+            </Border>
+
+            <Border Grid.Row="3" Grid.Column="0" Background="#C0000000">
                 <mvvm:ViewLocator
                     ViewClass="{x:Type core:IScreenControlView}"
                     ViewMode="{x:Type annotations:ViewModeDefault}"

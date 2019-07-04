@@ -76,7 +76,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
                     Config = e.Model,
                     Monitors = e._monitorsService.Monitors
                 };
-                var json = JsonConvert.SerializeObject(export, Newtonsoft.Json.Formatting.Indented);
+                var json = JsonConvert.SerializeObject(export, Formatting.Indented);
                 Clipboard.SetText(json);
             },
             e => true)
@@ -109,16 +109,12 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location
                 .On(e => e.Config.Saved)
                 .On(e => e.Running)
                 .NotNull(e => e.Config)
-                .Command(
-                    e => {
+                .Command( e => {
                         e.Config.Enabled = true;
 
                         if (!e.Config.Saved)
                             e.Config.Save();
 
-                        //LittleBigMouseClient.Client.LoadConfig();
-
-                        //if (!Running)
                         LittleBigMouseClient.Client.Start();
 
                         e.Client_StateChanged();

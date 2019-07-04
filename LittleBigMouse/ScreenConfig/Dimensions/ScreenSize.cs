@@ -42,6 +42,7 @@ namespace LittleBigMouse.ScreenConfigs
         double RightBorder { get; set; }
 
         Rect Bounds { get; }
+        Point Center { get; }
 
         Rect OutsideBounds { get; }
         double OutsideWidth { get; }
@@ -138,6 +139,10 @@ namespace LittleBigMouse.ScreenConfigs
                     Width = value.Width;
             }
         }
+
+        [TriggerOn(nameof(Location))]
+        [TriggerOn(nameof(Size))]
+        public Point Center => Location + new Vector(Width / 2, Height / 2);
 
 
         [JsonProperty]

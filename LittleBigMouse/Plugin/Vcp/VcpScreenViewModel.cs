@@ -20,24 +20,39 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
+
+using System;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using HLab.Argyll;
+using HLab.DependencyInjection.Annotations;
 using HLab.Mvvm;
 using HLab.Notify.Annotations;
 using HLab.Notify.PropertyChanged;
 using HLab.Windows.MonitorVcp;
+using LittleBigMouse.Plugin.Vcp.Patterns;
 using LittleBigMouse.ScreenConfigs;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
-    class ScreenVcpViewModel : ViewModel<ScreenVcpViewModel,Screen>
+    class VcpScreenViewModel : ViewModel<VcpScreenViewModel,Screen>
     {
-        public ScreenVcpViewModel()
+
+        [Import]
+        public Func<VcpScreenViewModel, TestPatternButtonViewModel> _getButtonPattern;
+        public VcpScreenViewModel()
         {
             Initialize();
+
+            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circles).Set(Color.FromRgb(5,5,5), Colors.Black));
+            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circles).Set(Color.FromRgb(250,250,250),Colors.White ));
+            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circle).Set(Color.FromRgb(0xFF,0x80,0x00),Colors.Black) );
+            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Gradient).SetRgb() );
+            TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Gamma).Set(Orientation.Vertical).SetRgb() );
+
         }
 
         public Visibility BrightnessVisibility => _brightnessVisibility.Get();
@@ -100,46 +115,12 @@ namespace LittleBigMouse.Plugin.Vcp
             .Set(e => Colors.Black)
         );
 
-        public ICommand TestPatternCommand => _testPatternCommand.Get();
+        public Window TestPatternPanel { get; set; } = null;
 
-        private readonly IProperty<ICommand> _testPatternCommand = H.Property<ICommand>(c => c
-            .Command((e,p) =>
-            {
-                e.ShowTestPattern(p as TestPattern);
-            }, e => true)
-        );
 
-        private Window _panel = null;
+        [Import]
+        public ObservableCollectionSafe<TestPatternButtonViewModel> TestPatterns {get;}
 
-        public void ShowTestPattern(TestPattern pattern)
-        {
-            if (_panel != null)
-            {
-
-                if (_panel.Content is TestPattern p)
-                {
-                    if (p.PatternColorA == pattern.PatternColorA
-                        && p.PatternColorB == pattern.PatternColorB
-                        && p.PatternType == pattern.PatternType)
-                    {
-                        _panel?.Close();
-                        _panel = null;
-                        return;
-                    }
-                    else
-                    {
-                        p.PatternColorA = pattern.PatternColorA;
-                        p.PatternColorB = pattern.PatternColorB;
-                        p.PatternType = pattern.PatternType;
-                    }
-                }
-            }
-            else
-            {
-                _panel = pattern.Show(Model.InDip.Bounds);
-
-            }
-        }
 
         public ProbeLut Lut => Model?.ProbeLut();
 

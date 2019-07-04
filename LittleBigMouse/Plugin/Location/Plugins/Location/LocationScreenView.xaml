@@ -4,11 +4,14 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:converters="clr-namespace:HLab.Mvvm.Wpf.Converters;assembly=HLab.Mvvm.Wpf"
+             xmlns:icons="clr-namespace:HLab.Mvvm.Wpf.Icons;assembly=HLab.Mvvm.Wpf"
+             xmlns:location="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location"
              mc:Ignorable="d" 
              MouseLeftButtonUp="OnMouseLeftButtonUp"
              MouseLeftButtonDown="OnMouseLeftButtonDown"
              MouseMove="OnMouseMove"
              d:DesignHeight="300" d:DesignWidth="300"
+             d:DataContext="{d:DesignInstance Type=location:LocationScreenViewModel, IsDesignTimeCreatable=True}"
              x:Name="UserControl"
              >
              <!--FontSize="{Binding Path=ActualHeight, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.05}"-->             
@@ -170,11 +173,12 @@
             Foreground="White"/>
         </StackPanel>
 
-        <Label
+        <icons:IconView
             Margin="5"
             Width ="30"
-            Foreground="Black"
-            Content="{StaticResource IconRuler}" Opacity="0.5" VerticalAlignment="Bottom" HorizontalAlignment="Left"
+            Foreground="{Binding RulerForegroundColor}"
+            Background="{Binding RulerBackgroundColor}"
+            Id="Icons/Ruler" Opacity="0.5" VerticalAlignment="Bottom" HorizontalAlignment="Left"
             MouseEnter="UIElement_OnMouseEnter"
             MouseLeave="UIElement_OnMouseLeave"
             MouseLeftButtonDown="UIElement_OnMouseLeftButtonDown"

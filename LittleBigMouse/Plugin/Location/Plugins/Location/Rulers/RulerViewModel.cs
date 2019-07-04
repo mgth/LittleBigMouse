@@ -77,36 +77,34 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
             Right
         }
 
-        private readonly IProperty<bool> _enable = H.Property<bool>();
         public bool Enabled
         {
             get => _enable.Get();
             set => _enable.Set(value);
         }
+        private readonly IProperty<bool> _enable = H.Property<bool>();
 
         public double ZeroX => _zeroX.Get();
         private readonly IProperty<double> _zeroX = H.Property<double>(c => c
-            .On(e => e.RatioX)
             .On(e => e.DrawOn.XMoving)
             .On(e => e.Screen.XMoving)
-            .Set(e => e.RatioX * (e.Screen.XMoving - e.DrawOn.XMoving))
+            .Set(e => e.Screen.XMoving - e.DrawOn.XMoving)
         );
 
         public double ZeroY => _zeroY.Get();
         private readonly IProperty<double> _zeroY = H.Property<double>(c => c
-            .On(e => e.RatioY)
             .On(e => e.DrawOn.YMoving)
             .On(e => e.Screen.YMoving)
-            .Set(e => e.RatioY * (e.Screen.YMoving - e.DrawOn.YMoving))
+            .Set(e => e.Screen.YMoving - e.DrawOn.YMoving)
         );
 
-        public Thickness Margin => _margin.Get();
-        private readonly IProperty<Thickness> _margin = H.Property<Thickness>( c => c
-            .On(e => e.RatioY)
-            .On(e => e.DrawOn.YMoving)
-            .On(e => e.Screen.YMoving)
-            .Set(e => new Thickness((!e.Horizontal) ? e.ZeroX : 0, e.Vertical ? e.ZeroY : 0, 0, 0))
-        );
+        //public Thickness Margin => _margin.Get();
+        //private readonly IProperty<Thickness> _margin = H.Property<Thickness>( c => c
+        //    .On(e => e.RatioY)
+        //    .On(e => e.DrawOn.YMoving)
+        //    .On(e => e.Screen.YMoving)
+        //    .Set(e => new Thickness((!e.Horizontal) ? e.ZeroX : 0, e.Vertical ? e.ZeroY : 0, 0, 0))
+        //);
 
 
         public Brush GetBrush(double x1, double y1, double x2, double y2, Color c1)
@@ -169,35 +167,37 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
             .Set(e => e.DrawOn.InDip.Height / e.DrawOn.InMm.Height)
         );
 
-        public double RulerHeight => _rulerHeight.Get();
-        private readonly IProperty<double> _rulerHeight = H.Property<double>(c => c
-                .On(e => e.RatioY)
-                .On(e => e.Screen.InMm.Height)
-                .Set(e => e.Vertical ? (e.Screen.InMm.Height * e.RatioY) : double.NaN)
-        );
+        //public double RulerHeight => _rulerHeight.Get();
+        //private readonly IProperty<double> _rulerHeight = H.Property<double>(c => c
+        //        .On(e => e.RatioY)
+        //        .On(e => e.Screen.InMm.Height)
+        //        .Set(e => e.Vertical ? (e.Screen.InMm.Height * e.RatioY) : double.NaN)
+        //);
 
-        public double RulerWidth => _rulerWidth.Get();
-        private readonly IProperty<double> _rulerWidth = H.Property<double>( c => c
-                .On(e => e.RatioX)
-                .On(e => e.Screen.InMm.Width)
-                .Set(e => e.Horizontal ? (e.Screen.InMm.Width * e.RatioX) : double.NaN)
-            );
+        //public double RulerWidth => _rulerWidth.Get();
+        //private readonly IProperty<double> _rulerWidth = H.Property<double>( c => c
+        //        .On(e => e.RatioX)
+        //        .On(e => e.Screen.InMm.Width)
+        //        .Set(e => e.Horizontal ? (e.Screen.InMm.Width * e.RatioX) : double.NaN)
+        //    );
 
         public double RulerLength => _rulerLength.Get();
         private readonly IProperty<double> _rulerLength = H.Property<double>(c => c
                 .On(e => e.Screen.InMm.Width)
                 .On(e => e.Screen.InMm.Height)
-                .Set(e => e.Vertical ? (e.Screen.InMm.Height * e.Screen.InMm.Width) : double.NaN)
+                .Set(e => e.Vertical ? e.Screen.InMm.Height : e.Screen.InMm.Width)
             );
 
         public double RulerEnd => _rulerEnd.Get();
         private readonly IProperty<double> _rulerEnd = H.Property<double>(c => c
-            .On(e => e.DrawOn.InMm.Height)
-            .On(e => e.DrawOn.InMm.Width)
+            .On(e => e.RulerLength)
             .On(e => e.RulerStart)
-            .Set(e => e.RulerStart + (e.Vertical ? e.DrawOn.InMm.Height : e.DrawOn.InMm.Width))
+            .Set(e => e.RulerStart + e.RulerLength)
         );
 
+        /// <summary>
+        /// Calculate the first tick value of the ruler
+        /// </summary>
         public double RulerStart => _rulerStart.Get();
         private readonly IProperty<double> _rulerStart = H.Property<double>(c => c
             .On(e => e.DrawOn.XMoving)

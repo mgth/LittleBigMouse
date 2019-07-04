@@ -69,12 +69,14 @@
             <Border Background="Transparent" Grid.Column="4" Grid.RowSpan="6" MouseWheel="Height_MouseWheel"/>
 
 <!-- Inside Dimentions -->
-            <TextBox Background="#E0FFFFFF"
+            <TextBox 
+                Background="#E0FFFFFF"
+                Foreground="Black"
                 Grid.Column="2" 
                 Grid.Row="2" 
                 VerticalAlignment="Center" 
                      HorizontalAlignment="Right"
-                Text="{Binding Height, StringFormat=N1}"
+                Text="{Binding Height, StringFormat=N1, FallbackValue=xxx}"
                 MouseWheel="InsideHeight_MouseWheel"
                 KeyUp="OnKeyEnterUpdate" 
                 >
@@ -85,11 +87,12 @@
             </TextBox>
             
             <TextBox Background="#E0FFFFFF"
+                     Foreground="Black"
                      Grid.Column="2" 
                      Grid.Row="2" 
                      VerticalAlignment="Bottom" 
                      HorizontalAlignment="Center"
-                     Text="{Binding Width,  StringFormat=N1}"
+                     Text="{Binding Width,  StringFormat=N1, FallbackValue=xxx}"
                      MouseWheel="InsideWidth_MouseWheel"
                      KeyUp="OnKeyEnterUpdate" 
                      >
@@ -114,16 +117,17 @@
                 </Viewbox.Height>
                    
                    
-            <CheckBox  IsChecked="{Binding Model.Physical.FixedAspectRatio}" />
+            <CheckBox  IsChecked="{Binding Model.Physical.FixedAspectRatio, FallbackValue=true}" />
                  </Viewbox>
            
 <!-- Outside Dimensions -->
             <TextBox Background="#E0FFFFFF"
+                     Foreground="Black"
                 Grid.Column="4" 
                 Grid.Row="2" 
                 VerticalAlignment="Center" 
                      HorizontalAlignment="Left"
-                Text="{Binding OutsideHeight, StringFormat=N1}"
+                Text="{Binding OutsideHeight, StringFormat=N1,FallbackValue=xxx}"
                 MouseWheel="Height_MouseWheel"
                      KeyUp="OnKeyEnterUpdate" 
                 >
@@ -133,11 +137,12 @@
             </TextBox>
 
             <TextBox Background="#E0FFFFFF"
+                     Foreground="Black"
                      Grid.Column="2" 
                      Grid.Row="4" 
                      VerticalAlignment="Top" 
                      HorizontalAlignment="Center"
-                     Text="{Binding OutsideWidth,  StringFormat=N1}"
+                     Text="{Binding OutsideWidth,  StringFormat=N1, FallbackValue=xxx}"
                      MouseWheel="Width_MouseWheel"
                      KeyUp="OnKeyEnterUpdate" 
                      >

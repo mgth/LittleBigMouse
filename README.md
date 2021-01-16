@@ -11,7 +11,7 @@ If people wants to participate with feedback or new ideas you're welcome. I real
 
 Code depends on HLab project : https://github.com/CHMP-HLab/HLab
 
-contens code from :
+Contains code from:
 
 MouseKeyboardActivityMonitor
 https://globalmousekeyhook.codeplex.com/documentation

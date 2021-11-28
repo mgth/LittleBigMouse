@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+	  <TargetFramework>net5.0-windows</TargetFramework>
+	  <UseWPF>true</UseWPF>
 
     <IsPackable>false</IsPackable>
 
@@ -17,8 +18,5 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\LittleBigMouse\ScreenConfig\LittleBigMouse.ScreenConfig.csproj" />
-  </ItemGroup>
 
 </Project>

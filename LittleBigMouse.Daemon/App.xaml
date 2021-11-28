@@ -1,0 +1,11 @@
+﻿<Application x:Class="LittleBigMouse.Daemon.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LittleBigMouse.Daemon"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <Image x:Key="lbm-off" Source="lbm-off.ico" />
+        <Image x:Key="lbm-on" Source="lbm-on.ico" />
+        <Image x:Key="lbm" Source="MainIcon.ico" />
+    </Application.Resources>
+</Application>

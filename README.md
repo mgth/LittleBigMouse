@@ -9,8 +9,6 @@ Please find a very small doc in the Wiki : https://github.com/mgth/LittleBigMous
 
 If people wants to participate with feedback or new ideas you're welcome. I really need beta testers now to provide a stable tool.
 
-Code depends on HLab project : https://github.com/CHMP-HLab/HLab
-
 contens code from :
 
 MouseKeyboardActivityMonitor

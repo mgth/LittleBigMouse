@@ -1,0 +1,10 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:converters1="clr-namespace:HLab.Mvvm.Converters;assembly=HLab.Mvvm.Wpf"
+                    xmlns:converters="clr-namespace:HLab.Base.Wpf.Converters;assembly=HLab.Base.Wpf">
+
+    <converters:ToVisibilityConverter x:Key="ToVisibilityConverter" />
+    <converters1:ScaleConverter x:Key="Scale" />
+    <converters1:MultiScaleConverter x:Key="MultiScale" />
+
+</ResourceDictionary>

@@ -1,0 +1,131 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net5.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Platforms>AnyCPU;x64</Platforms>
+	<StartupObject>LittleBigMouse.Control.App</StartupObject>
+    <ApplicationIcon>MainIcon.ico</ApplicationIcon>
+	<ApplicationManifest>app.manifest</ApplicationManifest>
+	<Configurations>Debug;Release;ReleaseDebug</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Icons\colors.xml" />
+    <None Remove="Icons\IconClose.svg" />
+    <None Remove="Icons\IconDebug.svg" />
+    <None Remove="Icons\IconFullscreen.svg" />
+    <None Remove="Icons\IconPinned.svg" />
+    <None Remove="Icons\IconUnfullscreen.svg" />
+    <None Remove="MainIcon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Icons\colors.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MahApps.Metro" Version="2.4.3" />
+    <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
+    <PackageReference Include="System.Runtime" Version="4.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\HLab\HLab.DependencyInjection.Annotations\HLab.DependencyInjection.Annotations.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Notify.Wpf\HLab.Notify.Wpf.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Daemon\LittleBigMouse.Daemon.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugin.Location\LittleBigMouse.Plugin.Location.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp\LittleBigMouse.Plugin.Vcp.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.ScreenConfig.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Icons\IconClose.svg" />
+    <Resource Include="Icons\IconDebug.svg">
+      <Generator>XamlIntelliSenseFileGenerator</Generator>
+    </Resource>
+    <Resource Include="Icons\IconFullscreen.svg" />
+    <Resource Include="Icons\IconPinned.svg" />
+    <Resource Include="Icons\IconUnfullscreen.svg" />
+    <Resource Include="MainIcon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="App.xaml.cs">
+      <SubType>Code</SubType>
+      <DependentUpon>App.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="ColorsWindow.xaml.cs">
+      <DependentUpon>ColorsWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Devices\DevicesView.xaml.cs">
+      <DependentUpon>DevicesView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Devices\DeviceView.xaml.cs">
+      <DependentUpon>DeviceView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Main\MainView.xaml.cs">
+      <DependentUpon>MainView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="MultiScreensView.xaml.cs">
+      <DependentUpon>MultiScreensView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Debug\DebugScreenView.xaml.cs">
+      <DependentUpon>DebugScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Default\DefaultScreenView.xaml.cs">
+      <DependentUpon>DefaultScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="ScreenFrame\ScreenFrameView.xaml.cs">
+      <DependentUpon>ScreenFrameView.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="ColorsWindow.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Converters.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Devices\DevicesView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Devices\DeviceView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Icons.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Main\MainView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="MultiScreensView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Debug\DebugScreenView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Default\DefaultScreenView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="ScreenFrame\ScreenFrameView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
+
+
+</Project>

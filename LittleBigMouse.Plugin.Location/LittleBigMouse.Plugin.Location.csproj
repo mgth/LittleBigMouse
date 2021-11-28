@@ -1,0 +1,106 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Platforms>AnyCPU;x64</Platforms>
+    <Configurations>Debug;Release;ReleaseDebug</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Icons\colors.xml" />
+    <None Remove="Icons\IconCopyConfig.svg" />
+    <None Remove="Icons\IconLocation.svg" />
+    <None Remove="Icons\IconSave.svg" />
+    <None Remove="Icons\IconSize.svg" />
+    <None Remove="Icons\IconStart.svg" />
+    <None Remove="Icons\IconStop.svg" />
+    <None Remove="Icons\IconUndo.svg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="Icons\Ruler.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Icons\colors.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\HLab\HLab.Base.Wpf\HLab.Base.Wpf.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.ScreenConfig.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Icons\IconCopyConfig.svg" />
+    <Resource Include="Icons\IconLocation.svg" />
+    <Resource Include="Icons\IconSave.svg" />
+    <Resource Include="Icons\IconSize.svg" />
+    <Resource Include="Icons\IconStart.svg" />
+    <Resource Include="Icons\IconStop.svg" />
+    <Resource Include="Icons\IconUndo.svg" />
+    <Resource Include="Icons\Ruler.xaml">
+      <Generator>MSBuild:UpdateDesignTimeXaml</Generator>
+    </Resource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Plugins\Location\Anchors\AnchorsView.xaml.cs">
+      <DependentUpon>AnchorsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Location\LocationControlView.xaml.cs">
+      <DependentUpon>LocationControlView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Location\LocationScreenView.xaml.cs">
+      <DependentUpon>LocationScreenView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Location\Rulers\RulerPanelView.xaml.cs">
+      <DependentUpon>RulerPanelView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Location\Rulers\RulerView.xaml.cs">
+      <DependentUpon>RulerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Location\Rulers\Tester.xaml.cs">
+      <DependentUpon>Tester.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Size\SizeScreenView.xaml.cs">
+      <DependentUpon>SizeScreenView.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="Icons\Spacedesk.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Location\Anchors\AnchorsView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Location\LocationControlView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Location\LocationScreenView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Location\Rulers\RulerPanelView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Location\Rulers\RulerView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Location\Rulers\Tester.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Plugins\Size\SizeScreenView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
+</Project>

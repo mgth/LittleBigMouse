@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Screen.Config
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Screen.Config.
 
@@ -23,13 +23,14 @@
 
 using System;
 using System.Globalization;
+
 using Microsoft.Win32;
 
-namespace LittleBigMouse.ScreenConfig
+namespace LittleBigMouse.DisplayLayout
 {
     public static class RegistryExt
     {
-        public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null, Action ifLoaded=null)
+        public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null, Action ifLoaded = null)
         {
             def ??= () => default;
 
@@ -37,7 +38,7 @@ namespace LittleBigMouse.ScreenConfig
 
             object value = null;
 
-            var sValue = key.GetValue(keyName, "")?.ToString()??"";
+            var sValue = key.GetValue(keyName, "")?.ToString() ?? "";
             if (sValue == "") return def();
 
             if (typeof(T) == typeof(double))
@@ -55,7 +56,7 @@ namespace LittleBigMouse.ScreenConfig
 
             ifLoaded?.Invoke();
 
-            return (T) value;
+            return (T)value;
         }
 
         public static void SetKey(this RegistryKey key, string keyName, double value)
@@ -73,7 +74,7 @@ namespace LittleBigMouse.ScreenConfig
 
         public static void SetKey(this RegistryKey key, string keyName, bool value)
         {
-            key.SetValue(keyName, value ? "1":"0", RegistryValueKind.String); 
+            key.SetValue(keyName, value ? "1" : "0", RegistryValueKind.String);
         }
     }
 }

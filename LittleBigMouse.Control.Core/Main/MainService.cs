@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -22,34 +22,116 @@
 */
 
 using System;
-using System.Windows.Input;
-using HLab.DependencyInjection.Annotations;
+using System.Windows;
+using HLab.Icons.Annotations.Icons;
+using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
+using HLab.Notification.Wpf;
+using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.Control.Main
 {
-    [Export(typeof(IMainService)),Singleton]
     public class MainService : IMainService
     {
-        public ScreenConfig.ScreenConfig Config {get;}
-        public MainViewModel MainViewModel { get; }
+        public IMonitorsLayout Layout { get; private set; }
+        public Func<MainControlViewModel> _getMainControl;
 
-        [Import]
-        public MainService(MainViewModel mainViewModel, ScreenConfig.ScreenConfig config)
+        private Func<IMonitorsLayout, MultiScreensViewModel> _getViewModel;
+        private IMvvmService _mvvmService;
+
+        private UserNotify _notify;
+        private ILittleBigMouseClientService _littleBigMouseClientService;
+
+
+        public void Inject(
+            Func<MainControlViewModel> mainControlGetter,
+            IMonitorsLayout layout,
+            Func<IMonitorsLayout, MultiScreensViewModel> getViewModel,
+            IMvvmService mvvmService,
+            IIconService iconService,
+            ILittleBigMouseClientService littleBigMouseClientService
+            )
         {
-           MainViewModel = mainViewModel;
-           Config = config;
+            _notify = new UserNotify(iconService);
+
+            _mvvmService = mvvmService;
+            _getMainControl = mainControlGetter;
+            _getViewModel = getViewModel;
+
+            _littleBigMouseClientService = littleBigMouseClientService;
+
+            _littleBigMouseClientService.StateChanged += _littleBigMouseClientService_StateChanged;
+
+            Layout = layout;
         }
 
-        public void AddButton(ICommand cmd) =>
-            MainViewModel.AddButton(cmd);
 
-        public void SetViewMode(Type viewMode)
+        private Window _controlWindow = null;
+        public void ShowControl()
         {
-            MainViewModel.Presenter.ViewMode = viewMode;
+            if (_controlWindow is { IsLoaded: true })
+            {
+                _controlWindow.Activate();
+                return;
+            }
+
+            var viewModel = _getMainControl();
+            viewModel.Layout = Layout;
+            viewModel.Presenter = _getViewModel(Layout);
+
+            _actions?.Invoke(viewModel);
+
+            _controlWindow = (Window)_mvvmService.MainContext.GetView<ViewModeDefault>(viewModel, typeof(IViewClassDefault));
+
+            if (_controlWindow == null) return;
+
+            _controlWindow.Closed += (s, a) => _controlWindow = null;
+            _controlWindow?.Show();
         }
 
-        public void SetViewMode<T>() where T:ViewMode => SetViewMode(typeof(T));
+        public void StartNotifier()
+        {
+            if (_notify == null) return;
+
+            _notify.Click += (s, a) => ShowControl();
+
+            // TODO 
+            //_notify.AddMenu(-1, "Check for update", CheckUpdate);
+            _notify.AddMenu(-1, "Open","Icon/Start", ShowControl);
+            _notify.AddMenu(-1, "Start","Icon/Start", () => _littleBigMouseClientService.Start(Layout.ComputeZones()));
+            _notify.AddMenu(-1, "Stop","Icon/Stop", _littleBigMouseClientService.Stop);
+            _notify.AddMenu(-1, "Exit", "Icon/Stop", Quit);
+        }
+
+        private Action<IMainControl> _actions;
+
+        public void AddControlPlugin(Action<IMainControl> action)
+        {
+            _actions += action;
+        }
+
+        private void Quit()
+        {
+            _littleBigMouseClientService.Quit();
+            Application.Current.Shutdown();
+        }
+
+        private void _littleBigMouseClientService_StateChanged(object sender, LittleBigMouseServiceEventArgs args)
+        {
+            switch (args.State)
+            {
+                case LittleBigMouseState.Running:
+                    _notify.SetOn();
+                    break;
+                case LittleBigMouseState.Stopped:
+                case LittleBigMouseState.Dead:
+                    _notify.SetOff();
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(args.State), args.State, null);
+            }
+        }
     }
 }

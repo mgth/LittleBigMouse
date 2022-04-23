@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -23,16 +23,40 @@
 
 using System;
 using System.Collections.Specialized;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
+
+using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.Plugins;
-using LittleBigMouse.ScreenConfig;
 
 namespace LittleBigMouse.Control
 {
+    public class SizeRatioConverter : IMultiValueConverter
+    {
+        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+
+            if (values == null || values.Length < 3) return null;
+
+            if(values[0] is double ui && values[1] is double vm && values[3] is double size)
+            {
+                return (ui / vm) * size;
+            }
+
+            return null;
+        }
+
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 
     /// <summary>
     /// Logique d'interaction pour MultiScreensGui.xaml
@@ -43,64 +67,65 @@ namespace LittleBigMouse.Control
         {
             InitializeComponent();
 
-            DataContextChanged += (a, b) =>
-            {
-                if (b.OldValue is MultiScreensViewModel oldvm)
-                {
-                    oldvm.Config.AllScreens.CollectionChanged -= AllScreens_CollectionChanged;
-                }
+            //DataContextChanged += (a, b) =>
+            //{
+            //    if (b.OldValue is MultiScreensViewModel oldvm)
+            //    {
+            //        AllScreens_CollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove,oldvm.Config.AllScreens));
+            //        oldvm.Config.AllScreens.CollectionChanged -= AllScreens_CollectionChanged;
+            //    }
 
-                if (b.NewValue is MultiScreensViewModel newvm)
-                {
-                    AllScreens_CollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,newvm.Config.AllScreens));
-                    newvm.Config.AllScreens.CollectionChanged += AllScreens_CollectionChanged;
-                }
-            };
+            //    if (b.NewValue is MultiScreensViewModel newvm)
+            //    {
+            //        AllScreens_CollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,newvm.Config.AllScreens));
+            //        newvm.Config.AllScreens.CollectionChanged += AllScreens_CollectionChanged;
+            //    }
+            //};
         }
 
-        private void AllScreens_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {
-            switch (e.Action)
-            {
-                case NotifyCollectionChangedAction.Add:
-                    if (e.NewItems != null)
-                    {
-                        foreach (var s in e.NewItems.OfType<Screen>())
-                        {
-                            var view = new ViewLocator {Model = s,Tag=s.Id};
-                            //var view = ViewModel.MvvmContext.GetView<ViewModeDefault>(s, typeof(IViewClassDefault));
-                            ContentGrid.Children.Add((UIElement)view);
-                            //if (view.Content is ScreenFrameView sfw)
-                            //{
-                            //    sfw.ViewModel.Presenter = ContentGrid;
-                            //}
-                        }
-                    }
-                    break;
-                case NotifyCollectionChangedAction.Remove:
-                    if (e.OldItems != null)
-                    {
-                        foreach (var s in e.OldItems.OfType<Screen>())
-                        {
-                            foreach (var element in ContentGrid.Children.OfType<FrameworkElement>().ToList())
-                            {
-                                if (element.Tag.ToString() == s.Id)
-                                {
-                                    ContentGrid.Children.Remove(element);
-                                }
-                            }
-                        }
-                    }
-                    else throw  new ArgumentException("OldItems should not be null for remove Action");
-                    break;
-                case NotifyCollectionChangedAction.Replace:
-                case NotifyCollectionChangedAction.Move:
-                case NotifyCollectionChangedAction.Reset:
-                    throw new NotImplementedException();
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
+        //private void AllScreens_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        //{
+        //    switch (e.Action)
+        //    {
+        //        case NotifyCollectionChangedAction.Add:
+        //            if (e.NewItems != null)
+        //            {
+        //                foreach (var s in e.NewItems.OfType<Screen>())
+        //                {
+        //                    var view = new ViewLocator {Model = s,Tag=s.Id};
+        //                    //var view = ViewModel.MvvmContext.GetView<ViewModeDefault>(s, typeof(IViewClassDefault));
+        //                    ContentGrid.Children.Add((UIElement)view);
+        //                    //if (view.Content is ScreenFrameView sfw)
+        //                    //{
+        //                    //    sfw.ViewModel.Presenter = ContentGrid;
+        //                    //}
+        //                }
+        //            }
+        //            break;
+        //        case NotifyCollectionChangedAction.Remove:
+        //            if (e.OldItems != null)
+        //            {
+        //                foreach (var s in e.OldItems.OfType<Screen>())
+        //                {
+        //                    foreach (var element in ContentGrid.Children.OfType<FrameworkElement>().ToList())
+        //                    {
+        //                        if (element.Tag.ToString() == s.Id)
+        //                        {
+        //                            ContentGrid.Children.Remove(element);
+        //                        }
+        //                    }
+        //                }
+        //            }
+        //            else throw  new ArgumentException("OldItems should not be null for remove Action");
+        //            break;
+        //        case NotifyCollectionChangedAction.Replace:
+        //        case NotifyCollectionChangedAction.Move:
+        //        case NotifyCollectionChangedAction.Reset:
+        //            throw new NotImplementedException();
+        //        default:
+        //            throw new ArgumentOutOfRangeException();
+        //    }
+        //}
 
         //protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         //{
@@ -114,13 +139,13 @@ namespace LittleBigMouse.Control
 
         internal MultiScreensViewModel ViewModel => DataContext as MultiScreensViewModel;
 
-        private ScreenConfig.ScreenConfig Config => ViewModel.Config;
+        private IMonitorsLayout Layout => ViewModel?.Layout;
 
         private double GetRatio()
         {
-            if (Config == null) return 1;
+            if (Layout == null) return 1;
 
-            var all = Config.InMmOutsideBounds;
+            var all = Layout.InMmOutsideBounds;
 
             if (all.Width * all.Height > 0)
             {
@@ -141,6 +166,10 @@ namespace LittleBigMouse.Control
 
             ViewModel.VisualRatio.X = r;
             ViewModel.VisualRatio.Y = r;
+        }
+
+        private void ReferenceGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
         }
     }
 }

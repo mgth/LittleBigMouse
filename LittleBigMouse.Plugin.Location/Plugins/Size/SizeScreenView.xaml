@@ -4,8 +4,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:size="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Size"
-             mc:Ignorable="d" 
+             xmlns:size="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Size" xmlns:wpf="clr-namespace:HLab.Base.Wpf;assembly=HLab.Base.Wpf"
+    mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
     d:DataContext="{d:DesignInstance Type=size:ScreenSizeViewModel, IsDesignTimeCreatable=false}"
@@ -71,37 +71,37 @@
             <Border Background="Transparent" Grid.Column="4" Grid.RowSpan="6" MouseWheel="OnMouseWheel"/>
 
 <!-- Inside Dimentions -->
-            <TextBox 
-                Background="#E0FFFFFF"
-                Foreground="Black"
+            <wpf:DoubleBox 
+                HorizontalAlignment="Right" 
+                VerticalAlignment="Center" 
                 Grid.Column="2" 
                 Grid.Row="2" 
-                VerticalAlignment="Center" 
-                     HorizontalAlignment="Right"
-                Text="{Binding Height, StringFormat=N1, FallbackValue=xxx}"
-                MouseWheel="OnMouseWheel"
-                KeyUp="OnKeyEnterUpdate" 
-                >
-                <TextBox.Effect>
+
+                Double="{Binding Height}" 
+                Background="#E0FFFFFF"
+                Foreground="Black"
+                Decimals="1">
+                <wpf:DoubleBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
-                </TextBox.Effect>
+                </wpf:DoubleBox.Effect>
                 
-            </TextBox>
-            
-            <TextBox Background="#E0FFFFFF"
+            </wpf:DoubleBox>
+
+            <wpf:DoubleBox Background="#E0FFFFFF"
                      Foreground="Black"
                      Grid.Column="2" 
                      Grid.Row="2" 
                      VerticalAlignment="Bottom" 
                      HorizontalAlignment="Center"
-                     Text="{Binding Width,  StringFormat=N1, FallbackValue=xxx}"
+                     Double="{Binding Width}"
                      MouseWheel="OnMouseWheel"
                      KeyUp="OnKeyEnterUpdate" 
                      >
-                <TextBox.Effect>
+                <wpf:DoubleBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
-                </TextBox.Effect>
-            </TextBox>
+                </wpf:DoubleBox.Effect>
+            </wpf:DoubleBox>
+            
             <Viewbox x:Name ="ChkLock"
                 Grid.Column="2" 
                 Grid.Row="2" 
@@ -119,83 +119,87 @@
                 </Viewbox.Height>
                    
                    
-            <CheckBox  IsChecked="{Binding Model.ScreenModel.Physical.FixedAspectRatio, FallbackValue=true}" />
+            <CheckBox  IsChecked="{Binding Model.Model.PhysicalSize.FixedAspectRatio, FallbackValue=true}" />
                  </Viewbox>
            
 <!-- Outside Dimensions -->
-            <TextBox Background="#E0FFFFFF"
-                     Foreground="Black"
+            <wpf:DoubleBox 
+                Background="#E0FFFFFF"
+                Foreground="Black"
+                
                 Grid.Column="4" 
                 Grid.Row="2" 
                 VerticalAlignment="Center" 
-                     HorizontalAlignment="Left"
-                Text="{Binding OutsideHeight, StringFormat=N1,FallbackValue=xxx}"
-                MouseWheel="OnMouseWheel"
-                     KeyUp="OnKeyEnterUpdate" 
+                HorizontalAlignment="Left"
+                
+                Double="{Binding OutsideHeight}"
+                Decimals="1"
                 >
-                <TextBox.Effect>
+                <wpf:DoubleBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
-                </TextBox.Effect>
-            </TextBox>
+                </wpf:DoubleBox.Effect>
+            </wpf:DoubleBox>
 
-            <TextBox Background="#E0FFFFFF"
-                     Foreground="Black"
-                     Grid.Column="2" 
-                     Grid.Row="4" 
-                     VerticalAlignment="Top" 
-                     HorizontalAlignment="Center"
-                     Text="{Binding OutsideWidth,  StringFormat=N1, FallbackValue=xxx}"
-                     MouseWheel="OnMouseWheel"
-                     KeyUp="OnKeyEnterUpdate" 
-                     >
-                <TextBox.Effect>
+            <wpf:DoubleBox 
+                Background="#E0FFFFFF"
+                Foreground="Black"
+                
+                Grid.Column="2" 
+                Grid.Row="4" 
+                VerticalAlignment="Top" 
+                HorizontalAlignment="Center"
+                           
+                Double="{Binding OutsideWidth}"
+                Decimals="1"
+                >
+                <wpf:DoubleBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
-                </TextBox.Effect>
+                </wpf:DoubleBox.Effect>
 
-            </TextBox>
+            </wpf:DoubleBox>
 
         </Grid>
 
-        <TextBox 
+        <wpf:DoubleBox 
+            Background="#00FFFFFF"
             Foreground="#FFD9DCEC"
-                Text="{Binding Path=TopBorder, StringFormat=N1, FallbackValue=top}" 
-                KeyUp="OnKeyEnterUpdate" 
-                HorizontalAlignment="Center" 
-                VerticalAlignment="Top" 
-                Background="#00FFFFFF"
-             MouseWheel="OnMouseWheel"   
+            
+            HorizontalAlignment="Center" 
+            VerticalAlignment="Top" 
+            
+            Double="{Binding Path=TopBorder}" 
+            Decimals="1"
             />
 
-        <TextBox 
+        <wpf:DoubleBox 
+            Background="#00FFFFFF"
             Foreground="#FFD9DCEC"
                 
-            Text="{Binding Path=LeftBorder, StringFormat=N1, FallbackValue=left}" 
-                KeyUp="OnKeyEnterUpdate" 
-                HorizontalAlignment="Left" 
-                VerticalAlignment="Center" 
-                Background="#00FFFFFF"
-             MouseWheel="OnMouseWheel"
+            HorizontalAlignment="Left" 
+            VerticalAlignment="Center" 
+            
+            Double="{Binding Path=LeftBorder}" 
+            Decimals="1"
             />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
-            <TextBox 
-                Text="{Binding Path=BottomBorder, StringFormat=N1, FallbackValue=bottom}" 
-                KeyUp="OnKeyEnterUpdate" 
-                VerticalAlignment="Bottom"  
-                HorizontalAlignment="Center" 
+            <wpf:DoubleBox 
                 Foreground="#FFD9DCEC" 
                 Background="#00FFFFFF" 
-                MouseWheel="OnMouseWheel"/>
+                
+                Double="{Binding Path=BottomBorder}" 
+                Decimals="1"
+                />
         </StackPanel>
 
         <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
-            <TextBox 
-                Text="{Binding Path=RightBorder, StringFormat=N1,FallbackValue=right}" 
-                KeyUp="OnKeyEnterUpdate" 
-                HorizontalAlignment="Right" 
+            <wpf:DoubleBox 
                 Foreground="#FFD9DCEC" 
                 Background="#00FFFFFF" 
-                MouseWheel="OnMouseWheel"/>
+                
+                Double="{Binding Path=RightBorder}" 
+                Decimals="1"
+                />
         </StackPanel>
 
         <!--<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">

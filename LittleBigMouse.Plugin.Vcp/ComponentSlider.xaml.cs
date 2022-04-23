@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using HLab.Base;
+using HLab.Base.Wpf;
 using HLab.Notify.PropertyChanged;
 
 namespace LittleBigMouse.Plugin.Vcp

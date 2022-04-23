@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -25,20 +25,24 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using HLab.DependencyInjection.Annotations;
+
+using HLab.Icons.Annotations.Icons;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Notify.PropertyChanged;
 
+using LittleBigMouse.DisplayLayout;
+using LittleBigMouse.Plugins;
+
 namespace LittleBigMouse.Control.Main
 {
-    using H = H<MainViewModel>;
+    using H = H<MainControlViewModel>;
 
-    [Export(typeof(MainViewModel)),Singleton]
-    public class MainViewModel : ViewModel
+
+
+    public class MainControlViewModel : ViewModel, IMainControl
     {
-        [Import]
-        public MainViewModel(IIconService iconService)
+        public MainControlViewModel(IIconService iconService)
         {
             IconService = iconService;
             H.Initialize(this);
@@ -46,12 +50,12 @@ namespace LittleBigMouse.Control.Main
 
         public IIconService IconService { get; }
 
-        public ScreenConfig.ScreenConfig Config
+        public IMonitorsLayout Layout
         {
-            get => _config.Get();
-            set => _config.Set(value);
+            get => _layout.Get();
+            set => _layout.Set(value);
         }
-        private readonly IProperty<ScreenConfig.ScreenConfig> _config = H.Property<ScreenConfig.ScreenConfig>();
+        private readonly IProperty<IMonitorsLayout> _layout = H.Property<IMonitorsLayout>();
 
         public IPresenterViewModel Presenter
         {
@@ -72,7 +76,7 @@ namespace LittleBigMouse.Control.Main
 
         private void Close()
         {
-            if (Config.Saved)
+            if (Layout.Saved)
             {
                 Application.Current.Shutdown();
                 return;
@@ -82,7 +86,7 @@ namespace LittleBigMouse.Control.Main
                 MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
             {
-                Config.Save();
+                Layout.Save();
                 Application.Current.Shutdown();
             }
 
@@ -124,5 +128,9 @@ namespace LittleBigMouse.Control.Main
             Commands.Add(cmd);
         }
 
+        public void SetViewMode<T>()
+        {
+            Presenter.ViewMode = typeof(T);
+        }
     }
 }

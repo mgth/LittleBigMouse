@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -23,53 +23,52 @@
 
 using HLab.Notify.PropertyChanged;
 
-namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
+
+using H = H<TesterViewModel>;
+public class TesterViewModel : NotifierBase
 {
-    using H = H<TesterViewModel>;
-    public class TesterViewModel : NotifierBase
+    public TesterViewModel() => H.Initialize(this);
+
+    public double LeftInDip
     {
-        public TesterViewModel() => H.Initialize(this);
-
-        public double LeftInDip
-        {
-            get => _leftInDip.Get();
-            set => _leftInDip.Set(value);
-        }
-        private readonly IProperty<double> _leftInDip = H.Property<double>();
-
-        public double RightInDip
-        {
-            get => _rightInDip.Get();
-            set => _rightInDip.Set(value);
-        }
-        private readonly IProperty<double> _rightInDip = H.Property<double>();
-
-        public double TopInDip
-        {
-            get => _topInDip.Get();
-            set => _topInDip.Set(value);
-        }
-        private readonly IProperty<double> _topInDip = H.Property<double>();
-
-        public double BottomInDip
-        {
-            get => _bottomInDip.Get();
-            set => _bottomInDip.Set(value);
-        }
-        private readonly IProperty<double> _bottomInDip = H.Property<double>();
-
-        public double HeightInDip
-        {
-            get => _heightInDip.Get();
-            set => _heightInDip.Set(value);
-        }
-        private readonly IProperty<double> _heightInDip = H.Property<double>();
-
-        public double WidthInDip
-        {
-            get => _widthInDip.Get();
-            set => _widthInDip.Set(value);
-        }
-        private readonly IProperty<double> _widthInDip = H.Property<double>();
+        get => _leftInDip.Get();
+        set => _leftInDip.Set(value);
     }
+    private readonly IProperty<double> _leftInDip = H.Property<double>();
+
+    public double RightInDip
+    {
+        get => _rightInDip.Get();
+        set => _rightInDip.Set(value);
+    }
+    private readonly IProperty<double> _rightInDip = H.Property<double>();
+
+    public double TopInDip
+    {
+        get => _topInDip.Get();
+        set => _topInDip.Set(value);
+    }
+    private readonly IProperty<double> _topInDip = H.Property<double>();
+
+    public double BottomInDip
+    {
+        get => _bottomInDip.Get();
+        set => _bottomInDip.Set(value);
+    }
+    private readonly IProperty<double> _bottomInDip = H.Property<double>();
+
+    public double HeightInDip
+    {
+        get => _heightInDip.Get();
+        set => _heightInDip.Set(value);
+    }
+    private readonly IProperty<double> _heightInDip = H.Property<double>();
+
+    public double WidthInDip
+    {
+        get => _widthInDip.Get();
+        set => _widthInDip.Set(value);
+    }
+    private readonly IProperty<double> _widthInDip = H.Property<double>();
 }

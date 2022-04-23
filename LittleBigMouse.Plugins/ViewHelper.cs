@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -32,12 +32,11 @@ namespace LittleBigMouse.Plugins
     {
         public static void OnKeyEnterUpdate(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter)
+            if (e.Key == Key.Enter && sender is TextBox tb)
             {
-                TextBox tBox = (TextBox)sender;
                 DependencyProperty prop = TextBox.TextProperty;
 
-                BindingExpression binding = BindingOperations.GetBindingExpression(tBox, prop);
+                BindingExpression binding = BindingOperations.GetBindingExpression(tb, prop);
                 binding?.UpdateSource();
             }
         }

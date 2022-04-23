@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -23,9 +23,11 @@
 
 using HLab.Mvvm;
 
+using LittleBigMouse.DisplayLayout;
+
 namespace LittleBigMouse.Plugin.Location.Plugins.Location.Anchors
 {
-    class AnchorsViewModel : ViewModel<ScreenConfig.ScreenConfig>
+    class AnchorsViewModel : ViewModel<Layout>
     {
     }
 }

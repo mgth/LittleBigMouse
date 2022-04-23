@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -27,12 +27,14 @@ using HLab.Base.Wpf;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Control.Sys;
 
+using MahApps.Metro.Controls;
+
 namespace LittleBigMouse.Control.Main
 {
     /// <summary>
     /// Interaction logic for Config.xaml
     /// </summary>
-    public partial class MainView : Window,IView<ViewModeDefault,MainViewModel>, IViewClassDefault
+    public partial class MainView : Window,IView<ViewModeDefault,MainControlViewModel>, IViewClassDefault
     {
 
         private readonly WindowResizer _resizer;
@@ -40,7 +42,6 @@ namespace LittleBigMouse.Control.Main
         public MainView()
         {
             InitializeComponent();
-            _resizer = new WindowResizer(this,ResizeGrid);
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -50,15 +51,7 @@ namespace LittleBigMouse.Control.Main
 
         public void OnMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 2)
-                WindowState = WindowState==WindowState.Maximized?WindowState.Normal : WindowState.Maximized;
-            else
-                _resizer.Sizer_DragWindow(sender,e);
         }
 
-        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
-        {
-            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-        }
     }
 }

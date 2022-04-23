@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Daemon
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Daemon.
 
@@ -29,55 +29,32 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
-using HLab.Notify.PropertyChanged;
-using HLab.Notify.Wpf;
+
 using HLab.Remote;
-using HLab.Sys.Windows.Monitors;
-using LittleBigMouse.Daemon.Updater;
-using LittleBigMouse.ScreenConfig;
-using LittleBigMouse_Daemon.Updater;
-using Microsoft.Win32.TaskScheduler;
+using LittleBigMouse.Zoning;
 using Task = System.Threading.Tasks.Task;
 
 namespace LittleBigMouse.Daemon
 {
     class LittleBigMouseDaemon : Application, ILittleBigMouseService
     {
-        private string ServiceName { get; } = "LittleBigMouse_" + System.Security.Principal.WindowsIdentity.GetCurrent().Name.Replace('\\', '_');
         private MouseEngine _engine;
         private readonly RemoteServer _remoteServer = new RemoteServer("lbm.daemon");
-        private readonly IMonitorsService _monitorsService = new MonitorsService();
-        private Notify _notify;
 
         public LittleBigMouseDaemon()
         {
-            NotifyHelper.EventHandlerService = new EventHandlerServiceWpf();
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
         }
 
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            _notify = new Notify();
-            _engine = new MouseEngine(_monitorsService);
-
-            _engine.ConfigLoaded += _engine_ConfigLoaded;
+            _engine = new MouseEngine(null);
 
             base.OnStartup(e);
 
             _remoteServer.GotMessage += OnGotMessage;
             _remoteServer.Run();
-
-            if (_notify != null)
-                _notify.Click += OnNotifyClick;
-
-            UpdateConfig();
-
-            _notify.AddMenu(-1, "Check for update", CheckUpdate);
-            _notify.AddMenu(-1, "Open", Open);
-            _notify.AddMenu(-1, "Start", Start);
-            _notify.AddMenu(-1, "Stop", Stop);
-            _notify.AddMenu(-1, "Exit", Quit);
 
             CommandLine(e.Args);
         }
@@ -86,7 +63,6 @@ namespace LittleBigMouse.Daemon
         {
             Stop();
             _remoteServer?.Stop();
-            _notify.Hide();
 
             base.OnExit(e);
         }
@@ -99,46 +75,44 @@ namespace LittleBigMouse.Daemon
             );
         }
 
+//TODO implement in control
 
-        private void _engine_ConfigLoaded(object sender, EventArgs e)
-        {
-            UpdateConfig();
-        }
-
-
-        public void UpdateConfig()
-        {
-            _notify.RemoveMenu("config");
-
-            foreach (string configName in ScreenConfig.ScreenConfig.ConfigsList)
-            {
-                bool chk = configName == _engine.Config?.Id;
-
-                // TODO : if (_screenConfig!=null && _screenConfig.IsDoableConfig(configName))
-                {
-                    _notify.AddMenu(0, configName, MatchConfig, "config", chk);
-                }
-            }
-
-        }
+        //private void _engine_ConfigLoaded(object sender, EventArgs e)
+        //{
+        //    UpdateConfig();
+        //}
 
 
-        private void OnNotifyClick(object sender, EventArgs e) { Open(); }
+        //public void UpdateConfig()
+        //{
+        //    _notify.RemoveMenu("config");
+
+        //    foreach (string configName in Layout.LayoutsList)
+        //    {
+        //        bool chk = configName == _engine.Layout?.Id;
+
+        //        // TODO : if (_screenConfig!=null && _screenConfig.IsDoableConfig(configName))
+        //        {
+        //            _notify.AddMenu(0, configName, MatchConfig, "config", chk);
+        //        }
+        //    }
+
+        //}
 
 
-        private void MatchConfig(object sender, EventArgs e)
-        {
-            //if (sender is ToolStripMenuItem menu)
-            //{
-            //    _engine.MatchConfig(menu.Text);
-            //}
-        }
+        //private void MatchConfig(object sender, EventArgs e)
+        //{
+        //    //if (sender is ToolStripMenuItem menu)
+        //    //{
+        //    //    _engine.MatchConfig(menu.Text);
+        //    //}
+        //}
 
 
         public async void CommandLine(IList<string> args)
         {
-            List<string> a = args.ToList();
-            foreach (string s in a)
+            var a = args.ToList();
+            foreach (var s in a)
             {
                 if (s.StartsWith("--"))
                 {
@@ -169,9 +143,6 @@ namespace LittleBigMouse.Daemon
                 case "quit":
                     Quit();
                     break;
-                case "l":
-                case "load":
-                    LoadConfig();
                     break;
                 case "s":
                 case "start":
@@ -180,18 +151,6 @@ namespace LittleBigMouse.Daemon
                 case "p":
                 case "stop":
                     Stop();
-                    break;
-                case "c":
-                case "schedule":
-                    LoadAtStartup();
-                    break;
-                case "n":
-                case "unschedule":
-                    LoadAtStartup(false);
-                    break;
-                case "u":
-                case "update":
-                    CheckUpdateAsync();
                     break;
             }
         }
@@ -208,34 +167,22 @@ namespace LittleBigMouse.Daemon
             }
         }
 
-        public async void Update()
-        {
-            CheckUpdateAsync();
-        }
-
-        public async void LoadAtStartup(bool state = true)
-        {
-            if (state) Schedule();
-            else Unschedule();
-        }
 
         //public void Init()
         //{
         //    Callback = OperationContext.Current.GetCallbackChannel<ILittleBigMouseCallback>();
         //}
 
-        public async void LoadConfig()
-        {
-            _engine.LoadConfig();
-            if (_engine.Config.AutoUpdate)
-                CheckUpdateAsync();
-        }
-
         private void Quit(object sender, EventArgs e) { Quit(); }
         public async void Quit()
         {
             Stop();
             Shutdown();
+        }
+
+        public void Start(ZonesLayout layout)
+        {
+            throw new NotImplementedException();
         }
 
         private async void Start(object sender, EventArgs e)
@@ -246,7 +193,6 @@ namespace LittleBigMouse.Daemon
         public async void Start()
         {
             _engine.Start();
-            _notify.SetOn();
             //await _server.SendMessageAsync("running");
         }
 
@@ -258,109 +204,73 @@ namespace LittleBigMouse.Daemon
         public async void Stop()
         {
             _engine.Stop();
-            _notify.SetOff();
             //await _server.SendMessageAsync("stopped");
         }
 
-        private void Open(object sender, EventArgs eventArgs)
-        {
-            Open();
-        }
 
-        private void CheckUpdate(object sender, EventArgs eventArgs) { CheckUpdateAsync(); }
+        // TODO implement in control
 
-        private async Task<bool> CheckUpdateAsync()
-        {
-            var updater = new ApplicationUpdateViewModel();
+        //private void CheckUpdate(object sender, EventArgs eventArgs) { CheckUpdateAsync(); }
 
-            await updater.CheckVersion();
+        //private async Task<bool> CheckUpdateAsync()
+        //{
+        //    var updater = new ApplicationUpdateViewModel();
 
-            if (updater.NewVersionFound)
-            {
-                var updaterView = new ApplicationUpdateView
-                {
-                    DataContext = updater
-                };
-                updaterView.ShowDialog();
+        //    await updater.CheckVersion();
 
-                if (updater.Updated)
-                {
-                    Quit();
-                    return true;
-                }
-            }
+        //    if (updater.NewVersionFound)
+        //    {
+        //        var updaterView = new ApplicationUpdateView
+        //        {
+        //            DataContext = updater
+        //        };
+        //        updaterView.ShowDialog();
 
-            return false;
-        }
+        //        if (updater.Updated)
+        //        {
+        //            Quit();
+        //            return true;
+        //        }
+        //    }
+
+        //    return false;
+        //}
 
 
-        [DllImport("user32")]
-        private static extern bool SetForegroundWindow(IntPtr hwnd);
-        private void Open()
-        {
-            Process[] pp = Process.GetProcessesByName("LittleBigMouse.Control.Loader");
-            foreach (var process in pp)
-            {
-                SetForegroundWindow(process.MainWindowHandle);
-            }
-            if (pp.Length > 0) return;
 
-            var p = Process.GetCurrentProcess();
-            string filename = p.MainModule.FileName.Replace(".Daemon", ".Control.Loader").Replace(".vshost", "");
+        // TODO implement in control
+        //public void Schedule()
+        //{
+        //    using var ts = new TaskService();
 
-            filename = filename.Replace("\\Daemon\\", "\\Control.Loader\\");
+        //    ts.RootFolder.DeleteTask(ServiceName, false);
 
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = filename,
-                WorkingDirectory = Path.GetDirectoryName(p.MainModule.FileName),
-                //Arguments = "-startcontrol",
-                UseShellExecute = false
-            };
+        //    var td = ts.NewTask();
+        //    td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
+        //    td.Triggers.Add(
+        //        //new BootTrigger());
+        //        new LogonTrigger { UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name });
 
-            try
-            {
-                Process.Start(startInfo);
-            }
-            catch(FileNotFoundException)
-            {
-                //TODO
-            }
-        }
+        //    //var p = Process.GetCurrentProcess();
+        //    //string filename = p.MainModule.FileName.Replace(".vshost", "");
+        //    var filename = AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName.Replace(".vshost", "");
 
+        //    td.Actions.Add(
+        //        new ExecAction(filename, "--start", AppDomain.CurrentDomain.BaseDirectory)
+        //    );
 
-        public void Schedule()
-        {
-            using var ts = new TaskService();
+        //    td.Principal.RunLevel = TaskRunLevel.Highest;
+        //    td.Settings.DisallowStartIfOnBatteries = false;
+        //    td.Settings.DisallowStartOnRemoteAppSession = true;
+        //    td.Settings.StopIfGoingOnBatteries = false;
+        //    td.Settings.ExecutionTimeLimit = TimeSpan.Zero;
 
-            ts.RootFolder.DeleteTask(ServiceName, false);
-
-            var td = ts.NewTask();
-            td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
-            td.Triggers.Add(
-                //new BootTrigger());
-                new LogonTrigger { UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name });
-
-            //var p = Process.GetCurrentProcess();
-            //string filename = p.MainModule.FileName.Replace(".vshost", "");
-            var filename = AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName.Replace(".vshost", "");
-
-            td.Actions.Add(
-                new ExecAction(filename, "--start", AppDomain.CurrentDomain.BaseDirectory)
-            );
-
-            td.Principal.RunLevel = TaskRunLevel.Highest;
-            td.Settings.DisallowStartIfOnBatteries = false;
-            td.Settings.DisallowStartOnRemoteAppSession = true;
-            td.Settings.StopIfGoingOnBatteries = false;
-            td.Settings.ExecutionTimeLimit = TimeSpan.Zero;
-
-            ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
-        }
-        public void Unschedule()
-        {
-            using var ts = new TaskService();
-            ts.RootFolder.DeleteTask(ServiceName, false);
-        }
+        //    ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
+        //}
+        //public void Unschedule()
+        //{
+        //    using var ts = new TaskService();
+        //    ts.RootFolder.DeleteTask(ServiceName, false);
+        //}
     }
 }

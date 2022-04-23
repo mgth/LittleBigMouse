@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -28,17 +28,19 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Notify.PropertyChanged;
+
+using LittleBigMouse.DisplayLayout;
+using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.Plugins;
-using LittleBigMouse.ScreenConfig;
-using LittleBigMouse.ScreenConfig.Dimensions;
 
 namespace LittleBigMouse.Control.ScreenFrame
 {
     using H = H<ScreenFrameViewModel>;
-    public class ScreenFrameViewModel : ViewModel<Screen>, IMvvmContextProvider, IScreenFrameViewModel
+    public class ScreenFrameViewModel : ViewModel<Monitor>, IMvvmContextProvider, IScreenFrameViewModel
     {
         public ScreenFrameViewModel()
         {
@@ -93,6 +95,7 @@ namespace LittleBigMouse.Control.ScreenFrame
 
         public Thickness LogoPadding => _logoPadding.Get();
         private readonly IProperty<Thickness> _logoPadding = H.Property<Thickness>(c => c
+                .NotNull(e => e.Presenter)
                 .Set(e => new Thickness(4 * e.Presenter.VisualRatio.X,4*e.Presenter.VisualRatio.Y,4 * e.Presenter.VisualRatio.X,4*e.Presenter.VisualRatio.Y))
                 .On(e => e.Presenter.VisualRatio.X)
                 .On(e => e.Presenter.VisualRatio.Y)
@@ -118,11 +121,11 @@ namespace LittleBigMouse.Control.ScreenFrame
                     if (e.Presenter == null) return 0.0;
 
                     return e.Presenter.VisualRatio.X *
-                           (e.Model.Config.X0 + e.Model.XMoving - e.Model.InMm.LeftBorder);
+                           (e.Model.Layout.X0 + e.Model.XMoving - e.Model.InMm.LeftBorder);
                 })
                 .On(e => e.Presenter.VisualRatio.X)
                 .On(e => e.Model.XMoving)
-                .On(e => e.Model.Config.X0)
+                .On(e => e.Model.Layout.X0)
                 .On(e => e.Model.InMm.LeftBorder)
                 .Update()
             );
@@ -135,22 +138,25 @@ namespace LittleBigMouse.Control.ScreenFrame
                     if (e.Presenter == null) return 0.0;
 
                     return e.Presenter.VisualRatio.Y *
-                           (e.Model.Config.Y0 + e.Model.YMoving - e.Model.InMm.TopBorder);
+                           (e.Model.Layout.Y0 + e.Model.YMoving - e.Model.InMm.TopBorder);
                 })
                 .On(e => e.Presenter.VisualRatio.Y)
                 .On(e => e.Model.YMoving)
-                .On(e => e.Model.Config.Y0)
+                .On(e => e.Model.Layout.Y0)
                 .On(e => e.Model.InMm.TopBorder)
                 .Update()
             );
 
 
-        public IScreenSize Rotated => _rotated.Get();
-        private readonly IProperty<IScreenSize> _rotated = H.Property<IScreenSize>(c => c
-            .NotNull(e => e.Model)
-            .NotNull(e => e.Presenter)
+        public IDisplaySize Rotated => _rotated.Get();
+        private readonly IProperty<IDisplaySize> _rotated = H.Property<IDisplaySize>(c => c
+//            .NotNull(e => e.Model)
+//            .NotNull(e => e.Presenter)
             .Set(e =>
             {
+                if (e.Model == null) return null;
+                if (e.Presenter == null) return null;
+
                 //if (e.Presenter == null) return null;//e.Model.InMm;
                 return e.Model.InMm.ScaleWithLocation(e.Presenter.VisualRatio);
             })
@@ -160,8 +166,8 @@ namespace LittleBigMouse.Control.ScreenFrame
         );
 
 
-        public IScreenSize Unrotated => _unrotated.Get();
-        private readonly IProperty<IScreenSize> _unrotated = H.Property<IScreenSize>(c => c
+        public IDisplaySize Unrotated => _unrotated.Get();
+        private readonly IProperty<IDisplaySize> _unrotated = H.Property<IDisplaySize>(c => c
             .Set(e =>
             {
                 if (e.Presenter == null) return null;//e.Model.InMmU;
@@ -182,7 +188,7 @@ namespace LittleBigMouse.Control.ScreenFrame
             .NotNull(e => e.Model)
             .Set(e =>
             {
-                switch (e.Model.Config.WallpaperStyle)
+                switch (e.Model.Layout.WallpaperStyle)
                 {
                     case 0:
                         return Stretch.None;
@@ -197,7 +203,7 @@ namespace LittleBigMouse.Control.ScreenFrame
                         return Stretch.None;
                 }
             })
-            .On(e => e.Model.Config.WallpaperStyle)
+            .On(e => e.Model.Layout.WallpaperStyle)
             .Update()
         );
 
@@ -211,9 +217,10 @@ namespace LittleBigMouse.Control.ScreenFrame
                 {
                     return new Image
                     {
-                        Source = new BitmapImage(new Uri(e.Model.Config.WallPaperPath)),
+                        Source = new BitmapImage(new Uri(e.Model.ActiveSource.Device.WallpaperPath)),
                         Stretch = e.WallPaperStretch,
-                        HorizontalAlignment = HorizontalAlignment.Center
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
                     };
                 }
                 catch (Exception)
@@ -222,7 +229,7 @@ namespace LittleBigMouse.Control.ScreenFrame
                 }
             })
             .On(e => e.WallPaperStretch)
-            .On(e => e.Model.Config.WallPaperPath)
+            .On(e => e.Model.ActiveSource.Device.WallpaperPath)
             .Update()
         );
 
@@ -230,156 +237,34 @@ namespace LittleBigMouse.Control.ScreenFrame
         private readonly IProperty<Brush> _backgroundColor = H.Property<Brush>(c=>c
             .Set(e => (Brush)new SolidColorBrush(
                 Color.FromRgb(
-                    (byte)e.Model.Config.BackgroundColor[0],
-                    (byte)e.Model.Config.BackgroundColor[1],
-                    (byte)e.Model.Config.BackgroundColor[2])))
-            .On(e => e.Model.Config.BackgroundColor)
+                    (byte)e.Model.Layout.BackgroundColor[0],
+                    (byte)e.Model.Layout.BackgroundColor[1],
+                    (byte)e.Model.Layout.BackgroundColor[2])))
+            .On(e => e.Model.Layout.BackgroundColor)
             .Update()
         );
 
 
 
-        public Viewbox Logo => _logo.Get();
-        private readonly IProperty<Viewbox> _logo = H.Property<Viewbox>(c => c
+        public string Logo => _logo.Get();
+        private readonly IProperty<string> _logo = H.Property<string>(c => c
             .Set(e => e.GetLogo())
-            .On(e => e.Model.Monitor.Edid.ManufacturerCode)
-            .On(e => e.Model.Monitor.AttachedDevice.Parent.DeviceString)
+            .On(e => e.Model.ActiveSource.Device.Edid.ManufacturerCode)
+            .On(e => e.Model.ActiveSource.Device.AttachedDevice.Parent.DeviceString)
             .Update()
         );
 
-        public Viewbox GetLogo()
+        private string GetLogo()
         {
-            var dev = Model?.Monitor?.AttachedDevice?.Parent?.DeviceString;
-            if(dev !=null && dev.ToLower().Contains("spacedesk")) return (Viewbox)Application.Current.FindResource("LogoSpacedesk"); 
+            var dev = Model?.ActiveSource?.Device?.AttachedDevice?.Parent?.DeviceString;
+            if(dev !=null && dev.ToLower().Contains("spacedesk")) return "icon/Pnp/Spacedesk"; 
 
-            if (Model?.Monitor?.Edid?.ManufacturerCode == null) return null;
+            if (Model?.ActiveSource?.Device?.Edid?.ManufacturerCode == null) return null;
 
-                switch (Model.Monitor.Edid.ManufacturerCode.ToLower())
-                {
+            return $"icon/Pnp/{Model.ActiveSource.Device.Edid.ManufacturerCode}";
+        }
 
-                // https://github.com/OCSInventory-NG/WindowsAgent/blob/master/SysInfo/ISA_PNPID.cpp
 
-                case "sam":
-                case "skt":
-                case "sse":
-                case "stn":
-                case "kyk":
-                case "sem":
-                    return (Viewbox)Application.Current.FindResource("LogoSam"); 
-                case "del":
-                case "dll":
-                    return (Viewbox)Application.Current.FindResource("LogoDel"); 
-                case "che":
-                case "ali":
-                case "acr":
-                case "api":
-                    return (Viewbox)Application.Current.FindResource("LogoAcer"); 
-                case "atk":
-                case "aci":
-                case "asu":
-                    return (Viewbox)Application.Current.FindResource("LogoAsus"); 
-                case "eiz":
-                case "egd":
-                case "enc":
-                    return (Viewbox)Application.Current.FindResource("LogoEizo"); 
-                case "ben":
-                case "bnq":
-                    return (Viewbox)Application.Current.FindResource("LogoBenq");
-                case "nec":
-                case "nct":
-                case "nmv":
-                    return (Viewbox)Application.Current.FindResource("LogoNec"); 
-                case "hpq":
-                case "hpd":
-                case "hpc":
-                    return (Viewbox)Application.Current.FindResource("LogoHp");
-                case "lg":
-                case "lgs":
-                case "gsm"://GoldStar 
-                    return (Viewbox)Application.Current.FindResource("LogoLg"); 
-                case "apl":
-                case "app":
-                    return (Viewbox)Application.Current.FindResource("LogoApple");
-                case "fdt":
-                case "fuj":
-                case "fmi":
-                case "fml":
-                case "fpe":
-                case "fus":
-                case "fjs":
-                case "fjc":
-                case "ftl":
-                    return (Viewbox)Application.Current.FindResource("LogoFujitsu");
-                case "ibm":
-                case "cdt":
-                    return (Viewbox)Application.Current.FindResource("LogoIbm");
-                case "mat":
-                case "mdo":
-                case "plf":
-                case "mei":
-                    return (Viewbox)Application.Current.FindResource("LogoPanasonic");
-                case "sny":
-                case "son":
-                case "ser":
-                    return (Viewbox)Application.Current.FindResource("LogoSony");
-                case "tai":
-                case "tsb":
-                case "tos":
-                case "tgc":
-                case "lcd":
-                case "pcs":
-                case "tli":
-                    return (Viewbox)Application.Current.FindResource("LogoToshiba");
-                case "aoc":
-                    return (Viewbox)Application.Current.FindResource("LogoAoc");
-                case "ivm":
-                    return (Viewbox)Application.Current.FindResource("LogoIiyama");
-                case "len":
-                case "lnv":
-                case "lin":
-                    return (Viewbox)Application.Current.FindResource("LogoLenovo");
-                case "pca":
-                case "phs":
-                case "phl":
-                case "phe":
-                case "psc":
-                    return (Viewbox)Application.Current.FindResource("LogoPhilips");
-                case "hei":
-                    return (Viewbox)Application.Current.FindResource("LogoYundai");
-                case "cpq":
-                    return (Viewbox)Application.Current.FindResource("LogoCompaq");
-                case "hit":
-                case "hcp":
-                case "hce":
-                case "hec":
-                case "hic":
-                case "htc":
-                case "mxl":
-                case "hel":
-                    return (Viewbox)Application.Current.FindResource("LogoHitachi");
-                case "hyo":
-                    return (Viewbox)Application.Current.FindResource("LogoQnix");
-                case "nts":
-                    return (Viewbox)Application.Current.FindResource("LogoIolair");
-                case "otm":
-                    return (Viewbox)Application.Current.FindResource("LogoOptoma");
-                case "vsc":
-                    return (Viewbox)Application.Current.FindResource("LogoViewsonic");
-                case "msg":
-                    return (Viewbox)Application.Current.FindResource("LogoMsi");
-                case "gbt":
-                    return (Viewbox)Application.Current.FindResource("LogoAorus");
-                case "ins":
-                    return (Viewbox)Application.Current.FindResource("LogoInsignia");
-                case "auo":
-                    return (Viewbox)Application.Current.FindResource("LogoAUO");
-                case "wac":
-                    return (Viewbox)Application.Current.FindResource("LogoWacom");
-                    
-                default:
-                    return (Viewbox)Application.Current.FindResource("LogoLbm");
-            }
-            }
 
         public void ConfigureMvvmContext(IMvvmContext ctx)
         {

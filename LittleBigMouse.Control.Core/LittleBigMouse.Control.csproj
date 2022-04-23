@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net5.0-windows</TargetFramework>
+	  <TargetFramework>net6.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Platforms>AnyCPU;x64</Platforms>
 	<StartupObject>LittleBigMouse.Control.App</StartupObject>
@@ -12,12 +12,55 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Icons\colors.xml" />
-    <None Remove="Icons\IconClose.svg" />
-    <None Remove="Icons\IconDebug.svg" />
-    <None Remove="Icons\IconFullscreen.svg" />
-    <None Remove="Icons\IconPinned.svg" />
-    <None Remove="Icons\IconUnfullscreen.svg" />
+    <None Remove="Icon\Close.svg" />
+    <None Remove="Icon\colors.xml" />
+    <None Remove="Icon\Maximize.svg" />
+    <None Remove="Icon\Minimize.svg" />
+    <None Remove="Icon\Monitor.svg" />
+    <None Remove="Icon\MonitorInfo.svg" />
+    <None Remove="Icon\MonitorLocation.svg" />
+    <None Remove="Icon\MonitorSize.svg" />
+    <None Remove="Icon\MonitorVCP.svg" />
+    <None Remove="Icon\Pinned.svg" />
+    <None Remove="Icon\Pnp\Acer.CHE.ALI.ACR.API.svg" />
+    <None Remove="Icon\Pnp\AMD.svg" />
+    <None Remove="Icon\Pnp\AOC.svg" />
+    <None Remove="Icon\Pnp\Aorus.GBT.svg" />
+    <None Remove="Icon\Pnp\Apple.svg" />
+    <None Remove="Icon\Pnp\Asus.ATK.ACI.ASU.svg" />
+    <None Remove="Icon\Pnp\AUO.svg" />
+    <None Remove="Icon\Pnp\Benq.BEN.BNQ.svg" />
+    <None Remove="Icon\Pnp\Compaq.CPQ.svg" />
+    <None Remove="Icon\Pnp\Dell.DEL.DLL.svg" />
+    <None Remove="Icon\Pnp\Eizo.EIZ.EGD.ENC.svg" />
+    <None Remove="Icon\Pnp\Fujitsu.FDT.FUJ.FMI.FML.FPE.FUS.FJS.FJC.FTL.svg" />
+    <None Remove="Icon\Pnp\Hitachi.HIT.HCP.HCE.HEC.HIC.HTC.MXL.HEL.svg" />
+    <None Remove="Icon\Pnp\Hp.HPQ.HPD.HPC.svg" />
+    <None Remove="Icon\Pnp\Hyundai.HEI.svg" />
+    <None Remove="Icon\Pnp\IBM.CDT.svg" />
+    <None Remove="Icon\Pnp\Iiyama.IVM.svg" />
+    <None Remove="Icon\Pnp\Insignia.INS.svg" />
+    <None Remove="Icon\Pnp\Intel.svg" />
+    <None Remove="Icon\Pnp\Iolair.NTS.svg" />
+    <None Remove="Icon\Pnp\Lenovo.LEN.LNV.LIN.svg" />
+    <None Remove="Icon\Pnp\Lg.LGS.GSM.svg" />
+    <None Remove="Icon\Pnp\MSI.MSG.svg" />
+    <None Remove="Icon\Pnp\NEC.NCT.NVM.svg" />
+    <None Remove="Icon\Pnp\Nvidia.svg" />
+    <None Remove="Icon\Pnp\Optoma.OTM.svg" />
+    <None Remove="Icon\Pnp\Panasonic.MAT.MDO.PLF.MEI.svg" />
+    <None Remove="Icon\Pnp\Philips.PCA.PHS.PHL.PHE.PSC.svg" />
+    <None Remove="Icon\Pnp\Qnix.HYO.svg" />
+    <None Remove="Icon\Pnp\Samsung.SAM.SKT.SSE.STN.KYK.SEM.SEC.svg" />
+    <None Remove="Icon\Pnp\Samsung.svg" />
+    <None Remove="Icon\Pnp\Sony.SNY.SON.SER.svg" />
+    <None Remove="Icon\Pnp\Spacedesk.svg" />
+    <None Remove="Icon\Pnp\Toshiba.TAI.TSB.TOS.TGC.LCD.PCS.TLI.svg" />
+    <None Remove="Icon\Pnp\Viewsonic.VSC.svg" />
+    <None Remove="Icon\Pnp\Wacom.WAC.svg" />
+    <None Remove="Icon\Restore.svg" />
+    <None Remove="lbm-off.ico" />
+    <None Remove="lbm-on.ico" />
     <None Remove="MainIcon.ico" />
   </ItemGroup>
 
@@ -26,39 +69,86 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Icons\colors.xml">
+    <Content Include="Icon\colors.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MahApps.Metro" Version="2.4.3" />
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.0.44" />
+    <PackageReference Include="H.Pipes" Version="2.0.37" />
+    <PackageReference Include="MahApps.Metro" Version="2.4.9" />
     <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
     <PackageReference Include="System.Runtime" Version="4.3.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\HLab\HLab.DependencyInjection.Annotations\HLab.DependencyInjection.Annotations.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Notify.Wpf\HLab.Notify.Wpf.csproj" />
+    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Argyll\HLab.Sys.Argyll.csproj" />
+    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.MonitorVcp\HLab.Sys.Windows.MonitorVcp.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Icons.Wpf\HLab.Icons.Wpf.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm\HLab.Mvvm.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Notification.Wpf\HLab.Notification.Wpf\HLab.UserNotification.Wpf.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Notification\HLab.UserNotification.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Notify.Wpf\HLab.Notify.Wpf.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Daemon\LittleBigMouse.Daemon.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Location\LittleBigMouse.Plugin.Location.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp\LittleBigMouse.Plugin.Vcp.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
-    <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.ScreenConfig.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Icons\IconClose.svg" />
-    <Resource Include="Icons\IconDebug.svg">
-      <Generator>XamlIntelliSenseFileGenerator</Generator>
-    </Resource>
-    <Resource Include="Icons\IconFullscreen.svg" />
-    <Resource Include="Icons\IconPinned.svg" />
-    <Resource Include="Icons\IconUnfullscreen.svg" />
+    <Resource Include="Icon\Minimize.svg" />
+    <Resource Include="Icon\Monitor.svg" />
+    <Resource Include="Icon\MonitorInfo.svg" />
+    <Resource Include="Icon\MonitorLocation.svg" />
+    <Resource Include="Icon\MonitorSize.svg" />
+    <Resource Include="Icon\MonitorVCP.svg" />
+    <Resource Include="Icon\Pnp\Acer.CHE.ALI.ACR.API.svg" />
+    <Resource Include="Icon\Pnp\AMD.svg" />
+    <Resource Include="Icon\Pnp\AOC.svg" />
+    <Resource Include="Icon\Pnp\Aorus.GBT.svg" />
+    <Resource Include="Icon\Pnp\Apple.svg" />
+    <Resource Include="Icon\Pnp\Asus.ATK.ACI.ASU.svg" />
+    <Resource Include="Icon\Pnp\AUO.svg" />
+    <Resource Include="Icon\Pnp\Benq.BEN.BNQ.svg" />
+    <Resource Include="Icon\Pnp\Compaq.CPQ.svg" />
+    <Resource Include="Icon\Pnp\Dell.DEL.DLL.svg" />
+    <Resource Include="Icon\Pnp\Eizo.EIZ.EGD.ENC.svg" />
+    <Resource Include="Icon\Pnp\Fujitsu.FDT.FUJ.FMI.FML.FPE.FUS.FJS.FJC.FTL.svg" />
+    <Resource Include="Icon\Pnp\Hitachi.HIT.HCP.HCE.HEC.HIC.HTC.MXL.HEL.svg" />
+    <Resource Include="Icon\Pnp\Hp.HPQ.HPD.HPC.svg" />
+    <Resource Include="Icon\Pnp\Hyundai.HEI.svg" />
+    <Resource Include="Icon\Pnp\IBM.CDT.svg" />
+    <Resource Include="Icon\Pnp\Iiyama.IVM.svg" />
+    <Resource Include="Icon\Pnp\Insignia.INS.svg" />
+    <Resource Include="Icon\Pnp\Intel.svg" />
+    <Resource Include="Icon\Pnp\Iolair.NTS.svg" />
+    <Resource Include="Icon\Pnp\Lenovo.LEN.LNV.LIN.svg" />
+    <Resource Include="Icon\Pnp\Lg.LGS.GSM.svg" />
+    <Resource Include="Icon\Pnp\MSI.MSG.svg" />
+    <Resource Include="Icon\Pnp\NEC.NCT.NVM.svg" />
+    <Resource Include="Icon\Pnp\Nvidia.svg" />
+    <Resource Include="Icon\Pnp\Optoma.OTM.svg" />
+    <Resource Include="Icon\Pnp\Panasonic.MAT.MDO.PLF.MEI.svg" />
+    <Resource Include="Icon\Pnp\Philips.PCA.PHS.PHL.PHE.PSC.svg" />
+    <Resource Include="Icon\Pnp\Qnix.HYO.svg" />
+    <Resource Include="Icon\Pnp\Samsung.SAM.SKT.SSE.STN.KYK.SEM.SEC.svg" />
+    <Resource Include="Icon\Pnp\Samsung.svg" />
+    <Resource Include="Icon\Pnp\Sony.SNY.SON.SER.svg" />
+    <Resource Include="Icon\Pnp\Spacedesk.svg" />
+    <Resource Include="Icon\Pnp\Toshiba.TAI.TSB.TOS.TGC.LCD.PCS.TLI.svg" />
+    <Resource Include="Icon\Pnp\Viewsonic.VSC.svg" />
+    <Resource Include="Icon\Pnp\Wacom.WAC.svg" />
+    <Resource Include="Icon\Close.svg" />
+    <Resource Include="Icon\Maximize.svg" />
+    <Resource Include="Icon\Pinned.svg" />
+    <Resource Include="Icon\Restore.svg" />
+    <Resource Include="lbm-off.ico" />
+    <Resource Include="lbm-on.ico" />
     <Resource Include="MainIcon.ico" />
   </ItemGroup>
 
@@ -85,12 +175,39 @@
     <Compile Update="Plugins\Debug\DebugScreenView.xaml.cs">
       <DependentUpon>DebugScreenView.xaml</DependentUpon>
     </Compile>
-    <Compile Update="Plugins\Default\DefaultScreenView.xaml.cs">
-      <DependentUpon>DefaultScreenView.xaml</DependentUpon>
+    <Compile Update="Plugins\Default\DefaultMonitorView.xaml.cs">
+      <DependentUpon>DefaultMonitorView.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DependentUpon>Resources.resx</DependentUpon>
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+    </Compile>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <AutoGen>True</AutoGen>
     </Compile>
     <Compile Update="ScreenFrame\ScreenFrameView.xaml.cs">
       <DependentUpon>ScreenFrameView.xaml</DependentUpon>
     </Compile>
+    <Compile Update="Updater\ApplicationUpdaterView.xaml.cs">
+      <DependentUpon>ApplicationUpdaterView.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <Generator>PublicResXFileCodeGenerator</Generator>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Properties\Settings.settings">
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+      <Generator>SettingsSingleFileGenerator</Generator>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
@@ -118,10 +235,14 @@
     <Page Update="Plugins\Debug\DebugScreenView.xaml">
       <SubType>Designer</SubType>
     </Page>
-    <Page Update="Plugins\Default\DefaultScreenView.xaml">
+    <Page Update="Plugins\Default\DefaultMonitorView.xaml">
       <SubType>Designer</SubType>
     </Page>
     <Page Update="ScreenFrame\ScreenFrameView.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Updater\ApplicationUpdaterView.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>

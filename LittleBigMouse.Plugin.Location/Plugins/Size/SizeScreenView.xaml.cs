@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -31,72 +31,69 @@ using System.Windows.Threading;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Sys.Windows.API;
-using LittleBigMouse.Control;
-using LittleBigMouse.Control.Core;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Plugin.Location.Plugins.Size
+namespace LittleBigMouse.Plugin.Location.Plugins.Size;
+
+class SizeScreenContentView : UserControl, IView<ViewModeScreenSize, ScreenSizeViewModel>, IViewScreenFrameTopLayer
 {
-    class SizeScreenContentView : UserControl, IView<ViewModeScreenSize, ScreenSizeViewModel>, IViewScreenFrameTopLayer 
+}
+
+/// <summary>
+/// Logique d'interaction pour ScreenGuiBorders.xaml
+/// </summary>
+public partial class SizeScreenView : UserControl, IView<ViewModeScreenSize, ScreenSizeViewModel>, IViewScreenFrameContent
+{
+    public SizeScreenView()
     {
+        InitializeComponent();
     }
 
-    /// <summary>
-    /// Logique d'interaction pour ScreenGuiBorders.xaml
-    /// </summary>
-    public partial class SizeScreenView : UserControl , IView<ViewModeScreenSize, ScreenSizeViewModel>, IViewScreenFrameContent
+    ScreenSizeViewModel ViewModel => (DataContext as ScreenSizeViewModel);
+
+    private void OnKeyEnterUpdate(object sender, KeyEventArgs e)
     {
-        public SizeScreenView()
+        ViewHelper.OnKeyEnterUpdate(sender, e);
+    }
+
+    private static double WheelDelta(MouseWheelEventArgs e)
+    {
+        double delta = (e.Delta > 0) ? 1 : -1;
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0) delta /= 10;
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0) delta *= 10;
+        return delta;
+    }
+
+    private void OnMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is TextBox tb)
         {
-            InitializeComponent();
-        }
+            var p = e.GetPosition(tb);
+            var rx = p.X / tb.ActualWidth;
+            var ry = p.Y / tb.ActualHeight;
 
-        ScreenSizeViewModel ViewModel => (DataContext as ScreenSizeViewModel);
+            var delta = WheelDelta(e);
 
-        private void OnKeyEnterUpdate(object sender, KeyEventArgs e)
-        {
-            ViewHelper.OnKeyEnterUpdate(sender, e);
-        }
+            var prop = TextBox.TextProperty;
 
-        private static double WheelDelta(MouseWheelEventArgs e)
-        {
-            double delta = (e.Delta > 0) ? 1 : -1;
-            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0) delta /= 10;
-            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0) delta *= 10;
-            return delta;
-        }
+            var binding = BindingOperations.GetBindingExpression(tb, prop);
 
-        private void OnMouseWheel(object sender,MouseWheelEventArgs e)
-        {
-             if (sender is TextBox tb)
-             {
-                 var p = e.GetPosition(tb);
-                 var rx = p.X / tb.ActualWidth;
-                 var ry = p.Y / tb.ActualHeight;
+            var val = binding?.Target.GetValue(prop);
+            if (val is string s)
+            {
+                if (double.TryParse(s, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d))
+                {
+                    binding?.Target.SetValue(prop, (d + delta).ToString(CultureInfo.InvariantCulture));
+                    binding?.UpdateSource();
+                }
+            }
 
-                 var delta = WheelDelta(e);
-
-                 var prop = TextBox.TextProperty;
-
-                 var binding = BindingOperations.GetBindingExpression(tb, prop);
-
-                 var val = binding?.Target.GetValue(prop);
-                 if (val is string s)
-                 {
-                     if (double.TryParse(s, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture,  out var d))
-                     {
-                         binding?.Target.SetValue(prop, (d + delta).ToString(CultureInfo.InvariantCulture) );
-                         binding?.UpdateSource();
-                     }
-                 }
-
-                 Dispatcher.BeginInvoke(() =>
-                 {
-                    var p2 = new Point(rx * tb.ActualWidth,ry*tb.ActualHeight);
-                    var l = tb.PointToScreen(p2);
-                    NativeMethods.SetCursorPos((int)l.X, (int)l.Y);
-                 },DispatcherPriority.Loaded);
-             }
+            Dispatcher.BeginInvoke(() =>
+            {
+                var p2 = new Point(rx * tb.ActualWidth, ry * tb.ActualHeight);
+                var l = tb.PointToScreen(p2);
+                NativeMethods.SetCursorPos((int)l.X, (int)l.Y);
+            }, DispatcherPriority.Loaded);
         }
     }
 }

@@ -83,6 +83,7 @@ namespace LittleBigMouse.Plugin.Vcp.Patterns
             .Action((e,p) => e.ShowTestPattern(p as TestPattern))
         );
 
+        // TODO : respect mvvm pattern 
         public void ShowTestPattern(TestPattern pattern)
         {
 
@@ -115,8 +116,8 @@ namespace LittleBigMouse.Plugin.Vcp.Patterns
             }
             else
             {
-                var x = (_target.Model.InDip.X + _target.Model.InDip.Center.X) / 2;
-                var y = (_target.Model.InDip.Y + _target.Model.InDip.Center.Y) / 2;
+                var x = (_target.Model.ActiveSource.InDip.X + _target.Model.ActiveSource.InDip.Center.X) / 2;
+                var y = (_target.Model.ActiveSource.InDip.Y + _target.Model.ActiveSource.InDip.Center.Y) / 2;
 
                 var area = new Rect(new Point(x,y),new Size(1,1));
                 _target.TestPatternPanel = pattern.Show(area);

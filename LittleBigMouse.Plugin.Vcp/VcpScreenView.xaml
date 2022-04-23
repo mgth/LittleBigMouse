@@ -72,6 +72,7 @@
                 <Button Height="20" Command="{Binding AnywayCommand}">Try anyway</Button>
 
             </StackPanel>
+            <Button Command="{Binding SwitchSourceCommand}" Content="Test"/>
             <ItemsControl VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}"/>
         </DockPanel>
 

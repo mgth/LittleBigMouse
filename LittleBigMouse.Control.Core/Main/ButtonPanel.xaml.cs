@@ -8,7 +8,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using HLab.Base;
-using HLab.Mvvm.Icons;
+using HLab.Base.Wpf;
+using HLab.Icons.Wpf.Icons;
 using HLab.Notify.PropertyChanged;
 
 namespace LittleBigMouse.Control.Main
@@ -91,7 +92,7 @@ namespace LittleBigMouse.Control.Main
                     Width = 40,
                     Margin = new Thickness(5),
                     Padding = new Thickness(5),
-                    Content = new IconView {Path = ncmd.IconPath},
+                    Content = new IconView {Margin =  new Thickness(5), Path = ncmd.IconPath},
                 };
                 tb.Checked += (sender, args) =>
                 {

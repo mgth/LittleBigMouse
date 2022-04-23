@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -25,16 +25,17 @@ using System;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+
 using HLab.Mvvm;
 using HLab.Notify.PropertyChanged;
-using LittleBigMouse.LocationPlugin.Plugins.Size;
-using LittleBigMouse.ScreenConfig;
+
+using LittleBigMouse.DisplayLayout;
 
 namespace LittleBigMouse.Plugin.Location.Plugins.Size
 {
     using H = H<ScreenSizeViewModel>;
 
-    class ScreenSizeViewModel : ViewModel<Screen>
+    class ScreenSizeViewModel : ViewModel<Monitor>
     //ScreenControlViewModel
     {
         public ScreenSizeViewModel()
@@ -56,10 +57,10 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
 
 
 
-        private readonly CotationMark _ousideHorizontalCotation = new CotationMark {Brush = new SolidColorBrush(Colors.CadetBlue)};
-        private readonly CotationMark _outsideVerticalCotation = new CotationMark { Brush = new SolidColorBrush(Colors.CadetBlue) };
-        private readonly CotationMark _insideHorizontalCotation = new CotationMark { Brush = new SolidColorBrush(Colors.Bisque) };
-        private readonly CotationMark _insideVerticalCotation = new CotationMark { Brush = new SolidColorBrush(Colors.Bisque) };
+        private readonly CotationMark _ousideHorizontalCotation = new() { Brush = new SolidColorBrush(Colors.CadetBlue)};
+        private readonly CotationMark _outsideVerticalCotation = new() { Brush = new SolidColorBrush(Colors.CadetBlue) };
+        private readonly CotationMark _insideHorizontalCotation = new() { Brush = new SolidColorBrush(Colors.Bisque) };
+        private readonly CotationMark _insideVerticalCotation = new() { Brush = new SolidColorBrush(Colors.Bisque) };
 
 
         private void OnFrameSizeChanged(object sender, EventArgs eventArgs)
@@ -105,7 +106,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             set
             {
                 Model.PhysicalRotated.Height = value;
-                Model.Config.Compact();
+                Model.Layout.Compact();
             }
         }
         private readonly IProperty<double> _height = H.Property<double>(c => c
@@ -120,7 +121,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             set
             {
                 Model.PhysicalRotated.Width = value;
-                Model.Config.Compact(); 
+                Model.Layout.Compact(); 
             }
         }
         private readonly IProperty<double> _width = H.Property<double>(c => c
@@ -134,7 +135,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             set
             {
                 Model.PhysicalRotated.TopBorder = value;
-                Model.Config.Compact();
+                Model.Layout.Compact();
             }
         }
         private readonly IProperty<double> _topBorder = H.Property<double>(c => c
@@ -148,7 +149,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             set
             {
                 Model.PhysicalRotated.RightBorder = value;
-                Model.Config.Compact();
+                Model.Layout.Compact();
             }
         }
         private readonly IProperty<double> _rightBorder = H.Property<double>(c => c
@@ -162,7 +163,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             set
             {
                 Model.PhysicalRotated.BottomBorder = value;
-                Model.Config.Compact();
+                Model.Layout.Compact();
             }
         }
         private readonly IProperty<double> _bottomBorder = H.Property<double>(c => c
@@ -176,7 +177,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             set
             {
                 Model.PhysicalRotated.LeftBorder = value;
-                Model.Config.Compact();
+                Model.Layout.Compact();
             }
         }
         private readonly IProperty<double> _leftBorder = H.Property<double>(c => c
@@ -191,7 +192,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
             {
                 var offset = value - OutsideHeight;
                 Model.PhysicalRotated.BottomBorder += offset;
-                Model.Config.Compact();
+                Model.Layout.Compact();
             }
         }
         private readonly IProperty<double> _outsideHeight = H.Property<double>(c => c
@@ -207,7 +208,7 @@ namespace LittleBigMouse.Plugin.Location.Plugins.Size
                 var offset = (value - OutsideWidth) / 2;
                 Model.PhysicalRotated.LeftBorder += offset;
                 Model.PhysicalRotated.RightBorder += offset;
-                Model.Config.Compact();
+                Model.Layout.Compact();
             }
         }
         private readonly IProperty<double> _outsideWidth = H.Property<double>(c => c

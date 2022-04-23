@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Vcp
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Vcp.
 
@@ -26,6 +26,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using HLab.Base;
+using HLab.Base.Wpf;
 using HLab.Sys.Windows.MonitorVcp;
 
 namespace LittleBigMouse.Plugin.Vcp

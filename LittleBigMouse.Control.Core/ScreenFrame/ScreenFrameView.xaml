@@ -7,7 +7,7 @@
              xmlns:converters="clr-namespace:HLab.Base.Converters;assembly=HLab.Base.Wpf"
              xmlns:converters1="clr-namespace:HLab.Base.Wpf.Converters;assembly=HLab.Base.Wpf"
              xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
-             xmlns:screenFrame="clr-namespace:LittleBigMouse.Control.ScreenFrame"
+             xmlns:screenFrame="clr-namespace:LittleBigMouse.Control.ScreenFrame" xmlns:icons="clr-namespace:HLab.Icons.Wpf.Icons;assembly=HLab.Icons.Wpf"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="500"
              HorizontalAlignment="Left"
@@ -54,8 +54,7 @@
 
     <Grid>
         
-        <Grid x:Name="GridRotated"
-              Background="{Binding Model.Selected, Converter={StaticResource Highlighter}, FallbackValue={StaticResource UnselectedBrush}}" >
+        <Grid x:Name="GridRotated">
             <TextBlock.FontSize>
                 <MultiBinding ConverterParameter="0.05" Converter="{StaticResource MultiScale}">
                     <Binding ElementName="GridRotated" Path="ActualHeight"/>
@@ -73,32 +72,46 @@
                 <RowDefinition/>
                 <RowDefinition Height="{Binding Rotated.BottomBorder,FallbackValue=20}"/>
             </Grid.RowDefinitions>
+            
+            <Border 
+                Grid.ColumnSpan="3"
+                Grid.RowSpan="3"
+                Background="{Binding Model.Selected, Converter={StaticResource Highlighter}, FallbackValue={StaticResource UnselectedBrush}}"
+                >
+                <Border.CornerRadius>
+                <MultiBinding ConverterParameter="0.025" Converter="{StaticResource MultiScale}">
+                    <Binding ElementName="GridRotated" Path="ActualHeight"/>
+                    <Binding ElementName="GridRotated" Path="ActualWidth"/>
+                </MultiBinding>
+                </Border.CornerRadius>
+            </Border>
 
-            <!-- TopLeft Shadow -->
-            <Border Grid.Column="0"  Grid.Row="1" BorderThickness="0,0,1,0" BorderBrush="black"/>
-            <Border Grid.Column="1"  Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="black"/>
+            
             <!-- BottomRight Shadow -->
-            <Border Grid.Column="0"  Grid.ColumnSpan="3" Grid.Row="0" Grid.RowSpan="3" BorderThickness="0,0,1,1" BorderBrush="black"/>
+            <Border Grid.Column="0"  Grid.ColumnSpan="3" Grid.Row="0" Grid.RowSpan="3" BorderThickness="0,0,1,1" BorderBrush="Black">
+                <Border.CornerRadius>
+                    <MultiBinding ConverterParameter="0.025" Converter="{StaticResource MultiScale}">
+                        <Binding ElementName="GridRotated" Path="ActualHeight"/>
+                        <Binding ElementName="GridRotated" Path="ActualWidth"/>
+                    </MultiBinding>
+                </Border.CornerRadius>
+            </Border>
+            
             <!-- TopLeft Light -->
-            <Border Grid.Column="0"  Grid.ColumnSpan="3" Grid.Row="0" Grid.RowSpan="3" BorderThickness="1,1,0,0" BorderBrush="LightSlateGray"/>
+            <Border Grid.Column="0"  Grid.ColumnSpan="3" Grid.Row="0" Grid.RowSpan="3" BorderThickness="1,1,0,0" BorderBrush="White" Opacity="0.3">
+                <Border.CornerRadius>
+                <MultiBinding ConverterParameter="0.025" Converter="{StaticResource MultiScale}">
+                    <Binding ElementName="GridRotated" Path="ActualHeight"/>
+                    <Binding ElementName="GridRotated" Path="ActualWidth"/>
+                </MultiBinding>
+                </Border.CornerRadius>
+            </Border>
+            
             <!-- BottomRight Light -->
-            <Border Grid.Column="2"  Grid.Row="1" BorderThickness="1,0,0,0">
-                <Border.BorderBrush>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Offset="0" Color="LightBlue"/>
-                        <GradientStop Offset="1" Color="Gray"/>
-                    </LinearGradientBrush>
-                </Border.BorderBrush>
-            </Border>
-            <Border Grid.Column="1"  Grid.Row="2" BorderThickness="0,1,0,0">
-
-                <Border.BorderBrush>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Offset="0" Color="LightBlue"/>
-                        <GradientStop Offset="1" Color="Gray"/>
-                    </LinearGradientBrush>
-                </Border.BorderBrush>
-            </Border>
+            <Border Grid.Column="1"  Grid.Row="1" BorderThickness="0,0,2,2" Margin="-2" CornerRadius="2" BorderBrush="White" Opacity="0.4"/>
+            
+            <!-- TopLeft Shadow -->
+            <Border Grid.Column="1"  Grid.Row="1" BorderThickness="2,2,0,0" Margin="-2" CornerRadius="2" BorderBrush="Black" Opacity="0.4"/>
 
 
         </Grid>
@@ -134,7 +147,7 @@
             Grid.Column="1" 
                 FontWeight="Black"
                 Opacity="0.75"
-            Content="{Binding Path=Model.ScreenModel.PnpDeviceName, FallbackValue=Unknown}">
+            Content="{Binding Path=Model.Model.PnpDeviceName, FallbackValue=Unknown}">
 
                 <Label.FontSize>
                     <Binding ElementName="TopRow" Path="ActualHeight" Converter="{StaticResource Scale}" ConverterParameter="0.7"
@@ -157,8 +170,14 @@
                 VerticalAlignment="Center" 
                 Grid.Row="2" 
                 Grid.Column="1" 
-                Content="{Binding Path=Logo}"
-                />
+                Foreground="LightGray"
+                Opacity="0.8"
+                >
+                
+                <icons:IconView Path="{Binding Logo}">
+                    
+                </icons:IconView>
+                </Label>
 
             <!--<Label 
                 Margin="0" 

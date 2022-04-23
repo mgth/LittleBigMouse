@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Screen.Config
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Screen.Config.
 
@@ -25,7 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace LittleBigMouse.ScreenConfig
+namespace LittleBigMouse.DisplayLayout
 {
     public class LossyThread
     {
@@ -36,7 +36,7 @@ namespace LittleBigMouse.ScreenConfig
 
         private readonly object _threadLock = new object();
 
-        public LossyThread(ThreadStart ts=null)
+        public LossyThread(ThreadStart ts = null)
         {
             _finnaly = ts;
         }

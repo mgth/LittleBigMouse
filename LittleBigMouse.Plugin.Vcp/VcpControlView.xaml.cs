@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Vcp
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Vcp.
 
@@ -23,9 +23,10 @@
 
 using System.Windows;
 using System.Windows.Controls;
-using HLab.DependencyInjection.Annotations;
+
 using HLab.Mvvm.Annotations;
-using LittleBigMouse.ScreenConfig;
+
+using LittleBigMouse.DisplayLayout;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
@@ -34,11 +35,11 @@ namespace LittleBigMouse.Plugin.Vcp
     /// </summary>
     public partial class VcpControlView : UserControl, IView<ViewModeScreenVcp, VcpScreenViewModel>
     {
-        [Import]
         private readonly ILittleBigMouseClientService _service;
 
-        public VcpControlView()
+        public VcpControlView(ILittleBigMouseClientService service)
         {
+            _service = service;
             InitializeComponent();
         }
 
@@ -52,8 +53,7 @@ namespace LittleBigMouse.Plugin.Vcp
         {
             Save();
             //LittleBigMouseClient.Client.LoadAtStartup(Model.LoadAtStartup);
-            _service.LoadConfig();
-            _service.Start();
+            //_service.Start();
         }
 
         private void cmdCancel_Click(object sender, RoutedEventArgs e)

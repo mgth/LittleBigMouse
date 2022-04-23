@@ -22,13 +22,7 @@ extensions: .cs .cpp .h
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-extensions: .aspx .ascx
-<%-- 
-Copyright (c) 2011 rubicon IT GmbH
---%>
-extensions: .vb
-'Sample license text.
 extensions:  .xml .config .xsd
 <!--
-Sample license text.
+ Copyright (c) %CurrentYear% Mathieu GRENET.  All right reserved.
 -->

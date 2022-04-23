@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -23,40 +23,40 @@
 
 using System.Windows.Input;
 using HLab.Core.Annotations;
-using HLab.DependencyInjection.Annotations;
+using HLab.Icons.Annotations.Icons;
 using HLab.Mvvm.Annotations;
 using HLab.Notify.PropertyChanged;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Plugin.Location.Plugins.Location
+namespace LittleBigMouse.Plugin.Location.Plugins.Location;
+
+class ViewModeScreenLocation : ViewMode { }
+
+public class ScreenLocationPlugin : IBootloader
 {
-    class ViewModeScreenLocation : ViewMode { }
+    private readonly IMainService _mainService;
 
-    public class ScreenLocationPlugin : IBootloader
+    public ScreenLocationPlugin(IMainService mainService, IIconService iconService)
     {
-        private readonly IMainService _mainService;
-
-        [Import]
-        public ScreenLocationPlugin(IMainService mainService, IIconService iconService)
-        {
-            _mainService = mainService;
-        }
-
-        public void Load(IBootContext bootstrapper)
-        {
-            _mainService.AddButton(new NCommand<bool>(b =>
-                {
-                    if (b)
-                        _mainService.SetViewMode<ViewModeScreenLocation>();
-                    else
-                        _mainService.SetViewMode<ViewModeDefault>();
-                })
-                {
-                    IconPath = "Icons/IconLocation", 
-                    ToolTipText = "Location"
-                }
-            );
-        }
-
+        _mainService = mainService;
     }
+
+    public void Load(IBootContext bootstrapper)
+    {
+        _mainService.AddControlPlugin(c => 
+        
+            c.AddButton(new NCommand<bool>(b =>
+            {
+                if (b)
+                    c.SetViewMode<ViewModeScreenLocation>();
+                else
+                    c.SetViewMode<ViewModeDefault>();
+            })
+            {
+                IconPath = "Icon/MonitorLocation",
+                ToolTipText = "Location"
+            }
+        ));
+    }
+
 }

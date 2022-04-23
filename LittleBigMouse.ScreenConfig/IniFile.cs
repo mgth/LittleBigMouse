@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Screen.Config
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Screen.Config.
 
@@ -24,7 +24,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace LittleBigMouse.ScreenConfig
+namespace LittleBigMouse.DisplayLayout
 {
     /// <summary>
     /// Create a New INI file to store or load data

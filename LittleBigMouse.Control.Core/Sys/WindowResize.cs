@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -26,6 +26,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -54,19 +55,23 @@ namespace LittleBigMouse.Control.Sys
             SetSizer(ResizeDirection.Left, 1, 0);
             SetSizer(ResizeDirection.Right, 1, 2);
 
-            SetSizer(ResizeDirection.TopLeft, 0, 0);
-            SetSizer(ResizeDirection.BottomLeft, 2, 0);
-            SetSizer(ResizeDirection.TopRight, 0, 2);
-            SetSizer(ResizeDirection.BottomRight, 2, 2);
+            var r = 10.0;
+
+            SetSizer(ResizeDirection.TopLeft, 0, 0, new(r,0,0,0));
+            SetSizer(ResizeDirection.BottomLeft, 2, 0, new(0,0,0,r));
+            SetSizer(ResizeDirection.TopRight, 0, 2, new(0,r,0,0));
+            SetSizer(ResizeDirection.BottomRight, 2, 2, new(0,0,r,0));
         }
 
-        private void SetSizer(ResizeDirection dir, int row, int column)
+        private void SetSizer(ResizeDirection dir, int row, int column, CornerRadius cornerRadius = default)
         {
             var sizer = new Border
             {
                 Background = new SolidColorBrush(Colors.Black),
-                Margin = new Thickness(-1)
+                Margin = new Thickness(-1),
+                CornerRadius = cornerRadius
             };
+
 
             sizer.SetValue(Grid.RowProperty, row);
             sizer.SetValue(Grid.ColumnProperty, column);
@@ -81,7 +86,7 @@ namespace LittleBigMouse.Control.Sys
 
         private void Sizer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (!(sender is UIElement clicked)) return;
+            if (sender is not UIElement clicked) return;
 
             var dir = _resizers[clicked];
 

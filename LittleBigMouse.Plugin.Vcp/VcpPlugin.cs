@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Vcp
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Vcp.
 
@@ -22,39 +22,39 @@
 */
 
 using HLab.Core.Annotations;
-using HLab.DependencyInjection.Annotations;
 using HLab.Mvvm.Annotations;
 using HLab.Notify.PropertyChanged;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Plugin.Vcp
+namespace LittleBigMouse.Plugin.Vcp;
+
+class ViewModeScreenVcp : ViewMode { }
+
+public class VcpPlugin : IBootloader
 {
-    class ViewModeScreenVcp : ViewMode { }
+    private readonly IMainService _mainService;
 
-    class VcpPlugin : IBootloader
+    public VcpPlugin(IMainService mainService)
     {
-        private readonly IMainService _mainService;
-
-        [Import] public VcpPlugin(IMainService mainService)
-        {
-            _mainService = mainService;
-        }
-
-        public void Load(IBootContext bootstrapper)
-        {
-            _mainService.AddButton(new NCommand<bool>(b =>
-                {
-                    if (b)
-                        _mainService.SetViewMode<ViewModeScreenVcp>();
-                    else
-                        _mainService.SetViewMode<ViewModeDefault>();
-                })
-                {
-                    IconPath = "Icons/IconVcp", 
-                    ToolTipText = "Vcp control"
-                }
-            );
-        }
-
+        _mainService = mainService;
     }
+
+    public void Load(IBootContext bootstrapper)
+    {
+        _mainService.AddControlPlugin( c =>
+
+        c.AddButton(new NCommand<bool>(b =>
+            {
+                if (b)
+                    c.SetViewMode<ViewModeScreenVcp>();
+                else
+                    c.SetViewMode<ViewModeDefault>();
+            })
+        {
+            IconPath = "Icon/MonitorVcp",
+            ToolTipText = "Vcp control"
+        }
+        ));
+    }
+
 }

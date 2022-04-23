@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -23,62 +23,63 @@
 
 using System;
 using System.Windows;
+
 using HLab.Notify.Annotations;
 using HLab.Notify.PropertyChanged;
-using LittleBigMouse.ScreenConfig;
 
-namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers
+using LittleBigMouse.DisplayLayout;
+
+namespace LittleBigMouse.Plugin.Location.Plugins.Location.Rulers;
+
+using H = H<RulerPanelViewModel>;
+
+public class RulerPanelViewModel : NotifierBase
 {
-    using H = H<RulerPanelViewModel>;
-
-    public class RulerPanelViewModel : NotifierBase
+    public RulerPanelViewModel(Monitor monitor, MonitorSource drawOn)
     {
-        public RulerPanelViewModel(Screen screen, Screen drawOn)
-        {
-            Screen = screen;
-            DrawOn = drawOn;
-            TopRuler = new RulerViewModel(Screen, DrawOn, 0);
-            RightRuler = new RulerViewModel(Screen, DrawOn, 1);
-            BottomRuler = new RulerViewModel(Screen, DrawOn, 2);
-            LeftRuler = new RulerViewModel(Screen, DrawOn, 3);
-            H.Initialize(this);
-        }
-        public Screen Screen { get; }
-        public Screen DrawOn { get; }
-        public RulerViewModel TopRuler { get; }
-        public RulerViewModel RightRuler { get; }
-        public RulerViewModel BottomRuler { get; }
-        public RulerViewModel LeftRuler { get; }
-
-
-        private readonly IProperty<bool> _enabled =H.Property<bool>();
-        public bool Enabled
-        {
-            get => _enabled.Get();
-            set => _enabled.Set(value);
-        }
-
-        public Visibility Visibility
-        {
-            get => _visibility.Get();
-            set => _visibility.Set(value);
-        }
-        private readonly IProperty<Visibility> _visibility 
-            = H.Property<Visibility>();
-
-        
-        public double RulerWidth => _rulerWidth.Get();
-        private readonly IProperty<double> _rulerWidth = H.Property<double>(c => c
-            .Set(e => 30 * e.DrawOn.MmToDipRatio.X)
-            .On(e => e.DrawOn.MmToDipRatio.X)
-            .Update()
-        );
-
-        public double RulerHeight => _rulerHeight.Get();
-        private readonly IProperty<double> _rulerHeight = H.Property<double>(c => c
-            .Set(e => 30 * e.DrawOn.MmToDipRatio.Y)
-            .On(e => e.DrawOn.MmToDipRatio.Y)
-            .Update()
-        );
+        Monitor = monitor;
+        DrawOn = drawOn;
+        TopRuler = new RulerViewModel(Monitor, DrawOn, 0);
+        RightRuler = new RulerViewModel(Monitor, DrawOn, 1);
+        BottomRuler = new RulerViewModel(Monitor, DrawOn, 2);
+        LeftRuler = new RulerViewModel(Monitor, DrawOn, 3);
+        H.Initialize(this);
     }
+    public Monitor Monitor { get; }
+    public MonitorSource DrawOn { get; }
+    public RulerViewModel TopRuler { get; }
+    public RulerViewModel RightRuler { get; }
+    public RulerViewModel BottomRuler { get; }
+    public RulerViewModel LeftRuler { get; }
+
+
+    private readonly IProperty<bool> _enabled = H.Property<bool>();
+    public bool Enabled
+    {
+        get => _enabled.Get();
+        set => _enabled.Set(value);
+    }
+
+    public Visibility Visibility
+    {
+        get => _visibility.Get();
+        set => _visibility.Set(value);
+    }
+    private readonly IProperty<Visibility> _visibility
+        = H.Property<Visibility>();
+
+
+    public double RulerWidth => _rulerWidth.Get();
+    private readonly IProperty<double> _rulerWidth = H.Property<double>(c => c
+        .Set(e => 30 * e.DrawOn.MmToDipRatio.X)
+        .On(e => e.DrawOn.MmToDipRatio.X)
+        .Update()
+    );
+
+    public double RulerHeight => _rulerHeight.Get();
+    private readonly IProperty<double> _rulerHeight = H.Property<double>(c => c
+        .Set(e => 30 * e.DrawOn.MmToDipRatio.Y)
+        .On(e => e.DrawOn.MmToDipRatio.Y)
+        .Update()
+    );
 }

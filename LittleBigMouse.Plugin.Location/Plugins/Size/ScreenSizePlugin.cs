@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -22,39 +22,36 @@
 */
 
 using HLab.Core.Annotations;
-using HLab.DependencyInjection.Annotations;
 using HLab.Mvvm.Annotations;
 using HLab.Notify.PropertyChanged;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Plugin.Location.Plugins.Size
+namespace LittleBigMouse.Plugin.Location.Plugins.Size;
+
+public class ViewModeScreenSize : ViewMode { }
+public class ScreenSizePlugin : IBootloader
 {
-    public class ViewModeScreenSize : ViewMode { }
-    internal class ScreenSizePlugin : IBootloader
+    private readonly IMainService _mainService;
+
+    public ScreenSizePlugin(IMainService mainService)
     {
-        private readonly IMainService _mainService;
-
-        [Import]
-        public ScreenSizePlugin(IMainService mainService)
-        {
-            _mainService = mainService;
-        }
-
-        public void Load(IBootContext bootstrapper)
-        {
-            _mainService.AddButton(new NCommand<bool>(b =>
-                {
-                    if (b)
-                        _mainService.SetViewMode<ViewModeScreenSize>();
-                    else
-                        _mainService.SetViewMode<ViewModeDefault>();
-                })
-                {
-                    IconPath = "Icons/IconSize", 
-                    ToolTipText = "Size"
-                }
-            );
-        }
+        _mainService = mainService;
     }
 
+    public void Load(IBootContext bootstrapper)
+    {
+
+        _mainService.AddControlPlugin( c=>c.AddButton(new NCommand<bool>(b =>
+            {
+                if (b)
+                    c.SetViewMode<ViewModeScreenSize>();
+                else
+                    c.SetViewMode<ViewModeDefault>();
+            })
+        {
+            IconPath = "Icon/MonitorSize",
+            ToolTipText = "Size"
+        }
+        ));
+    }
 }

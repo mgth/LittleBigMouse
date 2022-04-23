@@ -1,5 +1,6 @@
-﻿using System.Windows.Controls;
-using HLab.Mvvm.Extensions;
+﻿using HLab.Mvvm.Extensions;
+
+using System.Windows.Controls;
 
 namespace LittleBigMouse.Plugins
 {

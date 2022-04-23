@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Plugin.Location
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Plugin.Location.
 
@@ -24,24 +24,21 @@
 using System.Windows.Controls;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
-using LittleBigMouse.Control;
-using LittleBigMouse.Control.Core;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Plugin.Location.Plugins.Location
+namespace LittleBigMouse.Plugin.Location.Plugins.Location;
+
+/// <summary>
+/// Logique d'interaction pour ControlGuiSizer.xaml
+/// </summary>
+public partial class LocationControlView : UserControl
+    , IView<ViewModeDefault, LocationControlViewModel>, IScreenControlView
 {
-    /// <summary>
-    /// Logique d'interaction pour ControlGuiSizer.xaml
-    /// </summary>
-    public partial class LocationControlView : UserControl
-        , IView<ViewModeDefault, LocationControlViewModel>, IScreenControlView
+
+    public LocationControlView()
     {
-
-        public LocationControlView() 
-        {
-            InitializeComponent();
-        }
-
-
+        InitializeComponent();
     }
+
+
 }

@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Control.Core
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Control.Core.
 
@@ -24,6 +24,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Extensions;
+
 using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Control.ScreenFrame
@@ -35,17 +37,25 @@ namespace LittleBigMouse.Control.ScreenFrame
         public ScreenFrameView()
         {
             InitializeComponent();
+
+            Loaded += ScreenFrameView_Loaded;
+        }
+
+        private void ScreenFrameView_Loaded(object sender, RoutedEventArgs e)
+        {
+            var parent = this.FindVisualParent<MultiScreensView>();
+            ViewModel.Presenter = parent.DataContext as IMultiScreensViewModel;
         }
 
         //TODO : replace with commands
         private void ResetPlace_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.Model.Config.SetPhysicalAuto();
+            ViewModel.Model.Layout.SetPhysicalAuto();
         }
 
         private void ResetSize_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.Model.ScreenModel.InitSize(ViewModel.Model.Monitor);
+            ViewModel.Model.Model.InitSize(ViewModel.Model.ActiveSource.Device);
         }
 
     }

@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Daemon
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Daemon.
 
@@ -56,12 +56,16 @@ namespace LittleBigMouse.Daemon
         {
             get
             {
-                NativeMethods.GetCursorPos(out var p);
-                return p;
+                if(NativeMethods.GetCursorPos(out var p))
+                    return p;
+                throw new InvalidOperationException();
             }
             set
             {
-                NativeMethods.SetCursorPos((int) value.X, (int) value.Y);
+
+                NativeMethods.SetCursorPos((int)value.X, (int)value.Y);
+                //MouseEvent(NativeMethods.MOUSEEVENTF.MOVE | NativeMethods.MOUSEEVENTF.ABSOLUTE | NativeMethods.MOUSEEVENTF.VIRTUALDESK , value.X, value.Y);
+
                 //new Thread(() => 
                 //{
                 //    /* run your code here */ 

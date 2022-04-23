@@ -2,17 +2,19 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+
 using HLab.Mvvm.Annotations;
-using LittleBigMouse.ScreenConfig;
-using LittleBigMouse.ScreenConfig.Dimensions;
+
+using LittleBigMouse.DisplayLayout;
+using LittleBigMouse.DisplayLayout.Dimensions;
 
 namespace LittleBigMouse.Plugins
 {
     public interface IMultiScreensViewModel
     {
-        IScreenRatio VisualRatio { get; }
+        IDisplayRatio VisualRatio { get; }
     }
-    public interface IScreenFrameViewModel : IViewModel<Screen>
+    public interface IScreenFrameViewModel : IViewModel<Monitor>
     {
         IMultiScreensViewModel Presenter { get; set; }
     }
@@ -31,10 +33,21 @@ namespace LittleBigMouse.Plugins
         Panel GetMainPanel();
     }
 
-    public interface IMainService
+    public interface IMainControl
     {
         void AddButton(ICommand cmd);
-        void SetViewMode(Type viewMode);
-        void SetViewMode<T>() where T:ViewMode;
+        void SetViewMode<T>();
+    }
+
+
+    public interface IMainService
+    {
+        //void AddButton(ICommand cmd);
+        //void SetViewMode(Type viewMode);
+        //void SetViewMode<T>() where T:ViewMode;
+        void StartNotifier();
+        void ShowControl();
+
+        void AddControlPlugin(Action<IMainControl> action);
     }
 }

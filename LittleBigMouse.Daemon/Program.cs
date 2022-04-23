@@ -1,6 +1,6 @@
 ﻿/*
   LittleBigMouse.Daemon
-  Copyright (c) 2017 Mathieu GRENET.  All right reserved.
+  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
   This file is part of LittleBigMouse.Daemon.
 
@@ -22,9 +22,10 @@
 */
 
 using System;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Windows;
-using HLab.Notify;
 using HLab.Remote;
 
 namespace LittleBigMouse.Daemon
@@ -32,42 +33,19 @@ namespace LittleBigMouse.Daemon
     //[ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
     internal class Program
     {
-        private const string UNIQUE = "LittleBigMouse_Daemon";
         [STAThread]
         public static void Main(string[] args)
         {
-            var mutex = new Mutex(true, UNIQUE + Environment.UserName, out var firstInstance);
-
-            if (!firstInstance)
-            {
-                var client = new RemoteClient("lbm.daemon");
-                foreach (var arg in args)
-                {
-                    client.SendMessageAsync(arg);
-                }
-                mutex.Close();
-                return;
-            }
+            if (args.Contains("debug") && !Debugger.IsAttached)
+                Debugger.Launch();
 
             if (Environment.UserInteractive)
             {
-                var daemon = new LittleBigMouseDaemon{ ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                var daemon = new LittleBigMouseSimpleDaemon{ ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 daemon.Run();
             }
-            else
-            {
-                #if USESERVICE
-                var evt = new EventHandlerServiceWpf();
-                var servicesToRun = new ServiceBase[]
-                {
-                    new LittleBigMouseService(new MonitorsService())
-                };
-                ServiceBase.Run(servicesToRun);
-                #endif
-            }
 
-            mutex.Close();
-            Environment.Exit(0);
+            //Environment.Exit(0);
         }
     }
 }

@@ -44,8 +44,7 @@ namespace LittleBigMouse.Control.Plugins.Default
         }
 
 
-
-         private DefaultMonitorViewModel ViewModel => (DataContext as DefaultMonitorViewModel);
+        DefaultMonitorViewModel ViewModel => (DataContext as DefaultMonitorViewModel);
         MultiScreensView Presenter => this.FindParent<MultiScreensView>();
     }
 

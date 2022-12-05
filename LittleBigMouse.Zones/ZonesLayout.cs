@@ -2,11 +2,12 @@
 using Newtonsoft.Json;
 
 using System.Collections;
+using System.Runtime.Serialization;
 using System.Windows;
 
 namespace LittleBigMouse.Zoning
 {
-    public class ZonesLayout
+    public class ZonesLayout : IXmlSerializable
     {
         public bool AdjustPointer {get;set;}
         public bool AdjustSpeed {get;set;}
@@ -14,10 +15,8 @@ namespace LittleBigMouse.Zoning
         public Zone FromPixel(Point pixel) => MainZones.FirstOrDefault(zone => zone.ContainsPixel(pixel));
         public Zone FromPhysical(Point physical) => Zones.FirstOrDefault(zone => zone.ContainsMm(physical));
 
-        [JsonProperty(ItemIsReference = true)]
         public List<Zone> Zones {get;} = new();
 
-        [JsonProperty(ItemIsReference = true)]
         public List<Zone> MainZones {get;} = new();
 
         public void Init()
@@ -28,5 +27,9 @@ namespace LittleBigMouse.Zoning
             foreach (var zone in Zones) zone.Init();
         }
 
+        public string Serialize()
+        {
+            return XmlSerializer.Serialize(this,e => e.AdjustPointer, e => e.AdjustSpeed, e=> e.Zones);
+        }
     }
 }

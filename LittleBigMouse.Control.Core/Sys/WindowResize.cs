@@ -35,13 +35,13 @@ namespace LittleBigMouse.Control.Sys
 {
     internal class WindowResizer
     {
-        private const int WmSyscommand = 0x112;
-        private HwndSource _hwndSource;
+        const int WmSyscommand = 0x112;
+        HwndSource _hwndSource;
         readonly Window _activeWin;
-        private readonly Grid _grid;
+        readonly Grid _grid;
 
 
-        private readonly Dictionary<UIElement, ResizeDirection> _resizers = new Dictionary<UIElement, ResizeDirection>();
+        readonly Dictionary<UIElement, ResizeDirection> _resizers = new Dictionary<UIElement, ResizeDirection>();
 
         public WindowResizer(Window activeW, Grid grid)
         {
@@ -63,7 +63,7 @@ namespace LittleBigMouse.Control.Sys
             SetSizer(ResizeDirection.BottomRight, 2, 2, new(0,0,r,0));
         }
 
-        private void SetSizer(ResizeDirection dir, int row, int column, CornerRadius cornerRadius = default)
+        void SetSizer(ResizeDirection dir, int row, int column, CornerRadius cornerRadius = default)
         {
             var sizer = new Border
             {
@@ -84,7 +84,7 @@ namespace LittleBigMouse.Control.Sys
             _resizers.Add(sizer, dir);           
         }
 
-        private void Sizer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        void Sizer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is not UIElement clicked) return;
 
@@ -94,7 +94,8 @@ namespace LittleBigMouse.Control.Sys
 
             ResizeWindow(dir);
         }
-        private void Sizer_MouseEnter(object sender, MouseEventArgs e)
+
+        void Sizer_MouseEnter(object sender, MouseEventArgs e)
         {
             if (!(sender is UIElement clicked)) return;
 
@@ -123,7 +124,8 @@ namespace LittleBigMouse.Control.Sys
 
             }
         }
-        private void Sizer_MouseLeave(object sender, MouseEventArgs mouseEventArgs)
+
+        void Sizer_MouseLeave(object sender, MouseEventArgs mouseEventArgs)
         {
             if (mouseEventArgs.LeftButton != MouseButtonState.Pressed)
             {
@@ -137,15 +139,15 @@ namespace LittleBigMouse.Control.Sys
             _activeWin.DragMove();
         }
 
-        private void InitializeWindowSource(object sender, EventArgs e)
+        void InitializeWindowSource(object sender, EventArgs e)
         {
             _hwndSource = PresentationSource.FromVisual((Visual)sender) as HwndSource;
             _hwndSource?.AddHook(WndProc);
         }
 
-        private IntPtr _retInt = IntPtr.Zero;
+        IntPtr _retInt = IntPtr.Zero;
 
-        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             //Debug.WriteLine("WndProc messages: " + msg.ToString());
             //
@@ -172,9 +174,9 @@ namespace LittleBigMouse.Control.Sys
         }
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-        private void ResizeWindow(ResizeDirection direction)
+        void ResizeWindow(ResizeDirection direction)
         {
             SendMessage(_hwndSource.Handle, WmSyscommand, (IntPtr)(61440 + direction), IntPtr.Zero);
         }

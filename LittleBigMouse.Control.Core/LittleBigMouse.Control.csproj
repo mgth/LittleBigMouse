@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-	  <TargetFramework>net6.0-windows</TargetFramework>
+	  <TargetFramework>net7.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Platforms>AnyCPU;x64</Platforms>
 	<StartupObject>LittleBigMouse.Control.App</StartupObject>
@@ -14,6 +14,7 @@
   <ItemGroup>
     <None Remove="Icon\Close.svg" />
     <None Remove="Icon\colors.xml" />
+    <None Remove="Icon\lbm_logo.svg" />
     <None Remove="Icon\Maximize.svg" />
     <None Remove="Icon\Minimize.svg" />
     <None Remove="Icon\Monitor.svg" />
@@ -75,7 +76,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.0.44" />
+    <PackageReference Include="Grace" Version="8.0.0-Beta822" />
     <PackageReference Include="H.Pipes" Version="2.0.37" />
     <PackageReference Include="MahApps.Metro" Version="2.4.9" />
     <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
@@ -93,7 +94,6 @@
     <ProjectReference Include="..\HLab\HLab.Notification\HLab.UserNotification.csproj" />
     <ProjectReference Include="..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj" />
     <ProjectReference Include="..\HLab\HLab.Notify.Wpf\HLab.Notify.Wpf.csproj" />
-    <ProjectReference Include="..\LittleBigMouse.Daemon\LittleBigMouse.Daemon.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Location\LittleBigMouse.Plugin.Location.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp\LittleBigMouse.Plugin.Vcp.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
@@ -101,6 +101,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Icon\lbm_logo.svg" />
     <Resource Include="Icon\Minimize.svg" />
     <Resource Include="Icon\Monitor.svg" />
     <Resource Include="Icon\MonitorInfo.svg" />

@@ -28,7 +28,6 @@ using System.Windows.Input;
 
 using HLab.Icons.Annotations.Icons;
 using HLab.Mvvm;
-using HLab.Mvvm.Annotations;
 using HLab.Notify.PropertyChanged;
 
 using LittleBigMouse.DisplayLayout;
@@ -37,8 +36,6 @@ using LittleBigMouse.Plugins;
 namespace LittleBigMouse.Control.Main
 {
     using H = H<MainControlViewModel>;
-
-
 
     public class MainControlViewModel : ViewModel, IMainControl
     {
@@ -55,26 +52,28 @@ namespace LittleBigMouse.Control.Main
             get => _layout.Get();
             set => _layout.Set(value);
         }
-        private readonly IProperty<IMonitorsLayout> _layout = H.Property<IMonitorsLayout>();
+
+        readonly IProperty<IMonitorsLayout> _layout = H.Property<IMonitorsLayout>();
 
         public IPresenterViewModel Presenter
         {
             get => _presenter.Get();
             set => _presenter.Set(value);
         }
-        private readonly IProperty<IPresenterViewModel> _presenter = H.Property<IPresenterViewModel>();
+
+        readonly IProperty<IPresenterViewModel> _presenter = H.Property<IPresenterViewModel>();
 
         public double VerticalResizerSize => _verticalResizerSize.Get();
-        private readonly IProperty<double> _verticalResizerSize = H.Property<double>(c => c.Default(10.0));
-        public double HorizontalResizerSize => _horizontalResizerSize.Get();
-        private readonly IProperty<double> _horizontalResizerSize = H.Property<double>(c => c.Default(10.0));
+        readonly IProperty<double> _verticalResizerSize = H.Property<double>(c => c.Default(10.0));
 
+        public double HorizontalResizerSize => _horizontalResizerSize.Get();
+        readonly IProperty<double> _horizontalResizerSize = H.Property<double>(c => c.Default(10.0));
 
         public ICommand CloseCommand { get; } = H.Command(c => c
             .Action(e => e.Close())
         );
 
-        private void Close()
+        void Close()
         {
             if (Layout.Saved)
             {
@@ -96,7 +95,7 @@ namespace LittleBigMouse.Control.Main
             }
         }
 
-        private readonly IProperty<WindowState> _windowState = H.Property<WindowState>();
+        readonly IProperty<WindowState> _windowState = H.Property<WindowState>();
         public WindowState WindowState
         {
             get => _windowState.Get();

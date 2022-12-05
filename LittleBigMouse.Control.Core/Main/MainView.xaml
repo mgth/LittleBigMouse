@@ -5,10 +5,10 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:annotations="clr-namespace:HLab.Mvvm.Annotations;assembly=HLab.Mvvm.Annotations"
-        xmlns:mvvm="clr-namespace:HLab.Mvvm;assembly=HLab.Mvvm.Wpf"
         xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins" 
         xmlns:icons="clr-namespace:HLab.Icons.Wpf.Icons;assembly=HLab.Icons.Wpf" xmlns:main="clr-namespace:LittleBigMouse.Control.Main"
-        mc:Ignorable="d"
+        xmlns:wpf="clr-namespace:HLab.Mvvm.Wpf;assembly=HLab.Mvvm.Wpf"
+    mc:Ignorable="d"
         Icon="../MainIcon.ico"
         Title="Little Big LbmMouse"  
         Topmost="{Binding Config.Pinned}"
@@ -20,7 +20,7 @@
         d:DataContext="{d:DesignInstance main:MainControlViewModel}"
         Background="Transparent"
         AllowsTransparency="True"
-    icons:IconView.IconService="{Binding IconService}"
+        icons:IconView.IconService="{Binding IconService}"
          >
         <!--
 -->
@@ -184,7 +184,7 @@
                     Data="M 1,1 L 0,1 C 0,1 1,1 1,0 L 1,1"
                 />
 
-                <mvvm:ViewLocator Model="{Binding Presenter}"/>
+                <wpf:ViewLocator Model="{Binding Presenter}"/>
             </Grid>
 
             <Border 
@@ -193,7 +193,7 @@
                 Background="{DynamicResource HLab.Brushes.Header.Active.Background}"
                 
                 >
-                <mvvm:ViewLocator
+                <wpf:ViewLocator
                     Foreground="{DynamicResource HLab.Brushes.Foreground}"
                     ViewClass="{x:Type plugins:IScreenControlView}"
                     ViewMode="{x:Type annotations:ViewModeDefault}"

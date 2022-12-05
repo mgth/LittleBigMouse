@@ -1,14 +1,11 @@
 ﻿
 using System.Collections.Concurrent;
-using System.Runtime.Serialization;
 using System.Windows;
 using System.Windows.Media;
-using System.Xml.Serialization;
 
 namespace LittleBigMouse.Zoning
 {
-
-    public class Zone
+    public class Zone : IXmlSerializable
     {
         public string DeviceId { get; set; }
         public string Name { get; set; }
@@ -16,13 +13,10 @@ namespace LittleBigMouse.Zoning
         public Rect PixelsBounds { get; set; }
         public Rect PhysicalBounds { get; set; }
 
-        //[XmlProperty(IsReference = true)]
         public Zone Main { get; set;}
 
-        [XmlIgnore]
         public bool IsMain=> ReferenceEquals(this,Main);
 
-        [XmlIgnore]
         public double Dpi { get; private set; }
 
         private Matrix _pixelsToPhysicalMatrix;
@@ -74,7 +68,6 @@ namespace LittleBigMouse.Zoning
 
         public Point PhysicalToPixels(Point mm) => mm * _physicalToPixelsMatrix;
 
-        [XmlIgnore]
         public Point CenterPixel => new Point(PixelsBounds.Left + PixelsBounds.Width / 2, PixelsBounds.Top + PixelsBounds.Height / 2);
 
         public bool ContainsPixel(Point pixel)
@@ -87,6 +80,7 @@ namespace LittleBigMouse.Zoning
         }
 
         public bool ContainsMm(Point mm) => PhysicalBounds.Contains(mm);
+
 
         public Point InsidePixelsBounds(Point px)
         {
@@ -114,7 +108,13 @@ namespace LittleBigMouse.Zoning
 
         public IEnumerable<Rect> TravelPixels(IEnumerable<Zone> zones, Zone target)
         {
-            return _travels.GetOrAdd(target.Main, z => PixelsBounds.TravelPixels(z.PixelsBounds, zones.Where(z => ReferenceEquals(z, z.Main)).Select(z => z.PixelsBounds)));
+            return _travels.GetOrAdd(target.Main, z => PixelsBounds.TravelPixels(z.PixelsBounds, zones.Where(z => ReferenceEquals(z, z.Main)).Select(z => z.PixelsBounds).ToArray()));
+        }
+
+        public string Serialize()
+        {
+            return XmlSerializer.Serialize(this, e => e.Name, /*e => e.DeviceId,*/ e => e.PixelsBounds, e => e.PhysicalBounds );
+            //return $@"<Zone Name=""{Name}"" DeviceId=""{DeviceId}""><PixelsBounds>{XmlSerializer.Serialize(PixelsBounds)}</PixelsBounds><PhysicalBounds>{XmlSerializer.Serialize(PhysicalBounds)}</PhysicalBounds></Zone>";
         }
     }
 }

@@ -28,17 +28,14 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Media;
-
 using HLab.Sys.MouseHooker;
-
+using HLab.Sys.Windows.API;
 using LittleBigMouse.Zoning;
 
 using Microsoft.Win32;
 
 using static System.Double;
 
-using NativeMethods = HLab.Sys.Windows.API.NativeMethods;
 
 //using static HLab.Windows.API.NativeMethods;
 
@@ -48,10 +45,10 @@ namespace LittleBigMouse.Daemon;
 public class MouseEngine
 {
 
-    private ZonesLayout _zones;
+    private readonly ZonesLayout _zones;
     private Action _stopAction = null;
 
-    //public readonly IMouseHooker Hook = new MouseHookerWinEvent();
+    //private readonly IMouseHooker _hook = new MouseHookerWinEvent();
     private readonly IMouseHooker _hook = new MouseHookerWindowsHook();
 
 
@@ -65,62 +62,31 @@ public class MouseEngine
         Stop();
 
         // TODO check if it's realy better with realtime
-        //Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+        Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
 
         if (_zones.AdjustPointer)
         {
-            using (var key = Registry.CurrentUser.CreateSubKey(@"\Softaware\Mgth\LittleBigMouse"))
-            {
-                using (var saveKey = key.CreateSubKey("InitialCursor"))
-                {
-                    if (saveKey?.ValueCount == 0)
-                    {
-                        LbmMouse.SaveCursor(saveKey);
-                    }
-                }
-            }
+            SaveInitialCursor();
 
             ZoneChanged += AdjustPointer;
 
             _stopAction += () =>
             {
                 ZoneChanged -= AdjustPointer;
-                using (var key = Registry.CurrentUser.OpenSubKey(@"\Softaware\Mgth\LittleBigMouse"))
-                {
-                    using var saveKey = key.OpenSubKey("InitialCursor");
-                    if (saveKey != null) LbmMouse.RestoreCursor(saveKey);
-
-                    key.DeleteSubKey("InitialCursor");
-                }
+                RestoreInitialCursor();
             };
         }
 
         if (_zones.AdjustSpeed)
         {
-            double initialMouseSpeed;
-
-            using (var key = Registry.CurrentUser.OpenSubKey(@"\Softaware\Mgth\LittleBigMouse"))
-            {
-                var ms = key.GetValue("InitialMouseSpeed", string.Empty).ToString();
-
-                if (string.IsNullOrEmpty(ms))
-                {
-                    initialMouseSpeed = LbmMouse.MouseSpeed;
-                    key.SetValue("InitialMouseSpeed", initialMouseSpeed.ToString(CultureInfo.InvariantCulture),
-                        RegistryValueKind.String);
-                }
-                else
-                    _ = TryParse(ms, out initialMouseSpeed);
-            }
+            var initialMouseSpeed = GetInitialMouseSpeed();
 
             ZoneChanged += AdjustSpeed;
 
             _stopAction += () =>
             {
                 ZoneChanged -= AdjustSpeed;
-                LbmMouse.MouseSpeed = initialMouseSpeed;
-                using var key = Registry.CurrentUser.CreateSubKey(@"\Softaware\Mgth\LittleBigMouse");
-                key.DeleteValue("InitialMouseSpeed");
+                RestoreMouseSpeed(initialMouseSpeed);
             };
         }
 
@@ -130,7 +96,7 @@ public class MouseEngine
         //    _stopAction += () => ZoneChanged -= HomeCinema;
         //}
 
-        ZoneChanged += VerboseZonneChange;
+        ZoneChanged += VerboseZoneChange;
 
         _hook.SetMouseMoveAction(OnMouseMoveExtFirst);
 
@@ -139,7 +105,60 @@ public class MouseEngine
         Console.WriteLine("start");
     }
 
-    private void VerboseZonneChange(object sender, ZoneChangeEventArgs e)
+    private const string RootKey = @"\Software\Mgth\LittleBigMouse";
+
+    private static void SaveInitialCursor()
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RootKey);
+
+        if(key==null) return;
+
+        using var saveKey = key.CreateSubKey("InitialCursor");
+
+        if (saveKey?.ValueCount == 0)
+        {
+            LbmMouse.SaveCursor(saveKey);
+        }
+    }
+
+    private static void RestoreInitialCursor()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RootKey);
+
+        if(key==null) return;
+
+        using var saveKey = key.OpenSubKey("InitialCursor");
+
+        if (saveKey != null) LbmMouse.RestoreCursor(saveKey);
+
+        key.DeleteSubKey("InitialCursor");
+
+    }
+
+    private static double GetInitialMouseSpeed()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RootKey);
+
+        var ms = key?.GetValue("InitialMouseSpeed", string.Empty)?.ToString();
+
+        if (!string.IsNullOrEmpty(ms) && TryParse(ms, out var initialMouseSpeed)) return initialMouseSpeed;
+
+        initialMouseSpeed = LbmMouse.MouseSpeed;
+        key?.SetValue("InitialMouseSpeed", initialMouseSpeed.ToString(CultureInfo.InvariantCulture),
+            RegistryValueKind.String);
+
+        return initialMouseSpeed;
+    }
+
+    private static void RestoreMouseSpeed(double mouseSpeed)
+    {
+        LbmMouse.MouseSpeed = mouseSpeed;
+        using var key = Registry.CurrentUser.CreateSubKey(RootKey);
+
+        key?.DeleteValue("InitialMouseSpeed");
+    }
+
+    private static void VerboseZoneChange(object sender, ZoneChangeEventArgs e)
     {
         Console.WriteLine(e.NewZone.DeviceId);
     }
@@ -662,6 +681,8 @@ public class MouseEngine
         //Layout.MatchLayout(configId);
     }
 
-    public bool Running => _hook.Hooked();
+    public bool Running => _hook.Hooked;
+
+
 }
 

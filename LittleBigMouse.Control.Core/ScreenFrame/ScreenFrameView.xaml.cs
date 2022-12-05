@@ -41,19 +41,19 @@ namespace LittleBigMouse.Control.ScreenFrame
             Loaded += ScreenFrameView_Loaded;
         }
 
-        private void ScreenFrameView_Loaded(object sender, RoutedEventArgs e)
+        void ScreenFrameView_Loaded(object sender, RoutedEventArgs e)
         {
             var parent = this.FindVisualParent<MultiScreensView>();
             ViewModel.Presenter = parent.DataContext as IMultiScreensViewModel;
         }
 
         //TODO : replace with commands
-        private void ResetPlace_Click(object sender, RoutedEventArgs e)
+        void ResetPlace_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.Model.Layout.SetPhysicalAuto();
         }
 
-        private void ResetSize_Click(object sender, RoutedEventArgs e)
+        void ResetSize_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.Model.Model.InitSize(ViewModel.Model.ActiveSource.Device);
         }

@@ -8,6 +8,7 @@
              xmlns:converters1="clr-namespace:HLab.Base.Wpf.Converters;assembly=HLab.Base.Wpf"
              xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
              xmlns:screenFrame="clr-namespace:LittleBigMouse.Control.ScreenFrame" xmlns:icons="clr-namespace:HLab.Icons.Wpf.Icons;assembly=HLab.Icons.Wpf"
+             xmlns:wpf="clr-namespace:HLab.Mvvm.Wpf;assembly=HLab.Mvvm.Wpf"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="500"
              HorizontalAlignment="Left"
@@ -214,7 +215,7 @@
             
             <ContentControl Grid.Column="1" Grid.Row="1" Content="{Binding WallPaper}"/>
             
-            <mvvm:ViewLocator 
+            <wpf:ViewLocator 
                 Grid.Column="1" Grid.Row="1" 
                 ViewClass="{x:Type plugins:IViewScreenFrameContent}"
                 Model="{Binding Model}"

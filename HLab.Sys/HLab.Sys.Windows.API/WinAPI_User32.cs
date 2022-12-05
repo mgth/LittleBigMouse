@@ -273,37 +273,37 @@ namespace HLab.Sys.Windows.API
 
             public int X
             {
-                get { return Left; }
+                get => Left;
                 set { Right -= (Left - value); Left = value; }
             }
 
             public int Y
             {
-                get { return Top; }
+                get => Top;
                 set { Bottom -= (Top - value); Top = value; }
             }
 
             public int Height
             {
-                get { return Bottom - Top; }
-                set { Bottom = value + Top; }
+                get => Bottom - Top;
+                set => Bottom = value + Top;
             }
 
             public int Width
             {
-                get { return Right - Left; }
-                set { Right = value + Left; }
+                get => Right - Left;
+                set => Right = value + Left;
             }
 
             public Point Location
             {
-                get { return new Point(Left, Top); }
+                get => new(Left, Top);
                 set { X = (int)value.X; Y = (int)value.Y; }
             }
 
             public Size Size
             {
-                get { return new Size(Width, Height); }
+                get => new Size(Width, Height);
                 set { Width = (int)value.Width; Height = (int)value.Height; }
             }
 
@@ -334,11 +334,12 @@ namespace HLab.Sys.Windows.API
 
             public override bool Equals(object obj)
             {
-                if (obj is RECT)
-                    return Equals((RECT)obj);
-                else if (obj is Rect)
-                    return Equals(new RECT((Rect)obj));
-                return false;
+                return obj switch
+                {
+                    RECT rect => Equals(rect),
+                    Rect rect => Equals(new RECT(rect)),
+                    _ => false
+                };
             }
 
             public override int GetHashCode()

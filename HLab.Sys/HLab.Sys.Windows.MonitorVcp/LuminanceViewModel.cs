@@ -24,6 +24,7 @@
 using System;
 using System.Windows.Media;
 using HLab.Base.Wpf;
+using HLab.Base.Wpf.Themes;
 using HLab.Mvvm;
 using HLab.Notify.PropertyChanged;
 using HLab.Sys.Windows.Monitors;

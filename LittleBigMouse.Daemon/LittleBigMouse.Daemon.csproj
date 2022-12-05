@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net7.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <UseForms>true</UseForms>
+    <UseForms>false</UseForms>
     <Platforms>AnyCPU;x64</Platforms>
     <ApplicationIcon>MainIcon.ico</ApplicationIcon>
     <StartupObject>LittleBigMouse.Daemon.Program</StartupObject>

@@ -1,5 +1,5 @@
 ﻿using System.Windows;
-using LittleBigMouse.Daemon.Updater;
+using LittleBigMouse.Control.Updater;
 
 namespace LittleBigMouse_Daemon.Updater
 {
@@ -14,12 +14,12 @@ namespace LittleBigMouse_Daemon.Updater
             DataContextChanged += ApplicationUpdateView_DataContextChanged;
         }
 
-        private void ApplicationUpdateView_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        void ApplicationUpdateView_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if(DataContext is ApplicationUpdateViewModel viewModel) viewModel.PropertyChanged += ViewModel_PropertyChanged;
         }
 
-        private void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == "Updated" && ((DataContext as ApplicationUpdateViewModel)?.Updated??false))
             {
@@ -27,7 +27,7 @@ namespace LittleBigMouse_Daemon.Updater
             }
         }
 
-        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        void ButtonBase_OnClick(object sender, RoutedEventArgs e)
         {
            Close();
         }

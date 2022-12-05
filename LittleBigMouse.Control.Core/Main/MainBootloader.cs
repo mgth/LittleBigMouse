@@ -1,31 +1,23 @@
-﻿using System;
-using System.Windows;
-
-using HLab.Core.Annotations;
-using HLab.Mvvm;
-using HLab.Mvvm.Annotations;
-
-using LittleBigMouse.DisplayLayout;
+﻿using HLab.Core.Annotations;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Control.Main
+namespace LittleBigMouse.Control.Main;
+
+public class MainBootloader : IBootloader
 {
-    public class MainBootloader : IBootloader
+    public MainBootloader(IMainService mainService )
     {
-        public MainBootloader(IMainService mainService )
-        {
-            _mainService = mainService;
-        }
+        _mainService = mainService;
+    }
 
-        private readonly IMainService _mainService;
+    readonly IMainService _mainService;
 
 
-        public void Load(IBootContext bootstrapper)
-        {
-            _mainService.StartNotifier();
+    public void Load(IBootContext bootstrapper)
+    {
+        _mainService.StartNotifier();
 
-
-        }
 
     }
+
 }

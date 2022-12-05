@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <UseWPF>true</UseWPF>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net7.0-windows</TargetFramework>
     <Platforms>x64</Platforms>
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>

@@ -139,9 +139,9 @@ namespace LittleBigMouse.Control
 
         internal MultiScreensViewModel ViewModel => DataContext as MultiScreensViewModel;
 
-        private IMonitorsLayout Layout => ViewModel?.Layout;
+        IMonitorsLayout Layout => ViewModel?.Layout;
 
-        private double GetRatio()
+        double GetRatio()
         {
             if (Layout == null) return 1;
 
@@ -160,7 +160,7 @@ namespace LittleBigMouse.Control
 
         public Panel GetMainPanel() => ContentGrid;
 
-        private void MultiScreensView_OnLayoutUpdated(object sender, EventArgs e)
+        void MultiScreensView_OnLayoutUpdated(object sender, EventArgs e)
         {
             var r = GetRatio();
 
@@ -168,7 +168,7 @@ namespace LittleBigMouse.Control
             ViewModel.VisualRatio.Y = r;
         }
 
-        private void ReferenceGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+        void ReferenceGrid_SizeChanged(object sender, SizeChangedEventArgs e)
         {
         }
     }

@@ -36,15 +36,14 @@ namespace LittleBigMouse.Control.Main
     /// </summary>
     public partial class MainView : Window,IView<ViewModeDefault,MainControlViewModel>, IViewClassDefault
     {
-
-        private readonly WindowResizer _resizer;
+        readonly WindowResizer _resizer;
 
         public MainView()
         {
             InitializeComponent();
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        void Window_Loaded(object sender, RoutedEventArgs e)
         {
             this.EnableBlur();
         }

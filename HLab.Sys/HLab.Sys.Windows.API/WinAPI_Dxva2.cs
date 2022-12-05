@@ -130,7 +130,6 @@ namespace HLab.Sys.Windows.API
             [Out] out MonitorCapabilities monitorCapabilities,
             [Out] out MonitorSupportedColorTemperatures supportedColorTemperatures);
 
-
         [DllImport("dxva2.dll", EntryPoint = "GetCapabilitiesStringLength", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetCapabilitiesStringLength(

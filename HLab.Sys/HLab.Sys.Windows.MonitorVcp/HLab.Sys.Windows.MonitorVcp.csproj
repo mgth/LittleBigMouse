@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
+    <TargetFramework>net7.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Platforms>AnyCPU;x64</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\HLab\HLab.Base.Wpf\HLab.Base.Wpf.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj" />
     <ProjectReference Include="..\HLab.Sys.Argyll\HLab.Sys.Argyll.csproj" />
+    <ProjectReference Include="..\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
   </ItemGroup>
 

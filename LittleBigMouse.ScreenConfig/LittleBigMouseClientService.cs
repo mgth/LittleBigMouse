@@ -1,29 +1,25 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
-using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Documents;
 using System.Xml.Serialization;
-using H.Pipes;
-using H.Pipes.Args;
 using HLab.Remote;
+//using H.Pipes;
 using LittleBigMouse.Zoning;
 using Newtonsoft.Json;
 
 namespace LittleBigMouse.DisplayLayout
 {
-
-    //[Export(typeof(ILittleBigMouseClientService)),Singleton]
     public class LittleBigMouseClientService : ILittleBigMouseClientService
     {
         public event EventHandler<LittleBigMouseServiceEventArgs> StateChanged;
-        private PipeClient<DaemonMessage> _client;
+        //private PipeClient<DaemonMessage> _client;
+        private NamedPipeClientStream _client;
 
         protected void OnStateChanged(LittleBigMouseState state)
         {
@@ -38,9 +34,8 @@ namespace LittleBigMouse.DisplayLayout
 
         public async void Start(ZonesLayout layout)
         {
-            var message = new DaemonMessage(LittleBigMouseCommand.Run, layout);
-
-            await SendMessageWithStartAsync(message);
+            await SendMessageWithStartAsync(new (LittleBigMouseCommand.Load, layout));
+            await SendMessageWithStartAsync(new (LittleBigMouseCommand.Run));
         }
 
         public async void Stop() => await SendAsync();
@@ -93,13 +88,24 @@ namespace LittleBigMouse.DisplayLayout
                 if (_daemonProcess.HasExited) return false;
                 */
 
-                _client = new PipeClient<DaemonMessage>("LBM");
+                //_client = new PipeClient<DaemonMessage>("lbm-daemon-beta");
+
+                _client = new NamedPipeClientStream(".", "lbm-daemon-beta", PipeDirection.InOut);
+
                 await _client.ConnectAsync();
 
+                new Thread(() =>
+                {
+                    while (true)
+                    {
+                        _client.ReadByte();
+                    }
 
-                _client.MessageReceived += (sender, args) => OnStateChanged(args.Message.State);
+                }).Start();
 
-                _client.Disconnected += (sender, args) => {};
+                //_client.MessageReceived += (sender, args) => OnStateChanged(args.Message.State);
+
+                //_client.Disconnected += (sender, args) => {};
 
                 return true;
             }
@@ -130,46 +136,60 @@ namespace LittleBigMouse.DisplayLayout
 
         private async Task SendMessageWithStartAsync(DaemonMessage message)
         {
-            var retry = (_client != null) || await StartDaemonAsync();
-
-            while (retry)
+            if (await StartDaemonAsync())
             {
-                try
+                var retry = true;
+                while (retry)
                 {
-                    if (!_client.IsConnected) continue;
+                    try
+                    {
+                        await SendMessageAsync(message);
+                        return;
+                    }
+                    catch (TimeoutException)
+                    {
+                        retry = await StartDaemonAsync();
+                    }
 
-                    await SendMessageAsync(message);
-                    return;
                 }
-                catch (TimeoutException)
-                {
-                    retry = await StartDaemonAsync();
-                }
-
             }
         }
 
         private async Task SendMessageAsync(DaemonMessage message)
         {
-            var serializer = new DataContractSerializer(typeof(DaemonMessage),new DataContractSerializerSettings() { PreserveObjectReferences = true});
+            //var serializer = new DataContractSerializer(
+            //    typeof(DaemonMessage),
+            //    new DataContractSerializerSettings() { 
+            //        PreserveObjectReferences = true
+            //        ,
+            //        }
+            //    );
+/*            
+            var serializer = new XmlSerializer(typeof(DaemonMessage));
+            var serializer = new JsonSerializer();
 
-            var ms = new MemoryStream();
+            //var ms = new MemoryStream();
 
-            var xsn = new XmlSerializerNamespaces();
-            xsn.Add(string.Empty, string.Empty);
+            //var xsn = new XmlSerializerNamespaces();
+            //xsn.Add(string.Empty, string.Empty);
 
+            var ms = new TextWriter();
 
-            serializer.WriteObject(ms, message);
+            serializer.Serialize(ms, message);
+
+            //serializer.WriteObject(ms, message);
 
             using var sr = new StreamReader(ms);
 
             ms.Position = 0;
 
-            var xml = await sr.ReadToEndAsync();   
+            var xml = await sr.ReadToEndAsync();  */
 
-            await _client.WriteAsync(message); //.StandardInput.WriteAsync(xml);
+            var xml = message.Serialize();
 
+            byte[] messageBytes = Encoding.UTF8.GetBytes(xml);
 
+            await _client.WriteAsync(messageBytes); //.StandardInput.WriteAsync(xml);
         }
 
 

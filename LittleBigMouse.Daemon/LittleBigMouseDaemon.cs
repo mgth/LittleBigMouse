@@ -46,7 +46,6 @@ namespace LittleBigMouse.Daemon
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
         }
 
-
         protected override void OnStartup(StartupEventArgs e)
         {
             _engine = new MouseEngine(null);

@@ -202,6 +202,7 @@ namespace HLab.Sys.Windows.Monitors
                 {
                     var c = (char)edid[j];
                     if (c == (char)0x0A) break;
+                    if (c == (char)0x00) break;
                     s += c;
                 }
                 return s;

@@ -57,6 +57,9 @@ namespace LittleBigMouse.Daemon
             _server.ExceptionOccurred += (o, args) => OnExceptionOccurred(args.Exception);
 
             await _server.StartAsync();
+
+            var w = new Window();
+            w.Show();
         }
 
         private void OnClientDisconnected(ConnectionEventArgs<DaemonMessage> args)
@@ -70,7 +73,7 @@ namespace LittleBigMouse.Daemon
 
         private async Task OnClientConnectedAsync(ConnectionEventArgs<DaemonMessage> args)
         {
-            Console.WriteLine($"Client {args.Connection.GetImpersonationUserName()} is now connected!");
+            Console.WriteLine($"Client {args.Connection.ServerName} is now connected!");
 
             await args.Connection.WriteAsync(new DaemonMessage(LittleBigMouseCommand.Run,null) );
         }

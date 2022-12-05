@@ -33,38 +33,42 @@ namespace LittleBigMouse.Control.Plugins.Default
 {
     using H = H<DefaultMonitorViewModel>;
 
-    class DefaultMonitorViewModel : ViewModel<Monitor>
+    internal class DefaultMonitorViewModel : ViewModel<Monitor>
     {
         public DefaultMonitorViewModel() => H.Initialize(this);
 
         public string Inches => _inches.Get();
-        private readonly IProperty<string> _inches = H.Property<string>(c => c
+
+        readonly IProperty<string> _inches = H.Property<string>(c => c
             .Set(e => (e.Model.Diagonal / 25.4).ToString("##.#") +"\"")
             .On(e => e.Model.Diagonal)
             .Update()
         );
         public VerticalAlignment DpiVerticalAlignment => _dpiVerticalAlignment.Get();
-        private readonly IProperty<VerticalAlignment> _dpiVerticalAlignment = H.Property<VerticalAlignment>(c => c
+
+        readonly IProperty<VerticalAlignment> _dpiVerticalAlignment = H.Property<VerticalAlignment>(c => c
             .Set(e => e.Model.Orientation == 3 ? VerticalAlignment.Bottom : VerticalAlignment.Top)
             .On(e => e.Model.Orientation)
             .Update()
         );
 
         public VerticalAlignment PnpNameVerticalAlignment => _pnpNameVerticalAlignment.Get();
-        private readonly IProperty<VerticalAlignment> _pnpNameVerticalAlignment = H.Property<VerticalAlignment>(c => c
+
+        readonly IProperty<VerticalAlignment> _pnpNameVerticalAlignment = H.Property<VerticalAlignment>(c => c
             .Set(e => e.Model.Orientation == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Top)
             .On(e => e.Model.Orientation)
             .Update()
         );
         public string InterfaceLogo => _interfaceLogo.Get();
-        private readonly IProperty<string> _interfaceLogo = H.Property<string>(c => c
+
+        readonly IProperty<string> _interfaceLogo = H.Property<string>(c => c
             .Set(e => e.GetInterfaceLogo())
 //            .On(e => e.Model.ActiveSource.Device.Edid.ManufacturerCode)
             .On(e => e.Model.ActiveSource.Device.AttachedDevice.Parent.DeviceString)
             .Update()
         );
 
-        private readonly string[] _brands = {"intel","amd","nvidia"};
+        readonly string[] _brands = {"intel","amd","nvidia"};
         public string GetInterfaceLogo()
         {
             var dev = Model?.ActiveSource?.Device?.AttachedDevice?.Parent?.DeviceString;
@@ -79,14 +83,15 @@ namespace LittleBigMouse.Control.Plugins.Default
             return "";
         }
         public string DeviceString => _deviceString.Get();
-        private readonly IProperty<string> _deviceString = H.Property<string>(c => c
+
+        readonly IProperty<string> _deviceString = H.Property<string>(c => c
             .Set(e => e.GetDeviceString())
 //            .On(e => e.Model.ActiveSource.Device.Edid.ManufacturerCode)
             .On(e => e.Model.ActiveSource.Device.AttachedDevice.Parent.DeviceString)
             .Update()
         );
 
-        private string GetDeviceString()
+        string GetDeviceString()
         {
             var dev = Model?.ActiveSource?.Device?.AttachedDevice?.Parent?.DeviceString;
             if (dev is string s)

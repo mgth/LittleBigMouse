@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using System.Runtime.Serialization;
 using System.Xml.Serialization;
 
 namespace LittleBigMouse.Zoning
@@ -33,15 +34,20 @@ namespace LittleBigMouse.Zoning
     }
     public enum LittleBigMouseCommand
     {
+        Load,
         Run,
         Stop,
         Quit
     }
 
-    public class DaemonMessage
+    public class DaemonMessage : IXmlSerializable
     {
         public DaemonMessage()
         {
+        }
+        public DaemonMessage(LittleBigMouseCommand command)
+        {
+            Command = command;
         }
 
         public DaemonMessage(LittleBigMouseCommand command, ZonesLayout payload)
@@ -49,10 +55,14 @@ namespace LittleBigMouse.Zoning
             Command = command;
             Payload = payload;
         }
-
         public LittleBigMouseCommand Command { get; set; }
         public LittleBigMouseState State { get; set; }
         public ZonesLayout? Payload { get; set; }
+
+        public string Serialize()
+        {
+            return XmlSerializer.Serialize(this,e => e.Command, e => e.State, e => e.Payload);
+        }
     }
 
 

@@ -51,7 +51,7 @@ public partial class ColorsWindow : Window
     }
 }
 
-class ColorAndName
+internal class ColorAndName
 {
     public Color Color { get; set; }
     public string Name { get; set; }

@@ -34,9 +34,10 @@ namespace LittleBigMouse.Control
     /// </summary>
     public class SmoothLinearGradient
     {
-        private static readonly PropertyInfo _dpiX;
-        private static readonly PropertyInfo _dpiY;
-        private static readonly byte[,] _bayerMatrix =
+        static readonly PropertyInfo _dpiX;
+        static readonly PropertyInfo _dpiY;
+
+        static readonly byte[,] _bayerMatrix =
         {
         { 1, 9, 3, 11 },
         { 13, 5, 15, 7 },

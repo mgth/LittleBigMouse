@@ -29,7 +29,7 @@ namespace LittleBigMouse.Control.Main
             .OnChange((c,a) => c.OnChange(a))
             .Register();
 
-        private void OnChange(DependencyPropertyChangedEventArgs<IEnumerable<ICommand>> a)
+        void OnChange(DependencyPropertyChangedEventArgs<IEnumerable<ICommand>> a)
         {
             if (a.OldValue is ObservableCollection<ICommand> oldValue)
             {
@@ -44,9 +44,9 @@ namespace LittleBigMouse.Control.Main
             }
         }
 
-        private readonly Dictionary<ICommand,FrameworkElement> _buttons = new Dictionary<ICommand, FrameworkElement>();
+        readonly Dictionary<ICommand,FrameworkElement> _buttons = new Dictionary<ICommand, FrameworkElement>();
 
-        private void ValueOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        void ValueOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             switch (e.Action)
             {
@@ -81,7 +81,7 @@ namespace LittleBigMouse.Control.Main
             }
         }
 
-        private FrameworkElement GetButton(ICommand cmd)
+        FrameworkElement GetButton(ICommand cmd)
         {
             if (cmd is INotifyCommand ncmd)
             {

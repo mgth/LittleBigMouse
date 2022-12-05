@@ -54,7 +54,8 @@ namespace LittleBigMouse.Control
             get => _viewMode.Get();
             set => _viewMode.Set(value);
         }
-        private readonly IProperty<Type> _viewMode 
+
+        readonly IProperty<Type> _viewMode 
             = H.Property<Type>(c=>c.Default(typeof(ViewModeDefault)));
 
         public IMonitorsLayout Layout
@@ -62,10 +63,12 @@ namespace LittleBigMouse.Control
             get => _layout.Get();
             set => _layout.Set(value);
         }
-        private readonly IProperty<IMonitorsLayout> _layout = H.Property<IMonitorsLayout>();
+
+        readonly IProperty<IMonitorsLayout> _layout = H.Property<IMonitorsLayout>();
 
         public double Width => _width.Get();
-        private readonly IProperty<double> _width = H.Property<double>(c => c
+
+        readonly IProperty<double> _width = H.Property<double>(c => c
             .NotNull(e => e.Layout)
             .Set(e => e.Layout.InMmOutsideBounds.Width * e.VisualRatio.X)
             .On(e => e.Layout.InMmOutsideBounds)
@@ -74,7 +77,8 @@ namespace LittleBigMouse.Control
         );
 
         public double Height => _height.Get();
-        private readonly IProperty<double> _height = H.Property<double>(c => c
+
+        readonly IProperty<double> _height = H.Property<double>(c => c
             .NotNull(e => e.Layout)
             .Set(e => e.Layout.InMmOutsideBounds.Height * e.VisualRatio.Y)
             .On(e => e.Layout.InMmOutsideBounds)

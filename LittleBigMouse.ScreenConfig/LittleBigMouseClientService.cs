@@ -1,17 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;
-using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Serialization;
-using HLab.Remote;
 //using H.Pipes;
 using LittleBigMouse.Zoning;
-using Newtonsoft.Json;
 
 namespace LittleBigMouse.DisplayLayout
 {
@@ -19,7 +14,7 @@ namespace LittleBigMouse.DisplayLayout
     {
         public event EventHandler<LittleBigMouseServiceEventArgs> StateChanged;
         //private PipeClient<DaemonMessage> _client;
-        private NamedPipeClientStream _client;
+        NamedPipeClientStream _client;
 
         protected void OnStateChanged(LittleBigMouseState state)
         {
@@ -48,10 +43,10 @@ namespace LittleBigMouse.DisplayLayout
 
         public async void Running() => await SendAsync();
 
-        private readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
+        readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
 
 
-        private async Task<bool> StartDaemonAsync()
+        async Task<bool> StartDaemonAsync()
         {
             //await StopDaemon();
 
@@ -114,27 +109,26 @@ namespace LittleBigMouse.DisplayLayout
                 _startingSemaphore.Release();
             }
         }
-        private async Task StopDaemon()
+
+        async Task StopDaemon()
         {
             await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Stop,null));
         }
 
-        private void _daemonProcess_Exited(object sender, EventArgs e)
+        void _daemonProcess_Exited(object sender, EventArgs e)
         {
             throw new NotImplementedException();
         }
 
 
-
-
-        private Task SendAsync([CallerMemberName]string name = null)
+        Task SendAsync([CallerMemberName]string name = null)
         {
             if(name==null) throw new ArgumentNullException(nameof(name));
             if (name.EndsWith("Async")) name = name[..^5];
             return Enum.TryParse<LittleBigMouseCommand>(name, out var command) ? SendMessageWithStartAsync(new DaemonMessage(command,null)) : Task.CompletedTask;
         }
 
-        private async Task SendMessageWithStartAsync(DaemonMessage message)
+        async Task SendMessageWithStartAsync(DaemonMessage message)
         {
             if (await StartDaemonAsync())
             {
@@ -155,7 +149,7 @@ namespace LittleBigMouse.DisplayLayout
             }
         }
 
-        private async Task SendMessageAsync(DaemonMessage message)
+        async Task SendMessageAsync(DaemonMessage message)
         {
             //var serializer = new DataContractSerializer(
             //    typeof(DaemonMessage),

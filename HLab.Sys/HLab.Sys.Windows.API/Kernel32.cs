@@ -28,7 +28,7 @@ using System.Text;
 namespace HLab.Sys.Windows.API
 {
     //[System.Security.SuppressUnmanagedCodeSecurity]
-    public static partial class NativeMethods
+    public static partial class Kernel32
     {
         public const uint ERROR_NO_MORE_ITEMS = 259;
 
@@ -44,7 +44,7 @@ namespace HLab.Sys.Windows.API
         }
 
         [DllImport("kernel32.dll")]
-        private static extern int FormatMessage(FORMAT_MESSAGE dwFlags, IntPtr lpSource, int dwMessageId, uint dwLanguageId, out StringBuilder msgOut, int nSize, IntPtr Arguments);
+        static extern int FormatMessage(FORMAT_MESSAGE dwFlags, IntPtr lpSource, int dwMessageId, uint dwLanguageId, out StringBuilder msgOut, int nSize, IntPtr Arguments);
 
         public static int GetLastError() => Marshal.GetLastWin32Error();
 

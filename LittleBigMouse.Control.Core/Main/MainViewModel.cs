@@ -81,7 +81,7 @@ namespace LittleBigMouse.Control.Main
                 return;
             }
 
-            MessageBoxResult result = MessageBox.Show("Save your changes before exiting ?", "Confirmation",
+            MessageBoxResult result = System.Windows.MessageBox.Show("Save your changes before exiting ?", "Confirmation",
                 MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
             {

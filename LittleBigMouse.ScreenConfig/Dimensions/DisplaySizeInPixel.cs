@@ -23,14 +23,11 @@
 
 using System;
 using System.Runtime.CompilerServices;
-
-using HLab.Notify.PropertyChanged;
-
+using Avalonia;
 using Microsoft.Win32;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
-
-using H = H<ScreenSizeInPixels>;
 
 public class ScreenSizeInPixels : DisplaySize
 {
@@ -39,7 +36,27 @@ public class ScreenSizeInPixels : DisplaySize
     public ScreenSizeInPixels(MonitorSource source) : base(null)
     {
         MonitorSource = source;
-        H.Initialize(this);
+
+        this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode,
+                (m) => m.Pels.Width)
+            .ToProperty(this, e => e.Width,out _width);
+
+        this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode,
+                (m) => m.Pels.Height)
+            .ToProperty(this, e => e.Height,out _height);
+
+        this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position,
+                (Point p) => p.X)
+            .ToProperty(this, e => e.X,out _x);
+
+        this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position,
+                (Point p) => p.Y)
+            .ToProperty(this, e => e.Y,out _y);
+
     }
 
     public override double Width
@@ -47,11 +64,7 @@ public class ScreenSizeInPixels : DisplaySize
         get => _width.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _width = H.Property<double>(c => c
-        .Set(e => e.MonitorSource.Device.AttachedDisplay?.CurrentMode?.Pels.Width ?? 0)
-        .On(e => e.MonitorSource.Device.AttachedDisplay.CurrentMode)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _width;
 
     // Monitor area was found depending on system scale
 
@@ -66,11 +79,8 @@ public class ScreenSizeInPixels : DisplaySize
         get => _height.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _height = H.Property<double>(c => c
-        .Set(e => e.MonitorSource.Device.AttachedDisplay?.CurrentMode?.Pels.Height ?? 0)
-        .On(e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Pels)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _height;
+
     //private IProperty<double> _height = H.Property<double>(c => c
     //    .Set(e => e.Screen.Monitor.MonitorArea.Height)
     //    .On(e => e.Screen.Monitor.MonitorArea)
@@ -82,11 +92,7 @@ public class ScreenSizeInPixels : DisplaySize
         get => _x.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _x = H.Property<double>(c => c
-        .Set(e => e.MonitorSource.Device.AttachedDisplay?.CurrentMode?.Position.X ?? 0)
-        .On(e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _x;
     //TODO : 
     //private readonly IProperty<double> _x = H.Property<double>(c => c
     //    .Set(s => s.Screen.Monitor.MonitorArea.X)
@@ -99,13 +105,9 @@ public class ScreenSizeInPixels : DisplaySize
         get => _y.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _y = H.Property<double>(c => c
-        // TODO BUG : //Root/BasicDisplay CurrentMode is null
-        .Set(e => e.MonitorSource.Device.AttachedDisplay?.CurrentMode?.Position.Y ?? 0)
-        .On(e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position)
-        .Update()
-    );
-    //private readonly IProperty<double> _y = H.Property<double>(nameof(Y), c => c
+    readonly ObservableAsPropertyHelper<double> _y;
+
+   //private readonly IProperty<double> _y = H.Property<double>(nameof(Y), c => c
     //    .Set(s => s.Screen.Monitor.MonitorArea.Y)
     //    .On(e => e.Screen.Monitor.MonitorArea)
     //    .Update()
@@ -132,14 +134,16 @@ public class ScreenSizeInPixels : DisplaySize
         get => 0;
         set => throw new NotImplementedException();
     }
-    private double LoadValueMonitor(Func<double> def, [CallerMemberName] string name = null)
+
+    double LoadValueMonitor(Func<double> def, [CallerMemberName] string name = null)
     {
         using (RegistryKey key = MonitorSource.Device.OpenMonitorRegKey())
         {
             return key.GetKey(name, def);
         }
     }
-    private double LoadValueConfig(Func<double> def, [CallerMemberName] string name = null)
+
+    double LoadValueConfig(Func<double> def, [CallerMemberName] string name = null)
     {
         using (RegistryKey key = MonitorSource.Monitor.OpenRegKey())
         {

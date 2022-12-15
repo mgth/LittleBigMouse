@@ -28,7 +28,7 @@ using System.Text;
 
 namespace HLab.Sys.Windows.API
 {
-    public static partial class NativeMethods
+    public static partial class Dxva2
     {
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         public struct PHYSICAL_MONITOR
@@ -86,11 +86,11 @@ namespace HLab.Sys.Windows.API
         {
             uint pdwNumberOfPhysicalMonitors = 0;
 
-            if (NativeMethods.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref pdwNumberOfPhysicalMonitors))
+            if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref pdwNumberOfPhysicalMonitors))
             {
-                var pPhysicalMonitorArray = new NativeMethods.PHYSICAL_MONITOR[pdwNumberOfPhysicalMonitors];
+                var pPhysicalMonitorArray = new PHYSICAL_MONITOR[pdwNumberOfPhysicalMonitors];
 
-                if (NativeMethods.GetPhysicalMonitorsFromHMONITOR(hMonitor, pdwNumberOfPhysicalMonitors, pPhysicalMonitorArray))
+                if (GetPhysicalMonitorsFromHMONITOR(hMonitor, pdwNumberOfPhysicalMonitors, pPhysicalMonitorArray))
                 {
                     return pPhysicalMonitorArray;
                 }

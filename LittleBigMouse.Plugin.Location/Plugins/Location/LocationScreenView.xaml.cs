@@ -54,8 +54,6 @@ class SizeScreenContentView : UserControl, IView<ViewModeScreenLocation, Locatio
 /// </summary>
 partial class DefaultScreenView : UserControl, IView<ViewModeScreenLocation, LocationScreenViewModel>, IViewScreenFrameContent
 {
-
-
     public DefaultScreenView()
     {
         InitializeComponent();
@@ -65,11 +63,12 @@ partial class DefaultScreenView : UserControl, IView<ViewModeScreenLocation, Loc
 
     private void SetStaticPoint()
     {
-        Point p = Mouse.GetPosition(this);
+        var p = Mouse.GetPosition(this);
         _staticPoint = new Point(
             p.X / ActualWidth,
             p.Y / ActualHeight);
     }
+    
     private void View_SizeChanged(object sender, EventArgs e)
     {
         if (_staticPoint != null)
@@ -80,7 +79,7 @@ partial class DefaultScreenView : UserControl, IView<ViewModeScreenLocation, Loc
                     ActualHeight * _staticPoint.Value.Y
                     ));
 
-            NativeMethods.SetCursorPos((int)p.X, (int)p.Y);
+            User32.SetCursorPos((int)p.X, (int)p.Y);
 
             _staticPoint = null;
         }
@@ -191,7 +190,7 @@ partial class DefaultScreenView : UserControl, IView<ViewModeScreenLocation, Loc
         //use anchors when control key is not pressed
         if ((Keyboard.Modifiers & ModifierKeys.Control) == 0)
         {
-            foreach (var other in ViewModel.Model.OtherScreens)
+            foreach (var other in ViewModel.Model.OtherScreens.Items)
             {
                 foreach (var xAnchorThis in VerticalAnchors(ViewModel.Model, this.GetFrame().ViewModel.Model.XMoving - _dragStartPosition.X))
                 {
@@ -412,7 +411,7 @@ partial class DefaultScreenView : UserControl, IView<ViewModeScreenLocation, Loc
             {
                 var p2 = new Point(rx * tb.ActualWidth, ry * tb.ActualHeight);
                 var l = tb.PointToScreen(p2);
-                NativeMethods.SetCursorPos((int)l.X, (int)l.Y);
+                HLab.Sys.Windows.API.User32.SetCursorPos((int)l.X, (int)l.Y);
             }, DispatcherPriority.Loaded);
         }
     }

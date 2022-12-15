@@ -28,7 +28,7 @@ using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Plugin.Vcp;
 
-class SizeScreenContentView : UserControl, IView<ViewModeScreenVcp, VcpScreenViewModel>, IViewScreenFrameContent
+internal class SizeScreenContentView : UserControl, IView<ViewModeScreenVcp, VcpScreenViewModel>, IViewScreenFrameContent
 {
 }
 /// <summary>
@@ -36,20 +36,20 @@ class SizeScreenContentView : UserControl, IView<ViewModeScreenVcp, VcpScreenVie
 /// </summary>
 public partial class VcpScreenView : UserControl, IView<ViewModeScreenVcp, VcpScreenViewModel>, IViewScreenFrameContent
 {
-    private VcpScreenViewModel ViewModel => (DataContext as VcpScreenViewModel);
+    VcpScreenViewModel ViewModel => (DataContext as VcpScreenViewModel);
 
     public VcpScreenView()
     {
         InitializeComponent();
     }
 
-    private void ButtonOff_OnClick(object sender, RoutedEventArgs e)
+    void ButtonOff_OnClick(object sender, RoutedEventArgs e)
     {
         if (ViewModel?.Vcp == null) return;
         ViewModel.Vcp.Power = false;
     }
 
-    private void WakeUp_OnClick(object sender, RoutedEventArgs e)
+    void WakeUp_OnClick(object sender, RoutedEventArgs e)
     {
         if (ViewModel?.Vcp == null) return;
         ViewModel.Vcp.Power = true;
@@ -82,32 +82,33 @@ public partial class VcpScreenView : UserControl, IView<ViewModeScreenVcp, VcpSc
     //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
     //}
 
-    private void ProbeLowLuminance_OnClick(object sender, RoutedEventArgs e)
+    void ProbeLowLuminance_OnClick(object sender, RoutedEventArgs e)
     {
         ViewModel?.ProbeLowLuminance();
     }
-    private void ProbeLuminance_OnClick(object sender, RoutedEventArgs e)
+
+    void ProbeLuminance_OnClick(object sender, RoutedEventArgs e)
     {
         ViewModel?.ProbeLowLuminance();
     }
 
 
-    private void Probe_OnClick(object sender, RoutedEventArgs e)
+    void Probe_OnClick(object sender, RoutedEventArgs e)
     {
         ViewModel?.Probe();
     }
 
-    private void Tune_OnClick(object sender, RoutedEventArgs e)
+    void Tune_OnClick(object sender, RoutedEventArgs e)
     {
         ViewModel?.Tune();
     }
 
 
-    private void UIElement_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    void UIElement_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
     }
 
-    private void Save_OnClick(object sender, RoutedEventArgs e)
+    void Save_OnClick(object sender, RoutedEventArgs e)
     {
         ViewModel?.Save();
     }

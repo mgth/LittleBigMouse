@@ -22,37 +22,36 @@
 */
 
 using System.Runtime.Serialization;
-using System.Windows;
-using NativeMethods = HLab.Sys.Windows.API.NativeMethods;
+using Avalonia;
+using HLab.Sys.Windows.API;
 
-namespace HLab.Sys.Windows.Monitors
+namespace HLab.Sys.Windows.Monitors;
+
+[DataContract]
+public class DisplayMode
 {
-    [DataContract]
-    public class DisplayMode
+    [DataMember]
+    public Point Position { get; }
+    [DataMember]
+    public int BitsPerPixel { get; }
+    [DataMember]
+    public Size Pels { get; }
+    [DataMember]
+    public int DisplayFlags { get; }
+    [DataMember]
+    public int DisplayFrequency { get; }
+    [DataMember]
+    public int DisplayFixedOutput { get; }
+    [DataMember]
+    public int DisplayOrientation { get; }
+    internal DisplayMode(User32.DEVMODE dm)
     {
-        [DataMember]
-        public Point Position { get; }
-        [DataMember]
-        public int BitsPerPixel { get; }
-        [DataMember]
-        public Size Pels { get; }
-        [DataMember]
-        public int DisplayFlags { get; }
-        [DataMember]
-        public int DisplayFrequency { get; }
-        [DataMember]
-        public int DisplayFixedOutput { get; }
-        [DataMember]
-        public int DisplayOrientation { get; }
-        public DisplayMode(NativeMethods.DEVMODE devmode)
-        {
-            DisplayOrientation = ((devmode.Fields & NativeMethods.DM.DisplayOrientation) != 0)?devmode.DisplayOrientation:0;
-            Position = ((devmode.Fields & NativeMethods.DM.Position) != 0)?new Point(devmode.Position.x, devmode.Position.y):new Point(0,0);
-            BitsPerPixel = ((devmode.Fields & NativeMethods.DM.BitsPerPixel) != 0)?devmode.BitsPerPel:0;
-            Pels = ((devmode.Fields & (NativeMethods.DM.PelsWidth | NativeMethods.DM.PelsHeight)) != 0)? new Size(devmode.PelsWidth, devmode.PelsHeight):new Size(1,1);
-            DisplayFlags = ((devmode.Fields & NativeMethods.DM.DisplayFlags) != 0)? devmode.DisplayFlags:0;
-            DisplayFrequency = ((devmode.Fields & NativeMethods.DM.DisplayFrequency) != 0)? devmode.DisplayFrequency:0;
-            DisplayFixedOutput = ((devmode.Fields & NativeMethods.DM.DisplayFixedOutput) != 0)? devmode.DisplayFixedOutput:0;
-        }
+        DisplayOrientation = ((dm.Fields & User32.DM.DisplayOrientation) != 0)?dm.DisplayOrientation:0;
+        Position = ((dm.Fields & User32.DM.Position) != 0)?new Point(dm.Position.x, dm.Position.y):new Point(0,0);
+        BitsPerPixel = ((dm.Fields & User32.DM.BitsPerPixel) != 0)?dm.BitsPerPel:0;
+        Pels = ((dm.Fields & (User32.DM.PelsWidth | User32.DM.PelsHeight)) != 0)? new Size(dm.PelsWidth, dm.PelsHeight):new Size(1,1);
+        DisplayFlags = ((dm.Fields & User32.DM.DisplayFlags) != 0)? dm.DisplayFlags:0;
+        DisplayFrequency = ((dm.Fields & User32.DM.DisplayFrequency) != 0)? dm.DisplayFrequency:0;
+        DisplayFixedOutput = ((dm.Fields & User32.DM.DisplayFixedOutput) != 0)? dm.DisplayFixedOutput:0;
     }
 }

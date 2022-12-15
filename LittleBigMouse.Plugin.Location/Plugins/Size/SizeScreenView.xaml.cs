@@ -92,7 +92,7 @@ public partial class SizeScreenView : UserControl, IView<ViewModeScreenSize, Scr
             {
                 var p2 = new Point(rx * tb.ActualWidth, ry * tb.ActualHeight);
                 var l = tb.PointToScreen(p2);
-                NativeMethods.SetCursorPos((int)l.X, (int)l.Y);
+                User32.SetCursorPos((int)l.X, (int)l.Y);
             }, DispatcherPriority.Loaded);
         }
     }

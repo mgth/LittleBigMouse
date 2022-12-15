@@ -21,99 +21,30 @@
 	  http://www.mgth.fr
 */
 
-using System.Windows;
-
-using HLab.Notify.PropertyChanged;
+using Avalonia;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-using H = H<DisplayLocate>;
-
-public class DisplayLocate : DisplaySize
+public class DisplayLocate : DisplayMove
 {
     public DisplayLocate(IDisplaySize source, Point? point = null) : base(source)
     {
-        H.Initialize(this);
         Location = point ?? new Point();
     }
 
-    public override double Width
-    {
-        get => _width.Get();
-        set => Source.Width = value;
-    }
-    private readonly IProperty<double> _width = H.Property<double>(c => c
-        .Set(e => e.Source.Width)
-        .On(e => e.Source.Width)
-        .Update()
-    );
-
-    public override double Height
-    {
-        get => _height.Get();
-        set => Source.Height = value;
-    }
-    private readonly IProperty<double> _height = H.Property<double>(c => c
-        .Set(e => e.Source.Height)
-        .On(e => e.Source.Height)
-        .Update()
-    );
-
     public override double X
     {
-        get => _x.Get();
-        set => _x.Set(value);
+        get => _x;
+        set => this.RaiseAndSetIfChanged(ref _x, value);
     }
-    private readonly IProperty<double> _x = H.Property<double>();
+    double _x;
 
     public override double Y
     {
-        get => _y.Get();
-        set => _y.Set(value);
+        get => _y;
+        set => this.RaiseAndSetIfChanged(ref _y, value);
     }
-    private readonly IProperty<double> _y = H.Property<double>();
+    double _y;
 
-    public override double TopBorder
-    {
-        get => _topBorder.Get();
-        set => Source.TopBorder = value;
-    }
-    private readonly IProperty<double> _topBorder = H.Property<double>(c => c
-        .Set(e => e.Source.TopBorder)
-        .On(e => e.Source.TopBorder)
-        .Update()
-    );
-
-    public override double RightBorder
-    {
-        get => _rightBorder.Get();
-        set => Source.RightBorder = value;
-    }
-    private readonly IProperty<double> _rightBorder = H.Property<double>(c => c
-        .Set(e => e.Source.RightBorder)
-        .On(e => e.Source.RightBorder)
-        .Update()
-    );
-
-    public override double BottomBorder
-    {
-        get => _bottomBorder.Get();
-        set => Source.BottomBorder = value;
-    }
-    private readonly IProperty<double> _bottomBorder = H.Property<double>(c => c
-        .Set(e => e.Source.BottomBorder)
-        .On(e => e.Source.BottomBorder)
-        .Update()
-    );
-
-    public override double LeftBorder
-    {
-        get => _leftBorder.Get();
-        set => Source.LeftBorder = value;
-    }
-    private readonly IProperty<double> _leftBorder = H.Property<double>(c => c
-        .Set(e => e.Source.LeftBorder)
-        .On(e => e.Source.LeftBorder)
-        .Update()
-    );
 }

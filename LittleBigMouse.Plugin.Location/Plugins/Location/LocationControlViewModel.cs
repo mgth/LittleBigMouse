@@ -22,6 +22,8 @@
 */
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Windows;
 using System.Windows.Input;
@@ -55,7 +57,7 @@ class LocationControlViewModel : ViewModel<Layout>
         [DataMember]
         public Layout Layout { get; set; }
         [DataMember]
-        public ObservableCollectionSafe<MonitorDevice> Monitors { get; set; }
+        public List<MonitorDevice> Monitors { get; set; }
         [DataMember]
         public ZonesLayout Zones { get; set; }
     }
@@ -67,7 +69,7 @@ class LocationControlViewModel : ViewModel<Layout>
            var export = new JsonExport
            {
                Layout = e.Model,
-               Monitors = e._monitorsService.Monitors,
+               Monitors = e._monitorsService.Monitors.Items.ToList(),
                Zones = e.Model.ComputeZones()
            };
            var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings { 

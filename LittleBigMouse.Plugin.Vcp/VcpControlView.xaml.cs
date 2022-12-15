@@ -35,7 +35,7 @@ namespace LittleBigMouse.Plugin.Vcp
     /// </summary>
     public partial class VcpControlView : UserControl, IView<ViewModeScreenVcp, VcpScreenViewModel>
     {
-        private readonly ILittleBigMouseClientService _service;
+        readonly ILittleBigMouseClientService _service;
 
         public VcpControlView(ILittleBigMouseClientService service)
         {
@@ -43,31 +43,31 @@ namespace LittleBigMouse.Plugin.Vcp
             InitializeComponent();
         }
 
-        private void Save()
+        void Save()
         {
  //           Model.Save();
         }
 
 
-        private void cmdApply_Click(object sender, RoutedEventArgs e)
+        void cmdApply_Click(object sender, RoutedEventArgs e)
         {
             Save();
             //LittleBigMouseClient.Client.LoadAtStartup(Model.LoadAtStartup);
             //_service.Start();
         }
 
-        private void cmdCancel_Click(object sender, RoutedEventArgs e)
+        void cmdCancel_Click(object sender, RoutedEventArgs e)
         {
            // MainGui.Close();
         }
 
 
-        private void cmdUnload_Click(object sender, RoutedEventArgs e)
+        void cmdUnload_Click(object sender, RoutedEventArgs e)
         {
             _service.Quit();
         }
 
-        private void ButtonBase_OnClick(object sender, RoutedEventArgs routedEventArgs)
+        void ButtonBase_OnClick(object sender, RoutedEventArgs routedEventArgs)
         {
             ;
         }

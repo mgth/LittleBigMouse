@@ -24,25 +24,19 @@
 using System;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Windows;
 
 // ReSharper disable InconsistentNaming
 
 namespace HLab.Sys.Windows.API
 {
-    public static partial class NativeMethods
+    public static partial class User32
     {
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct DISPLAY_DEVICE
         {
-            public DISPLAY_DEVICE(bool init)
+            public DISPLAY_DEVICE()
             {
                 cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
-                DeviceName = "";
-                DeviceString = "";
-                StateFlags = 0;
-                DeviceID = "";
-                DeviceKey = "";
             }
             [MarshalAs(UnmanagedType.U4)]
             public int cb;
@@ -100,39 +94,39 @@ namespace HLab.Sys.Windows.API
             [FieldOffset(0)]
             public string DeviceName;
             [FieldOffset(32)]
-            public Int16 SpecVersion;
+            public short SpecVersion;
             [FieldOffset(34)]
-            public Int16 DriverVersion;
+            public short DriverVersion;
             [FieldOffset(36)]
-            public Int16 Size;
+            public short Size;
             [FieldOffset(38)]
-            public Int16 DriverExtra;
+            public short DriverExtra;
             [FieldOffset(40)]
             public DM Fields;
 
             [FieldOffset(44)]
-            Int16 Orientation;
+            short Orientation;
             [FieldOffset(46)]
-            Int16 PaperSize;
+            short PaperSize;
             [FieldOffset(48)]
-            Int16 PaperLength;
+            short PaperLength;
             [FieldOffset(50)]
-            Int16 PaperWidth;
+            short PaperWidth;
             [FieldOffset(52)]
-            Int16 Scale;
+            short Scale;
             [FieldOffset(54)]
-            Int16 Copies;
+            short Copies;
             [FieldOffset(56)]
-            Int16 DefaultSource;
+            short DefaultSource;
             [FieldOffset(58)]
-            Int16 PrintQuality;
+            short PrintQuality;
 
             [FieldOffset(44)]
             public POINTL Position;
             [FieldOffset(52)]
-            public Int32 DisplayOrientation;
+            public int DisplayOrientation;
             [FieldOffset(56)]
-            public Int32 DisplayFixedOutput;
+            public int DisplayFixedOutput;
 
             [FieldOffset(60)]
             public short Color; // See note below!
@@ -148,19 +142,19 @@ namespace HLab.Sys.Windows.API
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CCHFORMNAME)]
             public string FormName;
             [FieldOffset(102)]
-            public Int16 LogPixels;
+            public short LogPixels;
             [FieldOffset(104)]
-            public Int32 BitsPerPel;
+            public int BitsPerPel;
             [FieldOffset(108)]
-            public Int32 PelsWidth;
+            public int PelsWidth;
             [FieldOffset(112)]
-            public Int32 PelsHeight;
+            public int PelsHeight;
             [FieldOffset(116)]
-            public Int32 DisplayFlags;
+            public int DisplayFlags;
             [FieldOffset(116)]
-            public Int32 Nup;
+            public int Nup;
             [FieldOffset(120)]
-            public Int32 DisplayFrequency;
+            public int DisplayFrequency;
 
             public DEVMODE(bool init)
             {
@@ -200,8 +194,8 @@ namespace HLab.Sys.Windows.API
 
         public struct POINTL
         {
-            public Int32 x;
-            public Int32 y;
+            public int x;
+            public int y;
         }
 
         [Flags()]
@@ -269,8 +263,6 @@ namespace HLab.Sys.Windows.API
                 Bottom = bottom;
             }
 
-            public RECT(Rect r) : this((int)r.Left, (int)r.Top, (int)r.Right, (int)r.Bottom) { }
-
             public int X
             {
                 get => Left;
@@ -295,28 +287,6 @@ namespace HLab.Sys.Windows.API
                 set => Right = value + Left;
             }
 
-            public Point Location
-            {
-                get => new(Left, Top);
-                set { X = (int)value.X; Y = (int)value.Y; }
-            }
-
-            public Size Size
-            {
-                get => new Size(Width, Height);
-                set { Width = (int)value.Width; Height = (int)value.Height; }
-            }
-
-            public static implicit operator Rect(RECT r)
-            {
-                return new Rect(r.Left, r.Top, r.Width, r.Height);
-            }
-
-            public static implicit operator RECT(Rect r)
-            {
-                return new RECT(r);
-            }
-
             public static bool operator ==(RECT r1, RECT r2)
             {
                 return r1.Equals(r2);
@@ -337,14 +307,8 @@ namespace HLab.Sys.Windows.API
                 return obj switch
                 {
                     RECT rect => Equals(rect),
-                    Rect rect => Equals(new RECT(rect)),
                     _ => false
                 };
-            }
-
-            public override int GetHashCode()
-            {
-                return ((Rect)this).GetHashCode();
             }
 
             public override string ToString()
@@ -1181,9 +1145,6 @@ namespace HLab.Sys.Windows.API
             System_Aware = 17,
             Per_Monitor_Aware = 18,
             Per_Monitor_Aware_V2 = 34,
-            StrangeValue = 43025,
-            StrangeValue1 = 24592,
-            StrangeValue2 = 24593,
         }
 
 
@@ -1402,8 +1363,6 @@ namespace HLab.Sys.Windows.API
             internal HARDWAREINPUT hi;
         }
 
-        public delegate bool EnumMonitorsDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
-
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
         {
@@ -1416,17 +1375,6 @@ namespace HLab.Sys.Windows.API
                 this.Y = y;
             }
 
-            public POINT(Point pt) : this((int)pt.X, (int)pt.Y) { }
-
-            public static implicit operator Point(POINT p)
-            {
-                return new Point(p.X, p.Y);
-            }
-
-            public static implicit operator POINT(Point p)
-            {
-                return new POINT((int)p.X, (int)p.Y);
-            }
         }
 
         //Display
@@ -1456,9 +1404,12 @@ namespace HLab.Sys.Windows.API
         [DllImport("user32.dll")]
         public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
-        [DllImport("user32.dll")]
-        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip,
-           EnumMonitorsDelegate lpfnEnum, IntPtr dwData);
+        [DllImport("User32.dll")]
+        public static extern bool EnumDisplayMonitors(
+            IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+
+        public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor,
+            ref RECT lprcMonitor, IntPtr dwData);
 
         //Input
         [DllImport("user32.dll")]
@@ -1466,11 +1417,11 @@ namespace HLab.Sys.Windows.API
            [MarshalAs(UnmanagedType.LPArray), In] InputUnion[] pInputs,
            int cbSize);
 
-        public const UInt32 SPI_SETCURSORS = 0x0057;
-        public const UInt32 SPIF_UPDATEINIFILE = 0x01;
-        public const UInt32 SPIF_SENDCHANGE = 0x02;
-        public const UInt32 SPI_SETMOUSESPEED = 0x0071;
-        public const UInt32 SPI_GETMOUSESPEED = 0x0070;
+        public const uint SPI_SETCURSORS = 0x0057;
+        public const uint SPIF_UPDATEINIFILE = 0x01;
+        public const uint SPIF_SENDCHANGE = 0x02;
+        public const uint SPI_SETMOUSESPEED = 0x0071;
+        public const uint SPI_GETMOUSESPEED = 0x0070;
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -1493,17 +1444,12 @@ namespace HLab.Sys.Windows.API
             uint fWinIni);
 
         [DllImport("User32.dll")]
-        public static extern Boolean SystemParametersInfo(
-            UInt32 uiAction,
-            UInt32 uiParam,
-            ref UInt32 pvParam,
-            UInt32 fWinIni);
+        public static extern bool SystemParametersInfo(
+            uint uiAction,
+            uint uiParam,
+            ref uint pvParam,
+            uint fWinIni);
 
-        [DllImport("Shcore.dll")]
-        public static extern int GetScaleFactorForMonitor(
-            IntPtr hMonitor,
-            ref int scale
-            );
 
         [DllImport("User32.dll")]
         public static extern int PhysicalToLogicalPoint( //ForPerMonitorDPI(
@@ -1526,12 +1472,6 @@ namespace HLab.Sys.Windows.API
             out uint dpiY
             );
 
-        //[DllImport("SHCore.dll", SetLastError = true)]
-        //public static extern int GetProcessDpiAwareness(
-        //        IntPtr  hprocess,
-        //        out Process_DPI_Awareness value
-        //      );
-
         [DllImport("user32.dll", SetLastError = true)]
         public static extern DPI_Awareness_Context GetThreadDpiAwarenessContext();
 
@@ -1539,11 +1479,11 @@ namespace HLab.Sys.Windows.API
         public static extern IntPtr GetDesktopWindow();
 
         [DllImport("user32.dll")]
-        public static extern int SendMessage(IntPtr hWnd, Int32 wMsg, bool wParam, Int32 lParam);
+        public static extern int SendMessage(IntPtr hWnd, int wMsg, bool wParam, int lParam);
         [DllImport("user32.dll")]
-        public static extern int SendMessage(IntPtr hWnd, Int32 Msg, Int32 wParam, Int32 lParam);
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
         [DllImport("user32.dll")]
-        public static extern int SendMessage(Int32 hWnd, Int32 Msg, Int32 wParam, Int32 lParam);
+        public static extern int SendMessage(int hWnd, int Msg, int wParam, int lParam);
 
         public const int WM_SETREDRAW = 11;
 
@@ -1594,12 +1534,21 @@ namespace HLab.Sys.Windows.API
         public const uint SPI_GETDESKWALLPAPER = 0x73;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        public static extern int SystemParametersInfo(UInt32 uAction, int uParam, string lpvParam, int fuWinIni);
+        public static extern int SystemParametersInfo(uint uAction, int uParam, string lpvParam, int fuWinIni);
 
         [DllImport("user32.dll")]
         public static extern bool ClipCursor(ref RECT lpRect);
 
         [DllImport("user32.dll")]
         public static extern bool GetClipCursor(out RECT lpRect);
+
+        /// <summary>
+        /// Provides access to function required to delete handle. This method is used internally
+        /// and is not required to be called separately.
+        /// </summary>
+        /// <param name="hIcon">Pointer to icon handle.</param>
+        /// <returns>N/A</returns>
+        [LibraryImport("User32.dll")]
+        public static partial int DestroyIcon( IntPtr hIcon );
     }
 }

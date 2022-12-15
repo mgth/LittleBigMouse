@@ -1,19 +1,18 @@
-﻿using HLab.Notify.Annotations;
-using HLab.Notify.PropertyChanged;
+﻿using DynamicData;
+using HLab.Sys.Windows.API;
 using Newtonsoft.Json;
+using ReactiveUI;
 
 namespace HLab.Sys.Windows.Monitors
 {
-    using H = H<PhysicalAdapter>;
-
-    public class PhysicalAdapter : NotifierBase
+    public class PhysicalAdapter : ReactiveObject
     {
         public PhysicalAdapter(string deviceId, IMonitorsService service)
         {
             DeviceId = deviceId;
             MonitorsService = service;
 
-            H.Initialize(this);
+            Displays = service.Devices.Connect().Filter(e => e.DeviceId == deviceId).AsObservableCache();
         }
 
         [JsonIgnore]
@@ -22,17 +21,12 @@ namespace HLab.Sys.Windows.Monitors
 
         public string DeviceString
         {
-            get => _deviceString.Get();
-            internal set => _deviceString.Set(value ?? "");
+            get => _deviceString;
+            internal set => this.RaiseAndSetIfChanged(ref _deviceString, value??"");
         }
-        private readonly IProperty<string> _deviceString = H.Property<string>();
+        string _deviceString;
 
 
-        public IObservableFilter<DisplayDevice> Displays { get; } = H.Filter<DisplayDevice>( c=> c
-            .On(e => e.DeviceId)
-            .On(e => e.MonitorsService.Devices.Item().DeviceId)
-            .Update()
-            .AddFilter((e,a) => a.DeviceId == e.DeviceId)
-            .Link(e => e.MonitorsService.Devices));
+        public IObservableCache<DisplayDevice,string> Displays { get; }
     }
 }

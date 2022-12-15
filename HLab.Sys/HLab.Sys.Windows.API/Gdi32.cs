@@ -29,7 +29,7 @@ using System.Text;
 namespace HLab.Sys.Windows.API
 {
     //[System.Security.SuppressUnmanagedCodeSecurity]
-    public static partial class NativeMethods
+    public static partial class Gdi32
     {
         public enum DeviceCap
     {
@@ -199,11 +199,11 @@ namespace HLab.Sys.Windows.API
         public struct RAMP
         {
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public UInt16[] Red;
+            public ushort[] Red;
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public UInt16[] Green;
+            public ushort[] Green;
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public UInt16[] Blue;
+            public ushort[] Blue;
         }
 
         [DllImport("gdi32.dll")]
@@ -211,7 +211,7 @@ namespace HLab.Sys.Windows.API
         [DllImport("gdi32.dll", EntryPoint = "DeleteDC")]
         public static extern bool DeleteDC([In] IntPtr hdc);
         [DllImport("gdi32.dll", SetLastError = true)]
-        public static extern Int32 GetDeviceCaps(IntPtr hdc, DeviceCap capindex);
+        public static extern int GetDeviceCaps(IntPtr hdc, DeviceCap capindex);
         [DllImport("gdi32.dll")]
         public static extern int GetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
 
@@ -234,7 +234,7 @@ namespace HLab.Sys.Windows.API
             {
                 if (len == 0) return null;
 
-                StringBuilder s = new StringBuilder((int)len + 1);
+                var s = new StringBuilder((int)len + 1);
                 if (DDCCIGetCapabilitiesString(hMonitor, s, len))
                 {
                     return s.ToString();

@@ -25,7 +25,7 @@ using HLab.Mvvm;
 
 namespace LittleBigMouse.Plugin.Vcp
 {
-    class VcpControlViewModel : ViewModel
+	internal class VcpControlViewModel : ViewModel
     {
     }
 }

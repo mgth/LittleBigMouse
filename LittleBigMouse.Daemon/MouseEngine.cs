@@ -259,7 +259,7 @@ public class MouseEngine
     }
 
 
-    private NativeMethods.RECT _oldClipRect;
+    private AdvApi32.RECT _oldClipRect;
     private bool _reset = false;
     private Point _goto = new Point(0, 0);
 
@@ -270,7 +270,7 @@ public class MouseEngine
         {
             Debug.WriteLine($"=> : {pIn.X:0},{pIn.Y:0}");
             //LbmMouse.CursorPos = _goto;
-            NativeMethods.ClipCursor(ref _oldClipRect);
+            AdvApi32.ClipCursor(ref _oldClipRect);
             _reset = false;
         }
 
@@ -377,14 +377,14 @@ public class MouseEngine
         {
             Debug.WriteLine($"No zone found : {pIn}");
 
-            var r = new NativeMethods.RECT((int)_oldZone.PixelsBounds.Left, (int)_oldZone.PixelsBounds.Top, (int)_oldZone.PixelsBounds.Right,
+            var r = new AdvApi32.RECT((int)_oldZone.PixelsBounds.Left, (int)_oldZone.PixelsBounds.Top, (int)_oldZone.PixelsBounds.Right,
                 (int)_oldZone.PixelsBounds.Bottom);
 
-            NativeMethods.GetClipCursor(out _oldClipRect);
+            AdvApi32.GetClipCursor(out _oldClipRect);
             _reset = true;
             //_goto = pIn;
 
-            NativeMethods.ClipCursor(ref r);
+            AdvApi32.ClipCursor(ref r);
 
             e.Handled = false; // when set to true, cursor stick to frame
             return;
@@ -407,7 +407,7 @@ public class MouseEngine
             //LbmMouse.CursorPos = new Point(1.0,1.0);
 
 
-            var r = new NativeMethods.RECT(
+            var r = new AdvApi32.RECT(
                 (int) zoneOut.PixelsBounds.Left ,//+1, 
                 (int) zoneOut.PixelsBounds.Top ,//+1, 
                 (int) (zoneOut.PixelsBounds.Right + 1/*-1+1*/),
@@ -421,7 +421,7 @@ public class MouseEngine
             //NativeMethods.ClipCursor(ref r);
             //_reset = true;
             //_goto = pOut;
-            NativeMethods.GetClipCursor(out _oldClipRect);
+            AdvApi32.GetClipCursor(out _oldClipRect);
 
             var pos = pIn;
 
@@ -429,8 +429,8 @@ public class MouseEngine
             {
                 Debug.WriteLine($"travel : {z}");
                 if(z.Contains(pos)) continue;
-                var rect = new NativeMethods.RECT(z);
-                NativeMethods.ClipCursor(ref rect);
+                var rect = new AdvApi32.RECT(z);
+                AdvApi32.ClipCursor(ref rect);
                 pos = LbmMouse.CursorPos;
                 //LbmMouse.CursorPos = pos = new Point((z.Right + z.Left)/2, (z.Top + z.Bottom)/2);
                 if(z.Contains(pOut)) break;
@@ -438,10 +438,10 @@ public class MouseEngine
 
 
             //LbmMouse.CursorPos = zoneOut.CenterPixel;
-            NativeMethods.ClipCursor(ref r);
+            AdvApi32.ClipCursor(ref r);
             _reset = true;
             LbmMouse.CursorPos = pOut;
-            NativeMethods.ClipCursor(ref _oldClipRect);
+            AdvApi32.ClipCursor(ref _oldClipRect);
 
             var p = LbmMouse.CursorPos;
 

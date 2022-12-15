@@ -23,28 +23,33 @@
 
 using System.Collections.Generic;
 using System.Runtime.Serialization;
-using HLab.Notify.PropertyChanged;
+using DynamicData;
+using HLab.Sys.Windows.API;
 using Newtonsoft.Json;
-using NativeMethods = HLab.Sys.Windows.API.NativeMethods;
+using ReactiveUI;
 
 namespace HLab.Sys.Windows.Monitors
 {
-    using H = H<DisplayDevice>;
-
     [DataContract]
-    public class DisplayDevice : NotifierBase
+    public class DisplayDevice : ReactiveObject
     {
-        public DisplayDevice(IMonitorsService service)
+        public DisplayDevice(IMonitorsService service, string deviceName)
         {
             MonitorsService = service;
+            DeviceName = deviceName;
 
-            H.Initialize(this);
+            this.WhenAnyValue(
+                    e => e.State,
+                    s => (s & User32.DisplayDeviceStateFlags.AttachedToDesktop) != 0
+                )
+                .ToProperty(this, e => e.AttachedToDesktop,out _attachedToDesktop);
+
         }
 
         [JsonIgnore]
         public IMonitorsService MonitorsService { get; }
 
-        public void Init(DisplayDevice parent, NativeMethods.DISPLAY_DEVICE dev, IList<DisplayDevice> oldDevices, IList<MonitorDevice> oldMonitors)
+        public void Init(DisplayDevice parent, User32.DISPLAY_DEVICE dev, IList<DisplayDevice> oldDevices, IList<MonitorDevice> oldMonitors)
         {
             Parent = parent;
 
@@ -55,6 +60,8 @@ namespace HLab.Sys.Windows.Monitors
             DeviceName = dev.DeviceName;
             State = dev.StateFlags;
 
+            DeviceCaps = new DeviceCaps(DeviceName);
+
             if(MonitorsService is not MonitorsService service) return;
 
             switch (DeviceId.Split('\\')[0])
@@ -63,14 +70,15 @@ namespace HLab.Sys.Windows.Monitors
                     break;
                 case "MONITOR":
 
-                    var monitor = service.GetOrAddMonitor(DeviceId, () =>
+                    var monitor = service.GetOrAddMonitor(DeviceId, (s,id) =>
                     {
-                        var m =  new MonitorDevice(DeviceId, MonitorsService)/*{MonitorNo = n++}*/;
+                        var m =  new MonitorDevice(id, s);
                         return m;
                     });
 
                     monitor.DeviceKey = DeviceKey;
                     monitor.DeviceString = DeviceString;
+                    
                     if (AttachedToDesktop)
                     {
                         monitor.AttachedDisplay = parent;
@@ -91,7 +99,7 @@ namespace HLab.Sys.Windows.Monitors
                 case "RdpIdd_IndirectDisplay":
                 case string s when s.StartsWith("VID_DATRONICSOFT_PID_SPACEDESK_VIRTUAL_DISPLAY_"):
 
-                    var adapter = service.GetOrAddAdapter(DeviceId, () => new PhysicalAdapter(DeviceId, MonitorsService)
+                    var adapter = service.GetOrAddAdapter(DeviceId, (s,id) => new PhysicalAdapter(id, s)
                     {
                         DeviceString = DeviceString
                     });
@@ -102,58 +110,52 @@ namespace HLab.Sys.Windows.Monitors
                 default:
                         break;
             }
-            
-
-
-
 
             uint i = 0;
-            var child = new NativeMethods.DISPLAY_DEVICE(true);
+            var child = new User32.DISPLAY_DEVICE();
 
-            while (NativeMethods.EnumDisplayDevices(DeviceName, i++, ref child, 0))
+            while (User32.EnumDisplayDevices(DeviceName, i++, ref child, 0))
             {
                 var c = child;
-                var device = MonitorsService.Devices.AddOrUpdate(m => m.DeviceName == c.DeviceName, 
-                    d =>oldDevices.Remove(d), 
-                    () =>new DisplayDevice(service));
+                var device = service.GetOrAddDevice(c.DeviceName, 
+                    (s,id) =>new DisplayDevice(s,id));
 
+                oldDevices.Remove(device);
                 device.Init(this, c, oldDevices, oldMonitors);
-                child = new NativeMethods.DISPLAY_DEVICE(true);
+                child = new User32.DISPLAY_DEVICE();
             }
         }
 
         [DataMember]
-        public bool AttachedToDesktop => _attachedToDesktop.Get();
-        private readonly IProperty<bool> _attachedToDesktop = H.Property<bool>(c => c
-            .Set(e => (e.State & NativeMethods.DisplayDeviceStateFlags.AttachedToDesktop) != 0)
-            .On(e => e.State)
-            .Update()
-        );
+        public bool AttachedToDesktop => _attachedToDesktop.Value;
+        readonly ObservableAsPropertyHelper<bool> _attachedToDesktop;
+
 
         [JsonProperty]
-        public ObservableCollectionSafe<DisplayMode> DisplayModes { get; } = new ObservableCollectionSafe<DisplayMode>();
+        public SourceList<DisplayMode> DisplayModes { get; } = new ();
 
         [DataMember]
-        public DeviceCaps DeviceCaps => _deviceCaps.Get();
-        private readonly IProperty<DeviceCaps> _deviceCaps = H.Property<DeviceCaps>(c => c
-                 .Set(s => new DeviceCaps(s.DeviceName))
-            );
-
+        public DeviceCaps DeviceCaps
+        {
+            get => _deviceCaps;
+            set => this.RaiseAndSetIfChanged(ref _deviceCaps, value);
+        }
+        DeviceCaps _deviceCaps;
 
 
        [DataMember]
         public DisplayMode CurrentMode
         {
-            get => _currentMode.Get();
-            set => _currentMode.Set(value);
+            get => _currentMode;
+            set => this.RaiseAndSetIfChanged(ref _currentMode, value);
         }
-        private readonly IProperty<DisplayMode> _currentMode = H.Property<DisplayMode>();
+        DisplayMode _currentMode;
 
-        private void CheckCurrentMode()
+        void CheckCurrentMode()
         {
-            var devMode = new NativeMethods.DEVMODE(true);
+            var devMode = new User32.DEVMODE(true);
 
-            if (NativeMethods.EnumDisplaySettingsEx(DeviceName, -1, ref devMode, 0))
+            if (User32.EnumDisplaySettingsEx(DeviceName, -1, ref devMode, 0))
             {
                 CurrentMode = new DisplayMode(devMode);
             }
@@ -161,12 +163,12 @@ namespace HLab.Sys.Windows.Monitors
  
         public void UpdateDevModes()
         {
-            NativeMethods.DEVMODE devmode = new NativeMethods.DEVMODE(true);
+            var devMode = new User32.DEVMODE(true);
 
             int i = 0;
-            while (NativeMethods.EnumDisplaySettingsEx(DeviceName, i, ref devmode, 0))
+            while (User32.EnumDisplaySettingsEx(DeviceName, i, ref devMode, 0))
             {
-                DisplayModes.Add(new DisplayMode(devmode));
+                DisplayModes.Add(new DisplayMode(devMode));
                 i++;
             }
         }
@@ -174,50 +176,49 @@ namespace HLab.Sys.Windows.Monitors
         [DataMember]
         public string DeviceName
         {
-            get => _deviceName.Get();
-            internal set => _deviceName.Set(value);
+            get => _deviceName;
+            internal set => this.RaiseAndSetIfChanged(ref _deviceName, value);
         }
-        private readonly IProperty<string> _deviceName = H.Property<string>();
+        string _deviceName;
 
         public DisplayDevice Parent
         {
-            get => _parent.Get();
-            protected set => _parent.Set(value);
+            get => _parent;
+            protected set => this.RaiseAndSetIfChanged(ref _parent, value);
         }
-        private readonly IProperty<DisplayDevice> _parent = H.Property<DisplayDevice>();
+        DisplayDevice _parent;
 
         [DataMember]
         public string DeviceString
         {
-            get => _deviceString.Get();
-            protected set => _deviceString.Set(value ?? "");
+            get => _deviceString;
+            protected set => this.RaiseAndSetIfChanged(ref _deviceString, value ?? "");
         }
-        private readonly IProperty<string> _deviceString= H.Property<string>();
+        string _deviceString;
 
         [DataMember]
-        public NativeMethods.DisplayDeviceStateFlags State
+        public User32.DisplayDeviceStateFlags State
         {
-            get => _state.Get();
-            protected set => _state.Set(value);
+            get => _state;
+            protected set => this.RaiseAndSetIfChanged(ref _state, value);
         }
-        private readonly IProperty<NativeMethods.DisplayDeviceStateFlags> _state 
-            = H.Property<NativeMethods.DisplayDeviceStateFlags>();
+        User32.DisplayDeviceStateFlags _state;
 
         [DataMember]
         public string DeviceId
         {
-            get => _deviceId.Get();
-            protected set => _deviceId.Set(value);
+            get => _deviceId;
+            protected set => this.RaiseAndSetIfChanged(ref _deviceId, value);
         }
-        private readonly IProperty<string> _deviceId = H.Property<string>();
+        string _deviceId;
 
         [DataMember] 
         public string DeviceKey
         {
-            get => _deviceKey.Get();
-            protected set => _deviceKey.Set(value);
+            get => _deviceKey;
+            protected set => this.RaiseAndSetIfChanged(ref _deviceKey, value);
         }
-        private readonly IProperty<string> _deviceKey = H.Property<string>();
+        string _deviceKey;
 
         public override string ToString() => DeviceId;
     }

@@ -30,7 +30,7 @@ using System.Security;
 namespace HLab.Sys.Windows.API
 {
     [SuppressUnmanagedCodeSecurity]
-    public static partial class NativeMethods
+    public static partial class Ntdll
     {
         public enum KEY_INFORMATION_CLASS
         {

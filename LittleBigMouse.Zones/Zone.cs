@@ -1,7 +1,6 @@
 ﻿
 using System.Collections.Concurrent;
-using System.Windows;
-using System.Windows.Media;
+using Avalonia;
 
 namespace LittleBigMouse.Zoning
 {
@@ -44,19 +43,16 @@ namespace LittleBigMouse.Zoning
 
         public void Init()
         {
-            var pixelToPhysicalMatrix = new Matrix();
-            pixelToPhysicalMatrix.Translate(-PixelsBounds.X, -PixelsBounds.Y);
-            pixelToPhysicalMatrix.Scale(1 / PixelsBounds.Width, 1 / PixelsBounds.Height);
-            pixelToPhysicalMatrix.Scale(PhysicalBounds.Width, PhysicalBounds.Height);
-            pixelToPhysicalMatrix.Translate(PhysicalBounds.X, PhysicalBounds.Y);
-            _pixelsToPhysicalMatrix = pixelToPhysicalMatrix;
+            _pixelsToPhysicalMatrix = Matrix
+                    .CreateTranslation(-PixelsBounds.X, -PixelsBounds.Y)
+                    .Append(Matrix.CreateScale(1 / PixelsBounds.Width, 1 / PixelsBounds.Height))
+                    .Append(Matrix.CreateScale(PhysicalBounds.Width, PhysicalBounds.Height))
+                    .Append(Matrix.CreateTranslation(PhysicalBounds.X, PhysicalBounds.Y));
 
-            var physicalToPixelsMatrix = new Matrix();
-            physicalToPixelsMatrix.Translate(-PhysicalBounds.X, -PhysicalBounds.Y);
-            physicalToPixelsMatrix.Scale(1 / PhysicalBounds.Width, 1 / PhysicalBounds.Height);
-            physicalToPixelsMatrix.Scale(PixelsBounds.Width, PixelsBounds.Height);
-            physicalToPixelsMatrix.Translate(PixelsBounds.X, PixelsBounds.Y);
-            _physicalToPixelsMatrix = physicalToPixelsMatrix;
+            _physicalToPixelsMatrix = Matrix.CreateTranslation(-PhysicalBounds.X, -PhysicalBounds.Y)
+                .Append(Matrix.CreateScale(1 / PhysicalBounds.Width, 1 / PhysicalBounds.Height))
+                .Append(Matrix.CreateScale(PixelsBounds.Width, PixelsBounds.Height))
+                .Append(Matrix.CreateTranslation(PixelsBounds.X, PixelsBounds.Y));
 
             var dpiX = PixelsBounds.Width / (PhysicalBounds.Width / 25.4);
             var dpiY = PixelsBounds.Height / (PhysicalBounds.Height / 25.4);
@@ -82,24 +78,24 @@ namespace LittleBigMouse.Zoning
         public bool ContainsMm(Point mm) => PhysicalBounds.Contains(mm);
 
 
-        public Point InsidePixelsBounds(Point px)
+        public Point InsidePixelsBounds(Point p)
         {
-            if (px.X < PixelsBounds.X) px.X = PixelsBounds.X;
-            else if (px.X > PixelsBounds.Right - 1.0) px.X = PixelsBounds.Right - 1.0;
+            if (p.X < PixelsBounds.X) p = new Point(PixelsBounds.X, p.Y);
+            else if (p.X > PixelsBounds.Right - 1.0) p = new Point(PixelsBounds.Right - 1.0, p.Y);
 
-            if (px.Y < PixelsBounds.Y) px.Y = PixelsBounds.Y;
-            else if (px.Y > PixelsBounds.Bottom - 1.0) px.Y = PixelsBounds.Bottom - 1.0;
+            if (p.Y < PixelsBounds.Y) p = new Point(p.X, PixelsBounds.Y);
+            else if (p.Y > PixelsBounds.Bottom - 1.0) p = new Point(p.X, PixelsBounds.Bottom - 1.0);
 
-            return px;
+            return p;
         }
 
         public Point InsidePhysicalBounds(Point mm)
         {
-            if (mm.X < PhysicalBounds.X) mm.X = PhysicalBounds.X;
-            else if (mm.X > PhysicalBounds.Right) mm.X = PhysicalBounds.Right;
+            if (mm.X < PhysicalBounds.X) mm = new Point(PhysicalBounds.X, mm.Y);
+            else if (mm.X > PhysicalBounds.Right) mm = new Point(PhysicalBounds.Right, mm.Y);
 
-            if (mm.Y < PhysicalBounds.Y) mm.Y = PhysicalBounds.Y;
-            else if (mm.Y > PhysicalBounds.Bottom) mm.Y = PhysicalBounds.Bottom;
+            if (mm.Y < PhysicalBounds.Y) mm = new Point(mm.X, PhysicalBounds.Y);
+            else if (mm.Y > PhysicalBounds.Bottom) mm = new Point(mm.X, PhysicalBounds.Bottom);
 
             return mm;
         }

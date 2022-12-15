@@ -21,89 +21,47 @@
 	  http://www.mgth.fr
 */
 
-using System.Windows;
-
-using HLab.Notify.Annotations;
-using HLab.Notify.PropertyChanged;
+using Avalonia;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
-
-using H = H<DisplayTranslate>;
 
 public static class DisplayTranslateExt
 {
     public static IDisplaySize Translate(this IDisplaySize source, Vector translation) => new DisplayTranslate(source, translation);
 }
 
-public class DisplayTranslate : DisplaySize
+public class DisplayTranslate : DisplayMove
 {
     public DisplayTranslate(IDisplaySize source, Vector? translation = null) : base(source)
     {
+        this.WhenAnyValue(e => e.Source.X,e =>e.Translation, (x,t)=>x + t.X)
+            .ToProperty(this, e => e.X,out _x);
+
+        this.WhenAnyValue(e => e.Source.Y,e =>e.Translation, (y,t)=>y + t.Y)
+            .ToProperty(this, e => e.Y,out _y);
+
         Translation = translation ?? new Vector();
     }
 
-    private readonly IProperty<Vector> _translation = H.Property<Vector>();
     public Vector Translation
     {
-        get => _translation.Get();
-        set => _translation.Set(value);
+        get => _translation;
+        set => this.RaiseAndSetIfChanged(ref _translation, value);
     }
+    Vector _translation;
 
-    [TriggerOn(nameof(Source), "Width")]
-    public override double Width
-    {
-        get => Source.Width;
-        set => Source.Width = value;
-    }
-
-    [TriggerOn(nameof(Source), "Height")]
-    public override double Height
-    {
-        get => Source.Height;
-        set => Source.Height = value;
-    }
-
-    [TriggerOn(nameof(Source), "X")]
-    [TriggerOn(nameof(Translation))]
     public override double X
     {
-        get => Source.X + Translation.X;
+        get => _x.Value;
         set => Source.X = value - Translation.X;
     }
+    readonly ObservableAsPropertyHelper<double> _x;
 
-    [TriggerOn(nameof(Source), "Y")]
-    [TriggerOn(nameof(Translation))]
     public override double Y
     {
-        get => Source.Y + Translation.Y;
+        get => _y.Value;
         set => Source.Y = value - Translation.Y;
     }
-
-    [TriggerOn(nameof(Source), "TopBorder")]
-    public override double TopBorder
-    {
-        get => Source.TopBorder;
-        set => Source.TopBorder = value;
-    }
-
-    [TriggerOn(nameof(Source), "RightBorder")]
-    public override double RightBorder
-    {
-        get => Source.RightBorder;
-        set => Source.RightBorder = value;
-    }
-
-    [TriggerOn(nameof(Source), "BottomBorder")]
-    public override double BottomBorder
-    {
-        get => Source.BottomBorder;
-        set => Source.BottomBorder = value;
-    }
-
-    [TriggerOn(nameof(Source), "LeftBorder")]
-    public override double LeftBorder
-    {
-        get => Source.LeftBorder;
-        set => Source.LeftBorder = value;
-    }
+    readonly ObservableAsPropertyHelper<double> _y;
 }

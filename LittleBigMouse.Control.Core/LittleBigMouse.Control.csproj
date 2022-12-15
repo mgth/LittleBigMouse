@@ -76,8 +76,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grace" Version="8.0.0-Beta822" />
-    <PackageReference Include="H.Pipes" Version="2.0.37" />
+    <PackageReference Include="Grace" Version="8.0.0-RC824" />
+    <PackageReference Include="H.Pipes" Version="2.0.42" />
     <PackageReference Include="MahApps.Metro" Version="2.4.9" />
     <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
     <PackageReference Include="System.Runtime" Version="4.3.1" />
@@ -86,9 +86,8 @@
   <ItemGroup>
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.Argyll\HLab.Sys.Argyll.csproj" />
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.MonitorVcp\HLab.Sys.Windows.MonitorVcp.csproj" />
-    <ProjectReference Include="..\HLab\HLab.Icons.Wpf\HLab.Icons.Wpf.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
-    <ProjectReference Include="..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm\HLab.Mvvm.csproj" />
     <ProjectReference Include="..\HLab\HLab.Notification.Wpf\HLab.Notification.Wpf\HLab.UserNotification.Wpf.csproj" />
     <ProjectReference Include="..\HLab\HLab.Notification\HLab.UserNotification.csproj" />

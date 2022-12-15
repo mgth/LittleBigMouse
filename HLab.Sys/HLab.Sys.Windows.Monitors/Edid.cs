@@ -22,14 +22,17 @@
 */
 
 using System.Windows;
+using Avalonia;
 
 namespace HLab.Sys.Windows.Monitors
 {
 
     public class Edid
     {
-        public Edid(byte[] edid)
+        public Edid(string key, byte[] edid)
         {
+            HKeyName = key;
+
             if (edid.Length <= 9) return;
 
             ManufacturerCode = "" + (char)(64 + ((edid[8] >> 2) & 0x1F))
@@ -154,7 +157,7 @@ namespace HLab.Sys.Windows.Monitors
 
         }
 
-
+        public string HKeyName { get; }
 
         public string ProductCode { get; }
         public string Serial { get; }
@@ -191,7 +194,7 @@ namespace HLab.Sys.Windows.Monitors
         public double WhiteY { get; }
         public int Checksum { get; }
 
-        private static string Block(char code, byte[] edid)
+        static string Block(char code, byte[] edid)
         {
             for (var i = 54; i <= 108; i += 18)
             {

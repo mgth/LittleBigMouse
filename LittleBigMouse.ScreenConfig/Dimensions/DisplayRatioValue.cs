@@ -1,43 +1,29 @@
-﻿using System.Windows;
-
-using HLab.Notify.PropertyChanged;
+﻿using Avalonia;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
-
-using H = H<DisplayRatioValue>;
 
 public class DisplayRatioValue : DisplayRatio
 {
     public DisplayRatioValue(double x, double y)
     {
-        H.Initialize(this);
-        X = x;
-        Y = y;
+        _x = x;
+        _y = y;
     }
-    public DisplayRatioValue(double r)
-    {
-        H.Initialize(this);
-        X = r;
-        Y = r;
-    }
-    public DisplayRatioValue(Vector v)
-    {
-        H.Initialize(this);
-        X = v.X;
-        Y = v.Y;
-    }
+    public DisplayRatioValue(double r):this(r,r) {}
+    public DisplayRatioValue(Vector v):this(v.X, v.Y) {}
 
     public override double X
     {
-        get => _x.Get();
-        set => _x.Set(value);
+        get => _x;
+        set => this.RaiseAndSetIfChanged(ref _x, value);
     }
-    private readonly IProperty<double> _x = H.Property<double>();
+    double _x;
 
     public override double Y
     {
-        get => _y.Get();
-        set => _y.Set(value);
+        get => _y;
+        set => this.RaiseAndSetIfChanged(ref _y, value);
     }
-    private readonly IProperty<double> _y = H.Property<double>();
+    double _y;
 }

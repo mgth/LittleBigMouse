@@ -1,8 +1,8 @@
-﻿using System.Globalization;
+﻿using System.Collections.Generic;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 
-using HLab.Notify.Annotations;
-using HLab.Notify.PropertyChanged;
 using HLab.Sys.Windows.Monitors;
 
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -10,13 +10,12 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using Microsoft.Win32;
 
 using Newtonsoft.Json;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout
 {
-    using H = H<MonitorModel>;
-
     [DataContract]
-    public class MonitorModel : NotifierBase
+    public class MonitorModel : ReactiveObject
     {
         [JsonIgnore]
         public Layout Config { get; }
@@ -26,35 +25,36 @@ namespace LittleBigMouse.DisplayLayout
         {
             Config = config;
             PnpCode = pnpCode;
-            H.Initialize(this);
+
+            PhysicalSize = new DisplaySizeInMm(this);
+
+        }
+        bool SetValue<TRet>(ref TRet backingField, TRet value, [CallerMemberName] string propertyName = null)
+        {
+            using (DelayChangeNotifications())
+            {
+                if (EqualityComparer<TRet>.Default.Equals(backingField, value))
+                {
+                    this.RaisePropertyChanging(propertyName);
+                    backingField = value;
+                    Saved = false;
+                    this.RaisePropertyChanged(propertyName);
+                    return true;
+                }
+
+                return false;
+            }
         }
 
         [DataMember]
         public string PnpDeviceName
         {
-            get => _pnpDeviceName.Get();
-            private set
-            {
-                if (_pnpDeviceName.Set(value)) Saved = false;
-            }
+            get => _pnpDeviceName;
+            private set => SetValue(ref _pnpDeviceName, value);
         }
-        private readonly IProperty<string> _pnpDeviceName = H.Property<string>();
+        string _pnpDeviceName;
 
-
-        private ITrigger _ = H.Trigger(c => c
-            .On(e => e.PhysicalSize.TopBorder)
-            .On(e => e.PhysicalSize.RightBorder)
-            .On(e => e.PhysicalSize.BottomBorder)
-            .On(e => e.PhysicalSize.LeftBorder)
-            .On(e => e.PhysicalSize.Height)
-            .On(e => e.PhysicalSize.Width)
-            .Do(e => e.Saved = false)
-        );
-
-        [DataMember] public DisplaySizeInMm PhysicalSize => _physicalSize.Get();
-        private readonly IProperty<DisplaySizeInMm> _physicalSize = H.Property<DisplaySizeInMm>(c => c
-            .Set(e => new DisplaySizeInMm(e))
-        );
+        [DataMember] public DisplaySizeInMm PhysicalSize { get; }
 
         public void Save(RegistryKey baseKey)
         {
@@ -166,10 +166,10 @@ namespace LittleBigMouse.DisplayLayout
 
         public bool Saved
         {
-            get => _saved.Get();
-            set => _saved.Set(value);
+            get => _saved;
+            set => this.RaiseAndSetIfChanged(ref _saved, value);
         }
-        private readonly IProperty<bool> _saved = H.Property<bool>();
+        bool _saved;
 
     }
 }

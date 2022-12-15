@@ -6,7 +6,7 @@ namespace HLab.Sys.Windows.Monitors
     /// From https://msdn.microsoft.com/en-us/library/windows/desktop/aa372716(v=vs.85).aspx
     /// </summary>
     [Flags]
-    public enum WindowMessageParameter : UInt64
+    public enum WindowMessageParameter : ulong
     {
         PBT_APMQUERYSUSPEND = 0x0,
         PBT_APMBATTERYLOW = 0x9, // Notifies applications that the battery power is low.

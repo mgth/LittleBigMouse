@@ -23,15 +23,9 @@
 
 using System;
 using System.Text.Json.Serialization;
-
-using HLab.Notify.PropertyChanged;
-using HLab.Sys.Windows.Monitors;
-
-using LittleBigMouse.DisplayLayout;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
-
-using H = H<DisplaySizeInMm>;
 
 /// <summary>
 /// Actual real monitor size 
@@ -43,51 +37,59 @@ public class DisplaySizeInMm : DisplaySize
     public DisplaySizeInMm(MonitorModel screenModel) : base(null)
     {
         ScreenModel = screenModel;
-        H.Initialize(this);
     }
 
     public bool Saved
     {
-        get => _saved.Get();
-        set => _saved.Set(value);
+        get => _saved;
+        set => this.RaiseAndSetIfChanged(ref _saved, value);
     }
-    private readonly IProperty<bool> _saved = H.Property<bool>();
+    bool _saved;
 
     public bool FixedAspectRatio
     {
-        get => _fixedAspectRatio.Get();
-        set => _fixedAspectRatio.Set(value);
+        get => _fixedAspectRatio;
+        set => this.RaiseAndSetIfChanged(ref _fixedAspectRatio, value);
     }
-    private readonly IProperty<bool> _fixedAspectRatio = H.Property<bool>(c => c
-           .Set(e => true)
-        );//PropertyBuilder.DefaultValue(true);
+    bool _fixedAspectRatio;//PropertyBuilder.DefaultValue(true);
 
     public override double Width
     {
-        get => _width.Get();
+        get => _width;
 
-        set => _width.Set(Math.Max(value, 0), (oldValue, newValue) =>
+        set
         {
-            if (FixedAspectRatio)
+            using (DelayChangeNotifications())
             {
-                var ratio = newValue / oldValue;
-                FixedAspectRatio = false;
-                Height *= ratio;
-                FixedAspectRatio = true;
-            }
+                var newValue = Math.Max(value, 0);
+                var oldValue = _width;
 
-            Saved = false;
-        });
+                if (FixedAspectRatio)
+                {
+                    var ratio = newValue / oldValue;
+                    FixedAspectRatio = false;
+                    Height *= ratio;
+                    FixedAspectRatio = true;
+                }
+
+                Saved = false;
+
+                this.RaiseAndSetIfChanged(ref _width, value);
+            }
+        }
     }
-    private readonly IProperty<double> _width = H.Property<double>();
+    double _width;
 
     public override double Height
     {
-        get => _height.Get();
+        get => _height;
         set
         {
-            _height.Set(Math.Max(value, 0), (oldValue, newValue) =>
+            using (DelayChangeNotifications())
             {
+                var newValue = Math.Max(value, 0);
+                var oldValue = _height;
+
                 if (FixedAspectRatio)
                 {
                     var ratio = newValue / oldValue;
@@ -97,59 +99,52 @@ public class DisplaySizeInMm : DisplaySize
                 }
 
                 Saved = false;
-            });
+
+                this.RaiseAndSetIfChanged(ref _height, value);
+            }
         }
     }
-    private readonly IProperty<double> _height = H.Property<double>();
+    double _height;
 
     public override double X
     {
-        get => _x.Get();
-        set => _x.Set(value);
+        get => _x;
+        set => this.RaiseAndSetIfChanged(ref _x, value);
     }
-    private readonly IProperty<double> _x = H.Property<double>();
+    double _x;
 
     public override double Y
     {
-        get => _y.Get();
-        set => _y.Set(value);
+        get => _y;
+        set => this.RaiseAndSetIfChanged(ref _y, value);
     }
-    private readonly IProperty<double> _y = H.Property<double>();
-
+    double _y;
 
     public override double TopBorder
     {
-        get => _topBorder.Get();
-        set => _topBorder.Set(Math.Max(value, 0.0));
+        get => _topBorder;
+        set => this.RaiseAndSetIfChanged(ref _topBorder, Math.Max(value, 0.0));
     }
-    private readonly IProperty<double> _topBorder = H.Property<double>(c => c
-        .Set(e => 20.0)
-    );
+    double _topBorder = 20.0;
 
     public override double BottomBorder
     {
-        get => _bottomBorder.Get();
-        set => _bottomBorder.Set(Math.Max(value, 0.0));
+        get => _bottomBorder;
+        set => this.RaiseAndSetIfChanged(ref _bottomBorder, Math.Max(value, 0.0));
     }
-    private readonly IProperty<double> _bottomBorder = H.Property<double>(c => c
-        .Set(e => 20.0)
-    );
+    double _bottomBorder = 20.0;
 
     public override double LeftBorder
     {
-        get => _leftBorder.Get();
-        set => _leftBorder.Set(Math.Max(value, 0.0));
+        get => _leftBorder;
+        set => this.RaiseAndSetIfChanged(ref _leftBorder, Math.Max(value, 0.0));
     }
-    private readonly IProperty<double> _leftBorder = H.Property<double>(c => c
-        .Set(e => 20.0)
-    );
+    double _leftBorder = 20.0;
 
     public override double RightBorder
     {
-        get => _rightBorder.Get();
-        set => _rightBorder.Set(Math.Max(value, 0.0));
+        get => _rightBorder;
+        set => this.RaiseAndSetIfChanged(ref _rightBorder, Math.Max(value, 0.0));
     }
-    private readonly IProperty<double> _rightBorder = H.Property<double>(c => c
-        .Set(e => 20.0)
-    );
+    double _rightBorder = 20.0;
 }

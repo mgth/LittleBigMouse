@@ -28,25 +28,23 @@ using System.Security;
 namespace HLab.Sys.Windows.API
 {
     [SuppressUnmanagedCodeSecurity]
-    public static partial class NativeMethods
+    public static partial class SetupApi
     {
+        const string DLL = $"{nameof(SetupApi)}.dll";
 
         [StructLayout(LayoutKind.Sequential)]
         public struct SP_DEVINFO_DATA
-    {
-        public uint cbSize;
-        public Guid classGuid;
-        public uint devInst;
-        public IntPtr reserved;
-
-        public SP_DEVINFO_DATA(bool init)
         {
-            cbSize = (uint)Marshal.SizeOf(typeof(SP_DEVINFO_DATA));
-            classGuid = Guid.Empty;
-            devInst = 0;
-            reserved = IntPtr.Zero;
+            public uint cbSize;
+            public Guid classGuid;
+            public uint devInst;
+            public IntPtr reserved;
+
+            public SP_DEVINFO_DATA()
+            {
+                cbSize = (uint)Marshal.SizeOf(typeof(SP_DEVINFO_DATA));
+            }
         }
-    }
 
         public static Guid GUID_CLASS_MONITOR = new Guid(0x4d36e96e, 0xe325, 0x11ce, 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18);
         const int MAX_DEVICE_ID_LEN = 200;
@@ -59,25 +57,25 @@ namespace HLab.Sys.Windows.API
 
         public const int KEY_READ = 0x20019;
 
-        private const Int32 NAME_SIZE = 128;
-        private const UInt32 ERROR_SUCCESS = 0;
+        private const int NAME_SIZE = 128;
+        private const uint ERROR_SUCCESS = 0;
 
-        [DllImport("setupapi.dll")]
+        [DllImport(DLL)]
         public static extern IntPtr SetupDiGetClassDevsEx(ref Guid ClassGuid,
-            [MarshalAs(UnmanagedType.LPStr)]String enumerator,
-            IntPtr hwndParent, Int32 Flags, IntPtr DeviceInfoSet,
-            [MarshalAs(UnmanagedType.LPStr)]String MachineName, IntPtr Reserved);
+            [MarshalAs(UnmanagedType.LPStr)] string enumerator,
+            IntPtr hwndParent, int Flags, IntPtr DeviceInfoSet,
+            [MarshalAs(UnmanagedType.LPStr)] string MachineName, IntPtr Reserved);
 
-        [DllImport("setupapi.dll", SetLastError = true)]
+        [DllImport(DLL, SetLastError = true)]
         public static extern bool SetupDiEnumDeviceInfo(IntPtr DeviceInfoSet, uint MemberIndex, ref SP_DEVINFO_DATA DeviceInfoData);
 
-        [DllImport("setupapi.dll", SetLastError = true)]
+        [DllImport(DLL, SetLastError = true)]
         public static extern bool SetupDiDestroyDeviceInfoList
         (
              IntPtr DeviceInfoSet
         );
 
-        [DllImport("Setupapi", CharSet = CharSet.Auto, SetLastError = true)]
+        [DllImport(DLL, CharSet = CharSet.Auto, SetLastError = true)]
         public static extern IntPtr SetupDiOpenDevRegKey(
             IntPtr hDeviceInfoSet,
             ref SP_DEVINFO_DATA deviceInfoData,

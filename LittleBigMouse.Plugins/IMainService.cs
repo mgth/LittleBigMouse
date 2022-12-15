@@ -1,10 +1,9 @@
-﻿using System;
+﻿
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-
 using HLab.Mvvm.Annotations;
-
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 

@@ -84,7 +84,8 @@ public partial class RulerView : UserControl, IView<RulerViewModel>
     {
         _oldPoint = e.GetPosition(this);
 
-        _dragStartPoint = InvertControl ? ViewModel.DrawOn.Monitor.InMm.Location : ViewModel.Screen.InMm.Location;
+        var p =  InvertControl ? ViewModel.DrawOn.Monitor.InMm.Location : ViewModel.Screen.InMm.Location;
+        _dragStartPoint = new(p.X,p.Y);
         Moving = true;
         CaptureMouse();
     }

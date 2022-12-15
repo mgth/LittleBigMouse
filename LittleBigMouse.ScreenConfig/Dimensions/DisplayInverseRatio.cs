@@ -22,11 +22,9 @@
 */
 
 
-using HLab.Notify.PropertyChanged;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
-
-using H = H<DisplayInverseRatio>;
 
 public static class ScreenInverseRatioExt
 {
@@ -37,7 +35,11 @@ public class DisplayInverseRatio : DisplayRatio
     public DisplayInverseRatio(IDisplayRatio ratio)
     {
         Source = ratio;
-        H.Initialize(this);
+
+        this.WhenAnyValue(e => e.Source.X, x => 1/x)
+            .ToProperty(this, e => e.X,out _x);
+        this.WhenAnyValue(e => e.Source.Y, y => 1/y)
+            .ToProperty(this, e => e.Y,out _y);
     }
 
     public IDisplayRatio Source { get; }
@@ -47,20 +49,12 @@ public class DisplayInverseRatio : DisplayRatio
         get => _x.Get();
         set => Source.X = 1 / value;
     }
-    private readonly IProperty<double> _x = H.Property<double>(c => c
-        .Set(e => 1 / e.Source.X)
-        .On(e => e.Source.X)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
         get => _y.Get();
         set => Source.Y = 1 / value;
     }
-    private readonly IProperty<double> _y = H.Property<double>(c => c
-        .Set(e => 1 / e.Source.Y)
-        .On(e => e.Source.Y)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _y;
 }

@@ -1,5 +1,4 @@
-﻿
-using System.Windows;
+﻿using Avalonia;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 

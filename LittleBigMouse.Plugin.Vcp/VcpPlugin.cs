@@ -28,11 +28,11 @@ using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Plugin.Vcp;
 
-class ViewModeScreenVcp : ViewMode { }
+internal class ViewModeScreenVcp : ViewMode { }
 
 public class VcpPlugin : IBootloader
 {
-    private readonly IMainService _mainService;
+    readonly IMainService _mainService;
 
     public VcpPlugin(IMainService mainService)
     {

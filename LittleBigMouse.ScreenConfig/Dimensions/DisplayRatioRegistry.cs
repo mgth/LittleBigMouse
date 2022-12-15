@@ -22,51 +22,49 @@
 */
 
 using System;
+using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
-
-using HLab.Notify.PropertyChanged;
-
-using Microsoft.Win32;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-using H = H<DisplayRatioRegistry>;
-
 public class DisplayRatioRegistry : DisplayRatio
 {
-    private readonly string _prefix;
+    readonly string _prefix;
     public Monitor Monitor { get; }
 
     public DisplayRatioRegistry(Monitor screen, [CallerMemberName] string prefix = null)
     {
         Monitor = screen;
         _prefix = prefix;
-        H.Initialize(this);
+
+        _x = LoadValue(nameof(X), () => 1.0);
+        _y = LoadValue(nameof(Y), () => 1.0);
+
+        this.WhenAnyValue(
+                e => e.X,
+                e  => e.Y)
+            .Do((e) => Monitor.Layout.Saved = false);
+
     }
 
     public override double X
     {
-        get => _x.Get();
-        set { if (_x.Set(value)) Monitor.Layout.Saved = false; }
+        get => _x;
+        set => this.RaiseAndSetIfChanged(ref _x, value);
     }
-    private readonly IProperty<double> _x = H.Property<double>(c => c
-        .Set(e => e.LoadValue(nameof(X), () => 1.0))
-    );
+    double _x;
 
     public override double Y
     {
-        get => _y.Get();
-        set { if (_y.Set(value)) Monitor.Layout.Saved = false; }
+        get => _y;
+        set => this.RaiseAndSetIfChanged(ref _y, value);
     }
-    private readonly IProperty<double> _y = H.Property<double>(c => c
-        .Set(e => e.LoadValue(nameof(Y), () => 1.0))
-    );
+    double _y;
 
     double LoadValue(string name, Func<double> defaultValue)
     {
-        using (RegistryKey key = Monitor.OpenRegKey())
-        {
-            return key.GetKey(_prefix + "." + name, defaultValue);
-        }
+        using var key = Monitor.OpenRegKey();
+        return key.GetKey(_prefix + "." + name, defaultValue);
     }
 }

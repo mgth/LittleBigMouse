@@ -50,7 +50,7 @@ namespace HLab.Sys.Windows.MonitorVcp
 
                 if (Monitors == null) return l;
 
-                foreach (var monitor in Monitors.AttachedMonitors)
+                foreach (var monitor in Monitors.AttachedMonitors.Items)
                 {
                     var lut = monitor.ProbeLut(); //ProbeLut.GetLut(screen);
                     lut.Load();
@@ -72,7 +72,7 @@ namespace HLab.Sys.Windows.MonitorVcp
                 if (Monitors != null)
                     _value.Set(value,(v)=>
                     {
-                        foreach (var monitor in Monitors.AttachedMonitors)
+                        foreach (var monitor in Monitors.AttachedMonitors.Items)
                         {
                             var lut = monitor.ProbeLut();
                             //lut.Load();
@@ -88,7 +88,7 @@ namespace HLab.Sys.Windows.MonitorVcp
                 double max = 0;
 
                 if (Monitors != null)
-                    foreach (var monitor in Monitors.AttachedMonitors)
+                    foreach (var monitor in Monitors.AttachedMonitors.Items)
                     {
                         ProbeLut lut = monitor.ProbeLut();
                         lut.Load();
@@ -104,7 +104,7 @@ namespace HLab.Sys.Windows.MonitorVcp
                 double max = double.MaxValue;
 
                 if (Monitors != null)
-                    foreach (var monitor in Monitors.AttachedMonitors)
+                    foreach (var monitor in Monitors.AttachedMonitors.Items)
                     {
                         ProbeLut lut = monitor.ProbeLut();
                         lut.Load();
@@ -122,7 +122,7 @@ namespace HLab.Sys.Windows.MonitorVcp
                 double min = double.MaxValue;
 
                 if (Monitors!=null)
-                foreach (var monitor in Monitors.AttachedMonitors)
+                foreach (var monitor in Monitors.AttachedMonitors.Items)
                 {
                     ProbeLut lut = monitor.ProbeLut();
                     lut.Load();
@@ -139,7 +139,7 @@ namespace HLab.Sys.Windows.MonitorVcp
                 double min = 0;
 
                 if (Monitors != null)
-                    foreach (var monitor in Monitors.AttachedMonitors)
+                    foreach (var monitor in Monitors.AttachedMonitors.Items)
                     {
                         ProbeLut lut = monitor.ProbeLut();
                         lut.Load();
@@ -158,15 +158,16 @@ namespace HLab.Sys.Windows.MonitorVcp
         {
             get
             {
-                DoubleCollection ticks = new DoubleCollection();
-                if (Monitors != null)
-                    foreach (var monitor in Monitors.AttachedMonitors)
-                    {
-                        ProbeLut lut = monitor.ProbeLut();
-                        lut.Load();
-                        ticks.Add(lut.MinLuminance);
-                        ticks.Add(lut.MaxLuminance);
-                    }
+                var ticks = new DoubleCollection();
+                if (Monitors == null) return ticks;
+
+                foreach (var monitor in Monitors.AttachedMonitors.Items)
+                {
+                    var lut = monitor.ProbeLut();
+                    lut.Load();
+                    ticks.Add(lut.MinLuminance);
+                    ticks.Add(lut.MaxLuminance);
+                }
                 return ticks;
             }
         }

@@ -1,41 +1,34 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0-windows</TargetFramework>
-	  <LangVersion>9.0</LangVersion> 
-    <UseWPF>true</UseWPF>
+    <TargetFramework>net7.0</TargetFramework>
     <Platforms>AnyCPU;x64</Platforms>
     <Nullable>disable</Nullable>
     <RootNamespace>HLab.Sys.Windows.Monitors</RootNamespace>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="System.Management" Version="6.0.0" />
+    <PackageReference Include="Avalonia" Version="11.0.0-preview4" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+    <PackageReference Include="System.Management" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\HLab\HLab.Base\HLab.Base.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Ioc\HLab.Ioc.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Notify.Annotations\HLab.Notify.Annotations.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj" />
     <ProjectReference Include="..\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="HLab.Sys.Windows.API">
-      <HintPath>..\HLab.Sys.Windows.MonitorVcp\bin\x64\Debug\net5.0-windows\HLab.Sys.Windows.API.dll</HintPath>
-    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>C:\Program Files\dotnet\sdk\NuGetFallbackFolder\newtonsoft.json\9.0.1\lib\netstandard1.0\Newtonsoft.Json.dll</HintPath>
     </Reference>
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Update="DisplayChangesView.xaml.cs">
-      <DependentUpon>DisplayChangesView.xaml</DependentUpon>
-    </Compile>
     <Compile Update="Properties\Settings.Designer.cs">
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
       <AutoGen>True</AutoGen>

@@ -32,7 +32,7 @@ namespace LittleBigMouse.Plugin.Vcp
     /// </summary>
     public partial class Curve : UserControl
     {
-        private IList<double> _points;
+        IList<double> _points;
         public Curve()
         {
             InitializeComponent();

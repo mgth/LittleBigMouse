@@ -3,31 +3,31 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
-using System.Windows;
-
-using HLab.Notify.PropertyChanged;
-
+using Avalonia;
+using DynamicData;
+using HLab.Sys.Windows.API;
 using Microsoft.Win32;
-
 using Newtonsoft.Json;
-
-using NativeMethods = HLab.Sys.Windows.API.NativeMethods;
+using ReactiveUI;
 
 namespace HLab.Sys.Windows.Monitors
 {
-    using H = H<MonitorDevice>;
-
     [DataContract]
-    public class MonitorDevice : NotifierBase
+    public class MonitorDevice : ReactiveObject
     {
         public MonitorDevice(string deviceId, IMonitorsService service)
         {
             MonitorsService = service;
             DeviceId = deviceId;
+            PnpCode = GetPnpCodeFromId(deviceId);
+            Edid = GetEdid(deviceId);
+            IdMonitor = GetMicrosoftId(deviceId, Edid);
 
-            H.Initialize(this);
+            Devices = MonitorsService.Devices.Connect().Filter(
+                e => e.DeviceId == deviceId
+                ).AsObservableCache();
 
-            SetEdid();
+
         }
 
         [DataMember] public string DeviceId { get; }
@@ -51,168 +51,134 @@ namespace HLab.Sys.Windows.Monitors
         }
 
         [DataMember] 
-        public string PnpCode => _pnpCode.Get();
-        private readonly IProperty<string> _pnpCode = H.Property<string>(c => c
-            .Set(s =>
-            {
-                var id = s.DeviceId.Split('\\');
-                return id.Length > 1 ? id[1] : id[0];
-            })
-            .On(e => e.DeviceId).Update()
-        );
+        public string PnpCode { get; }
 
-        [DataMember] 
-        public string IdMonitor => _idMonitor.Get();
-        private readonly IProperty<string> _idMonitor = H.Property<string>(c => c
-             .Set(s => s.GetMicrosoftId())
-             .On(e => e.PnpCode)
-             .On(e => e.Edid.SerialNo)
-             .On(e => e.Edid.Week)
-             .On(e => e.Edid.Year)
-             .On(e => e.Edid.Checksum)
-             .On(e => e.DeviceId)
-             .Update()
-         );
-        private string GetMicrosoftId()
+        static string GetPnpCodeFromId(string deviceId)
         {
-            if(Edid != null)
-                return $"{PnpCode}{Edid.SerialNo}_{Edid.Week:X2}_{Edid.Year:X4}_{Edid.Checksum:X2}";
-
-            return $"NOEDID_{PnpCode}_{DeviceId.Split('\\').Last()}";
+            var id = deviceId.Split('\\');
+            return id.Length > 1 ? id[1] : id[0];
         }
 
-        [DataMember] 
-        public string IdPhysicalMonitor => _idPhysicalMonitor.Get();
-        private readonly IProperty<string> _idPhysicalMonitor = H.Property<string>(c => c
-             .Set(s => s.GetPhysicalId())
-             .On(e => e.PnpCode)
-             .On(e => e.Edid.SerialNo)
-             .On(e => e.Edid.Week)
-             .On(e => e.Edid.Year)
-             //.On(e => e.Edid.Checksum)
-             .On(e => e.DeviceId)
-             .Update()
-         );
-        private string GetPhysicalId()
-        {
-            if(Edid != null)
-                return $"{PnpCode}{Edid.SerialNo}_{Edid.Week:X2}_{Edid.Year:X4}"/*_{Edid.Checksum:X2}*/;
+        [DataMember] public string IdMonitor { get; }
 
-            return $"NOEDID_{PnpCode}_{DeviceId.Split('\\').Last()}";
+        static string GetMicrosoftId(string deviceId, Edid edid)
+        {
+            var pnpCode = GetPnpCodeFromId(deviceId);
+
+            return edid is null 
+                ? GetPhysicalId(deviceId, null)
+                : $"{GetPhysicalId(deviceId, edid)}_{edid.Checksum:X2}" 
+                ;
+        }
+
+        [DataMember] public string IdPhysicalMonitor { get; }
+
+        static string GetPhysicalId(string deviceId, Edid edid)
+        {
+            var pnpCode = GetPnpCodeFromId(deviceId);
+            return edid == null 
+                ? $"NOEDID_{pnpCode}_{deviceId.Split('\\').Last()}" 
+                : $"{pnpCode}{edid.SerialNo}_{edid.Week:X2}_{edid.Year:X4}" /*_{Edid.Checksum:X2}*/;
         }
 
         [DataMember] 
         public string DeviceKey
         {
-            get => _deviceKey.Get();
-            internal set => _deviceKey.Set(value);
+            get => _deviceKey;
+            internal set => this.RaiseAndSetIfChanged(ref _deviceKey, value);
         }
-        private readonly IProperty<string> _deviceKey = H.Property<string>();
+        string _deviceKey;
 
         [DataMember]
         public string DeviceString
         {
-            get => _deviceString.Get();
-            internal set => _deviceString.Set(value ?? "");
+            get => _deviceString;
+            internal set => this.RaiseAndSetIfChanged(ref _deviceString, value ?? "");
         }
-        private readonly IProperty<string> _deviceString = H.Property<string>();
+        string _deviceString;
 
         [DataMember]
-        public IObservableFilter<DisplayDevice> Devices { get; }
-         = H.Filter<DisplayDevice>(c => c
-             .On(e => e.DeviceId).On(e => e.MonitorsService.Devices.Item().DeviceId)
-             .Update()
-             .AddFilter((e, a) => a.DeviceId == e.DeviceId)
-             .Link(e => e.MonitorsService.Devices)
-         );
+        public IObservableCache<DisplayDevice,string> Devices { get; }
 
 
         [DataMember]
         public DisplayDevice AttachedDevice
         {
-            get => _attachedDevice.Get();
-            set => _attachedDevice.Set(value);
+            get => _attachedDevice;
+            set => this.RaiseAndSetIfChanged(ref _attachedDevice, value);
         }
-        private readonly IProperty<DisplayDevice> _attachedDevice = H.Property<DisplayDevice>();
+        DisplayDevice _attachedDevice;
 
         [JsonProperty]
         public DisplayDevice AttachedDisplay
         {
-            get => _attachedDisplay.Get();
-            set => _attachedDisplay.Set(value);
+            get => _attachedDisplay;
+            set => this.RaiseAndSetIfChanged(ref _attachedDisplay, value);
         }
-        private readonly IProperty<DisplayDevice> _attachedDisplay = H.Property<DisplayDevice>();
+        DisplayDevice _attachedDisplay;
 
-        internal void SetMonitorInfoEx(NativeMethods.MONITORINFOEX mi)
+        internal void SetMonitorInfoEx(User32.MONITORINFOEX mi)
         {
             Primary = mi.Flags == 1;
-            MonitorArea = mi.Monitor;
-            WorkArea = mi.WorkArea;
+            MonitorArea = mi.Monitor.ToRect();
+            WorkArea = mi.WorkArea.ToRect();
         }
 
         [DataMember]
         public Rect MonitorArea // MONITORINFOEX 
         {
-            get => _monitorArea.Get();
-            private set => _monitorArea.Set(value);
+            get => _monitorArea;
+            private set => this.RaiseAndSetIfChanged(ref _monitorArea, value);
         }
-        private readonly IProperty<Rect> _monitorArea = H.Property<Rect>();
+        Rect _monitorArea;
 
         [DataMember]
         public Rect WorkArea // MONITORINFOEX
         {
-            get => _workArea.Get();
-            private set => _workArea.Set(value);
+            get => _workArea;
+            private set => this.RaiseAndSetIfChanged(ref _workArea, value);
         }
-        private readonly IProperty<Rect> _workArea = H.Property<Rect>();
 
-        [DataMember]
-        public string HKeyName // ZwQueryKey / NativeMethods.KEY_INFORMATION_CLASS.KeyNameInformation
-        {
-            get => _hKeyName.Get();
-            set => _hKeyName.Set(value);
-        }
-        private readonly IProperty<string> _hKeyName = H.Property<string>();
+        Rect _workArea;
 
         [DataMember]
         public bool AttachedToDesktop // EnumDisplayDevices
         {
-            get => _attachedToDesktop.Get();
-            set => _attachedToDesktop.Set(value);
+            get => _attachedToDesktop;
+            set => this.RaiseAndSetIfChanged(ref _attachedToDesktop, value);
         }
-        private readonly IProperty<bool> _attachedToDesktop = H.Property<bool>();
+        bool _attachedToDesktop;
 
 
         [DataMember]
         public bool Primary // MONITORINFOEX
         {
-            get => _primary.Get();
+            get => _primary;
             internal set
             {
                 // Must remove old primary screen before setting this one
                 if (value)
                 {
-                    foreach (var monitor in MonitorsService.Monitors.Where(m => !m.Equals(this)))
+                    foreach (var monitor in MonitorsService.Monitors.Items.Where(m => !m.Equals(this)))
                     {
                         monitor.Primary = false;
                     }
                 }
-                _primary.Set(value);
+                this.RaiseAndSetIfChanged(ref _primary, value);
             }
         }
-        private readonly IProperty<bool> _primary = H.Property<bool>();
+        bool _primary;
 
         [DataMember]
-        public Edid Edid => _edid.Get();
-        private readonly IProperty<Edid> _edid = H.Property<Edid>();
+        public Edid Edid { get; }
 
-        private void SetEdid()
+        static Edid GetEdid(string deviceId)
         {
-            IntPtr devInfo = NativeMethods.SetupDiGetClassDevsEx(
-                ref NativeMethods.GUID_CLASS_MONITOR, //class GUID
+            IntPtr devInfo = SetupApi.SetupDiGetClassDevsEx(
+                ref SetupApi.GUID_CLASS_MONITOR, //class GUID
                 null, //enumerator
                 IntPtr.Zero, //HWND
-                NativeMethods.DIGCF_PRESENT | NativeMethods.DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
+                SetupApi.DIGCF_PRESENT | SetupApi.DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
                 IntPtr.Zero, // device info, create a new one.
                 null, // machine name, local machine
                 IntPtr.Zero
@@ -222,27 +188,24 @@ namespace HLab.Sys.Windows.Monitors
             {
                 if (devInfo == IntPtr.Zero)
                 {
-                    _edid.Set(null);
-                    return;
+                    return null;
                 }
 
-                var devInfoData = new NativeMethods.SP_DEVINFO_DATA(true);
+                var devInfoData = new SetupApi.SP_DEVINFO_DATA();
 
                 uint i = 0;
 
                 do
                 {
-                    int result = 0;
-
-                    if (NativeMethods.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
+                    if (SetupApi.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                     {
 
-                        var hEdidRegKey = NativeMethods.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                            NativeMethods.DICS_FLAG_GLOBAL, 0, NativeMethods.DIREG_DEV, NativeMethods.KEY_READ);
+                        var hEdidRegKey = SetupApi.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
+                            SetupApi.DICS_FLAG_GLOBAL, 0, SetupApi.DIREG_DEV, SetupApi.KEY_READ);
 
                         try
                         {
-                            if (hEdidRegKey != IntPtr.Zero && (hEdidRegKey.ToInt32() != -1))
+                            if (hEdidRegKey != IntPtr.Zero && ((int)hEdidRegKey != -1))
                             {
                                 using var key = GetKeyFromPath(GetHKeyName(hEdidRegKey), 1);
 
@@ -252,38 +215,35 @@ namespace HLab.Sys.Windows.Monitors
                                     var id = s[0] + "\\" +
                                              key.GetValue("Driver");
 
-                                    if (id == DeviceId)
+                                    if (id == deviceId)
                                     {
-                                        HKeyName = GetHKeyName(hEdidRegKey);
-                                        using var keyEdid = GetKeyFromPath(HKeyName);
+                                        var hKeyName = GetHKeyName(hEdidRegKey);
+                                        using var keyEdid = GetKeyFromPath(hKeyName);
 
                                         var edid = (byte[])keyEdid.GetValue("EDID");
-                                        if (edid != null) _edid.Set(new Edid(edid));
-                                        return;
+                                        return edid != null ? new Edid(hKeyName,edid) : null;
                                     }
                                 }
                             }
                         }
                         finally
                         {
-                            result = NativeMethods.RegCloseKey(hEdidRegKey);
+                            var result = AdvApi32.RegCloseKey(hEdidRegKey);
                             if (result > 0)
-                                throw new Exception(NativeMethods.GetLastErrorString());
+                                throw new Exception(Kernel32.GetLastErrorString());
                         }
                     }
 
 
                     i++;
-                } while (NativeMethods.ERROR_NO_MORE_ITEMS != NativeMethods.GetLastError());
+                } while (Kernel32.ERROR_NO_MORE_ITEMS != Kernel32.GetLastError());
             }
             finally
             {
-                NativeMethods.SetupDiDestroyDeviceInfoList(devInfo);
+                SetupApi.SetupDiDestroyDeviceInfoList(devInfo);
             }
 
-            _edid.Set(null);
-            return;
-
+            return null;
         }
 
         public IntPtr HMonitor { get; private set; }
@@ -292,24 +252,24 @@ namespace HLab.Sys.Windows.Monitors
             HMonitor = hMonitor;
 
             {
-                GetDpiForMonitor(hMonitor, DpiType.Effective, out var x, out var y);
-                _effectiveDpi.Set(new Vector(x, y));
+                Shcore.GetDpiForMonitor(hMonitor, Shcore.DpiType.Effective, out var x, out var y);
+                EffectiveDpi = new Vector(x, y);
             }
             {
-                GetDpiForMonitor(hMonitor, DpiType.Angular, out var x, out var y);
-                _angularDpi.Set(new Vector(x, y));
+                Shcore.GetDpiForMonitor(hMonitor, Shcore.DpiType.Angular, out var x, out var y);
+                AngularDpi = new Vector(x, y);
             }
             {
-                GetDpiForMonitor(hMonitor, DpiType.Raw, out var x, out var y);
-                _rawDpi.Set(new Vector(x, y));
+                Shcore.GetDpiForMonitor(hMonitor, Shcore.DpiType.Raw, out var x, out var y);
+                RawDpi = new Vector(x, y);
             }
             {
                 var factor = 100;
-                NativeMethods.GetScaleFactorForMonitor(hMonitor, ref factor);
-                _scaleFactor.Set((double)factor / 100.0);
+                Shcore.GetScaleFactorForMonitor(hMonitor, ref factor);
+                ScaleFactor = (double)factor / 100.0;
             }
 
-            _capabilitiesString.Set(NativeMethods.DDCCIGetCapabilitiesString(hMonitor));
+            CapabilitiesString = Gdi32.DDCCIGetCapabilitiesString(hMonitor);
         }
 
 
@@ -317,49 +277,67 @@ namespace HLab.Sys.Windows.Monitors
         //private readonly IProperty<IntPtr> _hPhysical = H.Property<IntPtr>(nameof(HPhysical));
         //public IntPtr HPhysical => _hPhysical.Get();
 
-        private enum DpiType
-        {
-            Effective = 0,
-            Angular = 1,
-            Raw = 2,
-        }        //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510.aspx
 
-        [DataMember] public Vector EffectiveDpi => _effectiveDpi.Get(); //GetDpiForMonitor
-        private readonly IProperty<Vector> _effectiveDpi = H.Property<Vector>();
-        [DataMember] public Vector AngularDpi => _angularDpi.Get(); //GetDpiForMonitor
-        private readonly IProperty<Vector> _angularDpi = H.Property<Vector>();
-        [DataMember] public Vector RawDpi => _rawDpi.Get(); //GetDpiForMonitor
-        private readonly IProperty<Vector> _rawDpi = H.Property<Vector>();
+        [DataMember] public Vector EffectiveDpi
+        {
+            get => _effectiveDpi; //GetDpiForMonitor
+            set => this.RaiseAndSetIfChanged(ref _effectiveDpi, value);
+        }
+
+        Vector _effectiveDpi;
+        [DataMember] public Vector AngularDpi
+        {
+            get => _angularDpi; //GetDpiForMonitor
+            set => _angularDpi = value;
+        }
+
+        Vector _angularDpi;
+        [DataMember] public Vector RawDpi
+        {
+            get => _rawDpi; //GetDpiForMonitor
+            set => this.RaiseAndSetIfChanged(ref _rawDpi, value);
+        }
+
+        Vector _rawDpi;
 
         //https://msdn.microsoft.com/fr-fr/library/windows/desktop/dn302060.aspx
-        [DataMember] public double ScaleFactor => _scaleFactor.Get(); //GetScaleFactorForMonitor
-        private readonly IProperty<double> _scaleFactor = H.Property<double>();
+        [DataMember] public double ScaleFactor
+        {
+            get => _scaleFactor; //GetScaleFactorForMonitor
+            set => this.RaiseAndSetIfChanged(ref _scaleFactor, value);
+        }
 
-        [DataMember] public string CapabilitiesString => _capabilitiesString.Get(); //DDCCIGetCapabilitiesString
-        private readonly IProperty<string> _capabilitiesString = H.Property<string>();
+        double _scaleFactor;
+
+        [DataMember] public string CapabilitiesString
+        {
+            get => _capabilitiesString; //DDCCIGetCapabilitiesString
+            set => this.RaiseAndSetIfChanged(ref _capabilitiesString, value);
+        }
+
+        string _capabilitiesString;
 
 
 
 
 
-        [DllImport("Shcore.dll")]
-        private static extern IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX, [Out] out uint dpiY);
 
 
         [DataMember]
         public int MonitorNo
         {
-            get => _monitorNo.Get();
-            set => _monitorNo.Set(value);
+            get => _monitorNo;
+            set => this.RaiseAndSetIfChanged(ref _monitorNo, value);
         }
-        private readonly IProperty<int> _monitorNo = H.Property<int>(c => c);
+
+        int _monitorNo;
 
         public string WallpaperPath
         {
-            get => _wallpaperPath.Get();
-            set => _wallpaperPath.Set(value);
+            get => _wallpaperPath;
+            set => this.RaiseAndSetIfChanged(ref _wallpaperPath, value);
         }
-        private readonly IProperty<string> _wallpaperPath = H.Property<string>(c => c);
+        string _wallpaperPath;
 
         //------------------------------------------------------------------------
         public override bool Equals(object obj) => obj is MonitorDevice other ? DeviceId == other.DeviceId : base.Equals(obj);
@@ -396,11 +374,11 @@ namespace HLab.Sys.Windows.Monitors
             var pKNI = IntPtr.Zero;
 
             var needed = 0;
-            var status = NativeMethods.ZwQueryKey(hKey, NativeMethods.KEY_INFORMATION_CLASS.KeyNameInformation, IntPtr.Zero, 0, out needed);
+            var status = Ntdll.ZwQueryKey(hKey, Ntdll.KEY_INFORMATION_CLASS.KeyNameInformation, IntPtr.Zero, 0, out needed);
             if (status != 0xC0000023) return result;
 
             pKNI = Marshal.AllocHGlobal(cb: sizeof(uint) + needed + 4 /*paranoia*/);
-            status = NativeMethods.ZwQueryKey(hKey, NativeMethods.KEY_INFORMATION_CLASS.KeyNameInformation, pKNI, needed, out needed);
+            status = Ntdll.ZwQueryKey(hKey, Ntdll.KEY_INFORMATION_CLASS.KeyNameInformation, pKNI, needed, out needed);
             if (status == 0)    // STATUS_SUCCESS
             {
                 var bytes = new char[2 + needed + 2];
@@ -413,7 +391,8 @@ namespace HLab.Sys.Windows.Monitors
             Marshal.FreeHGlobal(pKNI);
             return result;
         }
-        private void OpenRegKey(string keystring)
+
+        void OpenRegKey(string keystring)
         {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Applets\Regedit\Lastkey", true))
             {
@@ -421,9 +400,9 @@ namespace HLab.Sys.Windows.Monitors
             }
         }
 
-        public void DisplayValues(Action<string, string, RoutedEventHandler, bool> addValue)
+        public void DisplayValues(Action<string, string, Action, bool> addValue)
         {
-            addValue("Registry", HKeyName, (sender, args) => { OpenRegKey(HKeyName); }, false);
+            addValue("Registry", Edid?.HKeyName, () => { OpenRegKey(Edid?.HKeyName); }, false);
             addValue("Microsoft Id", IdMonitor, null, false);
 
 

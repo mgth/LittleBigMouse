@@ -30,21 +30,21 @@ using System.Text;
 namespace HLab.Sys.Windows.API
 {
     [global::System.Security.SuppressUnmanagedCodeSecurity]
-    public static partial class NativeMethods
+    public static partial class AdvApi32
     {
-        [DllImport("advapi32.dll", SetLastError = true, CharSet =CharSet.Unicode)]
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         internal static extern uint RegEnumValue(
               IntPtr hKey,
               uint dwIndex,
               StringBuilder lpValueName,
               ref uint lpcValueName,
               IntPtr lpReserved,
-              ref UInt32 lpType,
+              ref uint lpType,
               IntPtr lpData,
-              ref UInt32 lpcbData);
+              ref uint lpcbData);
 
-        [DllImport("advapi32.dll", SetLastError = true)]
-        public static extern int RegCloseKey(
+        [LibraryImport("advapi32.dll", SetLastError = true)]
+        public static partial int RegCloseKey(
             IntPtr hKey);
     }
 }

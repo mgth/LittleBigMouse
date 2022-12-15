@@ -10,9 +10,9 @@ namespace LittleBigMouse.Plugin.Vcp.Patterns
 {
     using H = H<TestPatternButtonViewModel>;
 
-    class TestPatternButtonViewModel : ViewModel<TestPattern>
+    internal class TestPatternButtonViewModel : ViewModel<TestPattern>
     {
-        private readonly VcpScreenViewModel _target;
+        readonly VcpScreenViewModel _target;
 
 
         public TestPatternButtonViewModel(VcpScreenViewModel target)
@@ -48,35 +48,38 @@ namespace LittleBigMouse.Plugin.Vcp.Patterns
             get => _colorA.Get();
             set => _colorA.Set(value);
         }
-        private readonly IProperty<Color> _colorA = H.Property<Color>(c => c.Default(Colors.White));
+
+        readonly IProperty<Color> _colorA = H.Property<Color>(c => c.Default(Colors.White));
 
         public Color ColorB
         {
             get => _colorB.Get();
             set => _colorB.Set(value);
         }
-        private readonly IProperty<Color> _colorB = H.Property<Color>(c => c.Default(Colors.Black));
+        readonly IProperty<Color> _colorB = H.Property<Color>(c => c.Set(e=>Colors.Black));
 
         public TestPatternType TestPatternType
         {
             get => _testPatternType.Get();
             set => _testPatternType.Set(value);
         }
-        private readonly IProperty<TestPatternType> _testPatternType = H.Property<TestPatternType>(c => c.Default(TestPatternType.Solid));
+        readonly IProperty<TestPatternType> _testPatternType = H.Property<TestPatternType>(c => c.Set(e => TestPatternType.Solid));
 
         public bool Rgb
         {
             get => _rgb.Get();
             set => _rgb.Set(value);
         }
-        private readonly IProperty<bool> _rgb = H.Property<bool>(c => c.Default(false));
+
+        readonly IProperty<bool> _rgb = H.Property<bool>(c => c.Set(e => false));
 
         public Orientation Orientation
         {
             get => _orientation.Get();
             set => _orientation.Set(value);
         }
-        private readonly IProperty<Orientation> _orientation = H.Property<Orientation>(c => c.Default(Orientation.Horizontal));
+
+        readonly IProperty<Orientation> _orientation = H.Property<Orientation>(c => c.Default(Orientation.Horizontal));
 
 
         public ICommand TestPatternCommand { get; } = H.Command(c => c

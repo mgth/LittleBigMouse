@@ -72,7 +72,7 @@ namespace LittleBigMouse.Plugin.Vcp
             set => SetValue(MonitorLevelProperty, value);
         }
 
-        private void ValueOnPropertyChanged(object sender, PropertyChangedEventArgs propertyChangedEventArgs)
+        void ValueOnPropertyChanged(object sender, PropertyChangedEventArgs propertyChangedEventArgs)
         {
             MonitorLevel level = sender as MonitorLevel;
             if (level == null) return;
@@ -97,18 +97,21 @@ namespace LittleBigMouse.Plugin.Vcp
             }
         }
 
-        private void SetMaximum(double max) => Dispatcher.Invoke(()=>Slider.Maximum = max);
-        private void SetMinimum(double min) => Dispatcher.Invoke(()=>Slider.Minimum = min);
-        private void SetValue(double value) => Dispatcher.Invoke(()=>
+        void SetMaximum(double max) => Dispatcher.Invoke(()=>Slider.Maximum = max);
+        void SetMinimum(double min) => Dispatcher.Invoke(()=>Slider.Minimum = min);
+
+        void SetValue(double value) => Dispatcher.Invoke(()=>
         {
             Slider.Value = value;
             TextBox.Text = value.ToString();
         });
-        private void SetMoving(bool moving) => Dispatcher.Invoke(()=>
+
+        void SetMoving(bool moving) => Dispatcher.Invoke(()=>
         {
             TextBox.Background = new SolidColorBrush(moving?Colors.Orange:Colors.LightGreen);
         });
-        private void SetEnabled(bool enabled) => Dispatcher.Invoke(()=>
+
+        void SetEnabled(bool enabled) => Dispatcher.Invoke(()=>
         {
             Slider.IsEnabled = enabled;
             TextBox.IsEnabled = enabled;
@@ -143,7 +146,7 @@ namespace LittleBigMouse.Plugin.Vcp
             })
             .Register();
 
-        private void SetColor(Color c)
+        void SetColor(Color c)
         {
             Slider.Foreground = new SolidColorBrush(
                 Color.FromScRgb(c.ScA * 0.7f, c.ScR* 0.8f , c.ScG* 0.8f, c.ScB * 0.8f)
@@ -163,7 +166,7 @@ namespace LittleBigMouse.Plugin.Vcp
             set => SetValue(ComponentProperty,value);
         }
 
-        private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (MonitorLevel == null) return;
 

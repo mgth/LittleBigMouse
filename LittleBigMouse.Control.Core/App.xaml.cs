@@ -108,9 +108,9 @@ public partial class App : Application
     }
 
 
-    void ApplyResourceDictionaryEntries(ResourceDictionary oldRd, ResourceDictionary newRd)
+    void ApplyResourceDictionaryEntries(IDictionary oldRd, ResourceDictionary newRd)
     {
-        foreach (ResourceDictionary mergedDictionary in newRd.MergedDictionaries)
+        foreach (var mergedDictionary in newRd.MergedDictionaries)
         {
             ApplyResourceDictionaryEntries(oldRd, mergedDictionary);
         }

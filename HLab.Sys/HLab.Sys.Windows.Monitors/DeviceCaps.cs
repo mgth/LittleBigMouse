@@ -22,7 +22,7 @@
 */
 
 using System;
-using System.Windows;
+using Avalonia;
 using HLab.Sys.Windows.API;
 
 namespace HLab.Sys.Windows.Monitors
@@ -37,33 +37,33 @@ namespace HLab.Sys.Windows.Monitors
 
         public DeviceCaps(string deviceName)
         {
-            IntPtr hdc = NativeMethods.CreateDC("DISPLAY", deviceName, null, IntPtr.Zero);
+            var hdc = Gdi32.CreateDC("DISPLAY", deviceName, null, IntPtr.Zero);
 
             Size = new Size(
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.HORZSIZE),
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.VERTSIZE)
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.HORZSIZE),
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.VERTSIZE)
             );
 
             Resolution = new Size(
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.HORZRES),
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.VERTRES)
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.HORZRES),
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.VERTRES)
             );
 
             LogPixels = new Size(
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.LOGPIXELSX),
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.LOGPIXELSY)
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.LOGPIXELSX),
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.LOGPIXELSY)
             );
 
-            BitsPixel = NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.BITSPIXEL);
+            BitsPixel = Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.BITSPIXEL);
 
             Aspect = new Size(
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.ASPECTX),
-                NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.ASPECTY)
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.ASPECTX),
+                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.ASPECTY)
             );
 
             // TODO : https://msdn.microsoft.com/en-us/library/windows/desktop/dd144877(v=vs.85).aspx
 
-            NativeMethods.DeleteDC(hdc);
+            Gdi32.DeleteDC(hdc);
         }
     }
 }

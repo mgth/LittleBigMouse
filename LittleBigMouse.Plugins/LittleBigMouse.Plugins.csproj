@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-    <UseWPF>true</UseWPF>
-    <TargetFramework>net7.0-windows</TargetFramework>
+		<TargetFramework>net7.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
 		<Platforms>x64</Platforms>
 		<Configurations>Debug;Release;ReleaseDebug</Configurations>
 	</PropertyGroup>

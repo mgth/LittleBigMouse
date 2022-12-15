@@ -1,10 +1,13 @@
 ﻿
-using System.Windows;
+using Avalonia;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public static class DisplaySizeExtensions
 {
+    public static T Get<T>(this ObservableAsPropertyHelper<T> @this) => @this.Value;
+
     public static Point GetPoint(this IDisplaySize sz, IDisplaySize source, Point point)
     {
         var x = (point.X - source.X) / source.Width;

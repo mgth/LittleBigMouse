@@ -41,11 +41,11 @@ namespace LittleBigMouse.Plugin.Vcp;
 
 using H = H<VcpScreenViewModel>;
 
-class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
+internal abstract class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
 {
+    Func<VcpScreenViewModel, TestPatternButtonViewModel> _getButtonPattern;
 
-    public Func<VcpScreenViewModel, TestPatternButtonViewModel> _getButtonPattern;
-    public VcpScreenViewModel(Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, ObservableCollectionSafe<TestPatternButtonViewModel> testPatterns)
+    protected VcpScreenViewModel(Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, ObservableCollectionSafe<TestPatternButtonViewModel> testPatterns)
     {
         _getButtonPattern = getButtonPattern;
         TestPatterns = testPatterns;
@@ -64,30 +64,34 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
 
     public Visibility BrightnessVisibility => _brightnessVisibility.Get();
 
-    private readonly IProperty<Visibility> _brightnessVisibility = H.Property<Visibility>(c => c
+    readonly IProperty<Visibility> _brightnessVisibility = H.Property<Visibility>(c => c
         .On(e => e.Vcp.Brightness)
         .Set(e => (e.Vcp.Brightness == null) ? Visibility.Collapsed : Visibility.Visible)
     );
 
     public Visibility ContrastVisibility => _contrastVisibility.Get();
-    private readonly IProperty<Visibility> _contrastVisibility = H.Property<Visibility>(c => c
+
+    readonly IProperty<Visibility> _contrastVisibility = H.Property<Visibility>(c => c
         .On(e => e.Vcp.Contrast)
         .Set(e => (e.Vcp.Contrast == null) ? Visibility.Collapsed : Visibility.Visible)
     );
 
     public Visibility GainVisibility => _gainVisibility.Get();
-    private readonly IProperty<Visibility> _gainVisibility = H.Property<Visibility>(c => c
+
+    readonly IProperty<Visibility> _gainVisibility = H.Property<Visibility>(c => c
         .On(e => e.Vcp.Gain)
         .Set(e => (e.Vcp.Gain == null) ? Visibility.Collapsed : Visibility.Visible)
     );
 
     public Visibility DriveVisibility => _driveVisibility.Get();
-    private readonly IProperty<Visibility> _driveVisibility = H.Property<Visibility>(c => c
+
+    readonly IProperty<Visibility> _driveVisibility = H.Property<Visibility>(c => c
         .On(e => e.Vcp.Drive)
         .Set(e => (e.Vcp.Drive == null) ? Visibility.Collapsed : Visibility.Visible)
     );
     public Visibility AnywayVisibility => _anywayVisibility.Get();
-    private readonly IProperty<Visibility> _anywayVisibility = H.Property<Visibility>(c => c
+
+    readonly IProperty<Visibility> _anywayVisibility = H.Property<Visibility>(c => c
         .On(e => e.Vcp.Brightness)
         .On(e => e.Vcp.Contrast)
         .Set(e => (e.Vcp.Brightness == null || e.Vcp.Contrast == null) ? Visibility.Visible : Visibility.Collapsed)
@@ -99,7 +103,8 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
     );
 
     public VcpControl Vcp => _vcp.Get();
-    private readonly IProperty<VcpControl> _vcp = H.Property<VcpControl>(c => c
+
+    readonly IProperty<VcpControl> _vcp = H.Property<VcpControl>(c => c
         .On(e => e.Model.Device)
         .NotNull(e => e.Model?.Device)
         .Set(e => e.Model.Device.Vcp())
@@ -109,7 +114,8 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
         get => _colorA.Get();
         set => _colorA.Set(value);
     }
-    private readonly IProperty<Color> _colorA = H.Property<Color>(c => c
+
+    readonly IProperty<Color> _colorA = H.Property<Color>(c => c
         .Set(e => Colors.White)
     );
 
@@ -118,7 +124,8 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
         get => _colorB.Get();
         set => _colorB.Set(value);
     }
-    private readonly IProperty<Color> _colorB = H.Property<Color>(c => c
+
+    readonly IProperty<Color> _colorB = H.Property<Color>(c => c
         .Set(e => Colors.Black)
     );
 
@@ -187,7 +194,8 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
         ).Start();
         return;
     }
-    private void ProbeLuminance()
+
+    void ProbeLuminance()
     {
         var probe = new ArgyllProbe();
         if (!probe.Installed)
@@ -280,7 +288,8 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
         }
         ).Start();
     }
-    private void Probe(ArgyllProbe probe, Color c, MonitorLevel level)
+
+    void Probe(ArgyllProbe probe, Color c, MonitorLevel level)
     {
         //LineSeries line = new LineSeries {Color = c};
 
@@ -392,7 +401,8 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
         }
         ).Start();
     }
-    private double[,,] _tune;
+
+    double[,,] _tune;
     //private LineSeries _line;
 
     public void Tune()
@@ -431,7 +441,7 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
         Vcp.Gain.Blue.Value = rgb[2];
     }
 
-    private bool TuneWhitePoint(uint channel, ref uint[] rgb, uint maxlevel)
+    bool TuneWhitePoint(uint channel, ref uint[] rgb, uint maxlevel)
     {
         uint[] c;
         uint[] min = new uint[3];
@@ -539,7 +549,8 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
             || oldGain[2] != rgb[c[2]]
             );
     }
-    private double Probe(uint[] rgb)
+
+    double Probe(uint[] rgb)
     {
         if (_tune[rgb[0], rgb[1], rgb[2]] == 0)
         {
@@ -568,15 +579,17 @@ class VcpScreenViewModel : ViewModel<DisplayLayout.Monitor>
     {
         Lut.Save();
     }
-    private void PleaseInstall()
+
+    static void PleaseInstall()
     {
-        MessageBox.Show("Please install DispcalGUI & ArgyllCMS", "Calibration tools",
-                     MessageBoxButton.OK, MessageBoxImage.Exclamation);
+        // MessageBox.Show("Please install DispcalGUI & ArgyllCMS", "Calibration tools",
+        //              MessageBoxButton.OK, MessageBoxImage.Exclamation);
     }
 
 
     public ICommand SwitchSourceCommand { get; } = H.Command(c => c.Action(e => e.SwitchSource()));
-    private void SwitchSource()
+
+    void SwitchSource()
     {
         Vcp.SetSource(12);
     }

@@ -25,7 +25,7 @@ namespace LittleBigMouse.Plugin.Vcp
             InitializeComponent();
         }
 
-        private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
 
         }

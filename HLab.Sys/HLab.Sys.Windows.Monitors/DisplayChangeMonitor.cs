@@ -1,31 +1,17 @@
 ﻿using System;
-using System.Windows;
-using System.Windows.Interop;
 
 namespace HLab.Sys.Windows.Monitors
 {
-    // <summary>
-    // Logique d'interaction pour DispalyChangesView.xaml
-    // </summary>
-    public partial class DisplayChangesView : Window
+    public class DisplayChangeMonitor
     {
         public event EventHandler<EventArgs> DisplayChanged; 
-
-
-        public DisplayChangesView()
+        public void Hook()
         {
-            InitializeComponent();
+            //TODO 
+                // hwndSource.AddHook(WndProc);
         }
-        protected override void OnSourceInitialized(EventArgs e)
-        {
-            base.OnSourceInitialized(e);
 
-            if (PresentationSource.FromVisual(this) is HwndSource hwndSource)
-            {
-                hwndSource.AddHook(WndProc);
-            }
-        }
-        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             var message = (WindowMessage)msg;
             var subCode = (WindowMessageParameter)wParam.ToInt64();

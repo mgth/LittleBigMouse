@@ -23,23 +23,83 @@
 
 using System;
 using System.Runtime.Serialization;
-using System.Windows;
-
-using HLab.Notify.PropertyChanged;
-
+using Avalonia;
 using Newtonsoft.Json;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-using H = H<DisplaySize>;
-
 [DataContract]
-public abstract class DisplaySize : NotifierBase, IDisplaySize
+public abstract class DisplaySize : ReactiveObject, IDisplaySize
 {
     protected DisplaySize(IDisplaySize source)
     {
         Source = source;
-        //H.Initialize(this);
+
+        this.WhenAnyValue(
+                e => e.LeftBorder,
+                e => e.RightBorder,
+                e => e.TopBorder,
+                e => e.BottomBorder,(l,r,t,b) => new Thickness(l, r, t, b))
+            .ToProperty(this, e => e.Borders,out _borders);
+
+        this.WhenAnyValue(
+                e => e.X,
+                e => e.Y,
+                (x,y) => new Point(x, y))
+            .ToProperty(this, e => e.Location,out _location);
+
+        this.WhenAnyValue(
+                e => e.Width,
+                e => e.Height,
+                (x,y) => new Size(x, y))
+            .ToProperty(this, e => e.Size,out _size);
+
+        this.WhenAnyValue(
+                e => e.Location,
+                e => e.Size,
+                (l,s) => l + new Vector(s.Width / 2, s.Height / 2))
+            .ToProperty(this, e => e.Center,out _center);
+
+        this.WhenAnyValue(
+                e => e.Location,
+                e => e.Size,
+                (l,s) => new Rect(l, s))
+            .ToProperty(this, e => e.Bounds,out _bounds);
+
+        this.WhenAnyValue(
+                e => e.X,
+                e => e.LeftBorder,
+                (x,leftBorder) => x - leftBorder)
+            .ToProperty(this, e => e.OutsideX,out _outsideX);
+
+        this.WhenAnyValue(
+                e => e.Y,
+                e => e.TopBorder,
+                (y,topBorder) => y - topBorder)
+            .ToProperty(this, e => e.OutsideY,out _outsideY);
+
+        this.WhenAnyValue(
+                e => e.LeftBorder,
+                e => e.Width,
+                e => e.RightBorder,
+                (leftBorder,width,rightBorder) => leftBorder + width + rightBorder)
+            .ToProperty(this, e => e.OutsideWidth,out _outsideWidth);
+
+        this.WhenAnyValue(
+                e => e.TopBorder,
+                e => e.Height,
+                e => e.BottomBorder,
+                (topBorder,height,bottomBorder) => topBorder + height + bottomBorder)
+            .ToProperty(this, e => e.OutsideHeight,out _outsideHeight);
+
+        this.WhenAnyValue(
+                e => e.OutsideX,
+                e => e.OutsideY,
+                e => e.OutsideWidth,
+                e => e.OutsideHeight,
+                (x,y,width,height) => new Rect(new Point(x, y), new Size(width, height)))
+            .ToProperty(this, e => e.OutsideBounds,out _outsideBounds);
     }
 
     [JsonIgnore]
@@ -66,14 +126,8 @@ public abstract class DisplaySize : NotifierBase, IDisplaySize
 
     [DataMember]
     public Thickness Borders => _borders.Get();
-    private readonly IProperty<Thickness> _borders = H.Property<Thickness>(c => c
-        .Set(e => new Thickness(e.LeftBorder, e.TopBorder, e.RightBorder, e.BottomBorder))
-        .On(e => e.LeftBorder)
-        .On(e => e.RightBorder)
-        .On(e => e.TopBorder)
-        .On(e => e.BottomBorder)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<Thickness> _borders;
+
     //[DataMember]
     public Point Location
     {
@@ -84,12 +138,7 @@ public abstract class DisplaySize : NotifierBase, IDisplaySize
             Y = value.Y;
         }
     }
-    private readonly IProperty<Point> _location = H.Property<Point>(c => c
-        .Set(e => new Point(e.X, e.Y))
-        .On(e => e.X)
-        .On(e => e.Y)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<Point> _location;
 
     public Size Size
     {
@@ -100,95 +149,48 @@ public abstract class DisplaySize : NotifierBase, IDisplaySize
             Width = value.Width;
         }
     }
-    private readonly IProperty<Size> _size = H.Property<Size>(c => c
-        .Set(e => new Size(e.Width, e.Height))
-        .On(e => e.Width)
-        .On(e => e.Height)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<Size> _size;
 
     public Point Center => _center.Get();
-    private readonly IProperty<Point> _center = H.Property<Point>(c => c
-        .Set(e => e.Location + new Vector(e.Width / 2, e.Height / 2))
-        .On(e => e.Location)
-        .On(e => e.Size)
-        .Update()
-    );
-
+    readonly ObservableAsPropertyHelper<Point> _center;
 
     [DataMember] public Rect Bounds => _bounds.Get();
-    private readonly IProperty<Rect> _bounds = H.Property<Rect>(c => c
-        .Set(e => new Rect(e.Location, e.Size))
-        .On(e => e.Location)
-        .On(e => e.Size)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<Rect> _bounds;
 
     //[DataMember]
     public double OutsideX
     {
-        get => X - LeftBorder;
+        get => _outsideX.Get();
         set => X = value + LeftBorder;
     }
-    private readonly IProperty<double> _outsideX = H.Property<double>(c => c
-        .Set(e => e.X - e.LeftBorder)
-        .On(e => e.X)
-        .On(e => e.LeftBorder)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _outsideX;
 
     //[DataMember]
     public double OutsideY
     {
-        get => Y - TopBorder;
+        get => _outsideY.Value;
         set => Y = value + TopBorder;
     }
-    private readonly IProperty<double> _outsideY = H.Property<double>(c => c
-        .Set(e => e.Y - e.TopBorder)
-        .On(e => e.Y)
-        .On(e => e.TopBorder)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _outsideY;
 
     public double OutsideWidth
     {
         get => _outsideWidth.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _outsideWidth = H.Property<double>(c => c
-        .Set(e => e.Width + e.LeftBorder + e.RightBorder)
-        .On(e => e.Width)
-        .On(e => e.LeftBorder)
-        .On(e => e.RightBorder)
-        .Update()
-    );
-
+    readonly ObservableAsPropertyHelper<double> _outsideWidth;
 
     public double OutsideHeight
     {
         get => _outsideHeight.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _outsideHeight = H.Property<double>(c => c
-        .Set(e => e.Height + e.TopBorder + e.BottomBorder)
-        .On(e => e.Height)
-        .On(e => e.TopBorder)
-        .On(e => e.BottomBorder)
-        .Update()
-    );
-
-
+    readonly ObservableAsPropertyHelper<double> _outsideHeight;
 
     [DataMember]
     public Rect OutsideBounds => _outsideBounds.Get();
-    private readonly IProperty<Rect> _outsideBounds = H.Property<Rect>(c => c
-       .Set(e => new Rect(new Point(e.OutsideX, e.OutsideY), new Size(e.OutsideWidth, e.OutsideHeight)))
-       .On(e => e.OutsideX)
-       .On(e => e.OutsideY)
-       .On(e => e.OutsideWidth)
-       .On(e => e.OutsideHeight)
-       .Update()
-   );
+    readonly ObservableAsPropertyHelper<Rect> _outsideBounds;
+
     public bool Equals(IDisplaySize other)
     {
         throw new NotImplementedException();

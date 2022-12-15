@@ -23,7 +23,7 @@ namespace LittleBigMouse.Plugin.Vcp
     /// </summary>
     public partial class ComponentSlider : UserControl
     {
-        private class H : DependencyHelper<ComponentSlider> { }
+        class H : DependencyHelper<ComponentSlider> { }
 
         public ComponentSlider()
         {
@@ -56,7 +56,7 @@ namespace LittleBigMouse.Plugin.Vcp
             set => SetValue(MinimumProperty, value);
         }
 
-        private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             Value = Slider.Value;
         }

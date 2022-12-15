@@ -23,11 +23,9 @@
 
 using System;
 
-using HLab.Notify.PropertyChanged;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
-
-using H = H<DisplayRatioRatio>;
 
 public class DisplayRatioRatio : DisplayRatio
 {
@@ -35,7 +33,17 @@ public class DisplayRatioRatio : DisplayRatio
     {
         SourceA = ratioA;
         SourceB = ratioB;
-        H.Initialize(this);
+
+        this.WhenAnyValue(
+                e => e.SourceA.X,
+                e  => e.SourceB.X, 
+                (a,b) => a * b)
+            .ToProperty(this, e => e.X,out _x);
+        this.WhenAnyValue(
+                e => e.SourceA.Y,
+                e  => e.SourceB.Y, 
+                (a,b) => a * b)
+            .ToProperty(this, e => e.Y,out _y);
     }
 
     public IDisplayRatio SourceA { get; }
@@ -46,22 +54,12 @@ public class DisplayRatioRatio : DisplayRatio
         get => _x.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _x = H.Property<double>(c => c
-        .Set(s => s.SourceA.X * s.SourceB.X)
-        .On(e => e.SourceA.X)
-        .On(e => e.SourceB.X)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
         get => _y.Get();
         set => throw new NotImplementedException();
     }
-    private readonly IProperty<double> _y = H.Property<double>(c => c
-        .Set(s => s.SourceA.Y * s.SourceB.Y)
-        .On(e => e.SourceA.Y)
-        .On(e => e.SourceB.Y)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _y;
 }

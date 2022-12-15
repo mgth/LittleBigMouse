@@ -24,7 +24,7 @@
 using System;
 using System.Runtime.Serialization;
 
-using HLab.Notify.PropertyChanged;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -35,7 +35,7 @@ public interface IDisplayRatio
 }
 
 [DataContract]
-public abstract class DisplayRatio : NotifierBase, IDisplayRatio, IEquatable<IDisplayRatio>
+public abstract class DisplayRatio : ReactiveObject, IDisplayRatio, IEquatable<IDisplayRatio>
 {
     protected DisplayRatio() { }
     [DataMember]

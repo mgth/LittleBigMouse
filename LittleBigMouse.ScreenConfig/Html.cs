@@ -29,7 +29,7 @@ using System.Text.RegularExpressions;
 
 namespace LittleBigMouse.DisplayLayout;
 
-class Html
+internal class Html
 {
     public static string GetPnpName1(string pnpcode)
     {

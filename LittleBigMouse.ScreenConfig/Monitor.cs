@@ -26,33 +26,32 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
-using System.Windows;
-
-using HLab.Notify.PropertyChanged;
+using Avalonia;
+using DynamicData;
 using HLab.Sys.Windows.API;
 using HLab.Sys.Windows.Monitors;
 
 using LittleBigMouse.DisplayLayout.Dimensions;
 
 using Microsoft.Win32;
+using ReactiveUI;
+using Rect = Avalonia.Rect;
 
 namespace LittleBigMouse.DisplayLayout;
 
-using H = H<Monitor>;
-
 [DataContract]
-public class Monitor : NotifierBase
+public class Monitor : ReactiveObject
 {
     [JsonIgnore] public Layout Layout { get; }
 
-    public ObservableCollectionSafe<MonitorSource> Sources { get; } = new();
+    public ISourceList<MonitorSource> Sources { get; } = new SourceList<MonitorSource>();
 
     public MonitorSource ActiveSource
     {
-        get => _activeSource.Get();
-        set => _activeSource.Set(value);
+        get => _activeSource;
+        set => this.RaiseAndSetIfChanged(ref _activeSource,value);
     }
-    private readonly IProperty<MonitorSource> _activeSource = H.Property<MonitorSource>();
+    MonitorSource _activeSource;
 
     public MonitorDevice Device { get; }
 
@@ -63,72 +62,98 @@ public class Monitor : NotifierBase
 
         Model = Layout.GetScreenModel(device.PnpCode, device);
 
-        H.Initialize(this);
-
         var source = new MonitorSource(this, device);
 
         Sources.Add(source);
         ActiveSource = source;
 
+        OtherScreens = Layout.AllMonitors.Connect().Filter(s => !Equals(s, this)).AsObservableList();
+
+        this.WhenAnyValue(
+            e => e.Device.IdMonitor,
+            e => e.Orientation,
+            (id, o) => $"{id}_{o}"
+        ).ToProperty(this,e => e.Id, out _id);
+
+        this.WhenAnyValue(
+            e => e.Device.AttachedDisplay.CurrentMode.DisplayOrientation
+        ).ToProperty(this,e => e.Orientation, out _orientation);
+
+        this.WhenAnyValue(
+            e => e.Model.PhysicalSize,
+            e => e.Orientation,
+            (physicalSize, orientation) => physicalSize.Rotate(orientation)
+        ).ToProperty(this,e => e.PhysicalRotated, out _physicalRotated);
+
+        this.WhenAnyValue(
+            e => e.PhysicalRotated,
+            e => e.PhysicalRatio,
+            (physicalRotated, ratio) => physicalRotated.Scale(ratio).Locate()
+        ).ToProperty(this,e => e.InMm, out _inMm);
+
+        this.WhenAnyValue(
+            e => e.Model.PhysicalSize,
+            e => e.PhysicalRatio,
+            (physicalSize, ratio) => physicalSize.Scale(ratio)
+        ).ToProperty(this,e => e.InMmU, out _inMmU);
+
+        this.WhenAnyValue(
+            e => e.InMm.X
+        ).ToProperty(this,e => e.InMmX, out _inMmX);
+
+        this.WhenAnyValue(
+            e => e.InMm.Y
+        ).ToProperty(this,e => e.InMmY, out _inMmY);
+
+        PhysicalRatio = new DisplayRatioValue(1.0, 1.0);
+
+        this.WhenAnyValue(
+                e => e.InMm.Height,
+                e => e.InMm.Width,
+                (h, w) => Math.Sqrt(w * w + h * h))
+            .ToProperty(this, e=> e.Diagonal, out _diagonal);
     }
 
     public void AddSource(MonitorSource source)
         => Sources.Add(source);
+    // TODO :
+    //readonly ITrigger _updateModel = H.Trigger(c => c
+    //    .On(e => e.Device.AttachedDisplay)
+    //    .Do(s => s.Model.Load(s.Device))
+    //);
 
-    private readonly ITrigger _updateModel = H.Trigger(c => c
-        .On(e => e.Device.AttachedDisplay)
-        .Do(s => s.Model.Load(s.Device))
-    );
-
-    [JsonIgnore] public IEnumerable<Monitor> OtherScreens => _otherScreens.Get();
-    private readonly IProperty<IEnumerable<Monitor>> _otherScreens = H.Property<IEnumerable<Monitor>>(c => c
-        .Set(e => e.Layout.AllMonitors.Where(s => !Equals(s, e)))
-        .On(e => e.Layout.AllMonitors.Count)
-        .Update()
-    );
-
-    //public override bool Equals(object obj)
-    //{
-    //    return obj is Screen other && Monitor.Equals(other.Monitor);
-    //}
-
+    [JsonIgnore] public IObservableList<Monitor> OtherScreens { get; }
 
 
     // References properties
     [DataMember] public string Id => _id.Get();
-    private readonly IProperty<string> _id = H.Property<string>(c => c
-        .Set(e => $"{e.Device.IdMonitor}_{e.Orientation}")
-        .On(e => e.Device.IdMonitor)
-        .On(e => e.Orientation)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<string> _id;
 
-
-    [DataMember] public int Orientation => _orientation.Get();
-    private readonly IProperty<int> _orientation = H.Property<int>(c => c
-        .Set(s => s.Device.AttachedDisplay?.CurrentMode?.DisplayOrientation ?? 0)
-        .On(e => e.Device.AttachedDisplay.CurrentMode.DisplayOrientation)
-        .Update()
-    );
+    [DataMember] public int Orientation => _orientation.Value;
+    readonly ObservableAsPropertyHelper<int> _orientation;
 
     public bool Selected
     {
-        get => _selected.Get();
+        get => _selected;
         set
         {
-            if (!_selected.Set(value)) return;
-            if (!value) return;
-            foreach (var screen in Layout.AllBut(this)) screen.Selected = false;
+            using (DelayChangeNotifications())
+            {
+                this.RaiseAndSetIfChanged(ref _selected, value);
+                if (!value) return;
+                foreach (var screen in Layout.AllBut(this)) screen.Selected = false;
+            }
         }
     }
-    private readonly IProperty<bool> _selected = H.Property<bool>();
+
+    bool _selected;
 
     public bool Placed
     {
-        get => _placed.Get();
-        set => _placed.Set(value);
+        get => _placed;
+        set => this.RaiseAndSetIfChanged(ref _placed, value);
     }
-    private readonly IProperty<bool> _placed = H.Property<bool>();
+    bool _placed;
 
     // Mm dimensions
     // Natives
@@ -136,43 +161,28 @@ public class Monitor : NotifierBase
     public MonitorModel Model { get; }
 
     [DataMember] public IDisplaySize PhysicalRotated => _physicalRotated.Get();
-    private readonly IProperty<IDisplaySize> _physicalRotated =
-        H.Property<IDisplaySize>(c => c
-            .NotNull(e => e.Model)
-            .Set(s => s.Model.PhysicalSize.Rotate(s.Orientation))
-            .On(e => e.Model.PhysicalSize)
-            .On(e => e.Orientation)
-            .Update()
-    );
+
+    readonly ObservableAsPropertyHelper<IDisplaySize> _physicalRotated;
 
 
     // Mm
 
     [DataMember]
     public IDisplaySize InMm => _inMm.Get();
-    private readonly IProperty<IDisplaySize> _inMm = H.Property<IDisplaySize>(c => c
-        .Set(e => e.PhysicalRotated.Scale(e.PhysicalRatio).Locate())
-        .On(e => e.PhysicalRotated)
-        .On(e => e.PhysicalRatio)
-        .Update()
-    );
+
+    readonly ObservableAsPropertyHelper<IDisplaySize> _inMm;
 
     [DataMember]
     public IDisplaySize InMmU => _inMmU.Get();
-    private readonly IProperty<IDisplaySize> _inMmU = H.Property<IDisplaySize>(c => c
-        .Set(e => e.Model.PhysicalSize.Scale(e.PhysicalRatio))
-        //            .Set(e => e.InMm.Rotate((4-e.Orientation)%4))
-        .On(e => e.Model.PhysicalSize)
-        .On(e => e.PhysicalRatio)
-        .Update()
-    );
+
+    readonly ObservableAsPropertyHelper<IDisplaySize> _inMmU;
 
     public double InMmX
     {
         get => _inMmX.Get();
         set
         {
-            if (Sources.Any(s => s.Primary))
+            if (Sources.Items.Any(s => s.Primary))
             {
                 foreach (var screen in Layout.AllBut(this))
                 {
@@ -186,22 +196,14 @@ public class Monitor : NotifierBase
         }
     }
 
-    private readonly IProperty<double> _inMmX = H.Property<double>(c => c
-        .Set(e => e.InMm.X)
-        .On(e => e.InMm.X)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _inMmX;
 
     public double InMmY
     {
-        get
-        {
-            //_inMmU.GetNoCheck();
-            return _inMmY.Get();
-        }
+        get => _inMmY.Get();
         set
         {
-            if (Sources.Any(s => s.Primary))
+            if (Sources.Items.Any(s => s.Primary))
             {
                 foreach (var screen in Layout.AllBut(this))
                 {
@@ -217,64 +219,39 @@ public class Monitor : NotifierBase
         }
     }
 
-    private readonly IProperty<double> _inMmY = H.Property<double>(c => c
-        .Set(e => e.InMm.Y)
-        .On(e => e.InMm.Y)
-        .Update()
-    );
-
-    private ITrigger _setUnsaved = H.Trigger(c => c
-        .On(e => e.InMm.OutsideBounds)
-        .On(e => e.InMm.Bounds)
-        .Do(e => e.Layout.Saved = false)
-    );
+    readonly ObservableAsPropertyHelper<double> _inMmY;
+    
+    // TODO
+    //ITrigger _setUnsaved = H.Trigger(c => c
+    //    .On(e => e.InMm.OutsideBounds)
+    //    .On(e => e.InMm.Bounds)
+    //    .Do(e => e.Layout.Saved = false)
+    //);
 
     /// <summary>
     /// Final ratio to deal with screen distance
     /// </summary>
     [DataMember]
-    public IDisplayRatio PhysicalRatio => _physicalRatio.Get();
-    private readonly IProperty<IDisplayRatio> _physicalRatio = H.Property<IDisplayRatio>(c => c
-            .Set(e => new DisplayRatioValue(1.0, 1.0) as IDisplayRatio)
-    );
+    public IDisplayRatio PhysicalRatio { get; }
 
     public double Diagonal => _diagonal.Get();
-    private readonly IProperty<double> _diagonal = H.Property<double>(c => c
-            .Set(e =>
-            {
-                var w = e.InMm.Width;
-                var h = e.InMm.Height;
-                return Math.Sqrt(w * w + h * h);
-            })
-            .On(e => e.InMm.Height)
-            .On(e => e.InMm.Width)
-            .Update()
-    );
+
+    readonly ObservableAsPropertyHelper<double> _diagonal;
 
     [DataMember] public Rect OverallBoundsWithoutThisInMm => _overallBoundsWithoutThisInMm.Get();
-    private readonly IProperty<Rect> _overallBoundsWithoutThisInMm
-        = H.Property<Rect>(c => c
-            .Set(e =>
-            {
-                var result = new Rect();
-                var first = true;
-                foreach (var screen in e.Layout.AllBut(e))
-                {
-                    if (screen.InMm == null) continue;
-                    if (first)
-                    {
-                        result = screen.InMm.Bounds;
-                        first = false;
-                    }
-                    else
-                        result.Union(screen.InMm.Bounds);
-                }
 
-                return result;
-            })
-            .On(e => e.Layout.AllMonitors.Item().InMm.Bounds).Update()
+    readonly ObservableAsPropertyHelper<Rect> _overallBoundsWithoutThisInMm;
 
-    );
+    // TODO : .On(e => e.Layout.AllMonitors.Item().InMm.Bounds).Update()
+    static Rect GetOverallBoundsWithoutThisInMm(Layout layout, Monitor monitor)
+    {
+        return Layout.Union(layout
+            .AllBut(monitor)
+            .Where(e => e.InMm is not null)
+            .Select(e => e.InMm.Bounds)
+        );
+    }
+
 
     public static RegistryKey OpenRegKey(string LayoutId, string monitorId, bool create = false) => OpenRegKey(Layout.OpenRegKey(LayoutId,create),monitorId,create);
 
@@ -301,7 +278,7 @@ public class Monitor : NotifierBase
         }
 
         var active = key.GetKey("ActiveSource", () => "");
-        foreach(var source in Sources)
+        foreach(var source in Sources.Items)
         {
             source.Load(key);
             if(source.Device.IdMonitor == active || ActiveSource==null)
@@ -328,7 +305,7 @@ public class Monitor : NotifierBase
                 key.SetKey("PhysicalRatioX", PhysicalRatio.X);
                 key.SetKey("PhysicalRatioY", PhysicalRatio.Y);
 
-                foreach(var source in Sources)
+                foreach(var source in Sources.Items)
                 {
                     source.Save(key);
                 }
@@ -345,8 +322,8 @@ public class Monitor : NotifierBase
     //    new PixelPoint(Config, this, Monitor.WorkArea.Right, Monitor.WorkArea.Bottom)
     //));
 
-    private static readonly List<string> SideNames = new List<string> { "Left", "Top", "Right", "Bottom" };
-    private static readonly List<string> DimNames = new List<string> { "Width", "Height" };
+    static readonly List<string> SideNames = new List<string> { "Left", "Top", "Right", "Bottom" };
+    static readonly List<string> DimNames = new List<string> { "Width", "Height" };
 
     //private double LoadRotatedValue(List<string> names, string name, string side, Func<double> def,
     //    bool fromConfig = false)
@@ -392,73 +369,78 @@ public class Monitor : NotifierBase
 
     public bool Moving
     {
-        get => _moving.Get();
+        get => _moving;
         set
         {
             var x = XMoving;
             var y = YMoving;
 
-            if (_moving.Set(value) || value)
+            var oldValue = value;
+            using (DelayChangeNotifications())
             {
+                if (this.RaiseAndSetIfChanged(ref _moving, value) == oldValue && !value) return;
                 InMmX = x;
                 InMmY = y;
             }
         }
     }
-    private readonly IProperty<bool> _moving = H.Property<bool>();
+    bool _moving;
 
     public double XMoving
     {
-        get => _xMoving.Get();
+        get => _xMoving;
         set
         {
-            if (Moving) _xMoving.Set(value);
+            if (Moving) this.RaiseAndSetIfChanged(ref _xMoving, value);
             else InMmX = value;
         }
     }
-    private readonly IProperty<double> _xMoving = H.Property<double>(c => c
-        .Set(e => e.InMm.X)
-        .On(e => e.Moving)
-        .On(e => e.InMm.X)
-        .When(e => !e.Moving)
-        .Update()
-    );
+
+    double _xMoving;
+    // TODO :
+    //    .Set(e => e.InMm.X)
+    //    .On(e => e.Moving)
+    //    .On(e => e.InMm.X)
+    //    .When(e => !e.Moving)
+    //    .Update()
+    //);
 
     public double YMoving
     {
-        get => _yMoving.Get();
+        get => _yMoving;
         set
         {
-            if (Moving) _yMoving.Set(value);
+            if (Moving) this.RaiseAndSetIfChanged(ref _yMoving, value);
             else InMmY = value;
         }
     }
-    private readonly IProperty<double> _yMoving = H.Property<double>(c => c
-        .Set(e => e.InMm.Y)
-        .On(e => e.Moving)
-        .On(e => e.InMm.Y)
-        .When(e => !e.Moving)
-        .Update()
-    );
+    double _yMoving;
 
-    private double LogPixelSx
+    //    .Set(e => e.InMm.Y)
+    //    .On(e => e.Moving)
+    //    .On(e => e.InMm.Y)
+    //    .When(e => !e.Moving)
+    //    .Update()
+    //);
+
+    double LogPixelSx
     {
         get
         {
-            IntPtr hdc = NativeMethods.CreateDC("DISPLAY", Device.AttachedDisplay.DeviceName, null, IntPtr.Zero);
-            double dpi = NativeMethods.GetDeviceCaps(hdc, NativeMethods.DeviceCap.LOGPIXELSX);
-            NativeMethods.DeleteDC(hdc);
+            var hdc = Gdi32.CreateDC("DISPLAY", Device.AttachedDisplay.DeviceName, null, IntPtr.Zero);
+            double dpi = Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.LOGPIXELSX);
+            Gdi32.DeleteDC(hdc);
             return dpi;
         }
     }
 
 
-    private double RightDistance(Monitor screen) => InMm.OutsideBounds.X - screen.InMm.OutsideBounds.Right;
-    private double LeftDistance(Monitor screen) => screen.InMm.OutsideBounds.X - InMm.OutsideBounds.Right;
-    private double TopDistance(Monitor screen) => screen.InMm.OutsideBounds.Y - InMm.OutsideBounds.Bottom;
-    private double BottomDistance(Monitor screen) => InMm.OutsideBounds.Y - screen.InMm.OutsideBounds.Bottom;
+    double RightDistance(Monitor screen) => InMm.OutsideBounds.X - screen.InMm.OutsideBounds.Right;
+    double LeftDistance(Monitor screen) => screen.InMm.OutsideBounds.X - InMm.OutsideBounds.Right;
+    double TopDistance(Monitor screen) => screen.InMm.OutsideBounds.Y - InMm.OutsideBounds.Bottom;
+    double BottomDistance(Monitor screen) => InMm.OutsideBounds.Y - screen.InMm.OutsideBounds.Bottom;
 
-    private double RightDistanceToTouch(Monitor screen, bool zero = false)
+    double RightDistanceToTouch(Monitor screen, bool zero = false)
     {
         double top = TopDistance(screen);
         if (top > 0 || zero && top == 0) return double.PositiveInfinity;
@@ -621,7 +603,7 @@ public class Monitor : NotifierBase
 
     public double Distance(Monitor screen)
     {
-        Vector v = new Vector(HorizontalDistance(screen), VerticalDistance(screen));
+        var v = new Vector(HorizontalDistance(screen), VerticalDistance(screen));
 
         if (v.X >= 0 && v.Y >= 0) return v.Length;
 

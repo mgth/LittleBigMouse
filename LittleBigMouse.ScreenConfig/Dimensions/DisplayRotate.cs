@@ -21,13 +21,10 @@
 	  http://www.mgth.fr
 */
 
-using System.Windows;
-
-using HLab.Notify.PropertyChanged;
+using Avalonia;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
-
-using H = H<DisplayRotate>;
 
 public class DisplayRotate : DisplaySize
 {
@@ -35,15 +32,92 @@ public class DisplayRotate : DisplaySize
     public DisplayRotate(IDisplaySize source, int rotation = 0) : base(source)
     {
         Rotation = rotation;
-        H.Initialize(this);
+
+        this.WhenAnyValue(e => e.Source.X)
+            .ToProperty(this, e => e.X,out _x);
+
+        this.WhenAnyValue(e => e.Source.Y)
+            .ToProperty(this, e => e.Y,out _y);
+
+        this.WhenAnyValue(
+                e => e.Source.Width,
+                e => e.Source.Height,
+                e => e.Rotation,
+                (width,height,r) => r % 2 == 0 ? width : height
+                )
+            .ToProperty(this, e => e.Width,out _width);
+
+        this.WhenAnyValue(
+                e => e.Source.Width,
+                e => e.Source.Height,
+                e => e.Rotation,
+                (width,height,r) => r % 2 == 1 ? width : height
+                )
+            .ToProperty(this, e => e.Height,out _height);
+
+        //readonly IProperty<double> _topBorder = H.Property<double>(c => c
+        //    .Set(e => e.GetBorder(0))
+        //    .On(e => e.Rotation)
+        //    .On(e => e.Source.TopBorder)
+        //    .On(e => e.Source.RightBorder)
+        //    .On(e => e.Source.BottomBorder)
+        //    .On(e => e.Source.LeftBorder)
+        //    .Update()
+        //);
+
+        this.WhenAnyValue(
+                e => e.Rotation,
+                e => e.Source.LeftBorder,
+                e => e.Source.TopBorder,
+                e => e.Source.RightBorder,
+                e => e.Source.BottomBorder,
+
+                (r,left,top,right,bottom) => GetBorder(0,r,left,top,right,bottom)
+                )
+            .ToProperty(this, e => e.LeftBorder,out _leftBorder);
+
+        this.WhenAnyValue(
+                e => e.Rotation,
+                e => e.Source.LeftBorder,
+                e => e.Source.TopBorder,
+                e => e.Source.RightBorder,
+                e => e.Source.BottomBorder,
+
+                (r,left,top,right,bottom) => GetBorder(1,r,left,top,right,bottom)
+                )
+            .ToProperty(this, e => e.TopBorder,out _topBorder);
+
+        this.WhenAnyValue(
+                e => e.Rotation,
+                e => e.Source.LeftBorder,
+                e => e.Source.TopBorder,
+                e => e.Source.RightBorder,
+                e => e.Source.BottomBorder,
+
+                (r,left,top,right,bottom) => GetBorder(2,r,left,top,right,bottom)
+                )
+            .ToProperty(this, e => e.RightBorder,out _rightBorder);
+
+        this.WhenAnyValue(
+                e => e.Rotation,
+                e => e.Source.LeftBorder,
+                e => e.Source.TopBorder,
+                e => e.Source.RightBorder,
+                e => e.Source.BottomBorder,
+
+                (r,left,top,right,bottom) => GetBorder(3,r,left,top,right,bottom)
+                )
+            .ToProperty(this, e => e.BottomBorder,out _bottomBorder);
+
+
     }
 
     public Vector Translation
     {
-        get => _translation.Get();
-        set => _translation.Set(value);
+        get => _translation;
+        set => this.RaiseAndSetIfChanged(ref _translation, value);
     }
-    private readonly IProperty<Vector> _translation = H.Property<Vector>();
+    Vector _translation;
 
     public override double Width
     {
@@ -61,13 +135,7 @@ public class DisplayRotate : DisplaySize
             }
         }
     }
-    private readonly IProperty<double> _width = H.Property<double>(c => c
-        .Set(e => e.Rotation % 2 == 0 ? e.Source.Width : e.Source.Height)
-        .On(e => e.Source.Width)
-        .On(e => e.Source.Height)
-        .On(e => e.Rotation)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _width;
 
     public override double Height
     {
@@ -85,124 +153,83 @@ public class DisplayRotate : DisplaySize
             }
         }
     }
-    private readonly IProperty<double> _height = H.Property<double>(c => c
-        .Set(e => e.Rotation % 2 == 1 ? e.Source.Width : e.Source.Height)
-        .On(e => e.Source.Width)
-        .On(e => e.Source.Height)
-        .On(e => e.Rotation)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _height;
 
     public override double X
     {
         get => _x.Get();
         set => Source.X = value;
     }
-    private readonly IProperty<double> _x = H.Property<double>(c => c
-        .Set(e => e.Source.X)
-        .On(e => e.Source.X)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
         get => _y.Get();
         set => Source.Y = value;
     }
-    private readonly IProperty<double> _y = H.Property<double>(c => c
-        .Set(e => e.Source.X)
-        .On(e => e.Source.X)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _y;
 
-    private double GetBorder(int border)
+    static double GetBorder(int border, int rotation, double left, double top, double right, double bottom)
     {
-        return ((border + Rotation) % 4) switch
+        return ((border + rotation) % 4) switch
         {
-            0 => Source.TopBorder,
-            1 => Source.RightBorder,
-            2 => Source.BottomBorder,
-            3 => Source.LeftBorder,
+            0 => left,
+            1 => top,
+            2 => right,
+            3 => bottom,
             _ => -1,
         };
     }
-    private void SetBorder(int border, double value)
+
+    void SetBorder(int border, double value)
     {
-        switch ((border + Rotation) % 4)
+        using (DelayChangeNotifications())
         {
-            case 0:
-                Source.TopBorder = value;
-                break;
-            case 1:
-                Source.RightBorder = value;
-                break;
-            case 2:
-                Source.BottomBorder = value;
-                break;
-            case 3:
-                Source.LeftBorder = value;
-                break;
+            switch ((border + Rotation) % 4)
+            {
+                case 0:
+                    Source.LeftBorder = value;
+                    break;
+                case 1:
+                    Source.TopBorder = value;
+                    break;
+                case 2:
+                    Source.RightBorder = value;
+                    break;
+                case 3:
+                    Source.BottomBorder = value;
+                    break;
+            }
         }
     }
 
-
-    public override double TopBorder
-    {
-        get => _topBorder.Get();
-        set => SetBorder(0, value);
-    }
-    private readonly IProperty<double> _topBorder = H.Property<double>(c => c
-        .Set(e => e.GetBorder(0))
-        .On(e => e.Rotation)
-        .On(e => e.Source.TopBorder)
-        .On(e => e.Source.RightBorder)
-        .On(e => e.Source.BottomBorder)
-        .On(e => e.Source.LeftBorder)
-        .Update()
-    );
-
-    public override double RightBorder
-    {
-        get => _rightBorder.Get();
-        set => SetBorder(1, value);
-    }
-    private readonly IProperty<double> _rightBorder = H.Property<double>(c => c
-        .Set(e => e.GetBorder(1))
-        .On(e => e.Rotation)
-        .On(e => e.Source.TopBorder)
-        .On(e => e.Source.RightBorder)
-        .On(e => e.Source.BottomBorder)
-        .On(e => e.Source.LeftBorder)
-        .Update()
-    );
-
-    public override double BottomBorder
-    {
-        get => _bottomBorder.Get();
-        set => SetBorder(2, value);
-    }
-    private readonly IProperty<double> _bottomBorder = H.Property<double>(c => c
-        .Set(e => e.GetBorder(2))
-        .On(e => e.Rotation)
-        .On(e => e.Source.TopBorder)
-        .On(e => e.Source.RightBorder)
-        .On(e => e.Source.BottomBorder)
-        .On(e => e.Source.LeftBorder)
-        .Update()
-    );
 
     public override double LeftBorder
     {
         get => _leftBorder.Get();
         set => SetBorder(3, value);
     }
-    private readonly IProperty<double> _leftBorder = H.Property<double>(c => c
-        .Set(e => e.GetBorder(3))
-        .On(e => e.Rotation)
-        .On(e => e.Source.TopBorder)
-        .On(e => e.Source.RightBorder)
-        .On(e => e.Source.BottomBorder)
-        .On(e => e.Source.LeftBorder)
-        .Update()
-    );
+    readonly ObservableAsPropertyHelper<double> _leftBorder;
+
+    public override double TopBorder
+    {
+        get => _topBorder.Get();
+        set => SetBorder(0, value);
+    }
+    readonly ObservableAsPropertyHelper<double> _topBorder;
+
+    public override double RightBorder
+    {
+        get => _rightBorder.Get();
+        set => SetBorder(1, value);
+    }
+    readonly ObservableAsPropertyHelper<double> _rightBorder;
+
+    public override double BottomBorder
+    {
+        get => _bottomBorder.Get();
+        set => SetBorder(2, value);
+    }
+    readonly ObservableAsPropertyHelper<double> _bottomBorder;
+
 }

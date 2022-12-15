@@ -1,0 +1,281 @@
+﻿<UserControl x:Class="LittleBigMouse.Control.Main.ResizeGrid"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LittleBigMouse.Control.Main" xmlns:icons="clr-namespace:HLab.Icons.Wpf.Icons;assembly=HLab.Icons.Wpf"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800"
+             x:Name="UserControl"
+             MouseDown="UserControl_MouseDown"
+             >
+    <Grid>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="*"></RowDefinition>
+                <RowDefinition Height="10"></RowDefinition>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="10"></ColumnDefinition>
+                <ColumnDefinition Width="*"></ColumnDefinition>
+                <ColumnDefinition Width="10"></ColumnDefinition>
+            </Grid.ColumnDefinitions>
+            <Grid.Resources>
+                <Style x:Key="SizeBorder" TargetType="Border">
+                    <EventSetter  Event="MouseDown" Handler="Border_MouseDown"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Background" Value="{DynamicResource HLab.Brushes.Header.Active.Background}"/>
+                    <Setter Property="BorderBrush" Value="Transparent"/>
+                </Style>
+            </Grid.Resources>
+
+            <Border 
+            HorizontalAlignment="Stretch"
+            Style="{StaticResource SizeBorder}"
+            Grid.Row="0" 
+            Grid.Column="0" 
+            Grid.RowSpan="3"
+            CornerRadius="10,0,0,10"
+            Cursor="SizeWE"
+            MouseDown="Border_MouseDown"
+            Tag="{x:Static local:ResizeDirection.Left}"
+            Margin="0,0,-1,0"
+            />
+
+            <Border 
+            Style="{StaticResource SizeBorder}"
+            Grid.Row="0" 
+            Grid.Column="0" 
+            Grid.ColumnSpan="3"
+            CornerRadius="10,10,0,0"
+            Margin="0,0,0,-1"
+            Cursor="SizeNS"
+            MouseDown="Border_MouseDown"
+            Tag="{x:Static local:ResizeDirection.Top}"
+            />
+
+            <Border 
+            Style="{StaticResource SizeBorder}"
+            Grid.Row="0" 
+            Grid.Column="2" 
+            Grid.RowSpan="3"
+            CornerRadius="0,10,10,0"
+            Margin="-1,0,0,0"
+            Cursor="SizeWE"
+            MouseDown="Border_MouseDown"
+            Tag="{x:Static local:ResizeDirection.Right}"
+            />
+
+            <Border 
+            Style="{StaticResource SizeBorder}"
+            Grid.Row="2" 
+            Grid.Column="0" 
+            Grid.ColumnSpan="3"
+            CornerRadius="0,0,10,10"
+            Margin="0,-1,0,0"
+            Cursor="SizeNS"
+            MouseDown="Border_MouseDown"
+            Tag="{x:Static local:ResizeDirection.Bottom}"
+            />
+
+            <Border 
+            Grid.Row="0" 
+            Grid.Column="0" 
+            Cursor="SizeNWSE"
+            MouseDown="Border_MouseDown"
+            Background="Transparent"
+            Tag="{x:Static local:ResizeDirection.TopLeft}"
+            />
+
+            <Border 
+            Grid.Row="0" 
+            Grid.Column="2" 
+            Cursor="SizeNESW"
+            MouseDown="Border_MouseDown"
+            Background="Transparent"
+            Tag="{x:Static local:ResizeDirection.TopRight}"
+            />
+
+            <Border 
+            Grid.Row="2" 
+            Grid.Column="2" 
+            Cursor="SizeNWSE"
+            MouseDown="Border_MouseDown"
+            Background="Transparent"
+            Tag="{x:Static local:ResizeDirection.BottomRight}"
+            />
+
+            <Border 
+            Grid.Row="2" 
+            Grid.Column="0" 
+            Cursor="SizeNESW"
+            MouseDown="Border_MouseDown"
+            Background="Transparent"
+            Tag="{x:Static local:ResizeDirection.BottomLeft}"
+            />
+
+            
+
+            <ContentPresenter Content="{Binding NestedContent, ElementName=UserControl}" Grid.Column="1" Grid.Row="1"/>
+
+        </Grid>
+
+        <StackPanel 
+            Orientation="Horizontal" 
+            VerticalAlignment="Top" 
+            HorizontalAlignment="Right"
+            Margin="0"
+            >
+            <StackPanel.Resources>
+                <Style x:Key="ButtonClose" TargetType="{x:Type Button}">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}" />
+                    <Setter Property="FontSize" Value="15" />
+                    <Setter Property="SnapsToDevicePixels" Value="True" />
+
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="{x:Type Button}">
+                                <Border CornerRadius="0,8,0,0" Background="{TemplateBinding Background}" Margin="2">
+                                    <Grid>
+                                        <!--<Path x:Name="PathIcon" Width="15" Height="25" Stretch="Fill" Fill="#4C87B3" HorizontalAlignment="Left" Margin="17,0,0,0" Data="F1 M 30.0833,22.1667L 50.6665,37.6043L 50.6665,38.7918L 30.0833,53.8333L 30.0833,22.1667 Z "/>-->
+                                        <ContentPresenter 
+                                                x:Name="MyContentPresenter" 
+                                                Content="{TemplateBinding Content}" 
+                                                HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center" 
+                                                Margin="0,0,0,0" />
+
+                                        <Grid x:Name="GridDisabled"/>
+                                    </Grid>
+                                </Border>
+
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#ce392c" />
+                                        <Setter Property="Foreground" Value="White" />
+                                        <!--<Setter TargetName="PathIcon" Property="Fill" Value="Black" />-->
+                                    </Trigger>
+
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter Property="Background" Value="#ce392c" />
+                                        <Setter Property="Opacity" Value="0.5" />
+                                        <Setter Property="Foreground" Value="White" />
+                                    </Trigger>
+
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter TargetName="GridDisabled" Property="Background" Value="#80000000" />
+                                    </Trigger>
+
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+
+                <Style TargetType="{x:Type Button}">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}" />
+                    <Setter Property="FontSize" Value="15" />
+                    <Setter Property="SnapsToDevicePixels" Value="True" />
+
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="{x:Type Button}">
+                                <Border Background="{TemplateBinding Background}">
+                                    <Grid>
+                                        <!--<Path x:Name="PathIcon" Width="15" Height="25" Stretch="Fill" Fill="#4C87B3" HorizontalAlignment="Left" Margin="17,0,0,0" Data="F1 M 30.0833,22.1667L 50.6665,37.6043L 50.6665,38.7918L 30.0833,53.8333L 30.0833,22.1667 Z "/>-->
+                                        <ContentPresenter 
+                                                x:Name="MyContentPresenter" 
+                                                Content="{TemplateBinding Content}" 
+                                                HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center" 
+                                                Margin="0,0,0,0" />
+
+                                        <Grid x:Name="GridDisabled"/>
+                                    </Grid>
+                                </Border>
+
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="DimGray" />
+                                        <Setter Property="Foreground" Value="White" />
+                                        <!--<Setter TargetName="PathIcon" Property="Fill" Value="Black" />-->
+                                    </Trigger>
+
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter Property="Background" Value="#373737" />
+                                        <Setter Property="Foreground" Value="White" />
+                                    </Trigger>
+
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Opacity" Value="0.5" />
+                                    </Trigger>
+
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </StackPanel.Resources>
+
+            
+            
+            <ToggleButton IsChecked="{Binding Config.Pinned}" Width="45" Height="28">
+                <icons:IconView 
+                    Height="11"
+                    Opacity="0.5"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Right"
+                    Path="Icon/Pinned"
+                    />
+            </ToggleButton>
+            <Button Click="ButtonMinimize_OnClick" Width="45" Height="28">
+                <icons:IconView 
+                    Height="11"
+                    Opacity="0.5"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Right"
+                    Path="Icon/Minimize"
+                    />
+            </Button>
+            <Button x:Name="MaximizeButton" Click="ButtonMaximize_OnClick" Width="45" Height="28">
+                <icons:IconView
+                    Height="11"
+                    Opacity="0.5"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Right"
+                    Path="Icon/Maximize"
+                    />
+            </Button>
+            <Button Width="45" Height="28" Style="{StaticResource ButtonClose}" Click="ButtonClose_Click">
+                <icons:IconView 
+                    Height="11"
+                    Opacity="0.5"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Right"
+                    Path="Icon/Close"
+                    />
+            </Button>
+        </StackPanel>
+
+
+
+
+        <Border BorderBrush="{DynamicResource MahApps.HamburgerMenu.Pane.Background}" Grid.ColumnSpan="3" Grid.RowSpan="3" BorderThickness="1" CornerRadius="10"/>
+
+        <Canvas 
+            Height="10" 
+            Width="10" 
+            HorizontalAlignment="Right" 
+            VerticalAlignment="Top" 
+            Cursor="SizeNESW"
+            Tag="{x:Static local:ResizeDirection.TopRight}"
+            MouseDown="Border_MouseDown"
+            >
+            <Path Width="10" Height="10" Fill="Transparent" Data="M 0 0 L 10 0 L 10 10 L 5 10 L 0 5"/>
+        </Canvas>
+    </Grid>
+</UserControl>

@@ -87,7 +87,7 @@ class LocationScreenViewModel : ViewModel<Monitor>, IScreenContentViewModel
 
         Model.Selected = true;
 
-        foreach (var source in Model.Layout.AllSources)
+        foreach (var source in Model.Layout.AllSources.Items)
         {
             var area = source.Device.MonitorArea;
             var s = source.InDip;

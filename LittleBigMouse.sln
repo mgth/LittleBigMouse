@@ -80,7 +80,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GuiTester", "GuiTester\GuiT
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HLab.UserNotification", "HLab\HLab.Notification\HLab.UserNotification.csproj", "{9EBC618C-3829-423C-B990-1735FB6BA010}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HLab.Sys.Windows.API", "HLab.Sys\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj", "{FE78C54E-3C88-4A62-B1DF-96B86AC009F6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HLab.Sys.Windows.API", "HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj", "{FE78C54E-3C88-4A62-B1DF-96B86AC009F6}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "LittleBigMouse.Hook", "LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj", "{CB83115D-78BA-490D-AABD-31949F013F78}"
 EndProject

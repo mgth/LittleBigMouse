@@ -9,7 +9,7 @@ Please find a very small doc in the Wiki : https://github.com/mgth/LittleBigMous
 
 If people wants to participate with feedback or new ideas you're welcome. I really need beta testers now to provide a stable tool.
 
-contens code from :
+contains code from :
 
 MouseKeyboardActivityMonitor
 https://globalmousekeyhook.codeplex.com/documentation

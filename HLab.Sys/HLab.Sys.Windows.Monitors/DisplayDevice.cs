@@ -40,7 +40,7 @@ namespace HLab.Sys.Windows.Monitors
 
             this.WhenAnyValue(
                     e => e.State,
-                    s => (s & User32.DisplayDeviceStateFlags.AttachedToDesktop) != 0
+                    s => (s & WinGdi.DisplayDeviceStateFlags.AttachedToDesktop) != 0
                 )
                 .ToProperty(this, e => e.AttachedToDesktop,out _attachedToDesktop);
 
@@ -49,7 +49,7 @@ namespace HLab.Sys.Windows.Monitors
         [JsonIgnore]
         public IMonitorsService MonitorsService { get; }
 
-        public void Init(DisplayDevice parent, User32.DISPLAY_DEVICE dev, IList<DisplayDevice> oldDevices, IList<MonitorDevice> oldMonitors)
+        public void Init(DisplayDevice parent, WinGdi.DISPLAY_DEVICE dev, IList<DisplayDevice> oldDevices, IList<MonitorDevice> oldMonitors)
         {
             Parent = parent;
 
@@ -112,9 +112,9 @@ namespace HLab.Sys.Windows.Monitors
             }
 
             uint i = 0;
-            var child = new User32.DISPLAY_DEVICE();
+            var child = new WinGdi.DISPLAY_DEVICE();
 
-            while (User32.EnumDisplayDevices(DeviceName, i++, ref child, 0))
+            while (WinGdi.EnumDisplayDevices(DeviceName, i++, ref child, 0))
             {
                 var c = child;
                 var device = service.GetOrAddDevice(c.DeviceName, 
@@ -122,7 +122,7 @@ namespace HLab.Sys.Windows.Monitors
 
                 oldDevices.Remove(device);
                 device.Init(this, c, oldDevices, oldMonitors);
-                child = new User32.DISPLAY_DEVICE();
+                child = new WinGdi.DISPLAY_DEVICE();
             }
         }
 
@@ -153,9 +153,9 @@ namespace HLab.Sys.Windows.Monitors
 
         void CheckCurrentMode()
         {
-            var devMode = new User32.DEVMODE(true);
+            var devMode = new WinUser.DevMode();
 
-            if (User32.EnumDisplaySettingsEx(DeviceName, -1, ref devMode, 0))
+            if (WinUser.EnumDisplaySettingsEx(DeviceName, -1, ref devMode, 0))
             {
                 CurrentMode = new DisplayMode(devMode);
             }
@@ -163,10 +163,10 @@ namespace HLab.Sys.Windows.Monitors
  
         public void UpdateDevModes()
         {
-            var devMode = new User32.DEVMODE(true);
+            var devMode = new WinUser.DevMode();
 
-            int i = 0;
-            while (User32.EnumDisplaySettingsEx(DeviceName, i, ref devMode, 0))
+            var i = 0;
+            while (WinUser.EnumDisplaySettingsEx(DeviceName, i, ref devMode, 0))
             {
                 DisplayModes.Add(new DisplayMode(devMode));
                 i++;
@@ -197,12 +197,12 @@ namespace HLab.Sys.Windows.Monitors
         string _deviceString;
 
         [DataMember]
-        public User32.DisplayDeviceStateFlags State
+        public WinGdi.DisplayDeviceStateFlags State
         {
             get => _state;
             protected set => this.RaiseAndSetIfChanged(ref _state, value);
         }
-        User32.DisplayDeviceStateFlags _state;
+        WinGdi.DisplayDeviceStateFlags _state;
 
         [DataMember]
         public string DeviceId

@@ -40,6 +40,7 @@
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.MouseHooker\HLab.Sys.MouseHooker.csproj" />
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\HLab\HLab.Remote\HLab.Remote.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Zones\LittleBigMouse.Zoning.csproj" />
   </ItemGroup>
 

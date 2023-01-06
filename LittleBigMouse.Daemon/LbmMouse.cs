@@ -32,13 +32,13 @@ namespace LittleBigMouse.Daemon
 {
     class LbmMouse
     {
-        public static uint MouseEvent(AdvApi32.MOUSEEVENTF evt, double x, double y)
+        public static uint MouseEvent(WinUser.MouseEventF evt, double x, double y)
         {
-            AdvApi32.InputUnion[] input = {
-            new AdvApi32.InputUnion
+            WinUser.InputUnion[] input = {
+            new WinUser.InputUnion
             {
                 type = 0,
-                mi = new AdvApi32.MOUSEINPUT
+                mouseInput = new WinUser.MouseInput()
                 {
                     dwFlags = evt ,
                     dx = (int)x,
@@ -49,14 +49,14 @@ namespace LittleBigMouse.Daemon
                 }
             }};
 
-            return AdvApi32.SendInput((uint)input.Length, input, Marshal.SizeOf<AdvApi32.InputUnion>());
+            return WinUser.SendInput((uint)input.Length, input, Marshal.SizeOf<WinUser.InputUnion>());
         }
 
-        public static Point CursorPos
+        public static WinDef.Point CursorPos
         {
             get
             {
-                if(User32.GetCursorPos(out var p))
+                if(WinUser.GetCursorPos(out var p))
                     return p;
                 throw new InvalidOperationException();
             }

@@ -44,7 +44,7 @@ public class DisplayMode
     public int DisplayFixedOutput { get; }
     [DataMember]
     public int DisplayOrientation { get; }
-    internal DisplayMode(User32.DEVMODE dm)
+    internal DisplayMode(WinUser.DevMode dm)
     {
         DisplayOrientation = ((dm.Fields & User32.DM.DisplayOrientation) != 0)?dm.DisplayOrientation:0;
         Position = ((dm.Fields & User32.DM.Position) != 0)?new Point(dm.Position.x, dm.Position.y):new Point(0,0);

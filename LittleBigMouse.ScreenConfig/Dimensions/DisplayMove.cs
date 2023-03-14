@@ -1,4 +1,5 @@
 ﻿using ReactiveUI;
+using System.Reactive.Concurrency;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -6,65 +7,69 @@ public abstract class DisplayMove : DisplaySize
 {
     protected DisplayMove(IDisplaySize source) : base(source)
     {
-        this.WhenAnyValue(e => e.Source.Width)
-            .ToProperty(this, e => e.Width,out _width);
+        _width = this.WhenAnyValue(e => e.Source.Width)
+            .ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(e => e.Source.Height)
-            .ToProperty(this, e => e.Height,out _height);
+        _height = this.WhenAnyValue(e => e.Source.Height)
+            .ToProperty(this, e => e.Height, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(e => e.Source.LeftBorder)
-            .ToProperty(this, e => e.LeftBorder,out _leftBorder);
+        _leftBorder = this.WhenAnyValue(e => e.Source.LeftBorder)
+            .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(e => e.Source.TopBorder)
-            .ToProperty(this, e => e.TopBorder,out _topBorder);
+        _topBorder = this.WhenAnyValue(e => e.Source.TopBorder)
+            .ToProperty(this, e => e.TopBorder, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(e => e.Source.RightBorder)
-            .ToProperty(this, e => e.RightBorder,out _rightBorder);
+        _rightBorder = this.WhenAnyValue(e => e.Source.RightBorder)
+            .ToProperty(this, e => e.RightBorder, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(e => e.Source.BottomBorder)
-            .ToProperty(this, e => e.BottomBorder,out _bottomBorder);
+        _bottomBorder = this.WhenAnyValue(e => e.Source.BottomBorder)
+            .ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
+
+        Init();
     }
 
     public override double Width
     {
-        get => _width.Get();
+        get => _width.Value;
         set => Source.Width = value;
     }
     readonly ObservableAsPropertyHelper<double> _width;
 
     public override double Height
     {
-        get => _height.Get();
+        get => _height.Value;
         set => Source.Height = value;
     }
     readonly ObservableAsPropertyHelper<double> _height;
 
     public override double TopBorder
     {
-        get => _topBorder.Get();
+        get => _topBorder.Value;
         set => Source.TopBorder = value;
     }
     readonly ObservableAsPropertyHelper<double> _topBorder;
 
     public override double RightBorder
     {
-        get => _rightBorder.Get();
+        get => _rightBorder.Value;
         set => Source.RightBorder = value;
     }
     readonly ObservableAsPropertyHelper<double> _rightBorder;
 
     public override double BottomBorder
     {
-        get => _bottomBorder.Get();
+        get => _bottomBorder.Value;
         set => Source.BottomBorder = value;
     }
     readonly ObservableAsPropertyHelper<double> _bottomBorder;
 
     public override double LeftBorder
     {
-        get => _leftBorder.Get();
+        get => _leftBorder.Value;
         set => Source.LeftBorder = value;
     }
     readonly ObservableAsPropertyHelper<double> _leftBorder;
+
+    public override string TransformToString => $"Move";
 
 }

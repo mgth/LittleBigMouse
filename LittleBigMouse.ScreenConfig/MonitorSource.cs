@@ -1,15 +1,16 @@
-﻿using HLab.Sys.Windows.API;
-using HLab.Sys.Windows.Monitors;
+﻿using HLab.Sys.Windows.Monitors;
 
 using LittleBigMouse.DisplayLayout.Dimensions;
-
-using Microsoft.Win32;
 
 using System;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using Avalonia;
+using Microsoft.Win32;
 using ReactiveUI;
+using static HLab.Sys.Windows.API.WinDef;
+using Point = Avalonia.Point;
+using Rect = Avalonia.Rect;
 
 namespace LittleBigMouse.DisplayLayout;
 
@@ -23,46 +24,75 @@ public class MonitorSource : ReactiveObject
         Monitor = monitor;
         Device = device;
 
-        this.WhenAnyValue(
+        InPixel = new ScreenSizeInPixels(this);
+
+        _idResolution = this.WhenAnyValue(
             e => e.InPixel.Width,
             e => e.InPixel.Height,
             (w, h) => $"{w}x{h}"
-        ).ToProperty(this, e => e.IdResolution,out _idResolution);
+        ).ToProperty(this, e => e.IdResolution);
 
-        this.WhenAnyValue(
+        _primary = this.WhenAnyValue(
             e => e.Device.Primary
-        ).ToProperty(this, e => e.Primary,out _primary);
+        ).ToProperty(this, e => e.Primary);
 
-        InPixel = new ScreenSizeInPixels(this);
+        _effectiveDpi = this.WhenAnyValue(
+            e => e.Device.EffectiveDpi,
+            dpi => new DisplayRatioValue(dpi)
+        ).ToProperty(this, e => e.EffectiveDpi);
 
-        this.WhenAnyValue(
+        _winDpiX = this.WhenAnyValue(
+            e => e.EffectiveDpi.X
+        ).ToProperty(this, e => e.WinDpiX);
+
+        _winDpiY = this.WhenAnyValue(
+            e => e.EffectiveDpi.Y
+        ).ToProperty(this, e => e.WinDpiY);
+
+        _inDip = this.WhenAnyValue(
             e => e.InPixel,
             e => e.EffectiveDpi,
             e => e.Monitor.Layout,
             (px,dpi,layout) => px.ScaleDip(dpi,layout)
-        ).ToProperty(this, e => e.InDip,out _inDip);
+        ).ToProperty(this, e => e.InDip);
 
-        this.WhenAnyValue(
+        _realPitch = this.WhenAnyValue(
             e => e.Monitor.PhysicalRotated.Width,
             e => e.Monitor.PhysicalRotated.Height,
             e => e.InPixel.Width,
             e => e.InPixel.Height,  
             (pw,ph,w,h) => new DisplayRatioValue(pw/w,ph/h)
-        ).ToProperty(this, e => e.RealPitch,out _realPitch);
+        ).ToProperty(this, e => e.RealPitch);
 
-        this.WhenAnyValue(
+        _pitch = this.WhenAnyValue(
             e => e.RealPitch,
             e => e.Monitor.PhysicalRatio,
             (p,r) => p.Multiply(r)
-        ).ToProperty(this, e => e.Pitch,out _pitch);
+        ).ToProperty(this, e => e.Pitch);
 
-        this.WhenAnyValue(
+        _pixelToDipRatio = this.WhenAnyValue(
             e => e.DipToPixelRatio,
             (r) => r.Inverse()
-        ).ToProperty(this, e => e.PixelToDipRatio,out _pixelToDipRatio);
+        ).ToProperty(this, e => e.PixelToDipRatio);
 
-        this.WhenAnyValue(
-            e => e.Monitor.Layout.DpiAwarenessContext, 
+        _realDpi = this.WhenAnyValue(
+            e => e.RealPitch, 
+            (pitch) => Inch.Multiply(pitch.Inverse())
+        ).ToProperty(this, e => e.RealDpi);
+
+        _realDpiAvg = this.WhenAnyValue(
+            e => e.RealDpi.X,
+            e => e.RealDpi.Y,
+            GetRealDpiAvg
+        ).ToProperty(this, e => e.RealDpiAvg);
+
+        _dpiAwareAngularDpi = this.WhenAnyValue(
+            e => e.Device.AngularDpi,
+            dpi => new DisplayRatioValue(dpi)
+        ).ToProperty(this, e => e.DpiAwareAngularDpi);
+
+        _dipToPixelRatio = this.WhenAnyValue(
+            e => e.Monitor.Layout.DpiAwareness, 
             e => e.RealDpi.X,
             e => e.RealDpi.Y,
             e => e.DpiAwareAngularDpi.X,
@@ -72,66 +102,41 @@ public class MonitorSource : ReactiveObject
             e => e.EffectiveDpi.X,
             e => e.EffectiveDpi.Y,
             UpdateDipToPixelRatio
-        ).ToProperty(this, e => e.RealPitch,out _realPitch);
+        ).ToProperty(this, e => e.RealPitch);
 
-        this.WhenAnyValue(
+        _mmToDipRatio = this.WhenAnyValue(
             e => e.Monitor.PhysicalRatio, 
             e => e.PhysicalToPixelRatio,
             e => e.DipToPixelRatio,
             (phy,phy2px,dip2px) => phy2px.Multiply(dip2px.Inverse()).Multiply(phy)
-        ).ToProperty(this, e => e.MmToDipRatio,out _mmToDipRatio);
+        ).ToProperty(this, e => e.MmToDipRatio);
 
-        this.WhenAnyValue(
-            e => e.RealPitch, 
-            (pitch) => Inch.Multiply(pitch.Inverse())
-        ).ToProperty(this, e => e.RealDpi,out _realDpi);
-
-        this.WhenAnyValue(
+        _dpiX = this.WhenAnyValue(
             e => e.Pitch, 
             (pitch) => Inch.Multiply(pitch.Inverse())
-        ).ToProperty(this, e => e.DpiX,out _dpiX);
+        ).ToProperty(this, e => e.DpiX);
 
-        this.WhenAnyValue(
+        _physicalToPixelRatio = this.WhenAnyValue(
             e => e.Pitch, 
             (pitch) => pitch.Inverse()
-        ).ToProperty(this, e => e.PhysicalToPixelRatio,out _physicalToPixelRatio);
+        ).ToProperty(this, e => e.PhysicalToPixelRatio);
 
-        this.WhenAnyValue(
-            e => e.RealDpi.X,
-            e => e.RealDpi.Y,
-            GetRealDpiAvg
-        ).ToProperty(this, e => e.RealDpiAvg,out _realDpiAvg);
 
-        this.WhenAnyValue(
-            e => e.EffectiveDpi.X
-        ).ToProperty(this, e => e.WinDpiX,out _winDpiX);
 
-        this.WhenAnyValue(
-            e => e.EffectiveDpi.Y
-        ).ToProperty(this, e => e.WinDpiY,out _winDpiY);
-
-        this.WhenAnyValue(
+        _rawDpi = this.WhenAnyValue(
             e => e.Device.RawDpi,
             dpi => new DisplayRatioValue(dpi)
-        ).ToProperty(this, e => e.RawDpi,out _rawDpi);
+        ).ToProperty(this, e => e.RawDpi);
 
-        this.WhenAnyValue(
-            e => e.Device.EffectiveDpi,
-            dpi => new DisplayRatioValue(dpi)
-        ).ToProperty(this, e => e.EffectiveDpi,out _effectiveDpi);
 
-        this.WhenAnyValue(
-            e => e.Device.AngularDpi,
-            dpi => new DisplayRatioValue(dpi)
-        ).ToProperty(this, e => e.DpiAwareAngularDpi,out _dpiAwareAngularDpi);
     }
 
-    [DataMember] public string IdResolution => _idResolution.Get();
+    [DataMember] public string IdResolution => _idResolution.Value;
 
     readonly ObservableAsPropertyHelper<string> _idResolution;
 
     [DataMember]
-    public bool Primary => _primary.Get();
+    public bool Primary => _primary.Value;
 
     readonly ObservableAsPropertyHelper<bool> _primary;
 
@@ -139,13 +144,13 @@ public class MonitorSource : ReactiveObject
     [DataMember] public IDisplaySize InPixel { get; }
 
     // Dip
-    [DataMember] public IDisplaySize InDip => _inDip.Get();
+    [DataMember] public IDisplaySize InDip => _inDip.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _inDip;
 
     [DataMember]
     public IDisplayRatio RealPitch
     {
-        get => _realPitch.Get();
+        get => _realPitch.Value;
         set
         {
             Monitor.PhysicalRotated.Width = InPixel.Width * value.X;
@@ -156,41 +161,41 @@ public class MonitorSource : ReactiveObject
 
     //calculated
     [DataMember]
-    public IDisplayRatio Pitch => _pitch.Get();
+    public IDisplayRatio Pitch => _pitch.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _pitch;
 
     [DataMember]
-    public IDisplayRatio PixelToDipRatio => _pixelToDipRatio.Get();
+    public IDisplayRatio PixelToDipRatio => _pixelToDipRatio.Value;
 
     readonly ObservableAsPropertyHelper<IDisplayRatio> _pixelToDipRatio;
 
     [DataMember]
-    public IDisplayRatio DipToPixelRatio => _dipToPixelRatio.Get();
+    public IDisplayRatio DipToPixelRatio => _dipToPixelRatio?.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _dipToPixelRatio;
 
     [DataMember]
-    public IDisplayRatio MmToDipRatio => _mmToDipRatio.Get();
+    public IDisplayRatio MmToDipRatio => _mmToDipRatio?.Value;
 
     readonly ObservableAsPropertyHelper<IDisplayRatio> _mmToDipRatio;
 
 
     [DataMember]
-    public IDisplayRatio RealDpi => _realDpi.Get();
+    public IDisplayRatio RealDpi => _realDpi.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _realDpi;
 
     [DataMember]
-    public IDisplayRatio DpiX => _dpiX.Get();
+    public IDisplayRatio DpiX => _dpiX.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _dpiX ;
 
     static readonly IDisplayRatio Inch = new DisplayRatioValue(25.4);
 
     [DataMember]
-    public IDisplayRatio PhysicalToPixelRatio => _physicalToPixelRatio.Get();
+    public IDisplayRatio PhysicalToPixelRatio => _physicalToPixelRatio?.Value;
 
     readonly ObservableAsPropertyHelper<IDisplayRatio> _physicalToPixelRatio;
 
     [DataMember]
-    public double RealDpiAvg => _realDpiAvg.Get();
+    public double RealDpiAvg => _realDpiAvg.Value;
 
     readonly ObservableAsPropertyHelper<double> _realDpiAvg;
 
@@ -210,37 +215,26 @@ public class MonitorSource : ReactiveObject
     }
     Rect _guiLocation;
 
-    public enum DpiType
-    {
-        Effective = 0,
-        Angular = 1,
-        Raw = 2
-    } //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510.aspx
-
-    [DllImport("Shcore.dll")]
-    static extern IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX,
-        [Out] out uint dpiY);
-
 
     [DataMember]
-    public double WinDpiX => _winDpiX.Get();
+    public double WinDpiX => _winDpiX.Value;
     readonly ObservableAsPropertyHelper<double> _winDpiX;
 
     [DataMember]
-    public double WinDpiY => _winDpiY.Get();
+    public double WinDpiY => _winDpiY.Value;
     readonly ObservableAsPropertyHelper<double> _winDpiY;
 
-    [DataMember] public IDisplayRatio RawDpi => _rawDpi.Get();
+    [DataMember] public IDisplayRatio RawDpi => _rawDpi.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _rawDpi;
 
-    [DataMember] public IDisplayRatio EffectiveDpi => _effectiveDpi.Get();
+    [DataMember] public IDisplayRatio EffectiveDpi => _effectiveDpi.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _effectiveDpi;
 
-    [DataMember] public IDisplayRatio DpiAwareAngularDpi => _dpiAwareAngularDpi.Get();
+    [DataMember] public IDisplayRatio DpiAwareAngularDpi => _dpiAwareAngularDpi.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _dpiAwareAngularDpi;
 
     public static IDisplayRatio UpdateDipToPixelRatio(
-        User32.DPI_Awareness_Context aware,
+        DpiAwareness aware,
         double dpiRealX, double dpiRealY,
         double dpiAngX, double dpiAngY,
         double srcDpiX, double srcDpiY,
@@ -248,33 +242,30 @@ public class MonitorSource : ReactiveObject
     {
         switch (aware)
         {
-            case User32.DPI_Awareness_Context.Unaware:
+            case DpiAwareness.Unaware:
                 return new DisplayRatioValue(
                     Math.Round(dpiRealX / dpiAngX * 10) / 10,
                     Math.Round(dpiRealY / dpiAngY * 10) / 10);
             //return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
 
-            case User32.DPI_Awareness_Context.System_Aware:
+            case DpiAwareness.SystemAware:
                 return new DisplayRatioValue(
                     srcDpiX / 96,
                     srcDpiY / 96
                 );
 
-            case User32.DPI_Awareness_Context.Per_Monitor_Aware:
+            case DpiAwareness.PerMonitorAware:
                 return new DisplayRatioValue(
                     dpiEffectiveX / 96,
                     dpiEffectiveY / 96
                 );
 
-            case User32.DPI_Awareness_Context.Per_Monitor_Aware_V2:
+            case DpiAwareness.Invalid:
                 return new DisplayRatioValue(
                     dpiEffectiveX / 96,
                     dpiEffectiveY / 96
-                //DpiAwareAngularDpi.X / 96,
-                //DpiAwareAngularDpi.Y / 96
                 );
 
-            case User32.DPI_Awareness_Context.Unset:
             default:
                 throw new ArgumentOutOfRangeException();
         }
@@ -282,17 +273,16 @@ public class MonitorSource : ReactiveObject
 
     public void Load(RegistryKey baseKey)
     {
-        using (var key = baseKey.OpenSubKey("GuiLocation"))
-        {
-            if (key != null)
-            {
-                var left = key.GetKey("Left", () => GuiLocation.Left);
-                var width = key.GetKey("Width", () => GuiLocation.Width);
-                var top = key.GetKey("Top", () => GuiLocation.Top);
-                var height = key.GetKey("Height", () => GuiLocation.Height);
-                GuiLocation = new Rect(new Point(left, top), new Size(width, height));
-            }
-        }
+        using var key = baseKey.OpenSubKey("GuiLocation");
+
+        if (key == null) return;
+        
+        var left = key.GetKey("Left", () => GuiLocation.Left);
+        var width = key.GetKey("Width", () => GuiLocation.Width);
+        var top = key.GetKey("Top", () => GuiLocation.Top);
+        var height = key.GetKey("Height", () => GuiLocation.Height);
+        
+        GuiLocation = new Rect(new Point(left, top), new Size(width, height));
     }
     public void Save(RegistryKey baseKey)
     {
@@ -309,15 +299,14 @@ public class MonitorSource : ReactiveObject
 
         using (var key = baseKey.CreateSubKey(Device.IdMonitor))
         {
-            if (key != null)
-            {
-                key.SetKey("PixelX", InPixel.X);
-                key.SetKey("PixelY", InPixel.Y);
-                key.SetKey("PixelWidth", InPixel.Width);
-                key.SetKey("PixelHeight", InPixel.Height);
+            if (key == null) return;
+            
+            key.SetKey("PixelX", InPixel.X);
+            key.SetKey("PixelY", InPixel.Y);
+            key.SetKey("PixelWidth", InPixel.Width);
+            key.SetKey("PixelHeight", InPixel.Height);
 
-                key.SetKey("Primary", Primary);
-            }
+            key.SetKey("Primary", Primary);
         }
     }
 

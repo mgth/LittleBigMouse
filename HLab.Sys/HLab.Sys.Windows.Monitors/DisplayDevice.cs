@@ -24,9 +24,11 @@
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using DynamicData;
-using HLab.Sys.Windows.API;
 using Newtonsoft.Json;
 using ReactiveUI;
+using HLab.Sys.Windows.API;
+using static HLab.Sys.Windows.API.WinGdi;
+using static HLab.Sys.Windows.API.WinUser;
 
 namespace HLab.Sys.Windows.Monitors
 {
@@ -40,16 +42,15 @@ namespace HLab.Sys.Windows.Monitors
 
             this.WhenAnyValue(
                     e => e.State,
-                    s => (s & WinGdi.DisplayDeviceStateFlags.AttachedToDesktop) != 0
+                    s => (s & DisplayDeviceStateFlags.AttachedToDesktop) != 0
                 )
                 .ToProperty(this, e => e.AttachedToDesktop,out _attachedToDesktop);
-
         }
 
         [JsonIgnore]
         public IMonitorsService MonitorsService { get; }
 
-        public void Init(DisplayDevice parent, WinGdi.DISPLAY_DEVICE dev, IList<DisplayDevice> oldDevices, IList<MonitorDevice> oldMonitors)
+        public void Init(DisplayDevice parent, WinGdi.DisplayDevice dev, IList<DisplayDevice> oldDevices, IList<MonitorDevice> oldMonitors)
         {
             Parent = parent;
 
@@ -99,7 +100,7 @@ namespace HLab.Sys.Windows.Monitors
                 case "RdpIdd_IndirectDisplay":
                 case string s when s.StartsWith("VID_DATRONICSOFT_PID_SPACEDESK_VIRTUAL_DISPLAY_"):
 
-                    var adapter = service.GetOrAddAdapter(DeviceId, (s,id) => new PhysicalAdapter(id, s)
+                    var adapter = service.GetOrAddAdapter(DeviceId, (svc,id) => new PhysicalAdapter(id, svc)
                     {
                         DeviceString = DeviceString
                     });
@@ -112,9 +113,9 @@ namespace HLab.Sys.Windows.Monitors
             }
 
             uint i = 0;
-            var child = new WinGdi.DISPLAY_DEVICE();
+            var child = new WinGdi.DisplayDevice();
 
-            while (WinGdi.EnumDisplayDevices(DeviceName, i++, ref child, 0))
+            while (EnumDisplayDevices(DeviceName, i++, ref child, 0))
             {
                 var c = child;
                 var device = service.GetOrAddDevice(c.DeviceName, 
@@ -122,14 +123,13 @@ namespace HLab.Sys.Windows.Monitors
 
                 oldDevices.Remove(device);
                 device.Init(this, c, oldDevices, oldMonitors);
-                child = new WinGdi.DISPLAY_DEVICE();
+                child = new WinGdi.DisplayDevice();
             }
         }
 
         [DataMember]
         public bool AttachedToDesktop => _attachedToDesktop.Value;
         readonly ObservableAsPropertyHelper<bool> _attachedToDesktop;
-
 
         [JsonProperty]
         public SourceList<DisplayMode> DisplayModes { get; } = new ();
@@ -142,7 +142,6 @@ namespace HLab.Sys.Windows.Monitors
         }
         DeviceCaps _deviceCaps;
 
-
        [DataMember]
         public DisplayMode CurrentMode
         {
@@ -153,9 +152,9 @@ namespace HLab.Sys.Windows.Monitors
 
         void CheckCurrentMode()
         {
-            var devMode = new WinUser.DevMode();
+            var devMode = DevMode.Default;
 
-            if (WinUser.EnumDisplaySettingsEx(DeviceName, -1, ref devMode, 0))
+            if (EnumDisplaySettingsEx(DeviceName, -1, ref devMode,0))
             {
                 CurrentMode = new DisplayMode(devMode);
             }
@@ -163,15 +162,18 @@ namespace HLab.Sys.Windows.Monitors
  
         public void UpdateDevModes()
         {
-            var devMode = new WinUser.DevMode();
+            var devMode = new DevMode();
 
             var i = 0;
-            while (WinUser.EnumDisplaySettingsEx(DeviceName, i, ref devMode, 0))
+            while (EnumDisplaySettingsEx(DeviceName, i, ref devMode, 0))
             {
                 DisplayModes.Add(new DisplayMode(devMode));
                 i++;
             }
         }
+
+        
+
 
         [DataMember]
         public string DeviceName
@@ -197,12 +199,12 @@ namespace HLab.Sys.Windows.Monitors
         string _deviceString;
 
         [DataMember]
-        public WinGdi.DisplayDeviceStateFlags State
+        public DisplayDeviceStateFlags State
         {
             get => _state;
             protected set => this.RaiseAndSetIfChanged(ref _state, value);
         }
-        WinGdi.DisplayDeviceStateFlags _state;
+        DisplayDeviceStateFlags _state;
 
         [DataMember]
         public string DeviceId

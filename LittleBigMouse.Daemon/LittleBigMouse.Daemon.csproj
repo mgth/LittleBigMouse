@@ -32,13 +32,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="H.Pipes" Version="2.0.42" />
+    <PackageReference Include="H.Pipes" Version="2.0.44" />
     <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.MouseHooker\HLab.Sys.MouseHooker.csproj" />
-    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\HLab\HLab.Remote\HLab.Remote.csproj" />
     <ProjectReference Include="..\HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Zones\LittleBigMouse.Zoning.csproj" />

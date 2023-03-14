@@ -23,7 +23,8 @@
 
 using System;
 using Avalonia;
-using HLab.Sys.Windows.API;
+
+using static HLab.Sys.Windows.API.WinGdi;
 
 namespace HLab.Sys.Windows.Monitors
 {
@@ -37,33 +38,33 @@ namespace HLab.Sys.Windows.Monitors
 
         public DeviceCaps(string deviceName)
         {
-            var hdc = Gdi32.CreateDC("DISPLAY", deviceName, null, IntPtr.Zero);
+            var hdc = CreateDC("DISPLAY", deviceName, null, 0);
 
             Size = new Size(
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.HORZSIZE),
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.VERTSIZE)
+                GetDeviceCaps(hdc, DeviceCap.HorzSize),
+                GetDeviceCaps(hdc, DeviceCap.VertSize)
             );
 
             Resolution = new Size(
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.HORZRES),
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.VERTRES)
+                GetDeviceCaps(hdc, DeviceCap.HorzRes),
+                GetDeviceCaps(hdc, DeviceCap.VertRes)
             );
 
             LogPixels = new Size(
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.LOGPIXELSX),
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.LOGPIXELSY)
+                GetDeviceCaps(hdc, DeviceCap.LogPixelsX),
+                GetDeviceCaps(hdc, DeviceCap.LogPixelsY)
             );
 
-            BitsPixel = Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.BITSPIXEL);
+            BitsPixel = GetDeviceCaps(hdc, DeviceCap.BitsPixel);
 
             Aspect = new Size(
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.ASPECTX),
-                Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.ASPECTY)
+                GetDeviceCaps(hdc, DeviceCap.AspectX),
+                GetDeviceCaps(hdc, DeviceCap.AspectY)
             );
 
             // TODO : https://msdn.microsoft.com/en-us/library/windows/desktop/dd144877(v=vs.85).aspx
 
-            Gdi32.DeleteDC(hdc);
+            DeleteDC(hdc);
         }
     }
 }

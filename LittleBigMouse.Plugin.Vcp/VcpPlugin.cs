@@ -21,14 +21,16 @@
 	  http://www.mgth.fr
 */
 
+using System.Reactive.Linq;
 using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
 using HLab.Notify.PropertyChanged;
 using LittleBigMouse.Plugins;
+using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp;
 
-internal class ViewModeScreenVcp : ViewMode { }
+internal class MonitorVcpViewMode : ViewMode { }
 
 public class VcpPlugin : IBootloader
 {
@@ -41,20 +43,21 @@ public class VcpPlugin : IBootloader
 
     public void Load(IBootContext bootstrapper)
     {
-        _mainService.AddControlPlugin( c =>
+        _mainService.AddControlPlugin(c =>
+            c.AddButton(
+                "vcp",
+                "Icon/MonitorVcp",
+                "Vcp control",
 
-        c.AddButton(new NCommand<bool>(b =>
-            {
-                if (b)
-                    c.SetViewMode<ViewModeScreenVcp>();
-                else
-                    c.SetViewMode<ViewModeDefault>();
-            })
-        {
-            IconPath = "Icon/MonitorVcp",
-            ToolTipText = "Vcp control"
-        }
-        ));
+                ReactiveCommand.Create<bool>(b => {
+                        if (b)
+                            c.SetMonitorFrameViewMode<MonitorVcpViewMode>();
+                        else
+                            c.SetMonitorFrameViewMode<DefaultViewMode>();
+                    }
+                    , outputScheduler: RxApp.MainThreadScheduler
+                    , canExecute: Observable.Return(true) ))
+        );
     }
 
 }

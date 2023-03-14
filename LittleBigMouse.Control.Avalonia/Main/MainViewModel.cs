@@ -1,91 +1,80 @@
-﻿/*
-  LittleBigMouse.Control.Core
-  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
-
-  This file is part of LittleBigMouse.Control.Core.
-
-    LittleBigMouse.Control.Core is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    LittleBigMouse.Control.Core is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with MouseControl.  If not, see <http://www.gnu.org/licenses/>.
-
-	  mailto:mathieu@mgth.fr
-	  http://www.mgth.fr
-*/
-
-using System.Collections.ObjectModel;
-using System.Windows;
-using System.Windows.Controls;
+﻿using System;
 using System.Windows.Input;
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Layout;
-using Avalonia.Threading;
+using DynamicData;
 using HLab.Icons.Annotations.Icons;
-using HLab.Mvvm;
-using HLab.Notify.PropertyChanged;
-
+using HLab.Mvvm.Annotations;
+using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.Plugins;
-using LittleBigMouse.Plugins.Avalonia;
+using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
+using ReactiveUI;
 
-namespace LittleBigMouse.Control.Main
+namespace LittleBigMouse.Ui.Avalonia.Main;
+
+public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 {
-    using H = H<MainControlViewModel>;
-
-    public class MainControlViewModel : ViewModel, IMainControl
+    public string Title => "Little Big Mouse";
+        
+    public MainViewModel(IIconService iconService, ILocalizationService localizationService)
     {
-        public MainControlViewModel(IIconService iconService)
+        IconService = iconService;
+        LocalizationService = localizationService;
+        CloseCommand = ReactiveCommand.Create(Close);
+
+        //_commandsSource.Connect()
+        //    .Transform(x => x)
+        //    .ObserveOn(RxApp.MainThreadScheduler)
+        //    .Bind(out _commands)
+        //    .DisposeMany()
+        //    .Subscribe();
+
+
+
+        MaximizeCommand = ReactiveCommand.Create(() =>
+            WindowState = WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal);
+    }
+
+    public IIconService IconService { get; }
+    public ILocalizationService LocalizationService { get; }
+
+    public IMonitorsLayout? Layout
+    {
+        get => _layout;
+        set => this.RaiseAndSetIfChanged(ref _layout,value);
+    }
+    IMonitorsLayout? _layout;
+
+    public Type MonitorFrameViewMode
+    {
+        get => _monitorFrameViewMode;
+        set => this.RaiseAndSetIfChanged(ref _monitorFrameViewMode,value);
+    }
+    Type _monitorFrameViewMode = typeof(MonitorDebugViewMode);
+
+    public double VerticalResizerSize => 10.0;
+
+    public double HorizontalResizerSize => 10.0;
+
+
+    public ICommand CloseCommand { get; }
+    //public ICommand CloseCommand { get; } = H.Command(c => c
+    //    .Action(e => e.Close())
+    //);
+
+    public ICommand MaximizeCommand { get; }
+
+
+
+    void Close()
+    {
+        if (Layout?.Saved??true)
         {
-            IconService = iconService;
-            H.Initialize(this);
+            // TODO : exit application
+            return;
         }
 
-        public IIconService IconService { get; }
-
-        public IMonitorsLayout Layout
-        {
-            get => _layout.Get();
-            set => _layout.Set(value);
-        }
-
-        readonly IProperty<IMonitorsLayout> _layout = H.Property<IMonitorsLayout>();
-
-        public IPresenterViewModel Presenter
-        {
-            get => _presenter.Get();
-            set => _presenter.Set(value);
-        }
-
-        readonly IProperty<IPresenterViewModel> _presenter = H.Property<IPresenterViewModel>();
-
-        public double VerticalResizerSize => _verticalResizerSize.Get();
-        readonly IProperty<double> _verticalResizerSize = H.Property<double>(c => c.Default(10.0));
-
-        public double HorizontalResizerSize => _horizontalResizerSize.Get();
-        readonly IProperty<double> _horizontalResizerSize = H.Property<double>(c => c.Default(10.0));
-
-        public ICommand CloseCommand { get; } = H.Command(c => c
-            .Action(e => e.Close())
-        );
-
-        void Close()
-        {
-            if (Layout.Saved)
-            {
-                // TODO : exit application
-                return;
-            }
-
-            /* Todo avalonia
+        /* Todo avalonia
             MessageBoxResult result = MessageBox.Avalonia.MessageBoxManager.GetMessageBoxInputWindow().Show("Save your changes before exiting ?", "Confirmation",
                 MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
@@ -99,43 +88,41 @@ namespace LittleBigMouse.Control.Main
                 Application.Current.Shutdown();
             }
             */
-        }
+    }
 
-        readonly IProperty<WindowState> _windowState = H.Property<WindowState>();
-        public WindowState WindowState
+    public WindowState WindowState
+    {
+        get => _windowState;
+        set => this.RaiseAndSetIfChanged(ref _windowState, value);
+    }
+    WindowState _windowState;
+
+
+    public void UnMaximize()
+    {
+        //var w = Application.Current.MainWindow;
+        //if (w != null)
+        WindowState = WindowState.Normal;
+    }
+
+    //readonly SourceCache<UiCommand, string> _commandsSource = new(c=>c.Id);
+    //readonly ReadOnlyObservableCollection<UiCommand> _commands;
+    //public ReadOnlyObservableCollection<UiCommand> Commands => _commands;
+
+    public SourceCache<UiCommand, string> Commands { get; } = new(c=>c.Id);
+
+    public void AddButton(string id, string iconPath, string toolTipText, ICommand cmd)
+    {
+        var command = new UiCommand(id)
         {
-            get => _windowState.Get();
-            set => _windowState.Set(value);
-        }
-
-        public ICommand MaximizeCommand { get; } = H.Command(c => c.Action(e =>
-            {
-                e.WindowState = e.WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal;
-            }
-        ));
-
-        public void UnMaximize()
-        {
-            var w = Application.Current.MainWindow;
-            if (w != null)
-                w.WindowState = WindowState.Normal;
-        }
-
-        public StackPanel ButtonPanel { get; } = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
+            IconPath = iconPath,
+            ToolTipText = toolTipText,
+            Command = cmd,
         };
 
-        public ObservableCollection<ICommand> Commands { get; } = new ObservableCollection<ICommand>();
+        Commands.AddOrUpdate(command);
 
-        public void AddButton(ICommand cmd)
-        {
-            Commands.Add(cmd);
-        }
-
-        public void SetViewMode<T>()
-        {
-            Presenter.ViewMode = typeof(T);
-        }
+        //this.RaisePropertyChanged("Commands");
     }
+
 }

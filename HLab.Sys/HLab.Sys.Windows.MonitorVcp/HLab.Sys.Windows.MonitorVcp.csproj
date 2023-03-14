@@ -1,36 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <Platforms>AnyCPU;x64</Platforms>
+    <TargetFramework>net7.0</TargetFramework>
+    <Platforms>x64</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\HLab\HLab.Base.Wpf\HLab.Base.Wpf.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\HLab.Sys.Argyll\HLab.Sys.Argyll.csproj" />
-    <ProjectReference Include="..\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="Luminance.xaml.cs">
-      <DependentUpon>Luminance.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="TestPatternWindow.xaml.cs">
-      <DependentUpon>TestPatternWindow.xaml</DependentUpon>
-    </Compile>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Page Update="Luminance.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="TestPatternWindow.xaml">
-      <SubType>Designer</SubType>
-    </Page>
   </ItemGroup>
 
 </Project>

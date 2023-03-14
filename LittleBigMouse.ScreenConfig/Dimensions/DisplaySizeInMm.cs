@@ -22,21 +22,82 @@
 */
 
 using System;
+using System.Diagnostics;
 using System.Text.Json.Serialization;
+using Avalonia;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
+
+public class DisplayRect : ReactiveObject
+{
+    public double X
+    {
+        get => _x;
+        set => this.RaiseAndSetIfChanged(ref _x, value);
+    }
+    double _x;
+
+    public double Y
+    {
+        get => _y;
+        set => this.RaiseAndSetIfChanged(ref _y, value);
+    }
+    double _y;
+    public double Width
+    {
+        get => _with;
+        set => this.RaiseAndSetIfChanged(ref _with, value);
+    }
+    double _with;
+
+    public double Height
+    {
+        get => _height;
+        set => this.RaiseAndSetIfChanged(ref _height, value);
+    }
+    double _height;
+}
+public class DisplayBorders : ReactiveObject
+{
+    public double Left
+    {
+        get => _left;
+        set => this.RaiseAndSetIfChanged(ref _left, value);
+    }
+    double _left;
+
+    public double Top
+    {
+        get => _top;
+        set => this.RaiseAndSetIfChanged(ref _top, value);
+    }
+    double _top;
+    public double Right
+    {
+        get => _right;
+        set => this.RaiseAndSetIfChanged(ref _right, value);
+    }
+    double _right;
+
+    public double Bottom
+    {
+        get => _bottom;
+        set => this.RaiseAndSetIfChanged(ref _bottom, value);
+    }
+    double _bottom;
+}
 
 /// <summary>
 /// Actual real monitor size 
 /// </summary>
 public class DisplaySizeInMm : DisplaySize
 {
-    [JsonIgnore]
-    public MonitorModel ScreenModel { get; }
-    public DisplaySizeInMm(MonitorModel screenModel) : base(null)
+    public DisplaySizeInMm() : base(null)
     {
-        ScreenModel = screenModel;
+        //ScreenModel = screenModel;
+        Init();
+
     }
 
     public bool Saved
@@ -147,4 +208,7 @@ public class DisplaySizeInMm : DisplaySize
         set => this.RaiseAndSetIfChanged(ref _rightBorder, Math.Max(value, 0.0));
     }
     double _rightBorder = 20.0;
+
+    public override string TransformToString => $"InMm";
+
 }

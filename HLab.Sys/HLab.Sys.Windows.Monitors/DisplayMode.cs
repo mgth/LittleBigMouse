@@ -23,7 +23,7 @@
 
 using System.Runtime.Serialization;
 using Avalonia;
-using HLab.Sys.Windows.API;
+using static HLab.Sys.Windows.API.WinGdi;
 
 namespace HLab.Sys.Windows.Monitors;
 
@@ -33,7 +33,7 @@ public class DisplayMode
     [DataMember]
     public Point Position { get; }
     [DataMember]
-    public int BitsPerPixel { get; }
+    public uint BitsPerPixel { get; }
     [DataMember]
     public Size Pels { get; }
     [DataMember]
@@ -44,14 +44,14 @@ public class DisplayMode
     public int DisplayFixedOutput { get; }
     [DataMember]
     public int DisplayOrientation { get; }
-    internal DisplayMode(WinUser.DevMode dm)
+    internal DisplayMode(DevMode dm)
     {
-        DisplayOrientation = ((dm.Fields & User32.DM.DisplayOrientation) != 0)?dm.DisplayOrientation:0;
-        Position = ((dm.Fields & User32.DM.Position) != 0)?new Point(dm.Position.x, dm.Position.y):new Point(0,0);
-        BitsPerPixel = ((dm.Fields & User32.DM.BitsPerPixel) != 0)?dm.BitsPerPel:0;
-        Pels = ((dm.Fields & (User32.DM.PelsWidth | User32.DM.PelsHeight)) != 0)? new Size(dm.PelsWidth, dm.PelsHeight):new Size(1,1);
-        DisplayFlags = ((dm.Fields & User32.DM.DisplayFlags) != 0)? dm.DisplayFlags:0;
-        DisplayFrequency = ((dm.Fields & User32.DM.DisplayFrequency) != 0)? dm.DisplayFrequency:0;
-        DisplayFixedOutput = ((dm.Fields & User32.DM.DisplayFixedOutput) != 0)? dm.DisplayFixedOutput:0;
+        DisplayOrientation = (int)(((dm.Fields & DisplayModeFlags.DisplayOrientation) != 0)?dm.DisplayOrientation:DevMode.DisplayOrientationEnum.Default);
+        Position = ((dm.Fields & DisplayModeFlags.Position) != 0)?new Point(dm.Position.X, dm.Position.Y):new Point(0,0);
+        BitsPerPixel = ((dm.Fields & DisplayModeFlags.BitsPerPixel) != 0)?dm.BitsPerPel:0;
+        Pels = ((dm.Fields & (DisplayModeFlags.PixelsWidth | DisplayModeFlags.PixelsHeight)) != 0)? new Size(dm.PixelsWidth, dm.PixelsHeight):new Size(1,1);
+        DisplayFlags = (int)(((dm.Fields & DisplayModeFlags.DisplayFlags) != 0) ? dm.DisplayFlags : 0);
+        DisplayFrequency = (int)(((dm.Fields & DisplayModeFlags.DisplayFrequency) != 0)? dm.DisplayFrequency:0);
+        DisplayFixedOutput = (int)(((dm.Fields & DisplayModeFlags.DisplayFixedOutput) != 0)? dm.DisplayFixedOutput:0);
     }
 }

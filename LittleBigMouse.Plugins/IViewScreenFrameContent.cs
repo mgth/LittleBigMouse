@@ -1,6 +1,6 @@
 ﻿namespace LittleBigMouse.Plugins
 {
-    public interface IViewScreenFrameContent : IViewScreenFrameLayer
+    public interface IMonitorFrameContentViewClass : IMonitorFrameLayerViewClass
     {
     }
 }

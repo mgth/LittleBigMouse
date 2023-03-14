@@ -153,7 +153,7 @@ namespace LittleBigMouse.Daemon
 
     public class Segment
     {
-        private Line _line;
+        Line _line;
 
         public Segment(Point a, Point b)
         {
@@ -211,6 +211,8 @@ namespace LittleBigMouse.Daemon
 
         public IEnumerable<Point> Intersect(Rect r)
         {
+            Size s;
+
             Point? p = null;
             
             p = Intersect(new Segment(r.TopLeft, r.BottomLeft));

@@ -2,7 +2,7 @@
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public static class DisplayExtentions
+public static class DisplayExtensions
 {
     public static IDisplaySize Scale(this IDisplaySize source, IDisplayRatio ratio) => new DisplayScale(source, ratio);
     public static IDisplaySize ScaleWithLocation(this IDisplaySize source, IDisplayRatio ratio) => new DisplayScaleWithLocation(source, ratio);

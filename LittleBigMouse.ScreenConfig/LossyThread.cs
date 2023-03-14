@@ -70,9 +70,7 @@ namespace LittleBigMouse.DisplayLayout
 
             lock (_delegates)
             {
-                if (_delegates.Count == 0)
-                    d = _finnaly;
-                else d = null;
+                d = _delegates.Count == 0 ? _finnaly : null;
             }
             d?.DynamicInvoke();
         }

@@ -27,18 +27,19 @@ using System.Threading;
 using System.Windows;
 using HLab.Sys.Windows.API;
 using Microsoft.Win32;
+using static HLab.Sys.Windows.API.WinUser;
 
 namespace LittleBigMouse.Daemon
 {
     class LbmMouse
     {
-        public static uint MouseEvent(WinUser.MouseEventF evt, double x, double y)
+        public static uint MouseEvent(MouseEventF evt, double x, double y)
         {
-            WinUser.InputUnion[] input = {
-            new WinUser.InputUnion
+            InputUnion[] input = {
+            new InputUnion
             {
                 type = 0,
-                mouseInput = new WinUser.MouseInput()
+                mouseInput = new MouseInput()
                 {
                     dwFlags = evt ,
                     dx = (int)x,
@@ -49,14 +50,14 @@ namespace LittleBigMouse.Daemon
                 }
             }};
 
-            return WinUser.SendInput((uint)input.Length, input, Marshal.SizeOf<WinUser.InputUnion>());
+            return SendInput((uint)input.Length, input, Marshal.SizeOf<InputUnion>());
         }
 
         public static WinDef.Point CursorPos
         {
             get
             {
-                if(WinUser.GetCursorPos(out var p))
+                if(GetCursorPos(out var p))
                     return p;
                 throw new InvalidOperationException();
             }
@@ -78,11 +79,11 @@ namespace LittleBigMouse.Daemon
         {
             get {
                 uint speed = 0;
-                User32.SystemParametersInfo(User32.SPI_GETMOUSESPEED, 0, ref speed, 0);
+                SystemParametersInfo(SystemParametersInfoAction.GetMouseSpeed, 0, ref speed, 0);
                 return speed;
             }
 
-            set => User32.SystemParametersInfo(User32.SPI_SETMOUSESPEED, 0, (uint)Math.Round(value,0), 0);
+            set => SystemParametersInfo(SystemParametersInfoAction.GetMouseSpeed, 0, (uint)Math.Round(value,0), 0);
         }
         public static void SetCursor(string name, string fileName)
         {
@@ -107,7 +108,10 @@ namespace LittleBigMouse.Daemon
             SetCursor("UpArrow", @"%SystemRoot%\cursors\aero_up" + suffix + ".cur");
             SetCursor("Wait", @"%SystemRoot%\cursors\aero_busy" + suffix + ".ani");
 
-            AdvApi32.SystemParametersInfo(AdvApi32.SPI_SETCURSORS, 0, 0, AdvApi32.SPIF_UPDATEINIFILE | AdvApi32.SPIF_SENDCHANGE);
+            SystemParametersInfo(
+                SystemParametersInfoAction.SetCursors,
+                0, 0,
+                SystemParametersInfoFlags.UpdateIniFile | SystemParametersInfoFlags.SendChange);
         }
 
         public static void SaveCursor(RegistryKey savekey)
@@ -133,7 +137,11 @@ namespace LittleBigMouse.Daemon
                     key.SetValue(name, savekey.GetValue(name));
                 }
             }
-            AdvApi32.SystemParametersInfo(AdvApi32.SPI_SETCURSORS, 0, 0, AdvApi32.SPIF_UPDATEINIFILE | AdvApi32.SPIF_SENDCHANGE);
+
+            SystemParametersInfo(
+                SystemParametersInfoAction.SetCursors,
+                0, 0,
+                SystemParametersInfoFlags.UpdateIniFile | SystemParametersInfoFlags.SendChange);
         }
 
         public static void SetCursorAero(int size)

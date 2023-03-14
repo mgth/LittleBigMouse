@@ -23,16 +23,21 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management;
+using System.Reactive.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using Avalonia;
+using Avalonia.Threading;
 using DynamicData;
 using HLab.Sys.Windows.API;
 using Microsoft.Win32;
 using ReactiveUI;
+using static HLab.Sys.Windows.API.WinGdi;
+using static HLab.Sys.Windows.API.WinUser;
+using Rect = Avalonia.Rect;
 
 namespace HLab.Sys.Windows.Monitors
 {
@@ -41,7 +46,7 @@ namespace HLab.Sys.Windows.Monitors
     {
         IObservableCache<MonitorDevice, string> Monitors { get; }
         IObservableCache<DisplayDevice, string> Devices { get; }
-        IObservableCache<MonitorDevice,string> AttachedMonitors { get; }
+        IObservableCache<MonitorDevice, string> AttachedMonitors { get; }
 
         void DetachFromDesktop(string deviceName, bool apply = true);
         void AttachToDesktop(string deviceName, bool primary, Rect area, int orientation, bool apply = true);
@@ -59,15 +64,21 @@ namespace HLab.Sys.Windows.Monitors
         public event EventHandler DevicesUpdated;
 
         readonly DisplayChangeMonitor _listener = new DisplayChangeMonitor();
-        readonly DisplayDevice _root;
 
         public MonitorsService()
         {
-            _root = new DisplayDevice(this,"ROOT");
-            AttachedMonitors = Monitors.Connect().Filter(m => m.AttachedToDesktop).AsObservableCache();
-            UnattachedMonitors = Monitors.Connect().Filter(m => !m.AttachedToDesktop).AsObservableCache();
+            AttachedMonitors = Monitors
+                .Connect().AutoRefresh(m => m.AttachedToDesktop)
+                .Filter(m => m.AttachedToDesktop)
+                .ObserveOn(RxApp.MainThreadScheduler).AsObservableCache();
+
+            UnattachedMonitors = Monitors
+                .Connect().AutoRefresh(m => m.AttachedToDesktop)
+                .Filter(m => !m.AttachedToDesktop)
+                .ObserveOn(RxApp.MainThreadScheduler).AsObservableCache();//B
 
             UpdateDevices();
+
             _listener.DisplayChanged += (o, a) => { UpdateDevices(); };
 
         }
@@ -81,7 +92,12 @@ namespace HLab.Sys.Windows.Monitors
         readonly SourceCache<MonitorDevice, string> _monitors = new (m => m.DeviceId);
         public IObservableCache<MonitorDevice,string> Monitors => _monitors;
 
+
         public IObservableCache<MonitorDevice,string> AttachedMonitors { get; }
+
+
+        //IObservableCache<MonitorDevice, string> _attachedMonitors;
+        //public IObservableCache<MonitorDevice,string> AttachedMonitors => _attachedMonitors;    
 
         public IObservableCache<MonitorDevice,string> UnattachedMonitors { get; }
 
@@ -100,7 +116,9 @@ namespace HLab.Sys.Windows.Monitors
             var oldDevices = Devices.Items.ToList();
             var oldMonitors = Monitors.Items.ToList();
 
-            _root.Init(null,new User32.DISPLAY_DEVICE(){DeviceID = "ROOT",DeviceName = null}, oldDevices, oldMonitors);
+            var root = new DisplayDevice(this,"ROOT");
+
+            root.Init(null,new WinGdi.DisplayDevice(){DeviceID = "ROOT",DeviceName = null}, oldDevices, oldMonitors);
 
             foreach (var d in oldDevices)
             {
@@ -112,48 +130,54 @@ namespace HLab.Sys.Windows.Monitors
                 _monitors.Remove(m);
             }
 
-            // AttachedMonitors.OnTriggered();
-            //foreach (var m in AttachedMonitors) m.Devices.OnTriggered();
+            var hdc = 0;//GetDCEx(0, 0, DeviceContextValues.Window);
 
             // GetMonitorInfo
-            User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
-                (IntPtr hMonitor, IntPtr hdcMonitor,ref User32.RECT lprcMonitor, IntPtr dwData)=>
+            EnumDisplayMonitors(hdc, 0,
+                (nint hMonitor, nint hdcMonitor,ref WinDef.Rect lprcMonitor, nint dwData)=>
                 {
-                    var mi = new User32.MONITORINFOEX(true);
-                    var success = User32.GetMonitorInfo(hMonitor, ref mi);
-                    if (success)
+                    var mi = new MonitorInfoEx();//.Default;
+                    mi.Init();
+                    var success = GetMonitorInfo(hMonitor, ref mi);
+                    if (!success) // Continue
                     {
-                        var monitors = AttachedMonitors.Items.Where(d => d.AttachedDisplay?.DeviceName == mi.DeviceName).ToList();
-                        foreach (var monitor in monitors)
-                        {
-                            monitor.MonitorNo = (int)dwData;
-                            monitor.SetMonitorInfoEx(mi);
-                            monitor.UpdateDpi(hMonitor);
-                        }
+                        var errorCode = Marshal.GetLastWin32Error();
+                        Debug.WriteLine("GetMonitorInfo failed with error code: {0}", errorCode);
+                        return true;
+                    }
+                    
+                    var monitors = AttachedMonitors.Items.Where(d => d.AttachedDisplay?.DeviceName == new string(mi.DeviceName)).ToList();
+                    foreach (var monitor in monitors)
+                    {
+                        monitor.MonitorNo = (int)dwData;
+                        monitor.SetMonitorInfo(mi);
+                        monitor.UpdateDpi(hMonitor);
                     }
 
                     return true; // Continue
-                }, IntPtr.Zero);
+                }, 0);
+
+            //ReleaseDC(0, hdc);
 
             //ParseWindowsConfig();
             UpdateWallpaper();
 
-            string FromUShort(ushort[] array)
+            string FromUShort(IEnumerable<ushort> array)
             {
                 var sb = new StringBuilder();
-                for (int i = 0; i < array.Length; i++)
+                foreach (var t in array)
                 {
-                    sb.Append( (char)(array[i]) );
+                    sb.Append( (char)(t) );
                 }
                 return sb.ToString().Split('\0').First();
             }
 
             try
             {
-                ConnectionOptions aConnectionOptions = new ConnectionOptions();
-                ManagementScope aManagementScope = new ManagementScope(@"\\.\root\WMI", aConnectionOptions);
-                ObjectQuery aObjectQuery = new ObjectQuery("SELECT * FROM WmiMonitorID");
-                ManagementObjectSearcher aManagementObjectSearcher =
+                var aConnectionOptions = new ConnectionOptions();
+                var aManagementScope = new ManagementScope(@"\\.\root\WMI", aConnectionOptions);
+                var aObjectQuery = new ObjectQuery("SELECT * FROM WmiMonitorID");
+                var aManagementObjectSearcher =
                     new ManagementObjectSearcher(aManagementScope, aObjectQuery);
                 var aManagementObjectCollection = aManagementObjectSearcher.Get();
                 foreach (var aManagementObject in aManagementObjectCollection.OfType<ManagementObject>())
@@ -213,6 +237,7 @@ namespace HLab.Sys.Windows.Monitors
             var todo = Monitors.Items.ToList();
             using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\\Desktop");
 
+            // retrieve per monitor wallpaper if it exists
             if(key?.GetValue("TranscodedImageCount") is int nb)
             {
                 for(var i = 0; i < nb; i++)
@@ -241,6 +266,7 @@ namespace HLab.Sys.Windows.Monitors
 
             if (!todo.Any()) return;
 
+            // retrieve default wallpaper for other monitors
             if (key?.GetValue("TranscodedImageCache") is not byte[] imgCache) return;
 
             (path, id) = GetTranscodedImageCache(imgCache);
@@ -250,50 +276,65 @@ namespace HLab.Sys.Windows.Monitors
 
         public void AttachToDesktop(string deviceName, bool primary, Rect area, int orientation, bool apply = true)
         {
-            var devMode = new User32.DEVMODE(true)
+            var devMode = new DevMode()
             {
                 DeviceName = deviceName,
-                Position = new User32.POINTL { x = (int)area.X, y = (int)area.Y },
-                PelsWidth = (int)area.Width,
-                PelsHeight = (int)area.Height,
-                DisplayOrientation = orientation,
+                Position = new WinDef.Point((int)area.X,(int)area.Y),
+                PixelsWidth = (uint)area.Width,
+                PixelsHeight = (uint)area.Height,
+                DisplayOrientation = (DevMode.DisplayOrientationEnum)orientation,
                 BitsPerPel = 32,
-                Fields = User32.DM.Position | User32.DM.PelsHeight | User32.DM.PelsWidth | User32.DM.DisplayOrientation | User32.DM.BitsPerPixel
+                Fields = DisplayModeFlags.Position | 
+                         DisplayModeFlags.PixelsHeight | 
+                         DisplayModeFlags.PixelsWidth | 
+                         DisplayModeFlags.DisplayOrientation | 
+                         DisplayModeFlags.BitsPerPixel
             };
 
             var flag =
-                User32.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY |
-                User32.ChangeDisplaySettingsFlags.CDS_NORESET;
+                ChangeDisplaySettingsFlags.UpdateRegistry |
+                ChangeDisplaySettingsFlags.NoReset;
 
-            if (primary) flag |= User32.ChangeDisplaySettingsFlags.CDS_SET_PRIMARY;
+            if (primary) flag |= ChangeDisplaySettingsFlags.SetPrimary;
 
 
-            var ch = User32.ChangeDisplaySettingsEx(deviceName, ref devMode, IntPtr.Zero, flag, IntPtr.Zero);
+            var ch = ChangeDisplaySettingsEx(deviceName, ref devMode, 0, flag, 0);
 
-            if (ch == User32.DISP_CHANGE.Successful && apply)
+            if (ch == DispChange.Successful && apply)
                 ApplyDesktop();
         }
 
         public void DetachFromDesktop(string deviceName, bool apply = true)
         {
-            var devmode = new User32.DEVMODE();
-            devmode.Size = (short)Marshal.SizeOf(devmode);
+            var devMode = new DevMode
+            {
+                DeviceName = deviceName,
+                PixelsHeight = 0,
+                PixelsWidth = 0,
+                Fields = DisplayModeFlags.PixelsWidth | 
+                         DisplayModeFlags.PixelsHeight | 
+                         // DisplayModeFlags.BitsPerPixel |
+                         DisplayModeFlags.Position | 
+                         DisplayModeFlags.DisplayFrequency | 
+                         DisplayModeFlags.DisplayFlags
+            };
 
-            devmode.DeviceName = deviceName;
-            devmode.PelsHeight = 0;
-            devmode.PelsWidth = 0;
-            devmode.Fields = User32.DM.PelsWidth | User32.DM.PelsHeight /*| DM.BitsPerPixel*/ | User32.DM.Position
-                             | User32.DM.DisplayFrequency | User32.DM.DisplayFlags;
+            var ch = ChangeDisplaySettingsEx(
+                deviceName, 
+                ref devMode, 
+                0, 
+                ChangeDisplaySettingsFlags.UpdateRegistry | 
+                ChangeDisplaySettingsFlags.NoReset, 
+                0);
 
-            var ch = User32.ChangeDisplaySettingsEx(deviceName, ref devmode, IntPtr.Zero, User32.ChangeDisplaySettingsFlags.CDS_UPDATEREGISTRY | User32.ChangeDisplaySettingsFlags.CDS_NORESET, IntPtr.Zero);
-            if (ch == User32.DISP_CHANGE.Successful && apply)
+            if (ch == DispChange.Successful && apply)
                 ApplyDesktop();
         }
 
 
         public void ApplyDesktop()
         {
-            User32.ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+            ChangeDisplaySettingsEx(null, 0, 0, 0, 0);
         }
 
         public RegistryKey OpenRootRegKey(bool create = false)
@@ -314,8 +355,7 @@ namespace HLab.Sys.Windows.Monitors
         bool ParseWindowsConfig()
         {
             using var configurationKey = GetConfigurationKey();
-            if (configurationKey == null) return false;
-            if(!(configurationKey.GetValue("SetId") is string setId)) return false;
+            if(configurationKey?.GetValue("SetId") is not string setId) return false;
 
             setId= setId.Trim('\0');
             var monitorNo = 1;
@@ -342,8 +382,7 @@ namespace HLab.Sys.Windows.Monitors
                     monitors.Remove(monitor);
                 }
             }
-            if(monitors.Any()) return false;
-            return true;
+            return !monitors.Any();
         }
 
         RegistryKey GetConfigurationKey()
@@ -352,7 +391,7 @@ namespace HLab.Sys.Windows.Monitors
             foreach(var configurationKeyName in key.GetSubKeyNames())
             {
                 var configurationKey = key.OpenSubKey(configurationKeyName);
-                if (configurationKey.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0')))
+                if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0')))
                 {
                     return configurationKey;
                 }
@@ -362,7 +401,7 @@ namespace HLab.Sys.Windows.Monitors
 
         bool MatchConfig(string setId)
         {
-            List<DisplayDevice> devices = new List<DisplayDevice>();
+            var devices = new List<DisplayDevice>();
 
             var monitors = Monitors.Items.ToList();
             var idDisplays = setId.Split('+');

@@ -1,17 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <Platforms>AnyCPU;x64</Platforms>
+    <TargetFramework>net7.0</TargetFramework>
+    <Platforms>x64</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
+    <PackageReference Include="ReactiveUI" Version="18.4.26" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\HLab\HLab.Geo\HLab.Geo.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj" />
   </ItemGroup>
 

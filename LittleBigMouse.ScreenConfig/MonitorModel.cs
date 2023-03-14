@@ -14,6 +14,11 @@ using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout
 {
+    public interface ISizeProvider
+    {
+
+    }
+
     [DataContract]
     public class MonitorModel : ReactiveObject
     {
@@ -26,7 +31,7 @@ namespace LittleBigMouse.DisplayLayout
             Config = config;
             PnpCode = pnpCode;
 
-            PhysicalSize = new DisplaySizeInMm(this);
+            PhysicalSize = new DisplaySizeInMm(/*this*/);
 
         }
         bool SetValue<TRet>(ref TRet backingField, TRet value, [CallerMemberName] string propertyName = null)

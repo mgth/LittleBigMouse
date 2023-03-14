@@ -1,15 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<TargetFramework>net7.0-windows</TargetFramework>
-		<UseWPF>true</UseWPF>
-		<Platforms>x64</Platforms>
-		<Configurations>Debug;Release;ReleaseDebug</Configurations>
-	</PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
-    <ProjectReference Include="..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj" />
     <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
   </ItemGroup>
 

@@ -22,6 +22,7 @@
 */
 
 
+using System.Reactive.Concurrency;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
@@ -36,24 +37,25 @@ public class DisplayInverseRatio : DisplayRatio
     {
         Source = ratio;
 
-        this.WhenAnyValue(e => e.Source.X, x => 1/x)
-            .ToProperty(this, e => e.X,out _x);
-        this.WhenAnyValue(e => e.Source.Y, y => 1/y)
-            .ToProperty(this, e => e.Y,out _y);
+        _x = this.WhenAnyValue(e => e.Source.X, x => 1/x)
+            .ToProperty(this, e => e.X, scheduler: Scheduler.Immediate);
+        
+        _y = this.WhenAnyValue(e => e.Source.Y, y => 1/y)
+            .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
     }
 
     public IDisplayRatio Source { get; }
 
     public override double X
     {
-        get => _x.Get();
+        get => _x.Value;
         set => Source.X = 1 / value;
     }
     readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
-        get => _y.Get();
+        get => _y.Value;
         set => Source.Y = 1 / value;
     }
     readonly ObservableAsPropertyHelper<double> _y;

@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Reactive.Concurrency;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Microsoft.Win32;
@@ -37,31 +38,29 @@ public class ScreenSizeInPixels : DisplaySize
     {
         MonitorSource = source;
 
-        this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode,
-                (m) => m.Pels.Width)
-            .ToProperty(this, e => e.Width,out _width);
+        _width = this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Pels.Width)
+            .ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode,
-                (m) => m.Pels.Height)
-            .ToProperty(this, e => e.Height,out _height);
+        _height = this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Pels.Height)
+            .ToProperty(this, e => e.Height, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position,
-                (Point p) => p.X)
-            .ToProperty(this, e => e.X,out _x);
+        _x = this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position.X)
+            .ToProperty(this, e => e.X, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position,
-                (Point p) => p.Y)
-            .ToProperty(this, e => e.Y,out _y);
+        _y = this.WhenAnyValue(
+                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position.Y)
+            .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
+
+        Init();
 
     }
 
     public override double Width
     {
-        get => _width.Get();
+        get => _width.Value;
         set => throw new NotImplementedException();
     }
     readonly ObservableAsPropertyHelper<double> _width;
@@ -76,7 +75,7 @@ public class ScreenSizeInPixels : DisplaySize
 
     public override double Height
     {
-        get => _height.Get();
+        get => _height.Value;
         set => throw new NotImplementedException();
     }
     readonly ObservableAsPropertyHelper<double> _height;
@@ -89,20 +88,14 @@ public class ScreenSizeInPixels : DisplaySize
 
     public override double X
     {
-        get => _x.Get();
+        get => _x.Value;
         set => throw new NotImplementedException();
     }
     readonly ObservableAsPropertyHelper<double> _x;
-    //TODO : 
-    //private readonly IProperty<double> _x = H.Property<double>(c => c
-    //    .Set(s => s.Screen.Monitor.MonitorArea.X)
-    //    .On( e => e.Screen.Monitor.MonitorArea)
-    //    .Update()
-    //);
 
     public override double Y
     {
-        get => _y.Get();
+        get => _y.Value;
         set => throw new NotImplementedException();
     }
     readonly ObservableAsPropertyHelper<double> _y;
@@ -137,17 +130,15 @@ public class ScreenSizeInPixels : DisplaySize
 
     double LoadValueMonitor(Func<double> def, [CallerMemberName] string name = null)
     {
-        using (RegistryKey key = MonitorSource.Device.OpenMonitorRegKey())
-        {
-            return key.GetKey(name, def);
-        }
+        using RegistryKey key = MonitorSource.Device.OpenMonitorRegKey();
+        
+        return key.GetKey(name, def);
     }
 
     double LoadValueConfig(Func<double> def, [CallerMemberName] string name = null)
     {
-        using (RegistryKey key = MonitorSource.Monitor.OpenRegKey())
-        {
-            return key.GetKey(name, def);
-        }
+        using RegistryKey key = MonitorSource.Monitor.OpenRegKey();
+        
+        return key.GetKey(name, def);
     }
 }

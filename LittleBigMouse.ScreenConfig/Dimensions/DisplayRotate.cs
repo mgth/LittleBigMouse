@@ -23,6 +23,7 @@
 
 using Avalonia;
 using ReactiveUI;
+using System.Reactive.Concurrency;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -33,27 +34,27 @@ public class DisplayRotate : DisplaySize
     {
         Rotation = rotation;
 
-        this.WhenAnyValue(e => e.Source.X)
-            .ToProperty(this, e => e.X,out _x);
+        _x = this.WhenAnyValue(e => e.Source.X)
+            .ToProperty(this, e => e.X);
 
-        this.WhenAnyValue(e => e.Source.Y)
-            .ToProperty(this, e => e.Y,out _y);
+        _y = this.WhenAnyValue(e => e.Source.Y)
+            .ToProperty(this, e => e.Y);
 
-        this.WhenAnyValue(
+        _width = this.WhenAnyValue(
                 e => e.Source.Width,
                 e => e.Source.Height,
                 e => e.Rotation,
                 (width,height,r) => r % 2 == 0 ? width : height
                 )
-            .ToProperty(this, e => e.Width,out _width);
+            .ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
+        _height = this.WhenAnyValue(
                 e => e.Source.Width,
                 e => e.Source.Height,
                 e => e.Rotation,
                 (width,height,r) => r % 2 == 1 ? width : height
                 )
-            .ToProperty(this, e => e.Height,out _height);
+            .ToProperty(this, e => e.Height, scheduler: Scheduler.Immediate);
 
         //readonly IProperty<double> _topBorder = H.Property<double>(c => c
         //    .Set(e => e.GetBorder(0))
@@ -65,7 +66,7 @@ public class DisplayRotate : DisplaySize
         //    .Update()
         //);
 
-        this.WhenAnyValue(
+        _leftBorder = this.WhenAnyValue(
                 e => e.Rotation,
                 e => e.Source.LeftBorder,
                 e => e.Source.TopBorder,
@@ -74,9 +75,9 @@ public class DisplayRotate : DisplaySize
 
                 (r,left,top,right,bottom) => GetBorder(0,r,left,top,right,bottom)
                 )
-            .ToProperty(this, e => e.LeftBorder,out _leftBorder);
+            .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
+        _topBorder = this.WhenAnyValue(
                 e => e.Rotation,
                 e => e.Source.LeftBorder,
                 e => e.Source.TopBorder,
@@ -85,9 +86,9 @@ public class DisplayRotate : DisplaySize
 
                 (r,left,top,right,bottom) => GetBorder(1,r,left,top,right,bottom)
                 )
-            .ToProperty(this, e => e.TopBorder,out _topBorder);
+            .ToProperty(this, e => e.TopBorder, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
+        _rightBorder = this.WhenAnyValue(
                 e => e.Rotation,
                 e => e.Source.LeftBorder,
                 e => e.Source.TopBorder,
@@ -96,9 +97,9 @@ public class DisplayRotate : DisplaySize
 
                 (r,left,top,right,bottom) => GetBorder(2,r,left,top,right,bottom)
                 )
-            .ToProperty(this, e => e.RightBorder,out _rightBorder);
+            .ToProperty(this, e => e.RightBorder, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
+        _bottomBorder = this.WhenAnyValue(
                 e => e.Rotation,
                 e => e.Source.LeftBorder,
                 e => e.Source.TopBorder,
@@ -107,8 +108,9 @@ public class DisplayRotate : DisplaySize
 
                 (r,left,top,right,bottom) => GetBorder(3,r,left,top,right,bottom)
                 )
-            .ToProperty(this, e => e.BottomBorder,out _bottomBorder);
+            .ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
 
+        Init();
 
     }
 
@@ -121,7 +123,7 @@ public class DisplayRotate : DisplaySize
 
     public override double Width
     {
-        get => _width.Get();
+        get => _width?.Value ?? 0;
         set
         {
             switch (Rotation % 2)
@@ -139,7 +141,7 @@ public class DisplayRotate : DisplaySize
 
     public override double Height
     {
-        get => _height.Get();
+        get => _height?.Value ?? 0;
         set
         {
             switch (Rotation % 2)
@@ -157,14 +159,14 @@ public class DisplayRotate : DisplaySize
 
     public override double X
     {
-        get => _x.Get();
+        get => _x.Value;
         set => Source.X = value;
     }
     readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
-        get => _y.Get();
+        get => _y.Value;
         set => Source.Y = value;
     }
     readonly ObservableAsPropertyHelper<double> _y;
@@ -206,30 +208,32 @@ public class DisplayRotate : DisplaySize
 
     public override double LeftBorder
     {
-        get => _leftBorder.Get();
+        get => _leftBorder.Value;
         set => SetBorder(3, value);
     }
     readonly ObservableAsPropertyHelper<double> _leftBorder;
 
     public override double TopBorder
     {
-        get => _topBorder.Get();
+        get => _topBorder.Value;
         set => SetBorder(0, value);
     }
     readonly ObservableAsPropertyHelper<double> _topBorder;
 
     public override double RightBorder
     {
-        get => _rightBorder.Get();
+        get => _rightBorder.Value;
         set => SetBorder(1, value);
     }
     readonly ObservableAsPropertyHelper<double> _rightBorder;
 
     public override double BottomBorder
     {
-        get => _bottomBorder.Get();
+        get => _bottomBorder.Value;
         set => SetBorder(2, value);
     }
     readonly ObservableAsPropertyHelper<double> _bottomBorder;
+
+    public override string TransformToString => $"Rotate:{Rotation}";
 
 }

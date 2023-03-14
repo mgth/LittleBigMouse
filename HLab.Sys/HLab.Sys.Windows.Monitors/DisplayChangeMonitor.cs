@@ -25,7 +25,7 @@ namespace HLab.Sys.Windows.Monitors
                 DisplayChanged?.Invoke(this,EventArgs.Empty);
             }
 
-            return IntPtr.Zero;
+            return 0;
         }
 
     }

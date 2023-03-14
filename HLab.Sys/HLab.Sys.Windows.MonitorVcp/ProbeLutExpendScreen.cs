@@ -5,7 +5,7 @@ namespace HLab.Sys.Windows.MonitorVcp
 {
     public static class ProbeLutExpendScreen
     {
-        private static readonly Dictionary<MonitorDevice, ProbeLut> AllLut = new Dictionary<MonitorDevice, ProbeLut>();
+        static readonly Dictionary<MonitorDevice, ProbeLut> AllLut = new Dictionary<MonitorDevice, ProbeLut>();
         public static ProbeLut ProbeLut(this MonitorDevice monitor)
         {
             if (!AllLut.ContainsKey(monitor))

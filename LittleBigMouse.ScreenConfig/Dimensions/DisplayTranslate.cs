@@ -23,6 +23,7 @@
 
 using Avalonia;
 using ReactiveUI;
+using System.Reactive.Concurrency;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -35,13 +36,15 @@ public class DisplayTranslate : DisplayMove
 {
     public DisplayTranslate(IDisplaySize source, Vector? translation = null) : base(source)
     {
-        this.WhenAnyValue(e => e.Source.X,e =>e.Translation, (x,t)=>x + t.X)
-            .ToProperty(this, e => e.X,out _x);
+        _translation = translation ?? new Vector();
+        
+        _x = this.WhenAnyValue(e => e.Source.X,e =>e.Translation, (x,t)=>x + t.X)
+            .ToProperty(this, e => e.X, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(e => e.Source.Y,e =>e.Translation, (y,t)=>y + t.Y)
-            .ToProperty(this, e => e.Y,out _y);
+        _y = this.WhenAnyValue(e => e.Source.Y,e =>e.Translation, (y,t)=>y + t.Y)
+            .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
 
-        Translation = translation ?? new Vector();
+        Init();
     }
 
     public Vector Translation
@@ -64,4 +67,7 @@ public class DisplayTranslate : DisplayMove
         set => Source.Y = value - Translation.Y;
     }
     readonly ObservableAsPropertyHelper<double> _y;
+
+    public override string TransformToString => $"Translate:{Translation}";
+
 }

@@ -20,10 +20,6 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Shapes;
 
 namespace HLab.Sys.Argyll
 {
@@ -56,73 +52,74 @@ namespace HLab.Sys.Argyll
             ZDistribution = z;
         }
 
-        public void DrawOn(Canvas canvas)
-        {
-            double x = 0;
-            double y = 0;
-            double xMax = canvas.Width;
-            double yMax = canvas.Height;
+        // TODO
+        //public void DrawOn(Canvas canvas)
+        //{
+        //    var x = 0.0;
+        //    var y = 0.0;
+        //    double xMax = canvas.Width;
+        //    double yMax = canvas.Height;
 
 
-            double step = 0.005;
+        //    double step = 0.005;
 
-            for(x=0; x<1; x+=step)
-                for(y=0; y<1; y+=step)
-                {
-                    ProbedColorxyY c = new ProbedColorxyY
-                    {
-                        x = x,
-                        y = y,
-                        Y = 1,
-                    };
+        //    for(x=0; x<1; x+=step)
+        //        for(y=0; y<1; y+=step)
+        //        {
+        //            ProbedColorxyY c = new ProbedColorxyY
+        //            {
+        //                x = x,
+        //                y = y,
+        //                Y = 1,
+        //            };
 
-                    Color rgb = c.RGB(Gamuts.sRGB).LCompanding.Color;
+        //            Color rgb = c.RGB(Gamuts.sRGB).LCompanding.Color;
 
 
-                    canvas.Children.Add(
-                        new Rectangle
-                        {
-                           Margin = new Thickness(x * xMax, yMax - y * yMax, 0, 0),
+        //            canvas.Children.Add(
+        //                new Rectangle
+        //                {
+        //                   Margin = new Thickness(x * xMax, yMax - y * yMax, 0, 0),
                            
-                            Width = step * xMax,
-                            Height = step*yMax,
-                            StrokeThickness = 4,
-                            Fill = new SolidColorBrush(rgb),
-                        });
-                }
+        //                    Width = step * xMax,
+        //                    Height = step*yMax,
+        //                    StrokeThickness = 4,
+        //                    Fill = new SolidColorBrush(rgb),
+        //                });
+        //        }
 
-            x = 0;
-            y = 0;
-            for (double nm = 380; nm < 730; nm += 1)
-            {
-                ProbedColorxyY c = Color(nm).ToLuminance(1).xyY;
+        //    x = 0;
+        //    y = 0;
+        //    for (double nm = 380; nm < 730; nm += 1)
+        //    {
+        //        ProbedColorxyY c = Color(nm).ToLuminance(1).xyY;
 
 
-                if ((x != 0 || y != 0) 
-                    && !(double.IsNaN(x) || double.IsNaN(y))
-                    && !(double.IsNaN(c.x) || double.IsNaN(c.y))
+        //        if ((x != 0 || y != 0) 
+        //            && !(double.IsNaN(x) || double.IsNaN(y))
+        //            && !(double.IsNaN(c.x) || double.IsNaN(c.y))
 
-                    )
-                    canvas.Children.Add(
-                        new System.Windows.Shapes.Line
-                        {
-                            X1 = x * xMax,
-                            Y1 = yMax - y * yMax,
-                            X2 = c.x * xMax,
-                            Y2 = yMax - c.y * yMax,
-                            StrokeThickness = 4,
-                            Stroke = new SolidColorBrush(Colors.Black),
-                        });
-                else
-                {
+        //            )
+        //            canvas.Children.Add(
+        //                new System.Windows.Shapes.Line
+        //                {
+        //                    X1 = x * xMax,
+        //                    Y1 = yMax - y * yMax,
+        //                    X2 = c.x * xMax,
+        //                    Y2 = yMax - c.y * yMax,
+        //                    StrokeThickness = 4,
+        //                    Stroke = new SolidColorBrush(Colors.Black),
+        //                });
+        //        else
+        //        {
                     
-                }
-                x = c.x;
-                y = c.y;
-            }
-        }
+        //        }
+        //        x = c.x;
+        //        y = c.y;
+        //    }
+        //}
 
-        private static double ExtrapolValue(PowerDistribution pd, double wavelength)
+        private static double ExtrapolateValue(PowerDistribution pd, double wavelength)
         {
             int i = 0;
             double step = pd.Step;
@@ -145,9 +142,9 @@ namespace HLab.Sys.Argyll
             return pd.Power[i] + (pd.Power[i + 1] - pd.Power[i])*ratio;
         }
 
-        public double X(double nm) => ExtrapolValue(XDistribution, nm);
-        public double Y(double nm) => ExtrapolValue(YDistribution, nm);
-        public double Z(double nm) => ExtrapolValue(ZDistribution, nm);
+        public double X(double nm) => ExtrapolateValue(XDistribution, nm);
+        public double Y(double nm) => ExtrapolateValue(YDistribution, nm);
+        public double Z(double nm) => ExtrapolateValue(ZDistribution, nm);
 
         public ProbedColor Color(double nm) => new ProbedColorXYZ
             {

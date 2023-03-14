@@ -1,7 +1,6 @@
-﻿namespace LittleBigMouse.Plugins
+﻿namespace LittleBigMouse.Plugins;
+
+public interface IScreenContentViewModel
 {
-    public interface IScreenContentViewModel
-    {
-        public IScreenFrameViewModel ScreenFrameViewModel {get; set; }
-    }
+    public IMonitorFrameViewModel ScreenFrameViewModel {get; set; }
 }

@@ -1,17 +1,16 @@
-﻿using HLab.Notify.PropertyChanged;
-using HLab.Sys.Windows.Monitors;
+﻿using HLab.Sys.Windows.Monitors;
+using ReactiveUI;
 
 namespace HLab.Sys.Windows.MonitorVcp
 {
-    using H = H<MonitorLevel>;
-    public class MonitorLevel : NotifierBase
+    public class MonitorLevel : ReactiveObject
     {
-        private readonly uint _component = 0;
+        readonly uint _component = 0;
 
-        private readonly VcpSetter _componentSetter = null;
-        private readonly VcpGetter _componentGetter = null;
-        private LevelParser _levelParser = null;
-        private MonitorDevice _monitor = null;
+        readonly VcpSetter _componentSetter = null;
+        readonly VcpGetter _componentGetter = null;
+        LevelParser _levelParser = null;
+        MonitorDevice _monitor = null;
 
         public MonitorLevel(MonitorDevice monitor, LevelParser parser, VcpGetter getter, VcpSetter setter, uint component = 0)
         {
@@ -27,7 +26,7 @@ namespace HLab.Sys.Windows.MonitorVcp
 
             //_threadSetter.Add(GetValue);
 
-            H.Initialize(this);
+            //H.Initialize(this);
 
             parser.Add(this);
 
@@ -39,11 +38,21 @@ namespace HLab.Sys.Windows.MonitorVcp
         public void SetToMin() { Value = Min; }
 
 
-        private readonly IProperty<bool> _moving = H.Property<bool>();
-        public bool Moving => _moving.Get();
+        public bool Moving
+        {
+            get => _moving;
+            private set => this.RaiseAndSetIfChanged(ref _moving, value);
+        }
+        bool _moving;
 
-        private readonly IProperty<bool> _enabled = H.Property<bool>();
-        public bool Enabled => _enabled.Get();
+        public bool Enabled
+        {
+            get => _enabled;
+            private set => this.RaiseAndSetIfChanged(ref _enabled, value);
+        }
+        bool _enabled;
+
+
         internal void DoWork()
         {
             uint min = 0;
@@ -60,7 +69,7 @@ namespace HLab.Sys.Windows.MonitorVcp
                     {
                         if (value == Value)
                         {
-                            _moving.Set(false);
+                            Moving = false;
                         }
                         else
                         {
@@ -76,10 +85,13 @@ namespace HLab.Sys.Windows.MonitorVcp
                     }
                     else
                     {
-                        _value.Set(value);
-                        _min.Set(min);
-                        _max.Set(max);
-                        _enabled.Set(true);
+                        using (DelayChangeNotifications())
+                        {
+                            Value = value;
+                            Min = min;
+                            Max = max;
+                            Enabled = true;
+                        }
                     }
 
                     retry = 0;
@@ -92,31 +104,37 @@ namespace HLab.Sys.Windows.MonitorVcp
 
         //private readonly LossyThread _threadSetter;
 
-        private readonly IProperty<uint> _value = H.Property<uint>();
+        uint _value;
         public uint Value
         {
-            get => _value.Get(); set => _value.Set(value,
-                ()=>
+            get => _value;
+            set
+            {
+                if (_value == value) return;
+
+                using (DelayChangeNotifications())
                 {
-                    _moving.Set(true);
+                    this.RaiseAndSetIfChanged(ref _value, value);
+                    Moving = true;
                     _levelParser.Add(this);
-                });
+                }
+            }
         }
 
 
         public uint Min
         {
-            get => _min.Get();
-            private set => _min.Set(value);
+            get => _min;
+            private set => this.RaiseAndSetIfChanged(ref _min, value);
         }
-        private readonly IProperty<uint> _min = H.Property<uint>();
+        uint _min;
 
         public uint Max
         {
-            get => _max.Get();
-            private set => _max.Set(value);
+            get => _max;
+            private set => this.RaiseAndSetIfChanged(ref _max, value);
         }
-        private readonly IProperty<uint> _max = H.Property<uint>();
+        uint _max;
 
     }
 }

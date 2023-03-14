@@ -64,14 +64,14 @@ public class MouseHookerWindowsHook : MouseHooker
 
     #region Private variables
 
-    private static IntPtr _hookId = IntPtr.Zero;
+    private static nint _hookId = 0;
     private LowLevelMouseProc _hookCallback;
     private GCHandle _hookHandle;
 
-    private static int _oldX, _oldY;
+    static Point _old;
 
     private static readonly object _lock = new();
-    private static readonly IntPtr NoPtr = new(-1);
+    const nint NO_PTR = -1;
 
     #endregion Private variables
 
@@ -79,40 +79,36 @@ public class MouseHookerWindowsHook : MouseHooker
 
     #region Main Code
 
-    private static IntPtr HookCallback(int nCode, MouseMessages wParam, IntPtr lParam)
+
+    static nint HookCallback(int nCode, MouseMessages wParam, nint lParam)
     {
+        nint CallNext() => CallNextHookEx(_hookId, nCode, wParam, lParam);
+
         Console.WriteLine($"Callback {nCode}");
         lock (_lock)
         {
-            if (nCode < 0) goto CallNext;
-            if (lParam == IntPtr.Zero) goto CallNext;
-            if ((wParam & MouseMessages.WM_MOUSEMOVE) == 0) goto CallNext;
+            if (nCode < 0)  return CallNext();
+            if (lParam == 0) return CallNext();
+            if ((wParam & MouseMessages.WM_MOUSEMOVE) == 0) return CallNext();
 
-            int x;
-            int y;
+            Point p;
             unsafe
             {
-                x = ((MSLLHOOKSTRUCT*)lParam)->x;
-                y = ((MSLLHOOKSTRUCT*)lParam)->y;
+                p = new Point(
+                    ((MSLLHOOKSTRUCT*)lParam)->x,
+                    ((MSLLHOOKSTRUCT*)lParam)->y
+                    );
             }
 
-            if (_oldX == x && _oldY == y) goto CallNext;
+            if (_old == p) return CallNext();
 
-            _oldX = x;
-            _oldY = y;
+            _old = p;
 
-            var p = new HookMouseEventArg
-            {
-                Point = new Point(x, y),
-                Handled = false
-            };
+            var e = new HookMouseEventArg(p);
 
-            OnMouseMove(p);
+            OnMouseMove(e);
 
-            if (p.Handled) return NoPtr;
-
-            CallNext:
-            return CallNextHookEx(_hookId, nCode, wParam, lParam);
+            return e.Handled ? NO_PTR : CallNext();
         }
     }
 

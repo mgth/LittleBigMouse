@@ -24,17 +24,21 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using Avalonia;
 using DynamicData;
-using HLab.Sys.Windows.API;
 using HLab.Sys.Windows.Monitors;
+
+//using HLab.Sys.Windows.Monitors;
 
 using LittleBigMouse.DisplayLayout.Dimensions;
 
 using Microsoft.Win32;
 using ReactiveUI;
+
 using Rect = Avalonia.Rect;
 
 namespace LittleBigMouse.DisplayLayout;
@@ -67,51 +71,60 @@ public class Monitor : ReactiveObject
         Sources.Add(source);
         ActiveSource = source;
 
-        OtherScreens = Layout.AllMonitors.Connect().Filter(s => !Equals(s, this)).AsObservableList();
-
-        this.WhenAnyValue(
-            e => e.Device.IdMonitor,
-            e => e.Orientation,
-            (id, o) => $"{id}_{o}"
-        ).ToProperty(this,e => e.Id, out _id);
-
-        this.WhenAnyValue(
-            e => e.Device.AttachedDisplay.CurrentMode.DisplayOrientation
-        ).ToProperty(this,e => e.Orientation, out _orientation);
-
-        this.WhenAnyValue(
-            e => e.Model.PhysicalSize,
-            e => e.Orientation,
-            (physicalSize, orientation) => physicalSize.Rotate(orientation)
-        ).ToProperty(this,e => e.PhysicalRotated, out _physicalRotated);
-
-        this.WhenAnyValue(
-            e => e.PhysicalRotated,
-            e => e.PhysicalRatio,
-            (physicalRotated, ratio) => physicalRotated.Scale(ratio).Locate()
-        ).ToProperty(this,e => e.InMm, out _inMm);
-
-        this.WhenAnyValue(
-            e => e.Model.PhysicalSize,
-            e => e.PhysicalRatio,
-            (physicalSize, ratio) => physicalSize.Scale(ratio)
-        ).ToProperty(this,e => e.InMmU, out _inMmU);
-
-        this.WhenAnyValue(
-            e => e.InMm.X
-        ).ToProperty(this,e => e.InMmX, out _inMmX);
-
-        this.WhenAnyValue(
-            e => e.InMm.Y
-        ).ToProperty(this,e => e.InMmY, out _inMmY);
+        OtherScreens = Layout.AllMonitors.Items.AsObservableChangeSet().Filter(s => !Equals(s, this)).AsObservableList();
 
         PhysicalRatio = new DisplayRatioValue(1.0, 1.0);
 
-        this.WhenAnyValue(
-                e => e.InMm.Height,
-                e => e.InMm.Width,
-                (h, w) => Math.Sqrt(w * w + h * h))
-            .ToProperty(this, e=> e.Diagonal, out _diagonal);
+        _orientation = this.WhenAnyValue(
+            e => e.Device.AttachedDisplay.CurrentMode.DisplayOrientation
+            ).Log(this,"_orientation").ToProperty(this,e => e.Orientation);
+        
+        _id = this.WhenAnyValue(
+            e => e.Device.IdMonitor,
+            e => e.Orientation,
+            (id, o) => $"{id}_{o}"
+                ).Log(this, "_id").ToProperty(this, e => e.Id,scheduler: Scheduler.Immediate);
+
+
+        _physicalRotated = this.WhenAnyValue(
+            e => e.Model.PhysicalSize,
+            e => e.Orientation,
+            (physicalSize, orientation) => physicalSize.Rotate(orientation)
+            ).Log(this,"_physicalRotated").ToProperty(this,e => e.PhysicalRotated);
+
+        _inMm = this.WhenAnyValue(
+            e => e.PhysicalRotated,
+            e => e.PhysicalRatio,
+            (physicalRotated, ratio) => physicalRotated.Scale(ratio).Locate()
+            ).Log(this,"_inMm").ToProperty(this,e => e.InMm);
+
+        _inMmU = this.WhenAnyValue(
+            e => e.Model.PhysicalSize,
+            e => e.PhysicalRatio,
+            (physicalSize, ratio) => physicalSize.Scale(ratio)
+            ).Log(this,"_inMmU").ToProperty(this,e => e.InMmU);
+
+        _inMmX = this.WhenAnyValue(
+            e => e.InMm.X
+            ).Log(this,"_inMmX").ToProperty(this,e => e.InMmX);
+
+        _inMmY = this.WhenAnyValue(
+            e => e.InMm.Y
+            ).Log(this,"_inMmY").ToProperty(this,e => e.InMmY);
+
+        _diagonal = this.WhenAnyValue(
+            e => e.InMm.Height,
+            e => e.InMm.Width,
+            (h, w) => Math.Sqrt(w * w + h * h)
+            ).Log(this,"_diagonal").ToProperty(this, e=> e.Diagonal);
+
+
+        //_overallBoundsWithoutThisInMm =
+        //        Layout.AllMonitors.Items
+        //        .AsObservableChangeSet()
+        //        .WhenValueChanged(e => e.InMm.Bounds)
+        //        .Select(i => GetOverallBoundsWithoutThisInMm())
+        //        .Log(this,"_overallBoundsWithoutThisInMm").ToProperty(this, e => e.OverallBoundsWithoutThisInMm);
     }
 
     public void AddSource(MonitorSource source)
@@ -126,7 +139,7 @@ public class Monitor : ReactiveObject
 
 
     // References properties
-    [DataMember] public string Id => _id.Get();
+    [DataMember] public string Id => _id.Value;
     readonly ObservableAsPropertyHelper<string> _id;
 
     [DataMember] public int Orientation => _orientation.Value;
@@ -160,7 +173,7 @@ public class Monitor : ReactiveObject
 
     public MonitorModel Model { get; }
 
-    [DataMember] public IDisplaySize PhysicalRotated => _physicalRotated.Get();
+    [DataMember] public IDisplaySize PhysicalRotated => _physicalRotated?.Value;
 
     readonly ObservableAsPropertyHelper<IDisplaySize> _physicalRotated;
 
@@ -168,18 +181,17 @@ public class Monitor : ReactiveObject
     // Mm
 
     [DataMember]
-    public IDisplaySize InMm => _inMm.Get();
+    public IDisplaySize InMm => _inMm.Value;
 
     readonly ObservableAsPropertyHelper<IDisplaySize> _inMm;
 
     [DataMember]
-    public IDisplaySize InMmU => _inMmU.Get();
-
+    public IDisplaySize InMmU => _inMmU.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _inMmU;
 
     public double InMmX
     {
-        get => _inMmX.Get();
+        get => _inMmX.Value;
         set
         {
             if (Sources.Items.Any(s => s.Primary))
@@ -195,12 +207,11 @@ public class Monitor : ReactiveObject
             }
         }
     }
-
     readonly ObservableAsPropertyHelper<double> _inMmX;
 
     public double InMmY
     {
-        get => _inMmY.Get();
+        get => _inMmY.Value;
         set
         {
             if (Sources.Items.Any(s => s.Primary))
@@ -218,7 +229,6 @@ public class Monitor : ReactiveObject
             }
         }
     }
-
     readonly ObservableAsPropertyHelper<double> _inMmY;
     
     // TODO
@@ -234,19 +244,18 @@ public class Monitor : ReactiveObject
     [DataMember]
     public IDisplayRatio PhysicalRatio { get; }
 
-    public double Diagonal => _diagonal.Get();
+    public double Diagonal => _diagonal.Value;
 
     readonly ObservableAsPropertyHelper<double> _diagonal;
 
-    [DataMember] public Rect OverallBoundsWithoutThisInMm => _overallBoundsWithoutThisInMm.Get();
+    //[DataMember] public Rect OverallBoundsWithoutThisInMm => _overallBoundsWithoutThisInMm.Value;
 
-    readonly ObservableAsPropertyHelper<Rect> _overallBoundsWithoutThisInMm;
+    //readonly ObservableAsPropertyHelper<Rect> _overallBoundsWithoutThisInMm;
 
-    // TODO : .On(e => e.Layout.AllMonitors.Item().InMm.Bounds).Update()
-    static Rect GetOverallBoundsWithoutThisInMm(Layout layout, Monitor monitor)
+    Rect GetOverallBoundsWithoutThisInMm()
     {
-        return Layout.Union(layout
-            .AllBut(monitor)
+        return Layout.Union(Layout
+            .AllBut(this)
             .Where(e => e.InMm is not null)
             .Select(e => e.InMm.Bounds)
         );
@@ -416,6 +425,7 @@ public class Monitor : ReactiveObject
     }
     double _yMoving;
 
+
     //    .Set(e => e.InMm.Y)
     //    .On(e => e.Moving)
     //    .On(e => e.InMm.Y)
@@ -423,16 +433,16 @@ public class Monitor : ReactiveObject
     //    .Update()
     //);
 
-    double LogPixelSx
-    {
-        get
-        {
-            var hdc = Gdi32.CreateDC("DISPLAY", Device.AttachedDisplay.DeviceName, null, IntPtr.Zero);
-            double dpi = Gdi32.GetDeviceCaps(hdc, Gdi32.DeviceCap.LOGPIXELSX);
-            Gdi32.DeleteDC(hdc);
-            return dpi;
-        }
-    }
+    //double LogPixelSx
+    //{
+    //    get
+    //    {
+    //        var hdc = CreateDC("DISPLAY", Device.AttachedDisplay.DeviceName, null, 0);
+    //        double dpi = GetDeviceCaps(hdc, DeviceCap.LogPixelsX);
+    //        DeleteDC(hdc);
+    //        return dpi;
+    //    }
+    //}
 
 
     double RightDistance(Monitor screen) => InMm.OutsideBounds.X - screen.InMm.OutsideBounds.Right;
@@ -442,9 +452,9 @@ public class Monitor : ReactiveObject
 
     double RightDistanceToTouch(Monitor screen, bool zero = false)
     {
-        double top = TopDistance(screen);
+        var top = TopDistance(screen);
         if (top > 0 || zero && top == 0) return double.PositiveInfinity;
-        double bottom = BottomDistance(screen);
+        var bottom = BottomDistance(screen);
         if (bottom > 0 || zero && bottom == 0) return double.PositiveInfinity;
         return RightDistance(screen);
     }
@@ -707,10 +717,10 @@ public class Monitor : ReactiveObject
 
     public void PlaceAuto(IEnumerable<Monitor> screens)
     {
-        double left = LeftDistanceToTouch(screens, true);
-        double right = RightDistanceToTouch(screens, true);
-        double top = TopDistanceToTouch(screens, true);
-        double bottom = BottomDistanceToTouch(screens, true);
+        var left = LeftDistanceToTouch(screens, true);
+        var right = RightDistanceToTouch(screens, true);
+        var top = TopDistanceToTouch(screens, true);
+        var bottom = BottomDistanceToTouch(screens, true);
 
         if (!Layout.AllowDiscontinuity && double.IsPositiveInfinity(left) && double.IsPositiveInfinity(top) && double.IsPositiveInfinity(right) && double.IsPositiveInfinity(bottom))
         {

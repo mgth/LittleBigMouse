@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HLab\HLab.Core.Annotations\HLab.Core.Annotations.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
+  </ItemGroup>
+
+</Project>

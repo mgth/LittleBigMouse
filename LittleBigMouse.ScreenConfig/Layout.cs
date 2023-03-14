@@ -24,6 +24,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
@@ -44,7 +45,10 @@ using LittleBigMouse.Zoning;
 using Microsoft.Win32;
 using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
-using static HLab.Sys.Windows.API.User32;
+using static HLab.Sys.Windows.API.WinDef;
+using static HLab.Sys.Windows.API.WinUser;
+using Point = Avalonia.Point;
+using Rect = Avalonia.Rect;
 
 // ReSharper disable CompareOfFloatsByEqualityOperator
 
@@ -64,7 +68,7 @@ namespace LittleBigMouse.DisplayLayout
     {
         bool Saved { get; }
         Rect InMmOutsideBounds { get; }
-        ISourceList<Monitor> AllMonitors { get; }
+        SourceCache<Monitor, string> AllMonitors { get; }
         ZonesLayout ComputeZones();
         bool Save();
     }
@@ -73,53 +77,111 @@ namespace LittleBigMouse.DisplayLayout
     public class Layout : ReactiveObject, IMonitorsLayout
     {
         static readonly SystemEventProxy SystemEventProxy = new SystemEventProxy();
+        internal IMonitorsService MonitorsService { get; }
 
         public Layout(IMonitorsService monitorsService)
         {
             MonitorsService = monitorsService;
 
-            _dpiAwarenessContext = GetThreadDpiAwarenessContext();
+            _dpiAwarenessContext = GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext());
 
-            //this.WhenAnyValue(
-            //        e => e.AllMonitors.Item().BottomBorder,
-            //        e => e.Ratio.Y,
+            //_inMmOutsideBounds = allMonitors
+            //    .WhenValueChanged(s => s.InMm.OutsideBounds)
+            //    .Select(s => GetInMmOutsideBounds())
+            //    .Log(this,"_inMmOutsideBounds").ToProperty(this, s => s.InMmOutsideBounds, deferSubscription:true);
 
-            //        (height,r) => height*r
-            //    )
-            //    .ToProperty(this, e => e.BottomBorder,out _bottomBorder);
+            _primarySource = _allSources
+                .Preview()
+                .WhenValueChanged(e => e.Primary)
+                .Select(i => GetPrimarySource(_allSources.Items))
+                .Log(this, "_primarySource").ToProperty(this, e => e.PrimarySource, deferSubscription: true);
 
-            //this.WhenAnyValue(e => e.AutoUpdate, a => false).ToProperty(this, e => e.Saved, out _saved);
+            _selected = _allMonitors.Connect()
+                .WhenValueChanged(_ => _.Selected)
+                .Select(_ => GetSelected(_allMonitors.Items))
+                .Log(this, "Selected").ToProperty(this, _ => _.Selected, deferSubscription: true);
 
-            //this.WhenAnyValue(e => e.AllSources.Item());
+            _physicalBounds = _allMonitors.Connect()
+                .WhenValueChanged(_ => _.InMm.Bounds)
+                .Select(_ => GetPhysicalBounds(_allMonitors.Items))
+                .Log(this, "_physicalBounds").ToProperty(this, _ => _.PhysicalBounds, deferSubscription: true);
 
-            this.WhenAnyValue(e => e.InMmOutsideBounds.Left,left => -left).ToProperty(this, e => e.X0, out _x0);
-            this.WhenAnyValue(e => e.InMmOutsideBounds.Top,top => -top).ToProperty(this, e => e.Y0, out _y0);
+            _maxEffectiveDpiX = _allSources
+                .Preview()
+                .WhenValueChanged(_ => _.EffectiveDpi.X)
+                .Select(_ => GetMaxEffectiveDpiX(_allSources.Items))
+                .Log(this, "_maxEffectiveDpiX").ToProperty(this, _ => _.MaxEffectiveDpiX, deferSubscription: true);
 
-            this.WhenAnyValue(e => e.IsRatio100, (bool r) => r)
-                .ToProperty(this, e => e.AdjustPointerAllowed, out _adjustPointerAllowed);
+            _maxEffectiveDpiY = _allSources
+                .Preview()
+                .WhenValueChanged(_ => _.EffectiveDpi.Y)
+                .Select(_ => GetMaxEffectiveDpiY(_allSources.Items))
+                .Log(this, "_maxEffectiveDpiY").ToProperty(this, _ => _.MaxEffectiveDpiY, deferSubscription: true);
 
-            this.WhenAnyValue(e => e.IsRatio100, (bool r) => r)
-                .ToProperty(this, e => e.AdjustSpeedAllowed, out _adjustSpeedAllowed);
+            _isRatio100 = _allSources
+                    .Connect()
+                    .WhenValueChanged(e => e.PixelToDipRatio)
+                    .Select(e => GetIsRatio100(_allSources.Items))
+                    .Log(this, "_isRatio100").ToProperty(this, _ => _.IsRatio100, deferSubscription: true);
 
-            //.On(e => e.AllMonitors.Item().InMm.OutsideBounds)
-            var t = AllMonitors.Connect().Select(e => e.InMm.OutsideBounds).Aggregate(e => Union(e)).ToProperty(_inMmOutsideBounds));
+            _id = _allMonitors.Connect()
+                .WhenValueChanged(_ => _.Id)
+                .Select(e => GetId(_allMonitors.Items))
+                .Log(this, "Id").ToProperty(this, _ => _.Id, deferSubscription: true);
+
+            _x0 = this
+                .WhenAnyValue(e => e.InMmOutsideBounds.Left, left => -left)
+                .Log(this, "X0").ToProperty(this, e => e.X0, deferSubscription: true);
+
+            _y0 = this
+                .WhenAnyValue(e => e.InMmOutsideBounds.Top, top => -top)
+                .Log(this, "Y0").ToProperty(this, e => e.Y0, deferSubscription: true);
+
+            _adjustPointerAllowed = this
+                .WhenAnyValue(e => e.IsRatio100, (bool r) => r)
+                .Log(this, "_adjustPointerAllowed").ToProperty(this, e => e.AdjustPointerAllowed, deferSubscription: true);
+
+            _adjustSpeedAllowed = this
+                .WhenAnyValue(e => e.IsRatio100, (bool r) => r)
+                .Log(this, "_adjustSpeedAllowed").ToProperty(this, e => e.AdjustSpeedAllowed, deferSubscription: true);
+
 
 
             SetWallPaper();
 
-            //NotifyHelper.EventHandlerService.AddHandler<SystemEventProxy, UserPreferenceChangedEventArgs>(SystemEventProxy, "UserPreferenceChanged", SystemEvents_UserPreferenceChanged);
+            MonitorsService.AttachedMonitors
+                .Connect()
+                .Subscribe(UpdateMonitors);
 
-            MonitorsOnCollectionChanged(monitorsService.AttachedMonitors,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, monitorsService.AttachedMonitors.Items.ToList()));
+
+            //MonitorsOnCollectionChanged(monitorsService.AttachedMonitors,
+            //    new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, monitorsService.AttachedMonitors.Items.ToList()));
+
 
             //NotifyHelper.EventHandlerService.AddHandler(monitorsService.AttachedMonitors, MonitorsOnCollectionChanged);
+            //NotifyHelper.EventHandlerService.AddHandler<SystemEventProxy, UserPreferenceChangedEventArgs>(SystemEventProxy, "UserPreferenceChanged", SystemEvents_UserPreferenceChanged);
 
 
         }
 
-        internal IMonitorsService MonitorsService { get; }
-        public DPI_Awareness_Context DpiAwarenessContext => _dpiAwarenessContext;
-        readonly DPI_Awareness_Context _dpiAwarenessContext;
+
+        Rect GetOutsideBounds()
+        {
+            using var enumerator = _allMonitors.Items.GetEnumerator();
+
+            if (!enumerator.MoveNext()) return default;
+
+            var r = enumerator.Current!.InMm.OutsideBounds;
+            while (enumerator.MoveNext())
+            {
+                r = r.Union(enumerator.Current.InMm.OutsideBounds);
+            }
+            return r;
+        }
+
+
+        public DpiAwareness DpiAwareness => _dpiAwarenessContext;
+        readonly DpiAwareness _dpiAwarenessContext;
 
         [DataMember]
         public string Id => _id.Value;
@@ -154,7 +216,7 @@ namespace LittleBigMouse.DisplayLayout
 
         public MonitorSource MonitorSourceFromPixel(Point pixel) => AllSources.Items.FirstOrDefault(source => source.InPixel.Bounds.Contains(pixel));
 
-        public Monitor MonitorFromPhysicalPosition(Point mm) => AllMonitors.Items.FirstOrDefault(screen => screen.InMm.Bounds.Contains(mm));
+        public Monitor MonitorFromPhysicalPosition(Point mm) => _allMonitors.Items.FirstOrDefault(screen => screen.InMm.Bounds.Contains(mm));
 
 
         void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
@@ -173,7 +235,8 @@ namespace LittleBigMouse.DisplayLayout
         void SetWallPaper()
         {
             var currentWallpaper = new string('\0', SetupApi.MAX_PATH);
-            SystemParametersInfo(SPI_GETDESKWALLPAPER, currentWallpaper.Length, currentWallpaper, 0);
+            //TODO :
+            // SystemParametersInfo(SystemParametersInfoAction.GetDeskWallpaper, currentWallpaper.Length, currentWallpaper, 0);
 
             WallPaperPath = currentWallpaper[..currentWallpaper.IndexOf('\0')];
 
@@ -222,28 +285,32 @@ namespace LittleBigMouse.DisplayLayout
         }
         int[] _backgroundColor;
 
-        void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
+
+        void UpdateMonitors(IChangeSet<MonitorDevice, string> cs)
         {
-            switch (args.Action)
+            foreach (var change in cs)
             {
-                case NotifyCollectionChangedAction.Add:
-                    if (args.NewItems != null)
-                        foreach (var device in args.NewItems.OfType<MonitorDevice>())
+                if (change.Current is not { } device) continue;
+
+                switch (change.Reason)
+                {
+                    case ChangeReason.Add:
                         {
                             var source = AllSources.Items.FirstOrDefault(s => s.Device.Equals(device));
+
                             if (source != null) continue;
 
-                            var monitor = AllMonitors.Items.FirstOrDefault(m => 
-                                m.Model.PnpCode == device.PnpCode 
+                            var monitor = _allMonitors.Items.FirstOrDefault(m =>
+                                m.Model.PnpCode == device.PnpCode
                                 && m.ActiveSource.Device.IdPhysicalMonitor == device.IdPhysicalMonitor
-                                );
+                            );
 
                             if (monitor == null)
                             {
                                 monitor = new Monitor(this, device);
                                 source = monitor.ActiveSource;
 
-                                AllMonitors.Add(monitor);
+                                _allMonitors.AddOrUpdate(monitor);
                             }
                             else
                             {
@@ -251,41 +318,101 @@ namespace LittleBigMouse.DisplayLayout
                                 monitor.Sources.Add(source);
                             }
 
-                            AllSources.Add(source);
+                            _allSources.AddOrUpdate(source);
                         }
-                    break;
+                        break;
 
-                case NotifyCollectionChangedAction.Remove:
-                    if (args.OldItems != null)
-                        foreach (var monitor in args.OldItems.OfType<MonitorDevice>())
+                    case ChangeReason.Remove:
                         {
-                            var screen = AllSources.Items.FirstOrDefault(s => s.Monitor.Equals(monitor));
+                            //TODO : that does not work
 
-                            if (screen != null) AllSources.Remove(screen);
+                            var monitor = _allMonitors.Items.FirstOrDefault(m =>
+                                    m.Model.PnpCode == device.PnpCode
+                                    && m.ActiveSource.Device.IdPhysicalMonitor == device.IdPhysicalMonitor
+                                );
+
+                                var source = _allSources.Items.FirstOrDefault(s => s.Device.Equals(device));
+                                if (source != null) _allSources.Remove(source);
                         }
-                    break;
+                        break;
+                    case ChangeReason.Update:
+                    case ChangeReason.Refresh:
+                    case ChangeReason.Moved:
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
 
-                case NotifyCollectionChangedAction.Replace:
-                case NotifyCollectionChangedAction.Move:
-                case NotifyCollectionChangedAction.Reset:
-                    throw new NotImplementedException();
-                default:
-                    throw new ArgumentOutOfRangeException();
             }
-
-
-            Load();
-            SetPhysicalAuto(false);
         }
 
-        [DataMember]
-        public ISourceList<Monitor> AllMonitors { get; } = new SourceList<Monitor>();
-        [NotNull] public ISourceList<MonitorSource> AllSources { get; } = new SourceList<MonitorSource>();
+
+
+        //void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
+        //{
+        //    switch (args.Action)
+        //    {
+        //        case NotifyCollectionChangedAction.Add:
+        //            if (args.NewItems != null)
+        //                foreach (var device in args.NewItems.OfType<MonitorDevice>())
+        //                {
+        //                    var source = AllSources.Items.FirstOrDefault(s => s.Device.Equals(device));
+        //                    if (source != null) continue;
+
+        //                    var monitor = _allMonitors.FirstOrDefault(m => 
+        //                        m.Model.PnpCode == device.PnpCode 
+        //                        && m.ActiveSource.Device.IdPhysicalMonitor == device.IdPhysicalMonitor
+        //                        );
+
+        //                    if (monitor == null)
+        //                    {
+        //                        monitor = new Monitor(this, device);
+        //                        source = monitor.ActiveSource;
+
+        //                        _allMonitors.AddOrUpdate(monitor);
+        //                    }
+        //                    else
+        //                    {
+        //                        source = new MonitorSource(monitor, device);
+        //                        monitor.Sources.Add(source);
+        //                    }
+
+        //                    _allSources.Add(source);
+        //                }
+        //            break;
+
+        //        case NotifyCollectionChangedAction.Remove:
+        //            if (args.OldItems != null)
+        //                foreach (var monitor in args.OldItems.OfType<MonitorDevice>())
+        //                {
+        //                    var screen = AllSources.Items.FirstOrDefault(s => s.Monitor.Equals(monitor));
+
+        //                    if (screen != null) _allSources.Remove(screen);
+        //                }
+        //            break;
+
+        //        case NotifyCollectionChangedAction.Replace:
+        //        case NotifyCollectionChangedAction.Move:
+        //        case NotifyCollectionChangedAction.Reset:
+        //            throw new NotImplementedException();
+        //        default:
+        //            throw new ArgumentOutOfRangeException();
+        //    }
+
+
+        //    Load();
+        //    SetPhysicalAuto(false);
+        //}
+
+//        [DataMember] public SourceCache<Monitor, string> AllMonitors => _allMonitors;
+        [DataMember] public SourceCache<Monitor, string> AllMonitors => _allMonitors;
+        readonly SourceCache<Monitor, string> _allMonitors = new(m => m.Id);
+
+        public SourceCache<MonitorSource, string> AllSources => _allSources;
+        readonly SourceCache<MonitorSource, string> _allSources = new (s => s.Device.IdMonitor);
 
         public IEnumerable<Monitor> AllBut(Monitor screen) => AllMonitors.Items.Where(s => !Equals(s, screen));
 
-        public Monitor Selected => _selected.Get();
-
+        public Monitor Selected => _selected.Value;
         readonly ObservableAsPropertyHelper<Monitor> _selected;
 
         //.On(e => e.AllMonitors.Item().Selected)
@@ -331,53 +458,55 @@ namespace LittleBigMouse.DisplayLayout
 
         public void MatchLayout(string id)
         {
-            using (var rootKey = OpenRootRegKey())
+            using var rootKey = OpenRootRegKey();
+            using var key = rootKey.OpenSubKey(@"Layouts\" + id);
+
+            if (key != null)
             {
-                using (var key = rootKey.OpenSubKey(@"Layouts\" + id))
+                var todo = key.GetSubKeyNames().ToList();
+
+                foreach (var source in AllSources.Items)
                 {
-                    var todo = key.GetSubKeyNames().ToList();
-
-                    foreach (var source in AllSources.Items)
+                    if (todo.Contains(source.Device.IdMonitor))
                     {
-                        if (todo.Contains(source.Device.IdMonitor))
-                        {
-                            AttachToDesktop(id, source.Device.IdMonitor, false);
-                            todo.Remove(source.Device.IdMonitor);
-                        }
-                        else
-                        {
-                            MonitorsService.DetachFromDesktop(source.Device.AttachedDisplay.DeviceName, false);
-                        }
+                        AttachToDesktop(id, source.Device.IdMonitor, false);
+                        todo.Remove(source.Device.IdMonitor);
                     }
-
-                    foreach (string s in todo)
+                    else
                     {
-                        AttachToDesktop(id, s, false);
+                        MonitorsService.DetachFromDesktop(source.Device.AttachedDisplay.DeviceName, false);
                     }
-
-                    MonitorsService.ApplyDesktop();
                 }
+
+                foreach (string s in todo)
+                {
+                    AttachToDesktop(id, s, false);
+                }
+
+                MonitorsService.ApplyDesktop();
+
             }
+
         }
 
         public bool IsDoableLayout(string id)
         {
-            using (var rootKey = OpenRootRegKey())
+            using var rootKey = OpenRootRegKey();
+            using var key = rootKey.OpenSubKey(@"Layouts\" + id);
+
+            if (key == null) return false;
+
+            var todo = key.GetSubKeyNames().ToList();
+
+            foreach (var s in todo)
             {
-                using (var key = rootKey.OpenSubKey(@"Layouts\" + id))
-                {
-                    var todo = key.GetSubKeyNames().ToList();
+                var m = MonitorsService.Monitors.Items.FirstOrDefault(
+                    d => s == d.IdMonitor);
 
-                    foreach (var s in todo)
-                    {
-                        var m = MonitorsService.Monitors.Items.FirstOrDefault(
-                            d => s == d.IdMonitor);
-
-                        if (m == null) return false;
-                    }
-                }
+                if (m == null) return false;
             }
             return true;
+
         }
 
         //TODO : wong : should support sources
@@ -455,7 +584,7 @@ namespace LittleBigMouse.DisplayLayout
 
                 if (key != null)
                 {
-                    foreach (Monitor s in AllMonitors.Items)
+                    foreach (var s in _allMonitors.Items)
                     {
                         s.Load(key);
                     }
@@ -483,7 +612,7 @@ namespace LittleBigMouse.DisplayLayout
 
                 if (LoadAtStartup) Schedule(); else Unschedule();
 
-                foreach (var monitor in AllMonitors.Items)
+                foreach (var monitor in _allMonitors.Items)
                     monitor.Save(k);
 
                 Saved = true;
@@ -502,37 +631,27 @@ namespace LittleBigMouse.DisplayLayout
 
         [DataMember]
         public MonitorSource PrimarySource => _primarySource.Value;
+        readonly ObservableAsPropertyHelper<MonitorSource> _primarySource;
 
-        readonly ObservableAsPropertyHelper<MonitorSource> _primarySource; 
-
-        //.On(e => e.AllSources.Item().Primary)
         static MonitorSource GetPrimarySource(IEnumerable<MonitorSource> sources) => sources.FirstOrDefault(s => s.Primary);
 
         [DataMember]
-        public Rect InMmOutsideBounds => _inMmOutsideBounds.Value;
-        readonly ObservableAsPropertyHelper<Rect> _inMmOutsideBounds;
+        public Rect InMmOutsideBounds => GetInMmOutsideBounds();
+        //public Rect InMmOutsideBounds => _inMmOutsideBounds.Value;
+        //readonly ObservableAsPropertyHelper<Rect> _inMmOutsideBounds;
 
-        //.On(e => e.AllMonitors.Item().InMm.OutsideBounds)
-        static Rect GetInMmOutsideBounds(IEnumerable<Monitor> monitors)
-        {
-            return Union(monitors.Select(e => e.InMm.OutsideBounds));
-        }
+        Rect GetInMmOutsideBounds() => Union(AllMonitors.Items.Select(e => e.InMm?.OutsideBounds ?? new Rect()));
 
         public static Rect Union(IEnumerable<Rect> rects)
         {
-            var outside = new Rect();
+            using var e = rects.GetEnumerator();
+            if (!e.MoveNext()) return new Rect();
 
-            var first = true;
-            foreach (var rect in rects)
+            var outside = e.Current;
+
+            while (e.MoveNext())
             {
-                if (first)
-                {
-                    outside = rect;
-                    first = false;
-                    continue;
-                }
-
-                outside.Union(rect);
+                outside.Union(e.Current);
             }
 
             return outside;
@@ -544,7 +663,7 @@ namespace LittleBigMouse.DisplayLayout
         /// Mm Bounds of overall screens without borders
         /// </summary>
         [DataMember]
-        public Rect PhysicalBounds => _physicalBounds.Get();
+        public Rect PhysicalBounds => _physicalBounds.Value;
         readonly ObservableAsPropertyHelper<Rect> _physicalBounds;
 
         // .On(e => e.AllMonitors.Item().InMm.Bounds)
@@ -570,11 +689,11 @@ namespace LittleBigMouse.DisplayLayout
 
         }
 
-        public double X0 => _x0.Get();
+        public double X0 => _x0.Value;
 
         readonly ObservableAsPropertyHelper<double> _x0;
 
-        public double Y0 => _y0.Get();
+        public double Y0 => _y0.Value;
         readonly ObservableAsPropertyHelper<double> _y0;
 
         /// <summary>
@@ -638,11 +757,10 @@ namespace LittleBigMouse.DisplayLayout
 
 
         [DataMember]
-        public bool IsRatio100 => _isRatio100.Get();
+        public bool IsRatio100 => _isRatio100.Value;
         readonly ObservableAsPropertyHelper<bool> _isRatio100;
 
-        //.On(e => e.AllSources.Item().PixelToDipRatio)
-        static bool _getIsRatio100(IEnumerable<MonitorSource> sources)
+        static bool GetIsRatio100(IEnumerable<MonitorSource> sources)
         {
             foreach (var source in sources)
             {
@@ -654,7 +772,7 @@ namespace LittleBigMouse.DisplayLayout
 
 
         [DataMember]
-        public bool AdjustPointerAllowed => _adjustPointerAllowed.Get();
+        public bool AdjustPointerAllowed => _adjustPointerAllowed.Value;
         readonly ObservableAsPropertyHelper<bool> _adjustPointerAllowed;
 
 
@@ -668,7 +786,7 @@ namespace LittleBigMouse.DisplayLayout
         bool _adjustPointer;
 
         [DataMember]
-        public bool AdjustSpeedAllowed => _adjustSpeedAllowed.Get();
+        public bool AdjustSpeedAllowed => _adjustSpeedAllowed.Value;
         readonly ObservableAsPropertyHelper<bool> _adjustSpeedAllowed;
 
         [DataMember]
@@ -713,33 +831,33 @@ namespace LittleBigMouse.DisplayLayout
         Rect _configLocation;
 
 
-        public void SetPhysicalAuto(bool placeall = true)
+        public void SetPhysicalAuto(bool placeAll = true)
         {
             if (PrimarySource == null) return;
 
             lock (_compactLock)
             {
                 // List all screens not positioned
-                List<Monitor> unatachedScreens = placeall ? AllMonitors.Items.ToList() : AllMonitors.Items.Where(s => !s.Placed).ToList();
+                var unattachedScreens = placeAll ? _allMonitors.Items.ToList() : _allMonitors.Items.Where(s => !s.Placed).ToList();
 
                 // start with primary screen
-                Queue<Monitor> todo = new Queue<Monitor>();
+                var todo = new Queue<Monitor>();
                 todo.Enqueue(PrimarySource.Monitor);
 
                 while (todo.Count > 0)
                 {
-                    foreach (Monitor s2 in todo)
+                    foreach (var s2 in todo)
                     {
-                        unatachedScreens.Remove(s2);
+                        unattachedScreens.Remove(s2);
                     }
 
-                    Monitor placedScreen = todo.Dequeue();
+                    var placedScreen = todo.Dequeue();
 
-                    foreach (Monitor screenToPlace in unatachedScreens)
+                    foreach (var screenToPlace in unattachedScreens)
                     {
                         if (screenToPlace == placedScreen) continue;
 
-                        bool somethingDone = false;
+                        var somethingDone = false;
 
                         //     __
                         //  __| A
@@ -840,13 +958,13 @@ namespace LittleBigMouse.DisplayLayout
             //if (Moving) return;
             lock (_compactLock)
             {
-                List<Monitor> done = new List<Monitor> { PrimarySource.Monitor };
+                var done = new List<Monitor> { PrimarySource.Monitor };
 
-                List<Monitor> todo = AllBut(PrimarySource.Monitor).OrderBy(s => s.Distance(PrimarySource.Monitor)).ToList();
+                var todo = AllBut(PrimarySource.Monitor).OrderBy(s => s.Distance(PrimarySource.Monitor)).ToList();
 
                 while (todo.Count > 0)
                 {
-                    Monitor screen = todo[0];
+                    var screen = todo[0];
                     todo.Remove(screen);
 
                     screen.PlaceAuto(done);
@@ -882,8 +1000,7 @@ namespace LittleBigMouse.DisplayLayout
         bool _saved;
 
         [DataMember]
-        public double MaxEffectiveDpiX => _maxEffectiveDpiX.Get();
-
+        public double MaxEffectiveDpiX => _maxEffectiveDpiX.Value;
         readonly ObservableAsPropertyHelper<double> _maxEffectiveDpiX;
 
         //.On(e => e.AllSources.Item().EffectiveDpi.X)
@@ -893,7 +1010,7 @@ namespace LittleBigMouse.DisplayLayout
             .Max();
 
         [DataMember]
-        public double MaxEffectiveDpiY => _maxEffectiveDpiY.Get();
+        public double MaxEffectiveDpiY => _maxEffectiveDpiY.Value;
         readonly ObservableAsPropertyHelper<double> _maxEffectiveDpiY;
         static double GetMaxEffectiveDpiY(IEnumerable<MonitorSource> sources) => sources
             .Where(s => s.EffectiveDpi is not null)
@@ -964,7 +1081,7 @@ namespace LittleBigMouse.DisplayLayout
 
         public void Unschedule()
         {
-            using TaskService ts = new TaskService();
+            using var ts = new TaskService();
             ts.RootFolder.DeleteTask(ServiceName, false);
         }
 

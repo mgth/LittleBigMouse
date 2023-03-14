@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 
 namespace HLab.Sys.Windows.MonitorVcp
 {
-    public class LevelParser: IDisposable
+    public sealed class LevelParser: IDisposable
     {
-        private Task _task;
+        Task _task;
 
         public void Add(MonitorLevel level)
         {
@@ -23,9 +23,10 @@ namespace HLab.Sys.Windows.MonitorVcp
             if(shouldStart) _task = Task.Run(DoWork);
         }
 
-        private readonly object _lock = new object();
-        private readonly List<MonitorLevel> _actions = new List<MonitorLevel>();
-        private void DoWork()
+        readonly object _lock = new();
+        readonly List<MonitorLevel> _actions = new();
+
+        void DoWork()
         {
             while(true)
             {

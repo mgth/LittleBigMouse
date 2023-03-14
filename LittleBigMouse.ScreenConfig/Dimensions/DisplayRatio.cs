@@ -28,7 +28,7 @@ using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public interface IDisplayRatio
+public interface IDisplayRatio 
 {
     double X { get; set; }
     double Y { get; set; }
@@ -48,4 +48,7 @@ public abstract class DisplayRatio : ReactiveObject, IDisplayRatio, IEquatable<I
         if (other == null) return false;
         return !(Math.Abs(X - other.X) > double.Epsilon || Math.Abs(Y - other.Y) > double.Epsilon);
     }
+
+    public override string ToString() => $"({X},{Y})";
+
 }

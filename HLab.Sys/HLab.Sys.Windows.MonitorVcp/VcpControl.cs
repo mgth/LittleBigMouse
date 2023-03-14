@@ -22,47 +22,50 @@
 */
 
 using System;
-using HLab.Notify.PropertyChanged;
-using HLab.Sys.Windows.API;
+using ReactiveUI;
+
 using HLab.Sys.Windows.Monitors;
+
+using static HLab.Sys.Windows.API.ErrHandlingApi;
+using static HLab.Sys.Windows.API.MonitorConfiguration.HighLevelMonitorConfigurationApi;
+using static HLab.Sys.Windows.API.MonitorConfiguration.LowLevelMonitorConfiguration;
+using static HLab.Sys.Windows.API.MonitorConfiguration.PhysicalMonitorEnumerationApi;
+
 
 namespace HLab.Sys.Windows.MonitorVcp
 {
-    using H = H<VcpControl>;
-
     public enum VcpComponent { None, Red, Green, Blue, Brightness, Contrast }
 
-    public class VcpControl : NotifierBase
+    public class VcpControl : ReactiveObject
     {
-        private Dxva2.PHYSICAL_MONITOR[] _pPhysicalMonitorArray;
+        PhysicalMonitor[] _pPhysicalMonitorArray;
 
         public MonitorDevice Monitor { get; }
-        private readonly LevelParser _levelParser;
+        readonly LevelParser _levelParser;
         public VcpControl(MonitorDevice monitor, LevelParser levelParser)
         {
             Monitor = monitor;
             _levelParser = levelParser;
 
-            _pPhysicalMonitorArray = Dxva2.GetPhysicalMonitorsFromHMONITOR(monitor.HMonitor);
+            // TODO
+            //_pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(monitor.HMonitor);
 
-            H.Initialize(this);
-
-            int retry = 1;
+            var retry = 1;
             while (retry > 0)
             {
-                if (Dxva2.GetMonitorCapabilities(HPhysical, out var capabilities, out var colorTemperatures))
+                if (GetMonitorCapabilities(HPhysical, out var capabilities, out var colorTemperatures))
                 {
-                    if (capabilities.HasFlag(Dxva2.MonitorCapabilities.MC_CAPS_BRIGHTNESS))
-                        _brightness.Set(new MonitorLevel(monitor, levelParser, GetBrightness, SetBrightness));
+                    if (capabilities.HasFlag(MonitorCapabilities.Brightness))
+                        _brightness = new MonitorLevel(monitor, levelParser, GetBrightness, SetBrightness);
 
-                    if (capabilities.HasFlag(Dxva2.MonitorCapabilities.MC_CAPS_CONTRAST))
-                        _contrast.Set(new MonitorLevel(monitor, levelParser, GetContrast, SetContrast));
+                    if (capabilities.HasFlag(MonitorCapabilities.Contrast))
+                        _contrast = new MonitorLevel(monitor, levelParser, GetContrast, SetContrast);
 
-                    if (capabilities.HasFlag(Dxva2.MonitorCapabilities.MC_CAPS_RED_GREEN_BLUE_GAIN))
-                        _gain.Set(new MonitorRgbLevel(monitor, levelParser, GetGain, SetGain));
+                    if (capabilities.HasFlag(MonitorCapabilities.RedGreenBlueGain))
+                        _gain = new MonitorRgbLevel(monitor, levelParser, GetGain, SetGain);
 
-                    if (capabilities.HasFlag(Dxva2.MonitorCapabilities.MC_CAPS_RED_GREEN_BLUE_DRIVE))
-                        _drive.Set(new MonitorRgbLevel(monitor, levelParser, GetDrive, SetDrive));
+                    if (capabilities.HasFlag(MonitorCapabilities.RedGreenBlueDrive))
+                        _drive = new MonitorRgbLevel(monitor, levelParser, GetDrive, SetDrive);
 
                     //NativeMethods.MonitorCapabilities.MC_CAPS_COLOR_TEMPERATURE;
                     //NativeMethods.MonitorCapabilities.MC_CAPS_DEGAUSS;
@@ -81,12 +84,12 @@ namespace HLab.Sys.Windows.MonitorVcp
         }
 
 
-        private IntPtr HPhysical => _pPhysicalMonitorArray[0].hPhysicalMonitor;
+        nint HPhysical => _pPhysicalMonitorArray[0].hPhysicalMonitor;
 
-        private void Cleanup(bool disposing)
+        void Cleanup(bool disposing)
         {
-            if (_pPhysicalMonitorArray != null && _pPhysicalMonitorArray.Length > 0)
-                Dxva2.DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
+            if (_pPhysicalMonitorArray is { Length: > 0 })
+                DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
         }
 
         public void Dispose()
@@ -103,89 +106,103 @@ namespace HLab.Sys.Windows.MonitorVcp
 
         public bool Power
         {
-            get => _power.Get();
+            get => _power;
             set
             {
-                if (!_power.Set(value)) return;
-
+                if (value == _power) return;
                 if (value)
                 {
                     if(AlternatePower)
-                        Dxva2.SetVCPFeature(HPhysical, 0xE1, 0);
+                        SetVCPFeature(HPhysical, 0xE1, 0);
                     else
-                        Dxva2.SetVCPFeature(HPhysical, 0xD6, 1);
-
+                        SetVCPFeature(HPhysical, 0xD6, 1);
                 }
                 else
                 {
                     if(AlternatePower)
-                        Dxva2.SetVCPFeature(HPhysical, 0xE1, 1);
+                        SetVCPFeature(HPhysical, 0xE1, 1);
                     else
-                        Dxva2.SetVCPFeature(HPhysical, 0xD6, 4);
+                        SetVCPFeature(HPhysical, 0xD6, 4);
                 }
+                this.RaiseAndSetIfChanged(ref _power, value);
+
             }
         }
-        private readonly IProperty<bool> _power = H.Property<bool>();
+        bool _power;
 
         public void SetSource(uint source)
         {
-            Dxva2.GetVCPFeatureAndVCPFeatureReply(HPhysical, 0x60, out var pvct, out var current, out var max);
+            GetVCPFeatureAndVCPFeatureReply(HPhysical, 0x60, out var pvct, out var current, out var max);
 
+            GetCapabilitiesString(HPhysical, out var result);
 
-            Dxva2.GetCapabilitiesString(HPhysical, out var result);
-
-
-
-            Dxva2.SetVCPFeature(HPhysical, 0x60, 0x0F);
+            SetVCPFeature(HPhysical, 0x60, 0x0F);
         }
 
         public void ActivateAnyway()
         {
-                if(Brightness==null) _brightness.Set(new MonitorLevel(Monitor, _levelParser, GetBrightness, SetBrightness));
-                if(Contrast==null) _contrast.Set(new MonitorLevel(Monitor, _levelParser, GetContrast, SetContrast));
-                if(Gain==null) _gain.Set(new MonitorRgbLevel(Monitor, _levelParser, GetGain, SetGain));
-                if(Drive==null) _drive.Set(new MonitorRgbLevel(Monitor, _levelParser, GetDrive, SetDrive));
+                Brightness ??= new MonitorLevel(Monitor, _levelParser, GetBrightness, SetBrightness);
+                Contrast ??= new MonitorLevel(Monitor, _levelParser, GetContrast, SetContrast);
+                Gain ??= new MonitorRgbLevel(Monitor, _levelParser, GetGain, SetGain);
+                Drive ??= new MonitorRgbLevel(Monitor, _levelParser, GetDrive, SetDrive);
         }
 
-        public MonitorLevel Brightness => _brightness.Get();
-        private readonly IProperty<MonitorLevel> _brightness = H.Property<MonitorLevel>();
-        public MonitorLevel Contrast => _contrast.Get();
-        private readonly IProperty<MonitorLevel> _contrast = H.Property<MonitorLevel>();
-
-
-        public MonitorRgbLevel Gain => _gain.Get();
-        private readonly IProperty<MonitorRgbLevel> _gain = H.Property<MonitorRgbLevel>();
-        public MonitorRgbLevel Drive => _drive.Get();
-        private readonly IProperty<MonitorRgbLevel> _drive = H.Property<MonitorRgbLevel>();
-
-        private bool GetBrightness(ref uint min, ref uint value, ref uint max, uint component = 0)
+        public MonitorLevel Brightness
         {
-            var result = Dxva2.GetMonitorBrightness(HPhysical, ref min, ref value, ref max);
+            get => _brightness;
+            private set => this.RaiseAndSetIfChanged(ref _brightness, value);
+        }
+        MonitorLevel _brightness;
+
+        public MonitorLevel Contrast
+        {
+            get => _contrast;
+            private set => this.RaiseAndSetIfChanged(ref _contrast, value);
+        }
+        MonitorLevel _contrast;
+
+        public MonitorRgbLevel Gain
+        {
+            get => _gain;
+            private set => this.RaiseAndSetIfChanged(ref _gain, value);
+        }
+        MonitorRgbLevel _gain;
+
+        public MonitorRgbLevel Drive
+        {
+            get => _drive;
+            private set => this.RaiseAndSetIfChanged(ref _drive, value);
+        }
+        MonitorRgbLevel _drive;
+
+        bool GetBrightness(ref uint min, ref uint value, ref uint max, uint component = 0)
+        {
+            var result = GetMonitorBrightness(HPhysical, ref min, ref value, ref max);
             if (result) return true;
-            var r = Kernel32.GetLastError();
+            var r = GetLastError();
             return false;
         }
 
-        private bool SetBrightness(uint value, uint component = 0) 
-            => Dxva2.SetMonitorBrightness(HPhysical, value);
+        bool SetBrightness(uint value, uint component = 0) 
+            => SetMonitorBrightness(HPhysical, value);
 
-        private bool GetContrast(ref uint min, ref uint value, ref uint max, uint component = 0) 
-            => Dxva2.GetMonitorContrast(HPhysical, ref min, ref value, ref max);
+        bool GetContrast(ref uint min, ref uint value, ref uint max, uint component = 0) 
+            => GetMonitorContrast(HPhysical, ref min, ref value, ref max);
 
-        private bool SetContrast(uint value, uint component = 0) 
-            => Dxva2.SetMonitorContrast(HPhysical, value);
+        bool SetContrast(uint value, uint component = 0) 
+            => SetMonitorContrast(HPhysical, value);
 
-        private bool GetGain(ref uint min, ref uint value, ref uint max, uint component) 
-            => Dxva2.GetMonitorRedGreenOrBlueGain(HPhysical, component, ref min, ref value, ref max);
+        bool GetGain(ref uint min, ref uint value, ref uint max, uint component) 
+            => GetMonitorRedGreenOrBlueGain(HPhysical, component, ref min, ref value, ref max);
 
-        private bool SetGain(uint value, uint component) 
-            => Dxva2.SetMonitorRedGreenOrBlueGain(HPhysical, component, value);
+        bool SetGain(uint value, uint component) 
+            => SetMonitorRedGreenOrBlueGain(HPhysical, component, value);
 
-        private bool GetDrive(ref uint min, ref uint value, ref uint max, uint component) 
-            => Dxva2.GetMonitorRedGreenOrBlueDrive(HPhysical, component, ref min, ref value, ref max);
+        bool GetDrive(ref uint min, ref uint value, ref uint max, uint component) 
+            => GetMonitorRedGreenOrBlueDrive(HPhysical, component, ref min, ref value, ref max);
 
-        private bool SetDrive(uint component, uint value) 
-            => Dxva2.SetMonitorRedGreenOrBlueDrive(HPhysical, component, value);
+        bool SetDrive(uint component, uint value) 
+            => SetMonitorRedGreenOrBlueDrive(HPhysical, component, value);
     }
 
     public delegate bool VcpGetter(ref uint min, ref uint value, ref uint max, uint component = 0);

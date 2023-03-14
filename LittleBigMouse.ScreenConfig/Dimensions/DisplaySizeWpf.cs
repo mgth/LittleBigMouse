@@ -31,6 +31,7 @@ public class DisplaySizeWpf : DisplaySize
 {
     public DisplaySizeWpf(IDisplaySize source) : base(source)
     {
+        Init();
     }
 
     public IDisplayRatio Ratio

@@ -1,7 +1,7 @@
 ﻿using DynamicData;
-using HLab.Sys.Windows.API;
 using Newtonsoft.Json;
 using ReactiveUI;
+using System.Reactive.Linq;
 
 namespace HLab.Sys.Windows.Monitors
 {
@@ -10,13 +10,18 @@ namespace HLab.Sys.Windows.Monitors
         public PhysicalAdapter(string deviceId, IMonitorsService service)
         {
             DeviceId = deviceId;
-            MonitorsService = service;
+            //MonitorsService = service;
 
-            Displays = service.Devices.Connect().Filter(e => e.DeviceId == deviceId).AsObservableCache();
+            Displays = service
+                .Devices
+                .Connect()
+                .Filter(e => e.DeviceId == deviceId)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .AsObservableCache();
         }
 
-        [JsonIgnore]
-        public IMonitorsService MonitorsService { get; }
+        //[JsonIgnore]
+        //public IMonitorsService MonitorsService { get; }
         public string DeviceId { get; }
 
         public string DeviceString

@@ -26,6 +26,7 @@
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.MonitorVcp\HLab.Sys.Windows.MonitorVcp.csproj" />
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.Argyll\HLab.Sys.Argyll.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Wpf.csproj" />
     <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
   </ItemGroup>
 

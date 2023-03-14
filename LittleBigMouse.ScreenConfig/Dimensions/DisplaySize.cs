@@ -22,7 +22,9 @@
 */
 
 using System;
+using System.Reactive.Concurrency;
 using System.Runtime.Serialization;
+using System.Text;
 using Avalonia;
 using Newtonsoft.Json;
 using ReactiveUI;
@@ -35,71 +37,74 @@ public abstract class DisplaySize : ReactiveObject, IDisplaySize
     protected DisplaySize(IDisplaySize source)
     {
         Source = source;
+    }
 
-        this.WhenAnyValue(
-                e => e.LeftBorder,
-                e => e.RightBorder,
-                e => e.TopBorder,
-                e => e.BottomBorder,(l,r,t,b) => new Thickness(l, r, t, b))
-            .ToProperty(this, e => e.Borders,out _borders);
+    protected void Init()
+    {
+        _borders = this.WhenAnyValue(
+                _ => _.LeftBorder,
+                _ => _.TopBorder,
+                _ => _.RightBorder,
+                _ => _.BottomBorder,(left,top,right,bottom) => new Thickness(left, top, right, bottom))
+            .Log(this).ToProperty(this, _ => _.Borders, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.X,
-                e => e.Y,
+        _location = this.WhenAnyValue(
+                _ => _.X,
+                _ => _.Y,
                 (x,y) => new Point(x, y))
-            .ToProperty(this, e => e.Location,out _location);
+            .Log(this).ToProperty(this, _ => _.Location, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.Width,
-                e => e.Height,
+        _size = this.WhenAnyValue(
+                _ => _.Width,
+                _ => _.Height,
                 (x,y) => new Size(x, y))
-            .ToProperty(this, e => e.Size,out _size);
+            .Log(this).ToProperty(this, _ => _.Size, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.Location,
-                e => e.Size,
-                (l,s) => l + new Vector(s.Width / 2, s.Height / 2))
-            .ToProperty(this, e => e.Center,out _center);
+        _center = this.WhenAnyValue(
+                _ => _.Location,
+                _ => _.Size,
+                (location,size) => location + new Vector(size.Width / 2, size.Height / 2))
+            .Log(this).ToProperty(this, _ => _.Center, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.Location,
-                e => e.Size,
-                (l,s) => new Rect(l, s))
-            .ToProperty(this, e => e.Bounds,out _bounds);
+        _bounds = this.WhenAnyValue(
+                _ => _.Location,
+                _ => _.Size,
+                (location,size) => new Rect(location, size))
+            .Log(this).ToProperty(this, _ => _.Bounds, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.X,
-                e => e.LeftBorder,
+        _outsideX = this.WhenAnyValue(
+                _ => _.X,
+                _ => _.LeftBorder,
                 (x,leftBorder) => x - leftBorder)
-            .ToProperty(this, e => e.OutsideX,out _outsideX);
+            .Log(this).ToProperty(this, _ => _.OutsideX, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.Y,
-                e => e.TopBorder,
+        _outsideY = this.WhenAnyValue(
+                _ => _.Y,
+                _ => _.TopBorder,
                 (y,topBorder) => y - topBorder)
-            .ToProperty(this, e => e.OutsideY,out _outsideY);
+            .Log(this).ToProperty(this, _ => _.OutsideY, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.LeftBorder,
-                e => e.Width,
-                e => e.RightBorder,
+        _outsideWidth = this.WhenAnyValue(
+                _ => _.LeftBorder,
+                _ => _.Width,
+                _ => _.RightBorder,
                 (leftBorder,width,rightBorder) => leftBorder + width + rightBorder)
-            .ToProperty(this, e => e.OutsideWidth,out _outsideWidth);
+            .Log(this).ToProperty(this, _ => _.OutsideWidth, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.TopBorder,
-                e => e.Height,
-                e => e.BottomBorder,
+        _outsideHeight = this.WhenAnyValue(
+                _ => _.TopBorder,
+                _ => _.Height,
+                _ => _.BottomBorder,
                 (topBorder,height,bottomBorder) => topBorder + height + bottomBorder)
-            .ToProperty(this, e => e.OutsideHeight,out _outsideHeight);
+            .Log(this).ToProperty(this, _ => _.OutsideHeight, scheduler: Scheduler.Immediate);
 
-        this.WhenAnyValue(
-                e => e.OutsideX,
-                e => e.OutsideY,
-                e => e.OutsideWidth,
-                e => e.OutsideHeight,
+        _outsideBounds = this.WhenAnyValue(
+                _ => _.OutsideX,
+                _ => _.OutsideY,
+                _ => _.OutsideWidth,
+                _ => _.OutsideHeight,
                 (x,y,width,height) => new Rect(new Point(x, y), new Size(width, height)))
-            .ToProperty(this, e => e.OutsideBounds,out _outsideBounds);
+            .Log(this).ToProperty(this, _ => _.OutsideBounds, scheduler: Scheduler.Immediate);
     }
 
     [JsonIgnore]
@@ -125,45 +130,45 @@ public abstract class DisplaySize : ReactiveObject, IDisplaySize
 
 
     [DataMember]
-    public Thickness Borders => _borders.Get();
-    readonly ObservableAsPropertyHelper<Thickness> _borders;
+    public Thickness Borders => _borders.Value;
+    ObservableAsPropertyHelper<Thickness> _borders;
 
     //[DataMember]
     public Point Location
     {
-        get => _location.Get();
+        get => _location.Value;
         set
         {
             X = value.X;
             Y = value.Y;
         }
     }
-    readonly ObservableAsPropertyHelper<Point> _location;
+    ObservableAsPropertyHelper<Point> _location;
 
     public Size Size
     {
-        get => _size.Get();
+        get => _size.Value;
         set
         {
             Height = value.Height;
             Width = value.Width;
         }
     }
-    readonly ObservableAsPropertyHelper<Size> _size;
+    ObservableAsPropertyHelper<Size> _size;
 
-    public Point Center => _center.Get();
-    readonly ObservableAsPropertyHelper<Point> _center;
+    public Point Center => _center.Value;
+    ObservableAsPropertyHelper<Point> _center;
 
-    [DataMember] public Rect Bounds => _bounds.Get();
-    readonly ObservableAsPropertyHelper<Rect> _bounds;
+    [DataMember] public Rect Bounds => _bounds.Value;
+    ObservableAsPropertyHelper<Rect> _bounds;
 
     //[DataMember]
     public double OutsideX
     {
-        get => _outsideX.Get();
+        get => _outsideX.Value;
         set => X = value + LeftBorder;
     }
-    readonly ObservableAsPropertyHelper<double> _outsideX;
+    ObservableAsPropertyHelper<double> _outsideX;
 
     //[DataMember]
     public double OutsideY
@@ -171,28 +176,46 @@ public abstract class DisplaySize : ReactiveObject, IDisplaySize
         get => _outsideY.Value;
         set => Y = value + TopBorder;
     }
-    readonly ObservableAsPropertyHelper<double> _outsideY;
+    ObservableAsPropertyHelper<double> _outsideY;
 
     public double OutsideWidth
     {
-        get => _outsideWidth.Get();
+        get => _outsideWidth.Value;
         set => throw new NotImplementedException();
     }
-    readonly ObservableAsPropertyHelper<double> _outsideWidth;
+    ObservableAsPropertyHelper<double> _outsideWidth;
 
     public double OutsideHeight
     {
-        get => _outsideHeight.Get();
+        get => _outsideHeight.Value;
         set => throw new NotImplementedException();
     }
-    readonly ObservableAsPropertyHelper<double> _outsideHeight;
+    ObservableAsPropertyHelper<double> _outsideHeight;
 
     [DataMember]
-    public Rect OutsideBounds => _outsideBounds.Get();
-    readonly ObservableAsPropertyHelper<Rect> _outsideBounds;
+    public Rect OutsideBounds => _outsideBounds.Value;
+    ObservableAsPropertyHelper<Rect> _outsideBounds;
 
     public bool Equals(IDisplaySize other)
     {
-        throw new NotImplementedException();
+        if (other == null)
+            return false;
+        
+        return X == other.X && Y == other.Y && Width == other.Width && Height == other.Height &&
+               TopBorder == other.TopBorder && BottomBorder == other.BottomBorder &&
+               LeftBorder == other.LeftBorder && RightBorder == other.RightBorder;
+    }
+
+    public virtual string TransformToString => string.Empty;
+
+    public override string ToString()
+    {
+        var b = new StringBuilder();
+
+        b.Append($"{Source?.ToString() ?? "()"} -> ");
+        if (!string.IsNullOrEmpty(TransformToString)) b.Append($"{TransformToString} -> ");
+        b.Append($"[{X},{Y}-({Width}x{Height}) B:{Borders}]");
+
+        return b.ToString();
     }
 }

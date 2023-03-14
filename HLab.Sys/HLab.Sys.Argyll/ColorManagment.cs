@@ -21,16 +21,11 @@
 	  http://www.mgth.fr
 */
 using System;
-using System.Windows.Media;
 
 namespace HLab.Sys.Argyll
 {
     //http://www.brucelindbloom.com/index.html
     //http://ninedegreesbelow.com/photography/xyz-rgb.html
-
-
-
-
 
     public abstract class ProbedColor
     {
@@ -45,10 +40,10 @@ namespace HLab.Sys.Argyll
         public virtual ProbedColorRGB RGB(Gamut gamut) => XYZ.RGB(gamut);
 
 
-        private static double Calc(double T, double coef, double exp)
+        static double Calc(double T, double coef, double exp)
             => coef*Math.Pow(10, exp*3)/ Math.Pow(T, exp);
 
-        private static double Quadratic(double T, double a3, double b2, double cx, double d)
+        static double Quadratic(double T, double a3, double b2, double cx, double d)
             => Calc(T, a3, 3) + Calc(T, b2, 2) + Calc(T, cx, 1) + d;
 
         public static ProbedColor DIlluminant(double T)
@@ -69,15 +64,15 @@ namespace HLab.Sys.Argyll
 
         public ProbedColor ToLuminance(double l)
         {
-            ProbedColorxyY c = xyY;
+            var c = xyY;
             c.Y = l;
             return c;
         }
         public ProbedColor ToSum(double v=1)
         {
-            ProbedColorXYZ c = XYZ;
+            var c = XYZ;
 
-            double sum = (c.X + c.X + c.Y)/v;
+            var sum = (c.X + c.X + c.Y)/v;
 
             return new ProbedColorXYZ
             {
@@ -91,7 +86,7 @@ namespace HLab.Sys.Argyll
         public double DeltaE(ProbedColor referenceColor = null)
         {
             ProbedColorLab refLab;
-            ProbedColorLab lab = Lab;
+            var lab = Lab;
 
             if (referenceColor == null)
             {
@@ -101,7 +96,7 @@ namespace HLab.Sys.Argyll
             else refLab = referenceColor.Lab;
 
 
-            double result =
+            var result =
                 (lab.L - refLab.L)*(lab.L - refLab.L)
                 + (lab.a - refLab.a)*(lab.a - refLab.a)
                 + (lab.b - refLab.b)*(lab.b - refLab.b);
@@ -112,7 +107,7 @@ namespace HLab.Sys.Argyll
         public double DeltaE00(ProbedColor referenceColor = null)
         {
             ProbedColorLab refLab;
-            ProbedColorLab lab = Lab;
+            var lab = Lab;
             //lab.L = 1;
 
             if (referenceColor == null)
@@ -122,51 +117,51 @@ namespace HLab.Sys.Argyll
             }
             else refLab = referenceColor.Lab;
 
-            double Rad = Math.PI/180;
-            double Rad180 = Math.PI;
-            double Rad360 = 2*Rad180;
+            var Rad = Math.PI/180;
+            var Rad180 = Math.PI;
+            var Rad360 = 2*Rad180;
 
-            double L1 = refLab.L;
-            double a1 = refLab.a;
-            double b1 = refLab.b;
-            double L2 = lab.L;
-            double a2 = lab.a;
-            double b2 = lab.b;
+            var L1 = refLab.L;
+            var a1 = refLab.a;
+            var b1 = refLab.b;
+            var L2 = lab.L;
+            var a2 = lab.a;
+            var b2 = lab.b;
 
-            double avgLp = (L1 + L2)/2;
-            double C1 = Math.Sqrt(a1*a1 + b1*b1);
-            double C2 = Math.Sqrt(a2*a2 + b2*b2);
+            var avgLp = (L1 + L2)/2;
+            var C1 = Math.Sqrt(a1*a1 + b1*b1);
+            var C2 = Math.Sqrt(a2*a2 + b2*b2);
 
-            double avgC = (C1 + C2)/2;
-            double avgC7 = Math.Pow(avgC, 7);
+            var avgC = (C1 + C2)/2;
+            var avgC7 = Math.Pow(avgC, 7);
 
-            double G = (1 - Math.Sqrt(avgC7/(avgC7 + Math.Pow(25.0, 7.0))))/2;
+            var G = (1 - Math.Sqrt(avgC7/(avgC7 + Math.Pow(25.0, 7.0))))/2;
 
-            double ap1 = a1*(1 + G);
-            double ap2 = a2*(1 + G);
+            var ap1 = a1*(1 + G);
+            var ap2 = a2*(1 + G);
 
-            double Cp1 = Math.Sqrt(ap1*ap1 + b1*b1);
-            double Cp2 = Math.Sqrt(ap2*ap2 + b2*b2);
+            var Cp1 = Math.Sqrt(ap1*ap1 + b1*b1);
+            var Cp2 = Math.Sqrt(ap2*ap2 + b2*b2);
 
-            double avgCp = (Cp1 + Cp2)/2;
+            var avgCp = (Cp1 + Cp2)/2;
 
 
-            double hp1 = Math.Atan2(b1, ap1);
+            var hp1 = Math.Atan2(b1, ap1);
             if (hp1 < 0) hp1 += Rad360;
 
-            double hp2 = Math.Atan2(b2, ap2);
+            var hp2 = Math.Atan2(b2, ap2);
             if (hp2 < 0) hp2 += Rad360;
 
-            double avgHp = (hp1 + hp2)/2;
+            var avgHp = (hp1 + hp2)/2;
             if (Math.Abs(hp1 - hp2) > Rad180) avgHp += Rad180;
 
-            double T = 1
-                       - 0.17*Math.Cos(1*avgHp - 30.0*Rad)
-                       + 0.24*Math.Cos(2*avgHp)
-                       + 0.32*Math.Cos(3*avgHp + 6.0*Rad)
-                       - 0.20*Math.Cos(4*avgHp - 63.0*Rad);
+            var T = 1
+                    - 0.17*Math.Cos(1*avgHp - 30.0*Rad)
+                    + 0.24*Math.Cos(2*avgHp)
+                    + 0.32*Math.Cos(3*avgHp + 6.0*Rad)
+                    - 0.20*Math.Cos(4*avgHp - 63.0*Rad);
 
-            double dhp = hp2 - hp1;
+            var dhp = hp2 - hp1;
             if (Math.Abs(dhp) > Rad180)
             {
                 if (hp2 > hp1)
@@ -175,24 +170,24 @@ namespace HLab.Sys.Argyll
                     dhp += Rad360;
             }
 
-            double dLp = L2 - L1;
-            double dCp = Cp2 - Cp1;
+            var dLp = L2 - L1;
+            var dCp = Cp2 - Cp1;
 
-            double dHp = 2*Math.Sqrt(Cp1*Cp2)*Math.Sin(dhp/2);
+            var dHp = 2*Math.Sqrt(Cp1*Cp2)*Math.Sin(dhp/2);
 
-            double avgLp50 = Math.Pow(avgLp - 50.0, 2);
+            var avgLp50 = Math.Pow(avgLp - 50.0, 2);
 
-            double Sl = 1 + (0.015*avgLp50/Math.Sqrt(20.0 + avgLp50));
-            double Sc = 1 + 0.045*avgCp;
-            double Sh = 1 + 0.015*avgCp*T;
+            var Sl = 1 + (0.015*avgLp50/Math.Sqrt(20.0 + avgLp50));
+            var Sc = 1 + 0.045*avgCp;
+            var Sh = 1 + 0.015*avgCp*T;
 
-            double dO = (30.0*Rad)*Math.Exp(-Math.Pow(avgHp - 275.0*Rad, 2));
+            var dO = (30.0*Rad)*Math.Exp(-Math.Pow(avgHp - 275.0*Rad, 2));
 
-            double avgCp7 = Math.Pow(avgCp, 7);
+            var avgCp7 = Math.Pow(avgCp, 7);
 
-            double Rc = 2*Math.Sqrt(avgCp7/(avgCp7 + Math.Pow(25.0, 7.0)));
+            var Rc = 2*Math.Sqrt(avgCp7/(avgCp7 + Math.Pow(25.0, 7.0)));
 
-            double Rt = -Rc*Math.Sin(2*dO);
+            var Rt = -Rc*Math.Sin(2*dO);
 
             const double Kl = 1.0;
             const double Kc = 1.0;
@@ -200,7 +195,7 @@ namespace HLab.Sys.Argyll
 
 
 
-            double de =
+            var de =
                 Math.Pow(dLp/(Kl*Sl), 2)
                 + Math.Pow(dCp/(Kc*Sc), 2)
                 + Math.Pow(dHp/(Kh*Sh), 2)
@@ -281,7 +276,7 @@ namespace HLab.Sys.Argyll
             {
 
 
-                ProbedColorXYZ xyz = XYZ;
+                var xyz = XYZ;
 
                 if ((xyz.X < 1.0e-20) && (xyz.Y < 1.0e-20) && (xyz.Z < 1.0e-20))
                     return (-1); /* protect against possible divide-by-zero failure */
@@ -343,7 +338,7 @@ namespace HLab.Sys.Argyll
                     Z = Z / Max,
                 };
 
-                ProbedColorXYZ xyz = new ProbedColorXYZ {X = X, Y = Y, Z = Z, Illuminant = Illuminant};
+                var xyz = new ProbedColorXYZ {X = X, Y = Y, Z = Z, Illuminant = Illuminant};
                 if (xyz.X > 1)
                 {
                     xyz.Y /= xyz.X;
@@ -379,13 +374,13 @@ namespace HLab.Sys.Argyll
         {
             get
             {
-                ProbedColorXYZ white = Illuminant.XYZ;
+                var white = Illuminant.XYZ;
 
-                double fX = LabF(X / white.X);
-                double fY = LabF(Y / white.Y);
-                double fZ = LabF(Z / white.Z);
+                var fX = LabF(X / white.X);
+                var fY = LabF(Y / white.Y);
+                var fZ = LabF(Z / white.Z);
 
-                ProbedColorLab lab = new ProbedColorLab
+                var lab = new ProbedColorLab
                 {
                     Illuminant = Illuminant,
                     L = 116*fY - 16,
@@ -401,12 +396,12 @@ namespace HLab.Sys.Argyll
         {
             get
             {
-                double sum = X + Y + Z;
+                var sum = X + Y + Z;
 
                 if (sum == 0) return new ProbedColorxyY(0,0,0) {Illuminant = Illuminant};
 
 
-                ProbedColorxyY xyy = new ProbedColorxyY(
+                var xyy = new ProbedColorxyY(
                     X / sum, 
                     Y / sum, 
                     Y)
@@ -445,17 +440,17 @@ namespace HLab.Sys.Argyll
                 const double e = 216.0/24389.0;
                 const double k = 24389.0/27.0;
 
-                double fy = (L + 16)/116;
-                double fz = fy - (b/200);
-                double fx = (a/500) + fy;
+                var fy = (L + 16)/116;
+                var fz = fy - (b/200);
+                var fx = (a/500) + fy;
 
-                double fx3 = Math.Pow(fx, 3);
-                double fz3 = Math.Pow(fz, 3);
-                double x = (fx3 > e) ? fx3 : (116*fx - 16)/k;
-                double y = (L > k*e) ? Math.Pow((L + 16)/116, 3) : L/k;
-                double z = (fz3 > e) ? fz3 : (116*fz - 16)/k;
+                var fx3 = Math.Pow(fx, 3);
+                var fz3 = Math.Pow(fz, 3);
+                var x = (fx3 > e) ? fx3 : (116*fx - 16)/k;
+                var y = (L > k*e) ? Math.Pow((L + 16)/116, 3) : L/k;
+                var z = (fz3 > e) ? fz3 : (116*fz - 16)/k;
 
-                ProbedColorXYZ white = Illuminant.XYZ;
+                var white = Illuminant.XYZ;
 
                 return new ProbedColorXYZ
                 {
@@ -536,27 +531,26 @@ namespace HLab.Sys.Argyll
             B = b;
         }
 
-
-
         public ProbedColorRGB Normalized
         {
             get
             {
-                double max = Math.Max(Math.Max(R, G),B);
+                var max = Math.Max(Math.Max(R, G),B);
 
-                ProbedColorRGB RGB = new ProbedColorRGB  ( Illuminant, R/max, G/max, B/max ) ;
+                var RGB = new ProbedColorRGB  ( Illuminant, R/max, G/max, B/max ) ;
 
                 return RGB;
             }
         }
+
         public ProbedColorRGB Saturated
         {
             get
             {
-                double min = Math.Min(Math.Min(R, G), B);
-                double max = Math.Max(Math.Max(R, G), B) - min;
+                var min = Math.Min(Math.Min(R, G), B);
+                var max = Math.Max(Math.Max(R, G), B) - min;
 
-                ProbedColorRGB RGB = new ProbedColorRGB(Illuminant, (R - min)/max, (G - min)/max, (B - min)/max);
+                var RGB = new ProbedColorRGB(Illuminant, (R - min)/max, (G - min)/max, (B - min)/max);
 
                 return RGB;
             }
@@ -565,7 +559,7 @@ namespace HLab.Sys.Argyll
 
         public ProbedColorRGB Bits(int n)
         {
-            double max = Math.Pow(2, n) - 1;
+            var max = Math.Pow(2, n) - 1;
 
             return new ProbedColorRGB(
                 Illuminant,
@@ -573,9 +567,8 @@ namespace HLab.Sys.Argyll
                 Math.Min(G * max, max),
                 Math.Min(B * max, max)
                 );
-
-
         }
+
         public ProbedColorRGB sRGBCompanding => new ProbedColorRGB(
 
             Illuminant,
@@ -610,17 +603,17 @@ namespace HLab.Sys.Argyll
             );
         private static double LComp(double v)
         {
-            double k = 24389.0/27.0;
-            double e = 216.0/24389.0;
+            var k = 24389.0/27.0;
+            var e = 216.0/24389.0;
             return (v > e) ? 1.16*Math.Pow(v, 1.0/3.0) - 0.16:v*k/100.0;
         }
 
-        public Color Color
+        public (byte,byte,byte) Color
         {
             get
             {
-                ProbedColorRGB rgb = Bits(8);
-                return Color.FromRgb((byte)rgb.R, (byte)rgb.G, (byte)rgb.B);
+                var rgb = Bits(8);
+                return ((byte)rgb.R, (byte)rgb.G, (byte)rgb.B);
             }
         }
     }

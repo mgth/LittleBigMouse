@@ -30,23 +30,26 @@ using HLab.Sys.Argyll;
 using HLab.Notify.Annotations;
 using HLab.Notify.PropertyChanged;
 using HLab.Sys.Windows.Monitors;
+using ReactiveUI;
 
 namespace HLab.Sys.Windows.MonitorVcp
 {
-    using H = H<ProbeLut>;
-
-    public class ProbeLut : NotifierBase
+    public class ProbeLut : ReactiveObject
     {
         public ProbedColor DIlluminant { get; }
 
-        private readonly MonitorDevice _monitor;
+        readonly MonitorDevice _monitor;
 
-        private List<Tune> _lut = new List<Tune>();
+        List<Tune> _lut = new List<Tune>();
 
         internal ProbeLut(MonitorDevice monitor)
         {
             _monitor = monitor;
-            H.Initialize(this);
+
+            _luminance = this.WhenAnyValue(
+                e => e.Vcp.Brightness.Value,
+                selector: e => GetLuminance()
+            ).ToProperty(this, _ => _.Luminance);
         }
 
         public VcpControl Vcp => _monitor.Vcp();
@@ -59,6 +62,7 @@ namespace HLab.Sys.Windows.MonitorVcp
             _lut.Remove(t);
             return true;
         }
+
         public bool RemoveLowBrightness(double maxgain)
         {
             var t = _lut.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain== maxgain));
@@ -112,6 +116,7 @@ namespace HLab.Sys.Windows.MonitorVcp
 
             return t;
         }
+
         public Tune FromBrightness(double brightness)
         {
             if (_lut.Count == 0) return Current;
@@ -150,9 +155,9 @@ namespace HLab.Sys.Windows.MonitorVcp
             return t;
         }
 
-        private double GetLuminance() => FromBrightness(Vcp.Brightness.Value).Y;
+        double GetLuminance() => FromBrightness(Vcp.Brightness.Value).Y;
 
-        private void SetLuminance(double luminance)
+        void SetLuminance(double luminance)
         {
             var t = FromLuminance(luminance);
             Vcp.Brightness.Value = (uint)Math.Round(t.Brightness,0);
@@ -173,15 +178,11 @@ namespace HLab.Sys.Windows.MonitorVcp
 
         public double Luminance
         {
-            get => _luminance.Get();
+            get => _luminance.Value;
             set => SetLuminance(value);
         }
 
-        private readonly IProperty<double> _luminance = H.Property<double>(c => c
-            .Set(e => e.GetLuminance())
-            .On(e => e.Vcp.Brightness.Value)
-            .Update()
-        );
+        ObservableAsPropertyHelper<double> _luminance;
 
         public double MaxLuminance => 
             (_lut.Count==0)?1:_lut.Last().Y;

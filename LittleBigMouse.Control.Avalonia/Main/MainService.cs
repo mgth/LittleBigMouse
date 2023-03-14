@@ -22,44 +22,45 @@
 */
 
 using System;
-using System.Windows;
+using Avalonia.Controls;
 using HLab.Icons.Annotations.Icons;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
+using HLab.Mvvm.Avalonia;
+using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.Plugins;
-using LittleBigMouse.Plugins.Avalonia;
 using LittleBigMouse.Zoning;
 
-namespace LittleBigMouse.Control.Main;
+namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public class MainService : IMainService
 {
     public IMonitorsLayout Layout { get; }
 
-    readonly Func<MainControlViewModel> _getMainControl;
-    readonly Func<IMonitorsLayout, MultiScreensViewModel> _getViewModel;
+    readonly Func<IMainPluginsViewModel> _getMainViewModel;
     readonly IMvvmService _mvvmService;
 
-    readonly UserNotify _notify;
+    readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
 
+    Window? _controlWindow = null;
+    Action<IMainPluginsViewModel>? _actions;
+
     public MainService(
-        Func<MainControlViewModel> mainControlGetter,
+        Func<IMainPluginsViewModel> mainViewModelGetter,
         IMonitorsLayout layout,
-        Func<IMonitorsLayout, MultiScreensViewModel> getViewModel,
         IMvvmService mvvmService,
         IIconService iconService,
-        ILittleBigMouseClientService littleBigMouseClientService
+        ILittleBigMouseClientService littleBigMouseClientService,
+        IUserNotificationService notify
     )
     {
-        _notify = new UserNotify(iconService);
+        _notify = notify;
+        _littleBigMouseClientService = littleBigMouseClientService;
 
         _mvvmService = mvvmService;
-        _getMainControl = mainControlGetter;
-        _getViewModel = getViewModel;
-
-        _littleBigMouseClientService = littleBigMouseClientService;
+        _getMainViewModel = mainViewModelGetter;
 
         _littleBigMouseClientService.StateChanged += _littleBigMouseClientService_StateChanged;
 
@@ -67,7 +68,6 @@ public class MainService : IMainService
     }
 
 
-    Window _controlWindow = null;
     public void ShowControl()
     {
         if (_controlWindow is { IsLoaded: true })
@@ -76,13 +76,15 @@ public class MainService : IMainService
             return;
         }
 
-        var viewModel = _getMainControl();
+        var viewModel = _getMainViewModel();
         viewModel.Layout = Layout;
-        viewModel.Presenter = _getViewModel(Layout);
 
         _actions?.Invoke(viewModel);
 
-        _controlWindow = (Window)_mvvmService.MainContext.GetView<ViewModeDefault>(viewModel, typeof(IViewClassDefault));
+        _controlWindow = _mvvmService
+            .MainContext
+            .GetView<DefaultViewMode>(viewModel, typeof(IDefaultViewClass))
+            ?.AsWindow();
 
         if (_controlWindow == null) return;
 
@@ -92,8 +94,6 @@ public class MainService : IMainService
 
     public void StartNotifier()
     {
-        if (_notify == null) return;
-
         _notify.Click += (s, a) => ShowControl();
 
         // TODO 
@@ -109,9 +109,7 @@ public class MainService : IMainService
         _notify.Show();
     }
 
-    Action<IMainControl> _actions;
-
-    public void AddControlPlugin(Action<IMainControl> action)
+    public void AddControlPlugin(Action<IMainPluginsViewModel>? action)
     {
         _actions += action;
     }
@@ -119,10 +117,11 @@ public class MainService : IMainService
     void Quit()
     {
         _littleBigMouseClientService.Quit();
-        Application.Current.Shutdown();
+        // TODO : Avalonia
+        //Application.Current.Shutdown();
     }
 
-    void _littleBigMouseClientService_StateChanged(object sender, LittleBigMouseServiceEventArgs args)
+    void _littleBigMouseClientService_StateChanged(object? sender, LittleBigMouseServiceEventArgs args)
     {
         switch (args.State)
         {

@@ -1,23 +1,18 @@
-﻿using HLab.Notify.PropertyChanged;
-using HLab.Sys.Windows.Monitors;
-using HLab.Sys.Windows.MonitorVcp;
+﻿using HLab.Sys.Windows.Monitors;
+using ReactiveUI;
 
 namespace HLab.Sys.Windows.MonitorVcp
 {
-    using H = H<MonitorRgbLevel>;
-
-    public class MonitorRgbLevel : NotifierBase
+    public class MonitorRgbLevel : ReactiveObject
     {
-        private readonly MonitorLevel[] _values = new MonitorLevel[3];
+        readonly MonitorLevel[] _values = new MonitorLevel[3];
 
         public MonitorRgbLevel(MonitorDevice monitor, LevelParser parser, VcpGetter getter, VcpSetter setter)
         {
             for (uint i = 0; i < 3; i++)
                 _values[i] = new MonitorLevel(monitor, parser, getter, setter, i);
-
-            H.Initialize(this);
-
         }
+
         public MonitorLevel Channel(uint channel) { return _values[channel]; }
 
         public MonitorLevel Red => Channel(0);

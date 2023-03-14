@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using Avalonia;
@@ -9,6 +11,11 @@ using HLab.Sys.Windows.API;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 using ReactiveUI;
+
+using static HLab.Sys.Windows.API.ErrHandlingApi;
+using static HLab.Sys.Windows.API.SetupApi;
+using static HLab.Sys.Windows.API.ShellScalingApi;
+using static HLab.Sys.Windows.API.WinBase;
 
 namespace HLab.Sys.Windows.Monitors
 {
@@ -23,11 +30,12 @@ namespace HLab.Sys.Windows.Monitors
             Edid = GetEdid(deviceId);
             IdMonitor = GetMicrosoftId(deviceId, Edid);
 
-            Devices = MonitorsService.Devices.Connect().Filter(
-                e => e.DeviceId == deviceId
-                ).AsObservableCache();
-
-
+            Devices = MonitorsService
+                .Devices
+                .Connect()
+                .Filter(e => e.DeviceId == deviceId)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .AsObservableCache();
         }
 
         [DataMember] public string DeviceId { get; }
@@ -67,8 +75,7 @@ namespace HLab.Sys.Windows.Monitors
 
             return edid is null 
                 ? GetPhysicalId(deviceId, null)
-                : $"{GetPhysicalId(deviceId, edid)}_{edid.Checksum:X2}" 
-                ;
+                : $"{GetPhysicalId(deviceId, edid)}_{edid.Checksum:X2}";
         }
 
         [DataMember] public string IdPhysicalMonitor { get; }
@@ -117,7 +124,14 @@ namespace HLab.Sys.Windows.Monitors
         }
         DisplayDevice _attachedDisplay;
 
-        internal void SetMonitorInfoEx(User32.MONITORINFOEX mi)
+        internal void SetMonitorInfo(WinUser.MonitorInfoEx mi)
+        {
+            Primary = mi.Flags == 1;
+            MonitorArea = mi.Monitor.ToRect();
+            WorkArea = mi.WorkArea.ToRect();
+        }
+        
+        internal void SetMonitorInfo(WinUser.MonitorInfo mi)
         {
             Primary = mi.Flags == 1;
             MonitorArea = mi.Monitor.ToRect();
@@ -174,42 +188,41 @@ namespace HLab.Sys.Windows.Monitors
 
         static Edid GetEdid(string deviceId)
         {
-            IntPtr devInfo = SetupApi.SetupDiGetClassDevsEx(
-                ref SetupApi.GUID_CLASS_MONITOR, //class GUID
+            var devInfo = SetupDiGetClassDevsEx(
+                ref GUID_CLASS_MONITOR, //class GUID
                 null, //enumerator
-                IntPtr.Zero, //HWND
-                SetupApi.DIGCF_PRESENT | SetupApi.DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
-                IntPtr.Zero, // device info, create a new one.
+                0, //HWND
+                DIGCF_PRESENT | DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
+                0, // device info, create a new one.
                 null, // machine name, local machine
-                IntPtr.Zero
+                0
             ); // reserved
 
             try
             {
-                if (devInfo == IntPtr.Zero)
+                if (devInfo == 0)
                 {
                     return null;
                 }
 
-                var devInfoData = new SetupApi.SP_DEVINFO_DATA();
+                var devInfoData = new SP_DEVINFO_DATA();
 
                 uint i = 0;
 
                 do
                 {
-                    if (SetupApi.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
+                    if (SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                     {
 
-                        var hEdidRegKey = SetupApi.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                            SetupApi.DICS_FLAG_GLOBAL, 0, SetupApi.DIREG_DEV, SetupApi.KEY_READ);
+                        var hEdidRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData,
+                            DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
 
                         try
                         {
-                            if (hEdidRegKey != IntPtr.Zero && ((int)hEdidRegKey != -1))
+                            if (hEdidRegKey != 0 && ((int)hEdidRegKey != -1))
                             {
                                 using var key = GetKeyFromPath(GetHKeyName(hEdidRegKey), 1);
-
-                                var value = key.GetValue("HardwareID");
+                                var value = key?.GetValue("HardwareID");
                                 if (value is string[] s && s.Length > 0)
                                 {
                                     var id = s[0] + "\\" +
@@ -228,44 +241,62 @@ namespace HLab.Sys.Windows.Monitors
                         }
                         finally
                         {
-                            var result = AdvApi32.RegCloseKey(hEdidRegKey);
+                            var result = WinReg.RegCloseKey(hEdidRegKey);
                             if (result > 0)
-                                throw new Exception(Kernel32.GetLastErrorString());
+                                throw new Exception(GetLastErrorString());
                         }
                     }
 
 
                     i++;
-                } while (Kernel32.ERROR_NO_MORE_ITEMS != Kernel32.GetLastError());
+                } while (ErrorNoMoreItems != GetLastError());
             }
             finally
             {
-                SetupApi.SetupDiDestroyDeviceInfoList(devInfo);
+                SetupDiDestroyDeviceInfoList(devInfo);
             }
 
             return null;
         }
 
-        public IntPtr HMonitor { get; private set; }
-        public void UpdateDpi(IntPtr hMonitor)
+        //public nint HMonitor { get; private set; }
+        public void UpdateDpi(nint hMonitor)
         {
-            HMonitor = hMonitor;
+            //HMonitor = hMonitor;
 
             {
-                Shcore.GetDpiForMonitor(hMonitor, Shcore.DpiType.Effective, out var x, out var y);
+                var hResult = GetDpiForMonitor(hMonitor, DpiType.Effective, out var x, out var y);
+                if (hResult != 0)
+                {
+                    var errorCode = Marshal.GetLastWin32Error();
+                    Debug.WriteLine("GetDpiForMonitor failed with error code: {0}", errorCode);
+                }
+                
                 EffectiveDpi = new Vector(x, y);
             }
             {
-                Shcore.GetDpiForMonitor(hMonitor, Shcore.DpiType.Angular, out var x, out var y);
+                if (GetDpiForMonitor(hMonitor, DpiType.Angular, out var x, out var y) != 0)
+                {
+                    var errorCode = Marshal.GetLastWin32Error();
+                    Debug.WriteLine("GetDpiForMonitor failed with error code: {0}", errorCode);
+                }
                 AngularDpi = new Vector(x, y);
             }
             {
-                Shcore.GetDpiForMonitor(hMonitor, Shcore.DpiType.Raw, out var x, out var y);
+                if (GetDpiForMonitor(hMonitor, DpiType.Raw, out var x, out var y) != 0)
+                {
+                    var errorCode = Marshal.GetLastWin32Error();
+                    Debug.WriteLine("GetDpiForMonitor failed with error code: {0}", errorCode);
+                }
                 RawDpi = new Vector(x, y);
             }
             {
                 var factor = 100;
-                Shcore.GetScaleFactorForMonitor(hMonitor, ref factor);
+                if (GetScaleFactorForMonitor(hMonitor, ref factor) != 0)
+                {
+                    var errorCode = Marshal.GetLastWin32Error();
+                    Debug.WriteLine("GetScaleFactorForMonitor failed with error code: {0}", errorCode);
+                }
                 ScaleFactor = (double)factor / 100.0;
             }
 
@@ -368,27 +399,25 @@ namespace HLab.Sys.Windows.Monitors
 
             return key;
         }
-        public static string GetHKeyName(IntPtr hKey)
+        public static string GetHKeyName(nint hKey)
         {
             var result = string.Empty;
-            var pKNI = IntPtr.Zero;
 
-            var needed = 0;
-            var status = Ntdll.ZwQueryKey(hKey, Ntdll.KEY_INFORMATION_CLASS.KeyNameInformation, IntPtr.Zero, 0, out needed);
+            var status = Wdm.ZwQueryKey(hKey, Wdm.KeyInformationClass.KeyNameInformation, 0, 0, out var needed);
             if (status != 0xC0000023) return result;
 
-            pKNI = Marshal.AllocHGlobal(cb: sizeof(uint) + needed + 4 /*paranoia*/);
-            status = Ntdll.ZwQueryKey(hKey, Ntdll.KEY_INFORMATION_CLASS.KeyNameInformation, pKNI, needed, out needed);
+            var pKni = Marshal.AllocHGlobal(cb: sizeof(uint) + needed + 4 /*paranoia*/);
+            status = Wdm.ZwQueryKey(hKey, Wdm.KeyInformationClass.KeyNameInformation, pKni, needed, out needed);
             if (status == 0)    // STATUS_SUCCESS
             {
                 var bytes = new char[2 + needed + 2];
-                Marshal.Copy(pKNI, bytes, 0, needed);
+                Marshal.Copy(pKni, bytes, 0, needed);
                 // startIndex == 2  skips the NameLength field of the structure (2 chars == 4 bytes)
                 // needed/2         reduces value from bytes to chars
                 //  needed/2 - 2    reduces length to not include the NameLength
                 result = new string(bytes, 2, (needed / 2) - 2);
             }
-            Marshal.FreeHGlobal(pKNI);
+            Marshal.FreeHGlobal(pKni);
             return result;
         }
 

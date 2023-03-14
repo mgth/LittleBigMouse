@@ -1,17 +1,18 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ReactiveUI" Version="18.3.1" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
     <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
   </ItemGroup>
 

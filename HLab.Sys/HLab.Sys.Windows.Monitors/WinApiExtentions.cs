@@ -2,16 +2,17 @@
 using DynamicData;
 using HLab.Sys.Windows.API;
 using System;
+using Avalonia.Threading;
 
 namespace HLab.Sys.Windows.Monitors
 {
     internal static class WinApiExtensions
     {
-        public static Rect ToRect(this User32.RECT r)
+        public static Rect ToRect(this WinDef.Rect r)
         {
             return new Rect(r.X, r.Y, r.Width, r.Height);
         }
-        public static Point ToPoint(this User32.POINT p)
+        public static Point ToPoint(this WinDef.Point p)
         {
             return new Point(p.X, p.Y);
         }

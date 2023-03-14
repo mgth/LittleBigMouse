@@ -22,7 +22,7 @@
 */
 
 using System;
-
+using System.Reactive.Concurrency;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
@@ -34,31 +34,37 @@ public class DisplayRatioRatio : DisplayRatio
         SourceA = ratioA;
         SourceB = ratioB;
 
-        this.WhenAnyValue(
+        _x = this.WhenAnyValue(
                 e => e.SourceA.X,
-                e  => e.SourceB.X, 
-                (a,b) => a * b)
-            .ToProperty(this, e => e.X,out _x);
-        this.WhenAnyValue(
+                e => e.SourceB.X,
+                (a, b) => a * b)
+            .ToProperty(this, e => e.X, scheduler: Scheduler.Immediate);
+
+        _y = this.WhenAnyValue(
                 e => e.SourceA.Y,
                 e  => e.SourceB.Y, 
                 (a,b) => a * b)
-            .ToProperty(this, e => e.Y,out _y);
+            .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
+
+
     }
 
     public IDisplayRatio SourceA { get; }
     public IDisplayRatio SourceB { get; }
 
+
+
+
     public override double X
     {
-        get => _x.Get();
+        get => _x.Value;
         set => throw new NotImplementedException();
     }
     readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
-        get => _y.Get();
+        get => _y.Value;
         set => throw new NotImplementedException();
     }
     readonly ObservableAsPropertyHelper<double> _y;

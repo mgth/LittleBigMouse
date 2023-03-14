@@ -31,6 +31,7 @@ public class DisplayLocate : DisplayMove
     public DisplayLocate(IDisplaySize source, Point? point = null) : base(source)
     {
         Location = point ?? new Point();
+        Init();
     }
 
     public override double X
@@ -46,5 +47,7 @@ public class DisplayLocate : DisplayMove
         set => this.RaiseAndSetIfChanged(ref _y, value);
     }
     double _y;
+
+    public override string TransformToString => $"To:{X},{Y}";
 
 }

@@ -52,9 +52,9 @@ public class MouseHookerWinEvent : IMouseHooker
 
     #region Main code
 
-    private void HookCallback(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+    void HookCallback(nint hWinEventHook, uint eventType, nint hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
     {
-        if (hwnd != IntPtr.Zero) return;
+        if (hwnd != 0) return;
 
         if (!GetCursorPos(out var p)) return;
 
@@ -62,7 +62,7 @@ public class MouseHookerWinEvent : IMouseHooker
 
         _oldLocation = p;
 
-        OnMouseMove(new HookMouseEventArg { Point = p });
+        OnMouseMove(new HookMouseEventArg( p));
     }
 
     protected void OnMouseMove(HookMouseEventArg args)

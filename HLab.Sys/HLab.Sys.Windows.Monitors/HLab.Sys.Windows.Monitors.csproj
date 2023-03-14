@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>x64</Platforms>
     <Nullable>disable</Nullable>
     <RootNamespace>HLab.Sys.Windows.Monitors</RootNamespace>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
@@ -10,17 +10,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.0.0-preview4" />
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview4" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
-    <PackageReference Include="System.Management" Version="7.0.0" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview5" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.Management" Version="8.0.0-preview.1.23110.8" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\HLab\HLab.Base\HLab.Base.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Notify.Annotations\HLab.Notify.Annotations.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
-    <ProjectReference Include="..\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
   </ItemGroup>
 
   <ItemGroup>

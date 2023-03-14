@@ -35,6 +35,7 @@ using LittleBigMouse.Zoning;
 using Microsoft.Win32;
 
 using static System.Double;
+using static HLab.Sys.Windows.API.WinUser;
 
 
 //using static HLab.Windows.API.NativeMethods;
@@ -44,12 +45,11 @@ namespace LittleBigMouse.Daemon;
 //[ServiceBehavior(InstanceContextMode = InstanceContextMode.Single)]
 public class MouseEngine
 {
-
-    private readonly ZonesLayout _zones;
-    private Action _stopAction = null;
+    readonly ZonesLayout _zones;
+    Action _stopAction = null;
 
     //private readonly IMouseHooker _hook = new MouseHookerWinEvent();
-    private readonly IMouseHooker _hook = new MouseHookerWindowsHook();
+    readonly IMouseHooker _hook = new MouseHookerWindowsHook();
 
 
     public MouseEngine(ZonesLayout zones)
@@ -105,9 +105,9 @@ public class MouseEngine
         Console.WriteLine("start");
     }
 
-    private const string RootKey = @"\Software\Mgth\LittleBigMouse";
+    const string RootKey = @"\Software\Mgth\LittleBigMouse";
 
-    private static void SaveInitialCursor()
+    static void SaveInitialCursor()
     {
         using var key = Registry.CurrentUser.CreateSubKey(RootKey);
 
@@ -121,7 +121,7 @@ public class MouseEngine
         }
     }
 
-    private static void RestoreInitialCursor()
+    static void RestoreInitialCursor()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RootKey);
 
@@ -135,7 +135,7 @@ public class MouseEngine
 
     }
 
-    private static double GetInitialMouseSpeed()
+    static double GetInitialMouseSpeed()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RootKey);
 
@@ -150,7 +150,7 @@ public class MouseEngine
         return initialMouseSpeed;
     }
 
-    private static void RestoreMouseSpeed(double mouseSpeed)
+    static void RestoreMouseSpeed(double mouseSpeed)
     {
         LbmMouse.MouseSpeed = mouseSpeed;
         using var key = Registry.CurrentUser.CreateSubKey(RootKey);
@@ -158,7 +158,7 @@ public class MouseEngine
         key?.DeleteValue("InitialMouseSpeed");
     }
 
-    private static void VerboseZoneChange(object sender, ZoneChangeEventArgs e)
+    static void VerboseZoneChange(object sender, ZoneChangeEventArgs e)
     {
         Console.WriteLine(e.NewZone.DeviceId);
     }
@@ -177,22 +177,21 @@ public class MouseEngine
     }
 
 
+    readonly Stopwatch _timer = new Stopwatch();
+    int _count = -10;
 
-    private readonly Stopwatch _timer = new Stopwatch();
-    private int _count = -10;
 
-
-    private void PrintResult()
+    void PrintResult()
     {
         Console.WriteLine("AVG :" + _timer.ElapsedTicks / _count);
         Console.WriteLine("AVG :" + _timer.Elapsed.TotalMilliseconds / _count);
     }
 
 
-    private Point _oldPoint;
-    private Zone _oldZone;
+    Point _oldPoint;
+    Zone _oldZone;
 
-    private void OnMouseMoveExtFirst(object sender, HookMouseEventArg e)
+    void OnMouseMoveExtFirst(object sender, HookMouseEventArg e)
     {
         _oldPoint = e.Point;
 
@@ -209,13 +208,13 @@ public class MouseEngine
     public event EventHandler<ZoneChangeEventArgs> ZoneChanged;
 
     [DllImport("user32", SetLastError = true)]
-    private static extern IntPtr OpenInputDesktop(uint dwFlags,
+    static extern IntPtr OpenInputDesktop(uint dwFlags,
         bool fInherit,
         uint dwDesiredAccess);
     [DllImport("user32.dll", SetLastError = true)]
     static extern bool SetThreadDesktop(IntPtr hDesktop);
     [DllImport("user32.dll")]
-    private static extern bool SwitchDesktop(IntPtr hDesktop);
+    static extern bool SwitchDesktop(IntPtr hDesktop);
     [DllImport("user32.dll")]
     public static extern IntPtr GetThreadDesktop(int dwThreadId);
 
@@ -239,11 +238,11 @@ public class MouseEngine
                        DESKTOP_ENUMERATE | DESKTOP_WRITEOBJECTS | DESKTOP_SWITCHDESKTOP),
     }
     [DllImport("user32.dll")]
-    private static extern bool EnumWindowStations(EnumWindowStationsDelegate lpEnumFunc, IntPtr lParam);
+    static extern bool EnumWindowStations(EnumWindowStationsDelegate lpEnumFunc, IntPtr lParam);
 
-    private delegate bool EnumWindowStationsDelegate(string windowsStation, IntPtr lParam);
+    delegate bool EnumWindowStationsDelegate(string windowsStation, IntPtr lParam);
 
-    private static bool EnumWindowStationsCallback(string windowStation, IntPtr lParam)
+    static bool EnumWindowStationsCallback(string windowStation, IntPtr lParam)
     {
         GCHandle gch = GCHandle.FromIntPtr(lParam);
         IList<string> list = gch.Target as List<string>;
@@ -259,18 +258,18 @@ public class MouseEngine
     }
 
 
-    private AdvApi32.RECT _oldClipRect;
-    private bool _reset = false;
-    private Point _goto = new Point(0, 0);
+    WinDef.Rect _oldClipRect;
+    bool _reset = false;
+    Point _goto = new Point(0, 0);
 
-    private void MouseMoveStraight(object sender, HookMouseEventArg e)
+    void MouseMoveStraight(object sender, HookMouseEventArg e)
     {
         var pIn = e.Point;
         if(_reset)
         {
             Debug.WriteLine($"=> : {pIn.X:0},{pIn.Y:0}");
             //LbmMouse.CursorPos = _goto;
-            AdvApi32.ClipCursor(ref _oldClipRect);
+            ClipCursor(ref _oldClipRect);
             _reset = false;
         }
 
@@ -377,14 +376,14 @@ public class MouseEngine
         {
             Debug.WriteLine($"No zone found : {pIn}");
 
-            var r = new AdvApi32.RECT((int)_oldZone.PixelsBounds.Left, (int)_oldZone.PixelsBounds.Top, (int)_oldZone.PixelsBounds.Right,
+            var r = new WinDef.Rect((int)_oldZone.PixelsBounds.Left, (int)_oldZone.PixelsBounds.Top, (int)_oldZone.PixelsBounds.Right,
                 (int)_oldZone.PixelsBounds.Bottom);
 
-            AdvApi32.GetClipCursor(out _oldClipRect);
+            GetClipCursor(out _oldClipRect);
             _reset = true;
             //_goto = pIn;
 
-            AdvApi32.ClipCursor(ref r);
+            ClipCursor(ref r);
 
             e.Handled = false; // when set to true, cursor stick to frame
             return;
@@ -407,7 +406,7 @@ public class MouseEngine
             //LbmMouse.CursorPos = new Point(1.0,1.0);
 
 
-            var r = new AdvApi32.RECT(
+            var r = new WinDef.Rect(
                 (int) zoneOut.PixelsBounds.Left ,//+1, 
                 (int) zoneOut.PixelsBounds.Top ,//+1, 
                 (int) (zoneOut.PixelsBounds.Right + 1/*-1+1*/),
@@ -421,7 +420,7 @@ public class MouseEngine
             //NativeMethods.ClipCursor(ref r);
             //_reset = true;
             //_goto = pOut;
-            AdvApi32.GetClipCursor(out _oldClipRect);
+            GetClipCursor(out _oldClipRect);
 
             var pos = pIn;
 
@@ -429,8 +428,8 @@ public class MouseEngine
             {
                 Debug.WriteLine($"travel : {z}");
                 if(z.Contains(pos)) continue;
-                var rect = new AdvApi32.RECT(z);
-                AdvApi32.ClipCursor(ref rect);
+                var rect = new WinDef.Rect(z);
+                ClipCursor(ref rect);
                 pos = LbmMouse.CursorPos;
                 //LbmMouse.CursorPos = pos = new Point((z.Right + z.Left)/2, (z.Top + z.Bottom)/2);
                 if(z.Contains(pOut)) break;
@@ -438,10 +437,10 @@ public class MouseEngine
 
 
             //LbmMouse.CursorPos = zoneOut.CenterPixel;
-            AdvApi32.ClipCursor(ref r);
+            ClipCursor(ref r);
             _reset = true;
             LbmMouse.CursorPos = pOut;
-            AdvApi32.ClipCursor(ref _oldClipRect);
+            ClipCursor(ref _oldClipRect);
 
             var p = LbmMouse.CursorPos;
 
@@ -580,7 +579,7 @@ public class MouseEngine
         e.Handled = true;
     }
 
-    private void MouseMoveCross(object sender, HookMouseEventArg e)
+    void MouseMoveCross(object sender, HookMouseEventArg e)
     {
         // TODO : if (e.Clicked) return;
         var pIn = e.Point;
@@ -653,7 +652,7 @@ public class MouseEngine
         public Zone NewZone { get; }
     }
 
-    private void AdjustPointer(object sender, ZoneChangeEventArgs args)
+    void AdjustPointer(object sender, ZoneChangeEventArgs args)
     {
         if (args.NewZone.Dpi - args.OldZone.Dpi < 1) return;
         if (args.NewZone.Dpi > 110)
@@ -663,12 +662,12 @@ public class MouseEngine
         else LbmMouse.SetCursorAero(1);
     }
 
-    private void AdjustSpeed(object sender, ZoneChangeEventArgs args)
+    void AdjustSpeed(object sender, ZoneChangeEventArgs args)
     {
         LbmMouse.MouseSpeed = Math.Round((5.0 / 96.0) * args.NewZone.Dpi, 0);
     }
 
-    private void HomeCinema(object sender, ZoneChangeEventArgs args)
+    void HomeCinema(object sender, ZoneChangeEventArgs args)
     {
         // TODO
         //args.OldZone.Screen.Monitor.Vcp().Power = false;

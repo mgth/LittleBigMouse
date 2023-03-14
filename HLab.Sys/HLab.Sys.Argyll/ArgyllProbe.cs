@@ -20,23 +20,19 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using HLab.Notify.PropertyChanged;
+using ReactiveUI;
 using System;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Windows;
 using System.Xml.Serialization;
 
 namespace HLab.Sys.Argyll
 {
-    using H = H<ArgyllProbe>;
-    public class ArgyllProbe : NotifierBase
+    public class ArgyllProbe : ReactiveObject
     {
         public ArgyllProbe()
         {
-            H.Initialize(this);
             ConfigFromDipcalGUI();
         }
         public ArgyllProbe(bool autoconfig = true)
@@ -77,60 +73,61 @@ namespace HLab.Sys.Argyll
         private bool _calibrating = false;
         private bool _spectrum = false;
 
-        private readonly IProperty<string> _name = H.Property<string>();
         public string Name
         {
-            get => _name.Get(); set => _name.Set(value);
+            get => _name; 
+            set => this.RaiseAndSetIfChanged(ref _name, value);
         }
+        string _name;
 
-        private readonly IProperty<double> _spectrumFrom = H.Property<double>();
         public double SpectrumFrom
         {
-            get => _spectrumFrom.Get(); set => _spectrumFrom.Set(value);
+            get => _spectrumFrom; 
+            set => this.RaiseAndSetIfChanged(ref _spectrumFrom, value);
         }
+        double _spectrumFrom;
 
         public double SpectrumTo
         {
-            get => _spectrumTo.Get(); 
-            set => _spectrumTo.Set(value);
+            get => _spectrumTo; 
+            set => this.RaiseAndSetIfChanged(ref _spectrumTo, value);
         }
-
-        private readonly IProperty<double> _spectrumTo = H.Property<double>();//c => c.Default(720.0));
+        double _spectrumTo;//c => c.Default(720.0));
 
         public int SpectrumSteps
         {
-            get => _spectrumSteps.Get(); 
-            set => _spectrumSteps.Set(value);
+            get => _spectrumSteps; 
+            set => this.RaiseAndSetIfChanged(ref _spectrumSteps, value);
         }
-        private readonly IProperty<int> _spectrumSteps = H.Property< int>();
+        int _spectrumSteps;
 
         public double Cct
         {
-            get => _cct.Get(); 
-            set => _cct.Set(value);
+            get => _cct; 
+            set => this.RaiseAndSetIfChanged(ref _cct, value);
         }
-        private readonly IProperty<double> _cct = H.Property< double>();
+        double _cct;
 
         public double Cri
         {
-            get => _cri.Get(); 
-            set => _cri.Set(value);
+            get => _cri; 
+            set => this.RaiseAndSetIfChanged(ref _cri, value);
         }
-        private readonly IProperty<double> _cri = H.Property< double>();
+        double _cri;
 
         public double Tlci
         {
-            get => _tlci.Get(); 
-            set => _tlci.Set(value);
+            get => _tlci; 
+            set => this.RaiseAndSetIfChanged(ref _tlci, value);
         }
-        private readonly IProperty<double> _tlci = H.Property< double>();
+        double _tlci;
 
         public double Lux
         {
-            get => _lux.Get(); 
-            set => _lux.Set(value);
+            get => _lux; 
+            set => this.RaiseAndSetIfChanged(ref _lux, value);
         }
-        private readonly IProperty<double> _lux = H.Property<double>();
+        double _lux;
 
         public ObservableCollection<double> Spectrum { get; set; } = new ObservableCollection<double> {0};
 
@@ -139,27 +136,25 @@ namespace HLab.Sys.Argyll
         {
             System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-US");
 
-            string line = outLine.Data;
+            var line = outLine.Data;
 
             Console.WriteLine(line);
 
             if (line == null) return;
 
-            Process p = sendingProcess as Process;
-
-            if (p == null) return;
+            if (sendingProcess is not Process p) return;
 
             if (_spectrum)
             {
-                 string[] s = line.Split(',');
+                 var s = line.Split(',');
 
                 Spectrum.Clear();
                 WaveLength.Clear();
 
-                double nm = SpectrumFrom;
-                double step = (SpectrumTo - SpectrumFrom)/(SpectrumSteps - 1);
+                var nm = SpectrumFrom;
+                var step = (SpectrumTo - SpectrumFrom)/(SpectrumSteps - 1);
 
-                foreach (string t in s)
+                foreach (var t in s)
                 {
                     Spectrum.Add( double.Parse(t));
                     WaveLength.Add(nm);
@@ -172,7 +167,7 @@ namespace HLab.Sys.Argyll
             if (line.Contains("Spectrum from"))
             {
                 var pos = line.IndexOf("Spectrum from", StringComparison.Ordinal);
-                var sub = line.Substring(pos + 14);
+                var sub = line[(pos + 14)..];
                 var s = sub.Split(' ');
                 SpectrumFrom = double.Parse(s[0]);
                 SpectrumTo = double.Parse(s[2]);
@@ -206,9 +201,10 @@ namespace HLab.Sys.Argyll
             {
                 if (!_calibrating)
                 {
-                    var result = MessageBox.Show("Place instrument in calibration position", "Instrument",
-                        MessageBoxButton.OKCancel, MessageBoxImage.Information);
-                    ArgyllSendKey(p, result == MessageBoxResult.OK ? "k" : "q");
+                    // TODO
+                    //var result = MessageBox.Show("Place instrument in calibration position", "Instrument",
+                    //    MessageBoxButton.OKCancel, MessageBoxImage.Information);
+                    //ArgyllSendKey(p, result == MessageBoxResult.OK ? "k" : "q");
 
                     _calibrating = true;
                 }
@@ -476,18 +472,21 @@ namespace HLab.Sys.Argyll
 
             if (!p.HasExited) p.WaitForExit();
         }
+
+        //TODO
+
         public void Save()
         {
-            Microsoft.Win32.SaveFileDialog dlg = new Microsoft.Win32.SaveFileDialog();
-            dlg.DefaultExt = ".probe";
-            dlg.Filter = "Probe documents (.probe)|*.probe";
-            bool? result = dlg.ShowDialog();
-            if (result == true)
-            {
-                // Open document
-                string filename = dlg.FileName;
-                Save(filename);
-            }
+            //    Microsoft.Win32.SaveFileDialog dlg = new Microsoft.Win32.SaveFileDialog();
+            //    dlg.DefaultExt = ".probe";
+            //    dlg.Filter = "Probe documents (.probe)|*.probe";
+            //    bool? result = dlg.ShowDialog();
+            //    if (result == true)
+            //    {
+            //        // Open document
+            //        string filename = dlg.FileName;
+            //        Save(filename);
+            //    }
         }
 
         public void Save(string path)
@@ -502,16 +501,17 @@ namespace HLab.Sys.Argyll
 
         public static ArgyllProbe Load()
         {
-            Microsoft.Win32.OpenFileDialog dlg = new Microsoft.Win32.OpenFileDialog();
-            dlg.DefaultExt = ".probe";
-            dlg.Filter = "Probe documents (.probe)|*.probe";
-            bool? result = dlg.ShowDialog();
-            if (result == true)
-            {
-                // Open document
-                string filename = dlg.FileName;
-                return Load(filename);
-            }
+            //TODO
+            //Microsoft.Win32.OpenFileDialog dlg = new Microsoft.Win32.OpenFileDialog();
+            //dlg.DefaultExt = ".probe";
+            //dlg.Filter = "Probe documents (.probe)|*.probe";
+            //bool? result = dlg.ShowDialog();
+            //if (result == true)
+            //{
+            //    // Open document
+            //    string filename = dlg.FileName;
+            //    return Load(filename);
+            //}
             return null;
         }
 

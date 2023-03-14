@@ -45,6 +45,7 @@
     <ProjectReference Include="..\HLab\HLab.Base.Wpf\HLab.Base.Wpf.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.Wpf\HLab.Mvvm.Wpf.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Wpf.csproj" />
     <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
   </ItemGroup>
 

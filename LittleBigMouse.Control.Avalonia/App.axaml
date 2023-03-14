@@ -1,7 +1,12 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="LittleBigMouse.Control.Avalonia.App">
-    <Application.Styles>
-        <FluentTheme Mode="Light"/>
+             x:Class="LittleBigMouse.Ui.Avalonia.App">
+    <!--
+	TODO : Avalonia
+	Mode="Dark"
+	-->
+	<Application.Styles>
+        <FluentTheme />
     </Application.Styles>
+	
 </Application>

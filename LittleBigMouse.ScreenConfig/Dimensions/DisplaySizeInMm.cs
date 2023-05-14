@@ -95,9 +95,7 @@ public class DisplaySizeInMm : DisplaySize
 {
     public DisplaySizeInMm() : base(null)
     {
-        //ScreenModel = screenModel;
         Init();
-
     }
 
     public bool Saved

@@ -29,71 +29,65 @@ using System.Text.RegularExpressions;
 
 namespace LittleBigMouse.DisplayLayout;
 
-internal class Html
+public static class HtmlHelper
 {
     public static string GetPnpName1(string pnpcode)
     {
-        string html = GetHtml("http://listing.driveragent.com/c/pnp/" + pnpcode);
+        var html = GetHtml("http://listing.driveragent.com/c/pnp/" + pnpcode);
 
         if (html == null) return "";
 
-        Match match = Regex.Match(html, "<span class=\"title2\">(.*?)</span>", RegexOptions.Singleline);
-        if (match.Success)
+        var match = Regex.Match(html, "<span class=\"title2\">(.*?)</span>", RegexOptions.Singleline);
+        if (!match.Success) return "";
+
+        var result = match.Groups[1].Value;
+        if (result.Contains("Drivers")) result = result.Replace("Drivers", "");
+
+        var match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
+
+        for (var i = 1; i < match2.Groups.Count; i++)
         {
-            string result = match.Groups[1].Value;
-            if (result.Contains("Drivers")) result = result.Replace("Drivers", "");
-
-            Match match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
-
-            for (int i = 1; i < match2.Groups.Count; i++)
-            {
-
-                result = result.Replace("(" + match2.Groups[i].Value + ")", "");
-            }
-
-            result = result.Trim();
-
-            return result;
+            result = result.Replace("(" + match2.Groups[i].Value + ")", "");
         }
-        return "";
+
+        result = result.Trim();
+
+        return result;
     }
 
     public static string GetPnpName2(string pnpcode)
     {
-        string html = GetHtml("http://www.driversdownloader.com/hardware-id/monitor/" + pnpcode.ToLower());
+        var html = GetHtml("http://www.driversdownloader.com/hardware-id/monitor/" + pnpcode.ToLower());
 
         if (html == null) return "";
 
-        Match match = Regex.Match(html, "<b><p>(.*?)</p></b>", RegexOptions.Singleline);
-        if (match.Success)
+        var match = Regex.Match(html, "<b><p>(.*?)</p></b>", RegexOptions.Singleline);
+        if (!match.Success) return "";
+
+        var result = match.Groups[1].Value;
+        if (result.Contains("Drivers")) result = result.Replace("Drivers", "");
+
+        var match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
+
+        for (var i = 1; i < match2.Groups.Count; i++)
         {
-            string result = match.Groups[1].Value;
-            if (result.Contains("Drivers")) result = result.Replace("Drivers", "");
-
-            Match match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
-
-            for (int i = 1; i < match2.Groups.Count; i++)
-            {
-
-                result = result.Replace("(" + match2.Groups[i].Value + ")", "");
-            }
-
-            result = result.Trim();
-
-            return result;
+            result = result.Replace("(" + match2.Groups[i].Value + ")", "");
         }
-        return "";
+
+        result = result.Trim();
+
+        return result;
     }
 
     public static string GetPnpName(string pnpcode)
     {
-        string result = GetPnpName("https://driverlookup.com/hardware-id/monitor/", "<p><span><a href=.*?>(.*?)</a></span>", pnpcode);
+        var result = GetPnpName("https://driverlookup.com/hardware-id/monitor/", "<p><span><a href=.*?>(.*?)</a></span>", pnpcode);
 
-        //if (string.IsNullOrEmpty(result))
-        //    result = GetPnpName("http://listing.driveragent.com/c/pnp/", "<span class=\"title2\">(.*?)</span>", pnpcode);
+        if (string.IsNullOrEmpty(result))
+            result = GetPnpName("http://listing.driveragent.com/c/pnp/", "<span class=\"title2\">(.*?)</span>", pnpcode);
 
-        //if (string.IsNullOrEmpty(result))
-        //    result = GetPnpName("http://www.driversdownloader.com/hardware-id/monitor/", "<b><p>(.*?)</p></b>", pnpcode);
+        if (string.IsNullOrEmpty(result))
+            result = GetPnpName("http://www.driversdownloader.com/hardware-id/monitor/", "<b><p>(.*?)</p></b>", pnpcode);
 
         return result;
     }
@@ -102,11 +96,10 @@ internal class Html
     {
         if (result.Contains("Drivers")) result = result.Replace("Drivers", "");
 
-        Match match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
+        var match2 = Regex.Match(result, @"\((.*?)\)", RegexOptions.Singleline);
 
-        for (int i = 1; i < match2.Groups.Count; i++)
+        for (var i = 1; i < match2.Groups.Count; i++)
         {
-
             result = result.Replace("(" + match2.Groups[i].Value + ")", "");
         }
 
@@ -115,18 +108,16 @@ internal class Html
 
     public static string GetPnpName(string url, string regex, string pnpcode)
     {
-        string html = GetHtml(url + pnpcode.ToLower());
+        var html = GetHtml(url + pnpcode.ToLower());
 
         if (html == null) return "";
 
-        Match match = Regex.Match(html, regex, RegexOptions.Singleline);
-        if (match.Success)
-        {
-            string result = match.Groups[1].Value;
+        var match = Regex.Match(html, regex, RegexOptions.Singleline);
+        if (!match.Success) return "";
 
-            return CleanupPnpName(result);
-        }
-        return "";
+        var result = match.Groups[1].Value;
+
+        return CleanupPnpName(result);
     }
 
     public static string GetHtml(string url, string post = "", string referer = "")
@@ -134,7 +125,7 @@ internal class Html
 
         try
         {
-            CookieContainer cc = new CookieContainer();
+            var cc = new CookieContainer();
             if (referer != null && referer != "")
             {
                 /*
@@ -150,9 +141,9 @@ internal class Html
                 reqReferer.Method = "GET";
                 //reqReferer.UserAgent = "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)";
                 reqReferer.UserAgent = "Mozilla/5.0 (Windows NT 6.3; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0";
-                HttpWebResponse responseRef = (HttpWebResponse)reqReferer.GetResponse();
-                StreamReader websrcref = new StreamReader(responseRef.GetResponseStream());
-                string srcRef = websrcref.ReadToEnd();
+                var responseRef = (HttpWebResponse)reqReferer.GetResponse();
+                var websrcref = new StreamReader(responseRef.GetResponseStream());
+                var srcRef = websrcref.ReadToEnd();
                 /*
                                     Match match = Regex.Match(srcRef, "__VIEWSTATE\" value=\"(.*?)\"", RegexOptions.Singleline);
                                     if (match.Success)
@@ -161,7 +152,7 @@ internal class Html
                                     }*/
             }
 
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            var request = (HttpWebRequest)WebRequest.Create(url);
             request.CookieContainer = cc;
 
 
@@ -188,10 +179,10 @@ internal class Html
             if (post != "" && post != null)
             {
                 request.Method = "POST";
-                byte[] array = Encoding.UTF8.GetBytes(post /*+ "&__VIEWSTATE=" + ViewState*/);
+                var array = Encoding.UTF8.GetBytes(post /*+ "&__VIEWSTATE=" + ViewState*/);
                 request.ContentLength = array.Length;
                 request.ContentType = "application/x-www-form-urlencoded";
-                Stream data = request.GetRequestStream();
+                var data = request.GetRequestStream();
                 data.Write(array, 0, array.Length);
                 data.Close();
             }
@@ -199,11 +190,10 @@ internal class Html
                 request.Method = "GET";
 
             // make request for web page
-            HttpWebResponse response = (HttpWebResponse)request.GetResponse();
-            StreamReader websrc = new StreamReader(response.GetResponseStream(), Encoding.GetEncoding("iso-8859-1"));
-            string html = websrc.ReadToEnd();
+            var response = (HttpWebResponse)request.GetResponse();
+            var websrc = new StreamReader(response.GetResponseStream(), Encoding.GetEncoding("iso-8859-1"));
+            var html = websrc.ReadToEnd();
             response.Close();
-
 
             return html;
         }
@@ -213,11 +203,7 @@ internal class Html
         }
         catch (WebException ex)
         {
-            if (ex.Status == WebExceptionStatus.ProtocolError)
-            {
-                return "";
-            }
-            return "";
+            return ex.Status == WebExceptionStatus.ProtocolError ? "" : "";
         }
         catch (IOException)
         {

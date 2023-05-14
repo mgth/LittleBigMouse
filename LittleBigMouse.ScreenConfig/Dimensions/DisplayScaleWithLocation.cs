@@ -74,7 +74,6 @@ public class DisplayScaleWithLocation : DisplaySize
             (b,r) => b * r).ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
 
         Init();
-
     }
 
     public IDisplayRatio Ratio { get; }

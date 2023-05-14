@@ -31,7 +31,6 @@ public class DisplayLocate : DisplayMove
     public DisplayLocate(IDisplaySize source, Point? point = null) : base(source)
     {
         Location = point ?? new Point();
-        Init();
     }
 
     public override double X

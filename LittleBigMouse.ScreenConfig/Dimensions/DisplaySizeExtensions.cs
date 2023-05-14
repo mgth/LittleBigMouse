@@ -15,6 +15,7 @@ public static class DisplaySizeExtensions
 
         return new Point(sz.X + x * sz.Width, sz.Y + y * sz.Height);
     }
+
     public static Point Inside(this IDisplaySize sz, Point p)
     {
         var x = p.X < sz.X ? sz.X : p.X > sz.Bounds.Right - 1 ? sz.Bounds.Right - 1 : p.X;
@@ -22,4 +23,28 @@ public static class DisplaySizeExtensions
 
         return new Point(x, y);
     }
+
+    public static T Set<T>(this T @this, Size size) where T : IDisplaySize
+    {
+        using (@this.DelayChangeNotifications())
+        {
+            @this.Width = size.Width;
+            @this.Height = size.Height;
+            return @this;
+        }
+    }
+
+    public static T Set<T>(this T @this, Rect rect) where T : IDisplaySize
+    {
+        using (@this.DelayChangeNotifications())
+        {
+            @this.Width = rect.Width;
+            @this.Height = rect.Height;
+            @this.X = rect.X;
+            @this.Y = rect.Y;
+            return @this;
+        }
+    }
+
+
 }

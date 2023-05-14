@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview8" />
     <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
-    <PackageReference Include="ReactiveUI" Version="18.4.26" />
   </ItemGroup>
 
   <ItemGroup>

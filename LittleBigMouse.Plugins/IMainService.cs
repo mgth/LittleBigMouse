@@ -6,7 +6,7 @@
         //void SetViewMode(Type viewMode);
         //void SetViewMode<T>() where T:ViewMode;
         void StartNotifier();
-        void ShowControl();
+        Task ShowControlAsync();
 
         void AddControlPlugin(Action<IMainPluginsViewModel>? action);
     }

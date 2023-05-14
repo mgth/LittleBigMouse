@@ -13,6 +13,20 @@ public class DisplayRatioValue : DisplayRatio
     public DisplayRatioValue(double r):this(r,r) {}
     public DisplayRatioValue(Vector v):this(v.X, v.Y) {}
 
+    public DisplayRatioValue Set(double x, double y)
+    {
+        _x = x;
+        _y = y;
+        return this;
+    }
+
+    public DisplayRatioValue Set(Vector v)
+    {
+        _x = v.X;
+        _y = v.Y;
+        return this;
+    }
+
     public override double X
     {
         get => _x;

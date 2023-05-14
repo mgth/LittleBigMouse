@@ -25,7 +25,7 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public static class ScreenSizeWpfExt
 {
-    public static IDisplaySize Wpf(this ScreenSizeInPixels source, IDisplayRatio ratio) => new DisplayScale(source, ratio);
+    public static IDisplaySize Wpf(this DisplaySizeInPixels source, IDisplayRatio ratio) => new DisplayScale(source, ratio);
 }
 public class DisplaySizeWpf : DisplaySize
 {

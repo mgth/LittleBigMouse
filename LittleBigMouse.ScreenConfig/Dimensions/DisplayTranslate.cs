@@ -43,8 +43,6 @@ public class DisplayTranslate : DisplayMove
 
         _y = this.WhenAnyValue(e => e.Source.Y,e =>e.Translation, (y,t)=>y + t.Y)
             .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
-
-        Init();
     }
 
     public Vector Translation

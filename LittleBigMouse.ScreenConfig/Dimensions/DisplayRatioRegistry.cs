@@ -24,6 +24,7 @@
 using System;
 using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
+using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
@@ -31,9 +32,9 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 public class DisplayRatioRegistry : DisplayRatio
 {
     readonly string _prefix;
-    public Monitor Monitor { get; }
+    public PhysicalMonitor Monitor { get; }
 
-    public DisplayRatioRegistry(Monitor screen, [CallerMemberName] string prefix = null)
+    public DisplayRatioRegistry(PhysicalMonitor screen, [CallerMemberName] string prefix = null)
     {
         Monitor = screen;
         _prefix = prefix;
@@ -44,7 +45,11 @@ public class DisplayRatioRegistry : DisplayRatio
         this.WhenAnyValue(
                 e => e.X,
                 e  => e.Y)
-            .Do((e) => Monitor.Layout.Saved = false);
+            .Do((e) =>
+            {
+                // TODO
+                //Monitor.Layout.Saved = false;
+            });
 
     }
 
@@ -64,7 +69,9 @@ public class DisplayRatioRegistry : DisplayRatio
 
     double LoadValue(string name, Func<double> defaultValue)
     {
-        using var key = Monitor.OpenRegKey();
-        return key.GetKey(_prefix + "." + name, defaultValue);
+        // TODO 
+        //using var key = Monitor.OpenRegKey();
+        //return key.GetKey(_prefix + "." + name, defaultValue);
+        return 0.0;
     }
 }

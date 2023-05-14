@@ -18,8 +18,8 @@ namespace LittleBigMouse.Zoning
 
         public double Dpi { get; private set; }
 
-        private Matrix _pixelsToPhysicalMatrix;
-        private Matrix _physicalToPixelsMatrix;
+        Matrix _pixelsToPhysicalMatrix;
+        Matrix _physicalToPixelsMatrix;
 
         public Zone(){}
 
@@ -100,7 +100,7 @@ namespace LittleBigMouse.Zoning
             return mm;
         }
 
-        private readonly ConcurrentDictionary<Zone, IEnumerable<Rect>> _travels = new();
+        readonly ConcurrentDictionary<Zone, IEnumerable<Rect>> _travels = new();
 
         public IEnumerable<Rect> TravelPixels(IEnumerable<Zone> zones, Zone target)
         {

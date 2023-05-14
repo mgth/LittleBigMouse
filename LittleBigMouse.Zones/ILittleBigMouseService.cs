@@ -68,10 +68,10 @@ namespace LittleBigMouse.Zoning
 
     public interface ILittleBigMouseService
     {
-        void Quit();
-        void Start(ZonesLayout layout);
-        void Stop();
-        void CommandLine(IList<string> args);
+        Task QuitAsync();
+        Task StartAsync(ZonesLayout layout);
+        Task StopAsync();
+        Task CommandLineAsync(IList<string> args);
     }
 
 }

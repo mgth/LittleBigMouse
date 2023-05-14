@@ -21,206 +21,56 @@
 	  http://www.mgth.fr
 */
 
-using System.Collections.Generic;
 using System.Runtime.Serialization;
 using DynamicData;
 using Newtonsoft.Json;
-using ReactiveUI;
-using HLab.Sys.Windows.API;
-using static HLab.Sys.Windows.API.WinGdi;
-using static HLab.Sys.Windows.API.WinUser;
 
 namespace HLab.Sys.Windows.Monitors
 {
     [DataContract]
-    public class DisplayDevice : ReactiveObject
+    public class DisplayDevice
     {
-        public DisplayDevice(IMonitorsService service, string deviceName)
+        public DisplayDevice(string deviceName)
         {
-            MonitorsService = service;
             DeviceName = deviceName;
-
-            this.WhenAnyValue(
-                    e => e.State,
-                    s => (s & DisplayDeviceStateFlags.AttachedToDesktop) != 0
-                )
-                .ToProperty(this, e => e.AttachedToDesktop,out _attachedToDesktop);
         }
 
-        [JsonIgnore]
-        public IMonitorsService MonitorsService { get; }
+        public DisplayDevice Parent { get; set; }
 
-        public void Init(DisplayDevice parent, WinGdi.DisplayDevice dev, IList<DisplayDevice> oldDevices, IList<MonitorDevice> oldMonitors)
-        {
-            Parent = parent;
+        /// <summary>
+        /// Device name as returned by EnumDisplayDevices :
+        /// "ROOT", "\\\\.\\DISPLAY1", "\\\\.\\DISPLAY1\monitor0" 
+        /// </summary>
+        [DataMember] public string DeviceName { get; set; }
 
-            DeviceId = dev.DeviceID;
-            DeviceString = dev.DeviceString;
+        /// <summary>
+        /// Device name in human readable format :
+        /// "NVIDIA GeForce RTX 3080 Ti"
+        /// </summary>
+        [DataMember] public string DeviceString { get; set; }
 
-            DeviceKey = dev.DeviceKey;
-            DeviceName = dev.DeviceName;
-            State = dev.StateFlags;
+        /// <summary>
+        /// Device id as returned by EnumDisplayDevices :
+        /// "PCI\\VEN_10DE&DEV_2206&SUBSYS_3A3C1458&REV_A1"
+        /// </summary>
+        [DataMember] public string DeviceId { get; set; }
 
-            DeviceCaps = new DeviceCaps(DeviceName);
+        /// <summary>
+        /// Path to the device registry key :
+        /// "\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Video\\{AC0F00F9-3A6E-11ED-84B1-EBFE3BE9690A}\\0000"
+        /// </summary>
+        [DataMember] public string DeviceKey { get; set; }
 
-            if(MonitorsService is not MonitorsService service) return;
+        [DataMember] public SourceList<DisplayMode> DisplayModes { get; } = new ();
 
-            switch (DeviceId.Split('\\')[0])
-            {
-                case "ROOT":
-                    break;
-                case "MONITOR":
+        /// <summary>
+        /// Device mode as returned by EnumDisplaySettingsEx :
+        /// 
+        /// </summary>
+        [DataMember] public DisplayMode CurrentMode { get; set; }
 
-                    var monitor = service.GetOrAddMonitor(DeviceId, (s,id) =>
-                    {
-                        var m =  new MonitorDevice(id, s);
-                        return m;
-                    });
-
-                    monitor.DeviceKey = DeviceKey;
-                    monitor.DeviceString = DeviceString;
-                    
-                    if (AttachedToDesktop)
-                    {
-                        monitor.AttachedDisplay = parent;
-                        monitor.AttachedDevice = this;
-                    }
-                    else
-                    {
-                        monitor.AttachedDisplay = null;
-                        monitor.AttachedDevice = null;
-                    }
-                    monitor.AttachedToDesktop = AttachedToDesktop;
-
-                    var idx = oldMonitors.IndexOf(monitor);
-                    if (idx>=0) oldMonitors.RemoveAt(idx);
-                    break;
-
-                case "PCI":
-                case "RdpIdd_IndirectDisplay":
-                case string s when s.StartsWith("VID_DATRONICSOFT_PID_SPACEDESK_VIRTUAL_DISPLAY_"):
-
-                    var adapter = service.GetOrAddAdapter(DeviceId, (svc,id) => new PhysicalAdapter(id, svc)
-                    {
-                        DeviceString = DeviceString
-                    });
-
-                    CheckCurrentMode();
-
-                    break;
-                default:
-                        break;
-            }
-
-            uint i = 0;
-            var child = new WinGdi.DisplayDevice();
-
-            while (EnumDisplayDevices(DeviceName, i++, ref child, 0))
-            {
-                var c = child;
-                var device = service.GetOrAddDevice(c.DeviceName, 
-                    (s,id) =>new DisplayDevice(s,id));
-
-                oldDevices.Remove(device);
-                device.Init(this, c, oldDevices, oldMonitors);
-                child = new WinGdi.DisplayDevice();
-            }
-        }
-
-        [DataMember]
-        public bool AttachedToDesktop => _attachedToDesktop.Value;
-        readonly ObservableAsPropertyHelper<bool> _attachedToDesktop;
-
-        [JsonProperty]
-        public SourceList<DisplayMode> DisplayModes { get; } = new ();
-
-        [DataMember]
-        public DeviceCaps DeviceCaps
-        {
-            get => _deviceCaps;
-            set => this.RaiseAndSetIfChanged(ref _deviceCaps, value);
-        }
-        DeviceCaps _deviceCaps;
-
-       [DataMember]
-        public DisplayMode CurrentMode
-        {
-            get => _currentMode;
-            set => this.RaiseAndSetIfChanged(ref _currentMode, value);
-        }
-        DisplayMode _currentMode;
-
-        void CheckCurrentMode()
-        {
-            var devMode = DevMode.Default;
-
-            if (EnumDisplaySettingsEx(DeviceName, -1, ref devMode,0))
-            {
-                CurrentMode = new DisplayMode(devMode);
-            }
-        }
- 
-        public void UpdateDevModes()
-        {
-            var devMode = new DevMode();
-
-            var i = 0;
-            while (EnumDisplaySettingsEx(DeviceName, i, ref devMode, 0))
-            {
-                DisplayModes.Add(new DisplayMode(devMode));
-                i++;
-            }
-        }
-
-        
-
-
-        [DataMember]
-        public string DeviceName
-        {
-            get => _deviceName;
-            internal set => this.RaiseAndSetIfChanged(ref _deviceName, value);
-        }
-        string _deviceName;
-
-        public DisplayDevice Parent
-        {
-            get => _parent;
-            protected set => this.RaiseAndSetIfChanged(ref _parent, value);
-        }
-        DisplayDevice _parent;
-
-        [DataMember]
-        public string DeviceString
-        {
-            get => _deviceString;
-            protected set => this.RaiseAndSetIfChanged(ref _deviceString, value ?? "");
-        }
-        string _deviceString;
-
-        [DataMember]
-        public DisplayDeviceStateFlags State
-        {
-            get => _state;
-            protected set => this.RaiseAndSetIfChanged(ref _state, value);
-        }
-        DisplayDeviceStateFlags _state;
-
-        [DataMember]
-        public string DeviceId
-        {
-            get => _deviceId;
-            protected set => this.RaiseAndSetIfChanged(ref _deviceId, value);
-        }
-        string _deviceId;
-
-        [DataMember] 
-        public string DeviceKey
-        {
-            get => _deviceKey;
-            protected set => this.RaiseAndSetIfChanged(ref _deviceKey, value);
-        }
-        string _deviceKey;
+        [DataMember] public DeviceCaps Capabilities { get; set; }
+        [DataMember] public DeviceState State { get; set; }
 
         public override string ToString() => DeviceId;
     }

@@ -23,35 +23,41 @@
 
 using System.Runtime.Serialization;
 using Avalonia;
-using static HLab.Sys.Windows.API.WinGdi;
 
 namespace HLab.Sys.Windows.Monitors;
 
 [DataContract]
 public class DisplayMode
 {
-    [DataMember]
-    public Point Position { get; }
-    [DataMember]
-    public uint BitsPerPixel { get; }
-    [DataMember]
-    public Size Pels { get; }
-    [DataMember]
-    public int DisplayFlags { get; }
-    [DataMember]
-    public int DisplayFrequency { get; }
-    [DataMember]
-    public int DisplayFixedOutput { get; }
-    [DataMember]
-    public int DisplayOrientation { get; }
-    internal DisplayMode(DevMode dm)
-    {
-        DisplayOrientation = (int)(((dm.Fields & DisplayModeFlags.DisplayOrientation) != 0)?dm.DisplayOrientation:DevMode.DisplayOrientationEnum.Default);
-        Position = ((dm.Fields & DisplayModeFlags.Position) != 0)?new Point(dm.Position.X, dm.Position.Y):new Point(0,0);
-        BitsPerPixel = ((dm.Fields & DisplayModeFlags.BitsPerPixel) != 0)?dm.BitsPerPel:0;
-        Pels = ((dm.Fields & (DisplayModeFlags.PixelsWidth | DisplayModeFlags.PixelsHeight)) != 0)? new Size(dm.PixelsWidth, dm.PixelsHeight):new Size(1,1);
-        DisplayFlags = (int)(((dm.Fields & DisplayModeFlags.DisplayFlags) != 0) ? dm.DisplayFlags : 0);
-        DisplayFrequency = (int)(((dm.Fields & DisplayModeFlags.DisplayFrequency) != 0)? dm.DisplayFrequency:0);
-        DisplayFixedOutput = (int)(((dm.Fields & DisplayModeFlags.DisplayFixedOutput) != 0)? dm.DisplayFixedOutput:0);
-    }
+    /// <summary>
+    /// Display position as of EnumDisplaySettingsEx 
+    /// </summary>
+    [DataMember] public Point Position { get; set; }
+
+    /// <summary>
+    /// Display bits per pixel (EnumDisplaySettingsEx)
+    /// </summary>
+    [DataMember] public uint BitsPerPixel { get; set; }
+
+    /// <summary>
+    ///  Size in pixels, of the visible device surface (EnumDisplaySettingsEx)
+    /// </summary>
+    [DataMember] public Size Pels { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    [DataMember] public int DisplayFlags { get; set; }
+
+    /// <summary>
+    /// Display frequency in Hertz (EnumDisplaySettingsEx)
+    /// </summary>
+    [DataMember] public int DisplayFrequency { get; set; }
+
+    [DataMember] public int DisplayFixedOutput { get; set; }
+
+    /// <summary>
+    /// Display orientation (EnumDisplaySettingsEx)
+    /// </summary>
+    [DataMember] public int DisplayOrientation { get; set; }
 }

@@ -22,63 +22,34 @@
 */
 
 using System;
-using System.Reactive.Concurrency;
-using System.Runtime.CompilerServices;
 using Avalonia;
-using Microsoft.Win32;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class ScreenSizeInPixels : DisplaySize
+public class DisplaySizeInPixels : DisplaySize
 {
-    public MonitorSource MonitorSource { get; }
 
-    public ScreenSizeInPixels(MonitorSource source) : base(null)
+    public DisplaySizeInPixels(Rect rect) : base(null)
     {
-        MonitorSource = source;
-
-        _width = this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Pels.Width)
-            .ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);
-
-        _height = this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Pels.Height)
-            .ToProperty(this, e => e.Height, scheduler: Scheduler.Immediate);
-
-        _x = this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position.X)
-            .ToProperty(this, e => e.X, scheduler: Scheduler.Immediate);
-
-        _y = this.WhenAnyValue(
-                e => e.MonitorSource.Device.AttachedDisplay.CurrentMode.Position.Y)
-            .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
-
         Init();
-
+        this.Set(rect);
     }
 
     public override double Width
     {
-        get => _width.Value;
-        set => throw new NotImplementedException();
+        get => _width;
+        set => this.RaiseAndSetIfChanged(ref _width, value);
     }
-    readonly ObservableAsPropertyHelper<double> _width;
+    double _width;
 
-    // Monitor area was found depending on system scale
-
-    //private IProperty<double> _width = H.Property<double>(c => c
-    //    .Set(e => e.Screen.Monitor.MonitorArea.Width)
-    //    .On(e => e.Screen.Monitor.MonitorArea)
-    //    .Update()
-    //);
 
     public override double Height
     {
-        get => _height.Value;
-        set => throw new NotImplementedException();
+        get => _height;
+        set => this.RaiseAndSetIfChanged(ref _height, value);
     }
-    readonly ObservableAsPropertyHelper<double> _height;
+    double _height;
 
     //private IProperty<double> _height = H.Property<double>(c => c
     //    .Set(e => e.Screen.Monitor.MonitorArea.Height)
@@ -88,17 +59,17 @@ public class ScreenSizeInPixels : DisplaySize
 
     public override double X
     {
-        get => _x.Value;
-        set => throw new NotImplementedException();
+        get => _x;
+        set => this.RaiseAndSetIfChanged(ref _x, value);
     }
-    readonly ObservableAsPropertyHelper<double> _x;
+    double _x;
 
     public override double Y
     {
-        get => _y.Value;
-        set => throw new NotImplementedException();
+        get => _y;
+        set => this.RaiseAndSetIfChanged(ref _y, value);
     }
-    readonly ObservableAsPropertyHelper<double> _y;
+    double _y;
 
    //private readonly IProperty<double> _y = H.Property<double>(nameof(Y), c => c
     //    .Set(s => s.Screen.Monitor.MonitorArea.Y)
@@ -128,17 +99,19 @@ public class ScreenSizeInPixels : DisplaySize
         set => throw new NotImplementedException();
     }
 
-    double LoadValueMonitor(Func<double> def, [CallerMemberName] string name = null)
-    {
-        using RegistryKey key = MonitorSource.Device.OpenMonitorRegKey();
+    // TODO Avalonia
+    //double LoadValueMonitor(Func<double> def, [CallerMemberName] string name = null)
+    //{
+    //    using RegistryKey key = MonitorSource.Device.OpenMonitorRegKey();
         
-        return key.GetKey(name, def);
-    }
+    //    return key.GetKey(name, def);
+    //}
 
-    double LoadValueConfig(Func<double> def, [CallerMemberName] string name = null)
-    {
-        using RegistryKey key = MonitorSource.Monitor.OpenRegKey();
-        
-        return key.GetKey(name, def);
-    }
+
+    // TODO 
+    //double LoadValueConfig(Func<double> def, [CallerMemberName] string name = null)
+    //{
+    //    using RegistryKey key = MonitorSource.OpenRegKey();
+    //    return key.GetKey(name, def);
+    //}
 }

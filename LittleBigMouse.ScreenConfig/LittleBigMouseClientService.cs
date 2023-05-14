@@ -27,21 +27,21 @@ namespace LittleBigMouse.DisplayLayout
 
         public async void Start() => await SendAsync();
 
-        public async void Start(ZonesLayout layout)
+        public async Task StartAsync(ZonesLayout layout)
         {
-            await SendMessageWithStartAsync(new (LittleBigMouseCommand.Load, layout));
-            await SendMessageWithStartAsync(new (LittleBigMouseCommand.Run));
+            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Load, layout));
+            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Run));
         }
 
-        public async void Stop() => await SendAsync();
+        public async Task StopAsync() => await SendAsync();
 
-        public async void Quit() => await SendAsync();
+        public async Task QuitAsync() => await SendAsync();
 
-        public async void LoadAtStartup(bool state = true) => await SendAsync();
+        public async Task LoadAtStartupAsync(bool state = true) => await SendAsync();
 
-        public async void CommandLine(IList<string> args) => await SendAsync();
+        public async Task CommandLineAsync(IList<string> args) => await SendAsync();
 
-        public async void Running() => await SendAsync();
+        public async Task RunningAsync() => await SendAsync();
 
         readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
 

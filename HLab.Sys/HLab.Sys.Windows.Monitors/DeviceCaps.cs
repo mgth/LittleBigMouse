@@ -21,50 +21,16 @@
 	  http://www.mgth.fr
 */
 
-using System;
 using Avalonia;
-
-using static HLab.Sys.Windows.API.WinGdi;
 
 namespace HLab.Sys.Windows.Monitors
 {
     public class DeviceCaps
     {
-        public Size Size { get; }
-        public Size Resolution { get; }
-        public Size LogPixels { get; }
-        public Size Aspect { get; }
-        public int BitsPixel { get; }
-
-        public DeviceCaps(string deviceName)
-        {
-            var hdc = CreateDC("DISPLAY", deviceName, null, 0);
-
-            Size = new Size(
-                GetDeviceCaps(hdc, DeviceCap.HorzSize),
-                GetDeviceCaps(hdc, DeviceCap.VertSize)
-            );
-
-            Resolution = new Size(
-                GetDeviceCaps(hdc, DeviceCap.HorzRes),
-                GetDeviceCaps(hdc, DeviceCap.VertRes)
-            );
-
-            LogPixels = new Size(
-                GetDeviceCaps(hdc, DeviceCap.LogPixelsX),
-                GetDeviceCaps(hdc, DeviceCap.LogPixelsY)
-            );
-
-            BitsPixel = GetDeviceCaps(hdc, DeviceCap.BitsPixel);
-
-            Aspect = new Size(
-                GetDeviceCaps(hdc, DeviceCap.AspectX),
-                GetDeviceCaps(hdc, DeviceCap.AspectY)
-            );
-
-            // TODO : https://msdn.microsoft.com/en-us/library/windows/desktop/dd144877(v=vs.85).aspx
-
-            DeleteDC(hdc);
-        }
+        public Size Size { get; set; }
+        public Size Resolution { get; set; }
+        public Size LogPixels { get; set; }
+        public Size Aspect { get; set; }
+        public int BitsPixel { get; set; }
     }
 }

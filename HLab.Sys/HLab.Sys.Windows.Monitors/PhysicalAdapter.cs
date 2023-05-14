@@ -7,21 +7,20 @@ namespace HLab.Sys.Windows.Monitors
 {
     public class PhysicalAdapter : ReactiveObject
     {
-        public PhysicalAdapter(string deviceId, IMonitorsService service)
+        public PhysicalAdapter(string deviceId)
         {
             DeviceId = deviceId;
             //MonitorsService = service;
 
-            Displays = service
-                .Devices
-                .Connect()
-                .Filter(e => e.DeviceId == deviceId)
-                .ObserveOn(RxApp.MainThreadScheduler)
-                .AsObservableCache();
+            // TODO 
+            //Displays = service
+            //    .Devices
+            //    .Connect()
+            //    .Filter(e => e.DeviceId == deviceId)
+            //    .ObserveOn(RxApp.MainThreadScheduler)
+            //    .AsObservableCache();
         }
 
-        //[JsonIgnore]
-        //public IMonitorsService MonitorsService { get; }
         public string DeviceId { get; }
 
         public string DeviceString

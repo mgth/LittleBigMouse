@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
 using System.Reactive.Concurrency;
 
@@ -29,9 +30,9 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 public class DisplayScaleDip : DisplaySize
 {
     public IDisplayRatio EffectiveDpi { get; }
-    public Layout Config { get; }
+    public IMonitorsLayout Config { get; }
 
-    public DisplayScaleDip(IDisplaySize source, IDisplayRatio effectiveDpi, Layout config) : base(source)
+    public DisplayScaleDip(IDisplaySize source, IDisplayRatio effectiveDpi, IMonitorsLayout config) : base(source)
     {
         EffectiveDpi = effectiveDpi;
         Config = config;

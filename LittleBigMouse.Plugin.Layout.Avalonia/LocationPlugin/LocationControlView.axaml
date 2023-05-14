@@ -1,0 +1,107 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.LocationControlView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:locationPlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin"
+             mc:Ignorable="d" 
+             d:DesignHeight="50" d:DesignWidth="800">
+    <Grid>
+        <Design.DataContext>
+            <locationPlugin:LocationControlViewModel/>
+        </Design.DataContext>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+
+            <!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
+<!---->
+             <StackPanel Margin="5" HorizontalAlignment="Right" Orientation="Horizontal">
+                <!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
+                </StackPanel>-->
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <ToggleSwitch 
+                        Content="Horizontal Loop" 
+
+                        IsEnabled="{Binding Path=Layout.LoopAllowed}" 
+                        IsChecked="{Binding Path=Layout.LoopX, Mode=TwoWay}"/>
+
+                    <ToggleSwitch  
+                        Content="Vertical Loop" 
+                        IsEnabled="{Binding Path=Layout.LoopAllowed}" 
+                        IsChecked="{Binding Path=Layout.LoopY, Mode=TwoWay}"/>
+
+                    <!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
+                </StackPanel>
+                
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <ToggleSwitch  
+                        Content="Allow overlaps" 
+                        IsChecked="{Binding Path=Layout.AllowOverlaps, Mode=TwoWay}"/>
+
+                    <ToggleSwitch  
+                        Content="Allow discontinuity" 
+                        IsChecked="{Binding Path=Layout.AllowDiscontinuity, Mode=TwoWay}"/>
+
+                    <!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
+                </StackPanel>
+                
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <ToggleSwitch 
+                        Content="Adjust Speed" 
+                        IsEnabled="{Binding Path=Layout.AdjustSpeedAllowed}"  
+                        IsChecked="{Binding Path=Layout.AdjustSpeed, Mode=TwoWay}"/>
+
+                    <ToggleSwitch 
+                        Content="Adjust Pointer" 
+                        IsEnabled="{Binding Path=Layout.AdjustPointerAllowed}" 
+                        IsChecked="{Binding Path=Layout.AdjustPointer, Mode=TwoWay}"/>
+
+                    <ToggleSwitch 
+                        Content="Allow Corner Crossing"
+                        IsChecked="{Binding Path=Layout.AllowCornerCrossing, 
+                        Mode=TwoWay}"/>
+
+                </StackPanel>
+                
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <ToggleSwitch 
+                        Content="Auto Check for update"  
+                        IsChecked="{Binding Path=Layout.AutoUpdate, Mode=TwoWay}"/>
+
+                    <ToggleSwitch 
+                        Content="Load at startup"  
+                        IsChecked="{Binding Path=Layout.LoadAtStartup, Mode=TwoWay}"/>
+
+                    <ToggleSwitch 
+                        Content="Enabled" 
+                        IsChecked="{Binding Path=Layout.Enabled, Mode=TwoWay}"/>
+
+                </StackPanel>
+                
+            </StackPanel>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CopyCommand}">
+                <ToolTip.Tip>Copy config to clipboard</ToolTip.Tip>
+                <icons:IconView Height="30" Path="Icon/CopyConfig"/>
+            </Button>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}">
+                <ToolTip.Tip>Apply/Start</ToolTip.Tip>
+                <icons:IconView Height="30" Path="Icon/Start"/>
+            </Button>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StopCommand}">
+                <ToolTip.Tip>Stop</ToolTip.Tip>
+                <icons:IconView Height="30" Path="Icon/Stop"/>
+            </Button>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding UndoCommand}">
+                <ToolTip.Tip>Undo</ToolTip.Tip>
+                <icons:IconView Height="30" Path="Icon/Undo"/>
+            </Button>
+        </StackPanel>
+
+    </Grid>
+</UserControl>

@@ -85,8 +85,7 @@ public class DisplayScale : DisplaySize
             )
             .ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
 
-        Init();
-
+        base.Init();
     }
 
     public IDisplayRatio Ratio { get; }
@@ -110,7 +109,6 @@ public class DisplayScale : DisplaySize
         get => _x?.Value ?? 0;
         set => Source.X = value;
     }
-
     readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
@@ -147,6 +145,7 @@ public class DisplayScale : DisplaySize
         set => Source.RightBorder = value / Ratio.X;
     }
     readonly ObservableAsPropertyHelper<double> _rightBorder;
+
     public override string TransformToString => $"Scale:{Ratio}";
 
 }

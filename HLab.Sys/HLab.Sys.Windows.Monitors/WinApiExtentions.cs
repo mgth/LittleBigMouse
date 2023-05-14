@@ -17,7 +17,7 @@ namespace HLab.Sys.Windows.Monitors
             return new Point(p.X, p.Y);
         }
 
-        public static T GetOrAdd<T,TKey>(this SourceCache<T,TKey> @this, IMonitorsService service, TKey key, Func<IMonitorsService,TKey,T> get)
+        public static T GetOrAdd<T,TKey>(this SourceCache<T,TKey> @this, IMonitorsSet service, TKey key, Func<IMonitorsSet,TKey,T> get)
         {
             var lookup = @this.Lookup(key);
             if(lookup.HasValue) return lookup.Value;

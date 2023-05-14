@@ -32,6 +32,7 @@ public interface IDisplayRatio
 {
     double X { get; set; }
     double Y { get; set; }
+    bool IsUnary { get; }
 }
 
 [DataContract]
@@ -42,6 +43,8 @@ public abstract class DisplayRatio : ReactiveObject, IDisplayRatio, IEquatable<I
     public abstract double X { get; set; }
     [DataMember]
     public abstract double Y { get; set; }
+
+    public bool IsUnary => Math.Abs(X - 1) < double.Epsilon && Math.Abs(Y - 1) < double.Epsilon;
 
     public bool Equals(IDisplayRatio other)
     {

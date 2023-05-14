@@ -23,8 +23,6 @@
 
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data;
-using Avalonia.Data.Core;
 using Avalonia.Input;
 
 namespace LittleBigMouse.Plugins.Avalonia

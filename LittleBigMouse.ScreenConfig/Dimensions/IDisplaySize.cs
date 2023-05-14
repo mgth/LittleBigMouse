@@ -6,6 +6,8 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public interface IDisplaySize : IEquatable<IDisplaySize>
 {
+    IDisposable DelayChangeNotifications();
+
     double Width { get; set; }
     double Height { get; set; }
     double X { get; set; }

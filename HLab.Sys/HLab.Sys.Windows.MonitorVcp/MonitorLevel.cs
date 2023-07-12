@@ -1,140 +1,152 @@
-﻿using HLab.Sys.Windows.Monitors;
+﻿using System.Collections.Concurrent;
+using System.Threading;
+using HLab.Sys.Windows.Monitors;
+using OneOf;
 using ReactiveUI;
 
-namespace HLab.Sys.Windows.MonitorVcp
+namespace HLab.Sys.Windows.MonitorVcp;
+
+public class MonitorLevelDesign : MonitorLevel
 {
-    public class MonitorLevel : ReactiveObject
+    static readonly ConcurrentDictionary<VcpComponent, uint> Components =
+        new ();
+
+    static bool  VcpSetter(uint value, VcpComponent component = VcpComponent.None)
     {
-        readonly uint _component = 0;
-
-        readonly VcpSetter _componentSetter = null;
-        readonly VcpGetter _componentGetter = null;
-        LevelParser _levelParser = null;
-        MonitorDevice _monitor = null;
-
-        public MonitorLevel(MonitorDevice monitor, LevelParser parser, VcpGetter getter, VcpSetter setter, uint component = 0)
-        {
-            _monitor = monitor;
-
-            _component = component;
-            _componentSetter = setter;
-            _componentGetter = getter;
-
-            _levelParser = parser;
-
-            //_threadSetter = new LossyThread( );
-
-            //_threadSetter.Add(GetValue);
-
-            //H.Initialize(this);
-
-            parser.Add(this);
-
-        }
-
-
-        public void SetToMax() { Value = Max; }
-
-        public void SetToMin() { Value = Min; }
-
-
-        public bool Moving
-        {
-            get => _moving;
-            private set => this.RaiseAndSetIfChanged(ref _moving, value);
-        }
-        bool _moving;
-
-        public bool Enabled
-        {
-            get => _enabled;
-            private set => this.RaiseAndSetIfChanged(ref _enabled, value);
-        }
-        bool _enabled;
-
-
-        internal void DoWork()
-        {
-            uint min = 0;
-            uint max = 0;
-            uint value = 0;
-
-            var retry = (!Enabled || Moving) ?10:1;
-
-            while (retry > 0)
-            {
-                if (_componentGetter(ref min, ref value, ref max, _component))
-                {
-                    if (Moving)
-                    {
-                        if (value == Value)
-                        {
-                            Moving = false;
-                        }
-                        else
-                        {
-                            while (retry > 0)
-                            {
-                                if (_componentSetter(Value, _component))
-                                {
-                                    retry = 0;
-                                }
-                                else retry--;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        using (DelayChangeNotifications())
-                        {
-                            Value = value;
-                            Min = min;
-                            Max = max;
-                            Enabled = true;
-                        }
-                    }
-
-                    retry = 0;
-                }
-
-                retry--;
-            }
-        }
-
-
-        //private readonly LossyThread _threadSetter;
-
-        uint _value;
-        public uint Value
-        {
-            get => _value;
-            set
-            {
-                if (_value == value) return;
-
-                using (DelayChangeNotifications())
-                {
-                    this.RaiseAndSetIfChanged(ref _value, value);
-                    Moving = true;
-                    _levelParser.Add(this);
-                }
-            }
-        }
-
-
-        public uint Min
-        {
-            get => _min;
-            private set => this.RaiseAndSetIfChanged(ref _min, value);
-        }
-        uint _min;
-
-        public uint Max
-        {
-            get => _max;
-            private set => this.RaiseAndSetIfChanged(ref _max, value);
-        }
-        uint _max;
-
+        Components.AddOrUpdate(component, value, (c,v) => 50);
+        Thread.Sleep(300);
+        return true;
     }
+
+    static OneOf<(uint value, uint min, uint max), int> VcpGetter(VcpComponent component = VcpComponent.None)
+    {
+        var value = Components.GetOrAdd(component, c => 50);
+        Thread.Sleep(300);
+        return (value, 0, 100);
+    }
+   
+    public MonitorLevelDesign(VcpComponent component = VcpComponent.None) 
+        : base(new LevelParser(), VcpGetter, VcpSetter, component)
+    {
+    }
+}
+
+public class MonitorLevel : ReactiveObject
+{
+    public VcpComponent Component { get; }
+
+    readonly VcpSetter _componentSetter;
+    readonly VcpGetter _componentGetter;
+    readonly LevelParser _levelParser;
+
+    public MonitorLevel(
+        LevelParser parser, 
+        VcpGetter getter, 
+        VcpSetter setter, 
+        VcpComponent component = VcpComponent.None
+        )
+    {
+        Component = component;
+        _componentSetter = setter;
+        _componentGetter = getter;
+
+        _levelParser = parser;
+
+        parser.Enqueue(this);
+    }
+
+
+    public void SetToMax() { Value = Max; }
+
+    public void SetToMin() { Value = Min; }
+
+
+    public bool Moving
+    {
+        get => _moving;
+        private set => this.RaiseAndSetIfChanged(ref _moving, value);
+    }
+    bool _moving;
+
+    public bool Enabled
+    {
+        get => _enabled;
+        private set => this.RaiseAndSetIfChanged(ref _enabled, value);
+    }
+    bool _enabled = true;
+
+    const int MAX_RETRY = 10;
+    int _retryRead = MAX_RETRY;
+    int _retryWrite = MAX_RETRY;
+    internal void DoWork()
+    {
+        // First get current value
+        _componentGetter(Component).Switch((v =>
+            {
+                Min = v.min;
+                Max = v.max;
+
+                if (v.value == Value)
+                {
+                    Moving = false;
+                    return;
+                }
+
+                if (Moving && Enabled)
+                {
+                    if (_componentSetter(Value, Component))
+                    {
+                        _retryWrite = MAX_RETRY;
+                    }
+                    else if (_retryWrite-- <= 0)
+                    {
+                        Enabled = false;
+                    }
+                    return;
+                }
+
+                Value = v.value;
+                Moving = false;
+            }), 
+            error =>
+            {
+                if (_retryRead-- <= 0)
+                {
+                    Enabled = false;
+                }
+            });
+
+        _levelParser.Enqueue(this);
+    }
+
+    uint _value;
+    public uint Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value) return;
+
+            using (DelayChangeNotifications())
+            {
+                this.RaiseAndSetIfChanged(ref _value, value);
+                Moving = true;
+            }
+        }
+    }
+
+    public uint Min
+    {
+        get => _min;
+        private set => this.RaiseAndSetIfChanged(ref _min, value);
+    }
+    uint _min;
+
+    public uint Max
+    {
+        get => _max;
+        private set => this.RaiseAndSetIfChanged(ref _max, value);
+    }
+    uint _max;
+
 }

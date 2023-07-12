@@ -21,6 +21,11 @@ public static class MonitorsLayoutExtensions
 
     static readonly object CompactLock = new();
 
+    public static void SetSizesFromSystemConfiguration(this IMonitorsLayout layout, bool placeAll = true)
+    {
+        // TODO
+    }
+
     /// <summary>
     /// try to place windows according to windows placement
     /// </summary>

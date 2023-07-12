@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using System.Windows.Input;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -54,6 +55,9 @@ public class MonitorsLayoutPresenterViewModel
                 e => e.VisualRatio.Y,
                 (h, y) => h * y)
             .ToProperty(this, e => e.Height);
+
+        ResetLocationsFromSystem = ReactiveCommand.Create(() => Model?.SetLocationsFromSystemConfiguration());
+        ResetSizesFromSystem = ReactiveCommand.Create(() => Model?.SetSizesFromSystemConfiguration());
     }
 
     public MonitorsLayoutPresenterViewModel():this(new MainViewModelDesign())
@@ -74,6 +78,9 @@ public class MonitorsLayoutPresenterViewModel
         set => this.RaiseAndSetIfChanged(ref _selectedMonitor, value);
     }
     private IMonitorFrameViewModel? _selectedMonitor;
+
+    public ICommand ResetLocationsFromSystem { get; }
+    public ICommand ResetSizesFromSystem { get; }
 
     public void ConfigureMvvmContext(IMvvmContext ctx)
     {

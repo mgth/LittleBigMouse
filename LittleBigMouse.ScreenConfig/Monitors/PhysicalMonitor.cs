@@ -30,6 +30,7 @@ using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using Avalonia;
 using DynamicData;
+using HLab.Base.Avalonia;
 
 //using HLab.Sys.Windows.Monitors;
 
@@ -42,7 +43,7 @@ using ReactiveUI;
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
 [DataContract]
-public class PhysicalMonitor : ReactiveObject
+public class PhysicalMonitor : ReactiveModel
 {
     public class Design : PhysicalMonitor
     {
@@ -66,7 +67,7 @@ public class PhysicalMonitor : ReactiveObject
     public PhysicalSource ActiveSource
     {
         get => _activeSource;
-        set => this.RaiseAndSetIfChanged(ref _activeSource, value);
+        set => this.SetUnsavedValue(ref _activeSource, value);
     }
     PhysicalSource _activeSource;
 
@@ -91,7 +92,7 @@ public class PhysicalMonitor : ReactiveObject
         DepthRatio = new DisplayRatioValue(1.0, 1.0);
 
         _id = this.WhenAnyValue(
-            e => e.ActiveSource.Source.IdMonitor,
+            e => e.ActiveSource.Source.IdMonitorDevice,
             e => e.Orientation,
             (id, o) => $"{id}_{o}"
                 ).Log(this, "_id").ToProperty(this, e => e.Id, scheduler: Scheduler.Immediate);
@@ -146,7 +147,7 @@ public class PhysicalMonitor : ReactiveObject
     public int Orientation
     {
         get => _orientation;
-        set => this.RaiseAndSetIfChanged(ref _orientation, value);
+        set => this.SetUnsavedValue(ref _orientation, value);
     }
     int _orientation;
 
@@ -154,7 +155,7 @@ public class PhysicalMonitor : ReactiveObject
     public string SerialNumber
     {
         get => _serialNumber;
-        set => this.RaiseAndSetIfChanged(ref _serialNumber, value);
+        set => this.SetUnsavedValue(ref _serialNumber, value);
     }
     string _serialNumber;
 
@@ -277,12 +278,6 @@ public class PhysicalMonitor : ReactiveObject
 
 
 
-    public string InterfaceLogo
-    {
-        get => _interfaceLogo;
-        set => this.RaiseAndSetIfChanged(ref _interfaceLogo, value);
-    }
-    string _interfaceLogo;
 
 
     //    .Set(e => e.InMm.Y)
@@ -440,7 +435,7 @@ public class PhysicalMonitor : ReactiveObject
         return Math.Max(top, bottom);
     }
 
-    public double Distance(PhysicalMonitor monitor)
+    public double DistanceHV(PhysicalMonitor monitor)
     {
         var v = new Vector(HorizontalDistance(monitor), VerticalDistance(monitor));
 
@@ -452,7 +447,7 @@ public class PhysicalMonitor : ReactiveObject
         return Math.Max(v.X, v.Y);
     }
 
-    public double Distance(IEnumerable<PhysicalMonitor> monitors)
+    public double DistanceHV(IEnumerable<PhysicalMonitor> monitors)
     {
         var v = new Vector(HorizontalDistance(monitors), VerticalDistance(monitors));
 
@@ -544,129 +539,120 @@ public class PhysicalMonitor : ReactiveObject
     }
 
 
-    public void PlaceAuto(IEnumerable<PhysicalMonitor> monitors, MonitorsLayout layout)
+    public void PlaceAuto(IEnumerable<PhysicalMonitor> monitors, bool allowDiscontinuity=false, bool allowOverlaps=false)
     {
-        var left = LeftDistanceToTouch(monitors, true);
-        var right = RightDistanceToTouch(monitors, true);
-        var top = TopDistanceToTouch(monitors, true);
-        var bottom = BottomDistanceToTouch(monitors, true);
+        var distance = this.DistanceToTouch(monitors, true);
 
-        if (!layout.AllowDiscontinuity && double.IsPositiveInfinity(left) && double.IsPositiveInfinity(top) && double.IsPositiveInfinity(right) && double.IsPositiveInfinity(bottom))
+        if (!allowDiscontinuity && distance.IsPositiveInfinity())
         {
-            top = TopDistance(monitors);
-            right = RightDistance(monitors);
-            bottom = BottomDistance(monitors);
-            left = LeftDistance(monitors);
+            distance = this.Distance(monitors);
 
-            if (left > 0)
+            if (distance.Left > 0)
             {
-                if (top > 0)
+                if (distance.Top > 0)
                 {
-                    DepthProjection.X += LeftDistance(monitors);
-                    DepthProjection.Y += TopDistance(monitors);
+                    DepthProjection.X += distance.Left;
+                    DepthProjection.Y += distance.Top;
                 }
-                if (bottom > 0)
+                if (distance.Bottom > 0)
                 {
-                    DepthProjection.X += LeftDistance(monitors);
-                    DepthProjection.Y -= BottomDistance(monitors);
+                    DepthProjection.X += distance.Left;
+                    DepthProjection.Y -= distance.Bottom;
                 }
             }
-            if (right > 0)
+            if (distance.Right > 0)
             {
-                if (top > 0)
+                if (distance.Top > 0)
                 {
-                    DepthProjection.X -= RightDistance(monitors);
-                    DepthProjection.Y += TopDistance(monitors);
+                    DepthProjection.X -= distance.Right;
+                    DepthProjection.Y += distance.Top;
                 }
-                if (bottom > 0)
+                if (distance.Bottom > 0)
                 {
-                    DepthProjection.X -= RightDistance(monitors);
-                    DepthProjection.Y -= BottomDistance(monitors);
+                    DepthProjection.X -= distance.Right;
+                    DepthProjection.Y -= distance.Bottom;
                 }
             }
 
-            left = LeftDistanceToTouch(monitors, false);
-            right = RightDistanceToTouch(monitors, false);
-            top = TopDistanceToTouch(monitors, false);
-            bottom = BottomDistanceToTouch(monitors, false);
+            distance = this.DistanceToTouch(monitors, false);    
         }
 
-        if (!layout.AllowDiscontinuity)
+        if (!allowDiscontinuity)
         {
 
-            if (top > 0 && left > 0)
+            if (distance.Top > 0 && distance.Left > 0)
             {
-                if (left < top) DepthProjection.X += left;
-                else DepthProjection.Y += top;
+                if (distance.Left < distance.Top) DepthProjection.X += distance.Left;
+                else DepthProjection.Y += distance.Top;
                 return;
             }
 
-            if (top > 0 && right > 0)
+            if (distance.Top > 0 && distance.Right > 0)
             {
-                if (right < top) DepthProjection.X -= right;
-                else DepthProjection.Y += top;
+                if (distance.Right < distance.Top) DepthProjection.X -= distance.Right;
+                else DepthProjection.Y += distance.Top;
                 return;
             }
 
-            if (bottom > 0 && right > 0)
+            if (distance.Bottom > 0 && distance.Right > 0)
             {
-                if (right < bottom) DepthProjection.X -= right;
-                else DepthProjection.Y -= bottom;
+                if (distance.Right < distance.Bottom) DepthProjection.X -= distance.Right;
+                else DepthProjection.Y -= distance.Bottom;
                 return;
             }
 
-            if (bottom > 0 && left > 0)
+            if (distance.Bottom > 0 && distance.Left > 0)
             {
-                if (left < bottom) DepthProjection.X += left;
-                else DepthProjection.Y -= bottom;
+                if (distance.Left < distance.Bottom) DepthProjection.X += distance.Left;
+                else DepthProjection.Y -= distance.Bottom;
                 return;
             }
 
-            if (top < 0 && bottom < 0)
+            if (distance.Top < 0 && distance.Bottom < 0)
             {
-                if (left >= 0)
+                if (distance.Left >= 0)
                 {
-                    DepthProjection.X += left;
+                    DepthProjection.X += distance.Left;
                     return;
                 }
-                if (right >= 0)
+                if (distance.Right >= 0)
                 {
-                    DepthProjection.X -= right;
+                    DepthProjection.X -= distance.Right;
                     return;
                 }
             }
 
-            if (left < 0 && right < 0)
+            if (distance.Left < 0 && distance.Right < 0)
             {
-                //if (top >= 0)
-                if (top > 0)
+                //if (distance.Top >= 0)
+                if (distance.Top > 0)
                 {
-                    DepthProjection.Y += top;
+                    DepthProjection.Y += distance.Top;
                     return;
                 }
-                if (bottom >= 0)
+                if (distance.Bottom >= 0)
                 {
-                    DepthProjection.Y -= bottom;
+                    DepthProjection.Y -= distance.Bottom;
                     return;
                 }
             }
         }
 
-        if (!layout.AllowOverlaps && left < 0 && right < 0 && top < 0 && bottom < 0)
+        if (!allowOverlaps && distance.Left < 0 && distance.Right < 0 && distance.Top < 0 && distance.Bottom < 0)
         {
-            if (left > right && left > top && left > bottom)
+            if (distance.Left > distance.Right && distance.Left > distance.Top && distance.Left > distance.Bottom)
             {
-                DepthProjection.X += left;
+                DepthProjection.X += distance.Left;
             }
-            else if (right > top && right > bottom)
+            else if (distance.Right > distance.Top && distance.Right > distance.Bottom)
             {
-                DepthProjection.X -= right;
+                DepthProjection.X -= distance.Right;
             }
-            else if (top > bottom)
+            else if (distance.Top > distance.Bottom)
             {
-                DepthProjection.Y += top;
+                DepthProjection.Y += distance.Top;
             }
-            else DepthProjection.Y -= bottom;
+            else DepthProjection.Y -= distance.Bottom;
         }
     }
 

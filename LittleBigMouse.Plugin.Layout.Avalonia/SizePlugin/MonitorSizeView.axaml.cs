@@ -21,33 +21,36 @@
 	  http://www.mgth.fr
 */
 
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Threading;
 using HLab.Mvvm.Annotations;
+using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.API;
 using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 
-internal class SizeScreenContentView : UserControl, IView<ViewModeScreenSize, ScreenSizeViewModel>, IViewScreenFrameTopLayer
+public partial class MonitorSizeView : UserControl, IView<ViewModeScreenSize, ScreenSizeViewModel>, IMonitorFrameContentViewClass
 {
-}
-
-/// <summary>
-/// Logique d'interaction pour ScreenGuiBorders.xaml
-/// </summary>
-public partial class SizeScreenView : UserControl, IView<ViewModeScreenSize, ScreenSizeViewModel>, IMonitorFrameContentViewClass
-{
-    public SizeScreenView()
+    public MonitorSizeView()
     {
         InitializeComponent();
+
+        this.SizeChanged += MonitorSizeView_SizeChanged;
     }
 
-    ScreenSizeViewModel ViewModel => (DataContext as ScreenSizeViewModel);
+    private void MonitorSizeView_SizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if(DataContext is ScreenSizeViewModel vm)
+            vm.UpdateArrows(Bounds);
+    }
+
+    protected override void OnMeasureInvalidated()
+    {
+        base.OnMeasureInvalidated();
+    }
 
     void OnKeyEnterUpdate(object sender, KeyEventArgs e)
     {

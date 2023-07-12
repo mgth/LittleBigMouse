@@ -145,14 +145,14 @@
 
                     <!-- Brand Icon -->
 					<icons:IconView 
-                        Path="{Binding Model.InterfaceLogo}" 
+                        Path="{Binding Model.ActiveSource.Source.InterfaceLogo}" 
                         Foreground="{DynamicResource HLab.Brushes.Foreground}"
                         Height="{Binding Path=Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.05|0.1|100}"
                         >
 						<icons:IconView.Caption>
 							<Label VerticalAlignment="Center" Margin="0"
 								   Padding="0"
-							   Content="{Binding Path=DeviceString, FallbackValue=xxx}"
+							   Content="{Binding Path=Model.ActiveSource.Source.InterfaceName, FallbackValue=xxx}"
                                FontSize="{Binding Path=Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.04|0.1|20}"
                             />
 						</icons:IconView.Caption>
@@ -190,7 +190,6 @@
 						<Label
 							Padding="2,0"
 							Content="{Binding Path=Model.ActiveSource.RealDpiAvg, StringFormat={}{0:0.}, FallbackValue=N/A}"
-							VerticalAlignment="{Binding Path=DpiVerticalAlignment}"
 							HorizontalAlignment="Right"
 							Foreground="{DynamicResource HLab.Brushes.Foreground}"
                         />

@@ -1,12 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>x64</Platforms>
   </PropertyGroup>
-
 
   <ItemGroup>
     <None Remove="Assets\**" />
@@ -19,9 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.0.0-preview8" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.0.0-preview8" />
-    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.0-preview8" />
+    <PackageReference Include="Avalonia" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -40,9 +39,6 @@
 	<Compile Update="LocationPlugin\Anchors\AnchorsView.axaml.cs">
       <DependentUpon>AnchorsView.axaml</DependentUpon>
     </Compile>
-    <Compile Update="LocationPlugin\LocationControlView.axaml.cs">
-      <DependentUpon>LocationControlView.axaml</DependentUpon>
-    </Compile>
     <Compile Update="LocationPlugin\MonitorLocationView.axaml.cs">
       <DependentUpon>MonitorLocationView.axaml</DependentUpon>
     </Compile>
@@ -55,8 +51,8 @@
     <Compile Update="Rulers\Tester.axaml.cs">
       <DependentUpon>Tester.axaml</DependentUpon>
     </Compile>
-    <Compile Update="SizePlugin\SizeScreenView.axaml.cs">
-      <DependentUpon>SizeScreenView.axaml</DependentUpon>
+    <Compile Update="SizePlugin\MonitorSizeView.axaml.cs">
+      <DependentUpon>MonitorSizeView.axaml</DependentUpon>
     </Compile>
 
   </ItemGroup>

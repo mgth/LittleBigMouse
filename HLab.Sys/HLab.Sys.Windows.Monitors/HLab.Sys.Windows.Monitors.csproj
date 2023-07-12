@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Platforms>x64</Platforms>
     <Nullable>disable</Nullable>
     <RootNamespace>HLab.Sys.Windows.Monitors</RootNamespace>
@@ -10,9 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview8" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Management" Version="8.0.0-preview.3.23174.8" />
+    <PackageReference Include="System.Management" Version="8.0.0-preview.5.23280.8" />
   </ItemGroup>
 
   <ItemGroup>

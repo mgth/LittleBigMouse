@@ -9,6 +9,8 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using MessageBox.Avalonia;
 using MessageBox.Avalonia.Enums;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
@@ -74,13 +76,14 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         }
 
         var result = MessageBoxManager
-            .GetMessageBoxStandardWindow(
+            .GetMessageBoxStandard(
                 "Save your changes before exiting ?",
                 "Confirmation", ButtonEnum.OkCancel,
                 Icon.Question, WindowStartupLocation.CenterOwner
 
                 )
-            .Show().Result;
+            //Todo get rid of Result
+            .ShowAsync().Result;
 
         if (result == ButtonResult.Yes)
         {

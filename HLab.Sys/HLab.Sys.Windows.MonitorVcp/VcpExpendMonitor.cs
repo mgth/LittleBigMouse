@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using HLab.Sys.Windows.API.MonitorConfiguration;
 using HLab.Sys.Windows.Monitors;
 
 namespace HLab.Sys.Windows.MonitorVcp
@@ -9,5 +10,6 @@ namespace HLab.Sys.Windows.MonitorVcp
 
         static readonly ConditionalWeakTable<MonitorDevice, VcpControl> AllVcp = new ConditionalWeakTable<MonitorDevice, VcpControl>();
         public static VcpControl Vcp(this MonitorDevice monitor) => AllVcp.GetValue(monitor, m => new VcpControl(monitor, LevelParser));
+
     }
 }

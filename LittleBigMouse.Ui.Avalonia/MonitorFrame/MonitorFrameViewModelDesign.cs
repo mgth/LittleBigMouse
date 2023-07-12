@@ -24,6 +24,7 @@
 //#define uglyfix
 
 using System.ComponentModel;
+using System.Windows.Input;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -42,6 +43,8 @@ public class MonitorFrameViewModelDesign : MonitorFrameViewModel, IDesignViewMod
         public IMainPluginsViewModel MainViewModel => new MainViewModelDesign();
 
         public IMonitorFrameViewModel? SelectedMonitor { get ; set ; }
+        public ICommand ResetLocationsFromSystem { get; }
+        public ICommand ResetSizesFromSystem { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
     }

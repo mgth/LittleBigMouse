@@ -44,6 +44,7 @@ public static class LayoutFactory
             _ => WallpaperStyle.Stretch
         };
 
+
         foreach (var device in service.Monitors)
         {
             //TODO : find a way to manage unattached monitors.
@@ -60,8 +61,12 @@ public static class LayoutFactory
 
             if (monitor == null)
             {
-                var model = device.CreatePhysicalMonitorModel();
-                monitor = device.CreatePhysicalMonitor(layout, model);
+                var model = device
+                    .CreatePhysicalMonitorModel();
+
+                monitor = device
+                    .CreatePhysicalMonitor(layout, model);
+
                 source = new PhysicalSource(monitor, device.CreateDisplaySource());
 
                 monitor.ActiveSource = source;
@@ -79,6 +84,7 @@ public static class LayoutFactory
         }
 
         layout.SetLocationsFromSystemConfiguration();
+        layout.Load();
     }
 
     /// <summary>
@@ -135,6 +141,8 @@ public static class LayoutFactory
                 mode.Position,
                 mode.Pels));
         }
+
+        (source.InterfaceName,source.InterfaceLogo) = device.InterfaceBrandNameAndLogo();
 
         source.WallpaperPath = device.WallpaperPath;
 
@@ -215,8 +223,8 @@ public static class LayoutFactory
             monitor.Orientation = mode.DisplayOrientation;
         }
 
-        // Interface Logo ( TODO => source ?)
-        monitor.InterfaceLogo = device.InterfaceBrandLogo();
+
+        monitor.Load();
 
         return monitor;
     }
@@ -235,15 +243,15 @@ public static class LayoutFactory
     }
 
     static readonly string[] Brands = { "intel", "amd", "nvidia", "microsoft" };
-    public static string InterfaceBrandLogo(this MonitorDevice device)
+    public static (string,string) InterfaceBrandNameAndLogo(this MonitorDevice device)
     {
         var dev = device.AttachedDevice?.Parent?.DeviceString?.ToLower() ?? "";
 
         foreach (var brand in Brands)
         {
-            if (dev.Contains(brand)) return $"icon/pnp/{brand}";
+            if (dev.Contains(brand)) return (dev,$"icon/pnp/{brand}");
         }
-        return "";
+        return (dev,"");
     }
 
 }

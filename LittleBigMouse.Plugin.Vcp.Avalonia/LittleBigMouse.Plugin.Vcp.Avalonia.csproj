@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<AvaloniaResource Include="Assets\**" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\Icon\colors.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+	  <PackageReference Include="Avalonia" Version="11.0.0" />
+	  <PackageReference Include="Avalonia.Desktop" Version="11.0.0" />
+	  <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HLab.Sys.Windows.MonitorVcp.Avalonia\HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
+  </ItemGroup>
+
+</Project>

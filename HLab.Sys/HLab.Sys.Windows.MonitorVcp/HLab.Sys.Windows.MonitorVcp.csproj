@@ -1,10 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Platforms>x64</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OneOf" Version="3.0.255" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\HLab\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />

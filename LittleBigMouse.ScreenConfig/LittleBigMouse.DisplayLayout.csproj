@@ -1,20 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Platforms>x64</Platforms>
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview8" />
-    <PackageReference Include="H.Pipes" Version="2.0.47" />
-    <PackageReference Include="MessageBox.Avalonia" Version="2.3.1-prev7.0" />
-    <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0-preview.3.23174.8" />
-    <PackageReference Include="System.Management" Version="8.0.0-preview.3.23174.8" />
-    <PackageReference Include="System.Reactive" Version="6.0.0-preview.13" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0" />
+    <PackageReference Include="H.Pipes" Version="2.0.51" />
+    <PackageReference Include="MessageBox.Avalonia" Version="3.0.1-rc2" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0-preview.5.23280.8" />
+    <PackageReference Include="System.Management" Version="8.0.0-preview.5.23280.8" />
+    <PackageReference Include="System.Reactive" Version="6.0.0" />
     <PackageReference Include="TaskScheduler" Version="2.10.1" />
   </ItemGroup>
 

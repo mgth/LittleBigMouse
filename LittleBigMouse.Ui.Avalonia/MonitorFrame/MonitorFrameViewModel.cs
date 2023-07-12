@@ -248,6 +248,6 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
     public void ConfigureMvvmContext(IMvvmContext ctx)
     {
-        ctx.AddCreator<IScreenContentViewModel>(e => e.ScreenFrameViewModel = this);
+        ctx.AddCreator<IScreenContentViewModel>(e => e.MonitorFrameViewModel = this);
     }
 }

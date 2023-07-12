@@ -23,9 +23,10 @@
 
 using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
+using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
+namespace LittleBigMouse.Ui.Avalonia.Controls;
 
 /// <summary>
 /// Logique d'interaction pour ControlGuiSizer.xaml

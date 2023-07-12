@@ -30,25 +30,22 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
 {
+    public struct Arrow
+    {
+        public Arrow(Point start, Point end)
+        {
+            StartPoint = start;
+            EndPoint = end;
+        }
+        public Point StartPoint { get; }
+        public Point EndPoint { get; }
+    }
+
     internal class ScreenSizeViewModel : ViewModel<PhysicalMonitor>
-    //ScreenControlViewModel
     {
         public ScreenSizeViewModel()
         {
-            var canvas = new Canvas
-            {
-                Children =
-                {
-                    _outsideHorizontalMeasureArrow,
-                    _outsideVerticalMeasureArrow,
-                    _insideHorizontalMeasureArrow,
-                    _insideVerticalMeasureArrow
-                }
-            };
 
-            InsideCoverControl.Children.Add(canvas);
-
-            InsideCoverControl.LayoutUpdated += OnFrameSizeChanged;
 
             _height = this.WhenAnyValue(e => e.Model.PhysicalRotated.Height)
                 .ToProperty(this, e => e.Height);
@@ -73,55 +70,57 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
 
             _outsideWidth = this.WhenAnyValue(e => e.Model.PhysicalRotated.OutsideWidth)
                 .ToProperty(this, e => e.OutsideWidth);
-
         }
 
-        readonly MeasureArrow _outsideHorizontalMeasureArrow = new()
+        public double ArrowLength
         {
-            StrokeThickness = 2, 
-            Fill = new SolidColorBrush(Colors.CadetBlue)
-        };
-
-        readonly MeasureArrow _outsideVerticalMeasureArrow = new()
-        {
-            StrokeThickness = 2, 
-            Fill = new SolidColorBrush(Colors.CadetBlue)
-        };
-
-        readonly MeasureArrow _insideHorizontalMeasureArrow = new()
-        {
-            StrokeThickness = 2, 
-            Fill = new SolidColorBrush(Colors.Bisque)
-        };
-
-        readonly MeasureArrow _insideVerticalMeasureArrow = new()
-        {
-            StrokeThickness = 2, 
-            Fill = new SolidColorBrush(Colors.Bisque)
-        };
-
-        void OnFrameSizeChanged(object sender, EventArgs eventArgs)
-        {
-            DrawLines();
+            get => _arrowLength;
+            set => this.RaiseAndSetIfChanged(ref _arrowLength, value);
         }
+        double _arrowLength;
 
-        public Grid InsideCoverControl { get; } = new Grid();
-
-        readonly Effect _effect = new DropShadowEffect
+        //Inside Vertical
+        public Arrow InsideVerticalArrow
         {
-            Color = Colors.DarkBlue,
-        };
+            get => _insideVerticalArrow;
+            set => this.RaiseAndSetIfChanged(ref _insideVerticalArrow, value);
+        }
+        Arrow _insideVerticalArrow;
 
-
-        public void DrawLines()
+        //Inside Horizontal
+        public Arrow InsideHorizontalArrow
         {
-            var rx = InsideCoverControl.Bounds.Width / Model.DepthProjection.Width;//this.FindParent<>.Presenter.GetRatio();
-            var ry = InsideCoverControl.Bounds.Height / Model.DepthProjection.Height;//this.FindParent<>.Presenter.GetRatio();
+            get => _insideHorizontalArrow;
+            set => this.RaiseAndSetIfChanged(ref _insideHorizontalArrow, value);
+        }
+        Arrow _insideHorizontalArrow;
 
-            var h = InsideCoverControl.Bounds.Height;
-            var w = InsideCoverControl.Bounds.Width;
-            var x = 5 * InsideCoverControl.Bounds.Width / 8;// + ScreenGui.LeftBorder.Value;
-            var y = 5 * InsideCoverControl.Bounds.Height / 8;// + ScreenGui.TopBorder.Value;
+        //Outside Vertical
+        public Arrow OutsideVerticalArrow
+        {
+            get => _outsideVerticalArrow;
+            set => this.RaiseAndSetIfChanged(ref _outsideVerticalArrow, value);
+        }
+        Arrow _outsideVerticalArrow;
+
+        //Outside Horizontal
+        public Arrow OutsideHorizontalArrow
+        {
+            get => _outsideHorizontalArrow;
+            set => this.RaiseAndSetIfChanged(ref _outsideHorizontalArrow, value);
+        }
+        Arrow _outsideHorizontalArrow;
+
+
+        public void UpdateArrows(Rect bounds)
+        {
+            var rx = bounds.Width / Model.DepthProjection.Width;
+            var ry = bounds.Height / Model.DepthProjection.Height;
+
+            var h = bounds.Height;
+            var w = bounds.Width;
+            var x = 5 * bounds.Width / 8;
+            var y = 5 * bounds.Height / 8;
 
             var x2 = -rx * Model.DepthProjection.LeftBorder;
             var y2 = -ry * Model.DepthProjection.TopBorder;
@@ -129,43 +128,13 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             var h2 = h - y2 + ry * Model.DepthProjection.BottomBorder;
             var w2 = w - x2 + rx * Model.DepthProjection.RightBorder;
 
-            var length = rx * (Model.DepthProjection.BottomBorder + Model.DepthProjection.RightBorder + Model.DepthProjection.LeftBorder + Model.DepthProjection.TopBorder) / 8;
+            ArrowLength = rx * 
+                Math.Min(Model.DepthProjection.Width, Model.DepthProjection.Height) / 32;
 
-
-            static void SetArrow(MeasureArrow arrow, double l, Point s, Point e)
-            {
-                arrow.ArrowLength = l;
-                arrow.StartPoint = s;
-                arrow.EndPoint = e;
-            }
-
-            SetArrow(
-                _insideVerticalMeasureArrow,
-                length, 
-                new Point(x,0),
-                new Point(x,h)
-                );
-
-            SetArrow(
-                _insideHorizontalMeasureArrow,
-                length, 
-                new Point(0, y),
-                new Point(w, y)
-                );
-
-            SetArrow(
-                _outsideVerticalMeasureArrow,
-                length, 
-                new Point(x + w / 8 - w / 128, y2), 
-                new Point(x + w / 8 - w / 128, y2 + h2)
-                );
-
-            SetArrow(
-                _outsideHorizontalMeasureArrow,
-                length, 
-                new Point(x2, y + h / 8 - h / 128), 
-                new Point(x2 + w2, y + h / 8 - h / 128)
-                );
+            InsideVerticalArrow = new Arrow(new Point(x, 0), new Point(x,h));
+            InsideHorizontalArrow = new Arrow(new Point(0, y), new Point(w, y));
+            OutsideVerticalArrow = new Arrow(new Point(x + w / 8 - w / 128, y2), new Point(x + w / 8 - w / 128, y2 + h2));
+            OutsideHorizontalArrow = new Arrow(new Point(x2, y + h / 8 - h / 128), new Point(x2 + w2, y + h / 8 - h / 128));
         }
 
         public double Height
@@ -174,8 +143,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             set
             {
                 Model.PhysicalRotated.Height = value;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _height;
@@ -187,8 +155,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             set
             {
                 Model.PhysicalRotated.Width = value;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _width;
@@ -200,8 +167,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             set
             {
                 Model.PhysicalRotated.TopBorder = value;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _topBorder;
@@ -213,8 +179,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             set
             {
                 Model.PhysicalRotated.RightBorder = value;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _rightBorder;
@@ -226,8 +191,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             set
             {
                 Model.PhysicalRotated.BottomBorder = value;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _bottomBorder;
@@ -239,8 +203,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             set
             {
                 Model.PhysicalRotated.LeftBorder = value;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _leftBorder;
@@ -253,8 +216,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             {
                 var offset = value - OutsideHeight;
                 Model.PhysicalRotated.BottomBorder += offset;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _outsideHeight;
@@ -268,8 +230,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
                 var offset = (value - OutsideWidth) / 2;
                 Model.PhysicalRotated.LeftBorder += offset;
                 Model.PhysicalRotated.RightBorder += offset;
-                // TODO : layout not reachable :
-                // Model.Layout.Compact();
+                Model.Layout.Compact();
             }
         }
         readonly ObservableAsPropertyHelper<double> _outsideWidth;

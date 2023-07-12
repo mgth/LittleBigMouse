@@ -21,6 +21,7 @@ public class MonitorDeviceDesign : MonitorDevice
 
 
 public class MonitorDevice {
+    public nint HMonitor { get; set; }
 
     public string DeviceId { get; set; }
 

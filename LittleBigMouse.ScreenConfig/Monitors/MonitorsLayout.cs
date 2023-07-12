@@ -210,7 +210,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     public SourceCache<PhysicalMonitor, string> PhysicalMonitors { get; } = new(m => m.Id);
 
     [JsonIgnore]
-    public SourceCache<PhysicalSource, string> AllSources { get; } = new(s => s.Source.IdMonitor);
+    public SourceCache<PhysicalSource, string> AllSources { get; } = new(s => s.Source.IdMonitorDevice);
 
 
     /// <summary>
@@ -405,6 +405,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     }
     Rect _physicalBounds;
 
+
     public void UpdatePhysicalMonitors() => ParsePhysicalMonitors(PhysicalMonitors.Items);
     void ParsePhysicalMonitors(IEnumerable<PhysicalMonitor> monitors)
     {
@@ -581,30 +582,33 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
 
     readonly object _compactLock = new object();
-    bool _compacting;
 
     /// <summary>
     /// Remove all gaps between screens 
     /// </summary>
-    public void Compact()
+    public void Compact(bool force = false)
     {
+        if(AllowDiscontinuity && !force) return;
+
         if (PrimaryMonitor == null) return;
 
         lock (_compactLock)
         {
+            // Primary monitor is alwais at 0,0
             var done = new List<PhysicalMonitor> { PrimaryMonitor };
 
-            var todo = this.PhysicalMonitorsExcept(PrimaryMonitor).OrderBy(s => s.Distance(PrimaryMonitor)).ToList();
+            // Enqueue all other monitors to be placed
+            var todo = this.PhysicalMonitorsExcept(PrimaryMonitor).OrderBy(s => s.DistanceHV(PrimaryMonitor)).ToList();
 
             while (todo.Count > 0)
             {
                 var monitor = todo[0];
                 todo.Remove(monitor);
 
-                monitor.PlaceAuto(done,this);
+                monitor.PlaceAuto(done,AllowDiscontinuity,AllowOverlaps);
                 done.Add(monitor);
 
-                todo = todo.OrderBy(s => s.Distance(done)).ToList();
+                todo = todo.OrderBy(s => s.DistanceHV(done)).ToList();
             }
         }
     }
@@ -752,7 +756,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
             if (source == source.Monitor.ActiveSource)
                 zones.Zones.Add(new Zone(
-                    source.Source.IdMonitor,
+                    source.Source.IdMonitorDevice,
                     source.Monitor.Model.PnpDeviceName,
                     source.Source.InPixel.Bounds,
                     source.Monitor.DepthProjection.Bounds

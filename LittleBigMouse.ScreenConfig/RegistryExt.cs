@@ -32,6 +32,8 @@ namespace LittleBigMouse.DisplayLayout
     {
         public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null, Action ifLoaded = null)
         {
+            (key, keyName) = key.ParseKeyName(keyName);
+
             def ??= () => default;
 
             if (key == null) return def();
@@ -59,8 +61,19 @@ namespace LittleBigMouse.DisplayLayout
             return (T)value;
         }
 
+        static (RegistryKey, string) ParseKeyName(this RegistryKey key, string keyName)
+        {
+            var i = keyName.LastIndexOf('\\');
+            if (i < 0) return (key, keyName);
+            var subKey = keyName[..i];
+            keyName = keyName[(i + 1)..];
+            var sub = key.OpenSubKey(subKey, true) ?? key.CreateSubKey(subKey);
+            return (sub, keyName);
+        }
+
         public static void SetKey(this RegistryKey key, string keyName, double value)
         {
+            (key, keyName) = key.ParseKeyName(keyName);
             if (double.IsNaN(value)) { key.DeleteValue(keyName, false); }
             else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
@@ -68,12 +81,14 @@ namespace LittleBigMouse.DisplayLayout
 
         public static void SetKey(this RegistryKey key, string keyName, string value)
         {
+            (key, keyName) = key.ParseKeyName(keyName);
             if (value == null) { key.DeleteValue(keyName, false); }
             else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
         }
 
         public static void SetKey(this RegistryKey key, string keyName, bool value)
         {
+            (key, keyName) = key.ParseKeyName(keyName);
             key.SetValue(keyName, value ? "1" : "0", RegistryValueKind.String);
         }
     }

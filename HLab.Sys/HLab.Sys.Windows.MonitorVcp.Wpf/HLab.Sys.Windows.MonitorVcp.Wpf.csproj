@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
     <ProjectReference Include="..\HLab.Sys.Windows.MonitorVcp\HLab.Sys.Windows.MonitorVcp.csproj" />
   </ItemGroup>
 

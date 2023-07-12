@@ -21,7 +21,7 @@
         <avalonia:MonitorsLayoutPresenterViewModel />
     </Design.DataContext>
 
-    <Grid>
+    <Grid ClipToBounds="False">
         <Grid.Background>
             <LinearGradientBrush StartPoint="0,0.4" EndPoint="1,0.6">
                 <GradientStop Offset="0" Color="Black"/>
@@ -73,17 +73,35 @@
             <icons1:IconView Path="icon/littlebigmouse" Opacity="0.02"/>
         </Grid>
 
-        <Grid  Margin="30" >
+        <Grid  Margin="30" ClipToBounds="False">
 
-            <Grid x:Name="ReferenceGrid">
+            <Grid 
+                x:Name="ReferenceGrid" 
+                ClipToBounds="False"
+                >
 
                 <Canvas x:Name="ContentGrid" 
-                        ClipToBounds="True"
+                        ClipToBounds="False"
+
                 >
                         <!--Width="{Binding Width, Mode=OneWay}" 
                         Height="{Binding Height, Mode=OneWay}"-->
 
-                    <ItemsControl ItemsSource="{Binding Model.PhysicalMonitors.Items}">
+                    <ItemsControl 
+                        ItemsSource="{Binding Model.PhysicalMonitors.Items}"
+                        ClipToBounds="False"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+
+                        >
+                        <ItemsControl.Effect>
+                            <DropShadowEffect 
+                                Color="AliceBlue" 
+                                OffsetX="0" 
+                                OffsetY="0" 
+                                BlurRadius="40" Opacity="0.3"/>
+                        </ItemsControl.Effect>
+
 
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

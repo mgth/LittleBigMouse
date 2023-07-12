@@ -21,20 +21,26 @@
 	  http://www.mgth.fr
 */
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reactive;
+using System.Reactive.Linq;
 using System.Runtime.Serialization;
+using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Controls;
+using DynamicData;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Zoning;
 using Newtonsoft.Json;
 using ReactiveUI;
 
-namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
+namespace LittleBigMouse.Ui.Avalonia.Controls;
 
 internal class LocationControlViewModel : ViewModel<MonitorsLayout>
 {
@@ -52,13 +58,13 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
 
         CopyCommand = ReactiveCommand.CreateFromTask(CopyAsync);
 
-        // TODO
-        //SaveCommand = ReactiveCommand.Create(
-        //    Model.Save, 
-        //    this.WhenAnyValue(e => e.Model.Saved,selector: (saved) => !saved)
-        //    );
+        SaveCommand = ReactiveCommand.CreateFromTask(
+            SaveAsync, 
+            this.WhenAnyValue(e => e.Model.Saved, 
+            selector: saved => true //TODO !saved
+            ));
 
-        //UndoCommand = ReactiveCommand.Create(Model.Load);
+        UndoCommand = ReactiveCommand.Create(Model.Load);
 
         StartCommand = ReactiveCommand.CreateFromTask(
             StartAsync,
@@ -78,6 +84,40 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
             e => e.Model.Saved
             ).Subscribe(e => DoLiveUpdate());
 
+
+        this.WhenAnyValue(e => e.Model.Saved)
+            .Do(e => Saved = e);
+
+    }
+
+    protected override MonitorsLayout? OnModelChanging(MonitorsLayout? oldModel, MonitorsLayout? newModel)
+    {
+        if (newModel is { } model)
+        {
+            model.PhysicalMonitors.Connect()
+                .WhenValueChanged(e => e.Saved)
+                .Do(e =>
+                {
+                    if (!e) Saved = false;
+                }).Subscribe().DisposeWith(this);
+
+            model.PhysicalMonitors.Connect()
+                .WhenValueChanged(e => e.Model.Saved)
+                .Do(e =>
+                {
+                    if (!e) Saved = false;
+                }).Subscribe().DisposeWith(this);
+
+            model.AllSources.Connect()
+                .WhenValueChanged(e => e.Saved)
+                .Do(e =>
+                {
+                    if (!e) Saved = false;
+                }).Subscribe().DisposeWith(this);
+
+        }
+
+        return base.OnModelChanging(oldModel, newModel);
     }
 
     [DataContract]
@@ -105,6 +145,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
            {
                ReferenceLoopHandling = ReferenceLoopHandling.Ignore
            });
+
            try
            {
                var clipboard = Application.Current?.GetTopLevel()?.Clipboard;
@@ -121,7 +162,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     public ReactiveCommand<Unit, Unit> CopyCommand { get; }
 
-    public ReactiveCommand<Unit, bool> SaveCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
 
     public ReactiveCommand<Unit, Unit> UndoCommand { get; }
 
@@ -132,11 +173,19 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
     {
         Model.Enabled = true;
 
-        // TODO
+        //TODO recurse saved value to know if we need to save
         //if (!Model.Saved)
-        //    Model.Save();
+        await  SaveAsync();
 
-        await _service.StartAsync(Model.ComputeZones());
+        //await _service.StartAsync(Model.ComputeZones());
+    }
+    async Task SaveAsync()
+    {
+        //TODO recurse saved value to know if we need to save
+        //if (!Model.Saved)
+            Model.Save();
+
+        //await _service.StartAsync(Model.ComputeZones());
     }
 
     public bool Running
@@ -157,7 +206,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
 
     void DoLiveUpdate()
     {
-        if (LiveUpdate && !Model.Saved)
+        if (LiveUpdate && !Saved)
         {
             StartCommand.Execute();
         }

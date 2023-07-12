@@ -121,12 +121,14 @@
 
         <Grid Grid.Row="0"
               Grid.Column="0"
-              
+              ClipToBounds="False"
               Background="{DynamicResource HLab.Brushes.Header.Active.Background}"
-              ColumnDefinitions="*,Auto">
+              ColumnDefinitions="*,Auto"
+              >
                 <ItemsControl
                     Foreground="{DynamicResource HLab.Brushes.Foreground}"
-				    ItemsSource="{Binding Commands.Items}">
+				    ItemsSource="{Binding Commands.Items}"
+                    >
 
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -137,7 +139,7 @@
 
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
- 					        <mvvm:ViewLocator Model="{Binding}"/>
+ 					        <mvvm:ViewLocator Model="{Binding}" ClipToBounds="False"/>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
 

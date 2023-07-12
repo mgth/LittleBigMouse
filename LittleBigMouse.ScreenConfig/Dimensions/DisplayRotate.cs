@@ -67,16 +67,6 @@ public class DisplayRotate : DisplaySize
         //    .Update()
         //);
 
-        _leftBorder = this.WhenAnyValue(
-                e => e.Rotation,
-                e => e.Source.LeftBorder,
-                e => e.Source.TopBorder,
-                e => e.Source.RightBorder,
-                e => e.Source.BottomBorder,
-
-                (r,left,top,right,bottom) => GetBorder(0,r,left,top,right,bottom)
-                )
-            .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
 
         _topBorder = this.WhenAnyValue(
                 e => e.Rotation,
@@ -85,7 +75,7 @@ public class DisplayRotate : DisplaySize
                 e => e.Source.RightBorder,
                 e => e.Source.BottomBorder,
 
-                (r,left,top,right,bottom) => GetBorder(1,r,left,top,right,bottom)
+                (r,left,top,right,bottom) => GetBorder(0,r,left,top,right,bottom)
                 )
             .ToProperty(this, e => e.TopBorder, scheduler: Scheduler.Immediate);
 
@@ -96,7 +86,7 @@ public class DisplayRotate : DisplaySize
                 e => e.Source.RightBorder,
                 e => e.Source.BottomBorder,
 
-                (r,left,top,right,bottom) => GetBorder(2,r,left,top,right,bottom)
+                (r,left,top,right,bottom) => GetBorder(1,r,left,top,right,bottom)
                 )
             .ToProperty(this, e => e.RightBorder, scheduler: Scheduler.Immediate);
 
@@ -107,9 +97,20 @@ public class DisplayRotate : DisplaySize
                 e => e.Source.RightBorder,
                 e => e.Source.BottomBorder,
 
-                (r,left,top,right,bottom) => GetBorder(3,r,left,top,right,bottom)
+                (r,left,top,right,bottom) => GetBorder(2,r,left,top,right,bottom)
                 )
             .ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
+
+        _leftBorder = this.WhenAnyValue(
+                e => e.Rotation,
+                e => e.Source.LeftBorder,
+                e => e.Source.TopBorder,
+                e => e.Source.RightBorder,
+                e => e.Source.BottomBorder,
+
+                (r,left,top,right,bottom) => GetBorder(3,r,left,top,right,bottom)
+            )
+            .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
 
         base.Init();
     }
@@ -138,7 +139,7 @@ public class DisplayRotate : DisplaySize
         }
     }
 
-    ObservableAsPropertyHelper<double> _width;
+    readonly ObservableAsPropertyHelper<double> _width;
 
     public override double Height
     {
@@ -165,7 +166,7 @@ public class DisplayRotate : DisplaySize
         set => Source.X = value;
     }
 
-    ObservableAsPropertyHelper<double> _x;
+    readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
@@ -173,16 +174,16 @@ public class DisplayRotate : DisplaySize
         set => Source.Y = value;
     }
 
-    ObservableAsPropertyHelper<double> _y;
+    readonly ObservableAsPropertyHelper<double> _y;
 
     static double GetBorder(int border, int rotation, double left, double top, double right, double bottom)
     {
         return ((border + rotation) % 4) switch
         {
-            0 => left,
-            1 => top,
-            2 => right,
-            3 => bottom,
+            0 => top,
+            1 => right,
+            2 => bottom,
+            3 => left,
             _ => -1,
         };
     }
@@ -194,29 +195,22 @@ public class DisplayRotate : DisplaySize
             switch ((border + Rotation) % 4)
             {
                 case 0:
-                    Source.LeftBorder = value;
-                    break;
-                case 1:
                     Source.TopBorder = value;
                     break;
-                case 2:
+                case 1:
                     Source.RightBorder = value;
                     break;
-                case 3:
+                case 2:
                     Source.BottomBorder = value;
+                    break;
+                case 3:
+                    Source.LeftBorder = value;
                     break;
             }
         }
     }
 
 
-    public override double LeftBorder
-    {
-        get => _leftBorder.Value;
-        set => SetBorder(3, value);
-    }
-
-    ObservableAsPropertyHelper<double> _leftBorder;
 
     public override double TopBorder
     {
@@ -224,7 +218,7 @@ public class DisplayRotate : DisplaySize
         set => SetBorder(0, value);
     }
 
-    ObservableAsPropertyHelper<double> _topBorder;
+    readonly ObservableAsPropertyHelper<double> _topBorder;
 
     public override double RightBorder
     {
@@ -232,7 +226,7 @@ public class DisplayRotate : DisplaySize
         set => SetBorder(1, value);
     }
 
-    ObservableAsPropertyHelper<double> _rightBorder;
+    readonly ObservableAsPropertyHelper<double> _rightBorder;
 
     public override double BottomBorder
     {
@@ -240,7 +234,15 @@ public class DisplayRotate : DisplaySize
         set => SetBorder(2, value);
     }
 
-    ObservableAsPropertyHelper<double> _bottomBorder;
+    readonly ObservableAsPropertyHelper<double> _bottomBorder;
+
+    public override double LeftBorder
+    {
+        get => _leftBorder.Value;
+        set => SetBorder(3, value);
+    }
+
+    readonly ObservableAsPropertyHelper<double> _leftBorder;
 
     public override string TransformToString => $"Rotate:{Rotation}";
 

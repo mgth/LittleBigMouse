@@ -2,6 +2,7 @@
 using System.Runtime.Serialization;
 using Avalonia;
 using Avalonia.Media;
+using HLab.Base.Avalonia;
 using Microsoft.Win32;
 using ReactiveUI;
 
@@ -20,13 +21,13 @@ public enum WallpaperStyle
 /// <summary>
 /// 
 /// </summary>
-public class DisplaySource : ReactiveObject
+public class DisplaySource : ReactiveModel
 {
-    public string IdMonitor { get; }
+    public string IdMonitorDevice { get; }
 
     public DisplaySource(string idMonitor)
     {
-        IdMonitor = idMonitor;
+        IdMonitorDevice = idMonitor;
 
         _idResolution = this.WhenAnyValue(
             e => e.InPixel.Width,
@@ -115,6 +116,21 @@ public class DisplaySource : ReactiveObject
     }
     Rect _guiLocation;
 
+    public string InterfaceName
+    {
+        get => _interfaceName;
+        set => this.RaiseAndSetIfChanged(ref _interfaceName, value);
+    }
+    string _interfaceName;
+
+    public string InterfaceLogo
+    {
+        get => _interfaceLogo;
+        set => this.RaiseAndSetIfChanged(ref _interfaceLogo, value);
+    }
+    string _interfaceLogo;
+
+
     [DataMember]
     public double WinDpiX => _winDpiX.Value;
     readonly ObservableAsPropertyHelper<double> _winDpiX;
@@ -129,18 +145,5 @@ public class DisplaySource : ReactiveObject
 
     [DataMember] public DisplayRatioValue DpiAwareAngularDpi { get; } = new(96);
 
-    public void Load(RegistryKey baseKey)
-    {
-        using var key = baseKey.OpenSubKey("GuiLocation");
-
-        if (key == null) return;
-
-        var left = key.GetKey("Left", () => GuiLocation.Left);
-        var width = key.GetKey("Width", () => GuiLocation.Width);
-        var top = key.GetKey("Top", () => GuiLocation.Top);
-        var height = key.GetKey("Height", () => GuiLocation.Height);
-
-        GuiLocation = new Rect(new Point(left, top), new Size(width, height));
-    }
 
 }

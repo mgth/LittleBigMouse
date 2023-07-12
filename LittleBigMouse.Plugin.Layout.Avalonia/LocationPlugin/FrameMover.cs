@@ -141,7 +141,9 @@ public class FrameMover : ReactiveObject, IFrameLocation
             _monitor.DepthProjection.Y = Y;
         }
 
+        //Remove gaps 
         _layout.Compact();
+
         _layout.UpdatePhysicalMonitors();
         //Todo : Plugin.ActivateConfig();
     }

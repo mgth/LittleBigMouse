@@ -2,5 +2,5 @@
 
 public interface IScreenContentViewModel
 {
-    public IMonitorFrameViewModel ScreenFrameViewModel {get; set; }
+    public IMonitorFrameViewModel MonitorFrameViewModel {get; set; }
 }

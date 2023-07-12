@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
 namespace HLab.Sys.Windows.MonitorVcp
@@ -7,47 +7,35 @@ namespace HLab.Sys.Windows.MonitorVcp
     public sealed class LevelParser: IDisposable
     {
         Task _task;
+        readonly ConcurrentQueue<MonitorLevel> _actions = new();
 
-        public void Add(MonitorLevel level)
+        public void Enqueue(MonitorLevel level)
         {
-            var shouldStart = false;
-            lock (_lock)
-            {
-                if (_actions.Count == 0) shouldStart = true;
-                if (_actions.Contains(level))
-                    _actions.Remove(level);
-
-                _actions.Insert(0,level);
-            }
-
-            if(shouldStart) _task = Task.Run(DoWork);
+            _actions.Enqueue(level);
+            _task ??= Task.Run(DoWork);
         }
-
-        readonly object _lock = new();
-        readonly List<MonitorLevel> _actions = new();
 
         void DoWork()
         {
-            while(true)
+            var doWork = true;
+            while (doWork)
             {
-                MonitorLevel level;
-                lock (_lock)
+                if (_actions.TryDequeue(out var level))
                 {
-                    if (_actions.Count == 0) return;
-                    level = _actions[0];
-                    _actions.Remove(level);
-                    _actions.Add(level);
+                    level.DoWork();
                 }
-                level.DoWork();
+                else
+                {
+                    doWork = false;
+                }
             }
         }
+
         public void Dispose()
         {
-            lock (_lock)
-            {
-                while (_actions.Count > 0)
-                    _actions.Remove(_actions[0]);
-            }
+                while (_actions.TryDequeue(out var l))
+                {
+                }
         }
 
     }

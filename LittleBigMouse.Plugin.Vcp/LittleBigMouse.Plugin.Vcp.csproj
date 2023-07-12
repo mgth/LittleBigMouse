@@ -1,91 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <Platforms>x64</Platforms>
-    <Configurations>Debug;Release;ReleaseDebug</Configurations>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Remove="Icon\colors.xml" />
-    <None Remove="Icon\Vcp.svg" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Icon\colors.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Extended.Wpf.Toolkit" Version="4.5.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.MonitorVcp\HLab.Sys.Windows.MonitorVcp.csproj" />
-    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Argyll\HLab.Sys.Argyll.csproj" />
-    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
-    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Wpf.csproj" />
-    <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Resource Include="Icon\Vcp.svg" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="ColorPicker.xaml.cs">
-      <DependentUpon>ColorPicker.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="ComponentSlider.xaml.cs">
-      <DependentUpon>ComponentSlider.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="Curve.xaml.cs">
-      <DependentUpon>Curve.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="Patterns\TestPatternButtonView.xaml.cs">
-      <DependentUpon>TestPatternButtonView.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="VcpControlView.xaml.cs">
-      <DependentUpon>VcpControlView.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="VcpDetailView.xaml.cs">
-      <DependentUpon>VcpDetailView.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="VcpScreenView.xaml.cs">
-      <DependentUpon>VcpScreenView.xaml</DependentUpon>
-    </Compile>
-    <Compile Update="VcpSlider.xaml.cs">
-      <DependentUpon>VcpSlider.xaml</DependentUpon>
-    </Compile>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Page Update="ColorPicker.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="ComponentSlider.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="Curve.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="Patterns\TestPatternButtonView.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="VcpControlView.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="VcpDetailView.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="VcpScreenView.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="VcpSlider.xaml">
-      <SubType>Designer</SubType>
-    </Page>
-  </ItemGroup>
 
 </Project>

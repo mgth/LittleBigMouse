@@ -62,7 +62,7 @@ abstract class RulerOrientation
 
     public Brush GetBackground(Color color)
     {
-        var c = color.ToColorDouble().Multiply(0.7).ToColor();
+        var c = color.ToColor<double>().ToHSL().Darken(0.7).ToAvaloniaColor();
         return GetBrush(c);
     }
 
@@ -70,8 +70,8 @@ abstract class RulerOrientation
 
     protected static Brush GetBrush(double x1, double y1, double x2, double y2, Color c0)
     {
-        var c1 = c0.ToColorDouble();
-        var c2 = ColorDouble.FromArgb(0, c1.R / 3, c1.G / 3, c1.B / 3).ToColor();
+        var c1 = c0.ToColor<double>();
+        var c2 = new ColorRGB<double>(0, c1.Red / 3, c1.Green / 3, c1.Blue / 3).ToAvaloniaColor();
 
         return new LinearGradientBrush
         {
@@ -284,7 +284,7 @@ public class RulerViewTop : Control
 
 
     readonly Pen _penIn = new(Brushes.WhiteSmoke, 1);
-    readonly Pen _penOut = new(new SolidColorBrush(ColorDouble.FromArgb(0.7, 0.7, 0.7, 0.7).ToColor()), 1);
+    readonly Pen _penOut = new(new SolidColorBrush(new ColorRGB<double>(0.7, 0.7, 0.7, 0.7).ToAvaloniaColor()), 1);
 
     protected void Render()
     {

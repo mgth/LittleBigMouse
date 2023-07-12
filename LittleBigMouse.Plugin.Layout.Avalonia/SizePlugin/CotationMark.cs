@@ -43,37 +43,34 @@ internal class MeasureArrow : Line
         set => SetValue(ArrowLengthProperty, value);
     }
 
-    static Geometry GetArrow(Point start, Point end, double length = 1)
+    static Vector Multiply(Vector v,Matrix m)
+    {
+        var p = new Point(v.X, v.Y);
+        return p * m;
+    }
+
+    static (Point,PolylineGeometry) GetArrow(Point start, Point end, double length = 1)
     {
         Vector v = end - start;
 
-        v.Normalize();
+        v = v.Normalize();
         v *= length;
 
-        var v1 = new Vector(v.Y / 2, -v.X / 2);
-        var v2 = new Vector(-v.Y / 2, v.X / 2);
+        var v1 = Multiply(v,Matrix.CreateRotation(0.35));
+        var v2 = Multiply(v,Matrix.CreateRotation(-0.35));
 
-        return new PolylineGeometry(new Point[] { start, start + v + v1, start + v + v2 }, true);
+        var p = start + (v1 + v2)/2;
+
+        return (p, new PolylineGeometry(new[] { start, start + v1, start + v2 }, true));
     }
 
     protected override Geometry CreateDefiningGeometry()
     {
-        var line = base.CreateDefiningGeometry();
-        var startArrow = GetArrow(StartPoint, EndPoint, ArrowLength);
-        var endArrow = GetArrow(EndPoint, StartPoint, ArrowLength);
+        var (start,startArrow) = GetArrow(StartPoint, EndPoint, ArrowLength);
+        var (end,endArrow) = GetArrow(EndPoint, StartPoint, ArrowLength);
 
-        var arrows = new CombinedGeometry
-        {
-            Geometry1 = startArrow,
-            Geometry2 = endArrow,
-            GeometryCombineMode = GeometryCombineMode.Union
-        };
+        var line = new LineGeometry(start, end);
 
-        return new CombinedGeometry
-        {
-            Geometry1 = line,
-            Geometry2 = arrows,
-            GeometryCombineMode = GeometryCombineMode.Union
-        };
+        return new GeometryGroup{Children = new GeometryCollection(new Geometry[]{startArrow,endArrow,line})};
     }
 }

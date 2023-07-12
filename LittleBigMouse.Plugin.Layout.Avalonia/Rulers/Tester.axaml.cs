@@ -78,10 +78,12 @@ public partial class Tester : Window
         Show();
     }
 
-    protected override void HandleWindowStateChanged(WindowState state)
+
+    // todo : avalonia override
+    protected  void HandleWindowStateChanged(WindowState state)
     {
         // SetValues();
-        base.HandleWindowStateChanged(state);
+        //base.HandleWindowStateChanged(state);
     }
 
     void Tester_PositionChanged(object sender, EventArgs e)

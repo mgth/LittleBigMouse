@@ -28,7 +28,7 @@ public interface IMonitorsLayout
     WallpaperStyle WallpaperStyle { get; }
 
     ZonesLayout ComputeZones();
-    void Compact();
+    void Compact(bool force = false);
 
     void UpdatePhysicalMonitors();
 }

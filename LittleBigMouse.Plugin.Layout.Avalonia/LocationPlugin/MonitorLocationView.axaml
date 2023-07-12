@@ -38,7 +38,6 @@
 		</LinearGradientBrush>
 
 		<converters:ToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
-
         <converters1:ScaleConverter x:Key="Scale" />
 
 	</UserControl.Resources>
@@ -84,7 +83,7 @@
                Opacity="0.8"/>
 		</StackPanel>
 
-		<!-- YMoving -->
+		<!-- Y Position -->
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top">
 			<Grid VerticalAlignment="Center">
 				<Border 
@@ -100,7 +99,7 @@
                 <controls:DoubleBox 
                     FontWeight="Bold"
                     BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
-                    Value="{Binding Model.YMoving, Mode=TwoWay}" 
+                    Value="{Binding MonitorFrameViewModel.Location.Y, Mode=TwoWay}" 
                     Decimals="1"
                     />
 			</Grid>
@@ -122,7 +121,7 @@
                 <controls:DoubleBox 
                     FontWeight="Bold"
                     BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
-                    Value="{Binding Model.XMoving, Mode=TwoWay}" 
+                    Value="{Binding MonitorFrameViewModel.Location.X, Mode=TwoWay}" 
                     Decimals="1"
                     />
 			</Grid>

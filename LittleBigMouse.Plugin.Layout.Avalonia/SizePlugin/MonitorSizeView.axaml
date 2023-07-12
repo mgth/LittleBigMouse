@@ -1,80 +1,137 @@
 ﻿<UserControl 
-    x:Class="LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin.SizeScreenView"
+    x:Class="LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin.MonitorSizeView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:sizePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin"
     xmlns:controls="clr-namespace:HLab.Base.Avalonia.Controls;assembly=HLab.Base.Avalonia"
+    xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
+    xmlns:converters1="clr-namespace:HLab.Base.Avalonia.Converters;assembly=HLab.Base.Avalonia"
     mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
+
+    ClipToBounds="False"
     >
     <Design.DataContext>
         <sizePlugin:ScreenSizeViewModel />
     </Design.DataContext>
 
+    <UserControl.Resources>
 
+        <LinearGradientBrush x:Key="ScreenColor" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="#FF7288C0" Offset="0"/>
+            <GradientStop Color="#FF52669D" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="SelectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="LightGreen" Offset="0"/>
+            <GradientStop Color="DarkGreen" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="UnselectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="#FF7288C0" Offset="0"/>
+            <GradientStop Color="#FF333E9A" Offset="1"/>
+        </LinearGradientBrush>
 
-    <UserControl.FontSize>
-        <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.05">
-            <Binding ElementName="UserControl" Path="Bounds.Height"/>
-            <Binding ElementName="UserControl" Path="Bounds.Width"/>
-        </MultiBinding>
-    </UserControl.FontSize>
+        <converters1:ToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
+
+        <converters:ScaleConverter x:Key="Scale" />
+
+    </UserControl.Resources>
 
     <Grid>
-
         
+        <Canvas>
+            <Canvas.Effect>
+                <DropShadowEffect Color="DarkBlue"/>
+            </Canvas.Effect>
+
+            <sizePlugin:MeasureArrow
+                StrokeThickness="2"
+                Stroke="Bisque"
+                Fill="Bisque"
+                ArrowLength="{Binding ArrowLength}"
+                StartPoint="{Binding InsideVerticalArrow.StartPoint}"
+                EndPoint="{Binding InsideVerticalArrow.EndPoint}"
+            />
+
+            <sizePlugin:MeasureArrow
+                StrokeThickness="2"
+                Stroke="Bisque"
+                Fill="Bisque"
+                ArrowLength="{Binding ArrowLength}"
+                StartPoint="{Binding InsideHorizontalArrow.StartPoint}"
+                EndPoint="{Binding InsideHorizontalArrow.EndPoint}"
+            />
+
+            <sizePlugin:MeasureArrow
+                StrokeThickness="2"
+                Stroke="CadetBlue"
+                Fill="CadetBlue"
+                ArrowLength="{Binding ArrowLength}"
+                StartPoint="{Binding OutsideVerticalArrow.StartPoint}"
+                EndPoint="{Binding OutsideVerticalArrow.EndPoint}"
+            />
+
+            <sizePlugin:MeasureArrow
+                StrokeThickness="2"
+                Stroke="CadetBlue"
+                Fill="CadetBlue"
+                ArrowLength="{Binding ArrowLength}"
+                StartPoint="{Binding OutsideHorizontalArrow.StartPoint}"
+                EndPoint="{Binding OutsideHorizontalArrow.EndPoint}"
+            />
+        </Canvas>
+
+
         <!--<Border BorderThickness="0" Background="{Binding Path=ScreenColor}"/>-->
 
-        <ContentControl Content="{Binding InsideCoverControl}"/>
+        <!--<ContentControl Content="{Binding InsideCoverControl}"/>-->
         
-        <Grid x:Name="Grid">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition/>
-                <ColumnDefinition Width="2*"/>
-                <ColumnDefinition Width="2*"/>
-                <ColumnDefinition/>
-                <ColumnDefinition/>
-                <ColumnDefinition/>
-            </Grid.ColumnDefinitions>
-            
-            <Grid.RowDefinitions>
-                <RowDefinition/>
-                <RowDefinition Height="2*"/>
-                <RowDefinition Height="2*"/>
-                <RowDefinition />
-                <RowDefinition/>
-                <RowDefinition/>
-            </Grid.RowDefinitions>
+        <Grid x:Name="Grid" ColumnDefinitions="*,2*,2*,*,*,*" RowDefinitions="*,2*,2*,*,*,*">
 
-            <Border Background="Transparent" Grid.Row="0" Grid.ColumnSpan="6" PointerWheelChanged="OnMouseWheel"/>
-            <Border Background="Transparent" Grid.Row="5" Grid.ColumnSpan="6" PointerWheelChanged="OnMouseWheel"/>
-            <Border Background="Transparent" Grid.Column="0" Grid.RowSpan="6" PointerWheelChanged="OnMouseWheel"/>
-            <Border Background="Transparent" Grid.Column="5" Grid.RowSpan="6" PointerWheelChanged="OnMouseWheel"/>
-            
-            <Grid Grid.Row="2" Grid.ColumnSpan="6">
-                <Grid.RowDefinitions>
-                    <RowDefinition/>
-                    <RowDefinition/>
-                    <RowDefinition/>
-                </Grid.RowDefinitions>
+            <Border 
+                Background="Transparent" 
+                Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="6" 
+                PointerWheelChanged="OnMouseWheel"/>
 
+            <Border 
+                Background="Transparent" 
+                Grid.Row="5" Grid.ColumnSpan="6" Grid.Column="0"
+                PointerWheelChanged="OnMouseWheel"/>
+
+            <Border 
+                Background="Transparent" 
+                Grid.Column="0" Grid.Row="0" Grid.RowSpan="6" 
+                PointerWheelChanged="OnMouseWheel"/>
+
+            <Border 
+                Background="Transparent" 
+                Grid.Column="5" Grid.Row="0" Grid.RowSpan="6" 
+                PointerWheelChanged="OnMouseWheel"/>
+            
+            <Grid Grid.Row="2" Grid.ColumnSpan="6" Grid.Column="0" 
+                  RowDefinitions="*,*,*">
                 <Border Background="Transparent" Grid.Row="2" PointerWheelChanged="OnMouseWheel"/>
             </Grid>
-            <Border Background="Transparent" Grid.Row="4" Grid.ColumnSpan="6" PointerWheelChanged="OnMouseWheel"/>
-            
-            <Grid Grid.RowSpan="6" Grid.Column="2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition/>
-                    <ColumnDefinition/>
-                </Grid.ColumnDefinitions>
 
-                <Border Background="Transparent" Grid.Column="2" PointerWheelChanged="OnMouseWheel"/>
+            <Border Background="Transparent" 
+                    Grid.Row="4" Grid.ColumnSpan="6" Grid.Column="0"
+                    PointerWheelChanged="OnMouseWheel"/>
+            
+            <Grid Grid.Row="0" Grid.RowSpan="6" Grid.Column="2" 
+                  ColumnDefinitions="*,*,*">
+
+                <Border 
+                    Background="Transparent" 
+                    Grid.Column="2" 
+                    PointerWheelChanged="OnMouseWheel"/>
+
             </Grid>
-            <Border Background="Transparent" Grid.Column="4" Grid.RowSpan="6" PointerWheelChanged="OnMouseWheel"/>
+
+            <Border Background="Transparent" 
+                    Grid.Column="4" Grid.Row="0" Grid.RowSpan="6" 
+                    PointerWheelChanged="OnMouseWheel"/>
 
 <!-- Inside Dimensions -->
 
@@ -117,14 +174,8 @@
                 Width ="{Binding 
                     ElementName=ChkLock,
                     Path=Height}"
+                Height ="{Binding Bounds,ElementName=UserControl,Converter={StaticResource Scale},ConverterParameter=0.05}"
                 >
-                   <Viewbox.Height>
-                    <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.05" FallbackValue="20">
-                        <Binding ElementName="UserControl" Path="ActualHeight"/>
-                        <Binding ElementName="UserControl" Path="ActualWidth"/>
-                    </MultiBinding>
-                </Viewbox.Height>
-                   
                    
             <CheckBox  IsChecked="{Binding Model.Model.PhysicalSize.FixedAspectRatio, FallbackValue=true}" />
                  </Viewbox>
@@ -169,6 +220,9 @@
 
         </Grid>
 
+        <!-- Borders -->
+
+        <!-- Top Border -->
 		<controls:DoubleBox 
             Background="#00FFFFFF"
             Foreground="#FFD9DCEC"
@@ -180,6 +234,7 @@
             Decimals="1"
             />
 
+        <!-- Left Border -->
 		<controls:DoubleBox 
             Background="#00FFFFFF"
             Foreground="#FFD9DCEC"
@@ -191,6 +246,7 @@
             Decimals="1"
             />
 
+        <!-- Bottom Border -->
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
 
 			<controls:DoubleBox 
@@ -203,6 +259,7 @@
 
         </StackPanel>
 
+        <!-- Right Border -->
         <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
 
 			<controls:DoubleBox 
@@ -215,12 +272,13 @@
 
         </StackPanel>
 
+
+
         <!--<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="{Binding Path=SelectedBrush, FallbackValue=#FF333E9A}" BorderBrush="#FFD9DCEC">
                 <Label FontSize="{Binding Path=FontSize}" x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />
             </Border>
         </StackPanel>-->
 
-        <!--<ContentControl Content="{Binding InsideCoverControl}"></ContentControl>-->
     </Grid>
 </UserControl>

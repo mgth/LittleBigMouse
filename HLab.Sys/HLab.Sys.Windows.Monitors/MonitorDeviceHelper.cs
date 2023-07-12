@@ -487,6 +487,7 @@ public static class MonitorDeviceHelper
                 var monitors = service.Monitors.Where(d => d.AttachedDisplay?.DeviceName == new string(mi.DeviceName)).ToList();
                 foreach (var monitor in monitors)
                 {
+                    monitor.HMonitor = hMonitor;
                     monitor.UpdateFromMonitorInfo(mi, monitors);
                     monitor.UpdateDpi(hMonitor);
                 }
@@ -573,7 +574,7 @@ public static class MonitorDeviceHelper
         });
 
         service.WallpaperPosition = info.Position;
-        service.Background = info.Background.ToColor();
+        service.Background = info.Background.ToAvaloniaColor();
     }
 
     public static void UpdateWallpaper2(this MonitorsService service)

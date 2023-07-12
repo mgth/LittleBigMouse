@@ -67,6 +67,18 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
         InitializeComponent();
     }
 
+
+    //TODO: avalonia override
+    protected  void OnUnloaded()
+    {
+        //base.OnUnloaded();
+        if (this.DataContext is not MonitorLocationViewModel viewModel) return;
+
+        viewModel.Dispose();
+    }
+
+
+
     Point? _staticPoint = null;
 
     //void SetStaticPoint()
@@ -77,8 +89,6 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
     //        p.Y / Bounds.Height);
     //}
 
-
-    // TODO: avalonia
     void View_SizeChanged(object? sender, SizeChangedEventArgs e)
     {
         if (_staticPoint != null)
@@ -105,17 +115,32 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
     {
         base.OnPointerPressed(e);
 
+        var model = ViewModel?.Model;
+        if(model == null) return;
+
+        var layout = this.GetLayout();
+        if(layout == null) return;
+
+        var frame = this.GetMonitorFrame();
+        if(frame == null) return;
+
+        var presenter = this.GetPresenter();
+        if(presenter == null) return;
+
+        var panel = MainPanel;
+        if(panel == null) return;
+
         e.Pointer.Capture(this);
 
         _frameLocation = this.GetFrameLocation();
 
         _frameMover = new FrameMover(
-            ViewModel?.Model, 
-            this.GetLayout(), 
-            this.GetMonitorFrame(), 
-            MainPanel, 
-            e.GetPosition(MainPanel),
-            this.GetPresenter()
+            model, 
+            layout, 
+            frame, 
+            panel, 
+            e.GetPosition(panel),
+            presenter
             );
 
         this.SetFrameLocation(_frameMover);
@@ -127,13 +152,19 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        EndMove(e);
+    }
 
+    protected void EndMove(PointerEventArgs e)
+    {
         _frameMover?.EndMove(e.GetPosition(MainPanel));
-
+        _frameMover = null;
+        // restore frame location to normal behavior
         this.SetFrameLocation(_frameLocation);
 
         e.Pointer.Capture(null);
     }
+
 
     protected override void OnPointerMoved(PointerEventArgs e)
     {
@@ -144,13 +175,7 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
         // if button not pressed any more, end moving.
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            _frameMover?.EndMove(e.GetPosition(MainPanel));
-
-            _frameMover = null;
-
-            this.SetFrameLocation(_frameLocation);
-
-            e.Pointer.Capture(null);
+            EndMove(e);
             return;
         }
 
@@ -198,6 +223,7 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
 
             // TODO : ViewModel.Model.Layout.Compact();
 
+           
             this.GetLayout()?.Compact();
 
             Dispatcher.UIThread.InvokeAsync(() => 

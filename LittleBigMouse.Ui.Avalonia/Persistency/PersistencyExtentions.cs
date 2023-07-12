@@ -4,7 +4,9 @@ using LittleBigMouse.Ui.Avalonia.Main;
 using Microsoft.Win32;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Avalonia;
 using HLab.Sys.Windows.Monitors;
+using static ExCSS.AttributeSelectorFactory;
 #pragma warning disable CA1416
 
 namespace LittleBigMouse.Ui.Avalonia.Persistency;
@@ -12,6 +14,8 @@ namespace LittleBigMouse.Ui.Avalonia.Persistency;
 public static class PersistencyExtensions
 {
     const string ROOT_KEY = @"SOFTWARE\Mgth\LittleBigMouse";
+    public static RegistryKey? OpenRegKey(this RegistryKey @this, string key, bool create = false) 
+        => create ? @this.CreateSubKey(key) : @this.OpenSubKey(key);
 
     public static RegistryKey? OpenRootRegKey(bool create = false)
     {
@@ -19,16 +23,11 @@ public static class PersistencyExtensions
         return create ? key.CreateSubKey(ROOT_KEY) : key.OpenSubKey(ROOT_KEY);
     }
 
-    public static RegistryKey? OpenRegKey(string layoutId, bool create = false)
+    public static RegistryKey? OpenRegKey(this IMonitorsLayout layout,  bool create = false)
     {
         using var key = OpenRootRegKey(create);
-
-        if (key == null) return null;
-        return create ? key.CreateSubKey(@"Layouts\" + layoutId) : key.OpenSubKey(@"Layouts\" + layoutId);
+        return key?.OpenRegKey(@"Layouts\Default", create);
     }
-
-    public static RegistryKey? OpenRegKey(this IMonitorsLayout layout,  bool create = false) 
-        => OpenRegKey(layout.Id, create);
 
     //==================//
     // Layout           //
@@ -56,13 +55,15 @@ public static class PersistencyExtensions
 
             if (key != null)
             {
-                foreach (var s in @this.PhysicalMonitors.Items)
+                foreach (var monitor in @this.PhysicalMonitors.Items)
                 {
-                    s.Load();
+                    monitor.Model.Load();
+                    monitor.Load();
                 }
             }
         }
         @this.Saved = true;
+        @this.UpdatePhysicalMonitors();
     }
 
     public static bool Save(this MonitorsLayout @this)
@@ -95,8 +96,6 @@ public static class PersistencyExtensions
     }
 
 
-    public static RegistryKey OpenRegKey(this RegistryKey @this, string key, bool create = false) 
-        => create ? @this.CreateSubKey(key) : @this.OpenSubKey(key);
 
     // TODO : public RegistryKey OpenRegKey(bool create = false) => OpenRegKey(Layout.OpenRegKey(create), create);// OpenRegKey(Layout.Id, Device.IdPhysicalMonitor, create);
 
@@ -107,28 +106,29 @@ public static class PersistencyExtensions
     public static RegistryKey? OpenRegKey(this PhysicalMonitor @this, bool create = false)
     {
         using var key = @this.Layout.OpenRegKey(create);
-        return key?.OpenRegKey(@"PhysicalMonitors\" + @this.IdPhysicalMonitor, create);
+        return key?.OpenRegKey(@$"PhysicalMonitors\{@this.Id}", create);
     }
 
-    public static void Load(this PhysicalMonitor @this)
+    public static PhysicalMonitor Load(this PhysicalMonitor @this)
     {
         using var key = @this.OpenRegKey();
 
-        if (key != null)
-        {
-            @this.DepthProjection.X = key.GetKey("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
-            @this.DepthProjection.Y = key.GetKey("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
-            @this.DepthRatio.X = key.GetKey("PhysicalRatioX", () => @this.DepthRatio.X);
-            @this.DepthRatio.Y = key.GetKey("PhysicalRatioY", () => @this.DepthRatio.Y);
-        }
+        if (key == null) return @this;
+
+        @this.DepthProjection.X = key.GetKey("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
+        @this.DepthProjection.Y = key.GetKey("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
+        @this.DepthRatio.X = key.GetKey("PhysicalRatioX", () => @this.DepthRatio.X);
+        @this.DepthRatio.Y = key.GetKey("PhysicalRatioY", () => @this.DepthRatio.Y);
 
         var active = key.GetKey("ActiveSource", () => "");
         foreach (var source in @this.Sources.Items)
         {
             source.Source.Load(key);
-            if (source.Source.IdMonitor == active || @this.ActiveSource == null)
+            if (source.Source.IdMonitorDevice == active || @this.ActiveSource == null)
                 @this.ActiveSource = source;
         }
+
+        return @this;
     }
 
     public static void Save(this PhysicalMonitor @this)
@@ -147,29 +147,88 @@ public static class PersistencyExtensions
             source.Source.Save(key);
         }
 
-        key.SetKey("ActiveSource", @this.ActiveSource.Source.IdMonitor);
+        key.SetKey("ActiveSource", @this.ActiveSource.Source.IdMonitorDevice);
         key.SetKey("Orientation", @this.Orientation);
+        key.SetKey("SerialNumber", @this.SerialNumber);
+    }
+
+    //========================//
+    // Physical Monitor Model //
+    //========================//
+    public static RegistryKey? OpenMonitorRegKey(this PhysicalMonitorModel @this, bool create = false)
+    {
+        using var key = OpenRootRegKey(create);
+        return key?.OpenRegKey(@$"monitors\{@this.PnpCode}", create);
+    }
+
+    public static PhysicalMonitorModel Load(this PhysicalMonitorModel @this)
+    {
+        var old = @this.PhysicalSize.FixedAspectRatio;
+        @this.PhysicalSize.FixedAspectRatio = false;
+
+        using (var key = @this.OpenMonitorRegKey(false))
+        {
+            if (key != null)
+            {
+                @this.PhysicalSize.TopBorder = key.GetKey(@"Borders\Top", ()=>@this.PhysicalSize.TopBorder);
+                @this.PhysicalSize.RightBorder = key.GetKey(@"Borders\Right", ()=>@this.PhysicalSize.RightBorder);
+                @this.PhysicalSize.BottomBorder = key.GetKey(@"Borders\Bottom", ()=>@this.PhysicalSize.BottomBorder);
+                @this.PhysicalSize.LeftBorder = key.GetKey(@"Borders\Left", ()=>@this.PhysicalSize.LeftBorder);
+
+                @this.PhysicalSize.Height = key.GetKey(@"Size\Height", ()=>@this.PhysicalSize.Height);
+                @this.PhysicalSize.Width = key.GetKey(@"Size\Width", ()=>@this.PhysicalSize.Width);
+
+                @this.PnpDeviceName = key.GetKey("PnpName", ()=>@this.PnpDeviceName);
+
+                //key.SetKey("DeviceId", Monitor.DeviceId);
+
+            }
+
+            @this.PhysicalSize.FixedAspectRatio = old;
+        }
+        @this.Saved = true;
+
+        return @this;
     }
 
     public static void Save(this PhysicalMonitorModel @this)
     {
-        if (@this.Saved) return;
+        //if (@this.Saved) return;
 
         using var key = @this.OpenMonitorRegKey(true);
+
         if (key == null) return;
 
-        key.SetKey("TopBorder", @this.PhysicalSize.TopBorder.ToString(CultureInfo.InvariantCulture));
-        key.SetKey("RightBorder", @this.PhysicalSize.RightBorder.ToString(CultureInfo.InvariantCulture));
-        key.SetKey("BottomBorder", @this.PhysicalSize.BottomBorder.ToString(CultureInfo.InvariantCulture));
-        key.SetKey("LeftBorder", @this.PhysicalSize.LeftBorder.ToString(CultureInfo.InvariantCulture));
+        key.SetKey(@"Borders\Top", @this.PhysicalSize.TopBorder.ToString(CultureInfo.InvariantCulture));
+        key.SetKey(@"Borders\Right", @this.PhysicalSize.RightBorder.ToString(CultureInfo.InvariantCulture));
+        key.SetKey(@"Borders\Bottom", @this.PhysicalSize.BottomBorder.ToString(CultureInfo.InvariantCulture));
+        key.SetKey(@"Borders\Left", @this.PhysicalSize.LeftBorder.ToString(CultureInfo.InvariantCulture));
 
-        key.SetKey("Height", @this.PhysicalSize.Height.ToString(CultureInfo.InvariantCulture));
-        key.SetKey("Width", @this.PhysicalSize.Width.ToString(CultureInfo.InvariantCulture));
+        key.SetKey(@"Size\Height", @this.PhysicalSize.Height.ToString(CultureInfo.InvariantCulture));
+        key.SetKey(@"Size\Width", @this.PhysicalSize.Width.ToString(CultureInfo.InvariantCulture));
 
         key.SetKey("PnpName", @this.PnpDeviceName);
 
         @this.Saved = true;
     }
+
+    //================//
+    // Display Source //
+    //================//
+    public static void Load(this DisplaySource @this, RegistryKey baseKey)
+    {
+        using var key = baseKey.OpenSubKey("GuiLocation");
+
+        if (key == null) return;
+
+        var left = key.GetKey("Left", () => @this.GuiLocation.Left);
+        var width = key.GetKey("Width", () => @this.GuiLocation.Width);
+        var top = key.GetKey("Top", () => @this.GuiLocation.Top);
+        var height = key.GetKey("Height", () => @this.GuiLocation.Height);
+
+        @this.GuiLocation = new Rect(new Point(left, top), new Size(width, height));
+    }
+
 
     public static void Save(this DisplaySource @this, RegistryKey? baseKey)
     {
@@ -182,60 +241,19 @@ public static class PersistencyExtensions
         key.SetKey("Top", @this.GuiLocation.Top);
         key.SetKey("Height", @this.GuiLocation.Height);
 
-        // TODO avalonia
-
-        //using (var key = baseKey.CreateSubKey(Device.IdMonitor))
-        //{
-        //    if (key == null) return;
-
-        //    key.SetKey("PixelX", InPixel.X);
-        //    key.SetKey("PixelY", InPixel.Y);
-        //    key.SetKey("PixelWidth", InPixel.Width);
-        //    key.SetKey("PixelHeight", InPixel.Height);
-
-        //    key.SetKey("Primary", Primary);
-        //}
-    }
-    public static RegistryKey? OpenMonitorRegKey(string id, bool create = false)
-    {
-        using var key = OpenRootRegKey(create);
-        if (key == null) return null;
-        return create ? key.CreateSubKey(@"monitors\" + id) : key.OpenSubKey(@"monitors\" + id);
-    }
-    public static RegistryKey? OpenMonitorRegKey(this PhysicalMonitorModel @this, bool create = false) => OpenMonitorRegKey(@this.PnpCode, create);
-    public static PhysicalMonitorModel Load(this PhysicalMonitorModel @this, MonitorDevice monitor)
-    {
-        var display = monitor.AttachedDisplay;
-        var old = @this.PhysicalSize.FixedAspectRatio;
-        @this.PhysicalSize.FixedAspectRatio = false;
-
-        @this.SetSizeFrom(monitor);
-
-        using (var key = @this.OpenMonitorRegKey(false))
+        using (var key2 = baseKey.CreateSubKey(@this.IdMonitorDevice))
         {
-            if (key != null)
-            {
-                @this.PhysicalSize.TopBorder = double.Parse(key.GetValue("TopBorder", @this.PhysicalSize.TopBorder).ToString(), CultureInfo.InvariantCulture);
-                @this.PhysicalSize.RightBorder = double.Parse(key.GetValue("RightBorder", @this.PhysicalSize.RightBorder).ToString(), CultureInfo.InvariantCulture);
-                @this.PhysicalSize.BottomBorder = double.Parse(key.GetValue("BottomBorder", @this.PhysicalSize.BottomBorder).ToString(), CultureInfo.InvariantCulture);
-                @this.PhysicalSize.LeftBorder = double.Parse(key.GetValue("LeftBorder", @this.PhysicalSize.LeftBorder).ToString(), CultureInfo.InvariantCulture);
+            if (key2 == null) return;
 
-                @this.PhysicalSize.Height = double.Parse(key.GetValue("Height", @this.PhysicalSize.Height).ToString(), CultureInfo.InvariantCulture);
-                @this.PhysicalSize.Width = double.Parse(key.GetValue("Whidth", @this.PhysicalSize.Width).ToString(), CultureInfo.InvariantCulture);
+            key2.SetKey("PixelX", @this.InPixel.X);
+            key2.SetKey("PixelY", @this.InPixel.Y);
+            key2.SetKey("PixelWidth", @this.InPixel.Width);
+            key2.SetKey("PixelHeight", @this.InPixel.Height);
 
-                @this.PnpDeviceName = key.GetValue("PnpName", "").ToString();
-
-                //key.SetKey("DeviceId", Monitor.DeviceId);
-
-            }
-
-            @this.SetPnpDeviceName(monitor);
-
-            @this.PhysicalSize.FixedAspectRatio = old;
+            key2.SetKey("Primary", @this.Primary);
         }
-        @this.Saved = true;
 
-        return @this;
+        @this.Saved = true;
     }
 
 }

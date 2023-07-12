@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+		<TargetFrameworks>net8.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<Platforms>x64</Platforms>
 		<OutputType>WinExe</OutputType>
@@ -21,19 +21,20 @@
 
   <ItemGroup>
     <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-    <PackageReference Include="Avalonia" Version="11.0.0-preview8" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.0.0-preview8" />
-    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.0-preview8" />
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0-preview8" />
-    <PackageReference Include="Avalonia.Svg.Skia" Version="11.0.0-preview8" />
+    <PackageReference Include="Avalonia" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.0" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Svg.Skia" Version="11.0.0" />
     <PackageReference Include="Grace" Version="8.0.0-RC837" />
-    <PackageReference Include="MessageBox.Avalonia" Version="2.3.1-prev7.0" />
-    <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.3.23174.8" />
+    <PackageReference Include="MessageBox.Avalonia" Version="3.0.1-rc2" />
+    <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.5.23280.8" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.0.1" />
-    <PackageReference Include="System.Resources.Extensions" Version="8.0.0-preview.3.23174.8" />
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0-preview.5.23280.8" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HLab.Sys.Windows.MonitorVcp.Avalonia\HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" />
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
     <ProjectReference Include="..\HLab\HLab.Icons.Avalonia\HLab.Icons.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
@@ -43,6 +44,7 @@
     <ProjectReference Include="..\HLab\HLab.Notify.Avalonia\HLab.Notify.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Layout.Avalonia\LittleBigMouse.Plugin.Layout.Avalonia.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp.Avalonia\LittleBigMouse.Plugin.Vcp.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins.Avalonia\LittleBigMouse.Plugins.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
     <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
@@ -68,6 +70,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Controls\LocationControlView.axaml.cs">
+      <DependentUpon>%(Filename)</DependentUpon>
+    </Compile>
     <Compile Update="MonitorFrame\MonitorFrameView.axaml.cs">
       <DependentUpon>MonitorFrameView.axaml</DependentUpon>
     </Compile>

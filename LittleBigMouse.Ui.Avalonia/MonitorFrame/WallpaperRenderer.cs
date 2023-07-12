@@ -126,7 +126,7 @@ public class WallpaperRenderer
         => new WallpaperRenderer(_source
             .Clone(e => e.Resize(new Size(width, height))),_bounds  );
 
-    public IBitmap ToBitmap()
+    public Bitmap ToBitmap()
     {
         using var ms = new MemoryStream();
         _source.Save(ms, PngFormat.Instance);

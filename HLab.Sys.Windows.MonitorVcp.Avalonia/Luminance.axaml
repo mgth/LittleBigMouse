@@ -1,0 +1,370 @@
+﻿<UserControl x:Class="HLab.Sys.Windows.MonitorVcp.Avalonia.Luminance"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300"
+             >
+    
+    <UserControl.Resources>
+
+        <!--000-->
+        <Style x:Key="SliderButtonStyle" Selector="RepeatButton">
+            <!--<Setter Property="SnapsToDevicePixels" Value="true" />-->
+            <!--<Setter Property="OverridesDefaultStyle"  Value="true" />-->
+            <Setter Property="IsTabStop" Value="false" />
+            <Setter Property="Focusable" Value="false" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RepeatButton}">
+                        <Border Background="Transparent" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SliderThumbStyle" Selector="Thumb">
+       <!--TargetType="{x:Type Thumb}"-->
+            <!--<Setter Property="SnapsToDevicePixels" Value="true" />-->
+            <!--<Setter Property="OverridesDefaultStyle" Value="true" />-->
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Width" Value="7" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border Background="{Binding CursorBrush}" CornerRadius="3.5,3.5,3.5,3.5">
+                            <!--
+                            TODO : Avalonia
+                            
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="MouseOver"/>
+                                    
+                                    <VisualState x:Name="Pressed"/>
+                                    <VisualState x:Name="Disabled"/>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>-->                            
+                            </Border>
+
+
+
+ 
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--Template when the orientation of the Slider is Horizontal.-->
+        <ControlTemplate x:Key="HorizontalSlider"
+                 TargetType="{x:Type Slider}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" MinHeight="{TemplateBinding MinHeight}" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TickBar x:Name="TopTick"
+                         Placement="Top"
+                         Height="4"
+                         IsVisible="False"
+                         Fill="{Binding TickBrush}" 
+                         
+                         />
+
+                <Border x:Name="TrackBackground"
+                        Grid.Row="1"
+                        Margin="0"
+                        CornerRadius="0"
+                        Height="4"
+                        BorderThickness="0"
+                        Background="{Binding TrackBrush}"  
+                        />
+
+                <Track Grid.Row="1" x:Name="PART_Track">
+                    <!-- TODO : Avalonia
+                    
+                    <Track.DecreaseButton>
+                        <RepeatButton Style="{StaticResource SliderButtonStyle}" Command="Slider.DecreaseLarge" />
+                    </Track.DecreaseButton>
+                    
+                    <Track.Thumb>
+                        <Thumb Style="{StaticResource SliderThumbStyle}" />
+                    </Track.Thumb>
+                    <Track.IncreaseButton>
+                        <RepeatButton Style="{StaticResource SliderButtonStyle}" Command="Slider.IncreaseLarge" />
+                    </Track.IncreaseButton>-->
+                </Track>
+                <TickBar x:Name="BottomTick"
+                    Grid.Row="2"
+                    Fill="{Binding TickBrush}"
+                    Placement="Bottom"
+                    Height="4"
+                    IsVisible="False" />
+            </Grid>
+
+            <!-- TODO Avalonia
+            
+            <ControlTemplate.Triggers>
+                <Trigger Property="TickPlacement" Value="TopLeft">
+                    <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="TickPlacement" Value="BottomRight">
+                    <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="TickPlacement" Value="Both">
+                    <Setter TargetName="TopTick"  Property="Visibility" Value="Visible" />
+                    <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+                </Trigger>
+            </ControlTemplate.Triggers>-->
+        </ControlTemplate>
+
+        <!--Template when the orientation of the Slider is Vertical.-->
+        <ControlTemplate x:Key="VerticalSlider"
+                 TargetType="{x:Type Slider}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto"
+                        MinWidth="{TemplateBinding MinWidth}" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TickBar x:Name="TopTick"
+             Placement="Left"
+             Width="4"
+             IsVisible="False">
+                    <TickBar.Fill>
+                        <SolidColorBrush Color="LawnGreen" />
+                    </TickBar.Fill>
+                </TickBar>
+
+                <Border x:Name="TrackBackground"
+            Margin="0"
+            CornerRadius="2"
+            Width="4"
+            Grid.Column="1"
+            BorderThickness="1">
+                    <Border.BorderBrush>
+                        <LinearGradientBrush StartPoint="0%,0%"
+                             EndPoint="100%,0%">
+                            <LinearGradientBrush.GradientStops>
+                                <GradientStop Color="LightGreen" Offset="0" />
+                                <GradientStop Color="DarkGreen" Offset="1" />
+                            </LinearGradientBrush.GradientStops>
+                        </LinearGradientBrush>
+
+                    </Border.BorderBrush>
+                    <Border.Background>
+                        <LinearGradientBrush EndPoint="100%,0%"  StartPoint="25%,0%">
+                            <GradientStop Color="Pink" Offset="0" />
+                            <GradientStop Color="DarkRed" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <Track Grid.Column="1"  x:Name="PART_Track">
+                    <!-- TODO : Avalonia
+                    
+                    <Track.DecreaseButton>
+                        <RepeatButton Style="{StaticResource SliderButtonStyle}" Command="Slider.DecreaseLarge" />
+                    </Track.DecreaseButton>
+                    <Track.Thumb>
+                        <Thumb Style="{StaticResource SliderThumbStyle}" />
+                    </Track.Thumb>
+                    <Track.IncreaseButton>
+                        <RepeatButton Style="{StaticResource SliderButtonStyle}" Command="Slider.IncreaseLarge" />
+                    </Track.IncreaseButton>-->
+                </Track>
+                <TickBar x:Name="BottomTick"
+             Grid.Column="2"
+             Fill="{TemplateBinding Foreground}"
+             Placement="Right"
+             Width="4"
+             IsVisible="False" />
+            </Grid>
+
+            <!-- TODO : Avalonia
+            
+            <ControlTemplate.Triggers>
+                <Trigger Property="TickPlacement" Value="TopLeft">
+                    <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="TickPlacement" Value="BottomRight">
+                    <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="TickPlacement" Value="Both">
+                    <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+                </Trigger>
+            </ControlTemplate.Triggers>-->
+        </ControlTemplate>
+
+<!-- TODO : Avalonia
+
+        <Style Selector="Slider">
+            -
+			<Setter Property="SnapsToDevicePixels" Value="true" />
+            <Setter Property="OverridesDefaultStyle" Value="true" />
+			-
+
+            
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="MinWidth" Value="104" />
+                    <Setter Property="MinHeight" Value="21" />
+                    <Setter Property="Template"  Value="{StaticResource HorizontalSlider}" />
+                </Trigger>
+                <Trigger Property="Orientation" Value="Vertical">
+                    <Setter Property="MinWidth" Value="21" />
+                    <Setter Property="MinHeight" Value="104" />
+                    <Setter Property="Template" Value="{StaticResource VerticalSlider}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+-->
+        <!--ooo-->
+        <Style x:Key="SliderRepeatButton" Selector="RepeatButton">
+            <!--<Setter Property="SnapsToDevicePixels" Value="true" />
+            <Setter Property="OverridesDefaultStyle" Value="true" />-->
+            <Setter Property="IsTabStop" Value="false" />
+            <Setter Property="Focusable" Value="false" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border  BorderThickness="1" BorderBrush="#838080" Background="#838080" Height="3"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SliderRepeatButton1" Selector="RepeatButton">
+            <!--<Setter Property="SnapsToDevicePixels" Value="true" />
+            <Setter Property="OverridesDefaultStyle" Value="true" />-->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border 
+                                Background="{Binding TrackBrush}"  
+                                BorderBrush="{Binding TrackBrush}" 
+                                BorderThickness="1" 
+                                Height="3"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SliderThumb" Selector="Thumb">
+            <!--<Setter Property="SnapsToDevicePixels" Value="true" />
+            <Setter Property="OverridesDefaultStyle" Value="true" />-->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Height="20" Width="7" 
+                                Background="{Binding CursorBrush}"
+                                CornerRadius="3.5,3.5,3.5,3.5"/>
+                        <!--<Ellipse Height="10" Width="5" Fill="MediumBlue"></Ellipse>-->
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <ControlTemplate x:Key="Slider"  TargetType="Slider">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" MinHeight="{TemplateBinding MinHeight}" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Track Grid.Row="1" x:Name="PART_Track"   >
+
+                    <!-- TODO : Avalonia
+                    
+                    <Track.DecreaseButton>
+                        <RepeatButton Style="{StaticResource SliderRepeatButton1}"  Command="Slider.DecreaseLarge" />
+                    </Track.DecreaseButton>
+                    <Track.Thumb>
+                        <Thumb Style="{StaticResource SliderThumb}"  />
+                    </Track.Thumb>
+                    <Track.IncreaseButton>
+                        <RepeatButton Style="{StaticResource SliderRepeatButton}" Command="Slider.IncreaseLarge" />
+                    </Track.IncreaseButton>-->
+                   
+                </Track>
+            </Grid>
+        </ControlTemplate>
+
+        <Style x:Key="HorizontalSlider2" Selector="Slider">
+            <Setter Property="Focusable" Value="False"/>
+            <!--
+			<Setter Property="SnapsToDevicePixels" Value="true" />
+            <Setter Property="OverridesDefaultStyle" Value="true" />
+			-->
+
+            <!-- TODO : Avalonia
+            
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="MinHeight" Value="21" />
+                    <Setter Property="MinWidth" Value="104" />
+                    <Setter Property="Template" Value="{StaticResource Slider}" />
+                </Trigger>
+            </Style.Triggers>-->
+        </Style>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Viewbox
+                 Grid.Column="0"
+    		     Width ="20"
+    		     Height="20"
+    		     Stretch="Uniform" VerticalAlignment="Center"
+                 Margin="10"
+                 PointerPressed="UIElement_OnMouseLeftButtonDown"
+                 >
+            <Canvas x:Name="svg2" Width="512" Height="512" >
+                <!--Unknown tag: metadata-->
+                <!--Unknown tag: sodipodi:namedview-->
+                <Path Fill="#FFFFFFFF">
+                    <Path.Data>
+                        <PathGeometry Figures="M 256 0 C 238.327 0 224 14.327 224 32 L 224 64 C 224 81.673 238.327 96 256 96 C 273.673 96 288 81.673 288 64 L 288 32 C 288 14.327 273.673 0 256 0 z M 97.607422 65.607422 C 89.417922 65.607422 81.228969 68.731969 74.980469 74.980469 C 62.483469 87.477469 62.483469 107.73738 74.980469 120.23438 L 97.607422 142.86328 C 110.10442 155.36028 130.36628 155.36028 142.86328 142.86328 C 155.36028 130.36628 155.36028 110.10442 142.86328 97.607422 L 120.23438 74.980469 C 113.98587 68.731969 105.79692 65.607422 97.607422 65.607422 z M 414.39258 65.607422 C 406.20295 65.607422 398.01363 68.731969 391.76562 74.980469 L 369.13672 97.607422 C 356.64072 110.10442 356.64072 130.36628 369.13672 142.86328 C 381.63372 155.35928 401.89658 155.35928 414.39258 142.86328 L 437.01953 120.23633 C 449.51553 107.73933 449.51553 87.477469 437.01953 74.980469 C 430.77103 68.731969 422.5822 65.607422 414.39258 65.607422 z M 256 128 C 185.308 128 128 185.308 128 256 C 128 326.692 185.308 384 256 384 C 326.692 384 384 326.692 384 256 C 384 185.308 326.692 128 256 128 z M 256 176 C 266.85369 176 277.20454 178.182 286.65039 182.11523 A 80.543434 80.543434 0 0 1 289.12891 183.21094 C 290.16438 183.68412 291.18788 184.17783 292.19922 184.69336 A 80.543434 80.543434 0 0 1 336.69336 256.61719 A 80.543434 80.543434 0 0 1 256.15039 337.16016 A 80.543434 80.543434 0 0 1 175.60742 256.61719 A 80.543434 80.543434 0 0 1 256 176.08008 L 256 176 z M 32 224 C 14.327 224 0 238.327 0 256 C 0 273.673 14.327 288 32 288 L 64 288 C 81.673 288 96 273.673 96 256 C 96 238.327 81.673 224 64 224 L 32 224 z M 448 224 C 430.327 224 416 238.327 416 256 C 416 273.673 430.327 288 448 288 L 480 288 C 497.673 288 512 273.673 512 256 C 512 238.327 497.673 224 480 224 L 448 224 z M 120.23438 359.76562 C 112.04488 359.76562 103.85542 362.88872 97.607422 369.13672 L 74.980469 391.76562 C 62.483469 404.26162 62.483469 424.52253 74.980469 437.01953 C 87.477469 449.51553 107.73738 449.51553 120.23438 437.01953 L 142.86133 414.39258 C 155.35833 401.89658 155.35833 381.63372 142.86133 369.13672 C 136.61333 362.88872 128.42388 359.76562 120.23438 359.76562 z M 391.76562 359.76562 C 383.576 359.76562 375.38522 362.88872 369.13672 369.13672 C 356.64072 381.63372 356.64072 401.89658 369.13672 414.39258 L 391.76562 437.01953 C 404.26162 449.51553 424.52253 449.51553 437.01953 437.01953 C 449.51553 424.52253 449.51553 404.26163 437.01953 391.76562 L 414.39258 369.13672 C 408.14458 362.88872 399.95525 359.76562 391.76562 359.76562 z M 256 416 C 238.327 416 224 430.327 224 448 L 224 480 C 224 497.673 238.327 512 256 512 C 273.673 512 288 497.673 288 480 L 288 448 C 288 430.327 273.673 416 256 416 z " FillRule="NonZero"/>
+                    </Path.Data>
+                </Path>
+            </Canvas>
+        </Viewbox>
+            <!--Style="{StaticResource HorizontalSlider}"--> 
+        <Slider 
+            x:Name="Slider"
+            Grid.Column="1" 
+            VerticalAlignment="Center" 
+            Value="{Binding Value}" 
+            Minimum="{Binding Min}" 
+            Maximum="{Binding Max}" 
+            Orientation="Horizontal" 
+            MinWidth="100" 
+            PointerWheelChanged="OnMouseWheel"
+
+            TickPlacement="Outside"
+            Ticks="{Binding Ticks}"
+            />
+
+            <!-- TODO : Avalonia
+			
+			SelectionStart="{Binding MinAll, Mode=OneWay}"
+            SelectionEnd="{Binding MaxAll, Mode=OneWay}"
+            IsSelectionRangeEnabled="True"-->
+
+        
+        <Label Margin="5,0,5,0" 
+               FontSize="20" 
+               Grid.Column="2" 
+               VerticalAlignment="Center" 
+               Foreground="White" 
+               Content="{Binding Value, StringFormat={}{0:0}, FallbackValue=100}" 
+               DoubleTapped="Control_OnMouseDoubleClick"
+               />
+    </Grid>
+</UserControl>

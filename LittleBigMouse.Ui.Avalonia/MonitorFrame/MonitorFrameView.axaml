@@ -32,9 +32,9 @@
 
     <UserControl.ContextMenu>
         <ContextMenu>
-            <MenuItem Header="Place from windows config" Click="ResetPlace_Click"/>
+            <MenuItem Header="Place from windows config" Command="{Binding MonitorsPresenter.ResetLocationsFromSystem}"/>
             <Separator />
-            <MenuItem Header="Reset Size" Click="ResetSize_Click"/>
+            <MenuItem Header="Reset Size" Command="{Binding MonitorsPresenter.ResetSizesFromSystem}" Click="ResetSize_Click"/>
         </ContextMenu>
     </UserControl.ContextMenu>
 
@@ -256,6 +256,7 @@
             <!-- Plugin content -->
             <avalonia:ViewLocator 
                 Grid.Column="1" Grid.Row="1" 
+                ClipToBounds="False"
                 ViewClass="{x:Type plugins:IMonitorFrameContentViewClass}"
                 ViewMode="{Binding MonitorsPresenter.MainViewModel.MonitorFrameViewMode, FallbackValue={x:Type annotations:DefaultViewMode}}"
                 Model="{Binding Model}"

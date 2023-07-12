@@ -25,6 +25,7 @@ using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using DynamicData.Binding;
+using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.Rulers;
@@ -65,8 +66,23 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
         this
             .WhenPropertyChanged(e => e.Ruler)
             .Do(e => UpdateRulers())
-            .Subscribe();
+            .Subscribe().DisposeWith(this);
 
+        this.WhenAnyValue(
+                e => e.MonitorFrameViewModel.MonitorsPresenter.SelectedMonitor)
+            .Do(e =>
+            {
+                if (Ruler && e?.Model != Model)
+                {
+                    Ruler = false;
+                }
+            }).Subscribe().DisposeWith(this);
+
+        Disposer.OnDispose(()=>
+        {
+            Ruler = false;
+            UpdateRulers();
+        });
     }
 
 
@@ -84,13 +100,8 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
     }
     bool _ruler;
 
-    readonly List<RulerView> _rulers = new();
-
     readonly List<RulerPanelView> _panels = new();
 
-
-    // TODO Avalonia
-    //[TriggerOn(nameof(Ruler))]
     public void UpdateRulers()
     {
         foreach (var panel in _panels)
@@ -101,9 +112,9 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
 
         if (!Ruler) return;
 
-        ScreenFrameViewModel.Select();
+        MonitorFrameViewModel.Select();
 
-        foreach (var source in ScreenFrameViewModel.MonitorsPresenter.Model.AllSources.Items)
+        foreach (var source in MonitorFrameViewModel.MonitorsPresenter.Model.AllSources.Items)
         {
             //var area = source.Source.Device.MonitorArea;
             var s = source.Source.InPixel;
@@ -111,14 +122,12 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
             var panel = new RulerPanelView
             {
                 Position = new PixelPoint((int)(s.Bounds.Left + s.Bounds.Width / 4), (int)(s.Bounds.Top + s.Bounds.Height / 4)),
-                Width = 0, //area.Width*1,//, //s.Bounds.Width/* - 20*/,
-                Height = 0, //area.Height*1,//, //s.Bounds.Height/* - 20*/,
+                Width = 10, //area.Width*1,//, //s.Bounds.Width/* - 20*/,
+                Height = 10, //area.Height*1,//, //s.Bounds.Height/* - 20*/,
                 DataContext = new RulerPanelViewModel(Model, source)
             };
             panel.Show();
-
-            panel.WindowState = WindowState.Maximized;
-
+            panel.WindowState = WindowState.FullScreen;
             _panels.Add(panel);
         }
     }
@@ -130,8 +139,7 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
         {
             if (Model is null) return;
             Model.DepthRatio.X = value / 100;
-            // TODO : layout not reachable :
-            // Model.Layout.Compact();
+            Model.Layout.Compact();
         }
     }
 
@@ -145,18 +153,17 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
         {
             if (Model is null) return;
             Model.DepthRatio.Y = value / 100;
-            // TODO : layout not reachable :
-            // Model.Layout.Compact();
+            Model.Layout.Compact();
         }
     }
 
     readonly ObservableAsPropertyHelper<double> _ratioY;
 
-    public IMonitorFrameViewModel ScreenFrameViewModel
+    public IMonitorFrameViewModel MonitorFrameViewModel
     {
-        get => _screenFrameViewModel;
-        set => this.RaiseAndSetIfChanged(ref _screenFrameViewModel, value);
+        get => _monitorFrameViewModel;
+        set => this.RaiseAndSetIfChanged(ref _monitorFrameViewModel, value);
     }
-    IMonitorFrameViewModel _screenFrameViewModel;
+    IMonitorFrameViewModel _monitorFrameViewModel;
 
 }

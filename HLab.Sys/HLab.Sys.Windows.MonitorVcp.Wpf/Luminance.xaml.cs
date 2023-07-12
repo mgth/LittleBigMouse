@@ -26,6 +26,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using HLab.Sys.Windows.Monitors;
+using LittleBigMouse.DisplayLayout.Monitors;
 
 //using System.Drawing;
 
@@ -47,13 +48,13 @@ namespace HLab.Sys.Windows.MonitorVcp
 
         LuminanceViewModel ViewModel => DataContext as LuminanceViewModel;
 
-        public static readonly DependencyProperty MonitorsProperty = H.Property<IMonitorsService>().Register();
+        public static readonly DependencyProperty MonitorsProperty = H.Property<IMonitorsLayout>().Register();
             
             //DependencyProperty.Register("Config", typeof(IMonitorsService), typeof(Luminance), new PropertyMetadata(null));
 
-        public IMonitorsService Monitors
+        public IMonitorsLayout Monitors
         {
-            get => (IMonitorsService)GetValue(MonitorsProperty); set
+            get => (IMonitorsLayout)GetValue(MonitorsProperty); set
             {
                 ViewModel.Monitors = value;
                 SetValue(MonitorsProperty, value);

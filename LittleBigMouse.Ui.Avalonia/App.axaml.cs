@@ -21,9 +21,9 @@ using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Core;
 using Splat;
-using LittleBigMouse.Plugins.Avalonia;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugin.Vcp.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia;
 
@@ -68,15 +68,15 @@ public partial class App : Application
 
             c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
 
-
             c.Export<MonitorLocationPlugin>().As<IBootloader>();
 
+            c.Export<VcpPlugin>().As<IBootloader>();
 
 
             var parser = new AssemblyParser();
 
-            parser.LoadDll("LittleBigMouse.Plugin.Layout");
-            //parser.LoadDll("LittleBigMouse.Plugin.Vcp");
+            parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
+            parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
 
             parser.LoadModules();
 

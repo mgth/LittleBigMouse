@@ -12,7 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Management" Version="8.0.0-preview.5.23280.8" />
+    <PackageReference Include="System.Management" Version="8.0.0-preview.6.23329.7" />
   </ItemGroup>
 
   <ItemGroup>

@@ -11,9 +11,9 @@
     <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0" />
     <PackageReference Include="H.Pipes" Version="2.0.51" />
     <PackageReference Include="MessageBox.Avalonia" Version="3.0.1-rc2" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0-preview.5.23280.8" />
-    <PackageReference Include="System.Management" Version="8.0.0-preview.5.23280.8" />
-    <PackageReference Include="System.Reactive" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0-preview.6.23329.7" />
+    <PackageReference Include="System.Management" Version="8.0.0-preview.6.23329.7" />
+    <PackageReference Include="System.Reactive" Version="6.0.1-preview.1" />
     <PackageReference Include="TaskScheduler" Version="2.10.1" />
   </ItemGroup>
 

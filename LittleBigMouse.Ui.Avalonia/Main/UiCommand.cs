@@ -1,26 +1,13 @@
-﻿using System;
-using ReactiveUI;
+﻿using ReactiveUI;
 using System.Windows.Input;
-using Avalonia.Controls;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
-
-public class UiCommandDesign : UiCommand
-{
-    public UiCommandDesign():base("Design")
-    {
-        if(!Design.IsDesignMode) throw new NotSupportedException("Only for design mode");
-
-        IconPath = "Icons/Settings";
-        ToolTipText = "Settings";
-    }
-}                                                                       
 
 public class UiCommand : ReactiveObject
 {
     string _iconPath = "";
     string _toolTipText = "";
-    ICommand _command = null;
+    ICommand? _command = null;
     bool _isActive = false;
 
     public UiCommand(string id)
@@ -48,7 +35,7 @@ public class UiCommand : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _toolTipText, value);
     }
 
-    public ICommand Command 
+    public ICommand? Command 
     {
         get => _command;
         set => this.RaiseAndSetIfChanged(ref _command, value);

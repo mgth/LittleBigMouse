@@ -25,7 +25,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Concurrency;
-using System.Reactive.Disposables;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using Avalonia;
@@ -36,7 +35,6 @@ using HLab.Base.Avalonia;
 
 using LittleBigMouse.DisplayLayout.Dimensions;
 
-using Microsoft.Win32;
 using ReactiveUI;
 
 
@@ -47,8 +45,9 @@ public class PhysicalMonitor : ReactiveModel
 {
     public class Design : PhysicalMonitor
     {
-        public Design() : base("PNP0000", MonitorsLayout.Design, PhysicalMonitorModel.Design)
+        public Design() : base("PNP0000", MonitorsLayout.MonitorsLayoutDesign, PhysicalMonitorModel.Design)
         {
+            if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
         }
     }
 
@@ -439,7 +438,7 @@ public class PhysicalMonitor : ReactiveModel
     {
         var v = new Vector(HorizontalDistance(monitor), VerticalDistance(monitor));
 
-        if (v.X >= 0 && v.Y >= 0) return v.Length;
+        if (v is { X: >= 0, Y: >= 0 }) return v.Length;
 
         if (v.X >= 0) return v.X;
         if (v.Y >= 0) return v.Y;
@@ -510,33 +509,26 @@ public class PhysicalMonitor : ReactiveModel
         return true;
     }
 
-    public double MoveLeftToTouch(PhysicalMonitor monitor)
-    {
-        if (DepthProjection.Y >= monitor.DepthProjection.Bounds.Bottom) return -1;
-        if (monitor.DepthProjection.Y >= DepthProjection.Bounds.Bottom) return -1;
-        return DepthProjection.X - monitor.DepthProjection.Bounds.Right;
-    }
 
-    public double MoveRightToTouch(PhysicalMonitor monitor)
-    {
-        if (DepthProjection.Y >= monitor.DepthProjection.Bounds.Bottom) return -1;
-        if (monitor.DepthProjection.Y >= DepthProjection.Bounds.Bottom) return -1;
-        return monitor.DepthProjection.X - DepthProjection.Bounds.Right;
-    }
+    public bool HorizontallyAligned(PhysicalMonitor monitor) 
+        => DepthProjection.Y <= monitor.DepthProjection.Bounds.Bottom 
+           && monitor.DepthProjection.Y <= DepthProjection.Bounds.Bottom;
 
-    public double MoveUpToTouch(PhysicalMonitor monitor)
-    {
-        if (DepthProjection.X > monitor.DepthProjection.Bounds.Right) return -1;
-        if (monitor.DepthProjection.X > DepthProjection.Bounds.Right) return -1;
-        return DepthProjection.Y - monitor.DepthProjection.Bounds.Bottom;
-    }
+    public bool VerticallyAligned(PhysicalMonitor monitor) 
+        => DepthProjection.X <= monitor.DepthProjection.Bounds.Right 
+           && monitor.DepthProjection.X <= DepthProjection.Bounds.Right;
 
-    public double MoveDownToTouch(PhysicalMonitor monitor)
-    {
-        if (DepthProjection.X > monitor.DepthProjection.Bounds.Right) return -1;
-        if (monitor.DepthProjection.X > DepthProjection.Bounds.Right) return -1;
-        return monitor.DepthProjection.Y - DepthProjection.Bounds.Bottom;
-    }
+    public double MoveLeftToTouch(PhysicalMonitor monitor) 
+        => HorizontallyAligned(monitor)?DepthProjection.X - monitor.DepthProjection.Bounds.Right:-1;
+
+    public double MoveRightToTouch(PhysicalMonitor monitor) 
+        => HorizontallyAligned(monitor)?monitor.DepthProjection.X - DepthProjection.Bounds.Right:-1;
+
+    public double MoveUpToTouch(PhysicalMonitor monitor) 
+        => (VerticallyAligned(monitor))?DepthProjection.Y - monitor.DepthProjection.Bounds.Bottom:-1;
+
+    public double MoveDownToTouch(PhysicalMonitor monitor) 
+        => (!VerticallyAligned(monitor))?monitor.DepthProjection.Y - DepthProjection.Bounds.Bottom:-1;
 
 
     public void PlaceAuto(IEnumerable<PhysicalMonitor> monitors, bool allowDiscontinuity=false, bool allowOverlaps=false)
@@ -580,35 +572,35 @@ public class PhysicalMonitor : ReactiveModel
         if (!allowDiscontinuity)
         {
 
-            if (distance.Top > 0 && distance.Left > 0)
+            if (distance is { Top: > 0, Left: > 0 })
             {
                 if (distance.Left < distance.Top) DepthProjection.X += distance.Left;
                 else DepthProjection.Y += distance.Top;
                 return;
             }
 
-            if (distance.Top > 0 && distance.Right > 0)
+            if (distance is { Top: > 0, Right: > 0 })
             {
                 if (distance.Right < distance.Top) DepthProjection.X -= distance.Right;
                 else DepthProjection.Y += distance.Top;
                 return;
             }
 
-            if (distance.Bottom > 0 && distance.Right > 0)
+            if (distance is { Bottom: > 0, Right: > 0 })
             {
                 if (distance.Right < distance.Bottom) DepthProjection.X -= distance.Right;
                 else DepthProjection.Y -= distance.Bottom;
                 return;
             }
 
-            if (distance.Bottom > 0 && distance.Left > 0)
+            if (distance is { Bottom: > 0, Left: > 0 })
             {
                 if (distance.Left < distance.Bottom) DepthProjection.X += distance.Left;
                 else DepthProjection.Y -= distance.Bottom;
                 return;
             }
 
-            if (distance.Top < 0 && distance.Bottom < 0)
+            if (distance is { Top: < 0, Bottom: < 0 })
             {
                 if (distance.Left >= 0)
                 {
@@ -622,9 +614,8 @@ public class PhysicalMonitor : ReactiveModel
                 }
             }
 
-            if (distance.Left < 0 && distance.Right < 0)
+            if (distance is { Left: < 0, Right: < 0 })
             {
-                //if (distance.Top >= 0)
                 if (distance.Top > 0)
                 {
                     DepthProjection.Y += distance.Top;
@@ -638,7 +629,7 @@ public class PhysicalMonitor : ReactiveModel
             }
         }
 
-        if (!allowOverlaps && distance.Left < 0 && distance.Right < 0 && distance.Top < 0 && distance.Bottom < 0)
+        if (!allowOverlaps && distance is { Left: < 0, Right: < 0, Top: < 0, Bottom: < 0 })
         {
             if (distance.Left > distance.Right && distance.Left > distance.Top && distance.Left > distance.Bottom)
             {

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -10,17 +11,23 @@ using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
+using DynamicData.Binding;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Sys.Windows.API;
+using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Zoning;
 using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
+/// <summary>
+/// 
+/// </summary>
 [DataContract]
 public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 {
@@ -28,7 +35,16 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     {
         DpiAwareness = WinUser.GetAwarenessFromDpiAwarenessContext(WinUser.GetThreadDpiAwarenessContext());
 
-        PhysicalMonitors.Connect()
+        _physicalMonitorsCache.Connect()
+            // Sort Ascending on the OrderIndex property
+            .Sort(SortExpressionComparer<PhysicalMonitor>.Ascending(t => t.Id))
+            //.Filter(x => x.Id.ToString().EndsWith('1'))
+            // Bind to our ReadOnlyObservableCollection<T>
+            .Bind(out _physicalMonitors)
+            // Subscribe for changes
+            .Subscribe();
+
+        _physicalMonitorsCache.Connect()
             //.AutoRefresh(e => e.Selected)
             //.AutoRefresh(e => e.DepthProjection.Bounds)
             .ToCollection()
@@ -75,17 +91,11 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         //    .WhenValueChanged(e => e.DepthProjection.Bounds)
         //    .Select(e => ParsePhysicalMonitors(PhysicalMonitors.Items))
         //    .ToProperty(this, e => e.PhysicalBounds);
-
-
-
-
     }
-
-
 
     Rect GetOutsideBounds()
     {
-        using var enumerator = PhysicalMonitors.Items.GetEnumerator();
+        using var enumerator = PhysicalMonitors.GetEnumerator();
 
         if (!enumerator.MoveNext()) return default;
 
@@ -97,7 +107,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         return r;
     }
 
-
     public WinDef.DpiAwareness DpiAwareness { get; }
 
     [DataMember]
@@ -107,7 +116,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         set => this.RaiseAndSetIfChanged(ref _id, value);
     }
     string _id;
-
 
     /// <summary>
     /// a list of string representing each known config in registry
@@ -125,7 +133,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
     public PhysicalSource PhysicalSourceFromPixel(Point pixel) => AllSources.Items.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
 
-    public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) => PhysicalMonitors.Items.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
+    public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
 
     public string WallPaperPath
     {
@@ -206,8 +214,17 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
     //        [DataMember] public SourceCache<Monitor, string> AllMonitors => _allMonitors;
     
+
+    readonly ReadOnlyObservableCollection<PhysicalMonitor> _physicalMonitors;
+
     [JsonIgnore]
-    public SourceCache<PhysicalMonitor, string> PhysicalMonitors { get; } = new(m => m.Id);
+    public ReadOnlyObservableCollection<PhysicalMonitor> PhysicalMonitors => _physicalMonitors;
+
+    readonly SourceCache<PhysicalMonitor, string> _physicalMonitorsCache = new(m => m.Id);
+    public void AddOrUpdatePhysicalMonitor(PhysicalMonitor monitor)
+    {
+        _physicalMonitorsCache.AddOrUpdate(monitor);
+    }
 
     [JsonIgnore]
     public SourceCache<PhysicalSource, string> AllSources { get; } = new(s => s.Source.IdMonitorDevice);
@@ -406,7 +423,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     Rect _physicalBounds;
 
 
-    public void UpdatePhysicalMonitors() => ParsePhysicalMonitors(PhysicalMonitors.Items);
+    public void UpdatePhysicalMonitors() => ParsePhysicalMonitors(PhysicalMonitors);
     void ParsePhysicalMonitors(IEnumerable<PhysicalMonitor> monitors)
     {
         Rect? physicalBounds = null;
@@ -697,7 +714,14 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
                                                                       + ".exe"
         ;
 
-    public static MonitorsLayout Design => new MonitorsLayout();
+    public static MonitorsLayout MonitorsLayoutDesign
+    {
+        get
+        {
+            if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+            return new MonitorsLayout();
+        }
+    }
 
 
     public bool IsScheduled()
@@ -796,5 +820,4 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
         return zones;
     }
-
 }

@@ -16,7 +16,7 @@ public static class MonitorsLayoutExtensions
     /// <param name="monitor"></param>
     /// <returns></returns>
     public static IEnumerable<PhysicalMonitor> PhysicalMonitorsExcept(this IMonitorsLayout layout, PhysicalMonitor monitor) 
-        => layout.PhysicalMonitors.Items.Where(s => !Equals(s, monitor));
+        => layout.PhysicalMonitors.Where(s => !Equals(s, monitor));
 
 
     static readonly object CompactLock = new();
@@ -38,7 +38,7 @@ public static class MonitorsLayoutExtensions
         lock (CompactLock)
         {
             // List all display not positioned
-            var unattachedScreens = placeAll ? layout.PhysicalMonitors.Items.ToList() : layout.PhysicalMonitors.Items.Where(s => !s.Placed).ToList();
+            var unattachedScreens = placeAll ? layout.PhysicalMonitors.ToList() : layout.PhysicalMonitors.Where(s => !s.Placed).ToList();
 
             // start with primary display
             var todo = new Queue<PhysicalMonitor>();

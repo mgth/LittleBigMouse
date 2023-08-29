@@ -26,7 +26,6 @@
                 Path="{Binding IconPath}"
                 ToolTip.Tip="{Binding ToolTipText}"
                 />
-            <!--<Label Content="{Binding ToolTipText}"/>-->
         </StackPanel>
 
   </ToggleButton>

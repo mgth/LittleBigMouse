@@ -21,7 +21,9 @@
 	  http://www.mgth.fr
 */
 
+using System;
 using System.Windows.Input;
+using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -62,6 +64,7 @@ public class MonitorsLayoutPresenterViewModel
 
     public MonitorsLayoutPresenterViewModel():this(new MainViewModelDesign())
     {
+        if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
     }
 
     public double Width => _width.Value;

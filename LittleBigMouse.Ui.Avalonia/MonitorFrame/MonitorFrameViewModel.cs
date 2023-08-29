@@ -10,8 +10,6 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
-using SkiaSharp;
-using static HLab.Sys.Windows.API.WinDef;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 

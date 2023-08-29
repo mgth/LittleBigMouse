@@ -9,7 +9,7 @@ public static class MonitorDeviceExtension
     public static PhysicalMonitor GetPhysicalMonitor(this MonitorDevice device, MonitorsLayout layout)
     {
 
-        var monitor = layout.PhysicalMonitors.Items.FirstOrDefault(m => m.Id == device.IdMonitor);
+        var monitor = layout.PhysicalMonitors.FirstOrDefault(m => m.Id == device.IdMonitor);
         if (monitor != null) return monitor;
         
         //monitor = new Monitor();

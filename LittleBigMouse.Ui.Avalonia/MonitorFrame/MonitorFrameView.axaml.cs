@@ -36,7 +36,6 @@ public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, Moni
 
     public MonitorFrameView() {
         InitializeComponent();
-
     }
 
     protected override void OnLoaded(RoutedEventArgs e)

@@ -94,14 +94,14 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
     {
         if (newModel is { } model)
         {
-            model.PhysicalMonitors.Connect()
+            model.PhysicalMonitors.AsObservableChangeSet()
                 .WhenValueChanged(e => e.Saved)
                 .Do(e =>
                 {
                     if (!e) Saved = false;
                 }).Subscribe().DisposeWith(this);
 
-            model.PhysicalMonitors.Connect()
+            model.PhysicalMonitors.AsObservableChangeSet()
                 .WhenValueChanged(e => e.Model.Saved)
                 .Do(e =>
                 {

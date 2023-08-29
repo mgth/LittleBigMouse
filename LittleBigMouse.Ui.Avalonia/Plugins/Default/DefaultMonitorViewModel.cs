@@ -23,19 +23,12 @@
 
 using System.Linq;
 using Avalonia.Layout;
+using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Default;
-
-public class DefaultMonitorViewModelDesign : DefaultMonitorViewModel
-{
-    public DefaultMonitorViewModelDesign()
-    {
-        //Monitor = new MonitorDesign();
-    }
-}
 
 public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
 {

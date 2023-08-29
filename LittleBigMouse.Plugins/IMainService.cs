@@ -9,5 +9,6 @@
         Task ShowControlAsync();
 
         void AddControlPlugin(Action<IMainPluginsViewModel>? action);
+
     }
 }

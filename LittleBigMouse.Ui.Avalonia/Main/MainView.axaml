@@ -9,11 +9,9 @@
         xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
         xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
         mc:Ignorable="d"
-
-        Foreground="{DynamicResource HLab.Brushes.Foreground}"
-
-
+        Foreground="White"
 >
+        <!--Foreground="{DynamicResource HLab.Brushes.Foreground}"-->
 	<Design.DataContext>
 		<main:MainViewModelDesign />
 	</Design.DataContext>
@@ -117,7 +115,14 @@
 
 	<!--<main:ResizeGrid>-->
 
+    <!-- 
+	    Row 0 : Buttons
+		Row 1 : Screens view panel
+		Row 2 : 
+		Row 3 :
+	-->
 	<Grid RowDefinitions="Auto,*,Auto,Auto" ColumnDefinitions="*">
+
 
         <Grid Grid.Row="0"
               Grid.Column="0"
@@ -136,7 +141,6 @@
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
 
-
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
  					        <mvvm:ViewLocator Model="{Binding}" ClipToBounds="False"/>
@@ -152,10 +156,10 @@
         <!--Graphical view for the layout-->
 		<mvvm:ViewLocator Grid.Row="1"
 
-                          ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
-                          ViewMode="{x:Type annotations:DefaultViewMode}"
+              ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
+              ViewMode="{x:Type annotations:DefaultViewMode}"
 
-                          Model="{Binding Layout}"
+              Model="{Binding Layout}"
         />
 
         <!--Controls for the layout-->

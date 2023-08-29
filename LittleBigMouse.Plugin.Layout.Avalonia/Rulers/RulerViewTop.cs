@@ -6,7 +6,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using HLab.Base.Avalonia;
+using HLab.Base.Avalonia.DependencyHelpers;
 using HLab.ColorTools;
 using HLab.ColorTools.Avalonia;
 

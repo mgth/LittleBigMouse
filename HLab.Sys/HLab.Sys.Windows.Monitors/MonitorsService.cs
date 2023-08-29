@@ -60,7 +60,7 @@ namespace HLab.Sys.Windows.Monitors
 
         //IObservableCache<MonitorDevice, string> _attachedMonitors;
         //public IObservableCache<MonitorDevice,string> AttachedMonitors => _attachedMonitors;    
-        public static IMonitorsSet Design => new MonitorsService();
+        public static IMonitorsSet MonitorsSetDesign => new MonitorsService();
 
         public DisplayDevice GetOrAddDevice(string deviceId, Func<string,DisplayDevice> get) 
             => _devices.GetOrAdd(deviceId, get);

@@ -23,17 +23,59 @@
 
 //#define uglyfix
 
+using System;
 using System.ComponentModel;
 using System.Windows.Input;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Converters;
 using HLab.Mvvm.Annotations;
+using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
+using OneOf.Types;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
-public class MonitorFrameViewModelDesign : MonitorFrameViewModel, IDesignViewModel
+public class MonitorFrameViewModelDesign : IDesignViewModel
+{
+    public MonitorFrameViewModelDesign()
+    {
+        if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+    }
+    public Thickness Margin { get; } = new();
+
+    public SizeDesign Rotated { get; } = new ();
+    public bool Selected { get; } = true;
+    public SizeDesign Unrotated { get; } = new();
+    public ModelDesign? Model { get; } = new();
+
+    public class ModelDesign
+    {
+        public ModelModelDesign Model { get; } = new();
+    }
+    public class ModelModelDesign
+    {
+        public string Logo => "Icon/Pnp/Windows";
+    }
+
+    public class SizeDesign
+    {
+        public double OutsideWidth =>  Width + LeftBorder + RightBorder ;
+        public double OutsideHeight => Height + TopBorder + BottomBorder;
+        public double LeftBorder => 20.0;
+        public double TopBorder => 20.0;
+        public double RightBorder => 20.0;
+        public double BottomBorder => 20.0;
+        public double Width => 30 * 16;
+        public double Height =>  30 * 9;
+    }
+
+}
+
+public class MonitorFrameViewModelDesign2 : MonitorFrameViewModel, IDesignViewModel
 {
     class MonitorsPresenterDesign : IMonitorsLayoutPresenterViewModel
     {
@@ -50,8 +92,10 @@ public class MonitorFrameViewModelDesign : MonitorFrameViewModel, IDesignViewMod
     }
 
 
-    public MonitorFrameViewModelDesign()
+    public MonitorFrameViewModelDesign2()
     {
+        if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+
         Model = new PhysicalMonitor.Design();
         MonitorsPresenter = new MonitorsPresenterDesign();
     }

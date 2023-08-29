@@ -3,8 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Wpf"
-             xmlns:icons1="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:avalonia1="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
              xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
              LayoutUpdated="OnLayoutUpdated"
@@ -70,7 +69,7 @@
                 </Grid>
 
             </Label>
-            <icons1:IconView Path="icon/littlebigmouse" Opacity="0.02"/>
+            <icons:IconView Path="icon/lbm_logo" Opacity="0.02"/>
         </Grid>
 
         <Grid  Margin="30" ClipToBounds="False">
@@ -80,6 +79,8 @@
                 ClipToBounds="False"
                 >
 
+                <TextBlock Text="{Binding Model.PhysicalMonitors.Count }"></TextBlock>
+
                 <Canvas x:Name="ContentGrid" 
                         ClipToBounds="False"
 
@@ -88,7 +89,7 @@
                         Height="{Binding Height, Mode=OneWay}"-->
 
                     <ItemsControl 
-                        ItemsSource="{Binding Model.PhysicalMonitors.Items}"
+                        ItemsSource="{Binding Model.PhysicalMonitors}"
                         ClipToBounds="False"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"

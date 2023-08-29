@@ -340,6 +340,8 @@ public static class MonitorDeviceHelper
         return new MonitorDevice
         {
             DeviceId = id,
+            IdPhysicalMonitor = id,
+
             PnpCode = GetPnpCodeFromId(id),
             Edid = edid,
             IdMonitor = GetMicrosoftId(id, edid),

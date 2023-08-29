@@ -25,6 +25,7 @@ using System.Reactive.Linq;
 using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Avalonia;
 using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
@@ -43,19 +44,10 @@ public class VcpPlugin : IBootloader
     public void Load(IBootContext bootstrapper)
     {
         _mainService.AddControlPlugin(c =>
-            c.AddButton(
+            c.AddViewModeButton<MonitorVcpViewMode>(
                 "vcp",
                 "Icon/MonitorVcp",
-                "Vcp control",
-
-                ReactiveCommand.Create<bool>(b => {
-                        if (b)
-                            c.SetMonitorFrameViewMode<MonitorVcpViewMode>();
-                        else
-                            c.SetMonitorFrameViewMode<DefaultViewMode>();
-                    }
-                    , outputScheduler: RxApp.MainThreadScheduler
-                    , canExecute: Observable.Return(true) ))
+                "Vcp control")
         );
     }
 

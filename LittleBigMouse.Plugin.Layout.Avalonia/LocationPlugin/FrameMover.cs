@@ -182,7 +182,7 @@ public class FrameMover : ReactiveObject, IFrameLocation
         //use anchors when control key is not pressed
         if (useAnchors)
         {
-            foreach (var other in _layout.PhysicalMonitors.Items.Where(m => m != _monitor))
+            foreach (var other in _layout.PhysicalMonitors.Where(m => m != _monitor))
             {
                 foreach (var xAnchorThis in FrameMover.VerticalAnchors(_monitor, X - _dragStartPosition.X))
                 {

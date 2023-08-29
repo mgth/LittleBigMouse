@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
@@ -18,10 +19,16 @@ namespace LittleBigMouse.DisplayLayout.Monitors
     [DataContract]
     public class PhysicalMonitorModel : ReactiveObject
     {
-        public static PhysicalMonitorModel Design => new PhysicalMonitorModel("PNP0000")
+        public static PhysicalMonitorModel Design
         {
-
-        };
+            get
+            {
+                if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+                return new PhysicalMonitorModel("PNP0000")
+                {
+                };
+            }
+        }
 
         // TODO : some monitors may have different pnpcode for each source.
          public string PnpCode { get; }

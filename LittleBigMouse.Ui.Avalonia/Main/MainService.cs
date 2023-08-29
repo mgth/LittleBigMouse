@@ -24,6 +24,7 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
@@ -40,7 +41,7 @@ public class MainService : IMainService
 {
     public IMonitorsLayout Layout { get; }
 
-    readonly Func<IMainPluginsViewModel> _getMainViewModel;
+    readonly Func<IMonitorsLayout,IMainPluginsViewModel> _getMainViewModel;
 
     readonly IMvvmService _mvvmService;
     readonly IMonitorsSet _monitorsSet;
@@ -48,54 +49,59 @@ public class MainService : IMainService
     readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
 
-    Window? _controlWindow = null;
     Action<IMainPluginsViewModel>? _actions;
 
     readonly DisplayChangeMonitor _listener = new DisplayChangeMonitor();
+    readonly IApplicationLifetime _app;
 
     public MainService(
-        Func<IMainPluginsViewModel> mainViewModelGetter,
+        Func<IMonitorsLayout,IMainPluginsViewModel> mainViewModelGetter,
         IMonitorsLayout layout,
         IMvvmService mvvmService,
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
-        IMonitorsSet monitorsService)
+        IMonitorsSet monitorsService,
+        IApplicationLifetime app)
     {
         _notify = notify;
         _monitorsSet = monitorsService;
+        _app = app;
         _littleBigMouseClientService = littleBigMouseClientService;
 
         _mvvmService = mvvmService;
         _getMainViewModel = mainViewModelGetter;
 
+        // Relate service state with notify icon
         _littleBigMouseClientService.StateChanged += _littleBigMouseClientService_StateChanged;
 
         Layout = layout;
     }
 
-
     public async Task ShowControlAsync()
     {
-        if (_controlWindow is { IsLoaded: true })
+
+        if (_app is IClassicDesktopStyleApplicationLifetime { MainWindow.IsLoaded: true } desktop)
         {
-            _controlWindow.Activate();
+            desktop.MainWindow.Activate();
             return;
         }
 
-        var viewModel = _getMainViewModel();
-        viewModel.Layout = Layout;
+        var viewModel = _getMainViewModel(Layout);
 
         _actions?.Invoke(viewModel);
 
-        _controlWindow = _mvvmService
+        var window = (await _mvvmService
             .MainContext
-            .GetView<DefaultViewMode>(viewModel, typeof(IDefaultViewClass))
+            .GetViewAsync<DefaultViewMode>(viewModel, typeof(IDefaultViewClass)))
             ?.AsWindow();
 
-        if (_controlWindow == null) return;
+        if (window == null) return;
 
-        _controlWindow.Closed += (s, a) => _controlWindow = null;
-        _controlWindow?.Show();
+        if (_app is IClassicDesktopStyleApplicationLifetime d)
+        {
+            d.MainWindow = window;
+            window.Closed += (s, a) => d.MainWindow = null;
+        }
 
         // TODO : move to plugin
         if (_monitorsSet is MonitorsService s && Layout is MonitorsLayout l)
@@ -110,11 +116,13 @@ public class MainService : IMainService
             };
         }
 
+        window.Show();
+
     }
 
     public void StartNotifier()
     {
-        _notify.Click += (s, a) => ShowControlAsync();
+        _notify.Click += async (s, a) => await ShowControlAsync();
 
         // TODO 
         //_notify.AddMenu(-1, "Check for update", CheckUpdate);
@@ -134,8 +142,11 @@ public class MainService : IMainService
         _actions += action;
     }
 
-    Task QuitAsync() => _littleBigMouseClientService.QuitAsync();
-        // TODO : Avalonia
+    async Task QuitAsync()
+    {
+        await _littleBigMouseClientService.QuitAsync();
+    }
+    // TODO : Avalonia
         //Application.Current.Shutdown();
 
     void _littleBigMouseClientService_StateChanged(object? sender, LittleBigMouseServiceEventArgs args)

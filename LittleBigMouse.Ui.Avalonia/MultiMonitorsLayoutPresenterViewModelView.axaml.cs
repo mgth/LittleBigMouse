@@ -22,114 +22,37 @@
 */
 
 using System;
-using System.Collections.Generic;
-using System.Globalization;
+
+using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data.Converters;
+
 using HLab.Mvvm.Annotations;
+
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 
+using HLab.Base.Avalonia.DependencyHelpers;
+using LittleBigMouse.DisplayLayout.Dimensions;
+using HLab.Mvvm.Avalonia;
+
 namespace LittleBigMouse.Ui.Avalonia;
-
-public class SizeRatioConverter : IMultiValueConverter
-{
-    public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (values == null || values.Count < 3) return null;
-
-        if(values[0] is double ui && values[1] is double vm && values[3] is double size)
-        {
-            return (ui / vm) * size;
-        }
-
-        return null;
-    }
-
-    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
-    {
-        throw new NotImplementedException();
-    }
-}
 
 /// <summary>
 /// Logique d'interaction pour MultiScreensGui.xaml
 /// </summary>
 public partial class MultiMonitorsLayoutPresenterView : UserControl
-    , IView<DefaultViewMode,MonitorsLayoutPresenterViewModel>
-    , IView<MonitorDebugViewMode,MonitorsLayoutPresenterViewModel>
+    , IView<DefaultViewMode,IMonitorsLayoutPresenterViewModel>
+    , IView<MonitorDebugViewMode,IMonitorsLayoutPresenterViewModel>
     , IMonitorsLayoutPresenterViewClass
     , IMonitorsLayoutPresenterView
 {
     public MultiMonitorsLayoutPresenterView()
     {
         InitializeComponent();
-
-        //DataContextChanged += (a, b) =>
-        //{
-        //    if (b.OldValue is MultiScreensViewModel oldvm)
-        //    {
-        //        AllScreens_CollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove,oldvm.Config.AllScreens));
-        //        oldvm.Config.AllScreens.CollectionChanged -= AllScreens_CollectionChanged;
-        //    }
-
-        //    if (b.NewValue is MultiScreensViewModel newvm)
-        //    {
-        //        AllScreens_CollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,newvm.Config.AllScreens));
-        //        newvm.Config.AllScreens.CollectionChanged += AllScreens_CollectionChanged;
-        //    }
-        //};
     }
 
-    //private void AllScreens_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
-    //{
-    //    switch (e.Action)
-    //    {
-    //        case NotifyCollectionChangedAction.Add:
-    //            if (e.NewItems != null)
-    //            {
-    //                foreach (var s in e.NewItems.OfType<Screen>())
-    //                {
-    //                    var view = new ViewLocator {Model = s,Tag=s.Id};
-    //                    //var view = ViewModel.MvvmContext.GetView<ViewModeDefault>(s, typeof(IViewClassDefault));
-    //                    ContentGrid.Children.Add((UIElement)view);
-    //                    //if (view.Content is ScreenFrameView sfw)
-    //                    //{
-    //                    //    sfw.ViewModel.Presenter = ContentGrid;
-    //                    //}
-    //                }
-    //            }
-    //            break;
-    //        case NotifyCollectionChangedAction.Remove:
-    //            if (e.OldItems != null)
-    //            {
-    //                foreach (var s in e.OldItems.OfType<Screen>())
-    //                {
-    //                    foreach (var element in ContentGrid.Children.OfType<FrameworkElement>().ToList())
-    //                    {
-    //                        if (element.Tag.ToString() == s.Id)
-    //                        {
-    //                            ContentGrid.Children.Remove(element);
-    //                        }
-    //                    }
-    //                }
-    //            }
-    //            else throw  new ArgumentException("OldItems should not be null for remove Action");
-    //            break;
-    //        case NotifyCollectionChangedAction.Replace:
-    //        case NotifyCollectionChangedAction.Move:
-    //        case NotifyCollectionChangedAction.Reset:
-    //            throw new NotImplementedException();
-    //        default:
-    //            throw new ArgumentOutOfRangeException();
-    //    }
-    //}
-
-    //protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
-    //{
-    //    base.OnRenderSizeChanged(sizeInfo);
 
     //    foreach (var frameView in Canvas.Children.OfType<ScreenFrameView>())
     //    {
@@ -137,28 +60,29 @@ public partial class MultiMonitorsLayoutPresenterView : UserControl
     //    }
     //}
 
-    public IMonitorsLayoutPresenterViewModel ViewModel => DataContext as MonitorsLayoutPresenterViewModel;
+    public IMonitorsLayout? Layout => ViewModel?.Model;
 
-    IMonitorsLayout? Layout => ViewModel?.Model;
+    public IMonitorsLayoutPresenterViewModel? ViewModel  => this.GetViewModel<IMonitorsLayoutPresenterViewModel>(DataContext);
 
     public double GetRatio()
     {
-        if (Layout == null) return 1;
+        if (Layout == null) return 1.0;
 
         var all = Layout.PhysicalBounds;
 
-        if (all.Width * all.Height > 0)
+        if (all.Width * all.Height > 0.0)
         {
             return Math.Min(
                 ReferenceGrid.Bounds.Width / all.Width,
                 ReferenceGrid.Bounds.Height / all.Height
             );
         }
-        return 1;
+        return 1.0;
     }
 
     public Panel MainPanel => ContentGrid;
     public Panel BackPanel => ContentGrid;
+
 
     void OnLayoutUpdated(object sender, EventArgs e)
     {

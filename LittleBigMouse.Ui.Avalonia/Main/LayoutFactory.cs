@@ -54,7 +54,7 @@ public static class LayoutFactory
 
             if (source != null) continue;
 
-            var monitor = layout.PhysicalMonitors.Items.FirstOrDefault(m =>
+            var monitor = layout.PhysicalMonitors.FirstOrDefault(m =>
                 m.Model.PnpCode == device.PnpCode
                 && m.IdPhysicalMonitor == device.IdPhysicalMonitor
             );
@@ -72,7 +72,7 @@ public static class LayoutFactory
                 monitor.ActiveSource = source;
                 monitor.Sources.Add(source);
 
-                layout.PhysicalMonitors.AddOrUpdate(monitor);
+                layout.AddOrUpdatePhysicalMonitor(monitor);
             }
             else
             {

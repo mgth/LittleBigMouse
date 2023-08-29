@@ -55,7 +55,7 @@ public static class PersistencyExtensions
 
             if (key != null)
             {
-                foreach (var monitor in @this.PhysicalMonitors.Items)
+                foreach (var monitor in @this.PhysicalMonitors)
                 {
                     monitor.Model.Load();
                     monitor.Load();
@@ -85,7 +85,7 @@ public static class PersistencyExtensions
 
         if (@this.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
 
-        foreach (var monitor in @this.PhysicalMonitors.Items)
+        foreach (var monitor in @this.PhysicalMonitors)
         {
             monitor.Save();
             monitor.Model.Save();

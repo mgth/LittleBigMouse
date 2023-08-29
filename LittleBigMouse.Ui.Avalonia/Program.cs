@@ -24,6 +24,7 @@ internal class Program
         return AppBuilder.Configure<App>()
             .UseReactiveUI()
             .UsePlatformDetect()
+            .WithInterFont()
             .UseSkia()
             .LogToTrace();
     }

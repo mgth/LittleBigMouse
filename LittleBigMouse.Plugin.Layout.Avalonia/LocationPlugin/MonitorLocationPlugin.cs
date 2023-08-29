@@ -1,9 +1,7 @@
-﻿using System.Reactive.Linq;
-using HLab.Core.Annotations;
+﻿using HLab.Core.Annotations;
 using HLab.Icons.Avalonia.Icons;
-using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
-using ReactiveUI;
+using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 
@@ -19,21 +17,12 @@ public class MonitorLocationPlugin : IBootloader
     public void Load(IBootContext bootstrapper)
     {
         _mainService.AddControlPlugin(c =>
-            c.AddButton(
+            c.AddViewModeButton<MonitorLocationViewMode>(
                 "location",
                 "Icon/MonitorLocation",
-                "Location",
+                "Location"
 
-                ReactiveCommand.Create<bool>(b =>
-                    {
-                        if (b)
-                            c.SetMonitorFrameViewMode<MonitorLocationViewMode>();
-                        else
-                            c.SetMonitorFrameViewMode<DefaultViewMode>();
-                    }
-                    , outputScheduler: RxApp.MainThreadScheduler
-                    , canExecute: Observable.Return(true)))
-        );
+        ));
     }
 
 }

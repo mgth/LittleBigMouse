@@ -1,5 +1,7 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Threading;
+using Avalonia.Controls;
 using HLab.Sys.Windows.Monitors;
 using OneOf;
 using ReactiveUI;
@@ -28,6 +30,7 @@ public class MonitorLevelDesign : MonitorLevel
     public MonitorLevelDesign(VcpComponent component = VcpComponent.None) 
         : base(new LevelParser(), VcpGetter, VcpSetter, component)
     {
+        if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
     }
 }
 

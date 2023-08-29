@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Grace.DependencyInjection;
 using HLab.Base.Avalonia.Themes;
@@ -36,15 +37,21 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        if (Design.IsDesignMode)
+        {
+            InitDesignMode();
+            base.OnFrameworkInitializationCompleted();
+            return;
+        }
 
 #if DEBUG
         Locator.CurrentMutable.RegisterConstant(new LoggingService { Level = LogLevel.Info }, typeof(ILogger));
 #endif
 
-
         var container = new DependencyInjectionContainer();
         container.Configure(c =>
         {
+            c.ExportInstance(ApplicationLifetime);
             c.Export<EventHandlerServiceAvalonia>().As<IEventHandlerService>().Lifestyle.Singleton();
 
 
@@ -92,9 +99,14 @@ public partial class App : Application
         var theme = new ThemeService(Resources);
         theme.SetTheme(ThemeService.WindowsTheme.Dark);
 
+
         boot.Boot();
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    void InitDesignMode()
+    {
     }
 
     public class LoggingService : ILogger

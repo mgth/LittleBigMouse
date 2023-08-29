@@ -11,7 +11,6 @@
     xmlns:annotations="clr-namespace:HLab.Mvvm.Annotations;assembly=HLab.Mvvm.Annotations"
     xmlns:monitorFrame="clr-namespace:LittleBigMouse.Ui.Avalonia.MonitorFrame"
     mc:Ignorable="d" 
-    d:DesignHeight="300" d:DesignWidth="500"
     HorizontalAlignment="Left"
     VerticalAlignment="Top"
     MinHeight="0"

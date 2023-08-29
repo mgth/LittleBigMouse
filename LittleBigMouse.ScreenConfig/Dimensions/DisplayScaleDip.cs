@@ -30,12 +30,12 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 public class DisplayScaleDip : DisplaySize
 {
     public IDisplayRatio EffectiveDpi { get; }
-    public IMonitorsLayout Config { get; }
+    public IMonitorsLayout Layout { get; }
 
-    public DisplayScaleDip(IDisplaySize source, IDisplayRatio effectiveDpi, IMonitorsLayout config) : base(source)
+    public DisplayScaleDip(IDisplaySize source, IDisplayRatio effectiveDpi, IMonitorsLayout layout) : base(source)
     {
         EffectiveDpi = effectiveDpi;
-        Config = config;
+        Layout = layout;
 
         _ratio = this.WhenAnyValue(
             e => e.EffectiveDpi.X,
@@ -56,8 +56,8 @@ public class DisplayScaleDip : DisplaySize
             ).ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
 
         _mainRatio = this.WhenAnyValue(
-            e => e.Config.PrimarySource.EffectiveDpi.X,
-            e => e.Config.PrimarySource.EffectiveDpi.Y,
+            e => e.Layout.PrimarySource.EffectiveDpi.X,
+            e => e.Layout.PrimarySource.EffectiveDpi.Y,
             (x, y) => new DisplayRatioValue(96 / x, 96 / y))
             .ToProperty(this,e=>e.MainRatio, scheduler: Scheduler.Immediate);
 

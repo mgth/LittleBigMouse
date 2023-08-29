@@ -3,22 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
 using HLab.Sys.Windows.API;
 using Microsoft.Win32;
 
 namespace HLab.Sys.Windows.Monitors;
-
-public class MonitorDeviceDesign : MonitorDevice
-{
-    MonitorDeviceDesign()
-    {
-        PnpCode = "DEL0000";
-        IdMonitor = "1";
-    }
-}
-
 
 public class MonitorDevice {
     public nint HMonitor { get; set; }
@@ -81,6 +72,11 @@ public class MonitorDevice {
 
     class EdidDesign : IEdid
     {
+        public EdidDesign() 
+        {        
+            if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+        }
+
         public string HKeyName => "HKLM://";
         public string ManufacturerCode => "SAM";
         public string ProductCode { get; }
@@ -112,10 +108,18 @@ public class MonitorDevice {
         public int Checksum => int.MinValue;
     }
 
-    public static MonitorDevice Design => new MonitorDevice
+    public static MonitorDevice MonitorDesign
     {
-        Edid = new EdidDesign()
-    };
+        get
+        {
+            if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+
+            return new MonitorDevice
+            {
+                Edid = new EdidDesign()
+            };
+        }
+    }
 
     string _hKeyName;
 

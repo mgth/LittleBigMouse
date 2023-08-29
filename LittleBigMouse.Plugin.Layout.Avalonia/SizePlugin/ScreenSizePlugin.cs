@@ -26,6 +26,7 @@ using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
 using System.Reactive.Linq;
+using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 
@@ -42,19 +43,11 @@ public class ScreenSizePlugin : IBootloader
     public void Load(IBootContext bootstrapper)
     {
         _mainService.AddControlPlugin(c =>
-            c.AddButton(
+            c.AddViewModeButton<ViewModeScreenSize>(
                 "size",
                 "Icon/MonitorSize",
-                "Size",
-
-                ReactiveCommand.Create<bool>(b => {
-                        if (b)
-                            c.SetMonitorFrameViewMode<ViewModeScreenSize>();
-                        else
-                            c.SetMonitorFrameViewMode<DefaultViewMode>();
-                    }
-                    , outputScheduler: RxApp.MainThreadScheduler
-                    , canExecute: Observable.Return(true) ))
+                "Size"
+                )
         );
 
     }

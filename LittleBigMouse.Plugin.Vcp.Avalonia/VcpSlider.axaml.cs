@@ -26,7 +26,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using HLab.Base.Avalonia;
+using HLab.Base.Avalonia.DependencyHelpers;
 using HLab.ColorTools;
 using HLab.ColorTools.Avalonia;
 using HLab.Mvvm.Annotations;

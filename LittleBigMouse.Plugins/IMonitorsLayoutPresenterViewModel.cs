@@ -1,11 +1,14 @@
-﻿using System.Windows.Input;
+﻿using System.ComponentModel;
+using System.Windows.Input;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 
 namespace LittleBigMouse.Plugins;
 
-public interface IMonitorsLayoutPresenterViewModel : IPresenterViewModel
+public interface IMonitorsLayoutPresenterViewModel : INotifyPropertyChanged
 {
+    IMainPluginsViewModel MainViewModel { get; }
+
     IDisplayRatio VisualRatio { get; }
 
     IMonitorsLayout Model { get; }

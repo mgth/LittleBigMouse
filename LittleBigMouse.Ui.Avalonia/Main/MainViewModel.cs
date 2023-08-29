@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reactive.Linq;
 using System.Windows.Input;
 using Avalonia.Controls;
 using DynamicData;
@@ -7,22 +8,22 @@ using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
-using MessageBox.Avalonia;
-using MessageBox.Avalonia.Enums;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
+
 public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 {
     public string Title => "Little Big Mouse";
 
-    public MainViewModel(IIconService iconService, ILocalizationService localizationService)
+    public MainViewModel(IMonitorsLayout layout, IIconService iconService, ILocalizationService localizationService)
     {
         IconService = iconService;
         LocalizationService = localizationService;
+        Layout = layout;
         CloseCommand = ReactiveCommand.Create(Close);
 
         //_commandsSource.Connect()
@@ -32,8 +33,6 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         //    .DisposeMany()
         //    .Subscribe();
 
-
-
         MaximizeCommand = ReactiveCommand.Create(() =>
             WindowState = WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal);
     }
@@ -41,12 +40,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     public IIconService IconService { get; }
     public ILocalizationService LocalizationService { get; }
 
-    public IMonitorsLayout? Layout
-    {
-        get => _layout;
-        set => this.RaiseAndSetIfChanged(ref _layout, value);
-    }
-    IMonitorsLayout? _layout;
+    public IMonitorsLayout Layout { get; }
 
     public Type MonitorFrameViewMode
     {
@@ -89,6 +83,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         {
             /* Todo avalonia*/
             //Layout.Save();
+            
             //Application.Current.Shutdown();
         }
 

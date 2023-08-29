@@ -25,7 +25,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
-using HLab.Base.Avalonia;
+using HLab.Base.Avalonia.DependencyHelpers;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors;
 

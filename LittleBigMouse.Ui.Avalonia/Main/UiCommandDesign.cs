@@ -1,5 +1,6 @@
 ﻿using System;
 using Avalonia.Controls;
+using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 

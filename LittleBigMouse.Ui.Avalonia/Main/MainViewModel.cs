@@ -10,6 +10,7 @@ using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Avalonia;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
 using ReactiveUI;
@@ -28,7 +29,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         CloseCommand = ReactiveCommand.Create(Close);
 
         _commandsCache.Connect()
-            .Sort(SortExpressionComparer<UiCommand>.Ascending(t => t.Id))
+            .Sort(SortExpressionComparer<IUiCommand>.Ascending(t => t.Id))
             //.Filter(x => x.Id.ToString().EndsWith('1'))
             .Bind(out _commands)
             .Subscribe().DisposeWith(this);
@@ -114,23 +115,14 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     }
 
     //readonly SourceCache<UiCommand, string> _commandsSource = new(c=>c.Id);
-    readonly ReadOnlyObservableCollection<UiCommand> _commands;
-    public ReadOnlyObservableCollection<UiCommand> Commands => _commands;
+    readonly ReadOnlyObservableCollection<IUiCommand> _commands;
+    public ReadOnlyObservableCollection<IUiCommand> Commands => _commands;
 
-    SourceCache<UiCommand, string> _commandsCache { get; } = new(c => c.Id);
+    SourceCache<IUiCommand, string> _commandsCache { get; } = new(c => c.Id);
 
-    public void AddButton(string id, string iconPath, string toolTipText, ICommand cmd)
+    public void AddButton(IUiCommand command)
     {
-        var command = new UiCommand(id)
-        {
-            IconPath = iconPath,
-            ToolTipText = toolTipText,
-            Command = cmd,
-        };
-
         _commandsCache.AddOrUpdate(command);
-
-        //this.RaisePropertyChanged("Commands");
     }
 
 }

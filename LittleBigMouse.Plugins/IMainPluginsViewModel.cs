@@ -6,7 +6,7 @@ namespace LittleBigMouse.Plugins;
 
 public interface IMainPluginsViewModel
 {
-    void AddButton(string id, string iconPath, string toolTypeText, ICommand cmd);
+    void AddButton(IUiCommand cmd);
 
     Type ContentViewMode { get; set; }
 

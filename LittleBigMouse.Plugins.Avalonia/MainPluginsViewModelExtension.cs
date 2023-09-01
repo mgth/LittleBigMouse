@@ -1,4 +1,5 @@
-﻿using System.Reactive.Linq;
+﻿using System;
+using System.Reactive.Linq;
 using System.Windows.Input;
 using HLab.Mvvm.Annotations;
 using ReactiveUI;
@@ -11,17 +12,34 @@ namespace LittleBigMouse.Plugins.Avalonia
             string toolTypeText)
             where T : ViewMode
         {
-            var command = ReactiveCommand.Create<bool>(b =>
+            var rc = ReactiveCommand.Create<bool>(b =>
                 {
                     if (b)
                         @this.SetMonitorFrameViewMode<T>();
                     else
-                        @this.SetMonitorFrameViewMode<DefaultViewMode>();
+                    {
+                        if(@this.ContentViewMode==typeof(T))
+                            @this.SetMonitorFrameViewMode<DefaultViewMode>();
+                    }
                 }
                 , outputScheduler: RxApp.MainThreadScheduler
                 , canExecute: Observable.Return(true));
 
-            @this.AddButton(id,iconPath,toolTypeText,command);
+
+            var command = new UiCommand(id)
+            {
+                Command = rc,
+                IconPath = iconPath,
+                ToolTipText = toolTypeText,
+            };
+
+            @this.WhenAnyValue(e => e.ContentViewMode).Do(e =>
+            {
+                if (e == typeof(T)) return;
+                command.IsActive = false;
+            }).Subscribe(Console.WriteLine);
+
+            @this.AddButton(command);
         }
 
     }

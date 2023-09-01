@@ -1,9 +1,9 @@
-﻿using ReactiveUI;
-using System.Windows.Input;
+﻿using System.Windows.Input;
+using ReactiveUI;
 
-namespace LittleBigMouse.Ui.Avalonia.Main;
+namespace LittleBigMouse.Plugins.Avalonia;
 
-public class UiCommand : ReactiveObject
+public class UiCommand : ReactiveObject, IUiCommand
 {
     string _iconPath = "";
     string _toolTipText = "";

@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
+using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 

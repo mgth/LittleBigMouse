@@ -1,6 +1,4 @@
 ﻿using Avalonia;
-using Avalonia.Media;
-using DynamicData;
 using HLab.Sys.Windows.API;
 using LittleBigMouse.Zoning;
 using System.Collections.ObjectModel;
@@ -24,7 +22,7 @@ public interface IMonitorsLayout
     /// <summary>
     /// All video sources
     /// </summary>
-    SourceCache<PhysicalSource, string> AllSources { get; }
+    ReadOnlyObservableCollection<PhysicalSource> PhysicalSources { get; }
 
     /// <summary>
     /// 

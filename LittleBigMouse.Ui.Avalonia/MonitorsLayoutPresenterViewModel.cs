@@ -60,6 +60,13 @@ public class MonitorsLayoutPresenterViewModel
 
         ResetLocationsFromSystem = ReactiveCommand.Create(() => Model?.SetLocationsFromSystemConfiguration());
         ResetSizesFromSystem = ReactiveCommand.Create(() => Model?.SetSizesFromSystemConfiguration());
+
+        RefreshCommand = ReactiveCommand.Create(()=> this.test());
+    }
+
+    void test()
+    {
+
     }
 
     public MonitorsLayoutPresenterViewModel():this(new MainViewModelDesign())
@@ -84,6 +91,7 @@ public class MonitorsLayoutPresenterViewModel
 
     public ICommand ResetLocationsFromSystem { get; }
     public ICommand ResetSizesFromSystem { get; }
+    public ICommand RefreshCommand { get; }
 
     public void ConfigureMvvmContext(IMvvmContext ctx)
     {

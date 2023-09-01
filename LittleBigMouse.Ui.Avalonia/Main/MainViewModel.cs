@@ -1,8 +1,10 @@
 ﻿using System;
-using System.Reactive.Linq;
+using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Avalonia.Controls;
 using DynamicData;
+using DynamicData.Binding;
+using HLab.Base.Avalonia.Extensions;
 using HLab.Icons.Avalonia.Icons;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
@@ -19,19 +21,17 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 {
     public string Title => "Little Big Mouse";
 
-    public MainViewModel(IMonitorsLayout layout, IIconService iconService, ILocalizationService localizationService)
+    public MainViewModel(IIconService iconService, ILocalizationService localizationService)
     {
         IconService = iconService;
         LocalizationService = localizationService;
-        Layout = layout;
         CloseCommand = ReactiveCommand.Create(Close);
 
-        //_commandsSource.Connect()
-        //    .Transform(x => x)
-        //    .ObserveOn(RxApp.MainThreadScheduler)
-        //    .Bind(out _commands)
-        //    .DisposeMany()
-        //    .Subscribe();
+        _commandsCache.Connect()
+            .Sort(SortExpressionComparer<UiCommand>.Ascending(t => t.Id))
+            //.Filter(x => x.Id.ToString().EndsWith('1'))
+            .Bind(out _commands)
+            .Subscribe().DisposeWith(this);
 
         MaximizeCommand = ReactiveCommand.Create(() =>
             WindowState = WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal);
@@ -40,14 +40,19 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     public IIconService IconService { get; }
     public ILocalizationService LocalizationService { get; }
 
-    public IMonitorsLayout Layout { get; }
-
-    public Type MonitorFrameViewMode
+    public object? Content
     {
-        get => _monitorFrameViewMode;
-        set => this.RaiseAndSetIfChanged(ref _monitorFrameViewMode, value);
+        get => _content;
+        set => this.RaiseAndSetIfChanged(ref _content, value);
     }
-    Type _monitorFrameViewMode = typeof(DefaultViewMode);
+    object? _content = null;
+
+    public Type ContentViewMode
+    {
+        get => _contentViewMode;
+        set => this.RaiseAndSetIfChanged(ref _contentViewMode, value);
+    }
+    Type _contentViewMode = typeof(DefaultViewMode);
 
     public double VerticalResizerSize => 10.0;
 
@@ -63,11 +68,11 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
     void Close()
     {
-        if (Layout?.Saved ?? true)
-        {
-            // TODO : exit application
-            return;
-        }
+        //if (Layout?.Saved ?? true)
+        //{
+        //    // TODO : exit application
+        //    return;
+        //}
 
         var result = MessageBoxManager
             .GetMessageBoxStandard(
@@ -109,10 +114,10 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     }
 
     //readonly SourceCache<UiCommand, string> _commandsSource = new(c=>c.Id);
-    //readonly ReadOnlyObservableCollection<UiCommand> _commands;
-    //public ReadOnlyObservableCollection<UiCommand> Commands => _commands;
+    readonly ReadOnlyObservableCollection<UiCommand> _commands;
+    public ReadOnlyObservableCollection<UiCommand> Commands => _commands;
 
-    public SourceCache<UiCommand, string> Commands { get; } = new(c => c.Id);
+    SourceCache<UiCommand, string> _commandsCache { get; } = new(c => c.Id);
 
     public void AddButton(string id, string iconPath, string toolTipText, ICommand cmd)
     {
@@ -123,7 +128,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
             Command = cmd,
         };
 
-        Commands.AddOrUpdate(command);
+        _commandsCache.AddOrUpdate(command);
 
         //this.RaisePropertyChanged("Commands");
     }

@@ -71,7 +71,7 @@ public partial class App : Application
 
             c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
 
-            c.Export<MonitorsLayout>().As<IMonitorsLayout>();
+            //c.Export<MonitorsLayout>().As<IMonitorsLayout>();
 
             c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
 

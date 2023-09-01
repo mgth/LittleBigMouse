@@ -108,7 +108,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
                     if (!e) Saved = false;
                 }).Subscribe().DisposeWith(this);
 
-            model.AllSources.Connect()
+            model.PhysicalSources.AsObservableChangeSet()
                 .WhenValueChanged(e => e.Saved)
                 .Do(e =>
                 {

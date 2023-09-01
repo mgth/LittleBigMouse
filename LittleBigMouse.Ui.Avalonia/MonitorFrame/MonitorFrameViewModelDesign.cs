@@ -52,6 +52,8 @@ public class MonitorFrameViewModelDesign : IDesignViewModel
     public SizeDesign Unrotated { get; } = new();
     public ModelDesign? Model { get; } = new();
 
+    IMonitorsLayoutPresenterViewModel? MonitorsPresenter { get; }
+
     public class ModelDesign
     {
         public ModelModelDesign Model { get; } = new();
@@ -77,7 +79,7 @@ public class MonitorFrameViewModelDesign : IDesignViewModel
 
 public class MonitorFrameViewModelDesign2 : MonitorFrameViewModel, IDesignViewModel
 {
-    class MonitorsPresenterDesign : IMonitorsLayoutPresenterViewModel
+    class MonitorsPresenterDesign : IMonitorsLayoutPresenterViewModel, IDesignViewModel
     {
         public IDisplayRatio VisualRatio => new DisplayRatioValue(1.0);
         public IMonitorsLayout Model { get; }

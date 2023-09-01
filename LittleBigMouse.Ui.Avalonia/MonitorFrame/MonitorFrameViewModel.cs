@@ -135,7 +135,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
                     case WallpaperStyle.Tile:
                     
                         result = new WallpaperRenderer(path)
-                            .Measure(MonitorsPresenter.Model.AllSources.Items)
+                            .Measure(MonitorsPresenter.Model.PhysicalSources)
                             .MakeTileWall()
                             .Crop(Model.ActiveSource.Source.InPixel)
                             .ToBitmap();
@@ -152,7 +152,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
                     case WallpaperStyle.Span:
                         result = new WallpaperRenderer(path)
-                            .Measure(MonitorsPresenter.Model.AllSources.Items)
+                            .Measure(MonitorsPresenter.Model.PhysicalSources)
                             .MakeSpanWall()
                             .Crop(Model.ActiveSource.Source.InPixel)
                             .ToBitmap();

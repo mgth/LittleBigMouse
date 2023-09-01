@@ -257,7 +257,7 @@
                 Grid.Column="1" Grid.Row="1" 
                 ClipToBounds="False"
                 ViewClass="{x:Type plugins:IMonitorFrameContentViewClass}"
-                ViewMode="{Binding MonitorsPresenter.MainViewModel.MonitorFrameViewMode, FallbackValue={x:Type annotations:DefaultViewMode}}"
+                ViewMode="{Binding MonitorsPresenter.MainViewModel.ContentViewMode, FallbackValue={x:Type annotations:DefaultViewMode}}"
                 Model="{Binding Model}"
             />
 

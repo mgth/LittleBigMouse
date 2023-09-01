@@ -39,9 +39,6 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public class MainService : IMainService
 {
-    public IMonitorsLayout Layout { get; }
-
-    readonly Func<IMonitorsLayout,IMainPluginsViewModel> _getMainViewModel;
 
     readonly IMvvmService _mvvmService;
     readonly IMonitorsSet _monitorsSet;
@@ -54,9 +51,10 @@ public class MainService : IMainService
     readonly DisplayChangeMonitor _listener = new DisplayChangeMonitor();
     readonly IApplicationLifetime _app;
 
+    readonly Func<IMainPluginsViewModel> _mainViewModelLocator;
+
     public MainService(
-        Func<IMonitorsLayout,IMainPluginsViewModel> mainViewModelGetter,
-        IMonitorsLayout layout,
+        Func<IMainPluginsViewModel> mainViewModelLocator,
         IMvvmService mvvmService,
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
@@ -69,12 +67,11 @@ public class MainService : IMainService
         _littleBigMouseClientService = littleBigMouseClientService;
 
         _mvvmService = mvvmService;
-        _getMainViewModel = mainViewModelGetter;
+        _mainViewModelLocator = mainViewModelLocator;
 
         // Relate service state with notify icon
         _littleBigMouseClientService.StateChanged += _littleBigMouseClientService_StateChanged;
 
-        Layout = layout;
     }
 
     public async Task ShowControlAsync()
@@ -86,7 +83,22 @@ public class MainService : IMainService
             return;
         }
 
-        var viewModel = _getMainViewModel(Layout);
+        IMonitorsLayout layout = new MonitorsLayout();
+        // TODO : move to plugin
+        if (_monitorsSet is MonitorsService s && layout is MonitorsLayout l)
+        {
+            s.UpdateDevices();
+            l.UpdateFrom(s);
+
+            _listener.DisplayChanged += (o, a) =>
+            {
+                s.UpdateDevices();
+                l.UpdateFrom(s);
+            };
+        }
+
+        var viewModel = _mainViewModelLocator();
+        viewModel.Content = layout;
 
         _actions?.Invoke(viewModel);
 
@@ -103,18 +115,6 @@ public class MainService : IMainService
             window.Closed += (s, a) => d.MainWindow = null;
         }
 
-        // TODO : move to plugin
-        if (_monitorsSet is MonitorsService s && Layout is MonitorsLayout l)
-        {
-            s.UpdateDevices();
-            l.UpdateFrom(s);
-
-            _listener.DisplayChanged += (o, a) =>
-            {
-                s.UpdateDevices();
-                l.UpdateFrom(s);
-            };
-        }
 
         window.Show();
 
@@ -124,10 +124,9 @@ public class MainService : IMainService
     {
         _notify.Click += async (s, a) => await ShowControlAsync();
 
-        // TODO 
-        //_notify.AddMenu(-1, "Check for update", CheckUpdate);
+        // TODO : _notify.AddMenu(-1, "Check for update", CheckUpdate);
         _notify.AddMenu(-1, "Open","Icon/Start", ShowControlAsync);
-        _notify.AddMenu(-1, "Start","Icon/Start", () => _littleBigMouseClientService.StartAsync(Layout.ComputeZones()));
+        // TODO : _notify.AddMenu(-1, "Start","Icon/Start", () => _littleBigMouseClientService.StartAsync(Layout.ComputeZones()));
         _notify.AddMenu(-1, "Stop","Icon/Stop", _littleBigMouseClientService.StopAsync);
         _notify.AddMenu(-1, "Exit", "Icon/Stop", QuitAsync);
 

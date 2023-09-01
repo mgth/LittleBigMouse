@@ -79,7 +79,9 @@
                 ClipToBounds="False"
                 >
 
-                <TextBlock Text="{Binding Model.PhysicalMonitors.Count }"></TextBlock>
+                <TextBlock Text="{Binding Model.PhysicalMonitors.Count, FallbackValue=NA }"></TextBlock>
+
+                <Button Command="{Binding RefreshCommand}"></Button>
 
                 <Canvas x:Name="ContentGrid" 
                         ClipToBounds="False"
@@ -89,7 +91,7 @@
                         Height="{Binding Height, Mode=OneWay}"-->
 
                     <ItemsControl 
-                        ItemsSource="{Binding Model.PhysicalMonitors}"
+                        ItemsSource="{Binding Model.PhysicalMonitors, FallbackValue=NA}"
                         ClipToBounds="False"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"

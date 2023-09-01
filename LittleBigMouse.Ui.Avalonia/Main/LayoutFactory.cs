@@ -50,7 +50,7 @@ public static class LayoutFactory
             //TODO : find a way to manage unattached monitors.
             if (!device.AttachedToDesktop) continue;
 
-            var source = layout.AllSources.Items.FirstOrDefault(s => s.DeviceId == device.DeviceId);
+            var source = layout.PhysicalSources.FirstOrDefault(s => s.DeviceId == device.DeviceId);
 
             if (source != null) continue;
 
@@ -80,7 +80,7 @@ public static class LayoutFactory
                 monitor.Sources.Add(source);
             }
 
-            layout.AllSources.AddOrUpdate(source);
+            layout.AddOrUpdatePhysicalSource(source);
         }
 
         layout.SetLocationsFromSystemConfiguration();

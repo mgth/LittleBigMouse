@@ -1,4 +1,5 @@
 ﻿using System.Windows.Input;
+using HLab.Mvvm.Annotations;
 using LittleBigMouse.DisplayLayout.Monitors;
 
 namespace LittleBigMouse.Plugins;
@@ -7,13 +8,13 @@ public interface IMainPluginsViewModel
 {
     void AddButton(string id, string iconPath, string toolTypeText, ICommand cmd);
 
-    Type MonitorFrameViewMode { get; set; }
+    Type ContentViewMode { get; set; }
 
-    IMonitorsLayout Layout { get; }
+    object? Content { get; set; }
 
-    void SetMonitorFrameViewMode<T>()
+    void SetMonitorFrameViewMode<T>() where T : ViewMode
     {
-        MonitorFrameViewMode = typeof(T);
+        ContentViewMode = typeof(T);
     }
 
 }

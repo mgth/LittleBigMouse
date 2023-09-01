@@ -3,6 +3,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -18,7 +19,6 @@ using DynamicData.Binding;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Sys.Windows.API;
-using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Zoning;
 using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
@@ -37,12 +37,23 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
         _physicalMonitorsCache.Connect()
             // Sort Ascending on the OrderIndex property
-            .Sort(SortExpressionComparer<PhysicalMonitor>.Ascending(t => t.Id))
+            //.Sort(SortExpressionComparer<PhysicalMonitor>.Ascending(t => t.Id))
             //.Filter(x => x.Id.ToString().EndsWith('1'))
-            // Bind to our ReadOnlyObservableCollection<T>
+            .StartWithEmpty()
             .Bind(out _physicalMonitors)
-            // Subscribe for changes
-            .Subscribe();
+
+            .Subscribe()
+            //.DisposeWith(this)
+            ;
+
+        _physicalSourcesCache.Connect()
+            // Sort Ascending on the OrderIndex property
+            .Sort(SortExpressionComparer<PhysicalSource>.Ascending(t => t.DeviceId))
+            //.Filter(x => x.Id.ToString().EndsWith('1'))
+            .Bind(out _physicalSources)
+            .Subscribe()
+            //.DisposeWith(this)
+            ;
 
         _physicalMonitorsCache.Connect()
             //.AutoRefresh(e => e.Selected)
@@ -51,7 +62,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
             .Do(ParsePhysicalMonitors)
             .Subscribe().DisposeWith(this);
 
-        AllSources.Connect()
+        _physicalSourcesCache.Connect()
             .AutoRefresh(e => e.Source.EffectiveDpi.Y)
             .AutoRefresh(e => e.Source.EffectiveDpi.Y)
             .AutoRefresh(e => e.PixelToDipRatio)
@@ -85,12 +96,17 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
             .ToProperty(this, e => e.AdjustSpeedAllowed)
             .DisposeWith(this)
             ;
+        ((INotifyCollectionChanged)PhysicalMonitors).CollectionChanged += MonitorsLayout_CollectionChanged;
 
         //_physicalBounds = PhysicalMonitors
         //    .Connect()
         //    .WhenValueChanged(e => e.DepthProjection.Bounds)
         //    .Select(e => ParsePhysicalMonitors(PhysicalMonitors.Items))
         //    .ToProperty(this, e => e.PhysicalBounds);
+    }
+
+    void MonitorsLayout_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
     }
 
     Rect GetOutsideBounds()
@@ -131,7 +147,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     //    }
     //}
 
-    public PhysicalSource PhysicalSourceFromPixel(Point pixel) => AllSources.Items.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
+    public PhysicalSource PhysicalSourceFromPixel(Point pixel) => PhysicalSources.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
 
     public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
 
@@ -213,13 +229,10 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     //}
 
     //        [DataMember] public SourceCache<Monitor, string> AllMonitors => _allMonitors;
-    
-
-    readonly ReadOnlyObservableCollection<PhysicalMonitor> _physicalMonitors;
 
     [JsonIgnore]
     public ReadOnlyObservableCollection<PhysicalMonitor> PhysicalMonitors => _physicalMonitors;
-
+    readonly ReadOnlyObservableCollection<PhysicalMonitor> _physicalMonitors;
     readonly SourceCache<PhysicalMonitor, string> _physicalMonitorsCache = new(m => m.Id);
     public void AddOrUpdatePhysicalMonitor(PhysicalMonitor monitor)
     {
@@ -227,8 +240,13 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     }
 
     [JsonIgnore]
-    public SourceCache<PhysicalSource, string> AllSources { get; } = new(s => s.Source.IdMonitorDevice);
-
+    public ReadOnlyObservableCollection<PhysicalSource> PhysicalSources => _physicalSources;
+    readonly ReadOnlyObservableCollection<PhysicalSource> _physicalSources;
+    readonly SourceCache<PhysicalSource, string> _physicalSourcesCache = new(s => s.Source.IdMonitorDevice);
+    public void AddOrUpdatePhysicalSource(PhysicalSource source)
+    {
+        _physicalSourcesCache.AddOrUpdate(source);
+    }
 
     /// <summary>
     /// Selected physical monitor
@@ -774,10 +792,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     public ZonesLayout ComputeZones()
     {
         var zones = new ZonesLayout();
-        foreach (var source in AllSources.Items)
+        foreach (var source in PhysicalSources)
         {
-            // TODO : avalonia
-
             if (source == source.Monitor.ActiveSource)
                 zones.Zones.Add(new Zone(
                     source.Source.IdMonitorDevice,
@@ -787,7 +803,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
                 ));
         }
 
-        Zone?[] actualZones = zones.Zones.ToArray();
+        var actualZones = zones.Zones.ToArray();
 
         if (LoopX)
         {
@@ -820,4 +836,5 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
         return zones;
     }
+
 }

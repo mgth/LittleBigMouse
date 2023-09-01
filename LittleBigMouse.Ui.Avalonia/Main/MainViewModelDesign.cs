@@ -31,7 +31,7 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public class MainViewModelDesign : MainViewModel
 {
-    public MainViewModelDesign() : base(new MonitorsLayout(), new IconServiceDesign(), new LocalizationServiceDesign())
+    public MainViewModelDesign() : base(new IconServiceDesign(), new LocalizationServiceDesign())
     {
         if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
     }

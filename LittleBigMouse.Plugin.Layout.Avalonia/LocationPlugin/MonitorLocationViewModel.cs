@@ -114,7 +114,7 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
 
         MonitorFrameViewModel.Select();
 
-        foreach (var source in MonitorFrameViewModel.MonitorsPresenter.Model.AllSources.Items)
+        foreach (var source in MonitorFrameViewModel.MonitorsPresenter.Model.PhysicalSources)
         {
             //var area = source.Source.Device.MonitorArea;
             var s = source.Source.InPixel;

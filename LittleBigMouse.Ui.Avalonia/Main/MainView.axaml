@@ -132,7 +132,7 @@
               >
                 <ItemsControl
                     Foreground="{DynamicResource HLab.Brushes.Foreground}"
-				    ItemsSource="{Binding Commands.Items}"
+				    ItemsSource="{Binding Commands}"
                     >
 
                     <ItemsControl.ItemsPanel>
@@ -159,7 +159,7 @@
               ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
               ViewMode="{x:Type annotations:DefaultViewMode}"
 
-              Model="{Binding Layout}"
+              Model="{Binding Content}"
         />
 
         <!--Controls for the layout-->
@@ -171,7 +171,7 @@
 			<mvvm:ViewLocator
 				ViewClass="{x:Type plugins:IMonitorsLayoutControlViewClass}"
 				ViewMode="{x:Type annotations:DefaultViewMode}"
-				Model="{Binding Layout}"
+				Model="{Binding Content}"
                     />
 		</Border>
 

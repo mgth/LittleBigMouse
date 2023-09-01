@@ -79,10 +79,6 @@
                 ClipToBounds="False"
                 >
 
-                <TextBlock Text="{Binding Model.PhysicalMonitors.Count, FallbackValue=NA }"></TextBlock>
-
-                <Button Command="{Binding RefreshCommand}"></Button>
-
                 <Canvas x:Name="ContentGrid" 
                         ClipToBounds="False"
 

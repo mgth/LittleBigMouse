@@ -64,7 +64,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
             selector: saved => true //TODO !saved
             ));
 
-        UndoCommand = ReactiveCommand.Create(Model.Load);
+        UndoCommand = ReactiveCommand.Create(() => Model?.Load());
 
         StartCommand = ReactiveCommand.CreateFromTask(
             StartAsync,

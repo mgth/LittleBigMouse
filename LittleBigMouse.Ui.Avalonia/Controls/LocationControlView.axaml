@@ -7,6 +7,28 @@
              xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
              mc:Ignorable="d" 
              d:DesignHeight="50" d:DesignWidth="800">
+<UserControl.Styles>
+    <Style Selector="ListBox.RadioButtonListBox">
+        <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.RadioButtonListBox ListBoxItem">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Background="Transparent">
+                        <RadioButton Content="{TemplateBinding ContentPresenter.Content}"
+                                     Background="Transparent"
+                                     VerticalAlignment="Center"
+                                     IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</UserControl.Styles>
+
+
+
     <Grid>
         <Design.DataContext>
             <controls:LocationControlViewModel/>
@@ -20,7 +42,7 @@
                 <!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                     <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
                 </StackPanel>-->
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
                     <ToggleSwitch 
                         Content="Horizontal Loop" 
 
@@ -34,7 +56,7 @@
 
                 </StackPanel>
                 
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
                     <ToggleSwitch  
                         Content="Allow overlaps" 
                         IsChecked="{Binding Path=Model.AllowOverlaps, Mode=TwoWay}"/>
@@ -46,7 +68,7 @@
                     <!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
                 </StackPanel>
                 
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
                     <ToggleSwitch 
                         Content="Adjust Speed" 
                         IsEnabled="{Binding Path=Model.AdjustSpeedAllowed}"  
@@ -57,14 +79,23 @@
                         IsEnabled="{Binding Path=Model.AdjustPointerAllowed}" 
                         IsChecked="{Binding Path=Model.AdjustPointer, Mode=TwoWay}"/>
 
-                    <ToggleSwitch 
-                        Content="Allow Corner Crossing"
+                    <!--<ToggleSwitch 
+                        Content="Algorithm"
                         IsChecked="{Binding Path=Model.AllowCornerCrossing, 
-                        Mode=TwoWay}"/>
+                        Mode=TwoWay}"/>-->
+                </StackPanel>
 
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
+                    <Label>Algorithm</Label>
+
+                    <ListBox Classes="RadioButtonListBox" 
+                             Background="Transparent"
+                             ItemsSource="{Binding AlgorithmList}"
+                             SelectedItem="{Binding Model.Algorithm}"
+                             />
                 </StackPanel>
                 
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
                     <ToggleSwitch 
                         Content="Auto Check for update"  
                         IsChecked="{Binding Path=Model.AutoUpdate, Mode=TwoWay}"/>

@@ -24,7 +24,6 @@
 using System;
 using System.Collections.Generic;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Notify.PropertyChanged;
 using HLab.Sys.Windows.Monitors;
 using ReactiveUI;
 

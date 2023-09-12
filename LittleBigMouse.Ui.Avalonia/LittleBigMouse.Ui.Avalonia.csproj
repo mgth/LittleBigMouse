@@ -61,7 +61,12 @@
 		<AvaloniaResource Include="Assets\**" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <AvaloniaResource Remove="Assets\Icon\MainIcon.ico" />
+	</ItemGroup>
+
 <ItemGroup>
+    <Content Include="Assets\MainIcon.ico" />
     <Content Include="MainIcon.ico" />
 </ItemGroup>
 

@@ -41,7 +41,7 @@ public static class PersistencyExtensions
                 @this.Enabled = key.GetValue("Enabled", 0).ToString() == "1";
                 @this.AdjustPointer = key.GetValue("AdjustPointer", 0).ToString() == "1";
                 @this.AdjustSpeed = key.GetValue("AdjustSpeed", 0).ToString() == "1";
-                @this.AllowCornerCrossing = key.GetValue("AllowCornerCrossing", 0).ToString() == "1";
+                @this.Algorithm = key.GetValue("Algorithm", "Strait")?.ToString()??"Strait";
                 @this.AllowOverlaps = key.GetValue("AllowOverlaps", 0).ToString() == "1";
                 @this.AllowDiscontinuity = key.GetValue("AllowDiscontinuity", 0).ToString() == "1";
                 @this.HomeCinema = key.GetValue("HomeCinema", 0).ToString() == "1";
@@ -74,7 +74,7 @@ public static class PersistencyExtensions
         k.SetValue("Enabled",  @this.Enabled ? "1" : "0");
         k.SetValue("AdjustPointer",  @this.AdjustPointer ? "1" : "0");
         k.SetValue("AdjustSpeed", @this.AdjustSpeed ? "1" : "0");
-        k.SetValue("AllowCornerCrossing", @this.AllowCornerCrossing ? "1" : "0");
+        k.SetValue("Algorithm", @this.Algorithm);
         k.SetValue("AllowOverlaps", @this.AllowOverlaps ? "1" : "0");
         k.SetValue("AllowDiscontinuity", @this.AllowDiscontinuity ? "1" : "0");
         k.SetValue("HomeCinema", @this.HomeCinema ? "1" : "0");

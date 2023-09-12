@@ -40,7 +40,7 @@ namespace LittleBigMouse.Zoning
         Quit
     }
 
-    public class DaemonMessage : IXmlSerializable
+    public class DaemonMessage : IZonesSerializable
     {
         public DaemonMessage()
         {
@@ -61,17 +61,17 @@ namespace LittleBigMouse.Zoning
 
         public string Serialize()
         {
-            return XmlSerializer.Serialize(this,e => e.Command, e => e.State, e => e.Payload);
+            return ZoneSerializer.Serialize(this,e => e.Command, e => e.State, e => e.Payload);
         }
     }
 
 
     public interface ILittleBigMouseService
     {
-        Task QuitAsync();
-        Task StartAsync(ZonesLayout layout);
-        Task StopAsync();
-        Task CommandLineAsync(IList<string> args);
+        Task QuitAsync(CancellationToken token = default);
+        Task StartAsync(ZonesLayout layout, CancellationToken token = default);
+        Task StopAsync(CancellationToken token = default);
+        Task CommandLineAsync(IList<string> args, CancellationToken token = default);
     }
 
 }

@@ -1,20 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Serialization;
+using HLab.Remote;
 //using H.Pipes;
 using LittleBigMouse.Zoning;
+using Newtonsoft.Json;
+using static HLab.Sys.Windows.API.WinUser;
 
 namespace LittleBigMouse.DisplayLayout
 {
     public class LittleBigMouseClientService : ILittleBigMouseClientService
     {
         public event EventHandler<LittleBigMouseServiceEventArgs> StateChanged;
-        //private PipeClient<DaemonMessage> _client;
-        NamedPipeClientStream _client;
+        //NamedPipeClientStream _client;
+        RemoteClientSocket _client;
 
         protected void OnStateChanged(LittleBigMouseState state)
         {
@@ -27,30 +34,31 @@ namespace LittleBigMouse.DisplayLayout
 
         public async void Start() => await SendAsync();
 
-        public async Task StartAsync(ZonesLayout layout)
+        public async Task StartAsync(ZonesLayout layout, CancellationToken token = default)
         {
-            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Load, layout));
-            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Run));
+            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Load, layout), _timeout, token);
+            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Run), _timeout, token);
         }
 
-        public async Task StopAsync() => await SendAsync();
+        public async Task StopAsync(CancellationToken token = default) => await SendAsync(token);
 
-        public async Task QuitAsync() => await SendAsync();
+        public async Task QuitAsync(CancellationToken token = default) => await SendAsync(token);
 
         public async Task LoadAtStartupAsync(bool state = true) => await SendAsync();
 
-        public async Task CommandLineAsync(IList<string> args) => await SendAsync();
+        public async Task CommandLineAsync(IList<string> args, CancellationToken token = default) => await SendAsync(token);
 
         public async Task RunningAsync() => await SendAsync();
 
         readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
 
-
-        async Task<bool> StartDaemonAsync()
+        Process _daemonProcess;
+        async Task<bool> StartDaemonAsync(int timeout, CancellationToken token = default)
         {
             //await StopDaemon();
 
-            await _startingSemaphore.WaitAsync();
+            await _startingSemaphore.WaitAsync(token);
+            if (token.IsCancellationRequested) return false;
             try
             {
                 if (_client != null)
@@ -58,61 +66,40 @@ namespace LittleBigMouse.DisplayLayout
                     if (_client.IsConnected) return true;
                     _client = null;
                 }
-                /*
-                var args = Debugger.IsAttached?"debug":"";
-                var module = Process.GetCurrentProcess().MainModule;
-
-                var filename = module?.FileName;
-                if (filename == null) return false;
-
-                filename = filename.Replace(".Control.exe", ".Daemon.exe").Replace(".vshost", "");
-
-                _daemonProcess = new Process
+                
+                //_client = new NamedPipeClientStream(".", "lbm-daemon", PipeDirection.Out);
+                _client = new RemoteClientSocket();
+                _client.MessageReceived += (sender, args) =>
                 {
-                    StartInfo = new ProcessStartInfo(filename)
-                    {
-                        RedirectStandardOutput = true,
-                        RedirectStandardInput = true,
-                        Arguments = args,
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        CreateNoWindow = true,
-                    }
+                    if(args.Contains("Stopped"))
+                        OnStateChanged(LittleBigMouseState.Stopped);
+                    else if(args.Contains("Running"))
+                        OnStateChanged(LittleBigMouseState.Running);
+                    else if(args.Contains("Dead"))
+                        OnStateChanged(LittleBigMouseState.Dead);
                 };
-                if (_daemonProcess == null) return false;
-                if (!_daemonProcess.Responding) return false;
-                if (_daemonProcess.HasExited) return false;
-                */
+                _client.Listen();
 
-                //_client = new PipeClient<DaemonMessage>("lbm-daemon-beta");
-
-                _client = new NamedPipeClientStream(".", "lbm-daemon-beta", PipeDirection.InOut);
-
-                await _client.ConnectAsync();
-
-                new Thread(() =>
-                {
-                    while (true)
-                    {
-                        _client.ReadByte();
-                    }
-
-                }).Start();
-
-                //_client.MessageReceived += (sender, args) => OnStateChanged(args.Message.State);
-
-                //_client.Disconnected += (sender, args) => {};
-
+                await _client.ConnectAsync(timeout, token);
                 return true;
+
+
             }
+            catch (TimeoutException)
+            {
+                return false;
+            }
+
             finally
             {
                 _startingSemaphore.Release();
             }
         }
 
-        async Task StopDaemon()
+        async Task StopDaemon(CancellationToken token = default)
         {
-            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Stop,null));
+            //TODO : Maybe we should not use WithStart here.
+            await SendMessageWithStartAsync(new DaemonMessage(LittleBigMouseCommand.Stop,null), _timeout, token);
         }
 
         void _daemonProcess_Exited(object sender, EventArgs e)
@@ -120,70 +107,44 @@ namespace LittleBigMouse.DisplayLayout
             throw new NotImplementedException();
         }
 
+        readonly int _timeout = 5000;
 
-        Task SendAsync([CallerMemberName]string name = null)
+        Task SendAsync(CancellationToken token = default, [CallerMemberName]string name = null)
         {
             if(name==null) throw new ArgumentNullException(nameof(name));
             if (name.EndsWith("Async")) name = name[..^5];
-            return Enum.TryParse<LittleBigMouseCommand>(name, out var command) ? SendMessageWithStartAsync(new DaemonMessage(command,null)) : Task.CompletedTask;
+            return Enum.TryParse<LittleBigMouseCommand>(name, out var command) ? SendMessageWithStartAsync(
+                new DaemonMessage(command,null),_timeout,token) : Task.CompletedTask;
         }
 
-        async Task SendMessageWithStartAsync(DaemonMessage message)
+        async Task SendMessageWithStartAsync(DaemonMessage message, int timeout, CancellationToken token = default)
         {
-            if (await StartDaemonAsync())
+            if (await StartDaemonAsync(timeout,token))
             {
                 var retry = true;
                 while (retry)
                 {
                     try
                     {
-                        await SendMessageAsync(message);
+                        await SendMessageAsync(message, token);
                         return;
                     }
                     catch (TimeoutException)
                     {
-                        retry = await StartDaemonAsync();
+                        retry = await StartDaemonAsync(timeout,token);
                     }
 
                 }
             }
         }
 
-        async Task SendMessageAsync(DaemonMessage message)
+        async Task SendMessageAsync(DaemonMessage message, CancellationToken token = default)
         {
-            //var serializer = new DataContractSerializer(
-            //    typeof(DaemonMessage),
-            //    new DataContractSerializerSettings() { 
-            //        PreserveObjectReferences = true
-            //        ,
-            //        }
-            //    );
-/*            
-            var serializer = new XmlSerializer(typeof(DaemonMessage));
-            var serializer = new JsonSerializer();
-
-            //var ms = new MemoryStream();
-
-            //var xsn = new XmlSerializerNamespaces();
-            //xsn.Add(string.Empty, string.Empty);
-
-            var ms = new TextWriter();
-
-            serializer.Serialize(ms, message);
-
-            //serializer.WriteObject(ms, message);
-
-            using var sr = new StreamReader(ms);
-
-            ms.Position = 0;
-
-            var xml = await sr.ReadToEndAsync();  */
-
-            var xml = message.Serialize();
+             var xml = message.Serialize();
 
             byte[] messageBytes = Encoding.UTF8.GetBytes(xml);
 
-            await _client.WriteAsync(messageBytes); //.StandardInput.WriteAsync(xml);
+            await _client.SendMessageAsync(xml, token); //.StandardInput.WriteAsync(xml);
         }
 
 

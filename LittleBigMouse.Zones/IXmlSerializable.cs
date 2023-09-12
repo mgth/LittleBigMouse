@@ -11,12 +11,12 @@ using Avalonia;
 
 namespace LittleBigMouse.Zoning
 {
-    public interface IXmlSerializable
+    public interface IZonesSerializable
     {
         string Serialize();
     }
 
-    public class XmlSerializer
+    public class ZoneSerializer
     {
         public static string Serialize<T>(T obj, params Expression<Func<T,object>>[] getters)
         {
@@ -42,7 +42,7 @@ namespace LittleBigMouse.Zoning
 
                     var value = lambda(obj);
 
-                    if(value is IXmlSerializable s)
+                    if(value is IZonesSerializable s)
                     {
                         inside+=$@"<{member.Name}>{s.Serialize()}</{member.Name}>";
                     }
@@ -52,7 +52,7 @@ namespace LittleBigMouse.Zoning
 
                         foreach(var i in en)
                         {
-                            if(i is IXmlSerializable element)
+                            if(i is IZonesSerializable element)
                             {
                                 list += element.Serialize();
                             }
@@ -85,7 +85,7 @@ namespace LittleBigMouse.Zoning
         }
 
 
-        public static string Serialize(IXmlSerializable obj)
+        public static string Serialize(IZonesSerializable obj)
         {
             return obj.Serialize();
         }

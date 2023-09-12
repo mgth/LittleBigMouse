@@ -1,9 +1,25 @@
 #include "LittleBigMouseDaemon.h"
 #include "tinyxml2.h"
 
-void LittleBigMouseDaemon::ReceiveMessage(std::string m)
+LittleBigMouseDaemon::LittleBigMouseDaemon(RemoteServer& server, MouseEngine& engine):_engine(&engine),_remoteServer(&server)
 {
+	_remoteServer->SetDaemon(this);
+	_engine->SetRemoteServer(_remoteServer);
+}
 
+void LittleBigMouseDaemon::Run() const
+{
+	_remoteServer->Start();
+	_remoteServer->Join();
+}
+
+LittleBigMouseDaemon::~LittleBigMouseDaemon()
+{
+	_remoteServer->SetDaemon(nullptr);
+}
+
+void LittleBigMouseDaemon::ReceiveMessage(const std::string& m) const
+{
 	tinyxml2::XMLDocument doc;
 	doc.Parse(m.c_str());
 
@@ -29,25 +45,25 @@ void LittleBigMouseDaemon::ReceiveMessage(std::string m)
 				auto zonesLayout = payloadElement->FirstChildElement("ZonesLayout");
 				if(zonesLayout)
 				{
-					_engine.Stop();
-					_engine.Layout.Load(zonesLayout);
+					_engine->Stop();
+					_engine->Layout.Load(zonesLayout);
 				}
 			}
 		}
 
 		if(command=="Run")
 		{
-			_engine.Start();
+			_engine->Start();
 		}
 
 		if(command=="Stop")
 		{
-			_engine.Stop();
+			_engine->Stop();
 		}
 
-		if(command=="quit")
+		if(command=="Quit")
 		{
-			_engine.Stop();
+			_engine->Stop();
 		}
 	}
 

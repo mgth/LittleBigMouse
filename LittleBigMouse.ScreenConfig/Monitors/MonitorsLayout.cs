@@ -572,17 +572,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     bool _adjustSpeed;
 
     /// <summary>
-    /// Allow cursor to travel diagonally between corners
-    /// </summary>
-    [DataMember]
-    public bool AllowCornerCrossing
-    {
-        get => _allowCornerCrossing;
-        set => SetUnsavedValue(ref _allowCornerCrossing, value);
-    }
-    bool _allowCornerCrossing;
-
-    /// <summary>
     /// Experimental : Sleep monitors not containing mouse cursor after a delay 
     /// </summary>
     [DataMember]
@@ -670,6 +659,19 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     }
     bool _allowDiscontinuity;
 
+    /// <summary>
+    /// algorithm to be used for mouse movements
+    /// - Strait
+    /// - CornerCrossing
+    /// </summary>
+    [DataMember]
+    public string Algorithm 
+    {
+        get => _algorithm;
+        set => SetUnsavedValue(ref _algorithm, value);
+    }
+    string _algorithm;
+
 
     /// <summary>
     /// Maximum effective Horizontal DPI of all screens
@@ -740,6 +742,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
             return new MonitorsLayout();
         }
     }
+
 
 
     public bool IsScheduled()
@@ -833,6 +836,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
         zones.AdjustPointer = AdjustPointer;
         zones.AdjustSpeed = AdjustSpeed;
+        zones.Algorithm = Algorithm;
 
         return zones;
     }

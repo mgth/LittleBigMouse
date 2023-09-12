@@ -1,9 +1,14 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Reflection;
 using System.Windows.Input;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using DynamicData;
 using DynamicData.Binding;
+using ExCSS;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Icons.Avalonia.Icons;
 using HLab.Mvvm.Annotations;
@@ -21,6 +26,7 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 {
     public string Title => "Little Big Mouse";
+    public object MainIcon { get; } = new WindowIcon(AssetLoader.Open(new Uri("avares://LittleBigMouse.Ui.Avalonia/Assets/MainIcon.ico")));
 
     public MainViewModel(IIconService iconService, ILocalizationService localizationService)
     {

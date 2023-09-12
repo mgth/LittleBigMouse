@@ -2,7 +2,7 @@
 
 bool XmlHelper::GetBool(tinyxml2::XMLElement* rectElement, const char* name, bool defaultValue)
 {
-	auto attribut = rectElement->FindAttribute(name);
+	const auto attribut = rectElement->FindAttribute(name);
 	if(attribut)
 	{
 		if(defaultValue)
@@ -26,19 +26,27 @@ bool XmlHelper::GetBool(tinyxml2::XMLElement* rectElement, const char* name, boo
 	return defaultValue;
 }
 
-long XmlHelper::GetLong(tinyxml2::XMLElement* rectElement, const char* name)
+long XmlHelper::GetLong(const tinyxml2::XMLElement* rectElement, const char* name)
 {
-	auto attribut = rectElement->FindAttribute(name);
-	if(attribut)
+	if(const auto attribut = rectElement->FindAttribute(name))
 	{
 		return std::stol(attribut->Value());
 	}
 	return 0;
 }
 
+int XmlHelper::GetInt(const tinyxml2::XMLElement* element, const char* name)
+{
+	if(const auto attribut = element->FindAttribute(name))
+	{
+		return std::stoi(attribut->Value());
+	}
+	return 0;
+}
+
 double XmlHelper::GetDouble(tinyxml2::XMLElement* rectElement, const char* name)
 {
-	auto attribut = rectElement->FindAttribute(name);
+	const auto attribut = rectElement->FindAttribute(name);
 	if(attribut)
 	{
 		return std::stod(attribut->Value());
@@ -48,7 +56,7 @@ double XmlHelper::GetDouble(tinyxml2::XMLElement* rectElement, const char* name)
 
 std::string XmlHelper::GetString(tinyxml2::XMLElement* rectElement, const char* name)
 {
-	auto attribut = rectElement->FindAttribute(name);
+	const auto attribut = rectElement->FindAttribute(name);
 	if(attribut)
 	{
 		return std::string(attribut->Value());
@@ -56,12 +64,12 @@ std::string XmlHelper::GetString(tinyxml2::XMLElement* rectElement, const char* 
 	return "";
 }
 
-Rect<long> XmlHelper::GetRectLong(tinyxml2::XMLElement* parent, const char* name)
+geo::Rect<long> XmlHelper::GetRectLong(tinyxml2::XMLElement* parent, const char* name)
 {
-	auto element = parent->FirstChildElement(name);
+	const auto element = parent->FirstChildElement(name);
 	if(element)
 	{
-		auto rectElement = element->FirstChildElement("Rect");
+		const auto rectElement = element->FirstChildElement("Rect");
 		if(rectElement)
 		{
 			const long left = GetLong(rectElement,"Left");
@@ -69,30 +77,30 @@ Rect<long> XmlHelper::GetRectLong(tinyxml2::XMLElement* parent, const char* name
 			const long width = GetLong(rectElement,"Width");
 			const long height = GetLong(rectElement,"Height");
 
-			return Rect<long>(left,top,width,height);
+			return geo::Rect<long>(left,top,width,height);
 		}
 	}
 
-	return Rect<long>(0,0,0,0);
+	return geo::Rect<long>(0,0,0,0);
 
 }
 
-Rect<double> XmlHelper::GetRectDouble(tinyxml2::XMLElement* parent, const char* name)
+geo::Rect<double> XmlHelper::GetRectDouble(tinyxml2::XMLElement* parent, const char* name)
 {
-	auto element = parent->FirstChildElement(name);
+	const auto element = parent->FirstChildElement(name);
 	if(element)
 	{
-		auto rectElement = element->FirstChildElement("Rect");
+		const auto rectElement = element->FirstChildElement("Rect");
 		if(rectElement)
 		{
-			double left = GetDouble(rectElement,"Left");
-			double top = GetDouble(rectElement,"Top");
-			double width = GetDouble(rectElement,"Width");
-			double height = GetDouble(rectElement,"Height");
+			const double left = GetDouble(rectElement,"Left");
+			const double top = GetDouble(rectElement,"Top");
+			const double width = GetDouble(rectElement,"Width");
+			const double height = GetDouble(rectElement,"Height");
 
-			return Rect<double>(left,top,width,height);
+			return geo::Rect<double>(left,top,width,height);
 		}
 	}
 
-	return Rect<double>(0,0,0,0);
+	return geo::Rect<double>(0,0,0,0);
 }

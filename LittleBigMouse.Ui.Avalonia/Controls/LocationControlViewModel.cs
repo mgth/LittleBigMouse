@@ -27,8 +27,10 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
@@ -54,6 +56,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
     public LocationControlViewModel(ILittleBigMouseClientService service, IMonitorsSet monitorsService)
     {
         _service = service;
+
         _monitorsService = monitorsService;
 
         CopyCommand = ReactiveCommand.CreateFromTask(CopyAsync);
@@ -88,6 +91,20 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
         this.WhenAnyValue(e => e.Model.Saved)
             .Do(e => Saved = e);
 
+        service.StateChanged += Service_StateChanged;
+    }
+
+    void Service_StateChanged(object? sender, LittleBigMouseServiceEventArgs e)
+    {
+        Dispatcher.UIThread.Invoke(new Action(() => 
+                Running = e.State switch
+                {
+                    LittleBigMouseState.Running => true,
+                    LittleBigMouseState.Stopped => false,
+                    LittleBigMouseState.Dead => false,
+                    _ => Running
+                }
+            ));
     }
 
     protected override MonitorsLayout? OnModelChanging(MonitorsLayout? oldModel, MonitorsLayout? newModel)
@@ -173,17 +190,19 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
     {
         Model.Enabled = true;
 
-        //TODO recurse saved value to know if we need to save
-        //if (!Model.Saved)
-        await  SaveAsync();
+        if (!Model.Saved)
+            await  SaveAsync();
 
-        //await _service.StartAsync(Model.ComputeZones());
+        await _service.StartAsync(Model.ComputeZones());
     }
+
     async Task SaveAsync()
     {
-        //TODO recurse saved value to know if we need to save
-        //if (!Model.Saved)
-            Model.Save();
+        await Task.Run(() =>
+        {
+            if (!Model.Saved)
+                Model.Save();
+        });
 
         //await _service.StartAsync(Model.ComputeZones());
     }
@@ -203,6 +222,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     bool _liveUpdate;
 
+    public List<string> AlgorithmList { get; } = new(){"Strait","CornerCrossing"};
 
     void DoLiveUpdate()
     {

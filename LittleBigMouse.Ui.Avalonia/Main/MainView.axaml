@@ -17,100 +17,7 @@
 	</Design.DataContext>
 
 	<Control.Resources>
-        <!--<Style Selector="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}" />
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="SnapsToDevicePixels" Value="True" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Button}">
-                        <Border CornerRadius="4" Background="{TemplateBinding Background}">
-                            <Grid>
-                                
-		                        <Path x:Name="PathIcon" Width="15" Height="25" Stretch="Fill" Fill="#4C87B3" HorizontalAlignment="Left" Margin="17,0,0,0" Data="F1 M 30.0833,22.1667L 50.6665,37.6043L 50.6665,38.7918L 30.0833,53.8333L 30.0833,22.1667 Z "/>
-		
-                                <ContentPresenter x:Name="MyContentPresenter" Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0" />
-                                <Grid x:Name="GridDisabled"/>
-                            </Grid>
-                        </Border>-->
 
-                        
-		<!-- TODO : Avalonia
-						
-						<ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="DimGray" />
-                                <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}" />
-                                -->
-		<!--<Setter TargetName="PathIcon" Property="Fill" Value="Black" />-->
-		<!--
-                            </Trigger>
-
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#373737" />
-                                <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}" />
-                            </Trigger>
-
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5" />
-                            </Trigger>
-
-                        </ControlTemplate.Triggers>-->
-		<!--
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>-->
-
-		<!--<Style Selector="ToggleButton">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}" />
-            <Setter Property="FontSize" Value="15" />
-            -->
-		<!-- TODO Avalonia : <Setter Property="SnapsToDevicePixels" Value="True" />-->
-		<!--
-
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ToggleButton}">
-                        <Border CornerRadius="4" Background="{TemplateBinding Background}">
-                            <Grid>
-                                -->
-		<!--<Path x:Name="PathIcon" Width="15" Height="25" Stretch="Fill" Fill="#4C87B3" HorizontalAlignment="Left" Margin="17,0,0,0" Data="F1 M 30.0833,22.1667L 50.6665,37.6043L 50.6665,38.7918L 30.0833,53.8333L 30.0833,22.1667 Z "/>-->
-		<!--
-                                <ContentPresenter x:Name="MyContentPresenter" Opacity="0.8" Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0" />
-                                <Grid x:Name="GridDisabled"/>
-                            </Grid>
-                        </Border>
-
-                        -->
-		<!-- TODO : Avalonia
-						
-						<ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="DimGray" />
-                                <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}" />
-                                -->
-		<!--<Setter TargetName="PathIcon" Property="Fill" Value="Black" />-->
-		<!--
-                            </Trigger>
-
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource HLab.Brushes.Selected.Background}" />
-                                <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Selected.Foreground}" />
-                            </Trigger>
-
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="GridDisabled" Property="Opacity" Value="0.5" />
-                            </Trigger>
-
-                        </ControlTemplate.Triggers>-->
-		
-                    <!--</ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>-->
 	</Control.Resources>
 
 	<!--<main:ResizeGrid>-->
@@ -121,14 +28,15 @@
 		Row 2 : 
 		Row 3 :
 	-->
-	<Grid RowDefinitions="Auto,*,Auto,Auto" ColumnDefinitions="*">
+	<Grid RowDefinitions="*,Auto,Auto,Auto" ColumnDefinitions="*">
 
 
-        <Grid Grid.Row="0"
+        <Grid Grid.Row="1"
               Grid.Column="0"
               ClipToBounds="False"
               Background="{DynamicResource HLab.Brushes.Header.Active.Background}"
               ColumnDefinitions="*,Auto"
+              HorizontalAlignment="Right"
               >
                 <ItemsControl
                     Foreground="{DynamicResource HLab.Brushes.Foreground}"
@@ -154,7 +62,7 @@
 		<!--<main:PresenterBackground Grid.Row="1"/>-->
 
         <!--Graphical view for the layout-->
-		<mvvm:ViewLocator Grid.Row="1"
+		<mvvm:ViewLocator Grid.Row="0"
 
               ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
               ViewMode="{x:Type annotations:DefaultViewMode}"

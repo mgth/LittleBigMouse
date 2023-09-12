@@ -8,59 +8,71 @@
 #include "Point.h"
 #include "Rect.h"
 
+
+class ZoneLink;
+class ZonesLayout;
+
+
 class Zone
 {
 private:
-	std::unordered_map<Zone*, std::vector<RECT>> _travels;
-	Rect<long> _pixelsBounds;
-	Rect<double> _physicalBounds;
+	std::unordered_map<Zone*, std::vector<geo::Rect<long>>> _travels;
+	geo::Rect<long> _pixelsBounds;
+	geo::Rect<double> _physicalBounds;
 
-	std::vector<RECT> GetTravelPixels(const std::vector<Zone*>& zones, const Zone* target) const;
+	std::vector<geo::Rect<long>> GetTravelPixels(const std::vector<Zone*>& zones, const Zone* target) const;
 
 public:
 
    bool operator==(const Zone& rhs) const noexcept
    {
-      // logic here
-      return this->Name == rhs.Name; // for example
+      return this->Name == rhs.Name; 
    }
 
+	int Id;
 	std::string DeviceId;
 	std::string Name;
 
-	[[nodiscard]] Rect<long> PixelsBounds() const { return _pixelsBounds;}
-	[[nodiscard]] Rect<double> PhysicalBounds() const { return _physicalBounds;}
+	[[nodiscard]] geo::Rect<long> PixelsBounds() const { return _pixelsBounds;}
+	[[nodiscard]] geo::Rect<double> PhysicalBounds() const { return _physicalBounds;}
 
 	Zone* Main;
+	ZoneLink* LeftZones;
+	ZoneLink* TopZones;
+	ZoneLink* RightZones;
+	ZoneLink* BottomZones;
 
 	[[nodiscard]] bool IsMain() const;
 
 	double Dpi;
 
-	void Init();
+	void ComputeDpi();
+	void InitZoneLinks(const ZonesLayout* layout) const;
 
-	Point<double> ToPhysical(Point<long> px) const;
-	POINT ToPixels(Point<double> mm) const;
+	geo::Point<double> ToPhysical(geo::Point<long> px) const;
+	geo::Point<long> ToPixels(geo::Point<double> mm) const;
 
-	POINT CenterPixel() const;
+	geo::Point<long> CenterPixel() const;
 
-	bool Contains(const POINT& pixel) const;
+	bool Contains(const geo::Point<long>& pixel) const;
 
-	bool Contains(const Point<double>& mm) const;
+	bool Contains(const geo::Point<double>& mm) const;
 
-	POINT InsidePixelsBounds(POINT px) const;
-	Point<double> InsidePhysicalBounds(Point<double> mm) const;
+	geo::Point<long> InsidePixelsBounds(geo::Point<long> px) const;
+	geo::Point<double> InsidePhysicalBounds(geo::Point<double> mm) const;
 
-	std::vector<RECT>& TravelPixels(const std::vector<Zone*>& zones, const Zone* target);
+	std::vector<geo::Rect<long>>& TravelPixels(const std::vector<Zone*>& zones, const Zone* target);
 
 
 	Zone(
+		int id,
 		std::string deviceId,
 		std::string name,
-		const Rect<long>& pixelsBounds,
-		const Rect<double>& physicalBounds,
+		const geo::Rect<long>& pixelsBounds,
+		const geo::Rect<double>& physicalBounds,
             Zone* main = nullptr)
-	:_pixelsBounds(pixelsBounds)
+	:Id(id)
+	,_pixelsBounds(pixelsBounds)
 	,_physicalBounds(physicalBounds)
 	,DeviceId(std::move(deviceId))
 	,Name(std::move(name))
@@ -74,10 +86,10 @@ public:
             Dpi = sqrt(dpiX * dpiX + dpiY * dpiY) / sqrt(2);
         }
 
-	~Zone()
-	{
-	}
-	
-	static Zone* GetNewZone(tinyxml2::XMLElement* zoneElement);
+	~Zone();
+
+
+	bool HorizontalReachable(const geo::Point<double>& mm) const;
+	bool VerticalReachable(const geo::Point<double>& mm) const;
 };
 

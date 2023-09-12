@@ -1,48 +1,55 @@
 #pragma once
 #include "HookMouseEventArg.h"
-//#include "MouseHookerWindowsHook.h"
 #include "Windows.h"
 #include "ZonesLayout.h"
 #include <mutex>
 
-#include "RemoteServer.h"
+#include "Rect.h"
+#include "ThreadHost.h"
 
-class MouseEngine
+class RemoteServer;
+
+
+class MouseEngine : public ThreadHost
 {
 
+	RemoteServer* _remote = nullptr;
 
-
-	POINT _oldPoint = POINT{0,0};
+	geo::Point<long> _oldPoint = geo::Point<long>(0,0);
     Zone* _oldZone = nullptr;
 
-	bool _reset = false;
-
-	RECT _oldClipRect = RECT{0,0,0,0};
+	geo::Rect<long> _oldClipRect = geo::Rect<long>::Empty();
 
 	std::mutex _lock;
 	void (MouseEngine::*OnMouseMoveFunc)(HookMouseEventArg& e) = &MouseEngine::OnMouseMoveExtFirst;
 
+	//First mouse event to init position
 	void OnMouseMoveExtFirst(HookMouseEventArg& e);
+	void ResetClip(HookMouseEventArg& e);
 
+	//Mouse movement move least cpu usage strait between monitors
 	void OnMouseMoveStraight(HookMouseEventArg& e);
-	//void OnMouseMoveCross(HookMouseEventArg& e);
-	void StartThread();
 
-	std::thread* _thread = nullptr;
+	//Mouse movement taking care of direction, allows "corner crossing"
+	void OnMouseMoveCross(HookMouseEventArg& e);
 
-	void Send(const std::string& message) const
-	{
-		if(Remote) Remote->Send(message);
-	}
+	//Final move
+	void Move(HookMouseEventArg& e, const geo::Point<long>& pIn, const geo::Point<long>& pOut, const Zone* zoneOut);
+
+	//Final move, cancel leaving monitor
+	void NoZoneMatches(HookMouseEventArg& e);
+
+	void RunThread() override;
+	void DoStop() override;
+	void OnStopped() override;
 
 public:
-	ZonesLayout Layout = ZonesLayout();
-
-	RemoteServer* Remote;
-
+	void Send(const std::string& message) const;
 	void OnMouseMove(HookMouseEventArg& e);
 
-	void Start();
-	void Stop();
+	ZonesLayout Layout = ZonesLayout();
+
+	void SetRemoteServer(RemoteServer* server) {_remote = server;}
+
 };
 

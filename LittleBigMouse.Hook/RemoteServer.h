@@ -1,24 +1,19 @@
 #pragma once
+#include <atomic>
 #include <string>
 
-#include "HookMouseEventArg.h"
-
-constexpr int INPUTBUFFERSIZE = 1024*16;
-constexpr int OUTPUTBUFFERSIZE = 1024*16;
+#include "ThreadHost.h"
 
 class LittleBigMouseDaemon;
 
-class RemoteServer
+class RemoteServer : public ThreadHost
 {
-	HANDLE _outputPipe = INVALID_HANDLE_VALUE;
-	HANDLE _inputPipe = INVALID_HANDLE_VALUE;
+protected:
+	LittleBigMouseDaemon* _daemon = nullptr;
+public:
+	virtual ~RemoteServer() = default;
+	void SetDaemon(LittleBigMouseDaemon* daemon) {_daemon = daemon;}
 
-	public:
-
-	void StartListener(std::string name);
-	void StartNotifier(std::string name);
-	LittleBigMouseDaemon* Daemon = nullptr;
-
-	void Send(const std::string& message) const;
+	virtual void Send(const std::string& message) const = 0;
 };
 

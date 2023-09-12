@@ -6,21 +6,17 @@
 
 class LittleBigMouseDaemon
 {
-	MouseEngine _engine;
-	RemoteServer _remoteServer = RemoteServer();
-
+	MouseEngine* _engine;
+	RemoteServer* _remoteServer;
 
 public:
 
-	LittleBigMouseDaemon()
-	{
-		_remoteServer.Daemon = this;
-		_engine.Remote = &_remoteServer;
-		_remoteServer.StartNotifier("lbm-daemon-beta");
-		_remoteServer.StartListener("lbm-daemon-beta");
-	}
+	LittleBigMouseDaemon(RemoteServer& server, MouseEngine& engine);
 
+	void Run() const;
 
-	void ReceiveMessage(std::string m);
+	~LittleBigMouseDaemon();
+
+	void ReceiveMessage(const std::string& m) const;
 };
 

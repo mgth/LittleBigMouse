@@ -127,7 +127,7 @@ public class MainService : IMainService
         // TODO : _notify.AddMenu(-1, "Check for update", CheckUpdate);
         _notify.AddMenu(-1, "Open","Icon/Start", ShowControlAsync);
         // TODO : _notify.AddMenu(-1, "Start","Icon/Start", () => _littleBigMouseClientService.StartAsync(Layout.ComputeZones()));
-        _notify.AddMenu(-1, "Stop","Icon/Stop", _littleBigMouseClientService.StopAsync);
+        _notify.AddMenu(-1, "Stop","Icon/Stop", () => _littleBigMouseClientService.StopAsync());
         _notify.AddMenu(-1, "Exit", "Icon/Stop", QuitAsync);
 
         _notify.SetIcon("icon/lbm_off",128);

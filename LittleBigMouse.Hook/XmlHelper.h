@@ -10,14 +10,15 @@ class XmlHelper
 public:
 	static bool GetBool(tinyxml2::XMLElement* rectElement, const char* name, bool defaultValue = false);
 
-	static long GetLong(tinyxml2::XMLElement* rectElement, const char* name);
+	static long GetLong(const tinyxml2::XMLElement* rectElement, const char* name);
+	static int GetInt(const tinyxml2::XMLElement* element, const char* name);
 
 	static double GetDouble(tinyxml2::XMLElement* rectElement, const char* name);
 
 	static std::string GetString(tinyxml2::XMLElement* rectElement, const char* name);
 
-	static Rect<long> GetRectLong(tinyxml2::XMLElement* parent, const char* name);
+	static geo::Rect<long> GetRectLong(tinyxml2::XMLElement* parent, const char* name);
 
-	static Rect<double> GetRectDouble(tinyxml2::XMLElement* parent, const char* name);
+	static geo::Rect<double> GetRectDouble(tinyxml2::XMLElement* parent, const char* name);
 };
 

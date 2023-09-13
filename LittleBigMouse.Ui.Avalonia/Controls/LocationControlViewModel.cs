@@ -27,12 +27,12 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia.Extensions;
+using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout;
@@ -43,6 +43,13 @@ using Newtonsoft.Json;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
+
+internal class LocationControlViewModelDesign : LocationControlViewModel, IDesignViewModel
+{
+    public LocationControlViewModelDesign() : base(null, null)
+    {
+    }
+}
 
 internal class LocationControlViewModel : ViewModel<MonitorsLayout>
 {
@@ -64,18 +71,19 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
         SaveCommand = ReactiveCommand.CreateFromTask(
             SaveAsync, 
             this.WhenAnyValue(e => e.Model.Saved, 
-            selector: saved => true //TODO !saved
-            ));
+            selector: saved  => !saved
+            ).ObserveOn(RxApp.MainThreadScheduler));
 
         UndoCommand = ReactiveCommand.Create(() => Model?.Load());
 
         StartCommand = ReactiveCommand.CreateFromTask(
             StartAsync,
-            this.WhenAnyValue(
+            this.
+                WhenAnyValue(
                 e => e.Running,
                 e => e.Model.Saved,
                 (running, saved) => !(running && saved)
-                ));
+                ).ObserveOn(RxApp.MainThreadScheduler));
 
         StopCommand = ReactiveCommand.CreateFromTask(
             _service.StopAsync,
@@ -112,6 +120,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
         if (newModel is { } model)
         {
             model.PhysicalMonitors.AsObservableChangeSet()
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .WhenValueChanged(e => e.Saved)
                 .Do(e =>
                 {
@@ -119,6 +128,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
                 }).Subscribe().DisposeWith(this);
 
             model.PhysicalMonitors.AsObservableChangeSet()
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .WhenValueChanged(e => e.Model.Saved)
                 .Do(e =>
                 {
@@ -126,6 +136,7 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
                 }).Subscribe().DisposeWith(this);
 
             model.PhysicalSources.AsObservableChangeSet()
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .WhenValueChanged(e => e.Saved)
                 .Do(e =>
                 {

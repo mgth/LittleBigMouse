@@ -1,142 +1,172 @@
 ﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.Controls.LocationControlView"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
-             mc:Ignorable="d" 
+             mc:Ignorable="d"
              d:DesignHeight="50" d:DesignWidth="800">
-<UserControl.Styles>
-    <Style Selector="ListBox.RadioButtonListBox">
-        <Setter Property="BorderBrush" Value="Transparent"/>
-    </Style>
-    <Style Selector="ListBox.RadioButtonListBox ListBoxItem">
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate>
-                    <Border Background="Transparent">
-                        <RadioButton Content="{TemplateBinding ContentPresenter.Content}"
-                                     Background="Transparent"
-                                     VerticalAlignment="Center"
-                                     IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-</UserControl.Styles>
+	<UserControl.Styles>
+		<Style Selector="ListBox.RadioButtonListBox">
+			<Setter Property="BorderBrush" Value="Transparent"/>
+		</Style>
+		<Style Selector="ListBox.RadioButtonListBox ListBoxItem">
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate>
+						<Border Background="Transparent">
+							<RadioButton Content="{TemplateBinding ContentPresenter.Content}"
+										 Background="Transparent"
+										 VerticalAlignment="Center"
+										 IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}"/>
+						</Border>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+		</Style>
+		<Style Selector="Button.Command">
+			<Setter Property="MinWidth" Value="50"/>
+			<Setter Property="Margin" Value="5,0,0,0" />
+		</Style>
 
+		<Style Selector="Button.Command:disabled /template/ ContentPresenter">
+			<Setter Property="Background" Value="Transparent"/>
+			<Setter Property="Opacity" Value="0.25"/>
+			<Setter Property="OpacityMask" Value="Black"/>
+		</Style>
+		<Style Selector="StackPanel.Options">
+			<Setter Property="Orientation" Value="Vertical"/>
+			<Setter Property="Margin" Value="5,0,0,0"/>
+			<Setter Property="VerticalAlignment" Value="Top"/>
+		</Style>
+	</UserControl.Styles>
 
+	<Grid>
+		<Design.DataContext>
+			<controls:LocationControlViewModelDesign/>
+		</Design.DataContext>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left" Opacity="0.051" OpacityMask="Gray">
+            <icons:IconView 
+                Foreground="Black"
+				IconMaxHeight="100"
+                Path="icon/lbm_logo" 
+            />
+            <Label>Little Big Mouse</Label>
+        </StackPanel>
 
-    <Grid>
-        <Design.DataContext>
-            <controls:LocationControlViewModel/>
-        </Design.DataContext>
+		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
 
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-
-            <!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
-<!---->
-             <StackPanel Margin="5" HorizontalAlignment="Right" Orientation="Horizontal">
-                <!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+			<!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
+			<!---->
+			<StackPanel Margin="5" HorizontalAlignment="Right" Orientation="Horizontal">
+				<!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                     <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
                 </StackPanel>-->
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
-                    <ToggleSwitch 
-                        Content="Horizontal Loop" 
+				<StackPanel Classes="Options">
+					<ToggleSwitch
+                        Content="Horizontal Loop"
 
-                        IsEnabled="{Binding Path=Model.LoopAllowed}" 
+                        IsEnabled="{Binding Path=Model.LoopAllowed}"
                         IsChecked="{Binding Path=Model.LoopX, Mode=TwoWay}"/>
 
-                    <ToggleSwitch  
-                        Content="Vertical Loop" 
-                        IsEnabled="{Binding Path=Model.LoopAllowed}" 
+					<ToggleSwitch
+                        Content="Vertical Loop"
+                        IsEnabled="{Binding Path=Model.LoopAllowed}"
                         IsChecked="{Binding Path=Model.LoopY, Mode=TwoWay}"/>
+				</StackPanel>
 
-                </StackPanel>
-                
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
-                    <ToggleSwitch  
-                        Content="Allow overlaps" 
+				<StackPanel  Classes="Options">
+					<ToggleSwitch
+                        Content="Allow overlaps"
                         IsChecked="{Binding Path=Model.AllowOverlaps, Mode=TwoWay}"/>
 
-                    <ToggleSwitch  
-                        Content="Allow discontinuity" 
+					<ToggleSwitch
+                        Content="Allow discontinuity"
                         IsChecked="{Binding Path=Model.AllowDiscontinuity, Mode=TwoWay}"/>
 
-                    <!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
-                </StackPanel>
-                
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
-                    <ToggleSwitch 
-                        Content="Adjust Speed" 
-                        IsEnabled="{Binding Path=Model.AdjustSpeedAllowed}"  
+					<!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
+				</StackPanel>
+
+				<StackPanel Classes="Options">
+					<ToggleSwitch
+                        Content="Adjust Speed"
+                        IsEnabled="{Binding Path=Model.AdjustSpeedAllowed}"
                         IsChecked="{Binding Path=Model.AdjustSpeed, Mode=TwoWay}"/>
 
-                    <ToggleSwitch 
-                        Content="Adjust Pointer" 
-                        IsEnabled="{Binding Path=Model.AdjustPointerAllowed}" 
+					<ToggleSwitch
+                        Content="Adjust Pointer"
+                        IsEnabled="{Binding Path=Model.AdjustPointerAllowed}"
                         IsChecked="{Binding Path=Model.AdjustPointer, Mode=TwoWay}"/>
 
-                    <!--<ToggleSwitch 
+					<!--<ToggleSwitch 
                         Content="Algorithm"
                         IsChecked="{Binding Path=Model.AllowCornerCrossing, 
                         Mode=TwoWay}"/>-->
-                </StackPanel>
+				</StackPanel>
 
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
-                    <Label>Algorithm</Label>
+				<StackPanel Classes="Options">
+					<Label>Algorithm</Label>
 
-                    <ListBox Classes="RadioButtonListBox" 
+					<ListBox Classes="RadioButtonListBox"
                              Background="Transparent"
                              ItemsSource="{Binding AlgorithmList}"
                              SelectedItem="{Binding Model.Algorithm}"
                              />
-                </StackPanel>
-                
-                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Top">
-                    <ToggleSwitch 
-                        Content="Auto Check for update"  
+				</StackPanel>
+
+				<StackPanel Classes="Options">
+
+				</StackPanel>
+
+				<StackPanel Classes="Options">
+					<ToggleSwitch
+                        Content="Auto Check for update"
                         IsChecked="{Binding Path=Model.AutoUpdate, Mode=TwoWay}"/>
 
-                    <ToggleSwitch 
-                        Content="Load at startup"  
+					<ToggleSwitch
+                        Content="Load at startup"
                         IsChecked="{Binding Path=Model.LoadAtStartup, Mode=TwoWay}"/>
 
-                    <ToggleSwitch 
-                        Content="Enabled" 
+					<ToggleSwitch
+                        Content="Enabled"
                         IsChecked="{Binding Path=Model.Enabled, Mode=TwoWay}"/>
 
-                </StackPanel>
-                
-            </StackPanel>
-            
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CopyCommand}">
-                <ToolTip.Tip>Copy config to clipboard</ToolTip.Tip>
-                <icons:IconView Height="30" Path="Icon/CopyConfig"/>
-            </Button>
-            
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding SaveCommand}">
-                <ToolTip.Tip>Save</ToolTip.Tip>
-                <icons:IconView Height="30" Path="Icon/Save"/>
-            </Button>
+				</StackPanel>
 
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}">
-                <ToolTip.Tip>Apply/Start</ToolTip.Tip>
-                <icons:IconView Height="30" Path="Icon/Start"/>
-            </Button>
-            
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StopCommand}">
-                <ToolTip.Tip>Stop</ToolTip.Tip>
-                <icons:IconView Height="30" Path="Icon/Stop"/>
-            </Button>
-            
-            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding UndoCommand}">
-                <ToolTip.Tip>Undo</ToolTip.Tip>
-                <icons:IconView Height="30" Path="Icon/Undo"/>
-            </Button>
-        </StackPanel>
+			</StackPanel>
 
-    </Grid>
+			<Button Classes="Command"
+                Command="{Binding CopyCommand}">
+				<ToolTip.Tip>Copy config to clipboard</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/CopyConfig"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding SaveCommand}">
+				<ToolTip.Tip>Save</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Save"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding StartCommand}">
+				<ToolTip.Tip>Apply/Start</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Start"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding StopCommand}">
+				<ToolTip.Tip>Stop</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Stop"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding UndoCommand}">
+				<ToolTip.Tip>Undo</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Undo"/>
+			</Button>
+
+		</StackPanel>
+
+	</Grid>
 </UserControl>

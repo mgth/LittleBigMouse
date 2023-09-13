@@ -1,21 +1,17 @@
 ﻿using System;
 using System.Collections.ObjectModel;
-using System.Reflection;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media.Imaging;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
 using DynamicData;
 using DynamicData.Binding;
-using ExCSS;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Icons.Avalonia.Icons;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
-using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
-using LittleBigMouse.Plugins.Avalonia;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
 using ReactiveUI;
@@ -36,7 +32,6 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
         _commandsCache.Connect()
             .Sort(SortExpressionComparer<IUiCommand>.Ascending(t => t.Id))
-            //.Filter(x => x.Id.ToString().EndsWith('1'))
             .Bind(out _commands)
             .Subscribe().DisposeWith(this);
 
@@ -95,13 +90,20 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         {
             /* Todo avalonia*/
             //Layout.Save();
-            
-            //Application.Current.Shutdown();
+            Shutdown();
         }
 
         if (result == ButtonResult.No)
         {
-            //Application.Current.Shutdown();
+            Shutdown();
+        }
+    }
+
+    public void Shutdown()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktopApp)
+        {
+            desktopApp.Shutdown();
         }
     }
 

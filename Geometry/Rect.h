@@ -116,6 +116,9 @@ namespace geo
 		Rect(const double left, const double top, const double width, const double height) : _left(left), _top(top), _width(width), _height(height)
 		{
 		}
+
+		friend std::ostream& operator<<(std::ostream& os, const Rect<T>& r) { return os << "[" << r.TopLeft() << r.Width << "," <<  r.Height << "]";}
+
 	};
 
 	template<class T>
@@ -124,11 +127,11 @@ namespace geo
 		return (
 			(point.X() >= _left)
 			&&
-			(point.X() - _width <= _left)
+			(point.X() - _width < _left)
 			&&
 			(point.Y() >= _top)
 			&&
-			(point.Y() - _height <= _top)
+			(point.Y() - _height < _top)
 			);
 
 	}

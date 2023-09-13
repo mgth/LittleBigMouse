@@ -8,6 +8,7 @@
         xmlns:mvvm="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
         xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
         xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+        xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
         mc:Ignorable="d"
         Foreground="White"
 >
@@ -28,41 +29,21 @@
 		Row 2 : 
 		Row 3 :
 	-->
-	<Grid RowDefinitions="*,Auto,Auto,Auto" ColumnDefinitions="*">
+	<Grid RowDefinitions="Auto,*,Auto,Auto" ColumnDefinitions="*">
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0.4" EndPoint="1,0.6">
+                <GradientStop Offset="0" Color="Black"/>
+                <GradientStop Offset="0.5" Color="#80808080"/>
+                <GradientStop Offset="0.53" Color="#80606060"/>
+                <GradientStop Offset="1" Color="#40000000"/>
+            </LinearGradientBrush>
+        </Grid.Background>
 
 
-        <Grid Grid.Row="1"
-              Grid.Column="0"
-              ClipToBounds="False"
-              Background="{DynamicResource HLab.Brushes.Header.Active.Background}"
-              ColumnDefinitions="*,Auto"
-              HorizontalAlignment="Right"
-              >
-                <ItemsControl
-                    Foreground="{DynamicResource HLab.Brushes.Foreground}"
-				    ItemsSource="{Binding Commands}"
-                    >
-
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
- 					        <mvvm:ViewLocator Model="{Binding}" ClipToBounds="False"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-
-			    </ItemsControl>
-
-		</Grid>
-
-		<!--<main:PresenterBackground Grid.Row="1"/>-->
+        <avalonia:PluginsControlsView/>
 
         <!--Graphical view for the layout-->
-		<mvvm:ViewLocator Grid.Row="0"
+		<mvvm:ViewLocator Grid.Row="1"
 
               ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
               ViewMode="{x:Type annotations:DefaultViewMode}"

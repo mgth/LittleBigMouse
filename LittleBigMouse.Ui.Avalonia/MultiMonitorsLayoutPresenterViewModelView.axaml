@@ -6,6 +6,7 @@
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:avalonia1="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
              xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
+             xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
              LayoutUpdated="OnLayoutUpdated"
              mc:Ignorable="d" 
              d:DesignHeight="300" 
@@ -21,56 +22,9 @@
     </Design.DataContext>
 
     <Grid ClipToBounds="False">
-        <Grid.Background>
-            <LinearGradientBrush StartPoint="0,0.4" EndPoint="1,0.6">
-                <GradientStop Offset="0" Color="Black"/>
-                <GradientStop Offset="0.5" Color="#80808080"/>
-                <GradientStop Offset="0.53" Color="#80606060"/>
-                <GradientStop Offset="1" Color="#40000000"/>
-            </LinearGradientBrush>
-        </Grid.Background>
 
-        <Grid>
-            <Label FontSize="50" 
-                   VerticalAlignment="Bottom" 
-                   HorizontalAlignment="Center">
+        <main:PresenterBackground/>
 
-                <Grid Opacity="0.3" HorizontalAlignment="Stretch" >
-                    <Border Background="Gray">
-                        
-                        <Border.Effect>
-                            <BlurEffect Radius="50"></BlurEffect>
-                        </Border.Effect>
-                    </Border>
-
-                    <StackPanel 
-                        Opacity="0.4" 
-                        Margin="50,0">
-
-                        <Label>Little</Label>
-
-                        <Label Margin="0,-40" 
-                               FontWeight="Heavy" 
-                               Foreground="AliceBlue" 
-                               FontSize="63"
-                               Content="BIG"/>
-
-                        <Label FontSize="34" 
-                               Foreground="Black" 
-                               FontWeight="Heavy"
-                               Content="Mouse"/>
-
-                    </StackPanel>
-                    <Label 
-                        Margin="-2,-40,0,0" 
-                        Foreground="White" 
-                        FontSize="120" 
-                        HorizontalAlignment="Center">.</Label>
-                </Grid>
-
-            </Label>
-            <icons:IconView Path="icon/lbm_logo" Opacity="0.02"/>
-        </Grid>
 
         <Grid  Margin="30" ClipToBounds="False">
 

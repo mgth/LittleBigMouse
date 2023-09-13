@@ -1,5 +1,6 @@
 #pragma once
 #include <limits>
+#include <ostream>
 
 namespace geo
 {
@@ -20,6 +21,8 @@ namespace geo
 		static Point<T> Empty() { return { (std::numeric_limits<T>::max)(),(std::numeric_limits<T>::max)() }; }
 
 		bool IsEmpty() const { return !(_x < (std::numeric_limits<T>::max)() || _y < (std::numeric_limits<T>::max)()); }
+
+		friend std::ostream& operator<<(std::ostream& os, const Point<T>& p) { return os << "[" << p.X() << "," << p.Y() << "]";}
 	};
 
 

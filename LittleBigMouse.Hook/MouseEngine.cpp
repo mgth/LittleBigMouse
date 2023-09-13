@@ -19,16 +19,20 @@ void MouseEngine::OnMouseMoveExtFirst(HookMouseEventArg& e)
 
 	switch (Layout.Algorithm)
 	{
-		case Strait :
-			OnMouseMoveFunc = &MouseEngine::OnMouseMoveStraight;
-			break;
-		case CornerCrossing:
-			OnMouseMoveFunc = &MouseEngine::OnMouseMoveCross;
+	case Strait:
+		OnMouseMoveFunc = &MouseEngine::OnMouseMoveStraight;
+		break;
+	case CornerCrossing:
+		OnMouseMoveFunc = &MouseEngine::OnMouseMoveCross;
 	}
 }
 
+void MouseEngine::SaveClip(const geo::Rect<long>& r)
+{
+	_oldClipRect = MouseHookerWindowsHook::GetClip();
+}
 
-void MouseEngine::ResetClip(HookMouseEventArg& e)
+void MouseEngine::ResetClip()
 {
 	if (!_oldClipRect.IsEmpty())
 	{
@@ -41,31 +45,38 @@ void MouseEngine::ResetClip(HookMouseEventArg& e)
 void MouseEngine::NoZoneMatches(HookMouseEventArg& e)
 {
 	// Store current clip zone to be restored at next move
-	_oldClipRect = MouseHookerWindowsHook::GetClip();
-	// _reset = true;
-
 	// Clip to current zone to get cursor back
-	MouseHookerWindowsHook::SetClip(_oldZone->PixelsBounds());
-
-	ResetClip(e);
+	SaveClip(_oldZone->PixelsBounds());
 
 	e.Handled = false;// when set to true, cursor stick to frame
+
+#ifdef _DEBUG
+
+	const auto p = _oldZone->ToPhysical(e.Point);
+	std::cout << "NoZoneMatches : " << _oldZone->Name << e.Point << p << "\n";
+
+#endif
+
 }
 
 void MouseEngine::OnMouseMoveCross(HookMouseEventArg& e)
 {
-	const auto pIn = e.Point;
-	ResetClip(e);
+	ResetClip();
 
-	if (_oldZone->PixelsBounds().Contains(pIn))
+
+	if (_oldZone->PixelsBounds().Contains(e.Point))
 	{
-		_oldPoint = pIn;
+#ifdef _DEBUG_
+		std::cout << "no change : " << pIn << "\n";
+#endif
+
+		_oldPoint = e.Point;
 		e.Handled = false;
 		return;
 	}
 
 	const auto pInMmOld = _oldZone->ToPhysical(_oldPoint);
-	const auto pInMm = _oldZone->ToPhysical(pIn);
+	const auto pInMm = _oldZone->ToPhysical(e.Point);
 	const Zone* zoneOut = nullptr;
 
 	//Get line from previous point to current point
@@ -79,41 +90,88 @@ void MouseEngine::OnMouseMoveCross(HookMouseEventArg& e)
 	{
 		// exclude zone we are currently in.
 		if (_oldZone == zone) continue;
-		for (auto p : zone->PhysicalBounds().Intersect(trip))
+
+		// if new point is within zone lets use it (it may append when allowing zones overlap)
+		if (zone->Contains(pOutInMm))
 		{
-			auto travelBox = geo::Rect<double>(pInMmOld,p);
-
-			// check if good direction
-			if(!travelBox.Contains(pInMm)) continue;
-
-			// calculate distance (squared) to retain the intersection with minimal travel distance
-			const auto dist = pow(travelBox.Width(),2) + pow(travelBox.Height(),2);
-
-			if (dist > minDist) continue;
-
-			minDist = dist;
 			zoneOut = zone;
-			pOutInMm = p;
+			minDist = 0;
+			std::cout << "#";
+		}
+		else
+		{
+			//check intersection between the line and the four borders of the target zone
+			for (auto p : zone->PhysicalInside().Intersect(trip))
+			{
+				std::cout << zone->Name << p;
+
+				if (p.X()<pInMmOld.X()) 
+				{
+					if (pInMm.X() > pInMmOld.X()) 
+					{
+						std::cout << "<\n";
+						continue;
+					}
+				}
+				else
+				{
+					if (pInMm.X() < pInMmOld.X()) 
+					{
+						std::cout << ">\n";
+						continue;
+					}
+				}
+
+				if (p.Y()<pInMmOld.Y()) 
+				{
+					if (pInMm.Y() > pInMmOld.Y())
+					{
+						std::cout << "/\\\n";
+						continue;
+					}
+				}
+				else
+				{
+					if (pInMm.Y() < pInMmOld.Y()) 
+					{
+						std::cout << "\\/\n";
+						continue;
+					}
+				}
+
+				// calculate distance (squared) to retain the intersection with minimal travel distance
+				const auto dist = pow(p.X() - pInMm.X(), 2) + pow(p.Y() - pInMm.Y(), 2);
+
+				if (dist > minDist) {
+					std::cout << "+\n";
+					continue;
+				}
+
+				std::cout << "*\n";
+				minDist = dist;
+				zoneOut = zone;
+				pOutInMm = p;
+			}
 		}
 	}
 
-
-	if (zoneOut == nullptr || minDist > pow(100,2) )
+	if (zoneOut == nullptr)// || minDist > pow(100, 2))
 	{
+		std::cout << " - " << pInMmOld << pInMm << " - ";
 		NoZoneMatches(e);
 		return;
 	}
 
 	const auto pOut = zoneOut->ToPixels(pOutInMm);
 
-	Move(e, pIn, pOut, zoneOut);
+	Move(e, pOut, zoneOut);
 }
 
 
 void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
 {
 	const auto pIn = e.Point;
-	ResetClip(e);
+	ResetClip();
 
 	const ZoneLink* zoneOut;
 	geo::Point<long> pOut;
@@ -124,7 +182,7 @@ void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
 		zoneOut = _oldZone->RightZones->AtPixel(pIn.Y());
 		if (zoneOut->Target)
 		{
-			pOut = {zoneOut->Target->PixelsBounds().Left(),zoneOut->ToTargetPixel(pIn.Y())};
+			pOut = { zoneOut->Target->PixelsBounds().Left(),zoneOut->ToTargetPixel(pIn.Y()) };
 		}
 		else
 		{
@@ -138,7 +196,7 @@ void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
 		zoneOut = _oldZone->LeftZones->AtPixel(pIn.Y());
 		if (zoneOut->Target)
 		{
-			pOut = {zoneOut->Target->PixelsBounds().Right() - 1,zoneOut->ToTargetPixel(pIn.Y())};
+			pOut = { zoneOut->Target->PixelsBounds().Right() - 1,zoneOut->ToTargetPixel(pIn.Y()) };
 		}
 		else
 		{
@@ -152,7 +210,7 @@ void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
 		zoneOut = _oldZone->BottomZones->AtPixel(pIn.Y());
 		if (zoneOut->Target)
 		{
-			pOut = {zoneOut->ToTargetPixel(pIn.X()), zoneOut->Target->PixelsBounds().Top()};
+			pOut = { zoneOut->ToTargetPixel(pIn.X()), zoneOut->Target->PixelsBounds().Top() };
 		}
 		else
 		{
@@ -166,7 +224,7 @@ void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
 		zoneOut = _oldZone->TopZones->AtPixel(pIn.X());
 		if (zoneOut->Target)
 		{
-			pOut = {zoneOut->ToTargetPixel(pIn.X()),zoneOut->Target->PixelsBounds().Bottom() - 1};
+			pOut = { zoneOut->ToTargetPixel(pIn.X()),zoneOut->Target->PixelsBounds().Bottom() - 1 };
 		}
 		else
 		{
@@ -181,16 +239,11 @@ void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
 		return;
 	}
 
-#ifdef _DEBUG_
-	std::cout << "to : " << zoneOut->Target->Name << " at " << pOut.X() << "," << pOut.X() /*<< "(" << pInMm.X() << "," << pInMm.Y() << ")\n"*/;
-#endif
-	Move(e, pIn,pOut,zoneOut->Target);
+	Move(e, pOut, zoneOut->Target);
 }
 
-void MouseEngine::Move(HookMouseEventArg& e, const geo::Point<long>& pIn, const geo::Point<long>& pOut, const Zone* zoneOut)
+void MouseEngine::Move(HookMouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut)
 {
-e.StartTiming();
-
 	const auto travel = _oldZone->TravelPixels(Layout.MainZones, zoneOut);
 
 	_oldZone = zoneOut->Main;
@@ -199,7 +252,7 @@ e.StartTiming();
 	const auto r = zoneOut->PixelsBounds();
 
 	_oldClipRect = MouseHookerWindowsHook::GetClip();
-	auto pos = pIn;
+	auto pos = e.Point;
 
 	for (const auto& rect : travel)
 	{
@@ -216,14 +269,14 @@ e.StartTiming();
 	MouseHookerWindowsHook::SetClip(r);
 	MouseHookerWindowsHook::SetMouseLocation(pOut);
 
-
 	_oldClipRect = MouseHookerWindowsHook::GetClip();
 	MouseHookerWindowsHook::SetMouseLocation(pOut);
 
+#ifdef _DEBUG
+	std::cout << "moved : " << zoneOut->Name << " at " << pOut << "\n";
+#endif
+
 	e.Handled = true;
-
-	e.EndTiming();
-
 }
 
 void MouseEngine::RunThread()
@@ -233,27 +286,26 @@ void MouseEngine::RunThread()
 
 void MouseEngine::Send(const std::string& message) const
 {
-	if(_remote) _remote->Send(message);
+	if (_remote) _remote->Send(message);
 }
 
 void MouseEngine::OnMouseMove(HookMouseEventArg& e)
 {
-	e.StartTiming();
 	_lock.lock();
 	(this->*OnMouseMoveFunc)(e);
 	_lock.unlock();
 
-	if(e.Timing())
-	{
-		std::cout << e.GetDuration() << "\n";
-	}
+	//if(e.Timing())
+	//{
+	//	std::cout << e.GetDuration() << "\n";
+	//}
 }
 void MouseEngine::DoStop()
 {
-		MouseHookerWindowsHook::Stopping = true;
+	MouseHookerWindowsHook::Stopping = true;
 }
 
 void MouseEngine::OnStopped()
 {
-		OnMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
+	OnMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
 }

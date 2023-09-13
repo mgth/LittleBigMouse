@@ -28,10 +28,11 @@
     <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.4" />
     <PackageReference Include="Grace" Version="8.0.0-RC837" />
+    <PackageReference Include="Live.Avalonia" Version="1.3.1" />
     <PackageReference Include="MessageBox.Avalonia" Version="3.1.4" />
     <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.7.23375.6" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.0.2" />
-    <PackageReference Include="System.Resources.Extensions" Version="8.0.0-preview.7.23375.6" />
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0-rc.1.23419.4" />
   </ItemGroup>
 
   <ItemGroup>

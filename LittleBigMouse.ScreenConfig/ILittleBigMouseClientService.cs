@@ -24,22 +24,19 @@
 using System;
 using LittleBigMouse.Zoning;
 
-namespace LittleBigMouse.DisplayLayout
+namespace LittleBigMouse.DisplayLayout;
+
+public class LittleBigMouseServiceEventArgs : EventArgs
 {
-    public class LittleBigMouseServiceEventArgs : EventArgs
+    public LittleBigMouseState State { get; }
+
+    public LittleBigMouseServiceEventArgs(LittleBigMouseState state)
     {
-        public LittleBigMouseState State { get; }
-
-        public LittleBigMouseServiceEventArgs(LittleBigMouseState state)
-        {
-            State = state;
-        }
+        State = state;
     }
+}
 
-
-    public interface ILittleBigMouseClientService : ILittleBigMouseService
-    {
-        event EventHandler<LittleBigMouseServiceEventArgs> StateChanged;
-    }
-
+public interface ILittleBigMouseClientService : ILittleBigMouseService
+{
+    event EventHandler<LittleBigMouseServiceEventArgs> StateChanged;
 }

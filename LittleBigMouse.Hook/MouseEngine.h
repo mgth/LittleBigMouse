@@ -25,7 +25,8 @@ class MouseEngine : public ThreadHost
 
 	//First mouse event to init position
 	void OnMouseMoveExtFirst(HookMouseEventArg& e);
-	void ResetClip(HookMouseEventArg& e);
+	void SaveClip(const geo::Rect<long>& r);
+	void ResetClip();
 
 	//Mouse movement move least cpu usage strait between monitors
 	void OnMouseMoveStraight(HookMouseEventArg& e);
@@ -34,7 +35,7 @@ class MouseEngine : public ThreadHost
 	void OnMouseMoveCross(HookMouseEventArg& e);
 
 	//Final move
-	void Move(HookMouseEventArg& e, const geo::Point<long>& pIn, const geo::Point<long>& pOut, const Zone* zoneOut);
+	void Move(HookMouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut);
 
 	//Final move, cancel leaving monitor
 	void NoZoneMatches(HookMouseEventArg& e);

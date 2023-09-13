@@ -19,6 +19,7 @@ private:
 	std::unordered_map<Zone*, std::vector<geo::Rect<long>>> _travels;
 	geo::Rect<long> _pixelsBounds;
 	geo::Rect<double> _physicalBounds;
+	geo::Rect<double> _physicalInside;
 
 	std::vector<geo::Rect<long>> GetTravelPixels(const std::vector<Zone*>& zones, const Zone* target) const;
 
@@ -35,6 +36,7 @@ public:
 
 	[[nodiscard]] geo::Rect<long> PixelsBounds() const { return _pixelsBounds;}
 	[[nodiscard]] geo::Rect<double> PhysicalBounds() const { return _physicalBounds;}
+	[[nodiscard]] geo::Rect<double> PhysicalInside() const { return _physicalInside;}
 
 	Zone* Main;
 	ZoneLink* LeftZones;
@@ -70,21 +72,7 @@ public:
 		std::string name,
 		const geo::Rect<long>& pixelsBounds,
 		const geo::Rect<double>& physicalBounds,
-            Zone* main = nullptr)
-	:Id(id)
-	,_pixelsBounds(pixelsBounds)
-	,_physicalBounds(physicalBounds)
-	,DeviceId(std::move(deviceId))
-	,Name(std::move(name))
-	,Main(main)
-        {
-			if(!Main) Main = this;
-
-            const double dpiX = _pixelsBounds.Width() / (_physicalBounds.Width() / 25.4);
-            const double dpiY = _pixelsBounds.Height() / (_physicalBounds.Height() / 25.4);
-
-            Dpi = sqrt(dpiX * dpiX + dpiY * dpiY) / sqrt(2);
-        }
+            Zone* main = nullptr);
 
 	~Zone();
 

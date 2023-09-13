@@ -23,16 +23,16 @@ void Zone::ComputeDpi()
 
 geo::Point<double> Zone::ToPhysical(const geo::Point<long> px) const
 {
-    auto x = _physicalBounds.Left() + ((static_cast<double>(px.X() - _pixelsBounds.Left())) * _physicalBounds.Width() / static_cast<double>(_pixelsBounds.Width()));
-    auto y = _physicalBounds.Top() + ((static_cast<double>(px.Y() - _pixelsBounds.Top())) * _physicalBounds.Height() / static_cast<double>(_pixelsBounds.Height()));
+    auto x = _physicalBounds.Left() + ((0.5 + static_cast<double>(px.X() - _pixelsBounds.Left())) * _physicalBounds.Width() / static_cast<double>(_pixelsBounds.Width()));
+    auto y = _physicalBounds.Top() + ((0.5 + static_cast<double>(px.Y() - _pixelsBounds.Top())) * _physicalBounds.Height() / static_cast<double>(_pixelsBounds.Height()));
 
     return {x,y};
 }
 
 geo::Point<long> Zone::ToPixels(const geo::Point<double> mm) const
 {
-	const auto x = _pixelsBounds.Left() + static_cast<long>((mm.X() - _physicalBounds.Left()) * static_cast<double>(_pixelsBounds.Width()) / _physicalBounds.Width());
-	const auto y = _pixelsBounds.Top() + static_cast<long>((mm.Y() - _physicalBounds.Top()) * static_cast<double>(_pixelsBounds.Height()) / _physicalBounds.Height());
+	const auto x = _pixelsBounds.Left() + static_cast<long>(((mm.X() - _physicalBounds.Left()) * static_cast<double>(_pixelsBounds.Width()) / _physicalBounds.Width()));
+	const auto y = _pixelsBounds.Top() + static_cast<long>(((mm.Y() - _physicalBounds.Top()) * static_cast<double>(_pixelsBounds.Height()) / _physicalBounds.Height()));
 
     return {x,y};
 }
@@ -101,6 +101,33 @@ std::vector<geo::Rect<long>>& Zone::TravelPixels(const std::vector<Zone*>& zones
     _travels[target->Main] = l;
 
     return l;
+}
+
+Zone::Zone(int id, std::string deviceId, std::string name, const geo::Rect<long>& pixelsBounds,
+	const geo::Rect<double>& physicalBounds, Zone* main):Id(id)
+	                                                     ,_pixelsBounds(pixelsBounds)
+	                                                     ,_physicalBounds(physicalBounds)
+	                                                     ,_physicalInside(physicalBounds)
+	                                                     ,DeviceId(std::move(deviceId))
+	                                                     ,Name(std::move(name))
+	                                                     ,Main(main)
+{
+	if(!Main) Main = this;
+
+	const double dpiX = _pixelsBounds.Width() / (_physicalBounds.Width() / 25.4);
+	const double dpiY = _pixelsBounds.Height() / (_physicalBounds.Height() / 25.4);
+
+	Dpi = sqrt(dpiX * dpiX + dpiY * dpiY) / sqrt(2);
+
+	double pixelWidth = _physicalBounds.Width() / (double)_pixelsBounds.Width();
+	double pixelHeight = _physicalBounds.Height() / (double)_pixelsBounds.Height();
+
+	_physicalInside = geo::Rect<double> (
+		_physicalBounds.Left()+pixelWidth/2,
+		_physicalBounds.Top()+pixelHeight/2,
+		_physicalBounds.Width()-pixelWidth,
+		_physicalBounds.Height()-pixelHeight);
+
 }
 
 

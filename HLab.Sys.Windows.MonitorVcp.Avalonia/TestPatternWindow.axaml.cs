@@ -28,52 +28,51 @@ using Avalonia.Media;
 using HLab.Sys.Windows.Monitors;
 using HLab.Sys.Windows.MonitorVcp.Avalonia;
 
-namespace HLab.Sys.Windows.MonitorVcp
+namespace HLab.Sys.Windows.MonitorVcp;
+
+/// <summary>
+/// Logique d'interaction pour TestPatternWindow.xaml
+/// </summary>
+public partial class TestPatternWindow : Window
 {
-    /// <summary>
-    /// Logique d'interaction pour TestPatternWindow.xaml
-    /// </summary>
-    public partial class TestPatternWindow : Window
+    public TestPatternType PatternType
     {
-        public TestPatternType PatternType
-        {
-            set => Pattern.PatternType = value; get => Pattern.PatternType;
-        }
-        public Color PatternColor
-        {
-            set => Pattern.PatternColorA = value; get => Pattern.PatternColorA;
-        }
-        public TestPatternWindow()
-        {
-            InitializeComponent();
-        }
-
-        void Window_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (sender is not Window win) return;
-
-            if (e.Key == Key.Escape)
-                win.IsVisible = false;
-        }
-
-
-        //TODO
-        public void ShowOnMonitor(MonitorDevice m)
-        {
-            if (m != null)
-            {
-                //Left = s.Bounds.TopLeft.Dip.X;
-                //Top = s.Bounds.TopLeft.Dip.Y;
-                //Width = s.Bounds.BottomRight.Dip.X - s.Bounds.TopLeft.Dip.X;
-                //Height = s.Bounds.BottomRight.Dip.Y - s.Bounds.TopLeft.Dip.Y;
-
-                Show();
-            }
-            else
-            {
-                Hide();
-            }
-        }
-
+        set => Pattern.PatternType = value; get => Pattern.PatternType;
     }
+    public Color PatternColor
+    {
+        set => Pattern.PatternColorA = value; get => Pattern.PatternColorA;
+    }
+    public TestPatternWindow()
+    {
+        InitializeComponent();
+    }
+
+    void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not Window win) return;
+
+        if (e.Key == Key.Escape)
+            win.IsVisible = false;
+    }
+
+
+    //TODO
+    public void ShowOnMonitor(MonitorDevice m)
+    {
+        if (m != null)
+        {
+            //Left = s.Bounds.TopLeft.Dip.X;
+            //Top = s.Bounds.TopLeft.Dip.Y;
+            //Width = s.Bounds.BottomRight.Dip.X - s.Bounds.TopLeft.Dip.X;
+            //Height = s.Bounds.BottomRight.Dip.Y - s.Bounds.TopLeft.Dip.Y;
+
+            Show();
+        }
+        else
+        {
+            Hide();
+        }
+    }
+
 }

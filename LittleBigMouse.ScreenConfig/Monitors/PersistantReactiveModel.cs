@@ -4,9 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace LittleBigMouse.DisplayLayout.Monitors
+namespace LittleBigMouse.DisplayLayout.Monitors;
+
+internal class PersistantReactiveModel
 {
-    internal class PersistantReactiveModel
-    {
-    }
 }

@@ -25,54 +25,52 @@ using System.Runtime.Serialization;
 using DynamicData;
 using Newtonsoft.Json;
 
-namespace HLab.Sys.Windows.Monitors
+namespace HLab.Sys.Windows.Monitors;
+
+[DataContract]
+public class DisplayDevice
 {
-    [DataContract]
-    public class DisplayDevice
+    public DisplayDevice(string deviceName)
     {
-        public DisplayDevice(string deviceName)
-        {
-            DeviceName = deviceName;
-        }
-
-        public DisplayDevice Parent { get; set; }
-
-        /// <summary>
-        /// Device name as returned by EnumDisplayDevices :
-        /// "ROOT", "\\\\.\\DISPLAY1", "\\\\.\\DISPLAY1\monitor0" 
-        /// </summary>
-        [DataMember] public string DeviceName { get; set; }
-
-        /// <summary>
-        /// Device name in human readable format :
-        /// "NVIDIA GeForce RTX 3080 Ti"
-        /// </summary>
-        [DataMember] public string DeviceString { get; set; }
-
-        /// <summary>
-        /// Device id as returned by EnumDisplayDevices :
-        /// "PCI\\VEN_10DE&DEV_2206&SUBSYS_3A3C1458&REV_A1"
-        /// </summary>
-        [DataMember] public string DeviceId { get; set; }
-
-        /// <summary>
-        /// Path to the device registry key :
-        /// "\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Video\\{AC0F00F9-3A6E-11ED-84B1-EBFE3BE9690A}\\0000"
-        /// </summary>
-        [DataMember] public string DeviceKey { get; set; }
-
-        [DataMember] public SourceList<DisplayMode> DisplayModes { get; } = new ();
-
-        /// <summary>
-        /// Device mode as returned by EnumDisplaySettingsEx :
-        /// 
-        /// </summary>
-        [DataMember] public DisplayMode CurrentMode { get; set; }
-
-        [DataMember] public DeviceCaps Capabilities { get; set; }
-        [DataMember] public DeviceState State { get; set; }
-
-        public override string ToString() => DeviceId;
+        DeviceName = deviceName;
     }
-}
 
+    public DisplayDevice Parent { get; set; }
+
+    /// <summary>
+    /// Device name as returned by EnumDisplayDevices :
+    /// "ROOT", "\\\\.\\DISPLAY1", "\\\\.\\DISPLAY1\monitor0" 
+    /// </summary>
+    [DataMember] public string DeviceName { get; set; }
+
+    /// <summary>
+    /// Device name in human readable format :
+    /// "NVIDIA GeForce RTX 3080 Ti"
+    /// </summary>
+    [DataMember] public string DeviceString { get; set; }
+
+    /// <summary>
+    /// Device id as returned by EnumDisplayDevices :
+    /// "PCI\\VEN_10DE&DEV_2206&SUBSYS_3A3C1458&REV_A1"
+    /// </summary>
+    [DataMember] public string DeviceId { get; set; }
+
+    /// <summary>
+    /// Path to the device registry key :
+    /// "\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Video\\{AC0F00F9-3A6E-11ED-84B1-EBFE3BE9690A}\\0000"
+    /// </summary>
+    [DataMember] public string DeviceKey { get; set; }
+
+    [DataMember] public SourceList<DisplayMode> DisplayModes { get; } = new ();
+
+    /// <summary>
+    /// Device mode as returned by EnumDisplaySettingsEx :
+    /// 
+    /// </summary>
+    [DataMember] public DisplayMode CurrentMode { get; set; }
+
+    [DataMember] public DeviceCaps Capabilities { get; set; }
+    [DataMember] public DeviceState State { get; set; }
+
+    public override string ToString() => DeviceId;
+}

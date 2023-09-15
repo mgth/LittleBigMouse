@@ -35,146 +35,145 @@ using HLab.Sys.Windows.API;
 using Microsoft.Win32;
 using ReactiveUI;
 
-namespace HLab.Sys.Windows.Monitors
+namespace HLab.Sys.Windows.Monitors;
+
+[DataContract]
+public class MonitorsService : IMonitorsSet
 {
-    [DataContract]
-    public class MonitorsService : IMonitorsSet
+    public MonitorsService()
     {
-        public MonitorsService()
-        {
-        }
-
-        public IEnumerable<PhysicalAdapter> Adapters => _adapters.Values;
-        readonly ConcurrentDictionary<string,PhysicalAdapter> _adapters = new();
-
-
-        public IEnumerable<DisplayDevice> Devices => _devices.Values;
-        readonly ConcurrentDictionary<string,DisplayDevice> _devices = new();
-
-        public IEnumerable<MonitorDevice> Monitors => _monitors.Values;
-        readonly ConcurrentDictionary<string,MonitorDevice> _monitors = new();
-
-        [DataMember] public Color Background { get; set; }
-
-        [DataMember] public DesktopWallpaperPosition WallpaperPosition { get; set; }
-
-        //IObservableCache<MonitorDevice, string> _attachedMonitors;
-        //public IObservableCache<MonitorDevice,string> AttachedMonitors => _attachedMonitors;    
-        public static IMonitorsSet MonitorsSetDesign => new MonitorsService();
-
-        public DisplayDevice GetOrAddDevice(string deviceId, Func<string,DisplayDevice> get) 
-            => _devices.GetOrAdd(deviceId, get);
-
-        public DisplayDevice? RemoveDevice(string deviceId)
-        {
-            return _devices.TryRemove(deviceId, out var device) ? device : null;
-        }
-
-        public MonitorDevice GetOrAddMonitor(string deviceId, Func<string, MonitorDevice> get)
-            => _monitors.GetOrAdd(deviceId, get);
-
-        public MonitorDevice? RemoveMonitor(string deviceId)
-        {
-            return _monitors.TryRemove(deviceId, out var monitor) ? monitor : null;
-        }
-
-        public PhysicalAdapter GetOrAddAdapter(string deviceId, Func<string, PhysicalAdapter> get)
-            => _adapters.GetOrAdd(deviceId, get);
-
-        public PhysicalAdapter? RemoveAdapter(string deviceId)
-        {
-            return _adapters.TryRemove(deviceId, out var adapter) ? adapter : null;
-        }
-
-        public string AppDataPath(bool create)
-        {
-            var path = Path.Combine(Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData), "LittleBigMouse");
-
-            if (create) Directory.CreateDirectory(path);
-
-            return path;
-        }
-
-        bool ParseWindowsConfig()
-        {
-            using var configurationKey = GetConfigurationKey();
-            if(configurationKey?.GetValue("SetId") is not string setId) return false;
-
-            setId= setId.Trim('\0');
-            var monitorNo = 1;
-
-            var monitors = Monitors.ToList();
-            var idDisplays = setId.Split('+').Reverse();
-            foreach (var idDisplay in idDisplays)
-            {
-                var idMonitors = idDisplay.Split('*').Reverse();
-                DisplayDevice display = null;
-                foreach(var idMonitor in idMonitors)
-                {
-                    var monitor = monitors.FirstOrDefault(m => m.IdMonitor == idMonitor);
-                    if (monitor == null) return false;
-
-                    if(display!=null)
-                    {
-                        if(!ReferenceEquals(display,monitor.AttachedDisplay)) return false;
-                    }
-                    else display = monitor.AttachedDisplay;
-                    
-                    monitor.MonitorNumber = monitorNo++;
-
-                    monitors.Remove(monitor);
-                }
-            }
-            return !monitors.Any();
-        }
-
-        RegistryKey GetConfigurationKey()
-        {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration");
-            foreach(var configurationKeyName in key.GetSubKeyNames())
-            {
-                var configurationKey = key.OpenSubKey(configurationKeyName);
-                if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0')))
-                {
-                    return configurationKey;
-                }
-            }
-            return null;
-        }
-
-        bool MatchConfig(string setId)
-        {
-            var devices = new List<DisplayDevice>();
-
-            var monitors = Monitors.ToList();
-            var idDisplays = setId.Split('+');
-            foreach (var idDisplay in idDisplays)
-            {
-                var idMonitors = idDisplay.Split('*');
-                DisplayDevice display = null;
-                foreach(var idMonitor in idMonitors)
-                {
-                    var monitor = monitors.FirstOrDefault(m => m.IdMonitor == idMonitor);
-                    if (monitor == null) return false;
-
-                    if(display!=null)
-                    {
-                        if(!ReferenceEquals(display,monitor.AttachedDisplay)) return false;
-                    }
-                    else 
-                    {
-                        display = monitor.AttachedDisplay; 
-                        if(devices.Contains(display)) return false;
-                        devices.Add(display);
-                    }
-                    
-                    monitors.Remove(monitor);
-                }
-            }
-            return !monitors.Any();
-        }
-
-
     }
+
+    public IEnumerable<PhysicalAdapter> Adapters => _adapters.Values;
+    readonly ConcurrentDictionary<string,PhysicalAdapter> _adapters = new();
+
+
+    public IEnumerable<DisplayDevice> Devices => _devices.Values;
+    readonly ConcurrentDictionary<string,DisplayDevice> _devices = new();
+
+    public IEnumerable<MonitorDevice> Monitors => _monitors.Values;
+    readonly ConcurrentDictionary<string,MonitorDevice> _monitors = new();
+
+    [DataMember] public Color Background { get; set; }
+
+    [DataMember] public DesktopWallpaperPosition WallpaperPosition { get; set; }
+
+    //IObservableCache<MonitorDevice, string> _attachedMonitors;
+    //public IObservableCache<MonitorDevice,string> AttachedMonitors => _attachedMonitors;    
+    public static IMonitorsSet MonitorsSetDesign => new MonitorsService();
+
+    public DisplayDevice GetOrAddDevice(string deviceId, Func<string,DisplayDevice> get) 
+        => _devices.GetOrAdd(deviceId, get);
+
+    public DisplayDevice? RemoveDevice(string deviceId)
+    {
+        return _devices.TryRemove(deviceId, out var device) ? device : null;
+    }
+
+    public MonitorDevice GetOrAddMonitor(string deviceId, Func<string, MonitorDevice> get)
+        => _monitors.GetOrAdd(deviceId, get);
+
+    public MonitorDevice? RemoveMonitor(string deviceId)
+    {
+        return _monitors.TryRemove(deviceId, out var monitor) ? monitor : null;
+    }
+
+    public PhysicalAdapter GetOrAddAdapter(string deviceId, Func<string, PhysicalAdapter> get)
+        => _adapters.GetOrAdd(deviceId, get);
+
+    public PhysicalAdapter? RemoveAdapter(string deviceId)
+    {
+        return _adapters.TryRemove(deviceId, out var adapter) ? adapter : null;
+    }
+
+    public string AppDataPath(bool create)
+    {
+        var path = Path.Combine(Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData), "LittleBigMouse");
+
+        if (create) Directory.CreateDirectory(path);
+
+        return path;
+    }
+
+    bool ParseWindowsConfig()
+    {
+        using var configurationKey = GetConfigurationKey();
+        if(configurationKey?.GetValue("SetId") is not string setId) return false;
+
+        setId= setId.Trim('\0');
+        var monitorNo = 1;
+
+        var monitors = Monitors.ToList();
+        var idDisplays = setId.Split('+').Reverse();
+        foreach (var idDisplay in idDisplays)
+        {
+            var idMonitors = idDisplay.Split('*').Reverse();
+            DisplayDevice display = null;
+            foreach(var idMonitor in idMonitors)
+            {
+                var monitor = monitors.FirstOrDefault(m => m.IdMonitor == idMonitor);
+                if (monitor == null) return false;
+
+                if(display!=null)
+                {
+                    if(!ReferenceEquals(display,monitor.AttachedDisplay)) return false;
+                }
+                else display = monitor.AttachedDisplay;
+                    
+                monitor.MonitorNumber = monitorNo++;
+
+                monitors.Remove(monitor);
+            }
+        }
+        return !monitors.Any();
+    }
+
+    RegistryKey GetConfigurationKey()
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration");
+        foreach(var configurationKeyName in key.GetSubKeyNames())
+        {
+            var configurationKey = key.OpenSubKey(configurationKeyName);
+            if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0')))
+            {
+                return configurationKey;
+            }
+        }
+        return null;
+    }
+
+    bool MatchConfig(string setId)
+    {
+        var devices = new List<DisplayDevice>();
+
+        var monitors = Monitors.ToList();
+        var idDisplays = setId.Split('+');
+        foreach (var idDisplay in idDisplays)
+        {
+            var idMonitors = idDisplay.Split('*');
+            DisplayDevice display = null;
+            foreach(var idMonitor in idMonitors)
+            {
+                var monitor = monitors.FirstOrDefault(m => m.IdMonitor == idMonitor);
+                if (monitor == null) return false;
+
+                if(display!=null)
+                {
+                    if(!ReferenceEquals(display,monitor.AttachedDisplay)) return false;
+                }
+                else 
+                {
+                    display = monitor.AttachedDisplay; 
+                    if(devices.Contains(display)) return false;
+                    devices.Add(display);
+                }
+                    
+                monitors.Remove(monitor);
+            }
+        }
+        return !monitors.Any();
+    }
+
+
 }

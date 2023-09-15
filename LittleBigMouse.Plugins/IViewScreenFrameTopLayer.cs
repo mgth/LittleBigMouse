@@ -1,6 +1,5 @@
-﻿namespace LittleBigMouse.Plugins
+﻿namespace LittleBigMouse.Plugins;
+
+public interface IViewScreenFrameTopLayer : IMonitorFrameLayerViewClass
 {
-    public interface IViewScreenFrameTopLayer : IMonitorFrameLayerViewClass
-    {
-    }
 }

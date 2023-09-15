@@ -2,41 +2,40 @@
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
-namespace HLab.Sys.Windows.MonitorVcp
+namespace HLab.Sys.Windows.MonitorVcp;
+
+public sealed class LevelParser: IDisposable
 {
-    public sealed class LevelParser: IDisposable
+    Task _task;
+    readonly ConcurrentQueue<MonitorLevel> _actions = new();
+
+    public void Enqueue(MonitorLevel level)
     {
-        Task _task;
-        readonly ConcurrentQueue<MonitorLevel> _actions = new();
+        _actions.Enqueue(level);
+        _task ??= Task.Run(DoWork);
+    }
 
-        public void Enqueue(MonitorLevel level)
+    void DoWork()
+    {
+        var doWork = true;
+        while (doWork)
         {
-            _actions.Enqueue(level);
-            _task ??= Task.Run(DoWork);
-        }
-
-        void DoWork()
-        {
-            var doWork = true;
-            while (doWork)
+            if (_actions.TryDequeue(out var level))
             {
-                if (_actions.TryDequeue(out var level))
-                {
-                    level.DoWork();
-                }
-                else
-                {
-                    doWork = false;
-                }
+                level.DoWork();
+            }
+            else
+            {
+                doWork = false;
             }
         }
-
-        public void Dispose()
-        {
-                while (_actions.TryDequeue(out var l))
-                {
-                }
-        }
-
     }
+
+    public void Dispose()
+    {
+        while (_actions.TryDequeue(out var l))
+        {
+        }
+    }
+
 }

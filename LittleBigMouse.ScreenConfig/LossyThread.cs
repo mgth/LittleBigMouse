@@ -25,55 +25,53 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace LittleBigMouse.DisplayLayout
+namespace LittleBigMouse.DisplayLayout;
+
+public class LossyThread
 {
-    public class LossyThread
+    readonly Queue<ThreadStart> _delegates = new Queue<ThreadStart>();
+
+    Thread _thread;
+    readonly ThreadStart _finnaly;
+
+    readonly object _threadLock = new object();
+
+    public LossyThread(ThreadStart ts = null)
     {
-        readonly Queue<ThreadStart> _delegates = new Queue<ThreadStart>();
+        _finnaly = ts;
+    }
 
-        Thread _thread;
-        readonly ThreadStart _finnaly;
+    public void Add(ThreadStart ts)
+    {
+        lock (_delegates) _delegates.Enqueue(ts);
+        new Thread(Run).Start();
+    }
 
-        readonly object _threadLock = new object();
+    public void Run()
+    {
+        Thread oldThread = null;
 
-        public LossyThread(ThreadStart ts = null)
+        lock (_threadLock)
         {
-            _finnaly = ts;
+            oldThread = _thread;
+            _thread = Thread.CurrentThread;
         }
 
-        public void Add(ThreadStart ts)
+        oldThread?.Join();
+
+        Delegate d = null;
+        lock (_delegates)
         {
-            lock (_delegates) _delegates.Enqueue(ts);
-            new Thread(Run).Start();
+            while (_delegates.Count > 0)
+                d = _delegates.Dequeue();
         }
 
-        public void Run()
+        d?.DynamicInvoke();
+
+        lock (_delegates)
         {
-            Thread oldThread = null;
-
-            lock (_threadLock)
-            {
-                oldThread = _thread;
-                _thread = Thread.CurrentThread;
-            }
-
-            oldThread?.Join();
-
-            Delegate d = null;
-            lock (_delegates)
-            {
-                while (_delegates.Count > 0)
-                    d = _delegates.Dequeue();
-            }
-
-            d?.DynamicInvoke();
-
-            lock (_delegates)
-            {
-                d = _delegates.Count == 0 ? _finnaly : null;
-            }
-            d?.DynamicInvoke();
+            d = _delegates.Count == 0 ? _finnaly : null;
         }
+        d?.DynamicInvoke();
     }
 }
-

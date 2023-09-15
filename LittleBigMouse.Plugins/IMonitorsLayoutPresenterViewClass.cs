@@ -23,10 +23,8 @@
 
 using HLab.Mvvm.Annotations;
 
-namespace LittleBigMouse.Plugins
-{
-    public interface IMonitorsLayoutPresenterViewClass : IViewClass
-    {
-    }
+namespace LittleBigMouse.Plugins;
 
+public interface IMonitorsLayoutPresenterViewClass : IViewClass
+{
 }

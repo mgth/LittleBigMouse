@@ -24,9 +24,8 @@
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 
-namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors
+namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors;
+
+internal class AnchorsViewModel : ViewModel<MonitorsLayout>
 {
-    internal class AnchorsViewModel : ViewModel<MonitorsLayout>
-    {
-    }
 }

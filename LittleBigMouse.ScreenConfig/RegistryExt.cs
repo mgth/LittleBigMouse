@@ -26,70 +26,69 @@ using System.Globalization;
 
 using Microsoft.Win32;
 
-namespace LittleBigMouse.DisplayLayout
+namespace LittleBigMouse.DisplayLayout;
+
+public static class RegistryExt
 {
-    public static class RegistryExt
+    public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null, Action ifLoaded = null)
     {
-        public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null, Action ifLoaded = null)
+        (key, keyName) = key.ParseKeyName(keyName);
+
+        def ??= () => default;
+
+        if (key == null) return def();
+
+        object value = null;
+
+        var sValue = key.GetValue(keyName, "")?.ToString() ?? "";
+        if (sValue == "") return def();
+
+        if (typeof(T) == typeof(double))
         {
-            (key, keyName) = key.ParseKeyName(keyName);
-
-            def ??= () => default;
-
-            if (key == null) return def();
-
-            object value = null;
-
-            var sValue = key.GetValue(keyName, "")?.ToString() ?? "";
-            if (sValue == "") return def();
-
-            if (typeof(T) == typeof(double))
-            {
-                value = double.Parse(sValue, CultureInfo.InvariantCulture);
-            }
-            else if (typeof(T) == typeof(string))
-            {
-                value = sValue;
-            }
-            else if (typeof(T) == typeof(string))
-            {
-                value = sValue == "1";
-            }
-
-            ifLoaded?.Invoke();
-
-            return (T)value;
+            value = double.Parse(sValue, CultureInfo.InvariantCulture);
+        }
+        else if (typeof(T) == typeof(string))
+        {
+            value = sValue;
+        }
+        else if (typeof(T) == typeof(string))
+        {
+            value = sValue == "1";
         }
 
-        static (RegistryKey, string) ParseKeyName(this RegistryKey key, string keyName)
-        {
-            var i = keyName.LastIndexOf('\\');
-            if (i < 0) return (key, keyName);
-            var subKey = keyName[..i];
-            keyName = keyName[(i + 1)..];
-            var sub = key.OpenSubKey(subKey, true) ?? key.CreateSubKey(subKey);
-            return (sub, keyName);
-        }
+        ifLoaded?.Invoke();
 
-        public static void SetKey(this RegistryKey key, string keyName, double value)
-        {
-            (key, keyName) = key.ParseKeyName(keyName);
-            if (double.IsNaN(value)) { key.DeleteValue(keyName, false); }
-            else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
-        }
+        return (T)value;
+    }
+
+    static (RegistryKey, string) ParseKeyName(this RegistryKey key, string keyName)
+    {
+        var i = keyName.LastIndexOf('\\');
+        if (i < 0) return (key, keyName);
+        var subKey = keyName[..i];
+        keyName = keyName[(i + 1)..];
+        var sub = key.OpenSubKey(subKey, true) ?? key.CreateSubKey(subKey);
+        return (sub, keyName);
+    }
+
+    public static void SetKey(this RegistryKey key, string keyName, double value)
+    {
+        (key, keyName) = key.ParseKeyName(keyName);
+        if (double.IsNaN(value)) { key.DeleteValue(keyName, false); }
+        else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
+    }
 
 
-        public static void SetKey(this RegistryKey key, string keyName, string value)
-        {
-            (key, keyName) = key.ParseKeyName(keyName);
-            if (value == null) { key.DeleteValue(keyName, false); }
-            else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
-        }
+    public static void SetKey(this RegistryKey key, string keyName, string value)
+    {
+        (key, keyName) = key.ParseKeyName(keyName);
+        if (value == null) { key.DeleteValue(keyName, false); }
+        else { key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String); }
+    }
 
-        public static void SetKey(this RegistryKey key, string keyName, bool value)
-        {
-            (key, keyName) = key.ParseKeyName(keyName);
-            key.SetValue(keyName, value ? "1" : "0", RegistryValueKind.String);
-        }
+    public static void SetKey(this RegistryKey key, string keyName, bool value)
+    {
+        (key, keyName) = key.ParseKeyName(keyName);
+        key.SetValue(keyName, value ? "1" : "0", RegistryValueKind.String);
     }
 }

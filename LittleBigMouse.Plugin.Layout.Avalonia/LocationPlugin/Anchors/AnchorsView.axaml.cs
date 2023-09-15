@@ -25,16 +25,15 @@ using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors
+namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors;
+
+/// <summary>
+/// Logique d'interaction pour AnchorsView.xaml
+/// </summary>
+public partial class AnchorsView : UserControl , IView<ViewModeMultiScreenBackground, AnchorsViewModel>
 {
-    /// <summary>
-    /// Logique d'interaction pour AnchorsView.xaml
-    /// </summary>
-    public partial class AnchorsView : UserControl , IView<ViewModeMultiScreenBackground, AnchorsViewModel>
+    public AnchorsView()
     {
-        public AnchorsView()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
     }
 }

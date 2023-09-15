@@ -23,14 +23,13 @@
 
 using Avalonia;
 
-namespace HLab.Sys.Windows.Monitors
+namespace HLab.Sys.Windows.Monitors;
+
+public class DeviceCaps
 {
-    public class DeviceCaps
-    {
-        public Size Size { get; set; }
-        public Size Resolution { get; set; }
-        public Size LogPixels { get; set; }
-        public Size Aspect { get; set; }
-        public int BitsPixel { get; set; }
-    }
+    public Size Size { get; set; }
+    public Size Resolution { get; set; }
+    public Size LogPixels { get; set; }
+    public Size Aspect { get; set; }
+    public int BitsPixel { get; set; }
 }

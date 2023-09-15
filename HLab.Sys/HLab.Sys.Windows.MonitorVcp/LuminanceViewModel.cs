@@ -27,149 +27,148 @@ using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
 using ReactiveUI;
 
-namespace HLab.Sys.Windows.MonitorVcp
+namespace HLab.Sys.Windows.MonitorVcp;
+
+public class LuminanceViewModel : ViewModel
 {
-    public class LuminanceViewModel : ViewModel
+    public LuminanceViewModel()
     {
-        public LuminanceViewModel()
-        {
-            _value  = ValueDefault();
-        }
-
-        public IMonitorsSet Monitors { get; set; }
-
-        double ValueDefault()
-        {
-                double l = 0;
-
-                if (Monitors == null) return l;
-
-                foreach (var monitor in Monitors.Monitors)
-                {
-                    var lut = monitor.ProbeLut(); 
-                    lut.Load();
-                    l = Math.Max(l, lut.Luminance);
-                }
-
-                return l;
-         }
-
-        public double Value
-        {
-            get => _value;
-
-            set
-            {
-                if (Monitors == null || Math.Abs(_value - value) < double.Epsilon) return;
-
-                using (DelayChangeNotifications())
-                {
-                    this.RaiseAndSetIfChanged(ref _value, value);
-                    foreach (var monitor in Monitors.Monitors)
-                    {
-                        var lut = monitor.ProbeLut();
-                        //lut.Load();
-                        lut.Luminance = value;
-                    }
-
-                }
-            }
-        }
-        double _value;
-
-        public double Max
-        {
-            get
-            {
-                if (Monitors == null) return 0;
-
-                double max = 0;
-
-                foreach (var monitor in Monitors.Monitors)
-                {
-                    var lut = monitor.ProbeLut();
-                    lut.Load();
-                    max = Math.Max(max, lut.MaxLuminance);
-                }
-                return max;
-            }
-        }
-
-        public double MaxAll
-        {
-            get
-            {
-                if (Monitors == null) return double.MaxValue;
-
-                var max = double.MaxValue;
-
-                foreach (var monitor in Monitors.Monitors)
-                {
-                    var lut = monitor.ProbeLut();
-                    lut.Load();
-                    max = Math.Min(max, lut.MaxLuminance);
-                }
-
-                return max;
-            }
-        }
-
-        public double Min
-        {
-            get
-            {
-                if (Monitors == null) return double.MaxValue;
-
-                var min = double.MaxValue;
-
-                foreach (var monitor in Monitors.Monitors)
-                {
-                    var lut = monitor.ProbeLut();
-                    lut.Load();
-                    min = Math.Min(min, lut.MinLuminance);
-                }
-                return min;
-            }
-        }
-        public double MinAll
-        {
-            get
-            {
-                if (Monitors == null) return 0;
-
-                double min = 0;
-
-                foreach (var monitor in Monitors.Monitors)
-                {
-                    var lut = monitor.ProbeLut();
-                    lut.Load();
-                    min = Math.Max(min, lut.MinLuminance);
-                }
-
-                return min;
-            }
-        }
-
-        // TODO 
-        //public Brush CursorBrush => new SolidColorBrush(AccentColorSet.ActiveSet["SystemAccent"]); //);
-        //public Brush TrackBrush => new SolidColorBrush(AccentColorSet.ActiveSet["SystemAccentLight1"]); //);
-        //public Brush TickBrush => new SolidColorBrush(Colors.White);//AccentColorSet.ActiveSet["ControlScrollbarThumbBorderPressed"]);
-
-        public IEnumerable<double> Ticks
-        {
-            get
-            {
-                if (Monitors is not  null)
-                    foreach (var monitor in Monitors.Monitors)
-                    {
-                        var lut = monitor.ProbeLut();
-                        lut.Load();
-                        yield return lut.MinLuminance;
-                        yield return lut.MaxLuminance;
-                    }
-            }
-        }
-
-
+        _value  = ValueDefault();
     }
+
+    public IMonitorsSet Monitors { get; set; }
+
+    double ValueDefault()
+    {
+        double l = 0;
+
+        if (Monitors == null) return l;
+
+        foreach (var monitor in Monitors.Monitors)
+        {
+            var lut = monitor.ProbeLut(); 
+            lut.Load();
+            l = Math.Max(l, lut.Luminance);
+        }
+
+        return l;
+    }
+
+    public double Value
+    {
+        get => _value;
+
+        set
+        {
+            if (Monitors == null || Math.Abs(_value - value) < double.Epsilon) return;
+
+            using (DelayChangeNotifications())
+            {
+                this.RaiseAndSetIfChanged(ref _value, value);
+                foreach (var monitor in Monitors.Monitors)
+                {
+                    var lut = monitor.ProbeLut();
+                    //lut.Load();
+                    lut.Luminance = value;
+                }
+
+            }
+        }
+    }
+    double _value;
+
+    public double Max
+    {
+        get
+        {
+            if (Monitors == null) return 0;
+
+            double max = 0;
+
+            foreach (var monitor in Monitors.Monitors)
+            {
+                var lut = monitor.ProbeLut();
+                lut.Load();
+                max = Math.Max(max, lut.MaxLuminance);
+            }
+            return max;
+        }
+    }
+
+    public double MaxAll
+    {
+        get
+        {
+            if (Monitors == null) return double.MaxValue;
+
+            var max = double.MaxValue;
+
+            foreach (var monitor in Monitors.Monitors)
+            {
+                var lut = monitor.ProbeLut();
+                lut.Load();
+                max = Math.Min(max, lut.MaxLuminance);
+            }
+
+            return max;
+        }
+    }
+
+    public double Min
+    {
+        get
+        {
+            if (Monitors == null) return double.MaxValue;
+
+            var min = double.MaxValue;
+
+            foreach (var monitor in Monitors.Monitors)
+            {
+                var lut = monitor.ProbeLut();
+                lut.Load();
+                min = Math.Min(min, lut.MinLuminance);
+            }
+            return min;
+        }
+    }
+    public double MinAll
+    {
+        get
+        {
+            if (Monitors == null) return 0;
+
+            double min = 0;
+
+            foreach (var monitor in Monitors.Monitors)
+            {
+                var lut = monitor.ProbeLut();
+                lut.Load();
+                min = Math.Max(min, lut.MinLuminance);
+            }
+
+            return min;
+        }
+    }
+
+    // TODO 
+    //public Brush CursorBrush => new SolidColorBrush(AccentColorSet.ActiveSet["SystemAccent"]); //);
+    //public Brush TrackBrush => new SolidColorBrush(AccentColorSet.ActiveSet["SystemAccentLight1"]); //);
+    //public Brush TickBrush => new SolidColorBrush(Colors.White);//AccentColorSet.ActiveSet["ControlScrollbarThumbBorderPressed"]);
+
+    public IEnumerable<double> Ticks
+    {
+        get
+        {
+            if (Monitors is not  null)
+                foreach (var monitor in Monitors.Monitors)
+                {
+                    var lut = monitor.ProbeLut();
+                    lut.Load();
+                    yield return lut.MinLuminance;
+                    yield return lut.MaxLuminance;
+                }
+        }
+    }
+
+
 }

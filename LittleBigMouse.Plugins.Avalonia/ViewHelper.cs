@@ -25,19 +25,18 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 
-namespace LittleBigMouse.Plugins.Avalonia
+namespace LittleBigMouse.Plugins.Avalonia;
+
+public static class ViewExtensions
 {
-    public static class ViewExtensions
+    public static void OnKeyEnterUpdate(object sender, KeyEventArgs e)
     {
-        public static void OnKeyEnterUpdate(object sender, KeyEventArgs e)
-        {
-            if (e.Key != Key.Enter || sender is not TextBox tb) return;
+        if (e.Key != Key.Enter || sender is not TextBox tb) return;
 
-            AvaloniaProperty prop = TextBox.TextProperty;
-            // TODO :
-            //BindingExpression binding = BindingOperations.GetBindingExpression(tb, prop);
-            //binding?.UpdateSource();
-        }
-
+        AvaloniaProperty prop = TextBox.TextProperty;
+        // TODO :
+        //BindingExpression binding = BindingOperations.GetBindingExpression(tb, prop);
+        //binding?.UpdateSource();
     }
+
 }

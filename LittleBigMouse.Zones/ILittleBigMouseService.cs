@@ -24,54 +24,52 @@
 using System.Runtime.Serialization;
 using System.Xml.Serialization;
 
-namespace LittleBigMouse.Zoning
+namespace LittleBigMouse.Zoning;
+
+public enum LittleBigMouseState
 {
-    public enum LittleBigMouseState
+    Running,
+    Stopped,
+    Dead,
+}
+public enum LittleBigMouseCommand
+{
+    Load,
+    Run,
+    Stop,
+    Quit
+}
+
+public class DaemonMessage : IZonesSerializable
+{
+    public DaemonMessage()
     {
-        Running,
-        Stopped,
-        Dead,
     }
-    public enum LittleBigMouseCommand
+    public DaemonMessage(LittleBigMouseCommand command)
     {
-        Load,
-        Run,
-        Stop,
-        Quit
-    }
-
-    public class DaemonMessage : IZonesSerializable
-    {
-        public DaemonMessage()
-        {
-        }
-        public DaemonMessage(LittleBigMouseCommand command)
-        {
-            Command = command;
-        }
-
-        public DaemonMessage(LittleBigMouseCommand command, ZonesLayout payload)
-        {
-            Command = command;
-            Payload = payload;
-        }
-        public LittleBigMouseCommand Command { get; set; }
-        public LittleBigMouseState State { get; set; }
-        public ZonesLayout? Payload { get; set; }
-
-        public string Serialize()
-        {
-            return ZoneSerializer.Serialize(this,e => e.Command, e => e.State, e => e.Payload);
-        }
+        Command = command;
     }
 
-
-    public interface ILittleBigMouseService
+    public DaemonMessage(LittleBigMouseCommand command, ZonesLayout payload)
     {
-        Task QuitAsync(CancellationToken token = default);
-        Task StartAsync(ZonesLayout layout, CancellationToken token = default);
-        Task StopAsync(CancellationToken token = default);
-        Task CommandLineAsync(IList<string> args, CancellationToken token = default);
+        Command = command;
+        Payload = payload;
     }
+    public LittleBigMouseCommand Command { get; set; }
+    public LittleBigMouseState State { get; set; }
+    public ZonesLayout? Payload { get; set; }
 
+    public string Serialize()
+    {
+        return ZoneSerializer.Serialize(this,e => e.Command, e => e.State, e => e.Payload);
+    }
+}
+
+
+public interface ILittleBigMouseService
+{
+    Task QuitAsync(CancellationToken token = default);
+    Task StartAsync(ZonesLayout layout, CancellationToken token = default);
+    Task StopAsync(CancellationToken token = default);
+    Task CommandLineAsync(IList<string> args, CancellationToken token = default);
 }

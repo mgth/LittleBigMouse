@@ -2,13 +2,14 @@
 using System.Collections.Concurrent;
 using System.Threading;
 using Avalonia.Controls;
+using HLab.Mvvm.Annotations;
 using HLab.Sys.Windows.Monitors;
 using OneOf;
 using ReactiveUI;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
-public class MonitorLevelDesign : MonitorLevel
+public class MonitorLevelDesign : MonitorLevel, IDesignViewModel
 {
     static readonly ConcurrentDictionary<VcpComponent, uint> Components =
         new ();

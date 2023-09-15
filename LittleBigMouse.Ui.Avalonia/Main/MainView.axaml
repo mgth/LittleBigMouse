@@ -8,7 +8,6 @@
         xmlns:mvvm="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
         xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
         xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
-        xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
         mc:Ignorable="d"
         Foreground="White"
 >
@@ -32,7 +31,7 @@
 	<Grid RowDefinitions="Auto,*,Auto,Auto" ColumnDefinitions="*">
         <Grid.Background>
             <LinearGradientBrush StartPoint="0,0.4" EndPoint="1,0.6">
-                <GradientStop Offset="0" Color="Black"/>
+                <GradientStop Offset="0" Color="{DynamicResource ThemeBackgroundColor}"/>
                 <GradientStop Offset="0.5" Color="#80808080"/>
                 <GradientStop Offset="0.53" Color="#80606060"/>
                 <GradientStop Offset="1" Color="#40000000"/>
@@ -40,7 +39,7 @@
         </Grid.Background>
 
 
-        <avalonia:PluginsControlsView/>
+        <main:PluginsControlsView/>
 
         <!--Graphical view for the layout-->
 		<mvvm:ViewLocator Grid.Row="1"

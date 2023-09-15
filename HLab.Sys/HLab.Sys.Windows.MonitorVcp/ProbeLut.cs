@@ -26,6 +26,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Serialization;
+using HLab.Options;
 using HLab.Sys.Argyll;
 using HLab.Sys.Windows.Monitors;
 using ReactiveUI;
@@ -38,7 +39,7 @@ public class ProbeLut : ReactiveObject
 
     readonly MonitorDevice _monitor;
 
-    List<Tune> _lut = new List<Tune>();
+    List<Tune> _lut = new();
 
     internal ProbeLut(MonitorDevice monitor)
     {
@@ -61,9 +62,9 @@ public class ProbeLut : ReactiveObject
         return true;
     }
 
-    public bool RemoveLowBrightness(double maxgain)
+    public bool RemoveLowBrightness(double maxGain)
     {
-        var t = _lut.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain== maxgain));
+        var t = _lut.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain == maxGain));
         if (t == null) return false;
 
         _lut.Remove(t);
@@ -85,7 +86,7 @@ public class ProbeLut : ReactiveObject
         Tune tInf = null;
 
         var i = 0;
-        for (;i<_lut.Count &&  _lut[i].Y < luminance; i++)
+        for (; i < _lut.Count && _lut[i].Y < luminance; i++)
             tInf = _lut[i];
 
         // luminance is more than monitor capabilities
@@ -158,7 +159,7 @@ public class ProbeLut : ReactiveObject
     void SetLuminance(double luminance)
     {
         var t = FromLuminance(luminance);
-        Vcp.Brightness.Value = (uint)Math.Round(t.Brightness,0);
+        Vcp.Brightness.Value = (uint)Math.Round(t.Brightness, 0);
         Vcp.Contrast.Value = (uint)Math.Round(t.Contrast, 0);
         Vcp.Gain.Red.Value = (uint)Math.Round(t.Red, 0);
         Vcp.Gain.Blue.Value = (uint)Math.Round(t.Blue, 0);
@@ -179,56 +180,66 @@ public class ProbeLut : ReactiveObject
         get => _luminance.Value;
         set => SetLuminance(value);
     }
+    readonly ObservableAsPropertyHelper<double> _luminance;
 
-    ObservableAsPropertyHelper<double> _luminance;
+    public double MaxLuminance =>
+        (_lut.Count == 0) ? 1 : _lut.Last().Y;
 
-    public double MaxLuminance => 
-        (_lut.Count==0)?1:_lut.Last().Y;
+    public double MinLuminance =>
+        (_lut.Count == 0) ? 0 : _lut.First().Y;
 
-    public double MinLuminance => 
-        (_lut.Count==0)?0:_lut.First().Y;
+    string ConfigPath(bool create = false)
+    {
+        var path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "LittleBigMouse"
+        );
+        path = Path.Combine(path, _monitor.ConfigPath());
+        path = Path.Combine(path, "Luminance.xml");
 
-    public string ConfigPath => Path.Combine(_monitor.ConfigPath(true), "Luminance.xml") ;
+        if(create) Directory.CreateDirectory(path);
+
+        return path;
+    }
 
     public void Save()
     {
         var serializer = new XmlSerializer(typeof(List<Tune>));
-        using (TextWriter writer = new StreamWriter(ConfigPath))
-        {
-            serializer.Serialize(writer, _lut);
-        }
+        using TextWriter writer = new StreamWriter(ConfigPath(true));
+
+        serializer.Serialize(writer, _lut);
     }
 
     public void Load()
     {
         var deserializer = new XmlSerializer(typeof(List<Tune>));
+        using TextReader reader = new StreamReader(ConfigPath());
         try
         {
-            TextReader reader = new StreamReader(ConfigPath);
-            _lut = (List<Tune>) deserializer.Deserialize(reader);
+            _lut = (List<Tune>)deserializer.Deserialize(reader);
             reader.Close();
         }
         catch (FileNotFoundException)
         {
             _lut = new List<Tune>
             {
-                new Tune
+                new()
                 {
                     Brightness = MinLuminance,
                     Y = 0,
-                    Red = Vcp.Gain?.Red.Value??0,
-                    Blue = Vcp.Gain?.Blue.Value??0,
-                    Green = Vcp.Gain?.Green.Value??0,
-                    Contrast = Vcp.Contrast?.Value??0
+                    Red = Vcp.Gain?.Red.Value ?? 0,
+                    Blue = Vcp.Gain?.Blue.Value ?? 0,
+                    Green = Vcp.Gain?.Green.Value ?? 0,
+                    Contrast = Vcp.Contrast?.Value ?? 0
                 },
-                new Tune
+                new()
                 {
                     Brightness = MaxLuminance,
                     Y = 160,
-                    Red = Vcp.Gain?.Red.Value??0,
-                    Blue = Vcp.Gain?.Blue.Value??0,
-                    Green = Vcp.Gain?.Green.Value??0,
-                    Contrast = Vcp.Contrast?.Value??0
+                    Red = Vcp.Gain?.Red.Value ?? 0,
+                    Blue = Vcp.Gain?.Blue.Value ?? 0,
+                    Green = Vcp.Gain?.Green.Value ?? 0,
+                    Contrast = Vcp.Contrast?.Value ?? 0
                 },
             };
         }

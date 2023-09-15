@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Layout;
 using Avalonia.Media;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Sys.Windows.Monitors;
 using HLab.Sys.Windows.MonitorVcp.Avalonia;
 using ReactiveUI;
 
@@ -13,11 +12,9 @@ public class TestPatternButtonViewModel : ViewModel<TestPattern>
 {
     readonly VcpScreenViewModel _target;
 
-
     public TestPatternButtonViewModel(VcpScreenViewModel target)
     {
         _target = target;
-
         TestPatternCommand = ReactiveCommand.Create<TestPattern>(ShowTestPattern);
     }
 
@@ -84,39 +81,42 @@ public class TestPatternButtonViewModel : ViewModel<TestPattern>
     // TODO : respect mvvm pattern 
     public void ShowTestPattern(TestPattern pattern)
     {
-        if (_target.TestPatternPanel != null)
+        if (_target.TestPatternPanel == null)
         {
+            var x = (_target.Model.ActiveSource.Source.InPixel.X + _target.Model.ActiveSource.Source.InPixel.Center.X) /
+                    2;
+            var y = (_target.Model.ActiveSource.Source.InPixel.Y + _target.Model.ActiveSource.Source.InPixel.Center.Y) /
+                    2;
 
-            if (_target.TestPatternPanel.Content is TestPattern p)
-            {
-                if (p.PatternColorA == pattern.PatternColorA
-                    && p.PatternColorB == pattern.PatternColorB
-                    && p.PatternType == pattern.PatternType
-                    && p.Rgb == pattern.Rgb
-                    && p.Orientation == pattern.Orientation
-                   )
-                {
-                    _target.TestPatternPanel?.Close();
-                    _target.TestPatternPanel = null;
-                    return;
-                }
-                else
-                {
-                    p.PatternColorA = pattern.PatternColorA;
-                    p.PatternColorB = pattern.PatternColorB;
-                    p.PatternType = pattern.PatternType;
-                    p.Rgb = pattern.Rgb;
-                    p.Orientation = pattern.Orientation;
-                }
-            }
+
+
+            var w = pattern.Show(new PixelPoint((int)x, (int)y));
+
+            w.Closing += (o, a) => { _target.TestPatternPanel = null; };
+            _target.TestPatternPanel = w;
+
         }
         else
         {
-            var x = (_target.Model.ActiveSource.Source.InPixel.X + _target.Model.ActiveSource.Source.InPixel.Center.X) / 2;
-            var y = (_target.Model.ActiveSource.Source.InPixel.Y + _target.Model.ActiveSource.Source.InPixel.Center.Y) / 2;
+            if (_target.TestPatternPanel.Content is not TestPattern p) return;
 
-            var area = new Rect(new Point(x,y),new Size(1,1));
-            _target.TestPatternPanel = pattern.Show(area);
+            if (p.PatternColorA == pattern.PatternColorA
+                && p.PatternColorB == pattern.PatternColorB
+                && p.PatternType == pattern.PatternType
+                && p.Rgb == pattern.Rgb
+                && p.Orientation == pattern.Orientation
+               )
+            {
+                _target.TestPatternPanel?.Close();
+                _target.TestPatternPanel = null;
+                return;
+            }
+
+            p.PatternColorA = pattern.PatternColorA;
+            p.PatternColorB = pattern.PatternColorB;
+            p.PatternType = pattern.PatternType;
+            p.Rgb = pattern.Rgb;
+            p.Orientation = pattern.Orientation;
         }
     }
 

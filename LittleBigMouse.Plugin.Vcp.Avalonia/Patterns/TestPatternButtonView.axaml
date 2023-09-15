@@ -15,12 +15,13 @@
     <Button
         Command="{Binding TestPatternCommand}" 
         CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
-        <avalonia:TestPattern Height="28" Width="50"
-                                PatternColorA="{Binding ColorA}"
-                                PatternColorB="{Binding ColorB}"
-                                PatternType="{Binding TestPatternType}"
-                                Rgb ="{Binding Rgb}"
-                                Orientation="{Binding Orientation}"
-                                />
+        <avalonia:TestPattern 
+            Height="28" Width="50"
+            PatternColorA="{Binding ColorA}"
+            PatternColorB="{Binding ColorB}"
+            PatternType="{Binding TestPatternType}"
+            Rgb ="{Binding Rgb}"
+            Orientation="{Binding Orientation}"
+            />
     </Button>
 </UserControl>

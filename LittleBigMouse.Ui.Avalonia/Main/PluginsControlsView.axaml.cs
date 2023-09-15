@@ -1,8 +1,6 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml;
 
-namespace LittleBigMouse.Ui.Avalonia;
+namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public partial class PluginsControlsView : UserControl
 {

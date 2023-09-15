@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
 using Avalonia;
@@ -137,19 +138,11 @@ public class MonitorDevice {
         }
     }
 
-    public string ConfigPath(bool create = false) {
-        throw new NotImplementedException();
-
-        //var path = Path.Combine(MonitorsService.AppDataPath(create), IdMonitor);
-        //if (create) Directory.CreateDirectory(path);
-
-        //return path;
-    }
+    public string ConfigPath() => IdMonitor;
 
     public void DisplayValues(Action<string, string, Action, bool> addValue) {
         addValue("Registry", Edid.HKeyName, () => { OpenRegKey(Edid.HKeyName); }, false);
         addValue("Microsoft Id", IdMonitor, null, false);
-
 
         // EnumDisplaySettings
         addValue("", "EnumDisplaySettings", null, true);

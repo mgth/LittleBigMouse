@@ -50,19 +50,20 @@ public class TestPattern : Control
     static readonly Color White = new(0xFF, 0xFF, 0xFF, 0xFF );
     static readonly Color Black = new(0xFF, 0x00, 0x00, 0x00 );
 
-    public Window GetWindow(Rect location)
+    public Window GetWindow(PixelPoint location, double width, double height)
     {
         return new Window
         {
-            // TODO : Avalonia
-            //WindowStyle = WindowStyle.None,
-            //ResizeMode = ResizeMode.NoResize,
-            //Left = location.Left,
-            //Top = location.Top,
-            Height = location.Height,
-            Width = location.Width,
+            SystemDecorations = SystemDecorations.None,
+            CanResize = false,
+            Position = location,
+            Height = height,
+            Width = width,
+            ShowInTaskbar = false,
+            //Topmost = true, bug in avalonia, if set there won't be applied on show()
             Content = this
         };
+
     }
 
     public TestPattern Clone()
@@ -77,12 +78,13 @@ public class TestPattern : Control
         };
     }
 
-    public Window Show(Rect location)
+    public Window Show(PixelPoint location)
     {
-        var panel = Clone().GetWindow(location);
+        var panel = Clone().GetWindow(location,1,1);
 
         panel.Show();
-        panel.WindowState = WindowState.Maximized;
+        panel.Topmost = true;
+        panel.WindowState = WindowState.FullScreen;
 
         // TODO : better with double click
         panel.PointerPressed += (s, e) => { panel.Close(); };

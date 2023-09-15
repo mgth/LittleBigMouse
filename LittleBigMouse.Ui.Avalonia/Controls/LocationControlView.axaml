@@ -42,17 +42,17 @@
 		</Style>
 	</UserControl.Styles>
 
-	<Grid>
+	<Grid Margin="20">
 		<Design.DataContext>
 			<controls:LocationControlViewModelDesign/>
 		</Design.DataContext>
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left" Opacity="0.051" OpacityMask="Gray">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Opacity="0.051" OpacityMask="Gray">
             <icons:IconView 
                 Foreground="Black"
 				IconMaxHeight="100"
                 Path="icon/lbm_logo" 
             />
-            <Label>Little Big Mouse</Label>
+            <Label FontSize="100" Foreground="{DynamicResource ThemeForegroundBrush}">Little Big Mouse</Label>
         </StackPanel>
 
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -64,24 +64,24 @@
                     <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
                 </StackPanel>-->
 				<StackPanel Classes="Options">
-					<ToggleSwitch
+					<CheckBox
                         Content="Horizontal Loop"
 
                         IsEnabled="{Binding Path=Model.LoopAllowed}"
                         IsChecked="{Binding Path=Model.LoopX, Mode=TwoWay}"/>
 
-					<ToggleSwitch
+					<CheckBox
                         Content="Vertical Loop"
                         IsEnabled="{Binding Path=Model.LoopAllowed}"
                         IsChecked="{Binding Path=Model.LoopY, Mode=TwoWay}"/>
 				</StackPanel>
 
 				<StackPanel  Classes="Options">
-					<ToggleSwitch
+					<CheckBox
                         Content="Allow overlaps"
                         IsChecked="{Binding Path=Model.AllowOverlaps, Mode=TwoWay}"/>
 
-					<ToggleSwitch
+					<CheckBox
                         Content="Allow discontinuity"
                         IsChecked="{Binding Path=Model.AllowDiscontinuity, Mode=TwoWay}"/>
 
@@ -89,12 +89,12 @@
 				</StackPanel>
 
 				<StackPanel Classes="Options">
-					<ToggleSwitch
+					<CheckBox
                         Content="Adjust Speed"
                         IsEnabled="{Binding Path=Model.AdjustSpeedAllowed}"
                         IsChecked="{Binding Path=Model.AdjustSpeed, Mode=TwoWay}"/>
 
-					<ToggleSwitch
+					<CheckBox
                         Content="Adjust Pointer"
                         IsEnabled="{Binding Path=Model.AdjustPointerAllowed}"
                         IsChecked="{Binding Path=Model.AdjustPointer, Mode=TwoWay}"/>
@@ -106,7 +106,7 @@
 				</StackPanel>
 
 				<StackPanel Classes="Options">
-					<Label>Algorithm</Label>
+					<Label Foreground="{DynamicResource ThemeBackgroundColor}">Algorithm</Label>
 
 					<ListBox Classes="RadioButtonListBox"
                              Background="Transparent"
@@ -120,15 +120,15 @@
 				</StackPanel>
 
 				<StackPanel Classes="Options">
-					<ToggleSwitch
+					<CheckBox
                         Content="Auto Check for update"
                         IsChecked="{Binding Path=Model.AutoUpdate, Mode=TwoWay}"/>
 
-					<ToggleSwitch
+					<CheckBox
                         Content="Load at startup"
                         IsChecked="{Binding Path=Model.LoadAtStartup, Mode=TwoWay}"/>
 
-					<ToggleSwitch
+					<CheckBox
                         Content="Enabled"
                         IsChecked="{Binding Path=Model.Enabled, Mode=TwoWay}"/>
 

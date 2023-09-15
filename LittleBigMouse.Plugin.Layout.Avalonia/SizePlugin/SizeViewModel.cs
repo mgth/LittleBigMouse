@@ -22,8 +22,6 @@
 */
 
 using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Media;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
@@ -79,6 +77,13 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
         }
         double _arrowLength;
 
+        public double BorderArrowLength
+        {
+            get => _borderArrowLength;
+            set => this.RaiseAndSetIfChanged(ref _borderArrowLength, value);
+        }
+        double _borderArrowLength;
+
         //Inside Vertical
         public Arrow InsideVerticalArrow
         {
@@ -111,6 +116,38 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
         }
         Arrow _outsideHorizontalArrow;
 
+        //Left Border
+        public Arrow LeftBorderArrow
+        {
+            get => _leftBorderArrow;
+            set => this.RaiseAndSetIfChanged(ref _leftBorderArrow, value);
+        }
+        Arrow _leftBorderArrow;
+
+        //Top Border
+        public Arrow TopBorderArrow
+        {
+            get => _topBorderArrow;
+            set => this.RaiseAndSetIfChanged(ref _topBorderArrow, value);
+        }
+        Arrow _topBorderArrow;
+
+        //Right Border
+        public Arrow RightBorderArrow
+        {
+            get => _rightBorderArrow;
+            set => this.RaiseAndSetIfChanged(ref _rightBorderArrow, value);
+        }
+        Arrow _rightBorderArrow;
+
+        //Bottom Border
+        public Arrow BottomBorderArrow
+        {
+            get => _bottomBorderArrow;
+            set => this.RaiseAndSetIfChanged(ref _bottomBorderArrow, value);
+        }
+        Arrow _bottomBorderArrow;
+
 
         public void UpdateArrows(Rect bounds)
         {
@@ -122,19 +159,37 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin
             var x = 5 * bounds.Width / 8;
             var y = 5 * bounds.Height / 8;
 
-            var x2 = -rx * Model.DepthProjection.LeftBorder;
-            var y2 = -ry * Model.DepthProjection.TopBorder;
+            var leftBorder = rx * Model.DepthProjection.LeftBorder;
+            var topBorder = ry * Model.DepthProjection.TopBorder;
+            var rightBorder = rx * Model.DepthProjection.RightBorder;
+            var bottomBorder = ry * Model.DepthProjection.BottomBorder;
 
-            var h2 = h - y2 + ry * Model.DepthProjection.BottomBorder;
-            var w2 = w - x2 + rx * Model.DepthProjection.RightBorder;
+            ArrowLength = Math.Min(rx * Model.DepthProjection.Width, ry * Model.DepthProjection.Height) / 32;
 
-            ArrowLength = rx * 
-                Math.Min(Model.DepthProjection.Width, Model.DepthProjection.Height) / 32;
+            BorderArrowLength = 
+                Math.Min(
+                rx * Math.Min(
+                    Model.DepthProjection.LeftBorder, 
+                    Model.DepthProjection.RightBorder
+                    ) ,
+                ry * Math.Min(
+                    Model.DepthProjection.TopBorder, 
+                    Model.DepthProjection.BottomBorder
+                    ) 
+                ) / 4;
 
             InsideVerticalArrow = new Arrow(new Point(x, 0), new Point(x,h));
             InsideHorizontalArrow = new Arrow(new Point(0, y), new Point(w, y));
-            OutsideVerticalArrow = new Arrow(new Point(x + w / 8 - w / 128, y2), new Point(x + w / 8 - w / 128, y2 + h2));
-            OutsideHorizontalArrow = new Arrow(new Point(x2, y + h / 8 - h / 128), new Point(x2 + w2, y + h / 8 - h / 128));
+            OutsideVerticalArrow = new Arrow(new Point(x + w / 8 - w / 128, - topBorder), new Point(x + w / 8 - w / 128, h + bottomBorder));
+            OutsideHorizontalArrow = new Arrow(new Point(-leftBorder, y + h / 8 - h / 128), new Point(w + rightBorder, y + h / 8 - h / 128));
+
+            var xb = 3 * bounds.Width /8;
+            var yb = bounds.Height /2;
+
+            LeftBorderArrow = new Arrow(new Point(- leftBorder, yb), new Point(0,yb));
+            TopBorderArrow = new Arrow(new Point(xb, - topBorder), new Point(xb,0));
+            RightBorderArrow = new Arrow(new Point(w, yb), new Point(w + rightBorder,yb));
+            BottomBorderArrow = new Arrow(new Point(xb, h), new Point(xb, h + bottomBorder));
         }
 
         public double Height

@@ -46,7 +46,7 @@ namespace HLab.Sys.Windows.MonitorVcp
 
                 foreach (var monitor in Monitors.Monitors)
                 {
-                    var lut = monitor.ProbeLut(); //ProbeLut.GetLut(screen);
+                    var lut = monitor.ProbeLut(); 
                     lut.Load();
                     l = Math.Max(l, lut.Luminance);
                 }

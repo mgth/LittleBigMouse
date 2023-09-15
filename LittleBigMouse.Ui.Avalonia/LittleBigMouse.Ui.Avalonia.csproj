@@ -102,4 +102,10 @@
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
   </ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Exec Command="taskkill /F /T /FI &quot;imagename eq dotnet.exe&quot;" />
+	</Target>
+
+
 </Project>

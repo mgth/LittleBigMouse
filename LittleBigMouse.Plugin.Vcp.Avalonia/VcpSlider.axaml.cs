@@ -36,7 +36,7 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
-public class VcpSliderViewModelDesign : VcpSliderViewModel
+public class VcpSliderViewModelDesign : VcpSliderViewModel, IDesignViewModel
 {
     public VcpSliderViewModelDesign()
     {

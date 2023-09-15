@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\HLab\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Mvvm\HLab.Mvvm.csproj" />
+    <ProjectReference Include="..\..\HLab\HLab.Options\HLab.Options.csproj" />
     <ProjectReference Include="..\..\HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\HLab.Sys.Argyll\HLab.Sys.Argyll.csproj" />
     <ProjectReference Include="..\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />

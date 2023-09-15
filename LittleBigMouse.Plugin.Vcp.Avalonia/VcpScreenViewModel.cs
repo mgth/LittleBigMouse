@@ -21,12 +21,13 @@
 	  http://www.mgth.fr
 */
 
+using System.Reactive.Linq;
 using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Notify.Annotations;
 using HLab.Notify.PropertyChanged;
 using HLab.Sys.Argyll;
 using HLab.Sys.Windows.Monitors;
@@ -38,11 +39,19 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
+public class VcpScreenViewModelDesign : VcpScreenViewModel, IDesignViewModel
+{
+    public VcpScreenViewModelDesign() : base(vm=>new TestPatternButtonViewModel(vm), null, new ObservableCollectionSafe<TestPatternButtonViewModel>())
+    {
+    }
+}
+
 public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 {
-    Func<VcpScreenViewModel, TestPatternButtonViewModel> _getButtonPattern;
+    readonly Func<VcpScreenViewModel, TestPatternButtonViewModel> _getButtonPattern;
     readonly IMonitorsSet _monitorsService;
 
+    // TODO : use reactive ui for collections
     public VcpScreenViewModel(
         Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, 
         IMonitorsSet monitorsService,
@@ -91,6 +100,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
             (b,c) => b == null || c == null)
             .ToProperty(this, e => e.DriveVisibility);
 
+       this.WhenAnyValue(e => e.Model).Do(e => InitLut()).Subscribe();
+
        AnywayCommand = ReactiveCommand.Create(() => Vcp?.ActivateAnyway());
 
        SwitchSourceCommand = ReactiveCommand.Create(SwitchSource);
@@ -130,17 +141,18 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
     }
     Color _colorB = Colors.Black;
 
-    public Window TestPatternPanel { get; set; } = null;
+    public Window? TestPatternPanel { get; set; } = null;
 
     public ObservableCollectionSafe<TestPatternButtonViewModel> TestPatterns { get; }
 
     public ProbeLut? Lut => Model?.MonitorDevice(_monitorsService).ProbeLut();
 
-    [TriggerOn(nameof(Model))]
     void InitLut()
     {
         Lut?.Load();
     }
+
+
     public void ProbeLowLuminance()
     {
         var probe = new ArgyllProbe();
@@ -153,24 +165,21 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
         new Thread(() =>
         {
-            MonitorLevel level = Vcp.Brightness;
-                //LineSeries _line = new LineSeries();
+            var level = Vcp.Brightness;
 
-                //Curve.PlotModel.Series.Add(_line);
+            var max = Vcp.Gain.Red.Max;
+            var min = Vcp.Gain.Red.Min;
 
-                uint max = Vcp.Gain.Red.Max;
-            uint min = Vcp.Gain.Red.Min;
-
-            double old = Model.MonitorDevice(_monitorsService).ProbeLut().Luminance;
+            var old = Model.MonitorDevice(_monitorsService).ProbeLut().Luminance;
             level.Value = 0;
 
-            for (uint i = max; i >= min; i--)
+            for (var i = max; i >= min; i--)
             {
 
 
                 TuneWhitePoint(i);
 
-                Tune t = Lut.Current;
+                var t = Lut.Current;
 
                 if (probe.SpotRead())
                 {
@@ -204,22 +213,17 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
         }
 
 
-        new Thread(() =>
+        Task.Run(() =>
         {
-            MonitorLevel level = Vcp.Brightness;
-                //LineSeries _line = new LineSeries();
-
-                //_line.Color = OxyColors.Red;
-
-                //Curve.PlotModel.Series.Add(_line);
-
-                for (uint i = level.Min; i <= level.Max; i++)
+            var level = Vcp.Brightness;
+ 
+            for (var i = level.Min; i <= level.Max; i++)
             {
                 level.Value = i;
 
                 TuneWhitePoint();
 
-                Tune t = Lut.Current;
+                var t = Lut.Current;
                 if (probe.SpotRead())
                 {
                     t.Y = probe.ProbedColor.xyY.Y;
@@ -230,18 +234,16 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                 Lut.RemoveBrightness(t.Brightness);
                 Lut.Add(t);
 
-                    //_line.Points.Add(new DataPoint(i, t.Y));
-                    //Curve.Refresh();
-                }
+            }
         }
-        ).Start();
+        );
         return;
 
         new Thread(() =>
         {
             for (uint channel = 0; channel < 3; channel++)
             {
-                MonitorLevel level = Vcp.Gain.Channel(channel);
+                var level = Vcp.Gain.Channel(channel);
                 //LineSeries line = new LineSeries();
 
                 switch (channel)
@@ -259,20 +261,20 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
                 //  Curve.PlotModel.Series.Add(line);
 
-                uint max = level.Value;
+                var max = level.Value;
 
                 for (uint i = 32; i <= max; i++)
                 {
                     level.Value = i; Thread.Sleep(1000);
                     probe.SpotRead();
-                    ProbedColor color = probe.ProbedColor;
+                    var color = probe.ProbedColor;
 
                     //line.Points.Add(new DataPoint(i, color.DeltaE00()));
                     //Curve.Refresh();
                 }
 
-                double min = double.MaxValue;
-                uint minIdx = level.Value;
+                var min = double.MaxValue;
+                var minIdx = level.Value;
                 //foreach (DataPoint dp in line.Points)
                 //{
                 //    if (dp.Y < min)
@@ -295,7 +297,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
         //Curve.PlotModel.Series.Add(line);
 
-        for (uint i = level.Min; i <= level.Max; i++)
+        for (var i = level.Min; i <= level.Max; i++)
         {
             level.Value = i;
 
@@ -317,15 +319,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
         }
         //Vcp.Brightness.SetToMax();
         //Vcp.Contrast.SetToMax();
-        uint red = Vcp.Gain.Red.Value;
-        uint green = Vcp.Gain.Green.Value;
-        uint blue = Vcp.Gain.Blue.Value;
+        var red = Vcp.Gain.Red.Value;
+        var green = Vcp.Gain.Green.Value;
+        var blue = Vcp.Gain.Blue.Value;
         //Vcp.Brightness.SetToMax();
         //Vcp.Contrast.SetToMax();
         //Vcp.Gain.Red.SetToMax();
         //Vcp.Gain.Green.SetToMax();
         //Vcp.Gain.Blue.SetToMax();
-        new Thread(() =>
+        Task.Run(() =>
         {
             Vcp.Gain.Red.SetToMax();
             Vcp.Gain.Green.SetToMin();
@@ -346,14 +348,14 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
             Vcp.Gain.Green.Value = green;
             Vcp.Gain.Blue.Value = blue;
         }
-        ).Start();
+        );
         return;
 
         new Thread(() =>
         {
             for (uint channel = 0; channel < 3; channel++)
             {
-                MonitorLevel level = Vcp.Gain.Channel(channel);
+                var level = Vcp.Gain.Channel(channel);
                 //LineSeries line = new LineSeries();
 
                 switch (channel)
@@ -371,7 +373,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
                 //    Curve.PlotModel.Series.Add(line);
 
-                uint max = level.Value;
+                var max = level.Value;
 
                 for (uint i = 32; i <= max; i++)
                 {
@@ -384,8 +386,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                     }
                 }
 
-                double min = double.MaxValue;
-                uint minIdx = level.Value;
+                var min = double.MaxValue;
+                var minIdx = level.Value;
                 //foreach (DataPoint dp in line.Points)
                 //{
                 //    if (dp.Y < min)
@@ -419,7 +421,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
         //    _line = new LineSeries();
         //    Curve.PlotModel.Series.Add(_line);
 
-        int count = 6;
+        var count = 6;
         uint channel = 0;
 
         _tune = new double[Vcp.Gain.Red.Max + 1, Vcp.Gain.Green.Max + 1, Vcp.Gain.Blue.Max + 1];
@@ -443,8 +445,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
     bool TuneWhitePoint(uint channel, ref uint[] rgb, uint maxlevel)
     {
         uint[] c;
-        uint[] min = new uint[3];
-        uint[] max = new uint[3];
+        var min = new uint[3];
+        var max = new uint[3];
         uint n = 0;
 
         switch (channel)
@@ -480,7 +482,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
         }
 
 
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
         {
             min[i] = Vcp.Gain.Channel(c[i]).Min;
             max[i] = maxlevel == 0 ? Vcp.Gain.Channel(c[i]).Max : maxlevel;
@@ -505,15 +507,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
         uint[] oldGain = { rgb[c[0]], rgb[c[1]], rgb[c[2]] };
         //uint old2 = rgb[c2];
 
-        double deltaE = Probe(rgb);
+        var deltaE = Probe(rgb);
         //_line.Points.Add(new DataPoint(_line.Points.Count, deltaE));
         //Curve.Refresh();
 
         while (rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]] > min[2]))
         {
-            double old = deltaE;
+            var old = deltaE;
 
-            for (int i = 0; i < n; i++) rgb[c[i]]--;
+            for (var i = 0; i < n; i++) rgb[c[i]]--;
 
             deltaE = Probe(rgb);
 
@@ -525,15 +527,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
         while (rgb[c[0]] < max[0] && (n < 2 || rgb[c[1]] < max[1]) && (n < 3 || rgb[c[2]] < max[2]))
         {
-            double old = deltaE;
+            var old = deltaE;
 
-            for (int i = 0; i < n; i++) rgb[c[i]]++;
+            for (var i = 0; i < n; i++) rgb[c[i]]++;
 
             deltaE = Probe(rgb);
 
             if (deltaE > old)
             {
-                for (int i = 0; i < n; i++) rgb[c[i]]--;
+                for (var i = 0; i < n; i++) rgb[c[i]]--;
                 deltaE = Probe(rgb);
                 break;
             }
@@ -559,7 +561,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
             Thread.Sleep(500);
 
-            ArgyllProbe probe = new ArgyllProbe(true);
+            var probe = new ArgyllProbe(true);
             if (!probe.Installed)
             {
                 PleaseInstall();

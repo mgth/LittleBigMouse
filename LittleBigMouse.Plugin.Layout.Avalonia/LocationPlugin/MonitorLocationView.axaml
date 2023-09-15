@@ -24,7 +24,7 @@
 
 	<UserControl.Resources>
 
-        <LinearGradientBrush x:Key="ScreenColor" StartPoint="0,0.3" EndPoint="1,0.7">
+		<LinearGradientBrush x:Key="ScreenColor" StartPoint="0,0.3" EndPoint="1,0.7">
 			<GradientStop Color="#FF7288C0" Offset="0"/>
 			<GradientStop Color="#FF52669D" Offset="1"/>
 		</LinearGradientBrush>
@@ -38,18 +38,27 @@
 		</LinearGradientBrush>
 
 		<converters:ToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
-        <converters1:ScaleConverter x:Key="Scale" />
+		<converters1:ScaleConverter x:Key="Scale" />
 
 	</UserControl.Resources>
 
+	<UserControl.Styles>
+		<Style Selector="controls|DoubleBox">
+			<Setter Property="Decimals" Value="1"/>
+			<Setter Property="FontWeight" Value="Bold"/>
+			<Setter Property="BorderBrush" Value="{DynamicResource HLab.Brushes.Foreground}"/>
+			<Setter Property="VerticalAlignment" Value="Center"/>
+		</Style>
+	</UserControl.Styles>
+
 	<Grid x:Name="Grid" TextElement.FontSize="{Binding Bounds, ElementName=Grid, Converter={StaticResource Scale},ConverterParameter=0.05|0.1|20}">
 
-        <Border BorderThickness="0" Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5"/>
+		<Border BorderThickness="0" Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5"/>
 
 		<!-- Central Device No -->
-		<StackPanel 
+		<StackPanel
             x:Name="Center"
-            HorizontalAlignment="Center" 
+            HorizontalAlignment="Center"
             VerticalAlignment="Center">
 			<Border
                     BorderThickness = "{Binding Bounds, ElementName=Center, Converter={StaticResource Scale}, ConverterParameter=0.05}"
@@ -61,7 +70,7 @@
                     Height="{Binding Bounds, ElementName=Grid, Converter={StaticResource Scale},ConverterParameter=0.2|0.1|200}"
                     >
 
-                <Label
+				<Label
                     x:Name="lblName"
 
                     FontSize="{Binding Bounds, ElementName=Center, Converter={StaticResource Scale},ConverterParameter=0.5}"
@@ -86,21 +95,19 @@
 		<!-- Y Position -->
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top">
 			<Grid VerticalAlignment="Center">
-				<Border 
-                    Background="{DynamicResource HLab.Brushes.Background}" 
+				<Border
+                    Background="{DynamicResource HLab.Brushes.Background}"
                     Opacity="0.5"
                     CornerRadius ="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"
                     >
-                    <Border.Effect>
-                        <BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
-                    </Border.Effect>
+					<Border.Effect>
+						<BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
+					</Border.Effect>
 				</Border>
 
-                <controls:DoubleBox 
-                    FontWeight="Bold"
-                    BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
-                    Value="{Binding MonitorFrameViewModel.Location.Y, Mode=TwoWay}" 
-                    Decimals="1"
+				<controls:DoubleBox
+                    Value="{Binding MonitorFrameViewModel.Location.Y, Mode=TwoWay}"
+					PointerWheelChanged="OnMouseWheel"
                     />
 			</Grid>
 			<Label VerticalAlignment="Center" Content="mm"/>
@@ -109,20 +116,18 @@
 		<!-- X Position -->
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
 			<Grid VerticalAlignment="Center">
-				<Border 
+				<Border
 					CornerRadius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"
-                    Background="{DynamicResource HLab.Brushes.Background}" 
+                    Background="{DynamicResource HLab.Brushes.Background}"
                     Opacity="0.5">
-                    <Border.Effect>
-                        <BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
-                    </Border.Effect>
+					<Border.Effect>
+						<BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
+					</Border.Effect>
 				</Border>
 
-                <controls:DoubleBox 
-                    FontWeight="Bold"
-                    BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
-                    Value="{Binding MonitorFrameViewModel.Location.X, Mode=TwoWay}" 
-                    Decimals="1"
+				<controls:DoubleBox
+                    Value="{Binding MonitorFrameViewModel.Location.X, Mode=TwoWay}"
+                    PointerWheelChanged="OnMouseWheel"
                     />
 			</Grid>
 			<TextBlock VerticalAlignment="Center" Text="mm"/>
@@ -134,27 +139,24 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom">
 
-            <TextBlock Text="{Binding Path=Model.DepthProjection.Bounds.Bottom,StringFormat={}{0:0.0} ,FallbackValue=bot.y}" />
+			<TextBlock Text="{Binding Path=Model.DepthProjection.Bounds.Bottom,StringFormat={}{0:0.0} ,FallbackValue=bot.y}" />
 			<TextBlock Text="mm"/>
 
 			<Grid>
-				<Border 
+				<Border
                     CornerRadius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"
-                    Background="{DynamicResource HLab.Brushes.Background}" 
+                    Background="{DynamicResource HLab.Brushes.Background}"
                     Opacity="0.5">
-                    <Border.Effect>
-                        <BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
-                    </Border.Effect>
+					<Border.Effect>
+						<BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
+					</Border.Effect>
 				</Border>
 
 				<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
 					<controls:DoubleBox
-                        FontWeight="Bold"
-                        BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
-                        VerticalAlignment="Center"
-                        Value="{Binding RatioY, Mode=TwoWay}" 
-                        Decimals="1"
+                        Value="{Binding RatioY, Mode=TwoWay}"
+                        PointerWheelChanged="OnMouseWheel"
                         />
 
 					<Label FontWeight="Bold" Content="%" VerticalAlignment="Center"/>
@@ -165,9 +167,9 @@
 		<!-- Right Dimensions -->
 		<StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
 
-            <!-- InMm.Bounds.Right -->
-			<StackPanel 
-                Orientation="Horizontal" 
+			<!-- InMm.Bounds.Right -->
+			<StackPanel
+                Orientation="Horizontal"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Center"
                 >
@@ -179,24 +181,21 @@
 				<Label Content="mm" VerticalAlignment="Center"/>
 			</StackPanel>
 
-            <!-- RatioX -->
+			<!-- RatioX -->
 			<Grid>
-				<Border 
+				<Border
                     CornerRadius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"
-                    Background="{DynamicResource HLab.Brushes.Background}" 
+                    Background="{DynamicResource HLab.Brushes.Background}"
                     Opacity="0.5">
-                    <Border.Effect>
-                        <BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
-                    </Border.Effect>
+					<Border.Effect>
+						<BlurEffect Radius="{Binding Bounds, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.01}"/>
+					</Border.Effect>
 				</Border>
 
 				<StackPanel Orientation="Horizontal">
-                    <controls:DoubleBox
-                    FontWeight="Bold"
-                    BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
-                    VerticalAlignment="Center" 
-                    Value="{Binding RatioX, Mode=TwoWay}" 
-                    Decimals="1"
+					<controls:DoubleBox
+                    Value="{Binding RatioX, Mode=TwoWay}"
+                    PointerWheelChanged="OnMouseWheel"
                     />
 
 					<Label FontWeight="Bold" Content="%" VerticalAlignment="Center"/>
@@ -205,9 +204,9 @@
 
 		</StackPanel>
 
-        <!--Up Right Infos-->
+		<!--Up Right Infos-->
 		<StackPanel>
-            <!--Pixel Resolution-->
+			<!--Pixel Resolution-->
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="5">
 				<Label Padding="0" Content="{Binding Path=Model.ActiveSource.Source.InPixel.Width,FallbackValue=pix.w}"/>
 				<Label Padding="0" Content=" X "/>
@@ -215,7 +214,7 @@
 				<Label Padding="0" Content=" px"/>
 			</StackPanel>
 
-            <!--DPI-->
+			<!--DPI-->
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="5" >
 				<Label
                     Content="{Binding Model.ActiveSource.RealDpiAvg, StringFormat={}{0:0}, FallbackValue=96}"
@@ -233,7 +232,7 @@
 			</StackPanel>
 		</StackPanel>
 
-        <!--Ruler button-->
+		<!--Ruler button-->
 		<ToggleButton Width ="40" Height="40" Cursor="Hand" VerticalAlignment="Bottom" HorizontalAlignment="Left" IsChecked="{Binding Ruler}">
 			<icons:IconView
                 Margin="5"

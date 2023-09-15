@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -34,8 +35,21 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Zoning;
+using Live.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
+
+public class LiveView : ILiveView
+{
+    readonly Func<Window, object> _windowFactory;
+
+    public LiveView(Func<Window, object> windowFactory)
+    {
+        _windowFactory = windowFactory;
+    }
+
+    public object CreateView(Window window) => _windowFactory(window);
+}
 
 public class MainService : IMainService
 {
@@ -102,23 +116,49 @@ public class MainService : IMainService
 
         _actions?.Invoke(viewModel);
 
-        var window = (await _mvvmService
-            .MainContext
-            .GetViewAsync<DefaultViewMode>(viewModel, typeof(IDefaultViewClass)))
-            ?.AsWindow();
 
-        if (window == null) return;
-
-        if (_app is IClassicDesktopStyleApplicationLifetime d)
+#if DEBUG
+        if (Debugger.IsAttached)
         {
-            d.MainWindow = window;
-            window.Closed += (s, a) => d.MainWindow = null;
+#endif
+                var window = (await _mvvmService
+                    .MainContext
+                    .GetViewAsync<DefaultViewMode>(viewModel, typeof(IDefaultViewClass)))
+                    ?.AsWindow();
+
+                if (window == null) return;
+
+                if (_app is IClassicDesktopStyleApplicationLifetime d)
+                {
+                    d.MainWindow = window;
+                    window.Closed += (s, a) => d.MainWindow = null;
+                }
+
+                window.Show();
+#if DEBUG
         }
+        else
+        {
+            var ctx = _mvvmService.MainContext;
 
+            var liveView = new LiveView(
+                w => (ctx.GetViewAsync<DefaultViewMode>(viewModel, typeof(IDefaultViewClass)))?.Result);
 
-        window.Show();
+            var window = new LiveViewHost(liveView, Console.WriteLine);
+            window.StartWatchingSourceFilesForHotReloading();
+
+            if (_app is IClassicDesktopStyleApplicationLifetime d)
+            {
+                d.MainWindow = window;
+                window.Closed += (s, a) => d.MainWindow = null;
+            }
+
+            window.Show();
+        }
+#endif
 
     }
+
 
     public void StartNotifier()
     {

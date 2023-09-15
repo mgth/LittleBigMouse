@@ -28,6 +28,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using HLab.Base.Avalonia.Controls;
 using HLab.Mvvm.Annotations;
 using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -199,40 +200,22 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
 
     void OnMouseWheel(object sender, PointerWheelEventArgs e)
     {
-        if (sender is TextBox tb)
+        if (sender is not DoubleBox db) return;
+
+        var p = e.GetPosition(db);
+        var rx = p.X / db.Bounds.Width;
+        var ry = p.Y / db.Bounds.Height;
+
+        db.Value += WheelDelta(e);
+
+        this.GetLayout()?.Compact();
+
+        Dispatcher.UIThread.InvokeAsync(() => 
         {
-            var p = e.GetPosition(tb);
-            var rx = p.X / tb.Bounds.Width;
-            var ry = p.Y / tb.Bounds.Height;
-
-            var delta = WheelDelta(e);
-
-            // TODO : Avalonia
-            //
-            //tb.SetBindingValue(TextBox.TextProperty, v =>
-            //{
-            //    if (v is string s)
-            //    {
-            //        if (double.TryParse(s, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d))
-            //        {
-            //            return (d + delta).ToString(CultureInfo.InvariantCulture);
-            //        }
-            //    }
-            //    return v;
-            //});
-
-            // TODO : ViewModel.Model.Layout.Compact();
-
-           
-            this.GetLayout()?.Compact();
-
-            Dispatcher.UIThread.InvokeAsync(() => 
-            {
-                var p2 = new Point(rx * tb.Bounds.Width, ry * tb.Bounds.Height);
-                var l = tb.PointToScreen(p2);
-                WinUser.SetCursorPos((int)l.X, (int)l.Y);
-            }, DispatcherPriority.Loaded);
-        }
+            var p2 = new Point(rx * db.Bounds.Width, ry * db.Bounds.Height);
+            var l = db.PointToScreen(p2);
+            WinUser.SetCursorPos((int)l.X, (int)l.Y);
+        }, DispatcherPriority.Loaded);
     }
 
     void OnMouseDoubleClick(object sender, PointerPressedEventArgs e)

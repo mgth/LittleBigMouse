@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Reactive;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
@@ -25,6 +27,9 @@ using Splat;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Vcp.Avalonia;
+using Live.Avalonia;
+using ReactiveUI;
+using MessageBus = HLab.Core.MessageBus;
 
 namespace LittleBigMouse.Ui.Avalonia;
 
@@ -35,6 +40,7 @@ public partial class App : Application
         AvaloniaXamlLoader.Load(this);
     }
 
+
     public override void OnFrameworkInitializationCompleted()
     {
         if (Design.IsDesignMode)
@@ -43,6 +49,8 @@ public partial class App : Application
             base.OnFrameworkInitializationCompleted();
             return;
         }
+
+        RxApp.DefaultExceptionHandler = Observer.Create<Exception>(Console.WriteLine);
 
 #if DEBUG
         Locator.CurrentMutable.RegisterConstant(new LoggingService { Level = LogLevel.Info }, typeof(ILogger));
@@ -97,8 +105,7 @@ public partial class App : Application
         var boot = new Bootstrapper(() => container.Locate<IEnumerable<IBootloader>>());
 
         var theme = new ThemeService(Resources);
-        theme.SetTheme(ThemeService.WindowsTheme.Dark);
-
+        theme.SetTheme(ThemeService.WindowsTheme.Auto);
 
         boot.Boot();
 

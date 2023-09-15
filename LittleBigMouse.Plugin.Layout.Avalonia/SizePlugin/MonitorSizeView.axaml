@@ -39,6 +39,31 @@
 
     </UserControl.Resources>
 
+    <UserControl.Styles>
+        <Style Selector="sizePlugin|MeasureArrow.Inside">
+            <Setter Property="StrokeThickness" Value="2.5"/>
+            <Setter Property="Stroke" Value="Bisque"/>
+            <Setter Property="Fill" Value="Bisque"/>
+        </Style>
+
+        <Style Selector="sizePlugin|MeasureArrow.Outside">
+            <Setter Property="StrokeThickness" Value="2"/>
+            <Setter Property="Stroke" Value="CadetBlue"/>
+            <Setter Property="Fill" Value="CadetBlue"/>
+        </Style>
+
+        <Style Selector="sizePlugin|MeasureArrow.Border">
+            <Setter Property="StrokeThickness" Value="1.5"/>
+            <Setter Property="Stroke" Value="White"/>
+            <Setter Property="Fill" Value="White"/>
+        </Style>
+
+        <Style Selector="controls|DoubleBox">
+            <Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
+            <Setter Property="Decimals" Value="1"/>
+        </Style>
+    </UserControl.Styles>
+
     <Grid>
         
         <Canvas>
@@ -46,37 +71,46 @@
                 <DropShadowEffect Color="DarkBlue"/>
             </Canvas.Effect>
 
-            <sizePlugin:MeasureArrow
-                StrokeThickness="2"
-                Stroke="Bisque"
-                Fill="Bisque"
+            <sizePlugin:MeasureArrow Classes="Border"
+                ArrowLength="{Binding BorderArrowLength}"
+                StartPoint="{Binding LeftBorderArrow.StartPoint}"
+                EndPoint="{Binding LeftBorderArrow.EndPoint}"
+            />
+            <sizePlugin:MeasureArrow Classes="Border"
+                ArrowLength="{Binding BorderArrowLength}"
+                StartPoint="{Binding TopBorderArrow.StartPoint}"
+                EndPoint="{Binding TopBorderArrow.EndPoint}"
+            />
+            <sizePlugin:MeasureArrow Classes="Border"
+                ArrowLength="{Binding BorderArrowLength}"
+                StartPoint="{Binding RightBorderArrow.StartPoint}"
+                EndPoint="{Binding RightBorderArrow.EndPoint}"
+            />
+            <sizePlugin:MeasureArrow Classes="Border"
+                ArrowLength="{Binding BorderArrowLength}"
+                StartPoint="{Binding BottomBorderArrow.StartPoint}"
+                EndPoint="{Binding BottomBorderArrow.EndPoint}"
+            />
+
+            <sizePlugin:MeasureArrow Classes="Inside"
                 ArrowLength="{Binding ArrowLength}"
                 StartPoint="{Binding InsideVerticalArrow.StartPoint}"
                 EndPoint="{Binding InsideVerticalArrow.EndPoint}"
             />
 
-            <sizePlugin:MeasureArrow
-                StrokeThickness="2"
-                Stroke="Bisque"
-                Fill="Bisque"
+            <sizePlugin:MeasureArrow Classes="Inside"
                 ArrowLength="{Binding ArrowLength}"
                 StartPoint="{Binding InsideHorizontalArrow.StartPoint}"
                 EndPoint="{Binding InsideHorizontalArrow.EndPoint}"
             />
 
-            <sizePlugin:MeasureArrow
-                StrokeThickness="2"
-                Stroke="CadetBlue"
-                Fill="CadetBlue"
+            <sizePlugin:MeasureArrow Classes="Outside"
                 ArrowLength="{Binding ArrowLength}"
                 StartPoint="{Binding OutsideVerticalArrow.StartPoint}"
                 EndPoint="{Binding OutsideVerticalArrow.EndPoint}"
             />
 
-            <sizePlugin:MeasureArrow
-                StrokeThickness="2"
-                Stroke="CadetBlue"
-                Fill="CadetBlue"
+            <sizePlugin:MeasureArrow Classes="Outside"
                 ArrowLength="{Binding ArrowLength}"
                 StartPoint="{Binding OutsideHorizontalArrow.StartPoint}"
                 EndPoint="{Binding OutsideHorizontalArrow.EndPoint}"
@@ -121,50 +155,39 @@
             
             <Grid Grid.Row="0" Grid.RowSpan="6" Grid.Column="2" 
                   ColumnDefinitions="*,*,*">
-
-                <Border 
-                    Background="Transparent" 
-                    Grid.Column="2" 
-                    PointerWheelChanged="OnMouseWheel"/>
-
+                <Border Grid.Column="2" Background="Transparent"/>
             </Grid>
 
             <Border Background="Transparent" 
-                    Grid.Column="4" Grid.Row="0" Grid.RowSpan="6" 
-                    PointerWheelChanged="OnMouseWheel"/>
+                    Grid.Column="4" Grid.Row="0" Grid.RowSpan="6" />
 
 <!-- Inside Dimensions -->
 
-			<controls:DoubleBox 
-                HorizontalAlignment="Right" 
-                VerticalAlignment="Center" 
-                Grid.Column="2" 
-                Grid.Row="2" 
+            <Grid Grid.Column="2" Grid.Row="2" RowDefinitions="*,Auto,Auto"> 
+			    <controls:DoubleBox 
+                    Grid.Row="1" 
+                    HorizontalAlignment="Right" 
 
-                Value="{Binding Height}" 
-                Background="#E0FFFFFF"
-                Foreground="Black"
-                Decimals="1">
-                <controls:DoubleBox.Effect>
-                    <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
-                </controls:DoubleBox.Effect>
-                
-            </controls:DoubleBox>
+                    Value="{Binding Height}" 
+                    PointerWheelChanged="OnMouseWheel"
+                    >
+                    <controls:DoubleBox.Effect>
+                        <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
+                    </controls:DoubleBox.Effect>
+                </controls:DoubleBox>
 
-			<controls:DoubleBox Background="#E0FFFFFF"
-                     Foreground="Black"
-                     Grid.Column="2" 
+			    <controls:DoubleBox 
                      Grid.Row="2" 
-                     VerticalAlignment="Bottom" 
-                     HorizontalAlignment="Center"
-                     Value="{Binding Width}"
-                     KeyUp="OnKeyEnterUpdate" 
-                     >
-                <controls:DoubleBox.Effect>
-                    <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
-                </controls:DoubleBox.Effect>
-            </controls:DoubleBox>
-            <!--MouseWheel="OnMouseWheel"-->
+                    HorizontalAlignment="Center"
+                    Value="{Binding Width}"
+                    KeyUp="OnKeyEnterUpdate" 
+                    PointerWheelChanged="OnMouseWheel"
+                 >
+                    <controls:DoubleBox.Effect>
+                        <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
+                    </controls:DoubleBox.Effect>
+                </controls:DoubleBox>
+            </Grid>
             
             <Viewbox x:Name ="ChkLock"
                 Grid.Column="2" 
@@ -183,16 +206,13 @@
 <!-- Outside Dimensions -->
 
 			<controls:DoubleBox 
-                Background="#E0FFFFFF"
-                Foreground="Black"
-                
                 Grid.Column="4" 
                 Grid.Row="2" 
                 VerticalAlignment="Center" 
                 HorizontalAlignment="Left"
+                PointerWheelChanged="OnMouseWheel"
                 
                 Value="{Binding OutsideHeight}"
-                Decimals="1"
                 >
                 <controls:DoubleBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
@@ -201,16 +221,13 @@
 
 		
 			<controls:DoubleBox 
-                Background="#E0FFFFFF"
-                Foreground="Black"
-                
                 Grid.Column="2" 
                 Grid.Row="4" 
                 VerticalAlignment="Top" 
                 HorizontalAlignment="Center"
+                PointerWheelChanged="OnMouseWheel"
                            
                 Value="{Binding OutsideWidth}"
-                Decimals="1"
                 >
                 <controls:DoubleBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>
@@ -221,57 +238,43 @@
         </Grid>
 
         <!-- Borders -->
-
+<Grid ColumnDefinitions="*,*,*,*">
         <!-- Top Border -->
-		<controls:DoubleBox 
-            Background="#00FFFFFF"
-            Foreground="#FFD9DCEC"
-            
-            HorizontalAlignment="Center" 
-            VerticalAlignment="Top" 
-            
-            Value="{Binding Path=TopBorder}" 
-            Decimals="1"
-            />
+		<controls:DoubleBox Grid.Column="1"
+                            HorizontalAlignment="Center" 
+                            VerticalAlignment="Top" 
+                            PointerWheelChanged="OnMouseWheel"
+
+                            Value="{Binding Path=TopBorder}" 
+                            />
 
         <!-- Left Border -->
-		<controls:DoubleBox 
-            Background="#00FFFFFF"
-            Foreground="#FFD9DCEC"
-                
-            HorizontalAlignment="Left" 
-            VerticalAlignment="Center" 
-            
-            Value="{Binding Path=LeftBorder}" 
-            Decimals="1"
-            />
+		<controls:DoubleBox Grid.Column="0"
+                            HorizontalAlignment="Left" 
+                            VerticalAlignment="Center" 
+                            PointerWheelChanged="OnMouseWheel"
+
+                            Value="{Binding Path=LeftBorder}" 
+                            />
 
         <!-- Bottom Border -->
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"  VerticalAlignment="Bottom">
+		<controls:DoubleBox Grid.Column="1"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Bottom"
+                            PointerWheelChanged="OnMouseWheel"
 
-			<controls:DoubleBox 
-                Foreground="#FFD9DCEC" 
-                Background="#00FFFFFF" 
-                
-                Value="{Binding Path=BottomBorder}" 
-                Decimals="1"
-                />
-
-        </StackPanel>
+                            Value="{Binding Path=BottomBorder}" 
+                            />
 
         <!-- Right Border -->
-        <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
+		<controls:DoubleBox Grid.Column="3"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            PointerWheelChanged="OnMouseWheel"
 
-			<controls:DoubleBox 
-                Foreground="#FFD9DCEC" 
-                Background="#00FFFFFF" 
-                
-                Value="{Binding Path=RightBorder}" 
-                Decimals="1"
-                />
-
-        </StackPanel>
-
+                            Value="{Binding Path=RightBorder}" 
+                            />
+</Grid>
 
 
         <!--<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">

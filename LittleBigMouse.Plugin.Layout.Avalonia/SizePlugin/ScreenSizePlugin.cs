@@ -31,18 +31,11 @@ using LittleBigMouse.Plugins.Avalonia;
 namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 
 public class ViewModeScreenSize : ViewMode { }
-public class ScreenSizePlugin : IBootloader
+public class ScreenSizePlugin(IMainService mainService) : IBootloader
 {
-    readonly IMainService _mainService;
-
-    public ScreenSizePlugin(IMainService mainService)
-    {
-        _mainService = mainService;
-    }
-
     public void Load(IBootContext bootstrapper)
     {
-        _mainService.AddControlPlugin(c =>
+        mainService.AddControlPlugin(c =>
             c.AddViewModeButton<ViewModeScreenSize>(
                 "size",
                 "Icon/MonitorSize",

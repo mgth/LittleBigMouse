@@ -1,30 +1,19 @@
 ﻿using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
-using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Ui.Core;
 
-public class MainBootloader : IBootloader
-{
-    public MainBootloader(
+public class MainBootloader(
         IMainService mainService, 
-        IMvvmService mvvm)
-    {
-        _mainService = mainService;
-        _mvvm = mvvm;
-     }
-
-    readonly IMainService _mainService;
-    readonly IMvvmService _mvvm;
-
-
+        IMvvmService mvvm) : IBootloader
+{
     public void Load(IBootContext bootstrapper)
     {
-        if(bootstrapper.WaitingForService(_mvvm)) return; 
+        if(bootstrapper.WaitingForService(mvvm)) return; 
 
         //_mainService.StartNotifier();
-        _mainService.ShowControlAsync();
+        mainService.ShowControlAsync();
 
     }
 

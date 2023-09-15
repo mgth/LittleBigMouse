@@ -21,29 +21,20 @@
 	  http://www.mgth.fr
 */
 
-using System.Reactive.Linq;
 using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
-using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
 internal class MonitorVcpViewMode : ViewMode { }
 
-public class VcpPlugin : IBootloader
+public class VcpPlugin(IMainService mainService) : IBootloader
 {
-    readonly IMainService _mainService;
-
-    public VcpPlugin(IMainService mainService)
-    {
-        _mainService = mainService;
-    }
-
     public void Load(IBootContext bootstrapper)
     {
-        _mainService.AddControlPlugin(c =>
+        mainService.AddControlPlugin(c =>
             c.AddViewModeButton<MonitorVcpViewMode>(
                 "vcp",
                 "Icon/MonitorVcp",

@@ -4,8 +4,10 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+             xmlns:avalonia="clr-namespace:LittleBigMouse.Plugins.Avalonia;assembly=LittleBigMouse.Plugins.Avalonia"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="LittleBigMouse.Ui.Avalonia.Main.UiCommandButton"
+             x:DataType="avalonia:UiCommand"
              >
     <Design.DataContext>
         <main:UiCommandDesign />

@@ -7,7 +7,9 @@
              xmlns:mvvm.Avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
              xmlns:avalonia="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="615.613" >
+             d:DesignHeight="300" d:DesignWidth="615.613" 
+             x:DataType="vcp.Avalonia:VcpScreenViewModel"
+             >
     <Design.DataContext>
         <vcp.Avalonia:VcpScreenViewModelDesign />
     </Design.DataContext>

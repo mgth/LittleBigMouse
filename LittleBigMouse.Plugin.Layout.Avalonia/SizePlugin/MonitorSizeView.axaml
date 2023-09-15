@@ -13,6 +13,8 @@
              x:Name="UserControl"
 
     ClipToBounds="False"
+
+    x:DataType="sizePlugin:ScreenSizeViewModel"
     >
     <Design.DataContext>
         <sizePlugin:ScreenSizeViewModel />

@@ -23,6 +23,8 @@
 
     Width="{Binding Rotated.OutsideWidth}"
     Height="{Binding Rotated.OutsideHeight}"
+
+    x:DataType="monitorFrame:MonitorFrameViewModel"
 >
 
     <Design.DataContext>

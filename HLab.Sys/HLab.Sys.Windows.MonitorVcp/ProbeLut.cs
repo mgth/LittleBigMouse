@@ -213,13 +213,13 @@ public class ProbeLut : ReactiveObject
     public void Load()
     {
         var deserializer = new XmlSerializer(typeof(List<Tune>));
-        using TextReader reader = new StreamReader(ConfigPath());
         try
         {
+            using TextReader reader = new StreamReader(ConfigPath());
             _lut = (List<Tune>)deserializer.Deserialize(reader);
             reader.Close();
         }
-        catch (FileNotFoundException)
+        catch (IOException ex) when(ex is FileNotFoundException or DirectoryNotFoundException)
         {
             _lut = new List<Tune>
             {

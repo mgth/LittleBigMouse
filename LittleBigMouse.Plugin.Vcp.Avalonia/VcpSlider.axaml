@@ -8,6 +8,7 @@
              mc:Ignorable="d" 
              d:DesignHeight="300"
              x:Name="UserControl"
+             x:DataType="avalonia:VcpSliderViewModel"
              >
         <Design.DataContext>
             <avalonia:VcpSliderViewModelDesign/>

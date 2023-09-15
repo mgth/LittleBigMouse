@@ -16,6 +16,7 @@
              Cursor="SizeAll"
 
              x:Name="UserControl"
+			 x:DataType="locationPlugin:MonitorLocationViewModel"
 >
 
 	<Design.DataContext>

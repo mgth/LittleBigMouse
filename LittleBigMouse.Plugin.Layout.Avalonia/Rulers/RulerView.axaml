@@ -12,6 +12,7 @@
         PointerMoved="Window_PointerMoved"
         PointerWheelChanged="Window_OnMouseWheel"
 
+        x:DataType="rulers:RulerViewModel"
         >
     <Design.DataContext>
         <rulers:RulerViewModel/>

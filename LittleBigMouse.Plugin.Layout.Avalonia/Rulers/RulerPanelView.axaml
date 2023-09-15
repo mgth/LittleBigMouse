@@ -16,6 +16,8 @@
 
         TransparencyLevelHint="Transparent"
         Background="Transparent"
+
+        x:DataType="rulers:RulerPanelViewModel"
         >
 	<Design.DataContext>
 		<rulers:RulerPanelViewModel/>

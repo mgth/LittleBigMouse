@@ -29,6 +29,7 @@ using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls.Chrome;
 using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia.Extensions;
@@ -44,14 +45,39 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
-internal class LocationControlViewModelDesign : LocationControlViewModel, IDesignViewModel
+#if DEBUG
+public class LocationControlViewModelDesign : IDesignViewModel
 {
-    public LocationControlViewModelDesign() : base(null, null)
+    public LocationControlViewModelDesign()
     {
     }
+
+    public List<Algorithm> AlgorithmList { get; } = new()
+    {
+        new ("strait","Strait","Simple and highly CPU-efficient transition."),
+        new ("cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
+
+    };
+
+    public object SelectedAlgorithm { get; set; }
+}
+#endif
+
+public class Algorithm
+{
+    public Algorithm(string id, string caption, string description)
+    {
+        Id = id;
+        Caption = caption;
+        Description = description;
+    }
+
+    public string Id { get; }
+    public string Caption { get; }
+    public string Description { get; }
 }
 
-internal class LocationControlViewModel : ViewModel<MonitorsLayout>
+public class LocationControlViewModel : ViewModel<MonitorsLayout>
 {
     readonly IMonitorsSet _monitorsService;
 
@@ -65,6 +91,9 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
         _service = service;
 
         _monitorsService = monitorsService;
+
+        _selectedAlgorithm = this.WhenAnyValue(e => e.Model.Algorithm)
+            .Select(a => AlgorithmList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedAlgorithm));
 
         CopyCommand = ReactiveCommand.CreateFromTask(CopyAsync);
 
@@ -207,6 +236,14 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
         await _service.StartAsync(Model.ComputeZones());
     }
 
+    public Algorithm SelectedAlgorithm 
+    {
+        get => _selectedAlgorithm.Value;
+        set => Model.Algorithm = value.Id;
+    }
+    readonly ObservableAsPropertyHelper<Algorithm> _selectedAlgorithm;
+
+
     async Task SaveAsync()
     {
         await Task.Run(() =>
@@ -233,7 +270,12 @@ internal class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     bool _liveUpdate;
 
-    public List<string> AlgorithmList { get; } = new(){"Strait","CornerCrossing"};
+    public List<Algorithm> AlgorithmList { get; } = new()
+    {
+        new ("strait","Strait","Simple and highly CPU-efficient transition."),
+        new ("cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
+
+    };
 
     void DoLiveUpdate()
     {

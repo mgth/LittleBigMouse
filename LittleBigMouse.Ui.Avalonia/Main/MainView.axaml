@@ -9,7 +9,7 @@
         xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
         xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
         mc:Ignorable="d"
-        Foreground="White"
+    x:DataType="main:MainViewModel"
 >
         <!--Foreground="{DynamicResource HLab.Brushes.Foreground}"-->
 	<Design.DataContext>

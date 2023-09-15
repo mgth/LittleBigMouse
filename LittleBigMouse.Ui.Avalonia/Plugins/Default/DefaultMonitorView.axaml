@@ -10,6 +10,7 @@
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
              Foreground="{DynamicResource HLab.Brushes.Foreground}"
+			 x:DataType="default:DefaultMonitorViewModel"
              >
 	<!--d:DataContext="{d:DesignInstance Type = default1:DefaultMonitorViewModel, IsDesignTimeCreatable = false}"-->
 	<Design.DataContext>
@@ -58,7 +59,8 @@
 		</StackPanel>-->
 
         <!-- PNP Code -->
-		<StackPanel VerticalAlignment="{Binding PnpNameVerticalAlignment}" Margin="5" >
+ <!--TODO : VerticalAlignment="{Binding PnpNameVerticalAlignment}"-->
+		<StackPanel Margin="5" >
 			<Grid>
 				<Border>
 
@@ -231,10 +233,10 @@
 
 					<StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
 
+                        <!-- TODO : VerticalAlignment="{Binding Path=DpiVerticalAlignment}"-->
 						<Label
                             Padding="2,0"
                             Content="{Binding Path=Model.ActiveSource.Source.DisplayFrequency, StringFormat={}{0:0.}, FallbackValue=xx}"
-                            VerticalAlignment="{Binding Path=DpiVerticalAlignment}"
                             Foreground="{DynamicResource HLab.Brushes.Foreground}"
                             />
 

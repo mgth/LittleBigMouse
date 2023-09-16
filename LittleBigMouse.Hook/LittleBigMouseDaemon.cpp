@@ -18,54 +18,63 @@ LittleBigMouseDaemon::~LittleBigMouseDaemon()
 	_remoteServer->SetDaemon(nullptr);
 }
 
+void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
+{
+	if(!root) return;
+	if(const auto zonesLayout = root->FirstChildElement("ZonesLayout"))
+	{
+		_engine->Stop();
+		_engine->Layout.Load(zonesLayout);
+	}
+}
+
+void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root) const
+{
+	if(!root) return;
+
+	auto commandAttribut = root->FindAttribute("Command");
+	if(commandAttribut)
+	{
+		const auto command = commandAttribut->Value();
+		if(strcmp(command, "Load")==0)
+			ReceiveLoadMessage(root->FirstChildElement("Payload"));
+
+		else if(strcmp(command, "Run")==0)
+			_engine->Start();
+
+		else if(strcmp(command, "Stop")==0)
+			_engine->Stop();
+
+		else if(strcmp(command, "Quit")==0)
+		{
+			_engine->Stop();
+			// TODO : quit exe
+		}
+	}
+}
+void LittleBigMouseDaemon::ReceiveMessage(tinyxml2::XMLElement* root) const
+{
+	if(!root) return;
+
+	if(strcmp(root->Name(), "CommandMessage") ==0 ) 
+		ReceiveCommandMessage(root);
+
+	else if(strcmp(root->Name(), "Messages") ==0 )
+	{
+		auto node = root->FirstChildElement();
+		while(node)
+		{
+			ReceiveMessage(node);
+			node = node->NextSiblingElement();
+		}
+	}
+}
+
 void LittleBigMouseDaemon::ReceiveMessage(const std::string& m) const
 {
 	tinyxml2::XMLDocument doc;
 	doc.Parse(m.c_str());
 
-	auto root = doc.RootElement();
-	if(!root) return;
-
-	auto name = std::string(root->Name());
-
-	auto c = root->Name();
-	auto e = strcmp(root->Name(), "DaemonMessage");
-
-	if(strcmp(root->Name(), "DaemonMessage") !=0 ) return;
-
-	auto commandAttribut = root->FindAttribute("Command");
-	if(commandAttribut)
-	{
-		auto command = std::string(commandAttribut->Value());
-		if(command == "Load")
-		{
-			auto payloadElement = root->FirstChildElement("Payload");
-			if(payloadElement)
-			{
-				auto zonesLayout = payloadElement->FirstChildElement("ZonesLayout");
-				if(zonesLayout)
-				{
-					_engine->Stop();
-					_engine->Layout.Load(zonesLayout);
-				}
-			}
-		}
-
-		if(command=="Run")
-		{
-			_engine->Start();
-		}
-
-		if(command=="Stop")
-		{
-			_engine->Stop();
-		}
-
-		if(command=="Quit")
-		{
-			_engine->Stop();
-		}
-	}
-
+	ReceiveMessage(doc.RootElement());
 }
 

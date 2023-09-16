@@ -15,25 +15,25 @@
     </Design.DataContext>
 
     <UserControl.Styles>
-		<Style Selector="ListBox.RadioButtonListBox">
+
+        <Style Selector="ListBox.RadioButtonListBox">
 			<Setter Property="BorderBrush" Value="Transparent"/>
 		</Style>
+
 		<Style Selector="ListBox.RadioButtonListBox ListBoxItem">
-			<Setter Property="Template">
-				<Setter.Value>
-					<ControlTemplate>
-						<Border Background="Transparent">
-							<RadioButton 
-                                x:DataType="controls:Algorithm"
-                                Content="{Binding Caption}"
-								Background="Transparent"
-								VerticalAlignment="Center"
-								IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}"/>
-						</Border>
-					</ControlTemplate>
-				</Setter.Value>
-			</Setter>
+            <Setter Property="Padding" Value="6,3,6,4" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+
+            <Style Selector="^:selected">
+                <Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
+                    <Setter Property="Background" Value="Transparent" />
+                </Style>
+            </Style>
+            <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
 		</Style>
+
 		<Style Selector="Button.Command">
 			<Setter Property="MinWidth" Value="50"/>
 			<Setter Property="Margin" Value="5,0,0,0" />
@@ -126,7 +126,24 @@
                              ItemsSource="{Binding AlgorithmList}"
 							 
                              SelectedItem="{Binding SelectedAlgorithm}"
-                             />
+                             >
+
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="Transparent">
+                                    <RadioButton Classes="RadioButtonListBox"
+                                        x:DataType="controls:Algorithm"
+                                        Content="{Binding Caption}"
+                                        Background="Transparent"
+                                        VerticalAlignment="Center"
+                                        IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}},Mode=TwoWay}"
+                                        ToolTip.Tip ="{Binding Description}"
+                                        />
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+
+                    </ListBox>
 				</StackPanel>
 
 				<StackPanel Classes="Options">

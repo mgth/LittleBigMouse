@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "LittleBigMouse.Ui.Avalonia": {
+      "commandName": "Project"
+    },
+    "WSL": {
+      "commandName": "WSL2",
+      "distributionName": ""
+    }
+  }
+}

@@ -45,7 +45,6 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
-#if DEBUG
 public class LocationControlViewModelDesign : IDesignViewModel
 {
     public LocationControlViewModelDesign()
@@ -61,7 +60,6 @@ public class LocationControlViewModelDesign : IDesignViewModel
 
     public object SelectedAlgorithm { get; set; }
 }
-#endif
 
 public class Algorithm
 {

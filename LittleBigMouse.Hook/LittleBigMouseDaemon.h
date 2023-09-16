@@ -16,6 +16,9 @@ public:
 	void Run() const;
 
 	~LittleBigMouseDaemon();
+	void ReceiveLoadMessage(tinyxml2::XMLElement* root) const;
+	void ReceiveCommandMessage(tinyxml2::XMLElement* root) const;
+	void ReceiveMessage(tinyxml2::XMLElement* root) const;
 
 	void ReceiveMessage(const std::string& m) const;
 };

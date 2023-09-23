@@ -11,15 +11,26 @@ enum Algorithm {Strait,CornerCrossing};
 
 class ZonesLayout
 {
-	Zone* GetNewZone(tinyxml2::XMLElement* xml_element) const;
+	Zone* GetNewZone(tinyxml2::XMLElement* xmlElement) const;
+
+	double _left = 0.0;
+	double _top = 0.0;
+	double _right = 0.0;
+	double _bottom = 0.0;
 
 public:
 	bool AdjustPointer;
 	bool AdjustSpeed;
 	Algorithm Algorithm;
 
-	Zone* Containing(const geo::Point<long>& pixel) const;
-	Zone* Containing(const geo::Point<double>& physical) const;
+	bool LoopX;
+	bool LoopY;
+
+	[[nodiscard]] Zone* Containing(const geo::Point<long>& pixel) const;
+	[[nodiscard]] Zone* Containing(const geo::Point<double>& physical) const;
+
+	[[nodiscard]] double Width() const;
+	[[nodiscard]] double Height() const;
 
 	std::vector<Zone*> Zones;
 	std::vector<Zone*> MainZones;

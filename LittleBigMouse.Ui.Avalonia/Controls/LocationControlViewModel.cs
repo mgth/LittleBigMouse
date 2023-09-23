@@ -215,12 +215,10 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
            }
 
     }
+
     public ReactiveCommand<Unit, Unit> CopyCommand { get; }
-
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
-
     public ReactiveCommand<Unit, Unit> UndoCommand { get; }
-
     public ReactiveCommand<Unit, Unit> StartCommand { get; }
     public ReactiveCommand<Unit, Unit> StopCommand { get; }
 
@@ -241,7 +239,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     readonly ObservableAsPropertyHelper<Algorithm> _selectedAlgorithm;
 
-
     async Task SaveAsync()
     {
         await Task.Run(() =>
@@ -260,7 +257,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     bool _running;
 
-
     public bool LiveUpdate
     {
         get => _liveUpdate;
@@ -272,7 +268,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     {
         new ("strait","Strait","Simple and highly CPU-efficient transition."),
         new ("cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
-
     };
 
     void DoLiveUpdate()

@@ -8,7 +8,7 @@
 #include "LittleBigMouseDaemon.h"
 #include "SocketClient.h"
 
-class SocketClient;
+class RemoteClient;
 
 void RemoteServerSocket::RunThread()
 {
@@ -36,9 +36,11 @@ void RemoteServerSocket::RunThread()
 		        const auto csock = accept(sock, reinterpret_cast<SOCKADDR*>(&csin), &sinSize);
 		        if(csock != INVALID_SOCKET)
 		        {
-					auto c = new SocketClient(this, csock);
+					auto c = new RemoteClient(this, csock);
 		            _clients.push_back(c);
 					c->Start();
+					//immediately inform client of current state
+					c->Send(_daemon->GetStateMessage());
 		        }
 		    }
 			while(!_clients.empty())
@@ -55,9 +57,9 @@ void RemoteServerSocket::RunThread()
 
 }
 
-void RemoteServerSocket::ReceiveMessage(const std::string& m) const
+void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client) const
 {
-	_daemon->ReceiveMessage(m);
+	_daemon->ReceiveMessage(m, client);
 }
 
 void RemoteServerSocket::Send(const std::string& message) const

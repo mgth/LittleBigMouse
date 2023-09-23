@@ -4,11 +4,11 @@
 
 #include "RemoteServer.h"
 
-class SocketClient;
+class RemoteClient;
 
 class RemoteServerSocket final : public RemoteServer
 {
-    std::vector<SocketClient*> _clients;
+    std::vector<RemoteClient*> _clients;
 
 protected:
 	void RunThread() override;
@@ -17,7 +17,7 @@ public:
 
 	void Send(const std::string& message) const override;
 
-    void ReceiveMessage(const std::string& m) const;
+    void ReceiveMessage(const std::string& m, RemoteClient* client) const;
 
 };
 

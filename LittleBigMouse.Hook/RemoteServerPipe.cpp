@@ -38,7 +38,7 @@ bool RemoteServerPipe::StartListener()
 				std::cout << _inputBuffer;
 
 				if(_daemon)
-					_daemon->ReceiveMessage(std::string(_inputBuffer));
+					_daemon->ReceiveMessage(std::string(_inputBuffer), nullptr);
 	        }
 	    }
 

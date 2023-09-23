@@ -5,7 +5,7 @@
 #include "HookMouseEventArg.h"
 #include "RemoteServer.h"
 
-constexpr int INPUTBUFFERSIZE = 1024*16;
+constexpr int BUFFERSIZE = 1024*16;
 
 class RemoteServerPipe final : public RemoteServer
 {
@@ -16,7 +16,7 @@ class RemoteServerPipe final : public RemoteServer
 	bool StartNotifier();
 
 protected:
-    char _inputBuffer[INPUTBUFFERSIZE] = {};
+    char _inputBuffer[BUFFERSIZE] = {};
 	void RunThread() override
 	{
 		StartListener() && StartNotifier();

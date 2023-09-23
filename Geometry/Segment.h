@@ -142,6 +142,10 @@ namespace geo
 
 			rect_side IntersectSide(const Rect<double>& rect) const;
 		*/
+
+		Segment<T> operator+(const Point<T>& p) const { return { _a + p, _b + p }; }
+		Segment<T> operator-(const Point<T>& p) const { return { _a - p, _b - p }; }
+
 	};
 
 }

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+	<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Platforms>AnyCPU;x64</Platforms>
@@ -9,7 +9,6 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.0.4" />
-    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.4" />
   </ItemGroup>
 
   <ItemGroup>

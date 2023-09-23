@@ -21,6 +21,16 @@ Zone* ZonesLayout::Containing(const geo::Point<double>& physical) const
 	return nullptr;
 }
 
+double ZonesLayout::Width() const
+{
+	return 40.0 + _right - _left;
+}
+
+double ZonesLayout::Height() const
+{
+	return 40.0 + _bottom - _top;
+}
+
 bool IsNearer(const int id, int& idMin, const double distance,  double& min)
 {
 	//if (distance<0.0) return false;
@@ -41,6 +51,11 @@ void ZonesLayout::Init()
 {
 	for (auto zone : Zones)
 	{
+		if(zone->PhysicalBounds().Left()<_left) _left = zone->PhysicalBounds().Left();
+		if(zone->PhysicalBounds().Top()<_top) _top = zone->PhysicalBounds().Top();
+		if(zone->PhysicalBounds().Right()>_right) _right = zone->PhysicalBounds().Right();
+		if(zone->PhysicalBounds().Bottom()>_bottom) _bottom = zone->PhysicalBounds().Bottom();
+
 		if(zone->IsMain()) MainZones.push_back(zone);
 		zone->ComputeDpi();
 		zone->InitZoneLinks(this);
@@ -54,10 +69,14 @@ void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 
 	AdjustPointer = XmlHelper::GetBool(layoutElement,"AdjustPointer");
 	AdjustSpeed = XmlHelper::GetBool(layoutElement,"AdjustSpeed");
+	LoopX = XmlHelper::GetBool(layoutElement,"LoopX");
+	LoopY = XmlHelper::GetBool(layoutElement,"LoopY");
 
 	const auto algorithm =  XmlHelper::GetString(layoutElement,"Algorithm");
-	if(algorithm=="CornerCrossing")
+	if(algorithm=="cross")
 		Algorithm = CornerCrossing;
+	else if(algorithm=="strait")
+		Algorithm = Strait;
 	else
 		Algorithm = Strait;
 

@@ -1,11 +1,8 @@
-#include "SocketClient.h"
-
 #include <string>
-#include <winsock2.h>
-
+#include "SocketClient.h"
 #include "RemoteServerSocket.h"
 
-void SocketClient::RunThread()
+void RemoteClient::RunThread()
 {
 	auto s = std::string();
 	while (!_stop)
@@ -24,7 +21,7 @@ void SocketClient::RunThread()
 			else
 				sn ="";
 
-			_server->ReceiveMessage(s);
+			_server->ReceiveMessage(s, this);
 
 			s = "";
 			i = sn.find('\n');
@@ -33,7 +30,7 @@ void SocketClient::RunThread()
 	}
 }
 
-void SocketClient::Send(const std::string& message) const
+void RemoteClient::Send(const std::string& message) const
 {
 	send(_client,message.c_str(),message.length(),0);
 }

@@ -837,6 +837,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         zones.AdjustPointer = AdjustPointer;
         zones.AdjustSpeed = AdjustSpeed;
         zones.Algorithm = Algorithm;
+        zones.LoopX = LoopX;
+        zones.LoopY = LoopY;
 
         return zones;
     }

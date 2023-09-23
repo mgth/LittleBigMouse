@@ -44,9 +44,9 @@ int XmlHelper::GetInt(const tinyxml2::XMLElement* element, const char* name)
 	return 0;
 }
 
-double XmlHelper::GetDouble(tinyxml2::XMLElement* rectElement, const char* name)
+double XmlHelper::GetDouble(const tinyxml2::XMLElement* element, const char* name)
 {
-	const auto attribut = rectElement->FindAttribute(name);
+	const auto attribut = element->FindAttribute(name);
 	if(attribut)
 	{
 		return std::stod(attribut->Value());
@@ -54,9 +54,9 @@ double XmlHelper::GetDouble(tinyxml2::XMLElement* rectElement, const char* name)
 	return 0.0;
 }
 
-std::string XmlHelper::GetString(tinyxml2::XMLElement* rectElement, const char* name)
+std::string XmlHelper::GetString(const tinyxml2::XMLElement* element, const char* name)
 {
-	const auto attribut = rectElement->FindAttribute(name);
+	const auto attribut = element->FindAttribute(name);
 	if(attribut)
 	{
 		return std::string(attribut->Value());

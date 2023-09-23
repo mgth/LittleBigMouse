@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections;
 using System.Globalization;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
 using Avalonia;
 
 namespace LittleBigMouse.Zoning;
@@ -27,7 +21,7 @@ public class ZoneSerializer
 
         foreach(var getter in getters)
         {
-            System.Linq.Expressions.Expression e = getter.Body;
+            var e = getter.Body;
 
             if(e is UnaryExpression ue && ue.NodeType == ExpressionType.Convert)
             {
@@ -84,11 +78,11 @@ public class ZoneSerializer
         return $@"<{name}{p}>{inside}</{name}>";
     }
 
-
     public static string Serialize(IZonesSerializable obj)
     {
         return obj.Serialize();
     }
+
     public static string Serialize(Rect rect)
     {
         return Serialize(rect,r=>r.Left,r=>r.Top,r=>r.Width,r=>r.Height);

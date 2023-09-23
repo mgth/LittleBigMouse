@@ -40,28 +40,28 @@ public enum LittleBigMouseCommand
     Quit
 }
 
-public class DaemonMessage : IZonesSerializable
+
+public class CommandMessage : IZonesSerializable
 {
-    public DaemonMessage()
+    public CommandMessage()
     {
     }
-    public DaemonMessage(LittleBigMouseCommand command)
+    public CommandMessage(LittleBigMouseCommand command)
     {
         Command = command;
     }
 
-    public DaemonMessage(LittleBigMouseCommand command, ZonesLayout payload)
+    public CommandMessage(LittleBigMouseCommand command, ZonesLayout payload)
     {
         Command = command;
         Payload = payload;
     }
     public LittleBigMouseCommand Command { get; set; }
-    public LittleBigMouseState State { get; set; }
     public ZonesLayout? Payload { get; set; }
 
     public string Serialize()
     {
-        return ZoneSerializer.Serialize(this,e => e.Command, e => e.State, e => e.Payload);
+        return ZoneSerializer.Serialize(this,e => e.Command, e => e.Payload);
     }
 }
 

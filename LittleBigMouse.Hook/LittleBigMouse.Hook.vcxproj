@@ -153,7 +153,7 @@
     <ClCompile Include="RemoteServer.cpp" />
     <ClCompile Include="RemoteServerPipe.cpp" />
     <ClCompile Include="RemoteServerSocket.cpp" />
-    <ClCompile Include="SocketClient.cpp" />
+    <ClCompile Include="RemoteClient.cpp" />
     <ClCompile Include="ThreadHost.cpp" />
     <ClCompile Include="tinyxml2.cpp" />
     <ClCompile Include="XmlHelper.cpp" />

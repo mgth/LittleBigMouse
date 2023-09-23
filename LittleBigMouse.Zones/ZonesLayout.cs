@@ -1,10 +1,4 @@
-﻿
-using Newtonsoft.Json;
-
-using System.Collections;
-using System.Runtime.Serialization;
-using System.Windows;
-using Avalonia;
+﻿using Avalonia;
 
 namespace LittleBigMouse.Zoning
 {
@@ -12,7 +6,10 @@ namespace LittleBigMouse.Zoning
     {
         public bool AdjustPointer {get;set;}
         public bool AdjustSpeed {get;set;}
-        public string Algorithm { get; set; } = "Strait";
+        public bool LoopX {get;set;}
+        public bool LoopY {get;set;}
+
+        public string Algorithm { get; set; } = "strait";
 
         public Zone FromPixel(Point pixel) => MainZones.FirstOrDefault(zone => zone.ContainsPixel(pixel));
         public Zone FromPhysical(Point physical) => Zones.FirstOrDefault(zone => zone.ContainsMm(physical));
@@ -40,6 +37,8 @@ namespace LittleBigMouse.Zoning
             return ZoneSerializer.Serialize(this,
                 e => e.AdjustPointer, 
                 e => e.AdjustSpeed, 
+                e => e.LoopX,
+                e => e.LoopY,
                 e => e.Algorithm,
                 e=> e.MainZones);
         }

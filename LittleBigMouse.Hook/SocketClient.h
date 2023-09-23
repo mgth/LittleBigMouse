@@ -1,15 +1,13 @@
 #pragma once
 #include <atomic>
 #include <string>
-#include <winsock2.h>
+#include <Windows.h>
 
 #include "ThreadHost.h"
+
 class RemoteServerSocket;
 
-constexpr int INPUTBUFFERSIZE = 1024*16;
-constexpr int OUTPUTBUFFERSIZE = 1024*16;
-
-class SocketClient final : public ThreadHost
+class RemoteClient final : public ThreadHost
 {
 	RemoteServerSocket* _server;
 	SOCKET _client;
@@ -18,11 +16,11 @@ class SocketClient final : public ThreadHost
 
 
 protected:
-    char _inputBuffer[INPUTBUFFERSIZE];
+    char _inputBuffer[1024*16];
 	void RunThread() override;
 
 public:
-	SocketClient(RemoteServerSocket* _server,const SOCKET socket):_server(_server),_client(socket)
+	RemoteClient(RemoteServerSocket* _server, const SOCKET socket):_server(_server),_client(socket)
 	{}
 
 	void Send(const std::string& message) const;

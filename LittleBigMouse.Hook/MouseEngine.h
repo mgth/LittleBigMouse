@@ -36,9 +36,11 @@ class MouseEngine : public ThreadHost
 
 	//Final move
 	void Move(HookMouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut);
+	void MoveInMm(HookMouseEventArg& e, const geo::Point<double>& pOutInMm, const Zone* zoneOut);
 
 	//Final move, cancel leaving monitor
 	void NoZoneMatches(HookMouseEventArg& e);
+	Zone* FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDist) const;
 
 	void RunThread() override;
 	void DoStop() override;

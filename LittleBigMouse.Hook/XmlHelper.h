@@ -13,9 +13,9 @@ public:
 	static long GetLong(const tinyxml2::XMLElement* rectElement, const char* name);
 	static int GetInt(const tinyxml2::XMLElement* element, const char* name);
 
-	static double GetDouble(tinyxml2::XMLElement* rectElement, const char* name);
+	static double GetDouble(const tinyxml2::XMLElement* element, const char* name);
 
-	static std::string GetString(tinyxml2::XMLElement* rectElement, const char* name);
+	static std::string GetString(const tinyxml2::XMLElement* element, const char* name);
 
 	static geo::Rect<long> GetRectLong(tinyxml2::XMLElement* parent, const char* name);
 

@@ -54,7 +54,7 @@
     <ClCompile Include="RemoteServer.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
-    <ClCompile Include="SocketClient.cpp">
+    <ClCompile Include="RemoteClient.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
     <ClCompile Include="ThreadHost.cpp">

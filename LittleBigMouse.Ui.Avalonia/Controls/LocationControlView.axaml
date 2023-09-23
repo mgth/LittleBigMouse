@@ -1,0 +1,186 @@
+﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.Controls.LocationControlView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
+             mc:Ignorable="d"
+             d:DesignHeight="200" d:DesignWidth="800"
+             x:DataType="controls:LocationControlViewModel"
+             x:CompileBindings="True"
+             >
+    <Design.DataContext>
+        <controls:LocationControlViewModelDesign/>
+    </Design.DataContext>
+
+    <UserControl.Styles>
+		<Style Selector="ListBox.RadioButtonListBox">
+			<Setter Property="BorderBrush" Value="Transparent"/>
+		</Style>
+		<Style Selector="ListBox.RadioButtonListBox ListBoxItem">
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate>
+						<Border Background="Transparent">
+							<RadioButton 
+                                x:DataType="controls:Algorithm"
+                                Content="{Binding Caption}"
+								Background="Transparent"
+								VerticalAlignment="Center"
+								IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}"/>
+						</Border>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+		</Style>
+		<Style Selector="Button.Command">
+			<Setter Property="MinWidth" Value="50"/>
+			<Setter Property="Margin" Value="5,0,0,0" />
+		</Style>
+
+		<Style Selector="Button.Command:disabled /template/ ContentPresenter">
+			<Setter Property="Background" Value="Transparent"/>
+			<Setter Property="Opacity" Value="0.25"/>
+			<Setter Property="OpacityMask" Value="Black"/>
+		</Style>
+		<Style Selector="StackPanel.Options">
+			<Setter Property="Orientation" Value="Vertical"/>
+			<Setter Property="Margin" Value="5,0,0,0"/>
+			<Setter Property="VerticalAlignment" Value="Top"/>
+		</Style>
+	</UserControl.Styles>
+
+	<Grid Margin="20">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Opacity="0.051" OpacityMask="Gray">
+            <icons:IconView 
+                Foreground="Black"
+				IconMaxHeight="100"
+                Path="icon/lbm_logo" 
+            />
+            <Label FontSize="100" Foreground="{DynamicResource ThemeForegroundBrush}">Little Big Mouse</Label>
+        </StackPanel>
+
+		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+
+			<!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
+			<!---->
+			<StackPanel Margin="5" HorizontalAlignment="Right" Orientation="Horizontal">
+				<!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
+                </StackPanel>-->
+				<StackPanel Classes="Options">
+					<CheckBox
+                        Content="Horizontal Loop"
+
+                        IsEnabled="{Binding Path=Model.LoopAllowed}"
+                        IsChecked="{Binding Path=Model.LoopX, Mode=TwoWay}"
+                        ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."
+                        />
+					<CheckBox
+                        Content="Vertical Loop"
+                        IsEnabled="{Binding Path=Model.LoopAllowed}"
+                        IsChecked="{Binding Path=Model.LoopY, Mode=TwoWay}"
+                        ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."
+                        />
+				</StackPanel>
+
+				<StackPanel  Classes="Options">
+					<CheckBox
+                        Content="Allow overlaps"
+                        IsChecked="{Binding Path=Model.AllowOverlaps, Mode=TwoWay}"
+                        ToolTip.Tip="Allow the screens to overlap."
+                        />
+
+					<CheckBox
+                        Content="Allow discontinuity"
+                        IsChecked="{Binding Path=Model.AllowDiscontinuity, Mode=TwoWay}"
+                        ToolTip.Tip="Allow gaps between monitors."
+                        />
+
+					<!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
+				</StackPanel>
+
+				<StackPanel Classes="Options">
+					<CheckBox
+                        Content="Adjust Speed"
+                        IsEnabled="{Binding Path=Model.AdjustSpeedAllowed}"
+                        IsChecked="{Binding Path=Model.AdjustSpeed, Mode=TwoWay}"
+                        ToolTip.Tip="Adjust the pointer speed when the system doesn't consider the screens ratio"
+                        />
+					<CheckBox
+                        Content="Adjust Pointer"
+                        IsEnabled="{Binding Path=Model.AdjustPointerAllowed}"
+                        IsChecked="{Binding Path=Model.AdjustPointer, Mode=TwoWay}"
+                        ToolTip.Tip="Adjust the pointer size when the system doesn't consider the screens ratio"
+                        />
+				</StackPanel>
+
+				<StackPanel Classes="Options">
+					<Label
+                        ToolTip.Tip="Choose the algorithm to handle screen transitions."
+                        >Algorithm</Label>
+
+					<ListBox Classes="RadioButtonListBox"
+                             Background="Transparent"
+                             ItemsSource="{Binding AlgorithmList}"
+							 
+                             SelectedItem="{Binding SelectedAlgorithm}"
+                             />
+				</StackPanel>
+
+				<StackPanel Classes="Options">
+
+				</StackPanel>
+
+				<StackPanel Classes="Options">
+					<CheckBox
+                        Content="Auto Check for update"
+                        IsChecked="{Binding Path=Model.AutoUpdate, Mode=TwoWay}"
+                        ToolTip.Tip="Enable automatic background checks for updates available online."
+                        />
+
+					<CheckBox
+                        Content="Load at startup"
+                        IsChecked="{Binding Path=Model.LoadAtStartup, Mode=TwoWay}"
+                        ToolTip.Tip="Enable execution at session startup."
+                        />
+
+				</StackPanel>
+
+			</StackPanel>
+
+			<Button Classes="Command"
+                Command="{Binding CopyCommand}">
+				<ToolTip.Tip>Copy config to clipboard</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/CopyConfig"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding SaveCommand}">
+				<ToolTip.Tip>Save</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Save"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding StartCommand}">
+				<ToolTip.Tip>Apply/Start</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Start"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding StopCommand}">
+				<ToolTip.Tip>Stop</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Stop"/>
+			</Button>
+
+			<Button Classes="Command"
+                Command="{Binding UndoCommand}">
+				<ToolTip.Tip>Undo</ToolTip.Tip>
+				<icons:IconView Height="30" Path="Icon/Undo"/>
+			</Button>
+
+		</StackPanel>
+
+	</Grid>
+</UserControl>

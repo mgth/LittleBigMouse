@@ -1,0 +1,63 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Vcp.ColorSliders"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LittleBigMouse.Plugin.Vcp"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+        <StackPanel Orientation="Horizontal">
+            <StackPanel Orientation="Vertical">
+                <Slider
+                    HorizontalAlignment="Center" 
+                    Orientation="Vertical" 
+                    x:Name="SliderR" 
+                    ValueChanged="Slider_OnValueChanged" 
+                    SmallChange="1" 
+                    LargeChange="16" 
+                    Maximum="255"
+                >
+                    <Slider.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            <GradientStop Color="#FFFF0000" Offset="0"/>
+                        </LinearGradientBrush>
+                    </Slider.Background>
+                </Slider>
+            </StackPanel>
+            <Slider
+                HorizontalAlignment="Center" 
+                Orientation="Vertical" 
+                x:Name="SliderG" 
+                ValueChanged="Slider_OnValueChanged" 
+                SmallChange="1" 
+                LargeChange="16" 
+                Maximum="255"
+            >
+                <Slider.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                        <GradientStop Color="#FF00FF00" Offset="0"/>
+                    </LinearGradientBrush>
+                </Slider.Background>
+            </Slider>
+            <Slider
+                HorizontalAlignment="Center" 
+                Orientation="Vertical" 
+                x:Name="SliderB" 
+                ValueChanged="Slider_OnValueChanged" 
+                SmallChange="1" 
+                LargeChange="16" 
+                Maximum="255"
+            >
+                <Slider.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                        <GradientStop Color="#FF0000FF" Offset="0"/>
+                    </LinearGradientBrush>
+                </Slider.Background>
+            </Slider>
+        </StackPanel>
+    </Grid>
+</UserControl>

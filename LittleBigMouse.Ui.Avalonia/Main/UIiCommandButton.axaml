@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+             xmlns:avalonia="clr-namespace:LittleBigMouse.Plugins.Avalonia;assembly=LittleBigMouse.Plugins.Avalonia"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="LittleBigMouse.Ui.Avalonia.Main.UiCommandButton"
+             x:DataType="avalonia:UiCommand"
+             >
+    <Design.DataContext>
+        <main:UiCommandDesign />
+    </Design.DataContext>
+
+    <ToggleButton      
+        Command="{Binding Command}" 
+        CommandParameter="{Binding IsActive}"
+        IsChecked="{Binding IsActive}"
+        Foreground="{DynamicResource HLab.Brushes.Foreground}"
+        >
+
+        <StackPanel>
+            <icons:IconView 
+                Height="40"
+                Width="40"
+                Margin="5"
+                Path="{Binding IconPath}"
+                ToolTip.Tip="{Binding ToolTipText}"
+                />
+        </StackPanel>
+
+  </ToggleButton>
+</UserControl>

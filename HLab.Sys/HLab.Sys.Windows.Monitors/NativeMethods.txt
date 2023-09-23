@@ -1,0 +1,3 @@
+﻿CreateDC
+GetDeviceCaps
+EnumDisplayDevices

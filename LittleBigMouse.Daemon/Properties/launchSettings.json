@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "LittleBigMouse.Daemon": {
+      "commandName": "Project",
+      "commandLineArgs": "< Input.txt"
+    }
+  }
+}

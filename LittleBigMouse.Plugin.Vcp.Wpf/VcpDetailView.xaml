@@ -1,0 +1,61 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Vcp.VcpDetailView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:monitorVcp="clr-namespace:HLab.Sys.Windows.MonitorVcp;assembly=HLab.Sys.Windows.MonitorVcp"
+             mc:Ignorable="d" 
+             d:DesignHeight="50" d:DesignWidth="800">
+    <Grid>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+
+            <ComboBox Width="300">
+                <monitorVcp:TestPattern Height="45" Width="80"
+                        PatternColorA="{Binding ColorA,FallbackValue=White}"
+                        PatternColorB="{Binding ColorB,FallbackValue=Black}"
+                        PatternType="Solid" />
+                <monitorVcp:TestPattern Height="45" Width="80"
+                        PatternColorA="{Binding ColorA,FallbackValue=White}"
+                        PatternColorB="{Binding ColorB,FallbackValue=Black}"
+                        PatternType="Gradient" />
+                <!--<monitorVcp:TestPattern Height="45" Width="80"
+                        PatternColorA="{Binding ColorA,FallbackValue=White}"
+                        PatternColorB="{Binding ColorB,FallbackValue=Black}"
+                        PatternType="ChessBoard" />-->
+
+                <!--<monitorVcp:TestPattern Height="45" Width="80"
+                        PatternColorA="{Binding ColorA,FallbackValue=White}"
+                        PatternColorB="{Binding ColorB,FallbackValue=Black}"
+                        PatternType="RgbGradient" />-->
+                <monitorVcp:TestPattern Height="45" Width="80"
+                        PatternColorA="{Binding ColorA,FallbackValue=White}"
+                        PatternColorB="{Binding ColorB,FallbackValue=Black}"
+                        PatternType="Circle" />
+                <monitorVcp:TestPattern Height="45" Width="80"
+                        PatternColorA="{Binding ColorA,FallbackValue=White}"
+                        PatternColorB="{Binding ColorB,FallbackValue=Black}"
+                        PatternType="Grid" />
+                
+            </ComboBox>
+
+            <!--<ColorPiker Margin ="5,0,0,0"
+                Width ="70"
+                SelectedColor="{Binding ColorA}"
+                ColorMode="ColorCanvas"
+                ShowTabHeaders="False"
+                Background="Black"
+            />-->
+            <Button HorizontalContentAlignment="Center" Content="&lt;-->" Margin ="5,0,0,0"/>
+            <!--<ColorPiker 
+                Margin ="5,0,0,0"
+                Width ="70"
+                SelectedColor="{Binding ColorB}"
+                ColorMode="ColorCanvas"
+                ShowTabHeaders="False"
+                Background="Black"
+            />-->
+            <Button Margin ="5,0,0,0" Command="{Binding AddCommand}">Add</Button>
+            <Button Margin ="5,0,0,0" Command="{Binding DeleteCommand}">Delete</Button>
+        </StackPanel>
+    </Grid>
+</UserControl>

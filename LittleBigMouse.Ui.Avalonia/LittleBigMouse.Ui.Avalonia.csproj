@@ -1,0 +1,107 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFrameworks>net8.0</TargetFrameworks>
+		<Nullable>enable</Nullable>
+		<Platforms>x64</Platforms>
+		<OutputType>WinExe</OutputType>
+		<ApplicationIcon>MainIcon.ico</ApplicationIcon>
+		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="Assets\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Remove="MainIcon.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<TrimmerRootDescriptor Include="Roots.xml" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+    <PackageReference Include="Avalonia" Version="11.0.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.4" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.4" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.4" />
+    <PackageReference Include="Grace" Version="8.0.0-RC837" />
+    <PackageReference Include="Live.Avalonia" Version="1.3.1" />
+    <PackageReference Include="MessageBox.Avalonia" Version="3.1.4" />
+    <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.7.23375.6" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.0.2" />
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0-rc.1.23419.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HLab.Sys.Windows.MonitorVcp.Avalonia\HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" />
+    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Icons.Avalonia\HLab.Icons.Avalonia.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Notify.Annotations\HLab.Notify.Annotations.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Notify.Avalonia\HLab.Notify.Avalonia.csproj" />
+    <ProjectReference Include="..\HLab\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />
+    <ProjectReference Include="..\HLab\HLab.UserNotification\HLab.UserNotification.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugin.Layout.Avalonia\LittleBigMouse.Plugin.Layout.Avalonia.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp.Avalonia\LittleBigMouse.Plugin.Vcp.Avalonia.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins.Avalonia\LittleBigMouse.Plugins.Avalonia.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.ScreenConfig\LittleBigMouse.DisplayLayout.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Ui.Core\LittleBigMouse.Ui.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <UpToDateCheckInput Remove="Main\MainView.axaml.cs" />
+    <UpToDateCheckInput Remove="Plugins\Default\DefaultMonitorView.axaml" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<AvaloniaResource Include="Assets\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <AvaloniaResource Remove="Assets\Icon\MainIcon.ico" />
+	</ItemGroup>
+
+<ItemGroup>
+    <Content Include="Assets\MainIcon.ico" />
+    <Content Include="MainIcon.ico" />
+</ItemGroup>
+
+
+  <ItemGroup>
+    <Resource Include="MainIcon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Controls\LocationControlView.axaml.cs">
+      <DependentUpon>%(Filename)</DependentUpon>
+    </Compile>
+    <Compile Update="MonitorFrame\MonitorFrameView.axaml.cs">
+      <DependentUpon>MonitorFrameView.axaml</DependentUpon>
+    </Compile>
+    <Compile Update="MultiMonitorsLayoutPresenterViewModelView.axaml.cs">
+      <DependentUpon>MultiMonitorsLayoutPresenterViewModelView.axaml</DependentUpon>
+    </Compile>
+    <Compile Update="Plugins\Debug\DebugMonitorView.axaml.cs">
+      <DependentUpon>DebugMonitorView.axaml</DependentUpon>
+    </Compile>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

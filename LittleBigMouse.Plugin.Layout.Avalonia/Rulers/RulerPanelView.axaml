@@ -1,0 +1,61 @@
+﻿<Window x:Class="LittleBigMouse.Plugin.Layout.Avalonia.Rulers.RulerPanelView"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+
+        xmlns:rulers="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.Rulers"
+
+        mc:Ignorable="d"
+        d:DesignHeight="300" d:DesignWidth="300"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        Margin="0"
+        SystemDecorations="None"
+
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+
+        x:DataType="rulers:RulerPanelViewModel"
+        >
+	<Design.DataContext>
+		<rulers:RulerPanelViewModel/>
+	</Design.DataContext>
+
+	<Grid Margin="0" ColumnDefinitions="100,*,100" RowDefinitions="100,*,100">
+
+        <!-- Top ruler -->
+		<rulers:RulerView x:Name="TopRuler"
+            VerticalAlignment="Stretch" 
+            HorizontalAlignment="Stretch" 
+            Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" 
+            DataContext="{Binding TopRuler}"/>
+
+        <!-- Bottom ruler -->
+		<rulers:RulerView 
+            VerticalAlignment="Stretch" 
+            HorizontalAlignment="Stretch" 
+            Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" 
+            DataContext="{Binding BottomRuler}"/>
+
+        <!-- Left ruler -->
+		<rulers:RulerView 
+            VerticalAlignment="Stretch" 
+            HorizontalAlignment="Stretch" 
+            Grid.Row="0" Grid.Column="0" Grid.RowSpan="3" 
+            DataContext="{Binding LeftRuler}"/>
+
+        <!-- Right ruler -->
+		<rulers:RulerView 
+            VerticalAlignment="Stretch" 
+            HorizontalAlignment="Stretch" 
+            Grid.Row="0" Grid.Column="2"  Grid.RowSpan="3" 
+            DataContext="{Binding RightRuler}"/>
+
+        <!--<Grid 
+            Grid.Row="1" Grid.Column="1"
+            Background="Transparent"/>-->
+
+	</Grid>
+</Window>

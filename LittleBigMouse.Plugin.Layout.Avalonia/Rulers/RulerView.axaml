@@ -1,0 +1,50 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Layout.Avalonia.Rulers.RulerView"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:rulers="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.Rulers"
+        mc:Ignorable="d"
+        Background="Transparent"
+
+        PointerPressed="Window_PointerPressed"
+        PointerReleased="Window_PointerReleased"
+        PointerMoved="Window_PointerMoved"
+        PointerWheelChanged="Window_OnMouseWheel"
+
+        x:DataType="rulers:RulerViewModel"
+        >
+    <Design.DataContext>
+        <rulers:RulerViewModel/>
+    </Design.DataContext>
+
+
+
+    <Grid x:Name="Grid01"><Border x:Name="Border"
+                                  Opacity="1" 
+                                  Background="Transparent" 
+                          />
+        
+        <!--<StackPanel>
+            <Label Content="{Binding RulerLength}"/>
+            <Label Content="{Binding RulerStart}"/>
+            <Label Content="{Binding RulerEnd}"/>
+            <Label Content="{Binding Revert}"/>
+            <Label Content="{Binding Selected}"/>
+       </StackPanel>-->
+
+        <rulers:RulerViewTop 
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            RulerLength="{Binding RulerLength}"
+            RulerStart="{Binding RulerStart}"
+            Length="{Binding Length}"
+            Size="{Binding Size}"
+            RulerEnd="{Binding RulerEnd}"
+            Selected="{Binding Selected}"
+            Zero="{Binding Zero}"
+            Orientation="{Binding Orientation}"
+            />
+    
+    </Grid>
+</UserControl>

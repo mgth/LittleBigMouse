@@ -1,0 +1,133 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Vcp.Avalonia.VcpScreenView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vcp.Avalonia="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia"
+             xmlns:mvvm.Avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
+             xmlns:avalonia="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="615.613" 
+             x:DataType="vcp.Avalonia:VcpScreenViewModel"
+             >
+    <Design.DataContext>
+        <vcp.Avalonia:VcpScreenViewModelDesign />
+    </Design.DataContext>
+
+
+    <Grid x:Name="Grid" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+        <DockPanel Grid.Column="0" Grid.RowSpan="2">
+
+            <LayoutTransformControl>
+                <LayoutTransformControl.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </LayoutTransformControl.LayoutTransform>
+                <Label Foreground="White" Content="Brightness" VerticalAlignment="Center" IsVisible="{Binding BrightnessVisibility}"/>
+            </LayoutTransformControl>
+
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Brightness}"/>
+
+            <LayoutTransformControl>
+                <LayoutTransformControl.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </LayoutTransformControl.LayoutTransform>
+                <Label Foreground="White" Content="Contrast" VerticalAlignment="Center" IsVisible="{Binding ContrastVisibility}"/>
+            </LayoutTransformControl>
+
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Contrast}"/>
+
+            <LayoutTransformControl>
+                <LayoutTransformControl.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </LayoutTransformControl.LayoutTransform>
+                <Label Foreground="White" Content="Gain" VerticalAlignment="Center" IsVisible="{Binding GainVisibility}"/>
+            </LayoutTransformControl>
+
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Red}"/>
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Green}"/>
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Blue}"/>
+
+            <LayoutTransformControl>
+                <LayoutTransformControl.LayoutTransform>
+                    <RotateTransform Angle="-90"/>
+                </LayoutTransformControl.LayoutTransform>
+            </LayoutTransformControl>
+
+            <Label Foreground="White" Content="Drive" VerticalAlignment="Center" IsVisible="{Binding DriveVisibility}">
+            </Label>
+
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Red}"/>
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Green}"/>
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Blue}"/>
+
+            <Rectangle Width="20"/>
+            <StackPanel VerticalAlignment="Center" Orientation="Vertical" IsVisible="{Binding AnywayVisibility}">
+                <Label Foreground="White">DDC/CI not available</Label>
+                <Button Height="20" Command="{Binding AnywayCommand}">Try anyway</Button>
+
+            </StackPanel>
+            <Button Command="{Binding SwitchSourceCommand}" Content="Test"/>
+            <ItemsControl VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <mvvm.Avalonia:ViewLocator Model="{Binding}"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DockPanel>
+
+        <!--<avalonia:AvaPlot Grid.Row="0" Grid.Column="1" x:Name="Curve"></avalonia:AvaPlot>-->
+
+        <!--<StackPanel  Grid.Column="1" Grid.Row="1" Orientation="Horizontal">
+            <Button             
+            Click="Probe_OnClick"
+                    Content="Probe"
+            />
+            <Button             
+            Click="Tune_OnClick"
+                    Content="Tune WP"
+            />
+            
+            <Button             
+            Click="ProbeLuminance_OnClick"
+                    Content="Tune WP High"
+            />
+            
+            <Button             
+            Click="ProbeLowLuminance_OnClick"
+                    Content="Tune WP Low"
+            />
+            
+           <Button             
+            Click="WakeUp_OnClick"
+                    Content="WakeUp"
+            />
+            <Button             
+            Click="Save_OnClick"
+                    Content="Save"
+            />
+        </StackPanel>-->
+
+        <!--<StackPanel Margin="30" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+            <Button                 
+                Width="50"  
+                Height="25" 
+                VerticalAlignment="Bottom" 
+                HorizontalAlignment="Right"
+                Click="ButtonOff_OnClick"
+                        Content="Off"
+                />
+            <TextBox x:Name="txtCode">D6</TextBox>
+            <TextBox x:Name="txtValue">1</TextBox>
+            <Button                 
+                Width="50"  
+                Height="25" 
+                VerticalAlignment="Bottom" 
+                HorizontalAlignment="Right"
+                Click="ButtonOn_OnClick"
+                        Content="On"
+                />
+
+        </StackPanel>-->
+    </Grid>
+</UserControl>

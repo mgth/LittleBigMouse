@@ -1,0 +1,61 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Location.Plugins.Location.LocationControlView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:location="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location" xmlns:icons="clr-namespace:HLab.Icons.Wpf.Icons;assembly=HLab.Icons.Wpf" xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+             mc:Ignorable="d" 
+             d:DesignHeight="50" d:DesignWidth="800"
+             d:DataContext="{d:DesignInstance Type=location:LocationControlViewModel, IsDesignTimeCreatable=False}">
+    <Grid>
+        <StackPanel  Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right" >
+            <!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
+            <StackPanel Margin="5" Orientation="Horizontal" Height="Auto" HorizontalAlignment="Right">
+                <!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
+                </StackPanel>-->
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <mah:ToggleSwitch Content="Horizontal Loop" IsEnabled="{Binding Path=Layout.LoopAllowed}" IsOn="{Binding Path=Layout.LoopX, Mode=TwoWay}"/>
+                    <mah:ToggleSwitch  Content="Vertical Loop" IsEnabled="{Binding Path=Layout.LoopAllowed}" IsOn="{Binding Path=Layout.LoopY, Mode=TwoWay}"/>
+                    <!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
+                </StackPanel>
+                
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <mah:ToggleSwitch  Content="Allow overlaps" IsOn="{Binding Path=Layout.AllowOverlaps, Mode=TwoWay}"/>
+                    <mah:ToggleSwitch  Content="Allow discontinuity" IsOn="{Binding Path=Layout.AllowDiscontinuity, Mode=TwoWay}"/>
+                    <!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
+                </StackPanel>
+                
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <mah:ToggleSwitch   Content="Adjust Speed" IsEnabled="{Binding Path=Layout.AdjustSpeedAllowed}"  IsOn="{Binding Path=Layout.AdjustSpeed, Mode=TwoWay}"/>
+                    <mah:ToggleSwitch   Content="Adjust Pointer" IsEnabled="{Binding Path=Layout.AdjustPointerAllowed}" IsOn="{Binding Path=Layout.AdjustPointer, Mode=TwoWay}"/>
+                    <mah:ToggleSwitch   Content="Allow Corner Crossing" IsOn="{Binding Path=Layout.AllowCornerCrossing, Mode=TwoWay}"/>
+                </StackPanel>
+                
+                <StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
+                    <mah:ToggleSwitch   Content="Auto Check for update"  IsOn="{Binding Path=Layout.AutoUpdate, Mode=TwoWay}"/>
+                    <mah:ToggleSwitch   Content="Load at startup"  IsOn="{Binding Path=Layout.LoadAtStartup, Mode=TwoWay}"/>
+                    <mah:ToggleSwitch   Content="Enabled" IsOn="{Binding Path=Layout.Enabled, Mode=TwoWay}"/>
+                </StackPanel>
+                
+            </StackPanel>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding CopyCommand}" ToolTip="Copy config to clipboard">
+                <icons:IconView Path="Icon/CopyConfig"/>
+            </Button>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StartCommand}" ToolTip="Apply/Start">
+                <icons:IconView Path="Icon/Start"/>
+            </Button>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding StopCommand}" ToolTip="Stop">
+                <icons:IconView Path="Icon/Stop"/>
+            </Button>
+            
+            <Button MinWidth="50" Margin="5,0,0,0" Command="{Binding UndoCommand}" ToolTip="Undo">
+                <icons:IconView Height="20" Path="Icon/Undo"/>
+            </Button>
+        </StackPanel>
+
+    </Grid>
+</UserControl>

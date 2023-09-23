@@ -1,0 +1,68 @@
+﻿<UserControl x:Class="LittleBigMouse.Control.Wpf.MultiScreensView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:control="clr-namespace:LittleBigMouse.Control" xmlns:icons="clr-namespace:HLab.Icons.Wpf.Icons;assembly=HLab.Icons.Wpf"
+             xmlns:wpf="clr-namespace:LittleBigMouse.Control.Wpf"
+             LayoutUpdated="MultiScreensView_OnLayoutUpdated"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" 
+             d:DesignWidth="500"
+             d:DataContext="{d:DesignInstance Type=wpf:MultiScreensViewModel, IsDesignTimeCreatable=False}"
+             >
+    <UserControl.Resources>
+        <wpf:SizeRatioConverter x:Key="SizeRatioConverter" />
+    </UserControl.Resources>
+    <Grid>
+        <!--<Grid.Background>
+            <LinearGradientBrush StartPoint="0,0.4" EndPoint="1,0.6">
+                <GradientStop Offset="0" Color="Black"/>
+                <GradientStop Offset="0.5" Color="#80808080"/>
+                <GradientStop Offset="0.53" Color="#80606060"/>
+                <GradientStop Offset="1" Color="#40000000"/>
+            </LinearGradientBrush>
+        </Grid.Background>-->
+
+        <Grid>
+            <Label FontSize="50" VerticalAlignment="Bottom" HorizontalAlignment="Center">
+
+                <Grid Opacity="0.3" HorizontalAlignment="Stretch" >
+                    <Border Background="Gray">
+                        <Border.Effect>
+                            <BlurEffect Radius="50"></BlurEffect>
+                        </Border.Effect>
+                    </Border>
+                    <StackPanel Opacity="0.4" Margin="50,0">
+                        <Label>Little</Label>
+                        <Label Margin="0,-40" FontWeight="Heavy" Foreground="AliceBlue" FontSize="63">BIG</Label>
+                        <Label FontSize="34" Foreground="Black" FontWeight="Heavy">Mouse</Label>
+                    </StackPanel>
+                    <Label Margin="-2,-40,0,0" Foreground="White" FontSize="120" HorizontalAlignment="Center">.</Label>
+                </Grid>
+
+            </Label>
+            <icons:IconView Path="icon/littlebigmouse" Opacity="0.02"/>
+        </Grid>
+
+        <Grid  Margin="30" >
+
+            <Grid x:Name="ReferenceGrid" SizeChanged="ReferenceGrid_SizeChanged">
+                <Canvas x:Name="ContentGrid" 
+                      Width="{Binding Width, Mode=OneWay}" 
+                      Height="{Binding Height, Mode=OneWay}"
+                >
+                    <ItemsControl ItemsSource="{Binding Layout.AllMonitors}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Grid/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </Canvas>
+
+            </Grid>
+
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,14 @@
+﻿<Window x:Class="HLab.Sys.Windows.MonitorVcp.TestPatternWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:monitorVcp="clr-namespace:HLab.Sys.Windows.MonitorVcp"
+        xmlns:avalonia="clr-namespace:HLab.Sys.Windows.MonitorVcp.Avalonia"
+        mc:Ignorable="d"
+        Title="TestPatternWindow" Height="300" Width="300" 
+        SystemDecorations="None"
+        ShowInTaskbar="False" 
+        >
+    <avalonia:TestPattern x:Name="Pattern"/>
+</Window>

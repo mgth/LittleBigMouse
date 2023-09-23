@@ -1,0 +1,40 @@
+﻿<Window x:Class="LittleBigMouse.Plugin.Location.Plugins.Location.Rulers.RulerPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:rulers="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location.Rulers"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300"
+            WindowStyle="None"
+            Opacity="1"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False" 
+        AllowsTransparency="True"
+        Topmost="True"
+             d:DataContext="{d:DesignInstance Type=rulers:RulerPanelViewModel, IsDesignTimeCreatable=false}"
+             Margin="0"
+        >
+    <!--Margin="7,7,6,6"-->
+
+    <Grid Margin="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="{Binding RulerWidth}"/>
+                <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="{Binding RulerWidth}"/>
+            </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="{Binding RulerHeight}"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="{Binding RulerHeight}"/>
+        </Grid.RowDefinitions>
+
+        <rulers:RulerView HorizontalAlignment="Stretch" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" DataContext="{Binding TopRuler}"/>
+        <rulers:RulerView HorizontalAlignment="Stretch" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" DataContext="{Binding BottomRuler}"/>
+        
+        <rulers:RulerView VerticalAlignment="Stretch" Grid.Row="0" Grid.Column="0" Grid.RowSpan="3" DataContext="{Binding LeftRuler}"/>
+        <rulers:RulerView VerticalAlignment="Stretch" Grid.Row="0" Grid.Column="2"  Grid.RowSpan="3" DataContext="{Binding RightRuler}"/>
+        
+    </Grid>
+</Window>

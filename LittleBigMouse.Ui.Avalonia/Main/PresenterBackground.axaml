@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="LittleBigMouse.Ui.Avalonia.Main.PresenterBackground">
+    <Grid >
+        <!--<Border Background="LightSkyBlue" Opacity="0.1"/>
+        <Border Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.1"/>-->
+
+
+        <!--<Path
+            Fill="Black"
+            StrokeThickness="0"
+            Stretch="UniformToFill"
+            Width="10"
+            Height="10"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Data="M 0,0 L 1,0 C 1,0 0,0 0,1 L 0,0"/>
+
+
+
+        <Path
+            Fill="Black"
+            StrokeThickness="0"
+            Stretch="UniformToFill"
+            Width="10"
+            Height="10"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Data="M 1,0 L 0,0 C 0,0 1,0 1,1 L 1,0"/>
+
+        <Path
+            Fill="Black"
+            StrokeThickness="0"
+            Stretch="UniformToFill"
+            Width="10"
+            Height="10"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Data="M 0,1 L 1,1 C 1,1 0,1 0,0 L 0,1"/>
+
+        <Path
+            Fill="Black"
+            StrokeThickness="0"
+            Stretch="UniformToFill"
+            Width="10"
+            Height="10"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Data="M 1,1 L 0,1 C 0,1 1,1 1,0 L 1,1"/>-->
+
+    </Grid>
+</UserControl>

@@ -21,6 +21,9 @@ namespace geo
 		Point<T> operator+(const Point<T>& p) const { return { _x + p._x, _y + p._y }; }
 		Point<T> operator-(const Point<T>& p) const { return { _x - p._x, _y - p._y }; }
 
+		bool operator!=(const Point& p) const { return _x != p._x || _y != p._y; }
+		bool operator==(const Point& p) const { return _x == p._x && _y == p._y; }
+
 		static Point<T> Empty() { return { (std::numeric_limits<T>::max)(),(std::numeric_limits<T>::max)() }; }
 
 		bool IsEmpty() const { return !(_x < (std::numeric_limits<T>::max)() || _y < (std::numeric_limits<T>::max)()); }

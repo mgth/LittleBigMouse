@@ -1,18 +1,20 @@
 #pragma once
 #include <string>
 
-#include "MouseEngine.h"
+#include "MouseHookerWindowsHook.h"
 #include "RemoteServer.h"
 #include "SocketClient.h"
+#include "tinyxml2.h"
 
 class LittleBigMouseDaemon
 {
+	MouseHooker* _hook;
 	MouseEngine* _engine;
 	RemoteServer* _remoteServer;
 
 public:
 
-	LittleBigMouseDaemon(RemoteServer& server, MouseEngine& engine);
+	LittleBigMouseDaemon(MouseHooker& hook, RemoteServer& server, MouseEngine& engine);
 
 	void Run() const;
 

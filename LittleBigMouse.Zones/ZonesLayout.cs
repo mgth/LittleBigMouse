@@ -8,6 +8,7 @@ namespace LittleBigMouse.Zoning
         public bool AdjustSpeed {get;set;}
         public bool LoopX {get;set;}
         public bool LoopY {get;set;}
+        public string Priority {get; set;}
 
         public string Algorithm { get; set; } = "strait";
 
@@ -39,6 +40,7 @@ namespace LittleBigMouse.Zoning
                 e => e.AdjustSpeed, 
                 e => e.LoopX,
                 e => e.LoopY,
+                e => e.Priority,
                 e => e.Algorithm,
                 e=> e.MainZones);
         }

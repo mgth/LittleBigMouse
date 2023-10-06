@@ -3,7 +3,7 @@
 
 #include "Point.h"
 
-class HookMouseEventArg
+class MouseEventArg
 {
 
 public:

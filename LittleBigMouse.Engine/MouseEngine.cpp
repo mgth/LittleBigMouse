@@ -1,15 +1,15 @@
+#include "pch.h"
 #include "MouseEngine.h"
-#include "MouseHookerWindowsHook.h"
 #include <iostream>
 #include <windows.h>
 
 #include "Geometry.h"
+#include "MouseHelper.h"
 #include "tinyxml2.h"
 #include "ZoneLink.h"
-#include "RemoteServer.h"
 #include "Zone.h"
 
-void MouseEngine::OnMouseMoveExtFirst(HookMouseEventArg& e)
+void MouseEngine::OnMouseMoveExtFirst(MouseEventArg& e)
 {
 	_oldPoint = e.Point;
 
@@ -30,26 +30,26 @@ void MouseEngine::OnMouseMoveExtFirst(HookMouseEventArg& e)
 
 void MouseEngine::SaveClip(const geo::Rect<long>& r)
 {
-	_oldClipRect = MouseHookerWindowsHook::GetClip();
+	_oldClipRect = GetClip();
 }
 
 void MouseEngine::ResetClip()
 {
 	if (!_oldClipRect.IsEmpty())
 	{
-		MouseHookerWindowsHook::SetClip(_oldClipRect);
+		SetClip(_oldClipRect);
 		_oldClipRect = geo::Rect<long>::Empty();
 	}
 }
 
 // no zone found at mouse position
-void MouseEngine::NoZoneMatches(HookMouseEventArg& e)
+void MouseEngine::NoZoneMatches(MouseEventArg& e)
 {
 	// Store current clip zone to be restored at next move
 	// Clip to current zone to get cursor back
 	SaveClip(_oldZone->PixelsBounds());
 
-	e.Handled = true;// when set to true, cursor stick to frame
+	e.Handled = false;// when set to true, cursor stick to frame
 
 #ifdef _DEBUG_
 	const auto p = _oldZone->ToPhysical(e.Point);
@@ -153,7 +153,7 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 	return zoneOut;
 }
 
-void MouseEngine::OnMouseMoveCross(HookMouseEventArg& e)
+void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 {
 	ResetClip();
 
@@ -226,7 +226,7 @@ void MouseEngine::OnMouseMoveCross(HookMouseEventArg& e)
 	NoZoneMatches(e);
 }
 
-void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
+void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 {
 	const auto pIn = e.Point;
 	ResetClip();
@@ -300,14 +300,14 @@ void MouseEngine::OnMouseMoveStraight(HookMouseEventArg& e)
 	Move(e, pOut, zoneOut->Target);
 }
 
-void MouseEngine::MoveInMm(HookMouseEventArg& e, const geo::Point<double>& pOutInMm, const Zone* zoneOut)
+void MouseEngine::MoveInMm(MouseEventArg& e, const geo::Point<double>& pOutInMm, const Zone* zoneOut)
 {
 	const auto pOut = zoneOut->ToPixels(pOutInMm);
 
 	Move(e, pOut, zoneOut);
 }
 
-void MouseEngine::Move(HookMouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut)
+void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut)
 {
 	const auto travel = _oldZone->TravelPixels(Layout.MainZones, zoneOut);
 
@@ -316,7 +316,7 @@ void MouseEngine::Move(HookMouseEventArg& e, const geo::Point<long>& pOut, const
 
 	const auto r = zoneOut->PixelsBounds();
 
-	_oldClipRect = MouseHookerWindowsHook::GetClip();
+	_oldClipRect = GetClip();
 	auto pos = e.Point;
 
 	for (const auto& rect : travel)
@@ -324,18 +324,18 @@ void MouseEngine::Move(HookMouseEventArg& e, const geo::Point<long>& pOut, const
 
 		if (rect.Contains(pos)) continue;
 
-		MouseHookerWindowsHook::SetClip(rect);
+		SetClip(rect);
 
-		pos = MouseHookerWindowsHook::GetMouseLocation();
+		pos = GetMouseLocation();
 
 		if (rect.Contains(pOut)) break;
 	}
 
-	MouseHookerWindowsHook::SetClip(r);
-	MouseHookerWindowsHook::SetMouseLocation(pOut);
+	SetClip(r);
+	SetMouseLocation(pOut);
 
-	_oldClipRect = MouseHookerWindowsHook::GetClip();
-	MouseHookerWindowsHook::SetMouseLocation(pOut);
+	_oldClipRect = GetClip();
+	SetMouseLocation(pOut);
 
 #ifdef _DEBUG_
 	std::cout << "moved : " << zoneOut->Name << " at " << pOut << "\n";
@@ -344,33 +344,28 @@ void MouseEngine::Move(HookMouseEventArg& e, const geo::Point<long>& pOut, const
 	e.Handled = true;
 }
 
-void MouseEngine::RunThread()
+void MouseEngine::Reset()
 {
-	MouseHookerWindowsHook::Start(*this);
+	OnMouseMoveFunc = &OnMouseMoveExtFirst;
 }
 
-void MouseEngine::Send(const std::string& message) const
+void MouseEngine::OnMouseMove(MouseEventArg& e)
 {
-	if (_remote) _remote->Send(message);
-}
-
-void MouseEngine::OnMouseMove(HookMouseEventArg& e)
-{
-	_lock.lock();
-	(this->*OnMouseMoveFunc)(e);
-	_lock.unlock();
+	if(_lock.try_lock())
+	{
+		(this->*OnMouseMoveFunc)(e);
+		_lock.unlock();
+	}
+	else
+	{
+		e.Handled = false;
+	}
+	//_lock.lock();
+	//(this->*OnMouseMoveFunc)(e);
+	//_lock.unlock();
 
 	//if(e.Timing())
 	//{
 	//	std::cout << e.GetDuration() << "\n";
 	//}
-}
-void MouseEngine::DoStop()
-{
-	MouseHookerWindowsHook::Stopping = true;
-}
-
-void MouseEngine::OnStopped()
-{
-	OnMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
 }

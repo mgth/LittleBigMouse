@@ -8,7 +8,6 @@
 #include "Point.h"
 #include "Rect.h"
 
-
 class ZoneLink;
 class ZonesLayout;
 

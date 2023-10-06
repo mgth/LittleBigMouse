@@ -7,7 +7,7 @@
 class Zone;
 
 enum Algorithm {Strait,CornerCrossing};
-
+enum Priority {Idle, Below, Normal, Above, High, Realtime};
 
 class ZonesLayout
 {
@@ -21,7 +21,9 @@ class ZonesLayout
 public:
 	bool AdjustPointer;
 	bool AdjustSpeed;
+
 	Algorithm Algorithm;
+	Priority Priority;
 
 	bool LoopX;
 	bool LoopY;

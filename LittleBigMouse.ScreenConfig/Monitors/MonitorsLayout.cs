@@ -498,6 +498,17 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     }
     bool _loadAtStartup;
 
+    /// <summary>
+    /// Load at startup
+    /// </summary>
+    [DataMember]
+    public string Priority
+    {
+        get => _priority;
+        set => SetUnsavedValue(ref _priority, value);
+    }
+    string _priority;
+
     [DataMember]
     public bool LoopAllowed => true;
 
@@ -836,7 +847,10 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
         zones.AdjustPointer = AdjustPointer;
         zones.AdjustSpeed = AdjustSpeed;
+
         zones.Algorithm = Algorithm;
+        zones.Priority = Priority;
+
         zones.LoopX = LoopX;
         zones.LoopY = LoopY;
 

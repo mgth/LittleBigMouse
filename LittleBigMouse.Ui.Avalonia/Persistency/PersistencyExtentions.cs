@@ -42,6 +42,7 @@ public static class PersistencyExtensions
                 @this.AdjustPointer = key.GetValue("AdjustPointer", 0).ToString() == "1";
                 @this.AdjustSpeed = key.GetValue("AdjustSpeed", 0).ToString() == "1";
                 @this.Algorithm = key.GetValue("Algorithm", "Strait")?.ToString()??"Strait";
+                @this.Priority = key.GetValue("Priority", "Normal")?.ToString()??"Normal";
                 @this.AllowOverlaps = key.GetValue("AllowOverlaps", 0).ToString() == "1";
                 @this.AllowDiscontinuity = key.GetValue("AllowDiscontinuity", 0).ToString() == "1";
                 @this.HomeCinema = key.GetValue("HomeCinema", 0).ToString() == "1";

@@ -132,7 +132,7 @@
                             <DataTemplate>
                                 <Border Background="Transparent">
                                     <RadioButton Classes="RadioButtonListBox"
-                                        x:DataType="controls:Algorithm"
+                                        x:DataType="controls:ListItem"
                                         Content="{Binding Caption}"
                                         Background="Transparent"
                                         VerticalAlignment="Center"
@@ -162,6 +162,27 @@
                         IsChecked="{Binding Path=Model.LoadAtStartup, Mode=TwoWay}"
                         ToolTip.Tip="Enable execution at session startup."
                         />
+
+                    <Label>Daemon Priority</Label>
+                    <ComboBox 
+                        ItemsSource="{Binding PriorityList}"
+                        SelectedItem="{Binding SelectedPriority}">
+
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="Transparent">
+                                    <Label Classes="RadioButtonListBox"
+                                           x:DataType="controls:ListItem"
+                                           Content="{Binding Caption}"
+                                           Background="Transparent"
+                                           VerticalAlignment="Center"
+                                           ToolTip.Tip ="{Binding Description}"
+                                    />
+                                </Border>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+
+                    </ComboBox>
 
 				</StackPanel>
 

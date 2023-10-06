@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "ZonesLayout.h"
 #include "XmlHelper.h"
 #include "ZoneLink.h"
@@ -73,12 +74,31 @@ void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 	LoopY = XmlHelper::GetBool(layoutElement,"LoopY");
 
 	const auto algorithm =  XmlHelper::GetString(layoutElement,"Algorithm");
-	if(algorithm=="cross")
+	if(algorithm=="Cross")
 		Algorithm = CornerCrossing;
-	else if(algorithm=="strait")
+	else if(algorithm=="Strait")
 		Algorithm = Strait;
 	else
 		Algorithm = Strait;
+
+	//enum Priority {Idle, Below, Normal, Above, High, Realtime};
+
+	const auto priority =  XmlHelper::GetString(layoutElement,"Priority");
+
+	if(priority=="Idle")
+		Priority = Idle;
+	else if(priority=="Below")
+		Priority = Below;
+	else if(priority=="Normal")
+		Priority = Normal;
+	else if(priority=="Above")
+		Priority = Above;
+	else if(priority=="High")
+		Priority = High;
+	else if(priority=="Realtime")
+		Priority = Realtime;
+	else
+		Priority = Normal;
 
 	if(const auto zonesElement = layoutElement->FirstChildElement("MainZones"))
 	{

@@ -51,7 +51,7 @@ public class LocationControlViewModelDesign : IDesignViewModel
     {
     }
 
-    public List<Algorithm> AlgorithmList { get; } = new()
+    public List<ListItem> AlgorithmList { get; } = new()
     {
         new ("strait","Strait","Simple and highly CPU-efficient transition."),
         new ("cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
@@ -61,9 +61,9 @@ public class LocationControlViewModelDesign : IDesignViewModel
     public object SelectedAlgorithm { get; set; }
 }
 
-public class Algorithm
+public class ListItem
 {
-    public Algorithm(string id, string caption, string description)
+    public ListItem(string id, string caption, string description)
     {
         Id = id;
         Caption = caption;
@@ -92,6 +92,9 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
         _selectedAlgorithm = this.WhenAnyValue(e => e.Model.Algorithm)
             .Select(a => AlgorithmList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedAlgorithm));
+
+        _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
+            .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedPriority));
 
         CopyCommand = ReactiveCommand.CreateFromTask(CopyAsync);
 
@@ -232,12 +235,19 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         await _service.StartAsync(Model.ComputeZones());
     }
 
-    public Algorithm SelectedAlgorithm 
+    public ListItem SelectedAlgorithm 
     {
         get => _selectedAlgorithm.Value;
         set => Model.Algorithm = value.Id;
     }
-    readonly ObservableAsPropertyHelper<Algorithm> _selectedAlgorithm;
+    readonly ObservableAsPropertyHelper<ListItem> _selectedAlgorithm;
+
+    public ListItem SelectedPriority 
+    {
+        get => _selectedPriority.Value;
+        set => Model.Priority = value.Id;
+    }
+    readonly ObservableAsPropertyHelper<ListItem> _selectedPriority;
 
     async Task SaveAsync()
     {
@@ -264,12 +274,22 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     bool _liveUpdate;
 
-    public List<Algorithm> AlgorithmList { get; } = new()
+    public List<ListItem> AlgorithmList { get; } = new()
     {
-        new ("strait","Strait","Simple and highly CPU-efficient transition."),
-        new ("cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
+        new ("Strait","Strait","Simple and highly CPU-efficient transition."),
+        new ("Cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
     };
 
+    public List<ListItem> PriorityList { get; } = new()
+    {
+        new ("Idle","Idle",""),
+        new ("Below","Below",""),
+        new ("Normal","Normal",""),
+        new ("Above","Above",""),
+        new ("High","High",""),
+        new ("Realtime","Realtime",""),
+
+    };
     void DoLiveUpdate()
     {
         if (LiveUpdate && !Saved)

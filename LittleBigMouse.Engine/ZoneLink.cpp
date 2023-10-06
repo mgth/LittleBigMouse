@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "ZoneLink.h"
 
 Zone* ZoneLink::At(const double pos) const

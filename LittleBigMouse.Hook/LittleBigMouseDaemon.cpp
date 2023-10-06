@@ -8,13 +8,17 @@
 #include <Shlwapi.h>
 #pragma comment(lib,"shlwapi.lib")
 
+#include "MouseEngine.h"
 #include "SocketClient.h"
 #include "XmlHelper.h"
 
-LittleBigMouseDaemon::LittleBigMouseDaemon(RemoteServer& server, MouseEngine& engine):_engine(&engine),_remoteServer(&server)
+LittleBigMouseDaemon::LittleBigMouseDaemon(MouseHooker& hook, RemoteServer& server, MouseEngine& engine):
+	_hook(&hook),
+	_remoteServer(&server),
+	_engine(&engine)
 {
 	_remoteServer->SetDaemon(this);
-	_engine->SetRemoteServer(_remoteServer);
+	_hook->SetRemoteServer(_remoteServer);
 }
 
 void LittleBigMouseDaemon::Run() const
@@ -22,8 +26,6 @@ void LittleBigMouseDaemon::Run() const
 	_remoteServer->Start();
 
 	LoadFromCurrentFile();
-
-	SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
 
 	_remoteServer->Join();
 }
@@ -38,14 +40,14 @@ void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
 	if(!root) return;
 	if(const auto zonesLayout = root->FirstChildElement("ZonesLayout"))
 	{
-		_engine->Stop();
-		_engine->Layout.Load(zonesLayout);
+		_hook->Stop();
+		_hook->Engine()->Layout.Load(zonesLayout);
 	}
 }
 
 std::string LittleBigMouseDaemon::GetStateMessage() const
 {
-	if(_engine)
+	if(_hook)
 		return "<DaemonMessage><State>Running</State></DaemonMessage>\n";
 	else
 		return "<DaemonMessage><State>Stopped</State></DaemonMessage>\n";
@@ -68,11 +70,11 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 			LoadFromFile(XmlHelper::GetString(root,"Payload"));
 
 		else if(strcmp(command, "Run")==0)
-			_engine->Start();
+			_hook->Start();
 
 		else if(strcmp(command, "Stop")==0)
 		{
-			_engine->Stop();
+			_hook->Stop();
 		}
 		else if(strcmp(command, "State")==0)
 		{
@@ -84,7 +86,7 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 
 		else if(strcmp(command, "Quit")==0)
 		{
-			_engine->Stop();
+			_hook->Stop();
 			_remoteServer->Stop();
 		}
 	}

@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "XmlHelper.h"
 
 bool XmlHelper::GetBool(tinyxml2::XMLElement* rectElement, const char* name, bool defaultValue)

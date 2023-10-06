@@ -7,8 +7,11 @@ int main(){
 
     RemoteServerSocket server;
     MouseEngine engine;
+    MouseHooker hook;
 
-    LittleBigMouseDaemon(server, engine).Run();
+    hook.OnMouseMove.connect_member(&engine, &MouseEngine::OnMouseMove);
+
+    LittleBigMouseDaemon(hook, server, engine).Run();
     
     return 0;
 }

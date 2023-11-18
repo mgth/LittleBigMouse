@@ -103,7 +103,7 @@ public partial class App : Application
         var theme = new ThemeService(Resources);
         theme.SetTheme(ThemeService.WindowsTheme.Auto);
 
-        boot.Boot();
+        var task = boot.BootAsync();
 
         base.OnFrameworkInitializationCompleted();
     }

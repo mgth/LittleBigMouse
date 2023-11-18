@@ -6,7 +6,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 
 public class MonitorLocationPlugin(IMainService mainService) : IBootloader
 {
-    public void Load(IBootContext bootstrapper)
+    public Task LoadAsync(IBootContext bootstrapper)
     {
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<MonitorLocationViewMode>(
@@ -15,6 +15,7 @@ public class MonitorLocationPlugin(IMainService mainService) : IBootloader
                 "Location"
 
         ));
+        return Task.CompletedTask;
     }
 
 }

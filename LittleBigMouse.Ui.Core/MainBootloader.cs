@@ -8,12 +8,12 @@ public class MainBootloader(
         IMainService mainService, 
         IMvvmService mvvm) : IBootloader
 {
-    public void Load(IBootContext bootstrapper)
+    public Task LoadAsync(IBootContext bootstrapper)
     {
-        if(bootstrapper.WaitingForService(mvvm)) return; 
+        if(bootstrapper.WaitingForService(mvvm)) return Task.CompletedTask; 
 
         mainService.StartNotifier();
-        mainService.ShowControlAsync();
+        return mainService.ShowControlAsync();
 
     }
 

@@ -32,7 +32,7 @@ internal class MonitorVcpViewMode : ViewMode { }
 
 public class VcpPlugin(IMainService mainService) : IBootloader
 {
-    public void Load(IBootContext bootstrapper)
+    public Task LoadAsync(IBootContext bootstrapper)
     {
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<MonitorVcpViewMode>(
@@ -40,6 +40,7 @@ public class VcpPlugin(IMainService mainService) : IBootloader
                 "Icon/MonitorVcp",
                 "Vcp control")
         );
+        return Task.CompletedTask;
     }
 
 }

@@ -33,7 +33,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 public class ViewModeScreenSize : ViewMode { }
 public class ScreenSizePlugin(IMainService mainService) : IBootloader
 {
-    public void Load(IBootContext bootstrapper)
+    public Task LoadAsync(IBootContext bootstrapper)
     {
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<ViewModeScreenSize>(
@@ -42,6 +42,6 @@ public class ScreenSizePlugin(IMainService mainService) : IBootloader
                 "Size"
                 )
         );
-
+        return Task.CompletedTask;
     }
 }

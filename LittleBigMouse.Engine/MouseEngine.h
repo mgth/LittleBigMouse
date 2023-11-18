@@ -3,7 +3,8 @@
 #include "ZonesLayout.h"
 #include <mutex>
 
-#include "SignalSlot.h"
+#include "Rect.h"
+#include "nano_signal_slot.hpp"
 #include "Segment.h"
 
 class MouseEngine 
@@ -14,11 +15,15 @@ class MouseEngine
 	geo::Rect<long> _oldClipRect = geo::Rect<long>::Empty();
 
 	std::mutex _lock;
-	void (MouseEngine::*OnMouseMoveFunc)(MouseEventArg& e) = &MouseEngine::OnMouseMoveExtFirst;
+	void (MouseEngine::*_onMouseMoveFunc)(MouseEventArg& e) = &MouseEngine::OnMouseMoveExtFirst;
 
 	//First mouse event to init position
 	void OnMouseMoveExtFirst(MouseEventArg& e);
-	void SaveClip(const geo::Rect<long>& r);
+
+	//save current clip cursor
+	void SaveClip();
+
+	//reset clip cursor from saved
 	void ResetClip();
 
 	//Mouse movement move least cpu usage strait between monitors
@@ -33,10 +38,13 @@ class MouseEngine
 
 	//Final move, cancel leaving monitor
 	void NoZoneMatches(MouseEventArg& e);
+
+	//Find first zone intersecting with mouse direction
 	Zone* FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDist) const;
+	bool CheckForStopped(const MouseEventArg& e);
 
 public:
-	Signal<std::string&> OnMessage;
+	Nano::Signal<void(std::string&)> OnMessage;
 
 	void Reset();
 	void OnMouseMove(MouseEventArg& e);

@@ -6,6 +6,8 @@
 #include <Windows.h>
 #include <iostream>
 
+#include "ClientMessage.h"
+
 bool RemoteServerPipe::StartListener()
 {
     DWORD dwRead;
@@ -37,8 +39,8 @@ bool RemoteServerPipe::StartListener()
 
 				std::cout << _inputBuffer;
 
-				if(_daemon)
-					_daemon->ReceiveMessage(std::string(_inputBuffer), nullptr);
+
+				OnMessage.fire(std::string(_inputBuffer),nullptr);
 	        }
 	    }
 
@@ -75,7 +77,7 @@ bool RemoteServerPipe::StartNotifier()
 }
 
 
-void RemoteServerPipe::Send(const std::string& message) const
+void RemoteServerPipe::Send(const std::string& message, const RemoteClient* client) const
 {
 	if(_outputPipe != INVALID_HANDLE_VALUE)
 	{

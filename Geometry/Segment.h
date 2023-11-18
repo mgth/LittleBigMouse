@@ -6,7 +6,7 @@
 #include "Point.h"
 #include "Line.h"
 
-#define DEBUG 1 
+// #define DEBUG 1 
 
 namespace geo
 {

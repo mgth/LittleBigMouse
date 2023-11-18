@@ -113,7 +113,7 @@ namespace geo
 		{
 		}
 
-		Rect(const double left, const double top, const double width, const double height) : _left(left), _top(top), _width(width), _height(height)
+		Rect(const T left, const T top, const T width, const T height) : _left(left), _top(top), _width(width), _height(height)
 		{
 		}
 

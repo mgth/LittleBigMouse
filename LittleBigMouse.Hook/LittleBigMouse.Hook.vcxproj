@@ -118,6 +118,7 @@
       <ConformanceMode>true</ConformanceMode>
       <BrowseInformation>true</BrowseInformation>
       <AdditionalIncludeDirectories>../Geometry;../LittleBigMouse.Engine</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -136,6 +137,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>../Geometry;../LittleBigMouse.Engine</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -155,6 +157,7 @@
     <ClCompile Include="ThreadHost.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ClientMessage.h" />
     <ClInclude Include="LittleBigMouseDaemon.h" />
     <ClInclude Include="MouseHooker.h" />
     <ClInclude Include="RemoteServer.h" />
@@ -162,6 +165,14 @@
     <ClInclude Include="RemoteServerSocket.h" />
     <ClInclude Include="SocketClient.h" />
     <ClInclude Include="ThreadHost.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Geometry\Geometry.vcxproj">
+      <Project>{df43e1e0-d8b8-44da-9f4f-d25e161a48eb}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\LittleBigMouse.Engine\LittleBigMouse.Engine.vcxproj">
+      <Project>{109d43c0-af82-4a09-b149-55612d7d7142}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

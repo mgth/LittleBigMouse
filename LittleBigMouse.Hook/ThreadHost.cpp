@@ -1,5 +1,9 @@
 #include "ThreadHost.h"
 
+#include <iostream>
+
+#include "LittleBigMouseDaemon.h"
+
 ThreadHost::~ThreadHost()
 {
 	while(_thread)
@@ -27,8 +31,10 @@ bool ThreadHost::Stop()
 	if (_thread && _thread->joinable())
 	{
 		DoStop();
+
 		_thread->join();
 		_thread=nullptr;
+
 		OnStopped();
 		return true;
 	}

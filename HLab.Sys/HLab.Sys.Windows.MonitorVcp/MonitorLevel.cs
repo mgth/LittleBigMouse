@@ -87,6 +87,7 @@ public class MonitorLevel : ReactiveObject
         // First get current value
         _componentGetter(Component).Switch((v =>
             {
+                _retryRead = MAX_RETRY;
                 Min = v.min;
                 Max = v.max;
 
@@ -106,6 +107,10 @@ public class MonitorLevel : ReactiveObject
                     {
                         Enabled = false;
                     }
+                    else
+                    {
+                        Thread.Sleep(100);
+                    }
                     return;
                 }
 
@@ -117,6 +122,10 @@ public class MonitorLevel : ReactiveObject
                 if (_retryRead-- <= 0)
                 {
                     Enabled = false;
+                }
+                else
+                {
+                    Thread.Sleep(100);
                 }
             });
 

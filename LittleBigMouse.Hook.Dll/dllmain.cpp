@@ -14,7 +14,6 @@
 
 static MouseEngine *engine = nullptr;
 
-
 void LoadFromFile(const std::wstring& path)
 {
     PWSTR szPath;
@@ -30,7 +29,10 @@ void LoadFromFile(const std::wstring& path)
 		std::string line;
 		while(startup){
 			std::getline(startup, line);
-		    ReceiveMessage(line);
+			tinyxml2::XMLDocument doc;
+			doc.Parse(line.c_str());
+
+		    engine->Layout.Load(doc.RootElement());
 		}
 
 	    startup.close();
@@ -39,7 +41,7 @@ void LoadFromFile(const std::wstring& path)
 }
 void LoadFromCurrentFile()
 {
-	LoadFromFile(TEXT("\\Mgth\\LittleBigMouse\\Current.xml"));
+	LoadFromFile(TEXT("\\Mgth\\LittleBigMouse\\Layout.xml"));
 }
 
 
@@ -50,11 +52,12 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 {
     switch (ul_reason_for_call)
     {
-    case DLL_PROCESS_ATTACH:
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-    case DLL_PROCESS_DETACH:
+	    case DLL_PROCESS_ATTACH:
+	    case DLL_THREAD_ATTACH:
+	    case DLL_THREAD_DETACH:
+	    case DLL_PROCESS_DETACH:
         break;
+		default: ;
     }
 
     return TRUE;
@@ -93,8 +96,7 @@ static LRESULT __stdcall MouseCallback(const int nCode, const WPARAM wParam, con
 		{
 			previousLocation = location;
 
-			auto p = MouseEventArg();
-			p.Point = location;
+			auto p = MouseEventArg(location);
 
 			engine->OnMouseMove(p);
 

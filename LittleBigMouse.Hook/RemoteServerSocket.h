@@ -15,9 +15,9 @@ protected:
 
 public:
 
-	void Send(const std::string& message) const override;
+	void Send(const std::string& message,const RemoteClient* client) const override;
 
-    void ReceiveMessage(const std::string& m, RemoteClient* client) const;
+    void ReceiveMessage(const std::string& m, RemoteClient* client);
 
 };
 

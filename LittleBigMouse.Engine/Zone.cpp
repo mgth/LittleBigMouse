@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "zone.h"
 
 #include <algorithm>
 #include <iterator>
@@ -96,11 +97,9 @@ std::vector<geo::Rect<long>>& Zone::TravelPixels(const std::vector<Zone*>& zones
         return it->second;
     }
 
-	std::vector<geo::Rect<long>> l = GetTravelPixels(zones, target);
+	const std::vector<geo::Rect<long>> l = GetTravelPixels(zones, target);
 
-    _travels[target->Main] = l;
-
-    return l;
+    return _travels[target->Main] = l;
 }
 
 Zone::Zone(int id, std::string deviceId, std::string name, const geo::Rect<long>& pixelsBounds,

@@ -122,11 +122,12 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         WindowState = WindowState.Normal;
     }
 
-    //readonly SourceCache<UiCommand, string> _commandsSource = new(c=>c.Id);
     readonly ReadOnlyObservableCollection<IUiCommand> _commands;
     public ReadOnlyObservableCollection<IUiCommand> Commands => _commands;
 
     SourceCache<IUiCommand, string> _commandsCache { get; } = new(c => c.Id);
+
+
 
     public void AddButton(IUiCommand command)
     {

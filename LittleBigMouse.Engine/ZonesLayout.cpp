@@ -181,3 +181,8 @@ void ZonesLayout::Unload()
 	}
 }
 
+ZonesLayout::~ZonesLayout()
+{
+	Unload();
+}
+

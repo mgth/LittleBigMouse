@@ -7,8 +7,11 @@ class MouseEventArg
 {
 
 public:
+	MouseEventArg(const geo::Point<long> point):Point(point){}
+
 	geo::Point<long> Point = geo::Point<long>();
 	bool Handled = false;
+	bool Running = true;
 
 	bool Timing() const {return _timing;}
 	auto StartTiming() { return _timingStart = _timingEnd = getTime();}
@@ -19,6 +22,7 @@ public:
 	}
 
 	long long GetDuration() const { return std::chrono::duration_cast<std::chrono::nanoseconds>(_timingEnd - _timingStart).count(); }
+
 private:
 	std::chrono::time_point<std::chrono::steady_clock> _timingStart;
 	std::chrono::time_point<std::chrono::steady_clock>  _timingEnd;

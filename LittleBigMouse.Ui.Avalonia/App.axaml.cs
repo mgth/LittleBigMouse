@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Reactive;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,7 +9,6 @@ using HLab.Base.Avalonia.Themes;
 using HLab.Core;
 using HLab.Core.Annotations;
 using HLab.Icons.Avalonia;
-using HLab.Icons.Avalonia.Icons;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
@@ -25,9 +23,7 @@ using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Core;
 using Splat;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
-using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Vcp.Avalonia;
-using Live.Avalonia;
 using ReactiveUI;
 using MessageBus = HLab.Core.MessageBus;
 

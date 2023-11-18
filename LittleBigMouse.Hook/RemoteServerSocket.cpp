@@ -7,6 +7,9 @@
 #include "RemoteServerSocket.h"
 #include "LittleBigMouseDaemon.h"
 #include "SocketClient.h"
+#include <iostream>
+
+#include "ClientMessage.h"
 
 class RemoteClient;
 
@@ -40,7 +43,7 @@ void RemoteServerSocket::RunThread()
 		            _clients.push_back(c);
 					c->Start();
 					//immediately inform client of current state
-					c->Send(_daemon->GetStateMessage());
+					OnMessage.fire("",c);
 		        }
 		    }
 			while(!_clients.empty())
@@ -57,16 +60,20 @@ void RemoteServerSocket::RunThread()
 
 }
 
-void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client) const
+void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client) 
 {
-	_daemon->ReceiveMessage(m, client);
+	OnMessage.fire(m,client);
 }
 
-void RemoteServerSocket::Send(const std::string& message) const
+void RemoteServerSocket::Send(const std::string& message, const RemoteClient* client) const
 {
-    for(const auto client : _clients)
-    {
-        if(client)
-			client->Send(message);
-    }
+	if(client)
+		client->Send(message);
+	else
+	{
+	    for(const auto c : _clients)
+	    {
+	        if(c) c->Send(message);
+	    }
+	}
 }

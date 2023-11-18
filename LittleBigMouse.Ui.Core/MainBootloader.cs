@@ -12,7 +12,7 @@ public class MainBootloader(
     {
         if(bootstrapper.WaitingForService(mvvm)) return; 
 
-        //_mainService.StartNotifier();
+        mainService.StartNotifier();
         mainService.ShowControlAsync();
 
     }

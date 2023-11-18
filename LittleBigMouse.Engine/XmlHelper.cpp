@@ -57,10 +57,10 @@ double XmlHelper::GetDouble(const tinyxml2::XMLElement* element, const char* nam
 
 std::string XmlHelper::GetString(const tinyxml2::XMLElement* element, const char* name)
 {
-	const auto attribut = element->FindAttribute(name);
-	if(attribut)
+	const auto attribute = element->FindAttribute(name);
+	if(attribute)
 	{
-		return std::string(attribut->Value());
+		return {attribute->Value()};
 	}
 	return "";
 }
@@ -78,11 +78,11 @@ geo::Rect<long> XmlHelper::GetRectLong(tinyxml2::XMLElement* parent, const char*
 			const long width = GetLong(rectElement,"Width");
 			const long height = GetLong(rectElement,"Height");
 
-			return geo::Rect<long>(left,top,width,height);
+			return {left,top,width,height};
 		}
 	}
 
-	return geo::Rect<long>(0,0,0,0);
+	return {0,0,0,0};
 
 }
 

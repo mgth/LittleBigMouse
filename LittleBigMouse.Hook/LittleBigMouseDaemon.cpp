@@ -8,31 +8,57 @@
 #include <Shlwapi.h>
 #pragma comment(lib,"shlwapi.lib")
 
+#include "ClientMessage.h"
 #include "MouseEngine.h"
+#include "MouseHooker.h"
 #include "SocketClient.h"
 #include "XmlHelper.h"
 
-LittleBigMouseDaemon::LittleBigMouseDaemon(MouseHooker& hook, RemoteServer& server, MouseEngine& engine):
-	_hook(&hook),
-	_remoteServer(&server),
-	_engine(&engine)
+void LittleBigMouseDaemon::Send(const std::string& string) const
 {
-	_remoteServer->SetDaemon(this);
-	_hook->SetRemoteServer(_remoteServer);
+	_remoteServer->Send(string,nullptr);
 }
 
-void LittleBigMouseDaemon::Run() const
+LittleBigMouseDaemon::LittleBigMouseDaemon(MouseHooker* hook, RemoteServer* server, MouseEngine* engine):
+	_hook(hook),
+	_engine(engine),
+	_remoteServer(server)
 {
-	_remoteServer->Start();
+	if(_hook)
+	{
+		_hook->OnMouseMove.connect<&MouseEngine::OnMouseMove>(_engine);
+		_hook->OnMessage.connect<&LittleBigMouseDaemon::Send>(this);
+	}
+	if(_remoteServer)
+	{
+		_remoteServer->OnMessage.connect<&LittleBigMouseDaemon::ReceiveClientMessage>(this);
+	}
+}
 
-	LoadFromCurrentFile();
+void LittleBigMouseDaemon::Run(const std::string& path) const
+{
+	if(_remoteServer)
+		_remoteServer->Start();
 
-	_remoteServer->Join();
+	if(!path.empty())
+		LoadFromFile(path);
+
+	if(_hook)
+		_hook->Join();
+
+	if(_remoteServer)
+		_remoteServer->Join();
 }
 
 LittleBigMouseDaemon::~LittleBigMouseDaemon()
 {
-	_remoteServer->SetDaemon(nullptr);
+	if(_hook)
+	{
+		_hook->OnMouseMove.disconnect<&MouseEngine::OnMouseMove>(_engine);
+		_hook->OnMessage.disconnect<&LittleBigMouseDaemon::Send>(this);
+	}
+	if(_remoteServer)
+		_remoteServer->OnMessage.disconnect<&LittleBigMouseDaemon::ReceiveClientMessage>(this);
 }
 
 void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
@@ -40,20 +66,15 @@ void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
 	if(!root) return;
 	if(const auto zonesLayout = root->FirstChildElement("ZonesLayout"))
 	{
-		_hook->Stop();
-		_hook->Engine()->Layout.Load(zonesLayout);
+		if(_hook)
+			_hook->Stop();
+
+		if(_engine)
+			_engine->Layout.Load(zonesLayout);
 	}
 }
 
-std::string LittleBigMouseDaemon::GetStateMessage() const
-{
-	if(_hook)
-		return "<DaemonMessage><State>Running</State></DaemonMessage>\n";
-	else
-		return "<DaemonMessage><State>Stopped</State></DaemonMessage>\n";
-}
-
-void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, RemoteClient* client) const
+void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, const RemoteClient* client) const
 {
 	if(!root) return;
 
@@ -66,28 +87,30 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 		if(strcmp(command, "Load")==0)
 			ReceiveLoadMessage(root->FirstChildElement("Payload"));
 
-		if(strcmp(command, "LoadFromFile")==0)
+		else if(strcmp(command, "LoadFromFile")==0)
 			LoadFromFile(XmlHelper::GetString(root,"Payload"));
 
 		else if(strcmp(command, "Run")==0)
-			_hook->Start();
+		{
+			if(_hook && !_hook->Hooked())
+				_hook->Start();
+		}
 
 		else if(strcmp(command, "Stop")==0)
 		{
-			_hook->Stop();
+			if(_hook && _hook->Hooked())
+				_hook->Stop();
 		}
+
 		else if(strcmp(command, "State")==0)
-		{
-			if(client)
-				client->Send(GetStateMessage());
-			else
-				_remoteServer->Send(GetStateMessage());
-		}
+			SendState(client);
 
 		else if(strcmp(command, "Quit")==0)
 		{
-			_hook->Stop();
-			_remoteServer->Stop();
+			if(_hook && _hook->Hooked())
+				_hook->Stop();
+			if(_remoteServer)
+				_remoteServer->Stop();
 		}
 	}
 }
@@ -110,17 +133,28 @@ void LittleBigMouseDaemon::ReceiveMessage(tinyxml2::XMLElement* root, RemoteClie
 	}
 }
 
-void LittleBigMouseDaemon::ReceiveMessage(const std::string& m, RemoteClient* client = nullptr) const
+void LittleBigMouseDaemon::SendState(const RemoteClient* client) const
 {
-	tinyxml2::XMLDocument doc;
-	doc.Parse(m.c_str());
+	if(!_remoteServer) return;
 
-	ReceiveMessage(doc.RootElement(), client);
+	if(_hook && _hook->Hooked())
+		_remoteServer->Send("<DaemonMessage><State>Running</State></DaemonMessage>\n",client);
+	else
+		_remoteServer->Send("<DaemonMessage><State>Stopped</State></DaemonMessage>\n",client);
 }
 
-void LittleBigMouseDaemon::LoadFromCurrentFile() const
+void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, RemoteClient* client) const
 {
-	LoadFromFile(TEXT("\\Mgth\\LittleBigMouse\\Current.xml"));
+	if (message.empty())
+	{
+		SendState(client);
+		return;
+	}
+
+	tinyxml2::XMLDocument doc;
+	doc.Parse(message.c_str());
+
+	ReceiveMessage(doc.RootElement(), client);
 }
 
 void LittleBigMouseDaemon::LoadFromFile(const std::string& path) const
@@ -140,29 +174,23 @@ void LittleBigMouseDaemon::LoadFromFile(const std::string& path) const
 
 void LittleBigMouseDaemon::LoadFromFile(const std::wstring& path) const
 {
-	if(path.empty())
-	{
-		LoadFromCurrentFile();
-		return;
-	}
-
     PWSTR szPath;
 
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
     {
-	    std::ifstream startup;
+	    std::ifstream file;
 
         PathAppend(szPath, path.c_str());
-	    startup.open(szPath, std::ios::in);
+	    file.open(szPath, std::ios::in);
 
 	    std::string buffer;
 		std::string line;
-		while(startup){
-			std::getline(startup, line);
-		    ReceiveMessage(line);
+		while(file){
+			std::getline(file, line);
+		    ReceiveClientMessage(line,nullptr);
 		}
 
-	    startup.close();
+	    file.close();
     }
 
 }

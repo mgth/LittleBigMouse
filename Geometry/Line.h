@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "Point.h"
-#include "Rect.h"
 
 namespace geo
 {

@@ -19,16 +19,17 @@ void MouseEngine::OnMouseMoveExtFirst(MouseEventArg& e)
 
 	switch (Layout.Algorithm)
 	{
-	case Strait:
-		OnMouseMoveFunc = &MouseEngine::OnMouseMoveStraight;
-		break;
-	case CornerCrossing:
-		OnMouseMoveFunc = &MouseEngine::OnMouseMoveCross;
-		break;
+		case Strait:
+			_onMouseMoveFunc = &MouseEngine::OnMouseMoveStraight;
+			break;
+
+		case CornerCrossing:
+			_onMouseMoveFunc = &MouseEngine::OnMouseMoveCross;
+			break;
 	}
 }
 
-void MouseEngine::SaveClip(const geo::Rect<long>& r)
+void MouseEngine::SaveClip()
 {
 	_oldClipRect = GetClip();
 }
@@ -47,7 +48,8 @@ void MouseEngine::NoZoneMatches(MouseEventArg& e)
 {
 	// Store current clip zone to be restored at next move
 	// Clip to current zone to get cursor back
-	SaveClip(_oldZone->PixelsBounds());
+	SaveClip();
+	SetClip(_oldZone->PixelsBounds());
 
 	e.Handled = false;// when set to true, cursor stick to frame
 
@@ -57,7 +59,6 @@ void MouseEngine::NoZoneMatches(MouseEventArg& e)
 #endif
 
 }
-
 
 Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDist) const
 {
@@ -153,10 +154,20 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 	return zoneOut;
 }
 
+bool MouseEngine::CheckForStopped(const MouseEventArg& e)
+{
+	if(e.Running) return false;
+#ifdef _DEBUG
+	std::cout << "<reset>" << std::endl;
+#endif
+	_onMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
+	return true;
+}
+
 void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 {
 	ResetClip();
-
+	if(CheckForStopped(e)) return;
 
 	if (_oldZone->PixelsBounds().Contains(e.Point))
 	{
@@ -228,8 +239,10 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 
 void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 {
-	const auto pIn = e.Point;
 	ResetClip();
+	if(CheckForStopped(e)) return;
+
+	const auto pIn = e.Point;
 
 	const ZoneLink* zoneOut;
 	geo::Point<long> pOut;
@@ -316,7 +329,7 @@ void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zon
 
 	const auto r = zoneOut->PixelsBounds();
 
-	_oldClipRect = GetClip();
+	SaveClip();
 	auto pos = e.Point;
 
 	for (const auto& rect : travel)
@@ -334,10 +347,10 @@ void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zon
 	SetClip(r);
 	SetMouseLocation(pOut);
 
-	_oldClipRect = GetClip();
-	SetMouseLocation(pOut);
+	//_oldClipRect = GetClip();
+	//SetMouseLocation(pOut);
 
-#ifdef _DEBUG_
+#ifdef _DEBUG
 	std::cout << "moved : " << zoneOut->Name << " at " << pOut << "\n";
 #endif
 
@@ -346,14 +359,18 @@ void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zon
 
 void MouseEngine::Reset()
 {
-	OnMouseMoveFunc = &OnMouseMoveExtFirst;
+	_onMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
 }
 
 void MouseEngine::OnMouseMove(MouseEventArg& e)
 {
+#ifdef _DEBUG_
+	std::cout << e.Point << "\n";
+#endif
+
 	if(_lock.try_lock())
 	{
-		(this->*OnMouseMoveFunc)(e);
+		(this->*_onMouseMoveFunc)(e);
 		_lock.unlock();
 	}
 	else

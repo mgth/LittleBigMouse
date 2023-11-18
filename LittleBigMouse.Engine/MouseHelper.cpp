@@ -54,14 +54,9 @@ static void deskMouseMove(int x, int y)
 
 void SetMouseLocation(const geo::Point<long>& location)
 {
-	//SetCursorPos(location.X(),location.Y());
+	SetCursorPos(location.X(),location.Y());
 
-	deskMouseMove(location.X(),location.Y());
-
-	//send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
- //       location.X(),
- //       location.Y(),
- //       0);
+	//deskMouseMove(location.X(),location.Y());
 }
 
 

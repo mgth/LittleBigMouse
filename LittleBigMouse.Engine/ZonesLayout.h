@@ -2,12 +2,12 @@
 #include <vector>
 
 #include "Point.h"
+#include "Priority.h"
 #include "tinyxml2.h"
 
 class Zone;
 
 enum Algorithm {Strait,CornerCrossing};
-enum Priority {Idle, Below, Normal, Above, High, Realtime};
 
 class ZonesLayout
 {
@@ -43,9 +43,6 @@ public:
 
 	void Unload();
 
-	~ZonesLayout()
-	{
-		Unload();
-	}
+	~ZonesLayout();
 };
 

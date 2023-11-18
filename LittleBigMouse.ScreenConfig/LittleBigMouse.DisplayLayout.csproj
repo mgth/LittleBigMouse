@@ -8,11 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.5-rc1" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.5" />
     <PackageReference Include="H.Pipes" Version="2.0.53" />
     <PackageReference Include="MessageBox.Avalonia" Version="3.1.4" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0-rc.1.23419.4" />
-    <PackageReference Include="System.Management" Version="8.0.0-rc.1.23419.4" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0-rc.2.23479.6" />
+    <PackageReference Include="System.Management" Version="8.0.0-rc.2.23479.6" />
     <PackageReference Include="TaskScheduler" Version="2.10.1" />
   </ItemGroup>
 

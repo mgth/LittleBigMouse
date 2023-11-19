@@ -47,6 +47,8 @@
     <ProjectReference Include="..\HLab\HLab.Notify.Avalonia\HLab.Notify.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.UserNotification\HLab.UserNotification.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Engine\LittleBigMouse.Engine.vcxproj" />
+    <ProjectReference Include="..\LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Layout.Avalonia\LittleBigMouse.Plugin.Layout.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp.Avalonia\LittleBigMouse.Plugin.Vcp.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins.Avalonia\LittleBigMouse.Plugins.Avalonia.csproj" />

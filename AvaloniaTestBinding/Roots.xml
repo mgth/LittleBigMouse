@@ -1,5 +1,0 @@
-﻿<linker>
-  <!-- Can be removed if CompiledBinding and no reflection are used -->
-  <assembly fullname="AvaloniaTestBinding" preserve="All" />
-  <assembly fullname="Avalonia.Themes.Fluent" preserve="All" />
-</linker>

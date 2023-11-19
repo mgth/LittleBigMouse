@@ -1,0 +1,42 @@
+﻿<UserControl 
+            x:Class="LittleBigMouse.Ui.Avalonia.Plugins.Debug.DebugMonitorView"
+            xmlns="https://github.com/avaloniaui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+            xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
+             xmlns:debug="clr-namespace:LittleBigMouse.Ui.Avalonia.Plugins.Debug"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300"
+             x:Name="UserControl"
+            x:DataType="debug:MonitorDebugViewModel"
+    >
+    <Design.DataContext>
+        <debug:MonitorDebugViewModel/>
+    </Design.DataContext>
+
+    <UserControl.Resources>
+        <converters:MultiScaleConverter x:Key="MultiScale"/>
+        <converters:ScaleConverter x:Key="Scale"/>
+    </UserControl.Resources>
+
+    <Grid TextElement.FontSize="{Binding Bounds, ElementName=UserControl, ConverterParameter=0.035|0.1|20}">
+        <Border BorderThickness="0" Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5"/>
+
+        <ScrollViewer>
+            <ListBox ItemsSource="{Binding Values}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="debug:MonitorDebugListValue">
+                        <WrapPanel>
+                            <Label 
+                                Foreground="Blue" 
+                                Content="{Binding Path=Name}"/>
+                            <Label 
+                                Content="{Binding Path=Value}"/>
+                        </WrapPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

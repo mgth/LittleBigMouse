@@ -2,7 +2,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
-		<Platforms>x64</Platforms>
+		<Platforms>x64;x86</Platforms>
 		<OutputType>WinExe</OutputType>
 		<ApplicationIcon>MainIcon.ico</ApplicationIcon>
         <LangVersion>preview</LangVersion>
@@ -44,11 +44,8 @@
     <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.Notify.Annotations\HLab.Notify.Annotations.csproj" />
-    <ProjectReference Include="..\HLab\HLab.Notify.Avalonia\HLab.Notify.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.UserNotification\HLab.UserNotification.csproj" />
-    <ProjectReference Include="..\LittleBigMouse.Engine\LittleBigMouse.Engine.vcxproj" />
-    <ProjectReference Include="..\LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Layout.Avalonia\LittleBigMouse.Plugin.Layout.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp.Avalonia\LittleBigMouse.Plugin.Vcp.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins.Avalonia\LittleBigMouse.Plugins.Avalonia.csproj" />
@@ -87,8 +84,8 @@
     <Compile Update="MonitorFrame\MonitorFrameView.axaml.cs">
       <DependentUpon>MonitorFrameView.axaml</DependentUpon>
     </Compile>
-    <Compile Update="MultiMonitorsLayoutPresenterViewModelView.axaml.cs">
-      <DependentUpon>MultiMonitorsLayoutPresenterViewModelView.axaml</DependentUpon>
+    <Compile Update="MultiMonitorsLayoutPresenterView.axaml.cs">
+      <DependentUpon>MultiMonitorsLayoutPresenterView.axaml</DependentUpon>
     </Compile>
     <Compile Update="Plugins\Debug\DebugMonitorView.axaml.cs">
       <DependentUpon>DebugMonitorView.axaml</DependentUpon>

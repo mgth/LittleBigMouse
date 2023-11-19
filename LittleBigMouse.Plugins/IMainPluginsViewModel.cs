@@ -1,6 +1,4 @@
-﻿using System.Windows.Input;
-using HLab.Mvvm.Annotations;
-using LittleBigMouse.DisplayLayout.Monitors;
+﻿using HLab.Mvvm.Annotations;
 
 namespace LittleBigMouse.Plugins;
 

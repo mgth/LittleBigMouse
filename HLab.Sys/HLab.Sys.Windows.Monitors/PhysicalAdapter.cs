@@ -1,7 +1,5 @@
 ﻿using DynamicData;
-using Newtonsoft.Json;
 using ReactiveUI;
-using System.Reactive.Linq;
 
 namespace HLab.Sys.Windows.Monitors;
 

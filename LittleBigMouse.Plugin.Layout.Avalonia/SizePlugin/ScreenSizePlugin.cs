@@ -24,8 +24,6 @@
 using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
-using ReactiveUI;
-using System.Reactive.Linq;
 using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;

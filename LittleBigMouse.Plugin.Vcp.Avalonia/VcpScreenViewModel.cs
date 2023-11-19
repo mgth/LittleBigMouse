@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using System.Collections.ObjectModel;
 using System.Reactive.Linq;
 using System.Windows.Input;
 using Avalonia.Controls;
@@ -28,7 +29,6 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Notify.PropertyChanged;
 using HLab.Sys.Argyll;
 using HLab.Sys.Windows.Monitors;
 using HLab.Sys.Windows.MonitorVcp;
@@ -41,7 +41,7 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
 public class VcpScreenViewModelDesign : VcpScreenViewModel, IDesignViewModel
 {
-    public VcpScreenViewModelDesign() : base(vm=>new TestPatternButtonViewModel(vm), null, new ObservableCollectionSafe<TestPatternButtonViewModel>())
+    public VcpScreenViewModelDesign() : base(vm=>new TestPatternButtonViewModel(vm), null, new ObservableCollection<TestPatternButtonViewModel>())
     {
     }
 }
@@ -55,7 +55,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
     public VcpScreenViewModel(
         Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, 
         IMonitorsSet monitorsService,
-        ObservableCollectionSafe<TestPatternButtonViewModel> testPatterns)
+        ObservableCollection<TestPatternButtonViewModel> testPatterns)
     {
         _getButtonPattern = getButtonPattern;
         TestPatterns = testPatterns;
@@ -143,7 +143,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
     public Window? TestPatternPanel { get; set; } = null;
 
-    public ObservableCollectionSafe<TestPatternButtonViewModel> TestPatterns { get; }
+    public ObservableCollection<TestPatternButtonViewModel> TestPatterns { get; }
 
     public ProbeLut? Lut => Model?.MonitorDevice(_monitorsService).ProbeLut();
 

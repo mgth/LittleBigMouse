@@ -1,24 +1,24 @@
-﻿ /*
-  LittleBigMouse.Plugin.Location
-  Copyright (c) 2021 Mathieu GRENET.  All right reserved.
+﻿/*
+ LittleBigMouse.Plugin.Location
+ Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
-  This file is part of LittleBigMouse.Plugin.Location.
+ This file is part of LittleBigMouse.Plugin.Location.
 
-    LittleBigMouse.Plugin.Location is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+   LittleBigMouse.Plugin.Location is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
-    LittleBigMouse.Plugin.Location is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+   LittleBigMouse.Plugin.Location is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with MouseControl.  If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with MouseControl.  If not, see <http://www.gnu.org/licenses/>.
 
-	  mailto:mathieu@mgth.fr
-	  http://www.mgth.fr
+     mailto:mathieu@mgth.fr
+     http://www.mgth.fr
 */
 
 using System.Diagnostics;
@@ -30,12 +30,13 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using HLab.Base.Avalonia.Controls;
 using HLab.Mvvm.Annotations;
-using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;
+
+using static HLab.Sys.Windows.API.WinUser;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 
@@ -100,7 +101,7 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
                     Bounds.Height * _staticPoint.Value.Y
                 ));
 
-            WinUser.SetCursorPos((int)p.X, (int)p.Y);
+            SetCursorPos((int)p.X, (int)p.Y);
 
             _staticPoint = null;
         }
@@ -214,7 +215,7 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
         {
             var p2 = new Point(rx * db.Bounds.Width, ry * db.Bounds.Height);
             var l = db.PointToScreen(p2);
-            WinUser.SetCursorPos((int)l.X, (int)l.Y);
+            SetCursorPos((int)l.X, (int)l.Y);
         }, DispatcherPriority.Loaded);
     }
 

@@ -21,9 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System.Reactive.Disposables;
-using System.Reactive.Linq;
-using ExCSS;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;

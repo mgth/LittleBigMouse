@@ -1,8 +1,6 @@
 ﻿#nullable enable
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.Win32;
-using static HLab.Sys.Windows.API.MonitorConfiguration.PhysicalMonitorEnumerationApi;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 

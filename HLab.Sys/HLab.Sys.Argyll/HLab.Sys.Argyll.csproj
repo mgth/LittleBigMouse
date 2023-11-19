@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    <Platforms>x64</Platforms>
+    <Platforms>x64;x86</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
   </PropertyGroup>
 
@@ -12,7 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\HLab\HLab.Geo\HLab.Geo.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Notify.PropertyChanged\HLab.Notify.PropertyChanged.csproj" />
   </ItemGroup>
 
 </Project>

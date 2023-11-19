@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using HLab.Options;
 using HLab.Sys.Windows.Monitors;
 
 namespace HLab.Sys.Windows.MonitorVcp;

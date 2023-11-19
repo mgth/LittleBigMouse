@@ -1,9 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
-using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors;
 using LittleBigMouse.Plugins.Avalonia;

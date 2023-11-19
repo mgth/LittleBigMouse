@@ -25,7 +25,6 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using HLab.Mvvm.Annotations;
-using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 

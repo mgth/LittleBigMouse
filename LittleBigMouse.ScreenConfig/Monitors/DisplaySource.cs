@@ -3,7 +3,6 @@ using System.Runtime.Serialization;
 using Avalonia;
 using Avalonia.Media;
 using HLab.Base.Avalonia;
-using Microsoft.Win32;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;

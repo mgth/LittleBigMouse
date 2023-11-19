@@ -21,9 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System.Runtime.Serialization;
-using System.Xml.Serialization;
-
 namespace LittleBigMouse.Zoning;
 
 public enum LittleBigMouseState

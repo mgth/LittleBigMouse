@@ -33,7 +33,6 @@ using Avalonia.Media;
 using DynamicData;
 using HLab.Sys.Windows.API;
 using Microsoft.Win32;
-using ReactiveUI;
 
 namespace HLab.Sys.Windows.Monitors;
 

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
 	<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
-    <Platforms>x64</Platforms>
+    <Platforms>x64;x86</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
   </PropertyGroup>
 

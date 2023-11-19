@@ -1,12 +1,8 @@
 ﻿using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout;
-using LittleBigMouse.Ui.Avalonia.Main;
 using Microsoft.Win32;
 using System.Globalization;
-using System.Runtime.InteropServices;
 using Avalonia;
-using HLab.Sys.Windows.Monitors;
-using static ExCSS.AttributeSelectorFactory;
 #pragma warning disable CA1416
 
 namespace LittleBigMouse.Ui.Avalonia.Persistency;

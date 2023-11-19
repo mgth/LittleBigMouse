@@ -21,7 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System.Reactive.Joins;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;

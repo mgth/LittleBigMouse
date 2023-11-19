@@ -22,9 +22,6 @@
 */
 
 using System;
-using System.Diagnostics;
-using System.Text.Json.Serialization;
-using Avalonia;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;

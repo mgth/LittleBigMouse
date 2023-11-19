@@ -2,7 +2,6 @@
 using DynamicData;
 using HLab.Sys.Windows.API;
 using System;
-using Avalonia.Threading;
 
 namespace HLab.Sys.Windows.Monitors;
 

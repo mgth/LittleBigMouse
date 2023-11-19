@@ -25,7 +25,6 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
-using DynamicData.Binding;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 

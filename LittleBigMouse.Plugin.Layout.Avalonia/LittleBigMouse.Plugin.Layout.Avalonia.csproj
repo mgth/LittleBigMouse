@@ -4,7 +4,7 @@
 	<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Platforms>x64</Platforms>
+    <Platforms>x64;x86</Platforms>
 	<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
@@ -29,6 +29,7 @@
     <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
+    <ProjectReference Include="..\HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins.Avalonia\LittleBigMouse.Plugins.Avalonia.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.csproj" />
   </ItemGroup>

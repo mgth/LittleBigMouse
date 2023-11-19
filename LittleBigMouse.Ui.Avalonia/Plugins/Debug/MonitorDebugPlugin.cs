@@ -1,11 +1,7 @@
-﻿using System.Reactive.Linq;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using HLab.Core.Annotations;
-using HLab.Mvvm.Annotations;
-using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
-using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 

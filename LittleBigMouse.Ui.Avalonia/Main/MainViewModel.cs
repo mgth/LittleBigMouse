@@ -8,7 +8,6 @@ using Avalonia.Platform;
 using DynamicData;
 using DynamicData.Binding;
 using HLab.Base.Avalonia.Extensions;
-using HLab.Icons.Avalonia.Icons;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.Plugins;

@@ -1,6 +1,5 @@
 ﻿
 using Avalonia;
-using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 

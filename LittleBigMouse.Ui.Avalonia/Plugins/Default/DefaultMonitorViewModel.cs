@@ -21,9 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System.Linq;
-using Avalonia.Layout;
-using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;

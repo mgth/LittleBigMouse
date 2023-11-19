@@ -28,14 +28,11 @@ using System.ComponentModel;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Converters;
 using HLab.Mvvm.Annotations;
-using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
-using OneOf.Types;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 

@@ -3,18 +3,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Management;
-using System.Reactive.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using DynamicData;
-using ReactiveUI;
 using Avalonia;
 using Microsoft.Win32;
 using HLab.ColorTools.Avalonia;
 using HLab.Sys.Windows.API;
 
-using static HLab.Sys.Windows.API.ShellScalingApi;
+using static HLab.Sys.Windows.API.ErrHandlingApi;
+using static HLab.Sys.Windows.API.SetupApi;
+using static HLab.Sys.Windows.API.WinBase;
 using static HLab.Sys.Windows.API.WinGdi;
+using static HLab.Sys.Windows.API.WinGdi.DisplayModeFlags;
+using static HLab.Sys.Windows.API.WinReg;
 using static HLab.Sys.Windows.API.WinUser;
 
 namespace HLab.Sys.Windows.Monitors;
@@ -26,25 +28,25 @@ public static class MonitorDeviceHelper
     {
         return new DisplayMode
         {
-            DisplayOrientation = (int)(((dm.Fields & DisplayModeFlags.DisplayOrientation) != 0)
+            DisplayOrientation = (int)(((dm.Fields & DisplayOrientation) != 0)
                 ? dm.DisplayOrientation : DevMode.DisplayOrientationEnum.Default),
 
-            Position = ((dm.Fields & DisplayModeFlags.Position) != 0)
+            Position = ((dm.Fields & Position) != 0)
                 ? new Point(dm.Position.X, dm.Position.Y) : new Point(0, 0),
 
-            BitsPerPixel = ((dm.Fields & DisplayModeFlags.BitsPerPixel) != 0)
+            BitsPerPixel = ((dm.Fields & BitsPerPixel) != 0)
                 ? dm.BitsPerPel : 0,
 
-            Pels = ((dm.Fields & (DisplayModeFlags.PixelsWidth | DisplayModeFlags.PixelsHeight)) != 0)
+            Pels = ((dm.Fields & (PixelsWidth | PixelsHeight)) != 0)
                 ? new Size(dm.PixelsWidth, dm.PixelsHeight) : new Size(1, 1),
 
-            DisplayFlags = (int)((dm.Fields & DisplayModeFlags.DisplayFlags) != 0
+            DisplayFlags = (int)((dm.Fields & DisplayFlags) != 0
                 ? dm.DisplayFlags : 0),
 
-            DisplayFrequency = (int)(((dm.Fields & DisplayModeFlags.DisplayFrequency) != 0)
+            DisplayFrequency = (int)(((dm.Fields & DisplayFrequency) != 0)
                 ? dm.DisplayFrequency : 0),
 
-            DisplayFixedOutput = (int)(((dm.Fields & DisplayModeFlags.DisplayFixedOutput) != 0)
+            DisplayFixedOutput = (int)(((dm.Fields & DisplayFixedOutput) != 0)
                 ? dm.DisplayFixedOutput : 0),
         };
     }
@@ -208,14 +210,14 @@ public static class MonitorDeviceHelper
     }
 
 
-    public static void UpdateFromMonitorInfo(this MonitorDevice @this, WinUser.MonitorInfoEx mi, IEnumerable<MonitorDevice> monitors)
+    public static void UpdateFromMonitorInfo(this MonitorDevice @this, MonitorInfoEx mi, IEnumerable<MonitorDevice> monitors)
     {
         @this.SetPrimary(monitors, mi.Flags == 1);
         @this.MonitorArea = mi.Monitor.ToRect();
         @this.WorkArea = mi.WorkArea.ToRect();
     }
 
-    public static void UpdateFromMonitorInfo(this MonitorDevice @this, WinUser.MonitorInfo mi, IEnumerable<MonitorDevice> monitors)
+    public static void UpdateFromMonitorInfo(this MonitorDevice @this, MonitorInfo mi, IEnumerable<MonitorDevice> monitors)
     {
         @this.SetPrimary(monitors, mi.Flags == 1);
         @this.MonitorArea = mi.Monitor.ToRect();
@@ -232,11 +234,11 @@ public static class MonitorDeviceHelper
             PixelsHeight = (uint)area.Height,
             DisplayOrientation = (DevMode.DisplayOrientationEnum)orientation,
             BitsPerPel = 32,
-            Fields = DisplayModeFlags.Position |
-                     DisplayModeFlags.PixelsHeight |
-                     DisplayModeFlags.PixelsWidth |
-                     DisplayModeFlags.DisplayOrientation |
-                     DisplayModeFlags.BitsPerPixel
+            Fields = Position |
+                     PixelsHeight |
+                     PixelsWidth |
+                     DisplayOrientation |
+                     BitsPerPixel
         };
 
         var flag =
@@ -259,12 +261,12 @@ public static class MonitorDeviceHelper
             DeviceName = deviceName,
             PixelsHeight = 0,
             PixelsWidth = 0,
-            Fields = DisplayModeFlags.PixelsWidth |
-                     DisplayModeFlags.PixelsHeight |
+            Fields = PixelsWidth |
+                     PixelsHeight |
                      // DisplayModeFlags.BitsPerPixel |
-                     DisplayModeFlags.Position |
-                     DisplayModeFlags.DisplayFrequency |
-                     DisplayModeFlags.DisplayFlags
+                     Position |
+                     DisplayFrequency |
+                     DisplayFlags
         };
 
         var ch = ChangeDisplaySettingsEx(
@@ -294,7 +296,7 @@ public static class MonitorDeviceHelper
     public static void UpdateDpi(this MonitorDevice @this, nint hMonitor)
     {
         {
-            var hResult = GetDpiForMonitor(hMonitor, ShellScalingApi.DpiType.Effective, out var x, out var y);
+            var hResult = ShellScalingApi.GetDpiForMonitor(hMonitor, ShellScalingApi.DpiType.Effective, out var x, out var y);
             if (hResult != 0)
             {
                 var errorCode = Marshal.GetLastWin32Error();
@@ -304,7 +306,7 @@ public static class MonitorDeviceHelper
             @this.EffectiveDpi = new Vector(x, y);
         }
         {
-            if (GetDpiForMonitor(hMonitor, ShellScalingApi.DpiType.Angular, out var x, out var y) != 0)
+            if (ShellScalingApi.GetDpiForMonitor(hMonitor, ShellScalingApi.DpiType.Angular, out var x, out var y) != 0)
             {
                 var errorCode = Marshal.GetLastWin32Error();
                 Debug.WriteLine("GetDpiForMonitor failed with error code: {0}", errorCode);
@@ -312,7 +314,7 @@ public static class MonitorDeviceHelper
             @this.AngularDpi = new Vector(x, y);
         }
         {
-            if (GetDpiForMonitor(hMonitor, ShellScalingApi.DpiType.Raw, out var x, out var y) != 0)
+            if (ShellScalingApi.GetDpiForMonitor(hMonitor, ShellScalingApi.DpiType.Raw, out var x, out var y) != 0)
             {
                 var errorCode = Marshal.GetLastWin32Error();
                 Debug.WriteLine("GetDpiForMonitor failed with error code: {0}", errorCode);
@@ -321,7 +323,7 @@ public static class MonitorDeviceHelper
         }
         {
             var factor = 100;
-            if (GetScaleFactorForMonitor(hMonitor, ref factor) != 0)
+            if (ShellScalingApi.GetScaleFactorForMonitor(hMonitor, ref factor) != 0)
             {
                 var errorCode = Marshal.GetLastWin32Error();
                 Debug.WriteLine("GetScaleFactorForMonitor failed with error code: {0}", errorCode);
@@ -381,11 +383,11 @@ public static class MonitorDeviceHelper
 
     static Edid GetEdid(string deviceId)
     {
-        var devInfo = SetupApi.SetupDiGetClassDevsEx(
-            ref SetupApi.GUID_CLASS_MONITOR, //class GUID
+        var devInfo = SetupDiGetClassDevsEx(
+            ref GUID_CLASS_MONITOR, //class GUID
             null, //enumerator
             0, //HWND
-            SetupApi.DIGCF_PRESENT | SetupApi.DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
+            DIGCF_PRESENT | DIGCF_PROFILE, // Primary //DIGCF_ALLCLASSES|
             0, // device info, create a new one.
             null, // machine name, local machine
             0
@@ -398,23 +400,23 @@ public static class MonitorDeviceHelper
                 return null;
             }
 
-            var devInfoData = new SetupApi.SP_DEVINFO_DATA();
+            var devInfoData = new SP_DEVINFO_DATA();
 
             uint i = 0;
 
             do
             {
-                if (SetupApi.SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
+                if (SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                 {
 
-                    var hEdidRegKey = SetupApi.SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                        SetupApi.DICS_FLAG_GLOBAL, 0, SetupApi.DIREG_DEV, SetupApi.KEY_READ);
+                    var hEdidRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData,
+                        DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
 
                     try
                     {
                         if (hEdidRegKey != 0 && ((int)hEdidRegKey != -1))
                         {
-                            using var key = WinReg.RegistryKey(hEdidRegKey, 1);
+                            using var key = RegistryKey(hEdidRegKey, 1);
                             var value = key?.GetValue("HardwareID");
                             if (value is string[] { Length: > 0 } s)
                             {
@@ -423,8 +425,8 @@ public static class MonitorDeviceHelper
 
                                 if (id == deviceId)
                                 {
-                                    var hKeyName = WinReg.GetHKeyName(hEdidRegKey);
-                                    using var keyEdid = WinReg.RegistryKey(hEdidRegKey);
+                                    var hKeyName = GetHKeyName(hEdidRegKey);
+                                    using var keyEdid = RegistryKey(hEdidRegKey);
 
                                     var edid = (byte[])keyEdid.GetValue("EDID");
                                     return edid != null ? new Edid(hKeyName, edid) : null;
@@ -434,19 +436,19 @@ public static class MonitorDeviceHelper
                     }
                     finally
                     {
-                        var result = WinReg.RegCloseKey(hEdidRegKey);
+                        var result = RegCloseKey(hEdidRegKey);
                         if (result > 0)
-                            throw new Exception(ErrHandlingApi.GetLastErrorString());
+                            throw new Exception(GetLastErrorString());
                     }
                 }
 
 
                 i++;
-            } while (WinBase.ErrorNoMoreItems != ErrHandlingApi.GetLastError());
+            } while (ErrorNoMoreItems != GetLastError());
         }
         finally
         {
-            SetupApi.SetupDiDestroyDeviceInfoList(devInfo);
+            SetupDiDestroyDeviceInfoList(devInfo);
         }
 
         return null;
@@ -474,11 +476,11 @@ public static class MonitorDeviceHelper
         var hdc = 0;//GetDCEx(0, 0, DeviceContextValues.Window);
 
         // GetMonitorInfo
-        WinUser.EnumDisplayMonitors(hdc, 0,
+        EnumDisplayMonitors(hdc, 0,
             (nint hMonitor, nint hdcMonitor, ref WinDef.Rect lprcMonitor, nint dwData) =>
             {
-                var mi = new WinUser.MonitorInfoEx();//.Default;
-                var success = WinUser.GetMonitorInfo(hMonitor, ref mi);
+                var mi = new MonitorInfoEx();//.Default;
+                var success = GetMonitorInfo(hMonitor, ref mi);
                 if (!success) // Continue
                 {
                     var errorCode = Marshal.GetLastWin32Error();

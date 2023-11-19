@@ -1,12 +1,8 @@
 ﻿#nullable enable
 using System;
-using System.Collections.Concurrent;
-using System.Globalization;
 using System.Linq;
 using DynamicData;
 using Avalonia;
-using Avalonia.Media;
-using Microsoft.Win32;
 using HLab.Sys.Windows.API;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout;

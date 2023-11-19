@@ -1,18 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 
-using HLab.Sys.Windows.Monitors;
-
 using LittleBigMouse.DisplayLayout.Dimensions;
-
-using Microsoft.Win32;
-
-using Newtonsoft.Json;
 using ReactiveUI;
-using static HLab.Sys.Windows.API.WinDef;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 

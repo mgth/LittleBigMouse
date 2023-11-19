@@ -22,15 +22,16 @@
 */
 
 using System;
+using HLab.Sys.Windows.API.MonitorConfiguration;
 using ReactiveUI;
 
 using HLab.Sys.Windows.Monitors;
+using OneOf;
 
 using static HLab.Sys.Windows.API.ErrHandlingApi;
 using static HLab.Sys.Windows.API.MonitorConfiguration.HighLevelMonitorConfigurationApi;
 using static HLab.Sys.Windows.API.MonitorConfiguration.LowLevelMonitorConfiguration;
 using static HLab.Sys.Windows.API.MonitorConfiguration.PhysicalMonitorEnumerationApi;
-using OneOf;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
@@ -62,16 +63,16 @@ public class VcpControl : ReactiveObject
         {
             if (GetMonitorCapabilities(HPhysical, out var capabilities, out var colorTemperatures))
             {
-                if (capabilities.HasFlag(MonitorCapabilities.Brightness))
+                if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.Brightness))
                     _brightness = new MonitorLevel(levelParser, GetBrightness, SetBrightness);
 
-                if (capabilities.HasFlag(MonitorCapabilities.Contrast))
+                if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.Contrast))
                     _contrast = new MonitorLevel(levelParser, GetContrast, SetContrast);
 
-                if (capabilities.HasFlag(MonitorCapabilities.RedGreenBlueGain))
+                if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.RedGreenBlueGain))
                     _gain = new MonitorRgbLevel(levelParser, GetGain, SetGain);
 
-                if (capabilities.HasFlag(MonitorCapabilities.RedGreenBlueDrive))
+                if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.RedGreenBlueDrive))
                     _drive = new MonitorRgbLevel(levelParser, GetDrive, SetDrive);
 
                 //NativeMethods.MonitorCapabilities.MC_CAPS_COLOR_TEMPERATURE;

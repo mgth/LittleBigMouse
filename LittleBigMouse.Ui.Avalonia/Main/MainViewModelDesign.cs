@@ -25,7 +25,6 @@ using System;
 using Avalonia.Controls;
 using HLab.Icons.Avalonia;
 using HLab.Mvvm.Annotations;
-using LittleBigMouse.DisplayLayout.Monitors;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 

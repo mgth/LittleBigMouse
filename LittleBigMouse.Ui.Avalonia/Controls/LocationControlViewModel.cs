@@ -29,7 +29,6 @@ using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Controls.Chrome;
 using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia.Extensions;

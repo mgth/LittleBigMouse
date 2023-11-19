@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Reactive.Linq;
-using System.Windows.Input;
 using HLab.Mvvm.Annotations;
 using ReactiveUI;
 

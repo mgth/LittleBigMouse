@@ -23,7 +23,6 @@
 
 using System.Runtime.Serialization;
 using DynamicData;
-using Newtonsoft.Json;
 
 namespace HLab.Sys.Windows.Monitors;
 

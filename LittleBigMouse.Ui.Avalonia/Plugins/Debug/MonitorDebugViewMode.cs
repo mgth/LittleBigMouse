@@ -21,9 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System.Reactive;
-using Avalonia.Threading;
-using ExCSS;
 using HLab.Mvvm.Annotations;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;

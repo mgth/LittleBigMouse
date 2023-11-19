@@ -26,7 +26,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Serialization;
-using HLab.Options;
 using HLab.Sys.Argyll;
 using HLab.Sys.Windows.Monitors;
 using ReactiveUI;

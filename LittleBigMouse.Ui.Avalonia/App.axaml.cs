@@ -12,8 +12,6 @@ using HLab.Icons.Avalonia;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
-using HLab.Notify.Annotations;
-using HLab.Notify.Avalonia;
 using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
 using HLab.UserNotification.Avalonia;
@@ -56,7 +54,7 @@ public partial class App : Application
         container.Configure(c =>
         {
             c.ExportInstance(ApplicationLifetime);
-            c.Export<EventHandlerServiceAvalonia>().As<IEventHandlerService>().Lifestyle.Singleton();
+            // c.Export<EventHandlerServiceAvalonia>().As<IEventHandlerService>().Lifestyle.Singleton();
 
 
             //NotifyHelper.EventHandlerService = new EventHandlerServiceAvalonia();

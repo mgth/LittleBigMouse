@@ -23,7 +23,6 @@
 
 using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
-using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;

@@ -1,5 +1,5 @@
-﻿using HLab.Sys.Windows.API;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using HLab.Sys.Windows.API;
 
 namespace HLab.Sys.Windows.Monitors;
 

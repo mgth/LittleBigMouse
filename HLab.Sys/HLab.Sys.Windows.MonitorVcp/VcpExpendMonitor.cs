@@ -1,5 +1,4 @@
 ﻿using System.Runtime.CompilerServices;
-using HLab.Sys.Windows.API.MonitorConfiguration;
 using HLab.Sys.Windows.Monitors;
 
 namespace HLab.Sys.Windows.MonitorVcp;

@@ -20,7 +20,6 @@
 	  mailto:mathieu@mgth.fr
 	  http://www.mgth.fr
 */
-using System.Windows;
 using HLab.Geo;
 
 namespace HLab.Sys.Argyll;

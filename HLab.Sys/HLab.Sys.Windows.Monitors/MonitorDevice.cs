@@ -1,13 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
 using DynamicData;
-using HLab.Sys.Windows.API;
 using Microsoft.Win32;
 
 namespace HLab.Sys.Windows.Monitors;

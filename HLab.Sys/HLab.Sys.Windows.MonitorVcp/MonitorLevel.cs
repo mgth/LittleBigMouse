@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Threading;
 using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
-using HLab.Sys.Windows.Monitors;
 using OneOf;
 using ReactiveUI;
 

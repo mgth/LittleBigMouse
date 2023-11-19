@@ -22,8 +22,6 @@
 */
 
 using System;
-
-using Avalonia;
 using Avalonia.Controls;
 
 using HLab.Mvvm.Annotations;
@@ -32,9 +30,6 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
-
-using HLab.Base.Avalonia.DependencyHelpers;
-using LittleBigMouse.DisplayLayout.Dimensions;
 using HLab.Mvvm.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia;

@@ -21,7 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;

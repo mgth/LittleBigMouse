@@ -65,6 +65,9 @@ std::string getParentProcess()
 
 
 int main(int argc, char *argv[]){
+
+    ShowWindow( GetConsoleWindow(), SW_HIDE );
+
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 );
 
     RemoteServerSocket server;

@@ -70,10 +70,11 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
             path = path.Replace(@"\LittleBigMouse.Ui.Avalonia\bin\", @"\");
             path = path.Replace(@"\net8.0\", @"\");
             path = path.Replace(@"\net7.0\", @"\");
-
         }
 
         path = path.Replace(@"\LittleBigMouse.Ui.Avalonia.dll", @"\LittleBigMouse.Hook.exe");
+
+        if(!File.Exists(path)) return;
 
         try
         {

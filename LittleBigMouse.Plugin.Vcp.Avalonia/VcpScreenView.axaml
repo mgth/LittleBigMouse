@@ -51,10 +51,9 @@
                 <LayoutTransformControl.LayoutTransform>
                     <RotateTransform Angle="-90"/>
                 </LayoutTransformControl.LayoutTransform>
+                <Label Foreground="White" Content="Drive" VerticalAlignment="Center" IsVisible="{Binding DriveVisibility}"/>
             </LayoutTransformControl>
 
-            <Label Foreground="White" Content="Drive" VerticalAlignment="Center" IsVisible="{Binding DriveVisibility}">
-            </Label>
 
             <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Red}"/>
             <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Green}"/>
@@ -63,10 +62,11 @@
             <Rectangle Width="20"/>
             <StackPanel VerticalAlignment="Center" Orientation="Vertical" IsVisible="{Binding AnywayVisibility}">
                 <Label Foreground="White">DDC/CI not available</Label>
-                <Button Height="20" Command="{Binding AnywayCommand}">Try anyway</Button>
-
+                <Button Command="{Binding AnywayCommand}">Try anyway</Button>
             </StackPanel>
-            <Button Command="{Binding SwitchSourceCommand}" Content="Test"/>
+
+            <!--<Button Command="{Binding SwitchSourceCommand}" Content="Test"/>-->
+
             <ItemsControl VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>

@@ -2,7 +2,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
-		<Platforms>x64;x86</Platforms>
+		<Platforms>x64;x86;AnyCPU</Platforms>
 		<OutputType>WinExe</OutputType>
 		<ApplicationIcon>MainIcon.ico</ApplicationIcon>
         <LangVersion>preview</LangVersion>
@@ -43,7 +43,6 @@
     <ProjectReference Include="..\HLab\HLab.Icons.Avalonia\HLab.Icons.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
     <ProjectReference Include="..\HLab\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
-    <ProjectReference Include="..\HLab\HLab.Notify.Annotations\HLab.Notify.Annotations.csproj" />
     <ProjectReference Include="..\HLab\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />
     <ProjectReference Include="..\HLab\HLab.UserNotification\HLab.UserNotification.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugin.Layout.Avalonia\LittleBigMouse.Plugin.Layout.Avalonia.csproj" />

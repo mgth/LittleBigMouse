@@ -39,32 +39,24 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
-public class VcpScreenViewModelDesign : VcpScreenViewModel, IDesignViewModel
-{
-    public VcpScreenViewModelDesign() : base(vm=>new TestPatternButtonViewModel(vm), null, new ObservableCollection<TestPatternButtonViewModel>())
-    {
-    }
-}
+public class VcpScreenViewModelDesign()
+    : VcpScreenViewModel(vm => new TestPatternButtonViewModel(vm), null), IDesignViewModel;
 
 public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 {
-    readonly Func<VcpScreenViewModel, TestPatternButtonViewModel> _getButtonPattern;
     readonly IMonitorsSet _monitorsService;
 
     // TODO : use reactive ui for collections
     public VcpScreenViewModel(
         Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, 
-        IMonitorsSet monitorsService,
-        ObservableCollection<TestPatternButtonViewModel> testPatterns)
+        IMonitorsSet monitorsService)
     {
-        _getButtonPattern = getButtonPattern;
-        TestPatterns = testPatterns;
         _monitorsService = monitorsService;
 
-        TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circles).Set(Colors.White, Colors.Black));
-        TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Circle).Set(Color.FromRgb(0xFF, 0x80, 0x00), Colors.Black));
-        TestPatterns.Add(_getButtonPattern(this).Set(TestPatternType.Gradient).SetRgb());
-        TestPatterns.Add(_getButtonPattern(this)
+        TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circles).Set(Colors.White, Colors.Black));
+        TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circle).Set(Color.FromRgb(0xFF, 0x80, 0x00), Colors.Black));
+        TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Gradient).SetRgb());
+        TestPatterns.Add(getButtonPattern(this)
             .Set(TestPatternType.Gamma)
             .Set(Colors.White, Colors.Black)
             .Set(Orientation.Vertical).SetRgb());
@@ -87,7 +79,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
        _gainVisibility = this.WhenAnyValue(
             e => e.Vcp.Gain,
             selector: e => e != null)
-            .ToProperty(this, e => e.ContrastVisibility);
+            .ToProperty(this, e => e.GainVisibility);
 
        _driveVisibility = this.WhenAnyValue(
             e => e.Vcp.Drive,
@@ -98,7 +90,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
             e => e.Vcp.Brightness,
             e => e.Vcp.Contrast,
             (b,c) => b == null || c == null)
-            .ToProperty(this, e => e.DriveVisibility);
+            .ToProperty(this, e => e.AnywayVisibility);
 
        this.WhenAnyValue(e => e.Model).Do(e => InitLut()).Subscribe();
 
@@ -143,7 +135,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
     public Window? TestPatternPanel { get; set; } = null;
 
-    public ObservableCollection<TestPatternButtonViewModel> TestPatterns { get; }
+    public ObservableCollection<TestPatternButtonViewModel> TestPatterns { get; } = new();
 
     public ProbeLut? Lut => Model?.MonitorDevice(_monitorsService).ProbeLut();
 
@@ -403,7 +395,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
         ).Start();
     }
 
-    double[,,] _tune;
+    double[,,] _tune = new double[0,0,0];
     //private LineSeries _line;
 
     public void Tune()

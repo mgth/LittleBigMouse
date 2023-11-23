@@ -26,6 +26,7 @@ using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using HLab.Base.Avalonia.Controls;
@@ -69,17 +70,15 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
         InitializeComponent();
     }
 
-
-    //TODO: avalonia override
-    protected  void OnUnloaded()
+    protected override void OnUnloaded(RoutedEventArgs e)
     {
-        //base.OnUnloaded();
-        if (this.DataContext is not MonitorLocationViewModel viewModel) return;
+        if (DataContext is MonitorLocationViewModel viewModel)
+        {
+            viewModel.Ruler = false;
+        }
 
-        viewModel.Dispose();
+        base.OnUnloaded(e);
     }
-
-
 
     Point? _staticPoint = null;
 

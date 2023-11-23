@@ -234,8 +234,13 @@
 		</StackPanel>
 
 		<!--Ruler button-->
-		<ToggleButton Width ="40" Height="40" Cursor="Hand" VerticalAlignment="Bottom" HorizontalAlignment="Left" IsChecked="{Binding Ruler}">
-			<icons:IconView
+		<ToggleButton 
+            Width ="40" Height="40" 
+            Cursor="Hand" 
+            VerticalAlignment="Bottom" HorizontalAlignment="Left" 
+            IsChecked="{Binding Ruler}">
+
+            <icons:IconView
                 Margin="5"
                 Foreground="{DynamicResource HLab.Brushes.Background}"
                 Path="Icon/Ruler"

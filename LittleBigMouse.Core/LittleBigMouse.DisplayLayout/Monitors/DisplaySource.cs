@@ -111,7 +111,7 @@ public class DisplaySource : ReactiveModel
         //    Y = 1 - (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
         //    X = 1 - 0.5
         //});
-        set => this.RaiseAndSetIfChanged(ref _guiLocation, value);
+        set => this.SetUnsavedValue(ref _guiLocation, value);
     }
     Rect _guiLocation;
 

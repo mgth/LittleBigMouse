@@ -36,14 +36,14 @@ public class DisplayLocate : DisplayMove
     public override double X
     {
         get => _x;
-        set => this.RaiseAndSetIfChanged(ref _x, value);
+        set => this.SetUnsavedValue(ref _x, value);
     }
     double _x;
 
     public override double Y
     {
         get => _y;
-        set => this.RaiseAndSetIfChanged(ref _y, value);
+        set => this.SetUnsavedValue(ref _y, value);
     }
     double _y;
 

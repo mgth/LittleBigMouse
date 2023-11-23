@@ -41,23 +41,16 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
             //.Filter(x => x.Id.ToString().EndsWith('1'))
             .StartWithEmpty()
             .Bind(out _physicalMonitors)
-
-            .Subscribe()
-            //.DisposeWith(this)
-            ;
+            .Subscribe();
 
         _physicalSourcesCache.Connect()
             // Sort Ascending on the OrderIndex property
             .Sort(SortExpressionComparer<PhysicalSource>.Ascending(t => t.DeviceId))
             //.Filter(x => x.Id.ToString().EndsWith('1'))
             .Bind(out _physicalSources)
-            .Subscribe()
-            //.DisposeWith(this)
-            ;
+            .Subscribe();
 
         _physicalMonitorsCache.Connect()
-            //.AutoRefresh(e => e.Selected)
-            //.AutoRefresh(e => e.DepthProjection.Bounds)
             .ToCollection()
             .Do(ParsePhysicalMonitors)
             .Subscribe().DisposeWith(this);
@@ -70,55 +63,50 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
             .Do(ParseDisplaySources)
             .Subscribe().DisposeWith(this);
 
-        _physicalMonitorsCache.Connect()
-            .AutoRefresh(e => e.Saved)
-            .ToCollection()
-            .Do(ParseSaved)
-            .Subscribe().DisposeWith(this);
-
         _x0 = this
             .WhenAnyValue(e => e.PhysicalBounds.Left, left => -left)
             .Log(this, "X0").ToProperty(this, e => e.X0)
-            .DisposeWith(this)
-            ;
+            .DisposeWith(this);
 
         _y0 = this
             .WhenAnyValue(e => e.PhysicalBounds.Top, top => -top)
             .Log(this, "Y0")
             .ToProperty(this, e => e.Y0)
-            .DisposeWith(this)
-            ;
+            .DisposeWith(this);
 
         _adjustPointerAllowed = this
             .WhenAnyValue(e => e.IsUnaryRatio, (bool r) => r)
             .Log(this, "_adjustPointerAllowed")
             .ToProperty(this, e => e.AdjustPointerAllowed)
-            .DisposeWith(this)
-            ;
+            .DisposeWith(this);
 
         _adjustSpeedAllowed = this
             .WhenAnyValue(e => e.IsUnaryRatio, (bool r) => r)
             .Log(this, "_adjustSpeedAllowed")
             .ToProperty(this, e => e.AdjustSpeedAllowed)
-            .DisposeWith(this)
-            ;
-        ((INotifyCollectionChanged)PhysicalMonitors).CollectionChanged += MonitorsLayout_CollectionChanged;
+            .DisposeWith(this);
 
-        //_physicalBounds = PhysicalMonitors
-        //    .Connect()
-        //    .WhenValueChanged(e => e.DepthProjection.Bounds)
-        //    .Select(e => ParsePhysicalMonitors(PhysicalMonitors.Items))
-        //    .ToProperty(this, e => e.PhysicalBounds);
-    }
+        //if any physical monitor unsaved set layout not saved
+        _physicalMonitorsCache.Connect()
+            .AutoRefresh(e => e.Saved)
+            .ToCollection()
+            .Do(e =>
+            {
+                if(e.All(m => m.Saved)) return;
+                Saved = false;
+            })
+            .Subscribe().DisposeWith(this);
 
-    void ParseSaved(IReadOnlyCollection<PhysicalMonitor> monitors)
-    {
-        if (monitors.All(monitor => monitor.Saved)) return;
-        Saved = false;
-    }
-
-    void MonitorsLayout_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
+        //if any physical source unsaved set layout not saved
+        _physicalSourcesCache.Connect()
+            .AutoRefresh(e => e.Saved)
+            .ToCollection()
+            .Do(e =>
+            {
+                if(e.All(m => m.Saved)) return;
+                Saved = false;
+            })
+            .Subscribe().DisposeWith(this);
     }
 
     Rect GetOutsideBounds()
@@ -725,19 +713,20 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         var isUnaryRatio = true;
         PhysicalSource? primarySource = null;
 
-        foreach (var source in sources)
-        {
-            if (source.Source.Primary) { primarySource = source; }
-            if (source.Source.EffectiveDpi is not null)
-            {
-                maxEffectiveDpiX = Math.Max(maxEffectiveDpiX, source.Source.EffectiveDpi.X);
-                maxEffectiveDpiY = Math.Max(maxEffectiveDpiY, source.Source.EffectiveDpi.Y);
-            }
-            if (isUnaryRatio && source.PixelToDipRatio is { IsUnary: false }) isUnaryRatio = false;
-        }
-
         using (SuppressChangeNotifications())
         {
+            foreach (var source in sources)
+            {
+                if (source.Source.Primary) { primarySource = source; }
+                if (source.Source.EffectiveDpi is not null)
+                {
+                    maxEffectiveDpiX = Math.Max(maxEffectiveDpiX, source.Source.EffectiveDpi.X);
+                    maxEffectiveDpiY = Math.Max(maxEffectiveDpiY, source.Source.EffectiveDpi.Y);
+                }
+                if (isUnaryRatio && source.PixelToDipRatio is { IsUnary: false }) isUnaryRatio = false;
+                if (!source.Saved) Saved = false;
+            }
+
             PrimaryMonitor = primarySource?.Monitor;
             PrimarySource = primarySource?.Source;
             MaxEffectiveDpiX = maxEffectiveDpiX;

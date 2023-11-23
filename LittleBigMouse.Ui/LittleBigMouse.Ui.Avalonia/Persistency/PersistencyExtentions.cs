@@ -114,8 +114,13 @@ public static class PersistencyExtensions
 
         @this.DepthProjection.X = key.GetKey("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
         @this.DepthProjection.Y = key.GetKey("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
+
+        @this.DepthProjection.Saved = true;
+
         @this.DepthRatio.X = key.GetKey("PhysicalRatioX", () => @this.DepthRatio.X);
         @this.DepthRatio.Y = key.GetKey("PhysicalRatioY", () => @this.DepthRatio.Y);
+
+        @this.DepthRatio.Saved = true;
 
         var active = key.GetKey("ActiveSource", () => "");
         foreach (var source in @this.Sources.Items)
@@ -124,6 +129,8 @@ public static class PersistencyExtensions
             if (source.Source.IdMonitorDevice == active || @this.ActiveSource == null)
                 @this.ActiveSource = source;
         }
+
+        @this.Saved = true;
 
         return @this;
     }
@@ -136,8 +143,13 @@ public static class PersistencyExtensions
 
         key.SetKey("XLocationInMm", @this.DepthProjection.X);
         key.SetKey("YLocationInMm", @this.DepthProjection.Y);
+
+        @this.DepthProjection.Saved = true;
+
         key.SetKey("PhysicalRatioX", @this.DepthRatio.X);
         key.SetKey("PhysicalRatioY", @this.DepthRatio.Y);
+
+        @this.DepthRatio.Saved = true;
 
         foreach (var source in @this.Sources.Items)
         {
@@ -147,6 +159,8 @@ public static class PersistencyExtensions
         key.SetKey("ActiveSource", @this.ActiveSource.Source.IdMonitorDevice);
         key.SetKey("Orientation", @this.Orientation);
         key.SetKey("SerialNumber", @this.SerialNumber);
+
+        @this.Saved = true;
     }
 
     //========================//
@@ -174,6 +188,8 @@ public static class PersistencyExtensions
 
                 @this.PhysicalSize.Height = key.GetKey(@"Size\Height", ()=>@this.PhysicalSize.Height);
                 @this.PhysicalSize.Width = key.GetKey(@"Size\Width", ()=>@this.PhysicalSize.Width);
+
+                @this.PhysicalSize.Saved = true;
 
                 @this.PnpDeviceName = key.GetKey("PnpName", ()=>@this.PnpDeviceName);
 
@@ -203,6 +219,8 @@ public static class PersistencyExtensions
 
         key.SetKey(@"Size\Height", @this.PhysicalSize.Height.ToString(CultureInfo.InvariantCulture));
         key.SetKey(@"Size\Width", @this.PhysicalSize.Width.ToString(CultureInfo.InvariantCulture));
+
+        @this.PhysicalSize.Saved = true;
 
         key.SetKey("PnpName", @this.PnpDeviceName);
 
@@ -246,6 +264,8 @@ public static class PersistencyExtensions
             key2.SetKey("PixelY", @this.InPixel.Y);
             key2.SetKey("PixelWidth", @this.InPixel.Width);
             key2.SetKey("PixelHeight", @this.InPixel.Height);
+
+            @this.Saved = true;
 
             key2.SetKey("Primary", @this.Primary);
         }

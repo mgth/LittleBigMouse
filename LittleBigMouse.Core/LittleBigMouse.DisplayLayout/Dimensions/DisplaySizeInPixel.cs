@@ -39,7 +39,7 @@ public class DisplaySizeInPixels : DisplaySize
     public override double Width
     {
         get => _width;
-        set => this.RaiseAndSetIfChanged(ref _width, value);
+        set => this.SetUnsavedValue(ref _width, value);
     }
     double _width;
 
@@ -47,36 +47,23 @@ public class DisplaySizeInPixels : DisplaySize
     public override double Height
     {
         get => _height;
-        set => this.RaiseAndSetIfChanged(ref _height, value);
+        set => this.SetUnsavedValue(ref _height, value);
     }
     double _height;
-
-    //private IProperty<double> _height = H.Property<double>(c => c
-    //    .Set(e => e.Screen.Monitor.MonitorArea.Height)
-    //    .On(e => e.Screen.Monitor.MonitorArea)
-    //    .Update()
-    //);
 
     public override double X
     {
         get => _x;
-        set => this.RaiseAndSetIfChanged(ref _x, value);
+        set => this.SetUnsavedValue(ref _x, value);
     }
     double _x;
 
     public override double Y
     {
         get => _y;
-        set => this.RaiseAndSetIfChanged(ref _y, value);
+        set => this.SetUnsavedValue(ref _y, value);
     }
     double _y;
-
-   //private readonly IProperty<double> _y = H.Property<double>(nameof(Y), c => c
-    //    .Set(s => s.Screen.Monitor.MonitorArea.Y)
-    //    .On(e => e.Screen.Monitor.MonitorArea)
-    //    .Update()
-    //);
-
 
     public override double TopBorder
     {
@@ -99,19 +86,4 @@ public class DisplaySizeInPixels : DisplaySize
         set => throw new NotImplementedException();
     }
 
-    // TODO Avalonia
-    //double LoadValueMonitor(Func<double> def, [CallerMemberName] string name = null)
-    //{
-    //    using RegistryKey key = MonitorSource.Device.OpenMonitorRegKey();
-        
-    //    return key.GetKey(name, def);
-    //}
-
-
-    // TODO 
-    //double LoadValueConfig(Func<double> def, [CallerMemberName] string name = null)
-    //{
-    //    using RegistryKey key = MonitorSource.OpenRegKey();
-    //    return key.GetKey(name, def);
-    //}
 }

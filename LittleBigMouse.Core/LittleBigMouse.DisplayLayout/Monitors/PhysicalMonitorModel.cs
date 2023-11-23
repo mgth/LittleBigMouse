@@ -2,14 +2,14 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
-
+using HLab.Base.Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
 [DataContract]
-public class PhysicalMonitorModel : ReactiveObject
+public class PhysicalMonitorModel : ReactiveModel
 {
     public static PhysicalMonitorModel Design
     {
@@ -29,30 +29,21 @@ public class PhysicalMonitorModel : ReactiveObject
     {
         PnpCode = pnpCode;
         PhysicalSize = new DisplaySizeInMm(/*this*/);
-    }
 
-    bool SetValue<TRet>(ref TRet backingField, TRet value, [CallerMemberName] string propertyName = null)
-    {
-        using (DelayChangeNotifications())
-        {
-            if (!EqualityComparer<TRet>.Default.Equals(backingField, value))
+        this.WhenAnyValue(e => e.PhysicalSize.Saved)
+            .Subscribe(e =>
             {
-                this.RaisePropertyChanging(propertyName);
-                backingField = value;
+                if (e) return;
                 Saved = false;
-                this.RaisePropertyChanged(propertyName);
-                return true;
-            }
-
-            return false;
-        }
+            });
     }
+
 
     [DataMember]
     public string PnpDeviceName
     {
         get => _pnpDeviceName;
-        set => SetValue(ref _pnpDeviceName, value);
+        set => SetUnsavedValue(ref _pnpDeviceName, value);
     }
     string _pnpDeviceName;
 
@@ -69,11 +60,5 @@ public class PhysicalMonitorModel : ReactiveObject
 
     [DataMember] public DisplaySizeInMm PhysicalSize { get; }
 
-    public bool Saved
-    {
-        get => _saved;
-        set => this.RaiseAndSetIfChanged(ref _saved, value);
-    }
-    bool _saved;
 
 }

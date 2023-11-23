@@ -25,11 +25,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using Avalonia;
 using DynamicData;
 using HLab.Base.Avalonia;
+using HLab.Base.Avalonia.Extensions;
 
 //using HLab.Sys.Windows.Monitors;
 
@@ -79,6 +81,12 @@ public class PhysicalMonitor : ReactiveModel
         Model = model;
         IdPhysicalMonitor = idPhysicalMonitor;
 
+        Sources.Connect()
+            .AutoRefresh(e => e.Saved)
+            .ToCollection()
+            .Do(ParseDisplaySources)
+            .Subscribe().DisposeWith(this);
+
         _physicalRotated = this.WhenAnyValue(
             e => e.Model.PhysicalSize,
             e => e.Orientation,
@@ -114,6 +122,26 @@ public class PhysicalMonitor : ReactiveModel
             (h, w) => Math.Sqrt(w * w + h * h)
             ).Log(this, "_diagonal").ToProperty(this, e => e.Diagonal);
 
+        this.WhenAnyValue(e => e.Model.Saved)
+            .Subscribe(e =>
+            {
+                if (e) return;
+                Saved = false;
+            });
+
+        this.WhenAnyValue(e => e.DepthProjection.Saved)
+            .Subscribe(e =>
+            {
+                if (e) return;
+                Saved = false;
+            });
+
+        this.WhenAnyValue(e => e.DepthRatio.Saved)
+            .Subscribe(e =>
+            {
+                if (e) return;
+                Saved = false;
+            });
 
         //_overallBoundsWithoutThisInMm =
         //        Layout.AllMonitors.Items
@@ -121,6 +149,14 @@ public class PhysicalMonitor : ReactiveModel
         //        .WhenValueChanged(e => e.InMm.Bounds)
         //        .Select(i => GetOverallBoundsWithoutThisInMm())
         //        .Log(this,"_overallBoundsWithoutThisInMm").ToProperty(this, e => e.OverallBoundsWithoutThisInMm);
+    }
+
+    void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)
+    {
+        if (obj.Any(s => !s.Saved))
+        {
+            Saved = false;
+        }
     }
 
     public void AddSource(PhysicalSource source) => Sources.Add(source);
@@ -200,6 +236,7 @@ public class PhysicalMonitor : ReactiveModel
     /// </summary>
     [DataMember]
     public IDisplayRatio DepthRatio { get; }
+
     public double Diagonal => _diagonal.Value;
 
     readonly ObservableAsPropertyHelper<double> _diagonal;

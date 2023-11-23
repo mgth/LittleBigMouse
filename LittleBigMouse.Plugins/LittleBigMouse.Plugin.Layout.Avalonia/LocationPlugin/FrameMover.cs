@@ -101,11 +101,6 @@ public class FrameMover : ReactiveObject, IFrameLocation
 
     void ShiftMonitor(Vector offset)
     {
-        if(offset.X != 0 || offset.Y != 0)
-        {
-           
-        }
-
         var pos = _dragStartPosition + offset;
 
         X = pos.X;
@@ -143,6 +138,7 @@ public class FrameMover : ReactiveObject, IFrameLocation
         _layout.Compact();
 
         _layout.UpdatePhysicalMonitors();
+
         //Todo : Plugin.ActivateConfig();
     }
 

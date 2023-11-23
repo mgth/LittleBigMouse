@@ -95,13 +95,6 @@ public class DisplaySizeInMm : DisplaySize
         Init();
     }
 
-    public bool Saved
-    {
-        get => _saved;
-        set => this.RaiseAndSetIfChanged(ref _saved, value);
-    }
-    bool _saved;
-
     public bool FixedAspectRatio
     {
         get => _fixedAspectRatio;
@@ -128,9 +121,7 @@ public class DisplaySizeInMm : DisplaySize
                     FixedAspectRatio = true;
                 }
 
-                Saved = false;
-
-                this.RaiseAndSetIfChanged(ref _width, value);
+                this.SetUnsavedValue(ref _width, value);
             }
         }
     }
@@ -154,9 +145,7 @@ public class DisplaySizeInMm : DisplaySize
                     FixedAspectRatio = true;
                 }
 
-                Saved = false;
-
-                this.RaiseAndSetIfChanged(ref _height, value);
+                this.SetUnsavedValue(ref _height, value);
             }
         }
     }
@@ -179,30 +168,30 @@ public class DisplaySizeInMm : DisplaySize
     public override double TopBorder
     {
         get => _topBorder;
-        set => this.RaiseAndSetIfChanged(ref _topBorder, Math.Max(value, 0.0));
+        set => this.SetUnsavedValue(ref _topBorder, Math.Max(value, 0.0));
     }
     double _topBorder = 20.0;
+
+    public override double RightBorder
+    {
+        get => _rightBorder;
+        set => this.SetUnsavedValue(ref _rightBorder, Math.Max(value, 0.0));
+    }
+    double _rightBorder = 20.0;
 
     public override double BottomBorder
     {
         get => _bottomBorder;
-        set => this.RaiseAndSetIfChanged(ref _bottomBorder, Math.Max(value, 0.0));
+        set => this.SetUnsavedValue(ref _bottomBorder, Math.Max(value, 0.0));
     }
     double _bottomBorder = 20.0;
 
     public override double LeftBorder
     {
         get => _leftBorder;
-        set => this.RaiseAndSetIfChanged(ref _leftBorder, Math.Max(value, 0.0));
+        set => this.SetUnsavedValue(ref _leftBorder, Math.Max(value, 0.0));
     }
     double _leftBorder = 20.0;
-
-    public override double RightBorder
-    {
-        get => _rightBorder;
-        set => this.RaiseAndSetIfChanged(ref _rightBorder, Math.Max(value, 0.0));
-    }
-    double _rightBorder = 20.0;
 
     public override string TransformToString => $"InMm";
 

@@ -26,13 +26,14 @@ using System.Reactive.Concurrency;
 using System.Runtime.Serialization;
 using System.Text;
 using Avalonia;
+using HLab.Base.Avalonia;
 using Newtonsoft.Json;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 [DataContract]
-public abstract class DisplaySize : ReactiveObject, IDisplaySize
+public abstract class DisplaySize : ReactiveModel, IDisplaySize
 {
     protected DisplaySize(IDisplaySize source)
     {
@@ -42,69 +43,69 @@ public abstract class DisplaySize : ReactiveObject, IDisplaySize
     protected void Init()
     {
         _borders = this.WhenAnyValue(
-                _ => _.LeftBorder,
-                _ => _.TopBorder,
-                _ => _.RightBorder,
-                _ => _.BottomBorder,(left,top,right,bottom) => new Thickness(left, top, right, bottom))
-            .Log(this).ToProperty(this, _ => _.Borders, scheduler: Scheduler.Immediate);
+                e => e.LeftBorder,
+                e => e.TopBorder,
+                e => e.RightBorder,
+                e => e.BottomBorder,(left,top,right,bottom) => new Thickness(left, top, right, bottom))
+            .Log(this).ToProperty(this, e => e.Borders, scheduler: Scheduler.Immediate);
 
         _location = this.WhenAnyValue(
-                _ => _.X,
-                _ => _.Y,
+                e => e.X,
+                e => e.Y,
                 (x,y) => new Point(x, y))
-            .Log(this).ToProperty(this, _ => _.Location, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.Location, scheduler: Scheduler.Immediate);
 
         _size = this.WhenAnyValue(
-                _ => _.Width,
-                _ => _.Height,
+                e => e.Width,
+                e => e.Height,
                 (x,y) => new Size(x, y))
-            .Log(this).ToProperty(this, _ => _.Size, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.Size, scheduler: Scheduler.Immediate);
 
         _center = this.WhenAnyValue(
-                _ => _.Location,
-                _ => _.Size,
+                e => e.Location,
+                e => e.Size,
                 (location,size) => location + new Vector(size.Width / 2, size.Height / 2))
-            .Log(this).ToProperty(this, _ => _.Center, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.Center, scheduler: Scheduler.Immediate);
 
         _bounds = this.WhenAnyValue(
-                _ => _.Location,
-                _ => _.Size,
+                e => e.Location,
+                e => e.Size,
                 (location,size) => new Rect(location, size))
-            .Log(this).ToProperty(this, _ => _.Bounds, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.Bounds, scheduler: Scheduler.Immediate);
 
         _outsideX = this.WhenAnyValue(
-                _ => _.X,
-                _ => _.LeftBorder,
+                e => e.X,
+                e => e.LeftBorder,
                 (x,leftBorder) => x - leftBorder)
-            .Log(this).ToProperty(this, _ => _.OutsideX, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.OutsideX, scheduler: Scheduler.Immediate);
 
         _outsideY = this.WhenAnyValue(
-                _ => _.Y,
-                _ => _.TopBorder,
+                e => e.Y,
+                e => e.TopBorder,
                 (y,topBorder) => y - topBorder)
-            .Log(this).ToProperty(this, _ => _.OutsideY, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.OutsideY, scheduler: Scheduler.Immediate);
 
         _outsideWidth = this.WhenAnyValue(
-                _ => _.LeftBorder,
-                _ => _.Width,
-                _ => _.RightBorder,
+                e => e.LeftBorder,
+                e => e.Width,
+                e => e.RightBorder,
                 (leftBorder,width,rightBorder) => leftBorder + width + rightBorder)
-            .Log(this).ToProperty(this, _ => _.OutsideWidth, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.OutsideWidth, scheduler: Scheduler.Immediate);
 
         _outsideHeight = this.WhenAnyValue(
-                _ => _.TopBorder,
-                _ => _.Height,
-                _ => _.BottomBorder,
+                e => e.TopBorder,
+                e => e.Height,
+                e => e.BottomBorder,
                 (topBorder,height,bottomBorder) => topBorder + height + bottomBorder)
-            .Log(this).ToProperty(this, _ => _.OutsideHeight, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.OutsideHeight, scheduler: Scheduler.Immediate);
 
         _outsideBounds = this.WhenAnyValue(
-                _ => _.OutsideX,
-                _ => _.OutsideY,
-                _ => _.OutsideWidth,
-                _ => _.OutsideHeight,
+                e => e.OutsideX,
+                e => e.OutsideY,
+                e => e.OutsideWidth,
+                e => e.OutsideHeight,
                 (x,y,width,height) => new Rect(new Point(x, y), new Size(width, height)))
-            .Log(this).ToProperty(this, _ => _.OutsideBounds, scheduler: Scheduler.Immediate);
+            .Log(this).ToProperty(this, e => e.OutsideBounds, scheduler: Scheduler.Immediate);
     }
 
     [JsonIgnore]

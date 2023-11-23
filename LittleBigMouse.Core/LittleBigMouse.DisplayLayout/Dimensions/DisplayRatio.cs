@@ -23,20 +23,21 @@
 
 using System;
 using System.Runtime.Serialization;
-
+using HLab.Base.Avalonia;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public interface IDisplayRatio 
 {
+    bool Saved { get; set; }
     double X { get; set; }
     double Y { get; set; }
     bool IsUnary { get; }
 }
 
 [DataContract]
-public abstract class DisplayRatio : ReactiveObject, IDisplayRatio, IEquatable<IDisplayRatio>
+public abstract class DisplayRatio : ReactiveModel, IDisplayRatio, IEquatable<IDisplayRatio>
 {
     protected DisplayRatio() { }
     [DataMember]

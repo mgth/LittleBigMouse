@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
+             xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="LittleBigMouse.Ui.Avalonia.Main.PluginsControlsView"
+             x:DataType="main:MainViewModel"
+             >
+    <Grid
+        Background="Transparent"
+        ClipToBounds="False"
+        ColumnDefinitions="*,Auto"
+        HorizontalAlignment="Left"
+    >
+        <!--Background="{DynamicResource HLab.Brushes.Header.Active.Background}"-->
+        <ItemsControl
+            Foreground="{DynamicResource HLab.Brushes.Foreground}"
+            ItemsSource="{Binding Commands}"
+        >
+
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <avalonia:ViewLocator Model="{Binding}" ClipToBounds="False"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+
+        </ItemsControl>
+
+    </Grid>
+
+</UserControl>

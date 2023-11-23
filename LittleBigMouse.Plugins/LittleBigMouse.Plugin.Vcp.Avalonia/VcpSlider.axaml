@@ -1,0 +1,76 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Vcp.Avalonia.VcpSlider"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:avalonia="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia"
+             xmlns:controls="clr-namespace:HLab.Base.Avalonia.Controls;assembly=HLab.Base.Avalonia"
+             mc:Ignorable="d" 
+             d:DesignHeight="300"
+             x:Name="UserControl"
+             x:DataType="avalonia:VcpSliderViewModel"
+             >
+        <Design.DataContext>
+            <avalonia:VcpSliderViewModelDesign/>
+        </Design.DataContext>
+
+    <Grid RowDefinitions="2*,8*,*,Auto,2*">
+
+        <Border Grid.Row="1" Background="{Binding SliderBackground}"/>
+
+        <Slider 
+            HorizontalAlignment="Center" 
+            Grid.Row="1" 
+            Orientation="Vertical" 
+
+            IsEnabled="{Binding Model.Enabled}"
+
+            Foreground="{Binding SliderForeground}"
+            Background="{Binding SliderBackground}"
+            BorderBrush="Violet"
+
+            SmallChange="1" 
+            Value="{Binding Model.Value}"
+            LargeChange="10" 
+            Minimum="{Binding Model.Min}"
+            Maximum="{Binding Model.Max}"
+
+            TickFrequency="10"
+            TickPlacement="Outside"
+
+            
+            >
+            <Slider.Styles>
+                <Style Selector="Thumb">
+                    <Setter Property="Template">
+                        <ControlTemplate>
+                            <Grid>
+                                <Ellipse Width="12"
+                                         Height="12"
+                                         Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}" />
+                            </Grid>
+                        </ControlTemplate>
+
+                    </Setter>
+                </Style>
+            </Slider.Styles>
+                <!--<SolidColorBrush  x:Key="SliderThumbBackground" Color="{Binding SliderBackground}"/>-->
+
+        </Slider>
+
+        <controls:DoubleBox 
+            Grid.Row="3"
+            BorderThickness="0" 
+            Opacity="0.6" 
+            Foreground="#B0000000" 
+            Background="{Binding Background}"
+            Width="40" 
+            Height="25"
+            FontSize="11" 
+            FontWeight="Bold"
+            Decimals="0"
+            Value="{Binding Model.Value}"
+            />
+
+    </Grid>
+</UserControl>

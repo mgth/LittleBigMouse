@@ -1,0 +1,226 @@
+﻿<UserControl x:Class="LittleBigMouse.Plugin.Location.Plugins.Location.DefaultScreenView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:location="clr-namespace:LittleBigMouse.Plugin.Location.Plugins.Location"
+             xmlns:converters="clr-namespace:HLab.Base.Converters;assembly=HLab.Base.Wpf"
+             xmlns:mvvm="clr-namespace:HLab.Mvvm;assembly=HLab.Mvvm.Wpf"
+             xmlns:converters1="clr-namespace:HLab.Base.Wpf.Converters;assembly=HLab.Base.Wpf" 
+             xmlns:icons="clr-namespace:HLab.Icons.Wpf.Icons;assembly=HLab.Icons.Wpf" xmlns:wpf="clr-namespace:HLab.Base.Wpf;assembly=HLab.Base.Wpf"
+             mc:Ignorable="d" 
+             MouseLeftButtonUp="OnMouseLeftButtonUp"
+             MouseLeftButtonDown="OnMouseLeftButtonDown"
+             MouseMove="OnMouseMove"
+             d:DesignHeight="300" d:DesignWidth="300"
+             d:DataContext="{d:DesignInstance Type=location:LocationScreenViewModel, IsDesignTimeCreatable=True}"
+             x:Name="UserControl"
+             SizeChanged="View_SizeChanged"
+             Background="Transparent"
+             Cursor="SizeAll"
+>
+    <!--FontSize="{Binding Path=ActualHeight, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.05}"-->
+    <UserControl.FontSize>
+        <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.05">
+            <Binding ElementName="UserControl" Path="ActualHeight"/>
+            <Binding ElementName="UserControl" Path="ActualWidth"/>
+        </MultiBinding>
+    </UserControl.FontSize>
+
+    <UserControl.Resources>
+        <LinearGradientBrush x:Key="ScreenColor" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="#FF7288C0" Offset="0"/>
+            <GradientStop Color="#FF52669D" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="SelectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="LightGreen" Offset="0"/>
+            <GradientStop Color="DarkGreen" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="UnselectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
+            <GradientStop Color="#FF7288C0" Offset="0"/>
+            <GradientStop Color="#FF333E9A" Offset="1"/>
+        </LinearGradientBrush>
+        <converters1:ToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
+        <converters1:ToVisibilityConverter x:Key="ToVisibilityConverter" TrueValue="Visible" FalseValue="Hidden"/>
+    </UserControl.Resources>
+
+    <Grid x:Name="grid" >
+
+        <Border BorderThickness="0" Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5"/>
+
+        <!-- Central Device No -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="center" 
+                    Width ="{Binding ElementName=center, Path=Height}"
+                    BorderThickness = "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.05}" 
+                    CornerRadius= "{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
+                     
+                    Background="{Binding Model.ActiveSource.Primary, Converter={StaticResource Highlighter}, FallbackValue={StaticResource UnselectedBrush}}" 
+                    BorderBrush="{DynamicResource HLab.Brushes.Selected.Background}">
+                <Border.Height>
+                    <MultiBinding Converter="{StaticResource MultiScale}" ConverterParameter="0.3">
+                        <Binding ElementName="UserControl" Path="ActualHeight"/>
+                        <Binding ElementName="UserControl" Path="ActualWidth"/>
+                    </MultiBinding>
+                </Border.Height>
+                <Label 
+                   FontSize="{Binding Path=ActualHeight, ElementName=center, Converter={StaticResource Scale},ConverterParameter=0.5}" 
+                    x:Name="lblName" 
+                    Margin="0,-7,0,-5" 
+                    Content ="{Binding Path=Model.ActiveSource.Device.MonitorNo,FallbackValue=1}" 
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center" 
+                    VerticalContentAlignment="Center" 
+                    Foreground="{DynamicResource HLab.Brushes.Foreground}" 
+                    FontWeight="Bold" />
+            </Border>
+        </StackPanel>
+
+        <!-- PNP Code -->
+        <StackPanel>
+            <Label FontWeight="Bold"
+               Content="{Binding Path=Model.ActiveSource.Device.PnpCode, FallbackValue=XXX000}"  
+               HorizontalAlignment="Left" 
+               VerticalAlignment="{Binding Path=PnpNameVerticalAlignment}" 
+               Foreground="{DynamicResource HLab.Brushes.Foreground}" Opacity="0.8"/>
+        </StackPanel>
+        <!-- Y Position -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top">
+            <Grid>
+                <Border Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5">
+                    <Border.Effect>
+                        <BlurEffect Radius="10"/>
+                    </Border.Effect>
+                </Border>
+                <wpf:DoubleBox 
+                    FontWeight="Bold"
+                    BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
+                    Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                    Double="{Binding Model.YMoving}" 
+                    Decimals="1"/>
+            </Grid>
+            <Label Content="mm"/>
+        </StackPanel>
+
+
+        <!-- X Position -->
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+            <Grid>
+                <Border Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5">
+                    <Border.Effect>
+                        <BlurEffect Radius="10"/>
+                    </Border.Effect>
+                </Border>
+                <wpf:DoubleBox 
+                    FontWeight="Bold"
+                    BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
+                    Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                    Double="{Binding Model.XMoving}" 
+                    Decimals="1"/>
+            </Grid>
+            <Label Content="mm"/>
+
+        </StackPanel>
+
+        <!-- Bottom Dimensions -->
+        <StackPanel Orientation="Horizontal" 
+                    HorizontalAlignment="Center"  
+                    VerticalAlignment="Bottom">
+            <Label 
+                   Content="{Binding Path=Model.InMm.Bounds.Bottom,FallbackValue=bot.y}" 
+                   ContentStringFormat="#0.#"/>
+            
+            <Label Content="mm"/>
+
+            <Grid>
+                <Border Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5">
+                    <Border.Effect>
+                        <BlurEffect Radius="10"/>
+                    </Border.Effect>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <wpf:DoubleBox
+                        FontWeight="Bold"
+                        BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
+                        Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                        VerticalAlignment="Center"
+                        Double="{Binding RatioY}" 
+                        Decimals="1"/>
+                    
+                    <Label FontWeight="Bold" Content="%" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+
+        <!-- Right Dimensions -->
+        <StackPanel HorizontalAlignment="Right"  VerticalAlignment="Center" >
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Label 
+                    Content="{Binding Path=Model.InMm.Bounds.Right,FallbackValue=right.x}" 
+                    ContentStringFormat="#0.#" 
+                    HorizontalAlignment="Right"
+                    />
+
+                <Label Content="mm"/>
+            </StackPanel>
+
+            <Grid>
+                <Border Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5">
+                    <Border.Effect>
+                        <BlurEffect Radius="10"/>
+                    </Border.Effect>
+                </Border>
+
+                <StackPanel Orientation="Horizontal">
+                    <wpf:DoubleBox 
+                    FontWeight="Bold"
+                    BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
+                    Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                    VerticalAlignment="Center" 
+                    Double="{Binding RatioX}" 
+                    Decimals="1"/>
+
+                    <Label FontWeight="Bold" Content="%" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel>
+            
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="5">
+                <Label Padding="0" Content="{Binding Path=Model.ActiveSource.InPixel.Width,FallbackValue=pix.w}"/>
+                <Label Padding="0" Content=" X "/>
+                <Label Padding="0" Content="{Binding Path=Model.ActiveSource.InPixel.Height,FallbackValue=pix.h}"/>
+                <Label Padding="0" Content=" px"/>
+            </StackPanel>
+            
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="5" >
+                <Label 
+                    Content="{Binding Path=Model.ActiveSource.RealDpiAvg, FallbackValue=96}" 
+                    ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" 
+                    HorizontalAlignment="Right"
+                    />
+                <Label 
+                    Content="DPI" 
+                    Opacity="0.5"
+                    ContentStringFormat="#0" VerticalAlignment="{Binding Path=DpiVerticalAlignment}" 
+                    HorizontalAlignment="Right" 
+                    FontWeight="Black"
+                    Foreground="{DynamicResource HLab.Brushes.Foreground}"/>
+            </StackPanel>
+
+        </StackPanel>
+
+        <ToggleButton Width ="40" Height="40" Cursor="Hand" VerticalAlignment="Bottom" HorizontalAlignment="Left" IsChecked="{Binding Ruler}">
+            <icons:IconView
+                Margin="5"
+                Foreground="{DynamicResource HLab.Brushes.Background}"
+                Path="Icon/Ruler"
+            />
+        </ToggleButton>
+
+    </Grid>
+</UserControl>

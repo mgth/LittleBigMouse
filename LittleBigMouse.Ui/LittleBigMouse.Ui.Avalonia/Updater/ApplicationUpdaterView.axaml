@@ -1,0 +1,40 @@
+﻿<Window x:Class="LittleBigMouse.Ui.Avalonia.Updater.ApplicationUpdaterView"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:updater="clr-namespace:LittleBigMouse.Ui.Avalonia.Updater"
+        mc:Ignorable="d" 
+        Width="400"
+        Height="260"
+        WindowStartupLocation="CenterScreen"
+        Title="Update Little Big Mouse"
+        d:DesignHeight="300" d:DesignWidth="300"
+        x:DataType="updater:ApplicationUpdaterViewModel"
+        >
+    <DockPanel Margin="10">
+        <TextBlock 
+            
+            DockPanel.Dock="Top" 
+            FontWeight="Bold" 
+            Text="{Binding Message,FallbackValue=New version available}"
+            TextWrapping="WrapWithOverflow"
+            />
+        
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+            <Label>Current Version :</Label>
+            <Label Content="{Binding CurrentVersion}"/>
+        </StackPanel>
+        
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+            <Label>Online version :</Label>
+            <Label Content="{Binding NewVersion}"/>
+        </StackPanel>
+            
+        <ProgressBar DockPanel.Dock="Top" Height="20" Value="{Binding Progress}" Maximum="100" Margin="20"/>
+        <StackPanel Height="40" DockPanel.Dock="Bottom" VerticalAlignment="Bottom" HorizontalAlignment="Right" Orientation="Horizontal">
+            <Button FontWeight="Bold" IsDefault="True" Padding="5" Command="{Binding UpdateCommand}"> Update </Button>
+            <Button Padding="5" Click="ButtonBase_OnClick"> Cancel </Button>
+        </StackPanel>
+    </DockPanel>
+</Window>

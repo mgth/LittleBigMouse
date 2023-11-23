@@ -1,0 +1,17 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             x:Class="LittleBigMouse.Ui.Avalonia.App"
+             RequestedThemeVariant="Default"
+			 x:DataType="main:TrayIconViewModel"
+             >
+	<!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+	<Application.Styles>
+		<FluentTheme DensityStyle="Normal"/>
+		<StyleInclude Source="avares://HLab.Base.Avalonia/Controls/DoubleBox.axaml" />
+	</Application.Styles>
+
+
+
+</Application>

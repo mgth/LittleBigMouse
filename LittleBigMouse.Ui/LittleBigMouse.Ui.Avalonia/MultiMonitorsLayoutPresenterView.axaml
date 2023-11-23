@@ -1,0 +1,80 @@
+﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.MultiMonitorsLayoutPresenterView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:avalonia1="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
+             xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
+             xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+             LayoutUpdated="OnLayoutUpdated"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" 
+             d:DesignWidth="500"
+             x:DataType="avalonia:MonitorsLayoutPresenterViewModel"
+>
+
+    <UserControl.Resources>
+        <avalonia:SizeRatioConverter x:Key="SizeRatioConverter" />
+    </UserControl.Resources>
+
+    <Design.DataContext>
+        <avalonia:MonitorsLayoutPresenterViewModel />
+    </Design.DataContext>
+
+    <Grid ClipToBounds="False">
+
+        <main:PresenterBackground/>
+
+
+        <Grid  Margin="30" ClipToBounds="False">
+
+            <Grid 
+                x:Name="ReferenceGrid" 
+                ClipToBounds="False"
+                >
+
+                <Canvas x:Name="ContentGrid" 
+                        ClipToBounds="False"
+
+                >
+                        <!--Width="{Binding Width, Mode=OneWay}" 
+                        Height="{Binding Height, Mode=OneWay}"-->
+
+                    <ItemsControl 
+                        ItemsSource="{Binding Model.PhysicalMonitors, FallbackValue=NA}"
+                        ClipToBounds="False"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+
+                        >
+                        <ItemsControl.Effect>
+                            <DropShadowEffect 
+                                Color="AliceBlue" 
+                                OffsetX="0" 
+                                OffsetY="0" 
+                                BlurRadius="40" Opacity="0.3"/>
+                        </ItemsControl.Effect>
+
+
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <avalonia1:ViewLocator Model="{Binding}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Grid/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
+                    </ItemsControl>
+
+                </Canvas>
+
+            </Grid>
+
+        </Grid>
+    </Grid>
+</UserControl>

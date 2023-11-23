@@ -769,7 +769,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
             new LogonTrigger { UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name });
 
         td.Actions.Add(
-            new ExecAction(ApplicationExe, "--start", AppDomain.CurrentDomain.BaseDirectory)
+            new ExecAction(ApplicationExe, "", AppDomain.CurrentDomain.BaseDirectory)
         );
 
         td.Principal.RunLevel = TaskRunLevel.Highest;
@@ -784,8 +784,16 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         }
         catch (UnauthorizedAccessException e)
         {
-            // Todo avalonia
-            //MessageBox.Show("Unable to register startup task");
+        }
+
+        td.Principal.RunLevel = TaskRunLevel.LUA;
+        try
+        {
+            ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
+            return true;
+        }
+        catch (UnauthorizedAccessException e)
+        {
             return false;
         }
     }

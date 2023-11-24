@@ -133,15 +133,19 @@ public class MainService : IMainService
 
         await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", CheckUpdateAsync);
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
-        await _notify.AddMenuAsync(-1, "Start","Icon/Start", () => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones()));
+        await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () => _littleBigMouseClientService.StopAsync());
         await _notify.AddMenuAsync(-1, "Exit", "Icon/sys/Close", QuitAsync);
 
-        //await _notify.SetIconAsync("Icon/Stop",128);
         await _notify.SetIconAsync("Icon/lbm_off",128);
-        //_notify.SetIcon("icon/MonitorLocation",128);
-        //_notify.SetIcon(Resources.lbm_off);
+
         _notify.Show();
+
+        if (MonitorsLayout.Enabled)
+        {
+            await StartAsync();
+        }
+
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action)
@@ -154,6 +158,8 @@ public class MainService : IMainService
         await _littleBigMouseClientService.QuitAsync();
         Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal);
     }
+
+    Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
 
     async Task StateChanged(object? sender, LittleBigMouseServiceEventArgs args)
     {

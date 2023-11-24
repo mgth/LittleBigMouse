@@ -5,7 +5,7 @@
 
 #include "LittleBigMouseDaemon.h"
 #include "MouseEngine.h"
-#include "MouseHooker.h"
+#include "Hooker.h"
 #include "RemoteServerSocket.h"
 
 DWORD getParentPID(DWORD pid)
@@ -66,31 +66,45 @@ std::string getParentProcess()
 
 int main(int argc, char *argv[]){
 
+	constexpr char szUniqueNamedMutex[] = "littlebigmouse_daemon";
+
+	HANDLE hHandle = CreateMutex(nullptr, TRUE, reinterpret_cast<LPCWSTR>(szUniqueNamedMutex));
+	if( ERROR_ALREADY_EXISTS == GetLastError() )
+	{
+	  // Program already running somewhere
+		std::cout << "Program already running, Press Enter to exit\n";
+		std::cin.ignore();
+		CloseHandle (hHandle);
+		return(1); // Exit program
+	}
+
+
     ShowWindow( GetConsoleWindow(), SW_HIDE );
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 );
 
     RemoteServerSocket server;
     MouseEngine engine;
-    MouseHooker hook;
+    Hooker hook;
 
     auto p = getParentProcess();
-    std::cout << p << std::endl;
+    std::cout << p << '\n';
 
-    bool ignoreCurrent = p.find("LittleBigMouse") != std::string::npos; //.contains("LittleBigMouse");
-    if(!ignoreCurrent)
+    // Test if daemon was started from UI
+    bool uiMode = p.find("LittleBigMouse") != std::string::npos;
+    if(!uiMode)
     {
 	    for(int i=0; i<argc; i++)
 	    {
 			if(strcmp(argv[i], "--ignore_current") == 0)
 		    {
-	    		ignoreCurrent = true;
+	    		uiMode = true;
 				break;
 			}
 		}
 	}
 
-    if(ignoreCurrent)
+    if(uiMode)
     {
 	    std::cout << "Starting in UI mode" << std::endl;
 		LittleBigMouseDaemon( &hook, &server, &engine ).Run("");
@@ -100,6 +114,8 @@ int main(int argc, char *argv[]){
 		std::cout << "Starting in Daemon mode" << std::endl;
 		LittleBigMouseDaemon( &hook, &server, &engine ).Run(R"(\Mgth\LittleBigMouse\Current.xml)");
 	}
-    
-    return 0;
+
+    ReleaseMutex (hHandle);
+	CloseHandle (hHandle);
+	return 0;
 }

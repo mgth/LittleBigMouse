@@ -12,7 +12,7 @@ ThreadHost::~ThreadHost()
 
 void ThreadHost::DoStop()
 {
-		_stop = true;
+	_stop = true;
 }
 
 void ThreadHost::OnStopped()

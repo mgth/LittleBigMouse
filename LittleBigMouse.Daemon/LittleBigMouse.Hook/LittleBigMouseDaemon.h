@@ -7,11 +7,11 @@
 #include "tinyxml2.h"
 
 class MouseEngine;
-class MouseHooker;
+class Hooker;
 
 class LittleBigMouseDaemon
 {
-	MouseHooker* _hook;
+	Hooker* _hook;
 	MouseEngine* _engine;
 	RemoteServer* _remoteServer;
 
@@ -31,7 +31,7 @@ class LittleBigMouseDaemon
 	void LoadFromFile(const std::wstring& path) const;
 
 public:
-	LittleBigMouseDaemon(MouseHooker* hook, RemoteServer* server, MouseEngine* engine);
+	LittleBigMouseDaemon(Hooker* hook, RemoteServer* server, MouseEngine* engine);
 	~LittleBigMouseDaemon();
 
 	void Run(const std::string& path) const;

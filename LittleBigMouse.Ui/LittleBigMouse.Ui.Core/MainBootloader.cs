@@ -15,6 +15,7 @@ public class MainBootloader(
         mainService.UpdateLayout();
 
         await mainService.StartNotifierAsync();
+
     }
 
 }

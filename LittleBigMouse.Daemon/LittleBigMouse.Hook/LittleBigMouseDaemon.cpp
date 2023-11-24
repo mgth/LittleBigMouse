@@ -10,7 +10,7 @@
 
 #include "ClientMessage.h"
 #include "MouseEngine.h"
-#include "MouseHooker.h"
+#include "Hooker.h"
 #include "RemoteClient.h"
 #include "XmlHelper.h"
 
@@ -19,7 +19,7 @@ void LittleBigMouseDaemon::Send(const std::string& string) const
 	_remoteServer->Send(string,nullptr);
 }
 
-LittleBigMouseDaemon::LittleBigMouseDaemon(MouseHooker* hook, RemoteServer* server, MouseEngine* engine):
+LittleBigMouseDaemon::LittleBigMouseDaemon(Hooker* hook, RemoteServer* server, MouseEngine* engine):
 	_hook(hook),
 	_engine(engine),
 	_remoteServer(server)
@@ -37,17 +37,22 @@ LittleBigMouseDaemon::LittleBigMouseDaemon(MouseHooker* hook, RemoteServer* serv
 
 void LittleBigMouseDaemon::Run(const std::string& path) const
 {
+	//start remote server
 	if(_remoteServer)
 		_remoteServer->Start();
 
+	// load layout from file
 	if(!path.empty())
 		LoadFromFile(path);
 
-	if(_hook)
-		_hook->Join();
-
+	// wait remote server to stop
 	if(_remoteServer)
 		_remoteServer->Join();
+
+	// wait for mouse hook to stop
+	_hook->DoStop();
+	if(_hook)
+		_hook->Join();
 }
 
 LittleBigMouseDaemon::~LittleBigMouseDaemon()

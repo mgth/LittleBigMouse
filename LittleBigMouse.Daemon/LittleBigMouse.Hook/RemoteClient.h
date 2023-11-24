@@ -19,6 +19,12 @@ protected:
     char _inputBuffer[1024*16];
 	void RunThread() override;
 
+	void DoStop() override
+	{
+		_stop = true;
+		closesocket(_client);
+	}
+
 public:
 	RemoteClient(RemoteServerSocket* server, const SOCKET socket): _server(server), _client(socket), _inputBuffer{}
 	{

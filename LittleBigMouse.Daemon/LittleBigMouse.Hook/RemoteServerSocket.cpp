@@ -1,6 +1,6 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <stdio.h>
+#include <cstdio>
 #pragma comment(lib, "Ws2_32.lib")
 
 
@@ -8,8 +8,6 @@
 #include "LittleBigMouseDaemon.h"
 #include "RemoteClient.h"
 #include <iostream>
-
-#include "ClientMessage.h"
 
 class RemoteClient;
 
@@ -25,39 +23,56 @@ void RemoteServerSocket::RunThread()
 	sin.sin_family        = AF_INET;
 	sin.sin_port        = htons(25196);
 
-	const SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+	_socket = socket(AF_INET, SOCK_STREAM, 0);
 
 	std::cout << "Socket.\n";
 
-    if(bind(sock, reinterpret_cast<SOCKADDR*>(&sin), sizeof(sin))==0)
+    if(bind(_socket, reinterpret_cast<SOCKADDR*>(&sin), sizeof(sin))==0)
     {
-	    if(listen(sock, 0)==0)
+	    if(listen(_socket, 0)==0)
 	    {
 		    while(!_stop) 
 		    {
 		        int sinSize = sizeof(csin);
-		        const auto csock = accept(sock, reinterpret_cast<SOCKADDR*>(&csin), &sinSize);
+		        const auto csock = accept(_socket, reinterpret_cast<SOCKADDR*>(&csin), &sinSize);
 		        if(csock != INVALID_SOCKET)
 		        {
 					auto c = new RemoteClient(this, csock);
-		            _clients.push_back(c);
+					_lock.lock();
+						_clients.push_back(c);
+					_lock.unlock();
+
 					c->Start();
+
 					//immediately inform client of current state
 					OnMessage.fire("",c);
 		        }
 		    }
+
+			_lock.lock();
+			const std::vector clients = _clients;
+			_lock.unlock();
+
 			while(!_clients.empty())
 			{
-				const auto c = _clients.back();
-
+				const auto c = clients.back();
 				c->Stop();
-				delete c;
 			}
 	    }
+	    else
+	    {
+		    std::cout << "Listen failed.\n";
+	    }
     }
-    closesocket(sock);
+    closesocket(_socket);
     WSACleanup();
+}
 
+void RemoteServerSocket::DoStop()
+{
+	RemoteServer::DoStop();
+	if(_socket!=0)
+		closesocket(_socket);
 }
 
 void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client) 
@@ -67,8 +82,13 @@ void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* clie
 
 void RemoteServerSocket::Remove(RemoteClient* remoteClient)
 {
+	_lock.lock();
+
+	remoteClient->Stop();
 	std::erase(_clients, remoteClient);
 	delete remoteClient;
+
+	_lock.unlock();
 }
 
 void RemoteServerSocket::Send(const std::string& message, RemoteClient* client) const

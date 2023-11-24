@@ -32,7 +32,6 @@ using Avalonia;
 using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia.Extensions;
-using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout;
@@ -44,22 +43,6 @@ using Newtonsoft.Json;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
-
-public class LocationControlViewModelDesign : IDesignViewModel
-{
-    public LocationControlViewModelDesign()
-    {
-    }
-
-    public List<ListItem> AlgorithmList { get; } = new()
-    {
-        new ("strait","Strait","Simple and highly CPU-efficient transition."),
-        new ("cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
-
-    };
-
-    public object SelectedAlgorithm { get; set; }
-}
 
 public class ListItem
 {
@@ -118,7 +101,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
                 ).ObserveOn(RxApp.MainThreadScheduler));
 
         StopCommand = ReactiveCommand.CreateFromTask(
-            _service.StopAsync,
+            StopAsync
+            ,
             this.WhenAnyValue(e => e.Running)
         );
 
@@ -233,13 +217,36 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
     async Task StartAsync()
     {
+        if(Model == null) return;
+
         Model.Enabled = true;
 
         if (!Model.Saved)
-            await  SaveAsync();
+            await SaveAsync();
+        else
+        {
+            await Task.Run(() => Model.SaveEnabled());
+        }
 
         await _service.StartAsync(_mainService.MonitorsLayout.ComputeZones());
     }
+
+    async Task StopAsync()
+    {
+        if(Model == null) return;
+
+        Model.Enabled = false; 
+        await Task.Run(() => Model.SaveEnabled());
+        await _service.StopAsync();
+    }
+
+    Task SaveAsync() =>
+        Task.Run(() =>
+        {
+            if (!(Model?.Saved??true))
+                Model.Save();
+        });
+
 
     public ListItem SelectedAlgorithm 
     {
@@ -255,16 +262,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     readonly ObservableAsPropertyHelper<ListItem> _selectedPriority;
 
-    async Task SaveAsync()
-    {
-        await Task.Run(() =>
-        {
-            if (!Model.Saved)
-                Model.Save();
-        });
-
-        //await _service.StartAsync(Model.ComputeZones());
-    }
 
     public bool Running
     {

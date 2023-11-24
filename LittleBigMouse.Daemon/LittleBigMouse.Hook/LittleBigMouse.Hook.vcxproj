@@ -152,9 +152,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="HookerHiddenWindow.cpp" />
+    <ClCompile Include="HookerWindows.cpp" />
+    <ClCompile Include="HookerWinEvents.cpp" />
     <ClCompile Include="LittleBigMouse.Hook.cpp" />
     <ClCompile Include="LittleBigMouseDaemon.cpp" />
-    <ClCompile Include="MouseHooker.cpp" />
+    <ClCompile Include="HookerMouse.cpp" />
     <ClCompile Include="RemoteServer.cpp" />
     <ClCompile Include="RemoteServerPipe.cpp" />
     <ClCompile Include="RemoteServerSocket.cpp" />
@@ -164,7 +167,7 @@
   <ItemGroup>
     <ClInclude Include="ClientMessage.h" />
     <ClInclude Include="LittleBigMouseDaemon.h" />
-    <ClInclude Include="MouseHooker.h" />
+    <ClInclude Include="Hooker.h" />
     <ClInclude Include="RemoteServer.h" />
     <ClInclude Include="RemoteServerPipe.h" />
     <ClInclude Include="RemoteServerSocket.h" />

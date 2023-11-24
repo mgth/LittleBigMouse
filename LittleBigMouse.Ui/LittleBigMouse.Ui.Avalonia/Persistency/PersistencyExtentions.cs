@@ -61,6 +61,20 @@ public static class PersistencyExtensions
         }
         @this.Saved = true;
         @this.UpdatePhysicalMonitors();
+
+    }
+
+    public static bool SaveEnabled(this MonitorsLayout @this)
+    {
+        using var k = @this.OpenRegKey(true);
+        if (k == null) return false;
+
+        k.SetValue("Enabled", @this.Enabled ? "1" : "0");
+
+        if (@this.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
+
+        //@this.Saved = true;
+        return true;
     }
 
     public static bool Save(this MonitorsLayout @this)

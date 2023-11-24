@@ -483,7 +483,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     public bool Enabled
     {
         get => _enabled;
-        set => SetUnsavedValue(ref _enabled, value);
+        set => SetAndRaise(ref _enabled, value);
     }
     bool _enabled;
 

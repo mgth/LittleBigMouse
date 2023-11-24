@@ -54,6 +54,7 @@ public interface IMonitorsLayout
     PhysicalMonitor PrimaryMonitor { get; }
 
     WallpaperStyle WallpaperStyle { get; }
+    bool Enabled { get; }
 
     ZonesLayout ComputeZones();
     void Compact(bool force = false);

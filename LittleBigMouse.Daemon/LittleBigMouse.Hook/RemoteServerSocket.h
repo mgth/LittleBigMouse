@@ -8,10 +8,14 @@ class RemoteClient;
 
 class RemoteServerSocket final : public RemoteServer
 {
+    std::mutex _lock; 
     std::vector<RemoteClient*> _clients;
+
+    SOCKET _socket = 0;
 
 protected:
 	void RunThread() override;
+    void DoStop() override;
 
 public:
 

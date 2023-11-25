@@ -193,3 +193,4 @@ ModelManifest.xml
 .vs/*
 LittleBigMouse/Control.Loader/setup/*.exe
 /LittleBigMouse/Control.Loader/img/Logos/Intel
+/LittleBigMouse.Setup/LittleBigMouse_5.0.0.0.exe

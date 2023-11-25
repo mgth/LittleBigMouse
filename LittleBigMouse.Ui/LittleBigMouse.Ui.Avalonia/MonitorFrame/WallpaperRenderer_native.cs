@@ -1,14 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.IO;
-using Avalonia;
-using LittleBigMouse.DisplayLayout.Dimensions;
-using LittleBigMouse.DisplayLayout.Monitors;
-using Bitmap = Avalonia.Media.Imaging.Bitmap;
-using Size = System.Drawing.Size;
-
-namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
+﻿namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 /*
 public class WallpaperRenderer
 {

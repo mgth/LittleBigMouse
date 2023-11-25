@@ -27,7 +27,6 @@ using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
-using DynamicData.Binding;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;

@@ -24,7 +24,6 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;

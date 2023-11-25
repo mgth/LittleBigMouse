@@ -1,12 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Numerics;
-using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;

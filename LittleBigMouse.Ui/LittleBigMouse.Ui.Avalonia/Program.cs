@@ -25,7 +25,6 @@ using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 using LittleBigMouse.Ui.Core;
 using ReactiveUI;
-using Splat;
 
 namespace LittleBigMouse.Ui.Avalonia;
 

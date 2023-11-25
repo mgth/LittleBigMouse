@@ -4,6 +4,7 @@
 	<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
     <Platforms>x64;x86;AnyCpu</Platforms>
     <Configurations>Debug;Release</Configurations>
+	<Version>2.2.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

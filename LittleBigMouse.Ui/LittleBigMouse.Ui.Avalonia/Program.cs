@@ -22,6 +22,7 @@ using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.Plugin.Vcp.Avalonia;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
+using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 using LittleBigMouse.Ui.Core;
 using ReactiveUI;
 using Splat;
@@ -91,6 +92,7 @@ internal class Program
 
             c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
 
+            c.Export<MonitorDebugPlugin>().As<IBootloader>();
             c.Export<MonitorLocationPlugin>().As<IBootloader>();
 
             c.Export<VcpPlugin>().As<IBootloader>();

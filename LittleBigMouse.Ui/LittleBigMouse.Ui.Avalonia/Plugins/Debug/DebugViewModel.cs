@@ -22,11 +22,17 @@
 */
 
 using System;
+using System.Linq;
+using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
+using DynamicData.Binding;
+using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
+using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors;
+using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 public struct MonitorDebugListValue
@@ -49,16 +55,22 @@ public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
 {
     int _row = 0;
 
-    public MonitorDebugViewModel()
+    public MonitorDebugViewModel(IMonitorsSet monitors)
     {
         Grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
         Grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
         Grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
 
         // TODO Avalonia
-        //_ = this
-        //    .WhenValueChanged(e => e.Model)
-        //    .Subscribe(monitor => monitor?.ActiveSource.Source.Device.DisplayValues(AddValue));
+        _ = this
+            .WhenAnyValue(e => e.Model)
+            .WhereNotNull()
+            .Do(monitor =>
+            {
+
+                var device = monitors.Monitors.FirstOrDefault(d => d.DeviceId == monitor.IdPhysicalMonitor);
+                device?.DisplayValues(AddValue);
+            }).Subscribe().DisposeWith(this);
     }
 
 

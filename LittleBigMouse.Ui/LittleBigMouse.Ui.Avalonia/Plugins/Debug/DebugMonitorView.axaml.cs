@@ -30,9 +30,9 @@ using LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 
-public partial class DebugMonitorView : UserControl, IView<MonitorDebugViewMode, MonitorDebugViewModel>, IMonitorFrameContentViewClass
+public partial class MonitorDebugView : UserControl, IView<MonitorDebugViewMode, MonitorDebugViewModel>, IMonitorFrameContentViewClass
 {
-    public DebugMonitorView()
+    public MonitorDebugView()
     {
         InitializeComponent();
     }

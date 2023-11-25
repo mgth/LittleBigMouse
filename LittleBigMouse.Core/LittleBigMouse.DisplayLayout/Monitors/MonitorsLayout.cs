@@ -759,8 +759,10 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     public bool Schedule()
     {
         Unschedule();
+
         using var ts = new TaskService();
-        ts.RootFolder.DeleteTask(ServiceName, false);
+
+        //ts.RootFolder.DeleteTask(ServiceName, false);
 
         var td = ts.NewTask();
         td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
@@ -801,7 +803,14 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     public void Unschedule()
     {
         using var ts = new TaskService();
-        ts.RootFolder.DeleteTask(ServiceName, false);
+        try
+        {
+            ts.RootFolder.DeleteTask(ServiceName, false);
+        }
+        catch(UnauthorizedAccessException)
+        {
+
+        }
     }
 
     public ZonesLayout ComputeZones()

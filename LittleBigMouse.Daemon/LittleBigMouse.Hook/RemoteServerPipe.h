@@ -23,7 +23,7 @@ protected:
 	}
 
 public:
-	void Send(const std::string& message, RemoteClient* client) const override;
+	void Send(const std::string& message, RemoteClient* client) override;
 };
 
 

@@ -26,7 +26,12 @@ std::wstring GetExecutablePathFromProcessId(DWORD processId) {
 
 void Hooker::HookEvent()
 {
-	_hEventHook = SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, &Hooker::WindowChangeHook, 0, 0, WINEVENT_OUTOFCONTEXT);
+	_hEventHook = SetWinEventHook(
+        EVENT_OBJECT_FOCUS, 
+        EVENT_OBJECT_FOCUS, 
+        nullptr, &Hooker::WindowChangeHook, 
+        0, 0, 
+        WINEVENT_OUTOFCONTEXT);
 }
 
 void Hooker::UnhookEvent()
@@ -38,14 +43,20 @@ void Hooker::UnhookEvent()
 	}
 }
 
-void CALLBACK Hooker::WindowChangeHook(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hWnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
+void CALLBACK Hooker::WindowChangeHook(
+    HWINEVENTHOOK hWinEventHook, 
+    DWORD event, HWND hWnd, LONG idObject, 
+    LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
 {
     if (hWnd != nullptr) {
 	    const DWORD processId = GetProcessIdFromWindow(hWnd);
 	    const LONG style = GetWindowLong(hWnd, GWL_STYLE);
         if (processId != 0) {
 	        auto exePath = GetExecutablePathFromProcessId(processId);
+
+            #if defined(_DEBUG)
             std::cout << "Window: " << (style & WS_MAXIMIZE) << '\n';
+            #endif
 
             if (!exePath.empty()) {
                 // Use the executable path as needed

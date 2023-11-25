@@ -51,7 +51,9 @@ void Hooker::Loop()
 	_instance = this;
 
 	OnMessage.fire("<DaemonMessage><State>Running</State></DaemonMessage>\n");
-
+#if defined(_DEBUG)
+	std::cout << "<Hook:Start>\n";
+#endif
     MSG msg;
 	int ret = PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE);
 	if(ret == 0)
@@ -69,10 +71,10 @@ void Hooker::Loop()
 	}
 	if(ret == -1)
 	{
-		std::cout << "<Error>";
+		#if defined(_DEBUG)
+		std::cout << "<Hook:Error>";
+		#endif
 	}
-
-	std::cout << "<Stopped>\n";
 
 	Stopping = false;
 
@@ -81,6 +83,9 @@ void Hooker::Loop()
 	OnMouseMove.fire(p);
 
 	OnMessage.fire("<DaemonMessage><State>Stopped</State></DaemonMessage>\n");
+#if defined(_DEBUG)
+	std::cout << "<Hook:Stopped>\n";
+#endif
 }
 
 void Hooker::RunThread()
@@ -102,7 +107,9 @@ void Hooker::DoStop()
 	
     if (PostThreadMessage(_currentThreadId, WM_QUIT, 0, 0))
     {
-        std::cout << "<quit>" << std::endl;
+		#if defined(_DEBUG)
+        std::cout << "<hook:quit>" << std::endl;
+		#endif
     }
 }
 

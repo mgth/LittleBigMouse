@@ -8,6 +8,7 @@
 #include "LittleBigMouseDaemon.h"
 #include "RemoteClient.h"
 #include <iostream>
+#include <list>
 
 class RemoteClient;
 
@@ -25,7 +26,9 @@ void RemoteServerSocket::RunThread()
 
 	_socket = socket(AF_INET, SOCK_STREAM, 0);
 
-	std::cout << "Socket.\n";
+	#if defined(_DEBUG)
+	std::cout << "<Server:Start>\n";
+	#endif
 
     if(bind(_socket, reinterpret_cast<SOCKADDR*>(&sin), sizeof(sin))==0)
     {
@@ -47,32 +50,67 @@ void RemoteServerSocket::RunThread()
 					//immediately inform client of current state
 					OnMessage.fire("",c);
 		        }
-		    }
+				#if defined(_DEBUG)
+				else
+				{
+					std::cout << "<Server:Dead>.\n"; 
+				}
+				#endif
 
-			_lock.lock();
-			const std::vector clients = _clients;
-			_lock.unlock();
+				DeleteDeadClients();
+		    }
 
 			while(!_clients.empty())
 			{
-				const auto c = clients.back();
+				_lock.lock();
+				const auto c = _clients.back();
+				_clients.pop_back();
+				_lock.unlock();
+
 				c->Stop();
 			}
+			DeleteDeadClients();
+			#if defined(_DEBUG)
+			std::cout << "<Server:Stopped>\n";
+			#endif
+
 	    }
+		#if defined(_DEBUG)
 	    else
 	    {
 		    std::cout << "Listen failed.\n";
 	    }
+		#endif
     }
-    closesocket(_socket);
+
+	if(_socket!=0)
+		closesocket(_socket);
+
     WSACleanup();
+}
+
+void RemoteServerSocket::DeleteDeadClients()
+{
+	while(!_deadClients.empty())
+	{
+		_lock.lock();
+		const auto c = _deadClients.back();
+		_deadClients.pop_back();
+		_lock.unlock();
+		c->Join();
+		delete c;
+	}
 }
 
 void RemoteServerSocket::DoStop()
 {
 	RemoteServer::DoStop();
 	if(_socket!=0)
+		shutdown(_socket,2);
+	if(_socket!=0)
 		closesocket(_socket);
+
+	_socket = 0;
 }
 
 void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client) 
@@ -84,19 +122,23 @@ void RemoteServerSocket::Remove(RemoteClient* remoteClient)
 {
 	_lock.lock();
 
-	remoteClient->Stop();
 	std::erase(_clients, remoteClient);
-	delete remoteClient;
+	remoteClient->Stop();
+	_deadClients.push_back(remoteClient);
 
 	_lock.unlock();
 }
 
-void RemoteServerSocket::Send(const std::string& message, RemoteClient* client) const
+void RemoteServerSocket::Send(const std::string& message, RemoteClient* client) 
 {
 	if(client)
 		client->Send(message);
 	else
 	{
+		_lock.lock();
+		const auto clients = _clients;
+		_lock.unlock();
+
 	    for(const auto c : _clients)
 	    {
 	        if(c) c->Send(message);

@@ -29,7 +29,9 @@ LRESULT __stdcall Hooker::WindowCallback(const int nCode, const WPARAM wParam, c
 
 	if (nCode == WM_CAPTURECHANGED)
 	{
+		#if defined(_DEBUG)
 		std::cout << "WM_CAPTURECHANGED : " << wParam << "::" << lParam << std::endl;
+		#endif
 	}
 
 	return CallNextHookEx(hook->_windowHookId, nCode, wParam, lParam);

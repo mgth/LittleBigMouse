@@ -1,19 +1,28 @@
 #include <string>
 #include "RemoteClient.h"
 #include "RemoteServerSocket.h"
+#include <iostream>
 
 void RemoteClient::RunThread()
 {
 	auto s = std::string();
 
+	#if defined(_DEBUG)
+	std::cout << "<Client:Start:" << _socket << ">\n";
+	#endif
+
 	while (!_stop)
 	{
-		const auto n = recv(_client,_inputBuffer,sizeof(_inputBuffer),0);
-		if(n == 0)
+		const auto n = recv(_socket,_inputBuffer,sizeof(_inputBuffer),0);
+		if (n <= 0)
 		{
 			_stop = true;
 			break;
 		}
+
+		#if defined(_DEBUG)
+		std::cout << "<Client:Received:" << n << "<-" << _socket << ">\n";
+		#endif
 
 		auto sn = std::string(_inputBuffer,n);
 		auto i = sn.find('\n');
@@ -34,14 +43,28 @@ void RemoteClient::RunThread()
 		s += sn;
 	}
 
+	#if defined(_DEBUG)
+	std::cout << "<Client:Stopped:" << _socket << ">\n";
+	#endif
+
+	if(_socket)
+	{
+		closesocket(_socket);
+		_socket = 0;
+	}
 	_server->Remove(this);
 }
 
 void RemoteClient::Send(const std::string& message)
 {
-	const auto result = send(_client,message.c_str(),message.length(),0);
+	const auto result = send(_socket,message.c_str(),message.length(),0);
 	if(result == SOCKET_ERROR)
 	{
 		_stop = true;
+		if(_socket)
+		{
+			closesocket(_socket);
+			_socket = 0;
+		}
 	}
 }

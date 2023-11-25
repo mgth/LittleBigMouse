@@ -10,7 +10,7 @@ class RemoteServerSocket;
 class RemoteClient final : public ThreadHost
 {
 	RemoteServerSocket* _server;
-	SOCKET _client;
+	SOCKET _socket;
 
 //	std::atomic<bool> _stop = false;
 
@@ -21,12 +21,15 @@ protected:
 
 	void DoStop() override
 	{
-		_stop = true;
-		closesocket(_client);
+		ThreadHost::DoStop();
+		if(_socket)
+			shutdown(_socket,2);
+		if(_socket)
+			closesocket(_socket);
 	}
 
 public:
-	RemoteClient(RemoteServerSocket* server, const SOCKET socket): _server(server), _client(socket), _inputBuffer{}
+	RemoteClient(RemoteServerSocket* server, const SOCKET socket): _server(server), _socket(socket), _inputBuffer{}
 	{
 	}
 

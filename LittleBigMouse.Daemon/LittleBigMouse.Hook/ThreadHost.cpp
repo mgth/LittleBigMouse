@@ -1,48 +1,50 @@
-#include "ThreadHost.h"
-
 #include <iostream>
 
+#include "ThreadHost.h"
 #include "LittleBigMouseDaemon.h"
 
 ThreadHost::~ThreadHost()
 {
-	while(_thread)
-		Stop();
+	if(_thread && _thread->joinable() && !_joined.load())
+	{
+		DoStop();
+		_thread->join();
+	}
+	delete _thread;
 }
 
 void ThreadHost::DoStop()
 {
-	_stop = true;
+	_stop.store(true);
 }
 
 void ThreadHost::OnStopped()
 {
-	_stop = false;
 }
 
-bool ThreadHost::Start()
+void ThreadHost::Start()
 {
-	_thread = new std::thread(&ThreadHost::RunThread, this);
-	return true;
+	_stop.store(false);
+	_thread = new std::thread(&ThreadHost::Run, this);
+	_joined.store(false);
 }
 
-bool ThreadHost::Stop()
+void ThreadHost::Run()
 {
-	if (_thread && _thread->joinable())
+	RunThread();
+	OnStopped();
+}
+
+void ThreadHost::Stop()
+{
+	DoStop();
+}
+
+void ThreadHost::Join() 
+{
+	if(_thread && _thread->joinable() && !_joined.load()) 
 	{
-		DoStop();
-
 		_thread->join();
-		_thread=nullptr;
-
-		OnStopped();
-		return true;
+		_joined.store(true);
 	}
-	return false;
-}
-
-void ThreadHost::Join() const
-{
-	if(_thread && _thread->joinable()) 
-		_thread->join();
 }

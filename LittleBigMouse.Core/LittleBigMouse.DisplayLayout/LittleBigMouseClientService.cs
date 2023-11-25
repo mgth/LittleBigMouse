@@ -34,8 +34,6 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
     public Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
     {
-        //var zonesLayout = ZonesLayoutGetter?.Invoke();
-        //if (zonesLayout is null) return Task.CompletedTask;
 
         var commands = new List<CommandMessage>()
         {
@@ -65,12 +63,17 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
     void LaunchDaemon()
     {
+        var processes = Process.GetProcessesByName("LittleBigMouse.Daemon");
+        foreach (var process in processes)
+        {
+            return;
+        }
+
         var path = Assembly.GetEntryAssembly()?.Location;
         if (path is null) return;
 
         if (path.Contains(@"\bin\"))
         {
-
             // .\LittleBigMouse.Ui.Avalonia\bin\x64\Debug\net8.0\LittleBigMouse.Ui.Avalonia.dll
             // .\x64\Debug\LittleBigMouse.Hook.exe
 
@@ -107,6 +110,8 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
             process.Start();
 
             _daemonProcess = process;//Process.Start(path);
+
+            process.WaitForInputIdle();
         }
         catch (ExecutionEngineException ex)
         {

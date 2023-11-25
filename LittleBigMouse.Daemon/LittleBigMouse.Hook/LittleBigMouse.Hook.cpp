@@ -1,5 +1,5 @@
 #include <Windows.h>
-#include <stdio.h>
+#include <cstdio>
 #include <tlhelp32.h>
 #include <Psapi.h>
 
@@ -8,7 +8,7 @@
 #include "Hooker.h"
 #include "RemoteServerSocket.h"
 
-DWORD getParentPID(DWORD pid)
+DWORD GetParentPid(const DWORD pid)
 {
     HANDLE h = nullptr;
     PROCESSENTRY32 pe = { 0 };
@@ -30,16 +30,17 @@ DWORD getParentPID(DWORD pid)
     return (ppid);
 }
 
-int getProcessName(const DWORD pid, LPWSTR fname, DWORD size)
+static auto getProcessName(const DWORD pid, LPWSTR fname, DWORD size) -> DWORD
 {
     HANDLE h = nullptr;
-    int e = 0;
+    DWORD e = 0;
 	h = OpenProcess
-	    (
-	    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-	    FALSE,
-	    pid
-	    );
+    (
+    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+    FALSE,
+    pid
+    );
+
 	if (h) 
     {
         if (GetModuleFileNameEx(h, nullptr, fname, size) == 0)
@@ -50,31 +51,33 @@ int getProcessName(const DWORD pid, LPWSTR fname, DWORD size)
     {
         e = GetLastError();
     }
-    return (e);
+    return e;
 }
 
-std::string getParentProcess()
+static std::string getParentProcess()
 {
 	wchar_t fname[MAX_PATH] = {0};
 	const DWORD pid = GetCurrentProcessId();
-	const DWORD ppid = getParentPID(pid);
-    int e = getProcessName(ppid, fname, MAX_PATH);
+	const DWORD ppid = GetParentPid(pid);
+    DWORD e = getProcessName(ppid, fname, MAX_PATH);
 	std::wstring ws(fname);
 	return std::string(ws.begin(), ws.end());
 }
 
-
 int main(int argc, char *argv[]){
 
-	constexpr char szUniqueNamedMutex[] = "littlebigmouse_daemon";
+	constexpr char szUniqueNamedMutex[] = "LittleBigMouse_Daemon";
 
 	HANDLE hHandle = CreateMutex(nullptr, TRUE, reinterpret_cast<LPCWSTR>(szUniqueNamedMutex));
 	if( ERROR_ALREADY_EXISTS == GetLastError() )
 	{
 	  // Program already running somewhere
+        #if defined(_DEBUG)
 		std::cout << "Program already running, Press Enter to exit\n";
 		std::cin.ignore();
-		CloseHandle (hHandle);
+		#endif
+        if(hHandle)
+		    CloseHandle (hHandle);
 		return(1); // Exit program
 	}
 
@@ -88,7 +91,6 @@ int main(int argc, char *argv[]){
     Hooker hook;
 
     auto p = getParentProcess();
-    std::cout << p << '\n';
 
     // Test if daemon was started from UI
     bool uiMode = p.find("LittleBigMouse") != std::string::npos;
@@ -106,16 +108,22 @@ int main(int argc, char *argv[]){
 
     if(uiMode)
     {
+        #if defined(_DEBUG)
 	    std::cout << "Starting in UI mode" << std::endl;
+        #endif
 		LittleBigMouseDaemon( &hook, &server, &engine ).Run("");
 	}
 	else
 	{
+        #if defined(_DEBUG)
 		std::cout << "Starting in Daemon mode" << std::endl;
+        #endif
 		LittleBigMouseDaemon( &hook, &server, &engine ).Run(R"(\Mgth\LittleBigMouse\Current.xml)");
 	}
-
-    ReleaseMutex (hHandle);
-	CloseHandle (hHandle);
+    if(hHandle)
+    {
+        ReleaseMutex (hHandle);
+	    CloseHandle (hHandle);
+    }
 	return 0;
 }

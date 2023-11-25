@@ -17,6 +17,6 @@ public:
 
 	virtual ~RemoteServer() = default;
 
-	virtual void Send(const std::string& message, RemoteClient* client) const = 0;
+	virtual void Send(const std::string& message, RemoteClient* client) = 0;
 };
 

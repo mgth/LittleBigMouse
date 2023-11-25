@@ -248,19 +248,27 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         });
 
 
-    public ListItem SelectedAlgorithm 
+    public ListItem? SelectedAlgorithm
     {
         get => _selectedAlgorithm.Value;
-        set => Model.Algorithm = value.Id;
+        set
+        {
+            if(Model == null) return;
+            Model.Algorithm = value?.Id ?? "";
+        }
     }
-    readonly ObservableAsPropertyHelper<ListItem> _selectedAlgorithm;
+    readonly ObservableAsPropertyHelper<ListItem?> _selectedAlgorithm;
 
-    public ListItem SelectedPriority 
+    public ListItem? SelectedPriority
     {
         get => _selectedPriority.Value;
-        set => Model.Priority = value.Id;
+        set
+        {
+            if(Model == null) return;
+            Model.Priority = value?.Id ?? "";
+        }
     }
-    readonly ObservableAsPropertyHelper<ListItem> _selectedPriority;
+    readonly ObservableAsPropertyHelper<ListItem?> _selectedPriority;
 
 
     public bool Running

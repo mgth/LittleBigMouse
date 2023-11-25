@@ -27,18 +27,23 @@ bool RemoteServerPipe::StartListener()
 
     while (_inputPipe != INVALID_HANDLE_VALUE && !_stop)
 	{
+		#if defined(_DEBUG)
 		std::cout << "Pipe.\n";
+		#endif
 	    if (ConnectNamedPipe(_inputPipe, nullptr) != false)   // wait for someone to connect to the pipe
 	    {
+			#if defined(_DEBUG)
 			std::cout << "Connected.\n";
+			#endif
 
 	        while (ReadFile(_inputPipe, _inputBuffer, sizeof(_inputBuffer) - 1, &dwRead, nullptr) != FALSE)
 	        {
 	            /* add terminating zero */
 	            _inputBuffer[dwRead] = '\0';
 
+				#if defined(_DEBUG)
 				std::cout << _inputBuffer;
-
+				#endif
 
 				OnMessage.fire(std::string(_inputBuffer),nullptr);
 	        }
@@ -66,18 +71,21 @@ bool RemoteServerPipe::StartNotifier()
 
     while (_inputPipe != INVALID_HANDLE_VALUE)
 	{
+		#if defined(_DEBUG)
 		std::cout << "Pipe.\n";
+		#endif
 	    if (ConnectNamedPipe(_outputPipe, nullptr) != false)   // wait for someone to connect to the pipe
 	    {
+			#if defined(_DEBUG)
 			std::cout << "Notifier Connected.\n";
-
+			#endif
 	    }
 	}
 	return true;
 }
 
 
-void RemoteServerPipe::Send(const std::string& message, RemoteClient* client) const
+void RemoteServerPipe::Send(const std::string& message, RemoteClient* client) 
 {
 	if(_outputPipe != INVALID_HANDLE_VALUE)
 	{

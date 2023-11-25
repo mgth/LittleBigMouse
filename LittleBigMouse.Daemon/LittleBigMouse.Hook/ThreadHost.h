@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <thread>
+#include <mutex>
 
 class ThreadHost
 {
@@ -8,16 +9,19 @@ class ThreadHost
 
 protected:
 	std::atomic<bool> _stop = false;
+	std::atomic<bool> _joined = false;
 
 	~ThreadHost();
+
 	virtual void RunThread() = 0;
 	virtual void DoStop();
 	virtual void OnStopped();
+	void Run();
 
 public:
-	bool Start();
-	bool Stop();
+	void Start();
+	void Stop();
 
-	void Join() const;
+	void Join();
 };
 

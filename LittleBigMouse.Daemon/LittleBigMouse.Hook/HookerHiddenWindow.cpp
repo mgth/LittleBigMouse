@@ -10,7 +10,9 @@ LRESULT CALLBACK MessageHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     {
 		//Hooker::Instance()->OnWindowsChanged.fire();
         // Handle the custom message here
+        #if defined(_DEBUG)
         std::cout << "Received custom message in the current thread!\n";
+        #endif
     }
 
     return DefWindowProc(hwnd, msg, wParam, lParam);

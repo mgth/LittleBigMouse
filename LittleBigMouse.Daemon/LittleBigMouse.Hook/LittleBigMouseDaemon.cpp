@@ -50,9 +50,7 @@ void LittleBigMouseDaemon::Run(const std::string& path) const
 		_remoteServer->Join();
 
 	// wait for mouse hook to stop
-	_hook->DoStop();
-	if(_hook)
-		_hook->Join();
+	_hook->Stop();
 }
 
 LittleBigMouseDaemon::~LittleBigMouseDaemon()
@@ -87,7 +85,9 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 	{
 		const auto command = commandAttribute->Value();
 
+		#if defined(_DEBUG)
 		std::cout << command << "\n";
+		#endif
 
 		if(strcmp(command, "Load")==0)
 			ReceiveLoadMessage(root->FirstChildElement("Payload"));
@@ -114,10 +114,9 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 		{
 			if(_hook && _hook->Hooked())
 				_hook->Stop();
+
 			if(_remoteServer)
 				_remoteServer->Stop();
-
-
 		}
 	}
 }

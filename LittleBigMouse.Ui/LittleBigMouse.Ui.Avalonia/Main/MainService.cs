@@ -146,6 +146,8 @@ public class MainService : IMainService
             await StartAsync();
         }
 
+        if(MonitorsLayout.AutoUpdate)
+            await CheckUpdateBlindAsync();
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action)
@@ -155,7 +157,7 @@ public class MainService : IMainService
 
     async Task QuitAsync()
     {
-        // TODO : it shound not append by sometimes the QuitAsync does not return
+        // TODO : it should not append by sometimes the QuitAsync does not return
         var t = Task.Delay(5000).ContinueWith(t => Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal));
         await _littleBigMouseClientService.QuitAsync();
         Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal);

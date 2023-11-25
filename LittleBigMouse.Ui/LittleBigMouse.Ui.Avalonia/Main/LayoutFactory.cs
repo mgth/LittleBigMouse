@@ -142,7 +142,6 @@ public static class LayoutFactory
 
         source.WallpaperPath = device.WallpaperPath;
 
-
         return source;
     }
 

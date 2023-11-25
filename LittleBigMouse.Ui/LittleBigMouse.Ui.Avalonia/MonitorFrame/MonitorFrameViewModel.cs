@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Numerics;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -13,12 +14,13 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
+using SixLabors.ImageSharp.Diagnostics;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
 public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextProvider, IMonitorFrameViewModel
 {
-    public MonitorFrameViewModel()
+     public MonitorFrameViewModel()
     {
         _rotated = this.WhenAnyValue(
             e => e.MonitorsPresenter.VisualRatio,
@@ -111,12 +113,19 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
             )
             .ToProperty(this, e => e.Selected);
 
+        Disposer.OnDispose(() =>
+        {
+            if (_wallpaper is IDisposable bmp)
+            {
+                bmp.Dispose();
+            }
+        });
     }
 
     async Task SetWallpaper(string path, WallpaperStyle style)
     {
-        var monitorWidth = Model.ActiveSource.Source.InPixel.Width;
-        var monitorHeight = Model.ActiveSource.Source.InPixel.Height;
+        var monitorWidth = (int)Model.ActiveSource.Source.InPixel.Width / 4;
+        var monitorHeight = (int)Model.ActiveSource.Source.InPixel.Height / 4;
 
         Wallpaper = style switch // = wallpaper;
         {
@@ -154,6 +163,9 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
             _ => throw new ArgumentOutOfRangeException()
         };
+
+        Debug.WriteLine(@$"Number of undisposed ImageSharp buffers: {MemoryDiagnostics.TotalUndisposedAllocationCount}");
+
     }
 
 

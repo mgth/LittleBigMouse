@@ -15,6 +15,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Point = SixLabors.ImageSharp.Point;
@@ -22,13 +23,15 @@ using Size = SixLabors.ImageSharp.Size;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
-public class WallpaperRenderer : IDisposable
+public class WallpaperRenderer
 {
-    readonly Image<Rgba32> _source;
+    Image<Rgba32>? _source;
     readonly Rectangle _bounds;
 
-    public static WallpaperRenderer Load(string path)    {
-        return new WallpaperRenderer(Image.Load(path).CloneAs<Rgba32>(), new Rectangle());
+    public static WallpaperRenderer Load(string path)
+    {
+        using var img = Image.Load(path);
+        return new WallpaperRenderer(img.CloneAs<Rgba32>(), new Rectangle());
     }
 
     WallpaperRenderer(Image<Rgba32> source, Rectangle bounds)
@@ -60,26 +63,32 @@ public class WallpaperRenderer : IDisposable
 
     public WallpaperRenderer MakeTileWall()
     {
+        using var source = _source;
+        _source = null;
+
         var img = new Image<Rgba32>(_bounds.Width, _bounds.Height);
 
         img.Mutate(e =>
         {
-            for (var x = 0; x < _bounds.Width; x += _source.Width)
-            for (var y = 0; y < _bounds.Height; y += _source.Height)
-                e = e.DrawImage(_source, new Point(x, y), 1.0f);
+            for (var x = 0; x < _bounds.Width; x += source.Width)
+            for (var y = 0; y < _bounds.Height; y += source.Height)
+                e = e.DrawImage(source, new Point(x, y), 1.0f);
         });
         
-        return ReturnAndDispose(img);
+        return Return(img);
     }
 
     public WallpaperRenderer MakeSpanWall()
     {
-        var ratio = Math.Max((double)_bounds.Width / (double)_source.Width, (double)_bounds.Height / (double)_source.Height);
+        using var source = _source;
+        _source = null;
 
-        return ReturnAndDispose(_source.Clone(e => e
+        var ratio = Math.Max((double)_bounds.Width / (double)source.Width, (double)_bounds.Height / (double)source.Height);
+
+        return Return(source.Clone(e => e
         .Resize(
-            (int)((double)_source.Width * ratio), 
-            (int)((double)_source.Height * ratio))
+            (int)((double)source.Width * ratio), 
+            (int)((double)source.Height * ratio))
         )).CropCenter(_bounds.Width, _bounds.Height);
     }
 
@@ -92,51 +101,71 @@ public class WallpaperRenderer : IDisposable
             (int)size.Height));
     }
 
-    public WallpaperRenderer Crop(Rectangle r) 
-        => ReturnAndDispose(_source.Clone(e => e.Crop(r)));
+    public WallpaperRenderer Crop(Rectangle r)
+    {
+        using var source = _source;
+        _source = null;
+
+        return Return(source.Clone(e => e.Crop(r)));
+    }
 
     public WallpaperRenderer Fill(double width, double height)
     {
-        var ratio = Math.Max( width / (double)_source.Width, height / (double)_source.Height);
+        using var source = _source;
+        _source = null;
 
-        return ReturnAndDispose(
-             _source.Clone
+
+        var ratio = Math.Max( width / (double)source.Width, height / (double)source.Height);
+
+        return Return(
+             source.Clone
             (e => e
-                .Resize(new Size((int)(ratio * _source.Width), (int)(ratio * _source.Height)))
+                .Resize(new Size((int)(ratio * source.Width), (int)(ratio * source.Height)))
             )
         );
     }
 
     public WallpaperRenderer Fit(int width, int height)
     {
-        var ratio = Math.Min( width / (double)_source.Width, height / (double)_source.Height);
+        using var source = _source;
+        _source = null;
 
-        return ReturnAndDispose(
-             _source.Clone(e => e
-            .Resize(new Size((int)(ratio * _source.Width), (int)(ratio * _source.Height)))
+        var ratio = Math.Min( width / (double)source.Width, height / (double)source.Height);
+
+        return Return(
+             source.Clone(e => e
+            .Resize(new Size((int)(ratio * source.Width), (int)(ratio * source.Height)))
         )
         );
     }
 
     public WallpaperRenderer CropCenter(int width, int height)
     {
-        height=Math.Min(height, _source.Height);
-        width=Math.Min(width, _source.Width);
+        using var source = _source;
+        _source = null;
 
-        return ReturnAndDispose( 
-            _source.Clone(e => e
+        height=Math.Min(height, source.Height);
+        width=Math.Min(width, source.Width);
+
+        return Return( 
+            source.Clone(e => e
             .Crop(new Rectangle(
-                (int)(_source.Width - (double)width) / 2, 
-                (int)(_source.Height - (double)height) / 2, 
+                (int)(source.Width - (double)width) / 2, 
+                (int)(source.Height - (double)height) / 2, 
                 (int)width, 
                 (int)height)))
             );
     }
 
-    public WallpaperRenderer Stretch(int width, int height) =>
-        ReturnAndDispose( 
-            _source.Clone(e => e.Resize(new Size(width, height)))
-            );
+    public WallpaperRenderer Stretch(int width, int height)
+    {   
+        using var source = _source;
+        _source = null;
+
+        return Return(
+            source.Clone(e => e.Resize(new Size(width, height)))
+        );
+    }
 
     static async Task Bench(string name, Func<Task> a)
     {
@@ -167,9 +196,14 @@ public class WallpaperRenderer : IDisposable
     {
         //return GetBitmapFromImage(_source);
 
-        await using var ms = new MemoryStream(_source.Height*_source.Width*(_source.PixelType.BitsPerPixel>>3));
+        using var source = _source;
+        _source = null;
 
-        await _source.SaveAsBmpAsync(ms);
+        await using var ms = new MemoryStream(source.Height*source.Width*(source.PixelType.BitsPerPixel>>3));
+
+        await source.SaveAsBmpAsync(ms);
+        //await source.SaveAsJpegAsync(ms);
+        //await source.SaveAsPngAsync(ms);
 
         //_source.SaveAsync(ms, PngFormat.Instance);
         //await Bench("BMP ", () => _source.SaveAsBmpAsync(ms));
@@ -189,29 +223,14 @@ public class WallpaperRenderer : IDisposable
         //await Bench("PNG ", () => _source.SaveAsPngAsync(ms));
 
         ms.Position = 0;
-        return ReturnAndDispose(new Bitmap(ms));
+        return new Bitmap(ms);
     }
     WallpaperRenderer ReturnAndDispose(Rectangle bounds)
     {
         return new WallpaperRenderer(_source, bounds);
     }
 
-    WallpaperRenderer ReturnAndDispose(Image<Rgba32> src) 
-        => ReturnAndDispose(new WallpaperRenderer(src, _bounds));
+    WallpaperRenderer Return(Image<Rgba32> src) => new(src, _bounds);
 
-    WallpaperRenderer ReturnAndDispose(Image<Rgba32> src, Rectangle bounds)
-    {
-        return ReturnAndDispose(new WallpaperRenderer(src, bounds));
-    }
-
-    T ReturnAndDispose<T>(T result)
-    {
-        Dispose();
-        return result;
-    }
-
-    public void Dispose()
-    {
-        _source.Dispose();
-    }
+    WallpaperRenderer Return(Image<Rgba32> src, Rectangle bounds) => new(src, bounds);
 }

@@ -56,6 +56,8 @@ public interface IMonitorsLayout
     WallpaperStyle WallpaperStyle { get; }
     bool Enabled { get; }
 
+    bool AutoUpdate { get; }
+
     ZonesLayout ComputeZones();
     void Compact(bool force = false);
 

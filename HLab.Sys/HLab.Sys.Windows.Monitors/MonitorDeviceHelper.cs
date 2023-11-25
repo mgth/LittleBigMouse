@@ -502,6 +502,7 @@ public static class MonitorDeviceHelper
         //ReleaseDC(0, hdc);
 
         //ParseWindowsConfig();
+
         UpdateWallpaper(service);
 
         string FromUShort(IEnumerable<ushort> array)

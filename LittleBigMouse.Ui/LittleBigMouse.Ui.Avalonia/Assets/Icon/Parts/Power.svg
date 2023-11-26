@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Gravit.io -->
+
+<svg
+   style="isolation:isolate"
+   viewBox="0 0 128 128"
+   width="128"
+   height="128"
+   version="1.1"
+   id="svg12"
+   sodipodi:docname="Power.svg"
+   inkscape:version="1.2.2 (732a01da63, 2022-12-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview14"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="4.9166667"
+     inkscape:cx="146.54237"
+     inkscape:cy="149.89831"
+     inkscape:window-width="3840"
+     inkscape:window-height="2071"
+     inkscape:window-x="1341"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg12" />
+  <defs
+     id="defs5">
+    <clipPath
+       id="_clipPath_3bMssuw1FBG8xl35NEIe15ujm9pfvhwa">
+      <rect
+         width="300"
+         height="300"
+         id="rect2"
+         x="0"
+         y="0" />
+    </clipPath>
+  </defs>
+  <g
+     clip-path="url(#_clipPath_3bMssuw1FBG8xl35NEIe15ujm9pfvhwa)"
+     id="g10"
+     transform="matrix(0.22377622,0,0,0.22377622,30.433525,30.433567)"
+     style="fill:#000000">
+    <g
+       id="Group"
+       style="fill:#000000">
+      <path
+         d="m 244.802,61.643 c -10.634,-10.768 -20.141,-19.346 -33.965,-26.12 -8.686,-4.262 -19.168,-0.589 -23.367,8.194 -4.227,8.784 -0.581,19.355 8.096,23.617 10.294,5.041 17.21,10.616 25.154,18.658 38.997,39.435 38.997,103.594 0,143.019 -18.89,19.114 -44.026,29.613 -70.736,29.613 -26.718,0 -51.846,-10.508 -70.737,-29.613 -38.996,-39.425 -38.996,-103.584 0,-143.019 7.971,-8.051 15.852,-13.608 25.638,-18.64 8.265,-4.271 11.723,-14.833 7.712,-23.626 C 108.584,34.952 99.952,31.341 91.482,35.487 78.051,42.082 65.844,50.875 55.184,61.643 2.901,114.498 2.901,200.488 55.184,253.352 81.33,279.775 115.662,293 149.994,293 c 34.34,0 68.672,-13.216 94.809,-39.648 52.301,-52.846 52.301,-138.845 -0.001,-191.709 z M 149.984,174 c 9.865,0 17.871,-8.007 17.871,-17.871 L 167.882,24.871 C 167.882,15.007 159.876,7 150.011,7 c -9.866,0 -17.872,8.007 -17.872,17.871 v 53.615 l -0.027,77.642 c 0,9.874 8.006,17.872 17.872,17.872 z"
+         fill="#000000"
+         id="path7"
+         style="fill:#000000" />
+    </g>
+  </g>
+</svg>

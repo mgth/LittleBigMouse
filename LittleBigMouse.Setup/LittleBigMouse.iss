@@ -31,7 +31,7 @@ Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse.Ui.Avalonia.ex
 [Run]
 Filename: {app}\LittleBigMouse.Ui.Avalonia.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
 
-[UninstallRun]
-Filename: "{cmd}"; Parameters: "/C ""taskkill /im LittleBigMouse.Ui.Avalonia.exe /f /t"
-Filename: "{cmd}"; Parameters: "/C ""taskkill /im LittleBigMouse.Hook.exe /f /t"
-Filename: "{app}\LittleBigMouse_Daemon.exe"; Parameters: "--unschedule --exit"
+;[UninstallRun]
+;Filename: "{cmd}"; Parameters: "/C ""taskkill /im LittleBigMouse.Ui.Avalonia.exe /f /t"
+;Filename: "{cmd}"; Parameters: "/C ""taskkill /im LittleBigMouse.Hook.exe /f /t"
+;Filename: "{app}\LittleBigMouse_Daemon.exe"; Parameters: "--unschedule --exit"

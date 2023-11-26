@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.2"
+   viewBox="0 0 128 128"
+   width="128"
+   height="128"
+   id="svg388"
+   sodipodi:docname="SU.PA.svg"
+   inkscape:version="1.2.2 (732a01da63, 2022-12-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <sodipodi:namedview
+     id="namedview390"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="7.7171448"
+     inkscape:cx="93.233965"
+     inkscape:cy="115.71637"
+     inkscape:window-width="3840"
+     inkscape:window-height="2071"
+     inkscape:window-x="2391"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg388" />
+  <title
+     id="title373">Schneider_Electric_2007-svg</title>
+  <defs
+     id="defs378">
+    <clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="cp1">
+      <path
+         d="M -2412.04,-1401.54 H 7416.57 V 1498.5 h -9828.61 z"
+         id="path375" />
+    </clipPath>
+  </defs>
+  <style
+     id="style380">
+		.s0 { fill: #009e4d } 
+	</style>
+  <g
+     id="g11"
+     style="fill:#000000"
+     transform="matrix(0.0640706,0,0,0.0640706,14.65852,15.991508)">
+    <g
+       id="g2510"
+       style="fill:#000000">
+      <g
+         id="g97"
+         style="fill:#000000">
+        <g
+           id="Clip-Path: g99"
+           clip-path="url(#cp1)"
+           style="fill:#000000">
+          <g
+             id="g99"
+             style="fill:#000000">
+            <path
+               id="path107"
+               fill-rule="evenodd"
+               class="s0"
+               d="m 1483.8,733.6 c -15.4,41.1 -35.2,81.6 -56.7,122.6 h -292.8 l -38.2,129 h 250.5 c -46.7,66 -98.5,130.2 -161.1,189.8 -357.9,342.4 -837.1,422.1 -1064,195.3 C 4.7,1253.4 -24.9,1069.3 21.5,871.9 H 293 L 337.2,742.7 H 60.9 c 16,-41 36.9,-81.4 59.2,-122.2 H 353 l 45.4,-129.2 h -195 C 246.4,432.5 293.6,375 349.6,321.9 707.7,-20.6 1188.3,-98.6 1418.1,131 c 113.5,113.5 145,286.7 105,473.7 h -323.9 l -35.5,128.9 z m -199.4,-242.8 40.8,-188.4 h -318.9 c -223.8,0 -371.6,154.5 -396.1,294.3 l -83,348.2 c -0.9,9.3 -7.2,18.4 -12.2,24.2 -13.3,14.9 -29.3,22.4 -49.7,22.4 h -200 l -54,204.8 h 311.3 c 223.9,0 395.7,-139.6 420.4,-279.3 l 105.1,-398.6 c 1.2,-7.4 2.5,-11.2 5.9,-14.8 8.4,-9.4 17.1,-12.8 37.8,-12.8 z"
+               style="fill:#000000" />
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <metadata
+     id="metadata509">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Schneider_Electric_2007-svg</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>

@@ -1,5 +1,5 @@
 # LittleBigMouse
-DPI Aware mouse move across screens for Windows 10
+DPI Aware mouse move across screens for Windows 10 / 11
 
 Allows accurate mouse screen crossover location within multi dpi monitors environment. It is typically useful when using a 4k monitor and a full HD side by side.
 

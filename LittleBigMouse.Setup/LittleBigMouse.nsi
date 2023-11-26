@@ -1,10 +1,9 @@
 ;--------------------------------
 ;Include Modern UI
-
   !include "MUI2.nsh"
   
   !define lbm "LittleBigMouse"
-  !define lbm_version "5.0.0"
+;  !define lbm_version "5.0.0"
   !define lbm_file "LittleBigMouse.Ui.Avalonia.exe"
   
   
@@ -12,6 +11,9 @@
   !define daemon "..\LittleBigMouse.Daemon"
   !define main_out_dir "${main}\bin\x64\Release\net8.0"
   !define daemon_out_dir "${daemon}\bin\x64\Release"
+  
+  !getdllversion "${main_out_dir}\${lbm_file}" Expv_
+  !define lbm_version "${Expv_1}.${Expv_2}.${Expv_3}"
 
 ;--------------------------------
 ;General

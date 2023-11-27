@@ -1,6 +1,13 @@
 ;--------------------------------
 ;Include Modern UI
+  Unicode True
+  
+  !AddIncludeDir "."
   !include "MUI2.nsh"
+  !include "FileFunc.nsh"
+  
+;  !include EasyUninstall.nsh 
+;	${CONFIGUREUNINSTALL}
   
   !define lbm "LittleBigMouse"
 ;  !define lbm_version "5.0.0"
@@ -13,7 +20,9 @@
   !define daemon_out_dir "${daemon}\bin\x64\Release"
   
   !getdllversion "${main_out_dir}\${lbm_file}" Expv_
-  !define lbm_version "${Expv_1}.${Expv_2}.${Expv_3}"
+  !define lbm_version "${Expv_1}.${Expv_2}.${Expv_3}.${Expv_4}"
+  
+  !define uninstall_reg "Software\Microsoft\Windows\CurrentVersion\Uninstall\${lbm}"
 
 ;--------------------------------
 ;General
@@ -21,7 +30,6 @@
   ;Name and file
   Name "Little Big Mouse"
   OutFile "${lbm}-${lbm_version}.exe"
-  Unicode True
 
   ;Default installation folder
   InstallDir "$PROGRAMFILES64\${lbm}"
@@ -68,6 +76,14 @@
 ;-------------------------------- 
 ;Installer Sections     
 Section "install" 
+
+;Delete Files 
+  RMDir /r "$INSTDIR\*.*"    
+ 
+  nsProcess::_KillProcess "${lbm_file}"
+  nsProcess::_KillProcess "LittleBigMouse.Hook.exe"
+  nsProcess::_KillProcess "LittleBigMouse_Control.exe"
+  nsProcess::_KillProcess "LittleBigMouse_Daemon.exe"
  
 ;Add files
   SetOutPath "$INSTDIR"
@@ -86,9 +102,16 @@ Section "install"
   CreateShortCut "$SMPROGRAMS\${lbm}\${lbm}.lnk" "$INSTDIR\${lbm_file}" "" "$INSTDIR\${lbm_file}" 0
  
 ;write uninstall information to the registry
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${lbm}" "DisplayName" "${lbm} (remove only)"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${lbm}" "UninstallString" "$INSTDIR\Uninstall.exe"
- 
+  WriteRegStr HKLM "${uninstall_reg}" "DisplayName" "${lbm}"
+  WriteRegStr HKLM "${uninstall_reg}" "UninstallString" "$INSTDIR\Uninstall.exe"
+  WriteRegStr HKLM "${uninstall_reg}" "DisplayVersion" "${lbm_version}"
+  WriteRegStr HKLM "${uninstall_reg}" "DisplayIcon" "$INSTDIR\${lbm_file}"
+  WriteRegStr HKLM "${uninstall_reg}" "InstallLocation" "$INSTDIR"
+  
+  ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
+  IntFmt $0 "0x%08X" $0
+  WriteRegDWORD HKLM "${uninstall_reg}" "EstimatedSize" "$0"
+
   WriteUninstaller "$INSTDIR\Uninstall.exe"
  
 SectionEnd
@@ -97,8 +120,10 @@ SectionEnd
 ;--------------------------------    
 ;Uninstaller Section  
 Section "Uninstall"
- 
-;Delete Files 
+  nsProcess::_KillProcess "${lbm_file}"
+  nsProcess::_KillProcess "LittleBigMouse.Hook.exe"
+
+Delete Files 
   RMDir /r "$INSTDIR\*.*"    
  
 ;Remove the installation directory
@@ -115,7 +140,9 @@ Section "Uninstall"
  
 SectionEnd
  
- 
+;Section CreateUninstaller ;section name is irrelevant
+;	${IncludeUninstaller} ;Tells EasyUninstall.nsh to write the uninstaller.
+;SectionEnd 
 
  
 ;eof

@@ -1,0 +1,32 @@
+﻿<UserControl
+            x:Class="LittleBigMouse.Ui.Avalonia.Plugins.About.AboutMonitorView"
+            xmlns="https://github.com/avaloniaui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+            xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
+             xmlns:about="clr-namespace:LittleBigMouse.Ui.Avalonia.Plugins.About"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             mc:Ignorable="d"
+             d:DesignHeight="300" d:DesignWidth="300"
+             x:Name="UserControl"
+            x:DataType="about:AboutMonitorViewModel"
+    >
+
+	<UserControl.Resources>
+		<converters:MultiScaleConverter x:Key="MultiScale"/>
+		<converters:ScaleConverter x:Key="Scale"/>
+	</UserControl.Resources>
+
+    <StackPanel VerticalAlignment="Center">
+    <TextBlock HorizontalAlignment="Center" Margin="0,0,0,5" Text="Little Big Mouse" FontSize="20" FontWeight="Bold"/>
+    <TextBlock HorizontalAlignment="Center" Text="{Binding Version}" TextWrapping="Wrap" FontSize="15"/>
+    <TextBlock HorizontalAlignment="Center" Text="Copyright (C) 2015 - 2023" FontSize="15"/>
+	<TextBlock HorizontalAlignment="Center" Margin="0,0,0,20" Text="Mathieu GRENET" FontSize="15"/>
+
+    <icons:IconView HorizontalAlignment="Center" Margin="0,0,0,20" Path="Icon/lbm_logo" Height="50"/>
+
+    <TextBlock HorizontalAlignment="Center" Margin="0,0,0,20"  FontStyle="Italic" Text="DPI Aware mouse move across screens for Windows 10 / 11" TextWrapping="Wrap" FontSize="15"/>
+
+    </StackPanel>
+</UserControl>

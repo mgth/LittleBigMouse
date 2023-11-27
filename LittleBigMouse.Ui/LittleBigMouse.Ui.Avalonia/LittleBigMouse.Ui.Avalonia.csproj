@@ -19,22 +19,22 @@
 		<Title>Little Big Mouse</Title>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|x64'">
-	  <DebugType>none</DebugType>
+	  <DebugType>full</DebugType>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|x86'">
-	  <DebugType>none</DebugType>
+	  <DebugType>full</DebugType>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|AnyCPU'">
-	  <DebugType>none</DebugType>
+	  <DebugType>full</DebugType>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0|x64'">
-	  <DebugType>none</DebugType>
+	  <DebugType>full</DebugType>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0|x86'">
-	  <DebugType>none</DebugType>
+	  <DebugType>full</DebugType>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0|AnyCPU'">
-	  <DebugType>none</DebugType>
+	  <DebugType>full</DebugType>
 	</PropertyGroup>
 
 	<ItemGroup>

@@ -1,0 +1,21 @@
+﻿using System.Threading.Tasks;
+using HLab.Core.Annotations;
+using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Avalonia;
+using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
+
+namespace LittleBigMouse.Ui.Avalonia.Plugins.About;
+
+public class AboutMonitorPlugin(IMainService mainService) : IBootloader
+{
+    public Task LoadAsync(IBootContext bootstrapper)
+    {
+        mainService.AddControlPlugin(c =>
+            c.AddViewModeButton<MonitorAboutViewMode>(
+                "about",
+                "Icon/MonitorAbout",
+                "About")
+        );
+        return Task.CompletedTask;
+    }
+}

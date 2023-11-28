@@ -11,29 +11,33 @@ void Hooker::HookWindows()
 	//HOOKPROC addr = (HOOKPROC)GetProcAddress(dll, "WindowCallback");
 	//WindowHookId = SetWindowsHookEx(WH_CBT, addr, dll, 0);
 
-	_windowHookId = SetWindowsHookEx(WM_CAPTURECHANGED, &Hooker::WindowCallback, nullptr, 0);
+	//_windowHookId = SetWindowsHookEx(WM_CAPTURECHANGED, &Hooker::WindowCallback, nullptr, 0);
+	_displayHookId = SetWindowsHookEx(WM_DISPLAYCHANGE, &Hooker::WindowCallback, nullptr, 0);
 
 }
 
 void Hooker::UnhookWindows()
 {
-	if (_windowHookId && UnhookWindowsHookEx(_windowHookId))
+	if (_displayHookId && UnhookWindowsHookEx(_displayHookId))
 	{
-		_windowHookId = nullptr;
+		_displayHookId = nullptr;
 	}
 }
 
 LRESULT __stdcall Hooker::WindowCallback(const int nCode, const WPARAM wParam, const LPARAM lParam)
 {
-	const auto hook = Hooker::Instance();
+	const auto hook = Instance();
 
-	if (nCode == WM_CAPTURECHANGED)
+	if (nCode == WM_DISPLAYCHANGE)
 	{
+		Hooker::Instance()->OnDisplayChanged.fire();
+
 		#if defined(_DEBUG)
-		std::cout << "WM_CAPTURECHANGED : " << wParam << "::" << lParam << std::endl;
+		std::cout << "WM_DISPLAYCHANGE : " << wParam << "::" << lParam << std::endl;
 		#endif
 	}
 
-	return CallNextHookEx(hook->_windowHookId, nCode, wParam, lParam);
+	return CallNextHookEx(hook->_displayHookId, nCode, wParam, lParam);
 }
+
 

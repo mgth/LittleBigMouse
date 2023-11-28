@@ -118,18 +118,18 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
                 Saved = e;
             });
 
-        service.StateChanged += StateChanged;
-        StateChanged(this,new LittleBigMouseServiceEventArgs(service.State));
+        service.DaemonEventReceived += StateChanged;
+        StateChanged(this,new LittleBigMouseServiceEventArgs(service.State,""));
     }
 
     void StateChanged(object? sender, LittleBigMouseServiceEventArgs e)
     {
         Dispatcher.UIThread.Invoke(new Action(() => 
-                Running = e.State switch
+                Running = e.Event switch
                 {
-                    LittleBigMouseState.Running => true,
-                    LittleBigMouseState.Stopped => false,
-                    LittleBigMouseState.Dead => false,
+                    LittleBigMouseEvent.Running => true,
+                    LittleBigMouseEvent.Stopped => false,
+                    LittleBigMouseEvent.Dead => false,
                     _ => Running
                 }
             ));

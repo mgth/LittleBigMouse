@@ -26,13 +26,14 @@ using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.DisplayLayout;
 
-public class LittleBigMouseServiceEventArgs(LittleBigMouseState state) : EventArgs
+public class LittleBigMouseServiceEventArgs(LittleBigMouseEvent evt, string payload) : EventArgs
 {
-    public LittleBigMouseState State { get; } = state;
+    public LittleBigMouseEvent Event { get; } = evt;
+    public string Payload { get; } = payload;
 }
 
 public interface ILittleBigMouseClientService : ILittleBigMouseService
 {
-    event EventHandler<LittleBigMouseServiceEventArgs> StateChanged;
-    LittleBigMouseState State { get; set; }
+    event EventHandler<LittleBigMouseServiceEventArgs> DaemonEventReceived;
+    LittleBigMouseEvent State { get; set; }
 }

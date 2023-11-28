@@ -11,9 +11,9 @@ class Hooker;
 
 class LittleBigMouseDaemon
 {
-	Hooker* _hook;
-	MouseEngine* _engine;
 	RemoteServer* _remoteServer;
+	MouseEngine* _engine;
+	Hooker* _hook;
 
 	//int _onMouseMoveId;
 	//int _onMessageId;
@@ -24,6 +24,11 @@ class LittleBigMouseDaemon
 	void ReceiveMessage(tinyxml2::XMLElement* root, RemoteClient* client) const;
 	void SendState(RemoteClient* client) const;
 
+	void DisplayChanged() const;
+	void DesktopChanged() const;
+
+	void FocusChanged(const std::wstring& path) const;
+
 	void ReceiveClientMessage(const std::string& message, RemoteClient* client) const;
 	void Send(const std::string& string) const;
 
@@ -31,7 +36,7 @@ class LittleBigMouseDaemon
 	void LoadFromFile(const std::wstring& path) const;
 
 public:
-	LittleBigMouseDaemon(Hooker* hook, RemoteServer* server, MouseEngine* engine);
+	LittleBigMouseDaemon(RemoteServer* server, MouseEngine* engine, Hooker* hook);
 	~LittleBigMouseDaemon();
 
 	void Run(const std::string& path) const;

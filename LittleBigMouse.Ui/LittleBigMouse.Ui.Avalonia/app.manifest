@@ -10,13 +10,14 @@
 
         <requestedExecutionLevel  level="asInvoker" uiAccess="false" />
         <requestedExecutionLevel  level="highestAvailable" uiAccess="false" />
-        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
 
             La spécification de l'élément requestedExecutionLevel désactive la virtualisation de fichiers et du Registre. 
             Supprimez cet élément si votre application a besoin de la virtualisation pour des
             raisons de compatibilité descendante.
-        -->
+			
 				<requestedExecutionLevel  level="requireAdministrator" uiAccess="false" />
+        -->
+				<requestedExecutionLevel level="asInvoker" uiAccess="false" />
 			</requestedPrivileges>
 		</security>
 	</trustInfo>

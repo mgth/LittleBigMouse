@@ -23,11 +23,14 @@
 
 namespace LittleBigMouse.Zoning;
 
-public enum LittleBigMouseState
+public enum LittleBigMouseEvent
 {
     Running,
     Stopped,
     Dead,
+    DisplayChanged,
+    DesktopChanged,
+    FocusChanged,
 }
 public enum LittleBigMouseCommand
 {

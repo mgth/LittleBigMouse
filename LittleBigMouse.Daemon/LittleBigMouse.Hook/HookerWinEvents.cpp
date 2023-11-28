@@ -24,9 +24,9 @@ std::wstring GetExecutablePathFromProcessId(DWORD processId) {
     return L"";
 }
 
-void Hooker::HookEvent()
+void Hooker::HookFocusEvent()
 {
-	_hEventHook = SetWinEventHook(
+	_hEventFocusHook = SetWinEventHook(
         EVENT_OBJECT_FOCUS, 
         EVENT_OBJECT_FOCUS, 
         nullptr, &Hooker::WindowChangeHook, 
@@ -34,12 +34,29 @@ void Hooker::HookEvent()
         WINEVENT_OUTOFCONTEXT);
 }
 
-void Hooker::UnhookEvent()
+void Hooker::UnhookFocusEvent()
 {
-	if(_hEventHook)
+	if(_hEventFocusHook && UnhookWinEvent(_hEventFocusHook))
 	{
-		UnhookWinEvent(_hEventHook);
-		_hEventHook = nullptr;
+		_hEventFocusHook = nullptr;
+	}
+}
+
+void Hooker::HookEventSystemDesktopSwitch()
+{
+	_hEventDesktopHook = SetWinEventHook(
+        EVENT_SYSTEM_DESKTOPSWITCH, 
+        EVENT_SYSTEM_DESKTOPSWITCH, 
+        nullptr, &Hooker::DesktopChangeHook, 
+        0, 0, 
+        WINEVENT_OUTOFCONTEXT);
+}
+
+void Hooker::UnhookEventSystemDesktopSwitch()
+{
+	if(_hEventDesktopHook && UnhookWinEvent(_hEventDesktopHook))
+	{
+		_hEventDesktopHook = nullptr;
 	}
 }
 
@@ -62,7 +79,7 @@ void CALLBACK Hooker::WindowChangeHook(
                 // Use the executable path as needed
                 wprintf(L"Executable Path: %s\n", exePath.c_str());
 
-                Instance()->OnWindowsChanged.fire(exePath);
+                Instance()->OnFocusChanged.fire(exePath);
 
             } else {
                 wprintf(L"Unable to retrieve the executable path.\n");
@@ -72,5 +89,17 @@ void CALLBACK Hooker::WindowChangeHook(
         }
     }
 }
+
+void CALLBACK Hooker::DesktopChangeHook(
+    HWINEVENTHOOK hWinEventHook, 
+    DWORD event, HWND hWnd, LONG idObject, 
+    LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
+{
+    #if defined(_DEBUG)
+    std::cout << "desktop: \n";
+    #endif
+    Instance()->OnDesktopChanged.fire();
+}
+
 
 

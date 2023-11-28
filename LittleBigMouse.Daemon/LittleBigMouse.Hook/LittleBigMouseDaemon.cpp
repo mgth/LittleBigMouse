@@ -19,15 +19,21 @@ void LittleBigMouseDaemon::Send(const std::string& string) const
 	_remoteServer->Send(string,nullptr);
 }
 
-LittleBigMouseDaemon::LittleBigMouseDaemon(Hooker* hook, RemoteServer* server, MouseEngine* engine):
-	_hook(hook),
+LittleBigMouseDaemon::LittleBigMouseDaemon(RemoteServer* server, MouseEngine* engine, Hooker* hook):
+	_remoteServer(server),
 	_engine(engine),
-	_remoteServer(server)
+	_hook(hook)
 {
 	if(_hook)
 	{
-		_hook->OnMouseMove.connect<&MouseEngine::OnMouseMove>(_engine);
+		if(_engine)
+			_hook->OnMouseMove.connect<&MouseEngine::OnMouseMove>(_engine);
+
 		_hook->OnMessage.connect<&LittleBigMouseDaemon::Send>(this);
+
+		_hook->OnDisplayChanged.connect<&LittleBigMouseDaemon::DisplayChanged>(this);
+		_hook->OnDesktopChanged.connect<&LittleBigMouseDaemon::DesktopChanged>(this);
+		_hook->OnFocusChanged.connect<&LittleBigMouseDaemon::FocusChanged>(this);
 	}
 	if(_remoteServer)
 	{
@@ -37,19 +43,22 @@ LittleBigMouseDaemon::LittleBigMouseDaemon(Hooker* hook, RemoteServer* server, M
 
 void LittleBigMouseDaemon::Run(const std::string& path) const
 {
-	//start remote server
-	if(_remoteServer)
-		_remoteServer->Start();
-
-	// load layout from file
+// load layout from file
 	if(!path.empty())
 		LoadFromFile(path);
 
-	// wait remote server to stop
+//start remote server
+	if(_remoteServer)
+		_remoteServer->Start();
+
+// pump messages
+	_hook->Start();
+
+// wait remote server to stop
 	if(_remoteServer)
 		_remoteServer->Join();
 
-	// wait for mouse hook to stop
+// wait for mouse hook to stop
 	_hook->Stop();
 }
 
@@ -59,6 +68,11 @@ LittleBigMouseDaemon::~LittleBigMouseDaemon()
 	{
 		_hook->OnMouseMove.disconnect<&MouseEngine::OnMouseMove>(_engine);
 		_hook->OnMessage.disconnect<&LittleBigMouseDaemon::Send>(this);
+
+		_hook->OnDisplayChanged.disconnect<&LittleBigMouseDaemon::DisplayChanged>(this);
+		_hook->OnDesktopChanged.disconnect<&LittleBigMouseDaemon::DesktopChanged>(this);
+		_hook->OnFocusChanged.disconnect<&LittleBigMouseDaemon::FocusChanged>(this);
+
 	}
 	if(_remoteServer)
 		_remoteServer->OnMessage.disconnect<&LittleBigMouseDaemon::ReceiveClientMessage>(this);
@@ -69,8 +83,9 @@ void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
 	if(!root) return;
 	if(const auto zonesLayout = root->FirstChildElement("ZonesLayout"))
 	{
-		if(_hook)
-			_hook->Stop();
+
+		if(_hook && _hook->Hooked())
+			_hook->Unhook();
 
 		if(_engine)
 			_engine->Layout.Load(zonesLayout);
@@ -98,13 +113,19 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 		else if(strcmp(command, "Run")==0)
 		{
 			if(_hook && !_hook->Hooked())
-				_hook->Start();
+			{
+				_hook->SetPriority(_engine->Layout.Priority);
+				_hook->Hook();
+			}
 		}
 
 		else if(strcmp(command, "Stop")==0)
 		{
 			if(_hook && _hook->Hooked())
-				_hook->Stop();
+			{
+				_hook->SetPriority(Normal);
+				_hook->Unhook();
+			}
 		}
 
 		else if(strcmp(command, "State")==0)
@@ -112,9 +133,6 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 
 		else if(strcmp(command, "Quit")==0)
 		{
-			if(_hook && _hook->Hooked())
-				_hook->Stop();
-
 			if(_remoteServer)
 				_remoteServer->Stop();
 		}
@@ -144,9 +162,35 @@ void LittleBigMouseDaemon::SendState(RemoteClient* client) const
 	if(!_remoteServer) return;
 
 	if(_hook && _hook->Hooked())
-		_remoteServer->Send("<DaemonMessage><State>Running</State></DaemonMessage>\n",client);
+		_remoteServer->Send("<DaemonMessage><Event>Running</Event></DaemonMessage>\n",client);
 	else
-		_remoteServer->Send("<DaemonMessage><State>Stopped</State></DaemonMessage>\n",client);
+		_remoteServer->Send("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n",client);
+}
+
+// Display configuration has changed.
+void LittleBigMouseDaemon::DisplayChanged() const
+{
+	//When display changed, we need to recompute zones, here we just stop the hook and inform ui to reload layout
+	if(_hook && _hook->Hooked())
+		_hook->Unhook();
+
+	_remoteServer->Send("<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>\n",nullptr);
+}
+
+// Sytem switches to/from UAC desktop
+void LittleBigMouseDaemon::DesktopChanged() const
+{
+
+	_remoteServer->Send("<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n",nullptr);
+}
+
+// Window focus has changed
+void LittleBigMouseDaemon::FocusChanged(const std::wstring& wpath) const
+{
+	std::string path( wpath.begin(), wpath.end() );
+	//if(_hook && _hook->Hooked())
+	//	_hook->Stop();
+	_remoteServer->Send("<DaemonMessage><Event>FocusChanged</Event><Payload>"+path+"</Payload></DaemonMessage>\n",nullptr);
 }
 
 void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, RemoteClient* client) const

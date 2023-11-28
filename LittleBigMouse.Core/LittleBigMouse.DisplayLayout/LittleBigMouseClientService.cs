@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using HLab.Remote;
@@ -15,14 +16,17 @@ namespace LittleBigMouse.DisplayLayout;
 
 public class LittleBigMouseClientService : ILittleBigMouseClientService
 {
-    public event EventHandler<LittleBigMouseServiceEventArgs> StateChanged;
+    public event EventHandler<LittleBigMouseServiceEventArgs> DaemonEventReceived;
     //NamedPipeClientStream _client;
     RemoteClientSocket _client;
 
-    protected void OnStateChanged(LittleBigMouseState state)
+    protected void OnStateChanged(LittleBigMouseEvent evt, string payload = "")
     {
-        State = state;
-        StateChanged?.Invoke(this, new (state));
+        if(evt<=LittleBigMouseEvent.Dead)
+        {
+            State = evt;
+        }
+        DaemonEventReceived?.Invoke(this, new (evt,payload));
     }
 
     public LittleBigMouseClientService()
@@ -45,7 +49,7 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
     }
 
     public Func<ZonesLayout> ZonesLayoutGetter { get; set; } = () => null;
-    public LittleBigMouseState State { get; set; }
+    public LittleBigMouseEvent State { get; set; }
 
     public async Task StopAsync(CancellationToken token = default) => await SendAsync(token);
 
@@ -136,17 +140,26 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
             //_client = new NamedPipeClientStream(".", "lbm-daemon", PipeDirection.Out);
             _client = new RemoteClientSocket("localhost",25196);
 
-            _client.ConnectionFailed += (sender, args) => LaunchDaemon();
+            //_client.ConnectionFailed += (sender, args) => LaunchDaemon();
 
             _client.MessageReceived += (sender, args) =>
             {
                 //TODO : message interpretation too lazy
                 if(args.Contains("Stopped"))
-                    OnStateChanged(LittleBigMouseState.Stopped);
+                    OnStateChanged(LittleBigMouseEvent.Stopped);
                 else if(args.Contains("Running"))
-                    OnStateChanged(LittleBigMouseState.Running);
+                    OnStateChanged(LittleBigMouseEvent.Running);
                 else if(args.Contains("Dead"))
-                    OnStateChanged(LittleBigMouseState.Dead);
+                    OnStateChanged(LittleBigMouseEvent.Dead);
+                else if(args.Contains("DisplayChanged"))
+                    OnStateChanged(LittleBigMouseEvent.DisplayChanged);
+                else if(args.Contains("DesktopChanged"))
+                    OnStateChanged(LittleBigMouseEvent.DesktopChanged);
+                else if(args.Contains("FocusChanged"))
+                {
+                    var payload = Regex.Match(args,"<Payload>(.*)</Payload>").Groups[1].Value;
+                    OnStateChanged(LittleBigMouseEvent.FocusChanged,payload);
+                }
             };
 
             _client.Listen();

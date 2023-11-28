@@ -157,9 +157,9 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 bool MouseEngine::CheckForStopped(const MouseEventArg& e)
 {
 	if(e.Running) return false;
-#ifdef _DEBUG
-	std::cout << "<reset>" << std::endl;
-#endif
+	#ifdef _DEBUG
+		std::cout << "<engine:nohook>" << std::endl;
+	#endif
 	_onMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
 	return true;
 }

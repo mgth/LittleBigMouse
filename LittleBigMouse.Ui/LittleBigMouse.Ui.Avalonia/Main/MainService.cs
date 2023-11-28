@@ -55,8 +55,6 @@ public class MainService : IMainService
 
     Action<IMainPluginsViewModel>? _actions;
 
-    readonly DisplayChangeMonitor _listener = new DisplayChangeMonitor();
-
     readonly Func<IMainPluginsViewModel> _mainViewModelLocator;
 
     public IMonitorsLayout MonitorsLayout { get; } = new MonitorsLayout();
@@ -77,7 +75,7 @@ public class MainService : IMainService
         _mainViewModelLocator = mainViewModelLocator;
 
         // Relate service state with notify icon
-        _littleBigMouseClientService.StateChanged += (o,a) => StateChanged(o,a);
+        _littleBigMouseClientService.DaemonEventReceived += (o,a) => DaemonEventReceived(o,a);
 
     }
 
@@ -88,12 +86,6 @@ public class MainService : IMainService
         {
             s.UpdateDevices();
             l.UpdateFrom(s);
-
-            _listener.DisplayChanged += (o, a) =>
-            {
-                s.UpdateDevices();
-                l.UpdateFrom(s);
-            };
         }
     }
 
@@ -164,19 +156,24 @@ public class MainService : IMainService
 
     Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
 
-    async Task StateChanged(object? sender, LittleBigMouseServiceEventArgs args)
+    async Task DaemonEventReceived(object? sender, LittleBigMouseServiceEventArgs args)
     {
-        switch (args.State)
+        switch (args.Event)
         {
-            case LittleBigMouseState.Running:
+            case LittleBigMouseEvent.Running:
                 await _notify.SetIconAsync("icon/lbm_on",32);
                 break;
-            case LittleBigMouseState.Stopped:
-            case LittleBigMouseState.Dead:
+            case LittleBigMouseEvent.Stopped:
+            case LittleBigMouseEvent.Dead:
                 await _notify.SetIconAsync("icon/lbm_off",32);
                 break;
+            case LittleBigMouseEvent.DisplayChanged:
+                UpdateLayout();
+                break;
+            case LittleBigMouseEvent.DesktopChanged:
+            case LittleBigMouseEvent.FocusChanged:
             default:
-                throw new ArgumentOutOfRangeException(nameof(args.State), args.State, null);
+                throw new ArgumentOutOfRangeException(nameof(args.Event), args.Event, null);
         }
     }
 

@@ -1,129 +1,70 @@
 #include "Hooker.h"
-
-#include "HookMouseEventArg.h"
-#include "Point.h"
-#include "MouseEngine.h"
-#include "RemoteServer.h"
-
-Hooker* Hooker::_instance = nullptr;
+#include <iostream>
+#include <MouseEngine.h>
 
 void Hooker::HookMouse()
 {
-	_currentThreadId = GetCurrentThreadId();
-	_mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, &Hooker::MouseCallback, nullptr, 0);
+		_mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, &Hooker::MouseCallback, nullptr, 0);
+
+		if(_mouseHookId)
+		{
+			OnMessage.fire("<DaemonMessage><Event>Running</Event></DaemonMessage>\n");
+
+			#if defined(_DEBUG)
+			std::cout << "<Hook:HookMouse>\n";
+			#endif
+		}
+		else
+		{
+			#if defined(_DEBUG)
+			std::cout << "<Hook:HookMouse FAILED>\n";
+			#endif
+		}
+//	_iniHookId = SetWindowsHookEx(WM_WININICHANGE, &IniChangedCallback, nullptr, 0);
+//	_displayHookId = SetWindowsHookEx(WM_DISPLAYCHANGE, &DisplayChangedCallback, nullptr, 0);
 }
 
 void Hooker::UnhookMouse()
 {
-	if (_mouseHookId && UnhookWindowsHookEx(_mouseHookId))
+	if (_mouseHookId)
 	{
-		_mouseHookId = nullptr;
+		if(UnhookWindowsHookEx(_mouseHookId))
+		{
+			_mouseHookId = nullptr;
+
+			auto p = MouseEventArg(geo::Point<long>(0,0));
+			p.Running = false;
+			OnMouseMove.fire(p);
+
+			OnMessage.fire("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n");
+
+			#if defined(_DEBUG)
+			std::cout << "<Hook:UnhookMouse>\n";
+			#endif
+
+				//SetPriority(_priority);
+
+			//SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+		}
+		else
+		{
+			_mouseHookId = nullptr;
+
+			OnMessage.fire("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n");
+
+			#if defined(_DEBUG)
+			std::cout << "<Hook:UnhookMouse FAILED>\n";
+			#endif
+		}
 	}
-}
-
-void SetPriority(const Priority priority)
-{
-	switch(priority)
-	{
-	case Idle:
-		SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
-		break;
-	case Below:
-		SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
-		break;
-	case Normal:
-		SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-		break;
-	case Above:
-		SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
-		break;
-	case High:
-		SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-		break;
-	case Realtime:
-		SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
-		break;
-	}
-}
-
-void Hooker::Loop()
-{
-	_instance = this;
-
-	OnMessage.fire("<DaemonMessage><State>Running</State></DaemonMessage>\n");
-#if defined(_DEBUG)
-	std::cout << "<Hook:Start>\n";
-#endif
-    MSG msg;
-	int ret = PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE);
-	if(ret == 0)
-	{
-		ret = GetMessage(&msg, nullptr, 0, 0);
-	}
-
-	//while we do not close our application
-	while (ret > 0 && msg.message != WM_QUIT && !Stopping)
-	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-
-		ret = GetMessage(&msg, nullptr, 0, 0);
-	}
-	if(ret == -1)
-	{
-		#if defined(_DEBUG)
-		std::cout << "<Hook:Error>";
-		#endif
-	}
-
-	Stopping = false;
-
-	auto p = MouseEventArg(geo::Point<long>(0,0));
-	p.Running = false;
-	OnMouseMove.fire(p);
-
-	OnMessage.fire("<DaemonMessage><State>Stopped</State></DaemonMessage>\n");
-#if defined(_DEBUG)
-	std::cout << "<Hook:Stopped>\n";
-#endif
-}
-
-void Hooker::RunThread()
-{
-	SetPriority(_priority);
-
-	HookMouse();
-
-	Loop();
-
-	UnhookMouse();
-
-	SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-}
-
-void Hooker::DoStop()
-{
-	Stopping = true;
-	
-    if (PostThreadMessage(_currentThreadId, WM_QUIT, 0, 0))
-    {
-		#if defined(_DEBUG)
-        std::cout << "<hook:quit>" << std::endl;
-		#endif
-    }
-}
-
-void Hooker::OnStopped()
-{
-}
-
-bool Hooker::Hooked() const
-{
-	return _mouseHookId;
 }
 
 LRESULT __stdcall Hooker::MouseCallback(const int nCode, const WPARAM wParam, const LPARAM lParam)
 {
+	//#if defined(_DEBUG)
+	//	std::cout << ".";
+	//#endif
+
 	const auto hook = Instance();
 
 	static auto previousLocation = geo::Point<long>();
@@ -136,7 +77,6 @@ LRESULT __stdcall Hooker::MouseCallback(const int nCode, const WPARAM wParam, co
 		if ( previousLocation != location)
 		{
 			previousLocation = location;
-
 			MouseEventArg p = location;
 
 			hook->OnMouseMove.fire(p);
@@ -148,8 +88,3 @@ LRESULT __stdcall Hooker::MouseCallback(const int nCode, const WPARAM wParam, co
 
     return CallNextHookEx(hook->_mouseHookId, nCode, wParam, lParam);
 }
-
-
-
-
-

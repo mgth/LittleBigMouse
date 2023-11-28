@@ -24,7 +24,7 @@
     <ClCompile Include="RemoteServerPipe.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
-    <ClCompile Include="HookerMouse.cpp">
+    <ClCompile Include="Hooker.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
     <ClCompile Include="RemoteServerSocket.cpp">
@@ -45,7 +45,10 @@
     <ClCompile Include="HookerWinEvents.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
-    <ClCompile Include="HookerHiddenWindow.cpp">
+    <ClCompile Include="HookerDisplayChanged.cpp">
+      <Filter>Fichiers sources</Filter>
+    </ClCompile>
+    <ClCompile Include="HookerMouse.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
   </ItemGroup>

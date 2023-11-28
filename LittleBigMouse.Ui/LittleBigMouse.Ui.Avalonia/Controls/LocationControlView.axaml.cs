@@ -22,8 +22,12 @@
 */
 
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
+using System;
+using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
@@ -39,5 +43,24 @@ public partial class LocationControlView : UserControl
         InitializeComponent();
     }
 
+    private async void Button_Click(object? sender, RoutedEventArgs e)
+    {
+        if(!(DataContext is LocationControlViewModel vm)) return;
 
+        var json = vm.Copy();
+
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(json);
+            }
+        }
+        catch (Exception ex)
+        {
+
+        }
+
+    }
 }

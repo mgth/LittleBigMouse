@@ -29,6 +29,7 @@ using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia.Extensions;
@@ -81,7 +82,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
             .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedPriority));
 
-        CopyCommand = ReactiveCommand.CreateFromTask(CopyAsync);
+//        CopyCommand = ReactiveCommand.CreateFromTask(Copy);
 
         SaveCommand = ReactiveCommand.CreateFromTask(
             SaveAsync, 
@@ -182,37 +183,25 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         public ZonesLayout? Zones { get; init; }
     }
 
-    async Task CopyAsync()
+    public string Copy()
     {
-        if(Model == null) return;
+        if (Model == null) return "";
 
-           var export = new JsonExport
-           {
-               Layout = Model,
-               Monitors = _monitorsService.Monitors.ToList(),
-               Zones = Model?.ComputeZones()
-           };
-           var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings
-           {
-               ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-           });
+        var export = new JsonExport
+        {
+            Layout = Model,
+            Monitors = _monitorsService.Monitors.ToList(),
+            Zones = Model?.ComputeZones()
+        };
+        var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings
+        {
+            ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+        });
 
-           try
-           {
-               var clipboard = Application.Current?.GetTopLevel()?.Clipboard;
-               if (clipboard != null)
-               {
-                   await clipboard.SetTextAsync(json);
-               }
-           }
-           catch (Exception ex)
-           {
-
-           }
-
+        return json;
     }
 
-    public ReactiveCommand<Unit, Unit> CopyCommand { get; }
+//    public ReactiveCommand<Unit, Unit> CopyCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> UndoCommand { get; }
     public ReactiveCommand<Unit, Unit> StartCommand { get; }

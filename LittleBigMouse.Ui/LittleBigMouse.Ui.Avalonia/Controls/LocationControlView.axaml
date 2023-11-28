@@ -189,7 +189,7 @@
 			</StackPanel>
 
 			<Button Classes="Command"
-                Command="{Binding CopyCommand}">
+                Click="Button_Click">
 				<ToolTip.Tip>Copy config to clipboard</ToolTip.Tip>
 				<icons:IconView Height="30" Path="Icon/CopyConfig"/>
 			</Button>

@@ -89,7 +89,10 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
             selector: saved  => !saved
             ).ObserveOn(RxApp.MainThreadScheduler));
 
-        UndoCommand = ReactiveCommand.Create(() => Model?.Load());
+        UndoCommand = ReactiveCommand.CreateFromTask(
+            LoadAsync,
+            this.WhenAnyValue(e => e.Model.Saved,selector: s => !s)
+            .ObserveOn(RxApp.MainThreadScheduler));
 
         StartCommand = ReactiveCommand.CreateFromTask(
             StartAsync,
@@ -245,6 +248,13 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         {
             if (!(Model?.Saved??true))
                 Model.Save();
+        });
+
+    Task LoadAsync() =>
+        Task.Run(() =>
+        {
+            if (!(Model?.Saved??true))
+                Model.Load();
         });
 
 

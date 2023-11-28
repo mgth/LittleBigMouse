@@ -68,7 +68,7 @@ public class PhysicalMonitor : ReactiveModel
     public PhysicalSource ActiveSource
     {
         get => _activeSource;
-        set => this.SetUnsavedValue(ref _activeSource, value);
+        set => SetUnsavedValue(ref _activeSource, value);
     }
     PhysicalSource _activeSource;
 

@@ -69,8 +69,10 @@ public class PhysicalSource : ReactiveModel
         }
     }
 
-    public PhysicalSource(PhysicalMonitor monitor, DisplaySource source)
+    public PhysicalSource(string deviceId, PhysicalMonitor monitor, DisplaySource source)
     {
+        DeviceId = deviceId;
+
         Monitor = monitor;
         Source = source;
 

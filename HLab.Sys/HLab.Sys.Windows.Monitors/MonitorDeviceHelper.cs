@@ -254,38 +254,50 @@ public static class MonitorDeviceHelper
             ApplyDesktop();
     }
 
-    public static void DetachFromDesktop(string deviceName, bool apply = true)
+    public static bool DetachFromDesktop(string deviceName, bool apply = true)
     {
+
         var devMode = new DevMode
         {
-            DeviceName = deviceName,
-            PixelsHeight = 0,
-            PixelsWidth = 0,
-            Fields = PixelsWidth |
-                     PixelsHeight |
-                     // DisplayModeFlags.BitsPerPixel |
-                     Position |
-                     DisplayFrequency |
-                     DisplayFlags
+            //DeviceName = "cdd", //= deviceName,
+            //PixelsHeight = 0,
+            //PixelsWidth = 0,
+            Fields = 0
+             | PixelsWidth
+             | PixelsHeight
+             | BitsPerPixel
+             | Position
+             | DisplayFrequency
+             | DisplayFlags
         };
+
+        //devMode.DeviceName = deviceName;
+        //devMode.PixelsHeight = 0;
+        //devMode.PixelsWidth = 0;
+
+        devMode.BitsPerPel = 32;
 
         var ch = ChangeDisplaySettingsEx(
             deviceName,
             ref devMode,
             0,
-            ChangeDisplaySettingsFlags.UpdateRegistry |
-            ChangeDisplaySettingsFlags.NoReset,
-            0);
+            ChangeDisplaySettingsFlags.UpdateRegistry
+            | ChangeDisplaySettingsFlags.NoReset
+            , 0);
+
+        Debug.WriteLine($"DetachFromDesktop {deviceName} {ch}");
 
         if (ch == DispChange.Successful && apply)
+        {
             ApplyDesktop();
+            return true;
+        }
+
+        return false;
     }
 
 
-    public static void ApplyDesktop()
-    {
-        ChangeDisplaySettingsEx(null, 0, 0, 0, 0);
-    }
+    public static void ApplyDesktop() => ChangeDisplaySettingsEx(null, 0, 0, 0, 0);
 
     public static RegistryKey OpenMonitorRegKey(this MonitorDevice @this, RegistryKey key, bool create = false)
     {
@@ -567,16 +579,25 @@ public static class MonitorDeviceHelper
 
     public static void UpdateWallpaper(this MonitorsService service)
     {
+        var monitors = service.Monitors.ToList();
+
         var info = WindowsWallpaperHelper.ParseWallpapers(wp =>
         {
             var r = new Rect(wp.Rect.X, wp.Rect.Y, wp.Rect.Width, wp.Rect.Height);
 
-            foreach (var monitor in service.Monitors.Where(m => m.MonitorArea == r))
+            var monitor = monitors.FirstOrDefault(m => m.MonitorArea == r);
+            if (monitor != null)
             {
                 monitor.MonitorNumber = (int)wp.Index + 1;
                 monitor.WallpaperPath = wp.FilePath;
+                monitors.Remove(monitor);
             }
         });
+
+        foreach (var monitor in monitors)
+        {
+            monitor.WallpaperPath = null;
+        }
 
         service.WallpaperPosition = info.Position;
         service.Background = info.Background.ToAvaloniaColor();

@@ -3,6 +3,7 @@ using LittleBigMouse.DisplayLayout;
 using Microsoft.Win32;
 using System.Globalization;
 using Avalonia;
+using LittleBigMouse.DisplayLayout.Dimensions;
 #pragma warning disable CA1416
 
 namespace LittleBigMouse.Ui.Avalonia.Persistency;
@@ -256,6 +257,20 @@ public static class PersistencyExtensions
         var height = key.GetKey("Height", () => @this.GuiLocation.Height);
 
         @this.GuiLocation = new Rect(new Point(left, top), new Size(width, height));
+
+        if(!@this.AttachedToDesktop)
+        {
+            using var key2 = baseKey.OpenSubKey(@this.IdMonitorDevice);
+
+            var x = key2.GetKey("PixelX", () => @this.InPixel.X);
+            var y = key2.GetKey("PixelY", () => @this.InPixel.Y);
+            var w = key2.GetKey("PixelWidth", () => @this.InPixel.Width);
+            var h = key2.GetKey("PixelHeight", () => @this.InPixel.Height);
+
+            @this.InPixel.Set(new Rect(new Point(x, y), new Size(w, h)));
+
+            @this.DisplayName = key2.GetKey("DisplayName", () => @this.DisplayName);
+        }
     }
 
 
@@ -274,14 +289,20 @@ public static class PersistencyExtensions
         {
             if (key2 == null) return;
 
-            key2.SetKey("PixelX", @this.InPixel.X);
-            key2.SetKey("PixelY", @this.InPixel.Y);
-            key2.SetKey("PixelWidth", @this.InPixel.Width);
-            key2.SetKey("PixelHeight", @this.InPixel.Height);
+            // This values are stored in order to be retrieved to be restored when the monitor is re-attached
+            if(@this.AttachedToDesktop)
+            {
+                key2.SetKey("PixelX", @this.InPixel.X);
+                key2.SetKey("PixelY", @this.InPixel.Y);
+                key2.SetKey("PixelWidth", @this.InPixel.Width);
+                key2.SetKey("PixelHeight", @this.InPixel.Height);
 
-            @this.Saved = true;
+                key2.SetKey("DisplayName", @this.DisplayName);
 
-            key2.SetKey("Primary", @this.Primary);
+                @this.Saved = true;
+
+                key2.SetKey("Primary", @this.Primary);
+            }
         }
 
         @this.Saved = true;

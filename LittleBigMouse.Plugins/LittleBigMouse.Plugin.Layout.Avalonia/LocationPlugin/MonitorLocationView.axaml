@@ -76,7 +76,7 @@
 
                     FontSize="{Binding Bounds, ElementName=Center, Converter={StaticResource Scale},ConverterParameter=0.5}"
                     Margin="0,-7,0,-5"
-                    Content ="{Binding Path=Model.ActiveSource.Source.SourceNb, FallbackValue=0}"
+                    Content ="{Binding Path=Model.ActiveSource.Source.SourceNumber, FallbackValue=0}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     VerticalContentAlignment="Center"

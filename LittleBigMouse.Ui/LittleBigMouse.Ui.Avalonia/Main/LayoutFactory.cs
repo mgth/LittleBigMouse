@@ -43,12 +43,17 @@ public static class LayoutFactory
 
         foreach (var device in service.Monitors)
         {
-            //TODO : find a way to manage unattached monitors.
-            if (!device.AttachedToDesktop) continue;
+            //if(!layout.ShowUnattachedMonitors && !device.AttachedToDesktop) continue;
+
+            if (!device.AttachedToDesktop) { }
 
             var source = layout.PhysicalSources.FirstOrDefault(s => s.DeviceId == device.DeviceId);
 
-            if (source != null) continue;
+            if (source != null)
+            {
+                source.Source.UpdateFrom(device);
+                continue;
+            }
 
             var monitor = layout.PhysicalMonitors.FirstOrDefault(m =>
                 m.Model.PnpCode == device.PnpCode
@@ -63,7 +68,7 @@ public static class LayoutFactory
                 monitor = device
                     .CreatePhysicalMonitor(layout, model);
 
-                source = new PhysicalSource(monitor, device.CreateDisplaySource());
+                source = new PhysicalSource(device.DeviceId, monitor, device.CreateDisplaySource());
 
                 monitor.ActiveSource = source;
                 monitor.Sources.Add(source);
@@ -72,14 +77,18 @@ public static class LayoutFactory
             }
             else
             {
-                source = new PhysicalSource(monitor, device.CreateDisplaySource());
+                // new source for an existing monitor
+                source = new PhysicalSource(device.DeviceId, monitor, device.CreateDisplaySource());
                 monitor.Sources.Add(source);
             }
 
             layout.AddOrUpdatePhysicalSource(source);
         }
 
+        // places monitors from windows configuration as best as possible
         layout.SetLocationsFromSystemConfiguration();
+
+        //retrieve saved layout
         layout.Load();
     }
 
@@ -120,16 +129,22 @@ public static class LayoutFactory
 
     public static DisplaySource CreateDisplaySource(this MonitorDevice device)
     {
-        var source = new DisplaySource(device.IdMonitor)
-        {
-            Primary = device.Primary,
-        };
+        return new DisplaySource(device.IdMonitor).UpdateFrom(device);
+    }
+
+    public static DisplaySource UpdateFrom(this DisplaySource source, MonitorDevice device)
+    {
+        source.DisplayName = device.AttachedDisplay?.DeviceName;
+        source.DeviceName = device.AttachedDevice?.DeviceName;
+
+        source.Primary = device.Primary;
+        source.AttachedToDesktop = device.AttachedToDesktop;
 
         source.EffectiveDpi.Set(device.EffectiveDpi);
         source.DpiAwareAngularDpi.Set(device.AngularDpi);
         source.RawDpi.Set(device.RawDpi);
 
-        if (device.AttachedDisplay?.CurrentMode is {} mode)
+        if (device.AttachedDisplay?.CurrentMode is { } mode)
         {
             source.DisplayFrequency = mode.DisplayFrequency;
 
@@ -137,8 +152,13 @@ public static class LayoutFactory
                 mode.Position,
                 mode.Pels));
         }
+        else
+        {
+            source.DisplayFrequency = 0;
+            source.InPixel.Set(new Rect(new Point(0, 0),new Size(0, 0)));
+        }
 
-        (source.InterfaceName,source.InterfaceLogo) = device.InterfaceBrandNameAndLogo();
+        (source.InterfaceName, source.InterfaceLogo) = device.InterfaceBrandNameAndLogo();
 
         source.WallpaperPath = device.WallpaperPath;
 
@@ -193,7 +213,7 @@ public static class LayoutFactory
 
         var name = HtmlHelper.CleanupPnpName(monitor.DeviceString);
         if (name.ToLower() == "generic pnp monitor") name = monitor.Edid.Model;
-//        if (name.ToLower() == "generic pnp monitor") name = HtmlHelper.GetPnpName(@this.PnpCode);
+        //        if (name.ToLower() == "generic pnp monitor") name = HtmlHelper.GetPnpName(@this.PnpCode);
 
         @this.PnpDeviceName = name;
 
@@ -209,7 +229,7 @@ public static class LayoutFactory
             throw new Exception("Cannot update monitor from different device");
 
         // Serial Number
-        monitor.SerialNumber = device.Edid?.SerialNumber??"N/A";
+        monitor.SerialNumber = device.Edid?.SerialNumber ?? "N/A";
 
         // Orientation
         var display = device.AttachedDisplay;
@@ -226,27 +246,29 @@ public static class LayoutFactory
 
     static string BrandLogo(this MonitorDevice device)
     {
-        // special case for Spacedesk support
         var dev = device.AttachedDevice?.Parent.DeviceString;
         if (dev != null)
         {
-             if(dev.Contains("spacedesk", StringComparison.OrdinalIgnoreCase)) return "icon/Pnp/Spacedesk";
-             if (dev == "Microsoft Remote Display Adapter") return "icon/Pnp/Windows";
+            // special case for Spacedesk support
+            if (dev.Contains("spacedesk", StringComparison.OrdinalIgnoreCase)) return "icon/Pnp/Spacedesk";
+            if (dev == "Microsoft Remote Display Adapter") return "icon/Pnp/Windows";
         }
 
-        return $"icon/Pnp/{device.Edid?.ManufacturerCode??"LBM"}";
+        return $"icon/Pnp/{device.Edid?.ManufacturerCode ?? "LBM"}";
     }
 
     static readonly string[] Brands = { "intel", "amd", "nvidia", "microsoft" };
-    public static (string,string) InterfaceBrandNameAndLogo(this MonitorDevice device)
+    public static (string, string) InterfaceBrandNameAndLogo(this MonitorDevice device)
     {
+        if(device.AttachedDevice == null) return ("detached", "icon/parts/detached");
+
         var dev = device.AttachedDevice?.Parent?.DeviceString?.ToLower() ?? "";
 
         foreach (var brand in Brands)
         {
-            if (dev.Contains(brand)) return (dev,$"icon/pnp/{brand}");
+            if (dev.Contains(brand)) return (dev, $"icon/pnp/{brand}");
         }
-        return (dev,"");
+        return (dev, "");
     }
 
 }

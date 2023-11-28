@@ -121,6 +121,12 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
     async Task SetWallpaper(string path, WallpaperStyle style)
     {
+        if(string.IsNullOrWhiteSpace(path))
+        {
+            Wallpaper = null;
+            return;
+        }
+
         var monitorWidth = (int)Model.ActiveSource.Source.InPixel.Width / 4;
         var monitorHeight = (int)Model.ActiveSource.Source.InPixel.Height / 4;
 
@@ -200,7 +206,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
     //public Bitmap? Wallpaper => _wallpaper.Value;
     //readonly ObservableAsPropertyHelper<Bitmap?> _wallpaper;
 
-    public IImage Wallpaper
+    public IImage? Wallpaper
     {
         get => _wallpaper;
         set => this.RaiseAndSetIfChanged(ref _wallpaper, value);

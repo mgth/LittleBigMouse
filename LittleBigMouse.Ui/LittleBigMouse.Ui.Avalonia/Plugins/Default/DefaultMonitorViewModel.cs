@@ -21,9 +21,13 @@
 	  http://www.mgth.fr
 */
 
+using Avalonia.Styling;
 using HLab.Mvvm.ReactiveUI;
+using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
+using System.Reactive.Linq;
+using System.Windows.Input;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Default;
 
@@ -35,14 +39,53 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
                 e => e.Model.Diagonal,
                 selector: d => (d / 25.4).ToString("##.#") + "\"")
             .ToProperty(this, _ => _.Inches);
+
+        _attached = this.WhenAnyValue(e => e.Model.ActiveSource.Source.AttachedToDesktop)
+            .ToProperty(this, e => e.Attached);
+
+        DetachCommand = ReactiveCommand.Create(() =>
+        {
+            DetachFromDesktop();
+        },this.WhenAnyValue(
+            e => e.Attached, 
+            e => e.Model.ActiveSource.Source.Primary,
+            (attached,primary) => attached && !primary)
+        .ObserveOn(RxApp.MainThreadScheduler));
+
+        AttachCommand = ReactiveCommand.Create(() =>
+        {
+            AttachToDesktop();
+        },this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxApp.MainThreadScheduler));
     }
+
+    public bool Attached => _attached.Value;
+    readonly ObservableAsPropertyHelper<bool> _attached;
+
 
     public string Inches => _inches.Value;
     readonly ObservableAsPropertyHelper<string> _inches;
+
+    public ICommand AttachCommand { get; }
+    public ICommand DetachCommand { get; }
 
     //static string GetDeviceString(string? deviceString)
     //{
     //    return deviceString != null ? string.Join(' ', deviceString.Split(' ').Where(l => !Brands.Contains(l.ToLower()))) : "";
     //}
 
-}
+    void DetachFromDesktop()
+    {
+        MonitorDeviceHelper.DetachFromDesktop(Model.ActiveSource.Source.DisplayName);
+    }
+    void AttachToDesktop()
+    {
+        MonitorDeviceHelper.AttachToDesktop(
+            Model.ActiveSource.Source.DisplayName,
+            Model.ActiveSource.Source.Primary,
+            Model.ActiveSource.Source.InPixel.Bounds,
+            Model.Orientation
+            );
+        //MonitorDeviceHelper.AttachToDesktop(Model.ActiveSource.Source.DeviceName);
+    }
+
+ }

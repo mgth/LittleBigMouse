@@ -160,6 +160,9 @@
 						</icons:IconView.Caption>
 
 					</icons:IconView>
+					
+					<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}">Attach</Button>
+					<Button IsVisible="{Binding Attached}" Command="{Binding DetachCommand}">Detach</Button>
 				</StackPanel>
 
 			</Grid>
@@ -244,6 +247,7 @@
                             Padding="2,0"
                             Foreground="{DynamicResource HLab.Brushes.Foreground}"
                             Content="Hz"/>
+						
 
 					</StackPanel>
 

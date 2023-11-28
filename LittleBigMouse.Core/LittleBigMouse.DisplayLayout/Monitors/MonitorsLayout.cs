@@ -818,7 +818,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         var zones = new ZonesLayout();
         foreach (var source in PhysicalSources)
         {
-            if (source == source.Monitor.ActiveSource)
+            if (source == source.Monitor.ActiveSource && source.Source.AttachedToDesktop)
                 zones.Zones.Add(new Zone(
                     source.Source.IdMonitorDevice,
                     source.Monitor.Model.PnpDeviceName,

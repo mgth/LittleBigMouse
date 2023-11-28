@@ -36,6 +36,7 @@ using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
 using Live.Avalonia;
+using ScottPlot;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
@@ -82,10 +83,10 @@ public class MainService : IMainService
     public void UpdateLayout()
     {
         // TODO : move to plugin
-        if (_monitorsSet is MonitorsService s && MonitorsLayout is MonitorsLayout l)
+        if (_monitorsSet is MonitorsService monitors && MonitorsLayout is MonitorsLayout layout)
         {
-            s.UpdateDevices();
-            l.UpdateFrom(s);
+            monitors.UpdateDevices();
+            layout.UpdateFrom(monitors);
         }
     }
 
@@ -168,12 +169,21 @@ public class MainService : IMainService
                 await _notify.SetIconAsync("icon/lbm_off",32);
                 break;
             case LittleBigMouseEvent.DisplayChanged:
-                UpdateLayout();
+                await DisplayChangedAsync();
                 break;
             case LittleBigMouseEvent.DesktopChanged:
             case LittleBigMouseEvent.FocusChanged:
             default:
                 throw new ArgumentOutOfRangeException(nameof(args.Event), args.Event, null);
+        }
+    }
+
+    private async Task DisplayChangedAsync()
+    {
+        UpdateLayout();
+        if(MonitorsLayout.Enabled)
+        {
+            await StartAsync();
         }
     }
 

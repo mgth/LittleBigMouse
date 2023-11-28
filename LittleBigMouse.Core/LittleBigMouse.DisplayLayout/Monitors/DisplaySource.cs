@@ -61,15 +61,37 @@ public class DisplaySource : ReactiveModel
     bool _primary;
 
     /// <summary>
+    /// Source Device Name
+    /// </summary>
+    [DataMember]
+    public string DeviceName
+    {
+        get => _deviceName;
+        set => this.RaiseAndSetIfChanged(ref _deviceName, value) ;
+    }
+    string _deviceName;
+
+    /// <summary>
+    /// Display Device Name
+    /// </summary>
+    [DataMember]
+    public string DisplayName
+    {
+        get => _displayName;
+        set => this.RaiseAndSetIfChanged(ref _displayName, value) ;
+    }
+    string _displayName;
+
+    /// <summary>
     /// Source number in windows system
     /// </summary>
     [DataMember]
-    public string SourceNb
+    public string SourceNumber
     {
-        get => _sourceNb;
-        set => this.RaiseAndSetIfChanged(ref _sourceNb, value) ;
+        get => _sourceNumber;
+        set => this.RaiseAndSetIfChanged(ref _sourceNumber, value) ;
     }
-    string _sourceNb;
+    string _sourceNumber;
 
     /// <summary>
     /// Current monitor frequency
@@ -129,6 +151,12 @@ public class DisplaySource : ReactiveModel
     }
     string _interfaceLogo;
 
+    public bool AttachedToDesktop
+    {
+        get => _attachedToDesktop;
+        set => this.RaiseAndSetIfChanged(ref _attachedToDesktop, value);
+    }
+    bool _attachedToDesktop;
 
     [DataMember]
     public double WinDpiX => _winDpiX.Value;

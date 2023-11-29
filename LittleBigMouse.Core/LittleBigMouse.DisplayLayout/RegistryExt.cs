@@ -25,41 +25,71 @@ using System;
 using System.Globalization;
 
 using Microsoft.Win32;
+using Newtonsoft.Json.Linq;
 
 namespace LittleBigMouse.DisplayLayout;
 
+#pragma warning disable CA1416
+
+
 public static class RegistryExt
 {
-    public static T GetKey<T>(this RegistryKey key, string keyName, Func<T> def = null, Action ifLoaded = null)
+    public static string GetOrSet(this RegistryKey key, string keyName, Func<string> def, Action ifLoaded = null)
     {
         (key, keyName) = key.ParseKeyName(keyName);
 
-        def ??= () => default;
-
-        if (key == null) return def();
-
-        object value = null;
-
-        var sValue = key.GetValue(keyName, "")?.ToString() ?? "";
-        if (sValue == "") return def();
-
-        if (typeof(T) == typeof(double))
+        var v = key.GetValue(keyName);
+        if (v is string r)
         {
-            value = double.Parse(sValue, CultureInfo.InvariantCulture);
+            ifLoaded?.Invoke();
         }
-        else if (typeof(T) == typeof(string))
+        else
         {
-            value = sValue;
-        }
-        else if (typeof(T) == typeof(string))
-        {
-            value = sValue == "1";
+            r = def.Invoke();
+            key.SetValue(keyName, r,RegistryValueKind.String);
         }
 
-        ifLoaded?.Invoke();
-
-        return (T)value;
+        return r;
     }
+
+    public static bool GetOrSet(this RegistryKey key, string keyName, Func<bool> getter, Action ifLoaded = null) 
+        => GetOrSet(key, keyName, () => getter() ? "1" : "0", ifLoaded) == "1";
+
+    public static double GetOrSet(this RegistryKey key, string keyName, Func<double> getter, Action ifLoaded = null) 
+        => double.Parse(
+            GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
+            CultureInfo.InvariantCulture);
+
+    //public static object GetKey<T>(this RegistryKey key, string keyName, Func<object> def = null, Action ifLoaded = null)
+    //{
+    //    (key, keyName) = key.ParseKeyName(keyName);
+
+    //    def ??= () => default;
+
+    //    if (key == null) return def();
+
+    //    object value = null;
+
+    //    var sValue = key.GetValue(keyName, "")?.ToString() ?? "";
+    //    if (sValue == "") return def();
+
+    //    if (typeof(T) == typeof(double))
+    //    {
+    //        value = double.Parse(sValue, CultureInfo.InvariantCulture);
+    //    }
+    //    else if (typeof(T) == typeof(string))
+    //    {
+    //        value = sValue;
+    //    }
+    //    else if (typeof(T) == typeof(string))
+    //    {
+    //        value = sValue == "1";
+    //    }
+
+    //    ifLoaded?.Invoke();
+
+    //    return (T)value;
+    //}
 
     static (RegistryKey, string) ParseKeyName(this RegistryKey key, string keyName)
     {

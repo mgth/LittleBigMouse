@@ -93,7 +93,6 @@ public class PhysicalMonitor : ReactiveModel
             (physicalSize, orientation) => physicalSize.Rotate(orientation)
         ).Log(this, "_physicalRotated").ToProperty(this, e => e.PhysicalRotated);
 
-
         //RemainingPhysicalMonitors = Layout.PhysicalMonitors.Items.AsObservableChangeSet().Filter(s => !Equals(s, this)).AsObservableList();
 
         DepthRatio = new DisplayRatioValue(1.0, 1.0);

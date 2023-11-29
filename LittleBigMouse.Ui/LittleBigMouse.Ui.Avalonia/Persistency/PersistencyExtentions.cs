@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using System.Globalization;
 using Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
+using System;
 #pragma warning disable CA1416
 
 namespace LittleBigMouse.Ui.Avalonia.Persistency;
@@ -31,22 +32,22 @@ public static class PersistencyExtensions
     //==================//
     public static void Load(this MonitorsLayout @this)
     {
-        using (var key = @this.OpenRegKey())
+        using (var key = @this.OpenRegKey(true))
         {
             if (key != null)
             {
-                @this.Enabled = key.GetValue("Enabled", 0).ToString() == "1";
-                @this.AdjustPointer = key.GetValue("AdjustPointer", 0).ToString() == "1";
-                @this.AdjustSpeed = key.GetValue("AdjustSpeed", 0).ToString() == "1";
-                @this.Algorithm = key.GetValue("Algorithm", "Strait")?.ToString()??"Strait";
-                @this.Priority = key.GetValue("Priority", "Normal")?.ToString()??"Normal";
-                @this.AllowOverlaps = key.GetValue("AllowOverlaps", 0).ToString() == "1";
-                @this.AllowDiscontinuity = key.GetValue("AllowDiscontinuity", 0).ToString() == "1";
-                @this.HomeCinema = key.GetValue("HomeCinema", 0).ToString() == "1";
-                @this.Pinned = key.GetValue("Pinned", 0).ToString() == "1";
-                @this.LoopX = key.GetValue("LoopX", 0).ToString() == "1";
-                @this.LoopY = key.GetValue("LoopY", 0).ToString() == "1";
-                @this.AutoUpdate = key.GetValue("AutoUpdate", 0).ToString() == "1";
+                @this.Enabled = key.GetOrSet("Enabled", () => false);
+                @this.AdjustPointer = key.GetOrSet("AdjustPointer", () => false);
+                @this.AdjustSpeed = key.GetOrSet("AdjustSpeed", () => false);
+                @this.Algorithm = key.GetOrSet("Algorithm", () => "Strait");
+                @this.Priority = key.GetOrSet("Priority", () => "Normal");
+                @this.AllowOverlaps = key.GetOrSet("AllowOverlaps", () => false);
+                @this.AllowDiscontinuity = key.GetOrSet("AllowDiscontinuity", () => false);
+                @this.HomeCinema = key.GetOrSet("HomeCinema", () => false);
+                @this.Pinned = key.GetOrSet("Pinned", () => false);
+                @this.LoopX = key.GetOrSet("LoopX", () => false);
+                @this.LoopY = key.GetOrSet("LoopY", () => false);
+                @this.AutoUpdate = key.GetOrSet("AutoUpdate", () => false);
             }
 
             @this.LoadAtStartup = @this.IsScheduled();
@@ -123,26 +124,28 @@ public static class PersistencyExtensions
 
     public static PhysicalMonitor Load(this PhysicalMonitor @this)
     {
-        using var key = @this.OpenRegKey();
+        using var key = @this.OpenRegKey(true);
 
-        if (key == null) return @this;
-
-        @this.DepthProjection.X = key.GetKey("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
-        @this.DepthProjection.Y = key.GetKey("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
+        @this.DepthProjection.X = key.GetOrSet("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
+        @this.DepthProjection.Y = key.GetOrSet("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
 
         @this.DepthProjection.Saved = true;
 
-        @this.DepthRatio.X = key.GetKey("PhysicalRatioX", () => @this.DepthRatio.X);
-        @this.DepthRatio.Y = key.GetKey("PhysicalRatioY", () => @this.DepthRatio.Y);
+        @this.DepthRatio.X = key.GetOrSet("PhysicalRatioX", () => @this.DepthRatio.X);
+        @this.DepthRatio.Y = key.GetOrSet("PhysicalRatioY", () => @this.DepthRatio.Y);
 
         @this.DepthRatio.Saved = true;
 
-        var active = key.GetKey("ActiveSource", () => "");
+        var active = key.GetOrSet("ActiveSource", () => @this.ActiveSource?.Source.IdMonitorDevice??"");
+
         foreach (var source in @this.Sources.Items)
         {
             source.Source.Load(key);
             if (source.Source.IdMonitorDevice == active || @this.ActiveSource == null)
-                @this.ActiveSource = source;
+            {
+                @this.ActiveSource = source; 
+                key.SetKey("ActiveSource",source.Source.IdMonitorDevice);
+            }
         }
 
         @this.Saved = true;
@@ -192,21 +195,21 @@ public static class PersistencyExtensions
         var old = @this.PhysicalSize.FixedAspectRatio;
         @this.PhysicalSize.FixedAspectRatio = false;
 
-        using (var key = @this.OpenMonitorRegKey(false))
+        using (var key = @this.OpenMonitorRegKey(true))
         {
             if (key != null)
             {
-                @this.PhysicalSize.TopBorder = key.GetKey(@"Borders\Top", ()=>@this.PhysicalSize.TopBorder);
-                @this.PhysicalSize.RightBorder = key.GetKey(@"Borders\Right", ()=>@this.PhysicalSize.RightBorder);
-                @this.PhysicalSize.BottomBorder = key.GetKey(@"Borders\Bottom", ()=>@this.PhysicalSize.BottomBorder);
-                @this.PhysicalSize.LeftBorder = key.GetKey(@"Borders\Left", ()=>@this.PhysicalSize.LeftBorder);
+                @this.PhysicalSize.TopBorder = key.GetOrSet(@"Borders\Top", ()=>@this.PhysicalSize.TopBorder);
+                @this.PhysicalSize.RightBorder = key.GetOrSet(@"Borders\Right", ()=>@this.PhysicalSize.RightBorder);
+                @this.PhysicalSize.BottomBorder = key.GetOrSet(@"Borders\Bottom", ()=>@this.PhysicalSize.BottomBorder);
+                @this.PhysicalSize.LeftBorder = key.GetOrSet(@"Borders\Left", ()=>@this.PhysicalSize.LeftBorder);
 
-                @this.PhysicalSize.Height = key.GetKey(@"Size\Height", ()=>@this.PhysicalSize.Height);
-                @this.PhysicalSize.Width = key.GetKey(@"Size\Width", ()=>@this.PhysicalSize.Width);
+                @this.PhysicalSize.Height = key.GetOrSet(@"Size\Height", ()=>@this.PhysicalSize.Height);
+                @this.PhysicalSize.Width = key.GetOrSet(@"Size\Width", ()=>@this.PhysicalSize.Width);
 
                 @this.PhysicalSize.Saved = true;
 
-                @this.PnpDeviceName = key.GetKey("PnpName", ()=>@this.PnpDeviceName);
+                @this.PnpDeviceName = key.GetOrSet("PnpName", ()=>@this.PnpDeviceName);
 
                 //key.SetKey("DeviceId", Monitor.DeviceId);
 
@@ -245,66 +248,65 @@ public static class PersistencyExtensions
     //================//
     // Display Source //
     //================//
-    public static void Load(this DisplaySource @this, RegistryKey baseKey)
+    public static void Load(this DisplaySource @this, RegistryKey key)
     {
-        using var key = baseKey.OpenSubKey("GuiLocation");
-
-        if (key == null) return;
-
-        var left = key.GetKey("Left", () => @this.GuiLocation.Left);
-        var width = key.GetKey("Width", () => @this.GuiLocation.Width);
-        var top = key.GetKey("Top", () => @this.GuiLocation.Top);
-        var height = key.GetKey("Height", () => @this.GuiLocation.Height);
+        var left = key.GetOrSet(@"GuiLocation\Left", () => @this.GuiLocation.Left);
+        var width = key.GetOrSet(@"GuiLocation\Width", () => @this.GuiLocation.Width);
+        var top = key.GetOrSet(@"GuiLocation\Top", () => @this.GuiLocation.Top);
+        var height = key.GetOrSet(@"GuiLocation\Height", () => @this.GuiLocation.Height);
 
         @this.GuiLocation = new Rect(new Point(left, top), new Size(width, height));
 
+        var id = @this.IdMonitorDevice;
+
         if(!@this.AttachedToDesktop)
         {
-            using var key2 = baseKey.OpenSubKey(@this.IdMonitorDevice);
-
-            var x = key2.GetKey("PixelX", () => @this.InPixel.X);
-            var y = key2.GetKey("PixelY", () => @this.InPixel.Y);
-            var w = key2.GetKey("PixelWidth", () => @this.InPixel.Width);
-            var h = key2.GetKey("PixelHeight", () => @this.InPixel.Height);
+            var x = key.GetOrSet($@"{id}\PixelX", () => @this.InPixel.X);
+            var y = key.GetOrSet($@"{id}\PixelY", () => @this.InPixel.Y);
+            var w = key.GetOrSet($@"{id}\PixelWidth", () => @this.InPixel.Width);
+            var h = key.GetOrSet($@"{id}\PixelHeight", () => @this.InPixel.Height);
 
             @this.InPixel.Set(new Rect(new Point(x, y), new Size(w, h)));
 
-            @this.DisplayName = key2.GetKey("DisplayName", () => @this.DisplayName);
+            @this.DisplayName = key.GetOrSet($@"{id}\DisplayName", () => @this.DisplayName);
         }
+        else 
+        {    
+            key.SetKey($@"{id}\PixelX", @this.InPixel.X);
+            key.SetKey($@"{id}\PixelY", @this.InPixel.Y);
+            key.SetKey($@"{id}\PixelWidth", @this.InPixel.Width);
+            key.SetKey($@"{id}\PixelHeight", @this.InPixel.Height);
+
+            @this.InPixel.Saved = true;
+
+            key.SetKey($@"{id}\DisplayName", @this.DisplayName);
+            key.SetKey($@"{id}\Primary", @this.Primary);
+        }
+
+        @this.Saved = true;
     }
 
-
-    public static void Save(this DisplaySource @this, RegistryKey? baseKey)
+    public static void Save(this DisplaySource @this, RegistryKey? key)
     {
-        using var key = baseKey?.CreateSubKey("GuiLocation");
+        key.SetKey(@"GuiLocation\Left", @this.GuiLocation.Left);
+        key.SetKey(@"GuiLocation\Width", @this.GuiLocation.Width);
+        key.SetKey(@"GuiLocation\Top", @this.GuiLocation.Top);
+        key.SetKey(@"GuiLocation\Height", @this.GuiLocation.Height);
 
-        if (key == null) return;
+        var id = @this.IdMonitorDevice;
 
-        key.SetKey("Left", @this.GuiLocation.Left);
-        key.SetKey("Width", @this.GuiLocation.Width);
-        key.SetKey("Top", @this.GuiLocation.Top);
-        key.SetKey("Height", @this.GuiLocation.Height);
-
-        using (var key2 = baseKey.CreateSubKey(@this.IdMonitorDevice))
+        // This values are stored in order to be retrieved to be restored when the monitor is re-attached
+        if(@this.AttachedToDesktop)
         {
-            if (key2 == null) return;
+            key.SetKey($@"{id}\PixelX", @this.InPixel.X);
+            key.SetKey($@"{id}\PixelY", @this.InPixel.Y);
+            key.SetKey($@"{id}\PixelWidth", @this.InPixel.Width);
+            key.SetKey($@"{id}\PixelHeight", @this.InPixel.Height);
+            @this.InPixel.Saved = true;
 
-            // This values are stored in order to be retrieved to be restored when the monitor is re-attached
-            if(@this.AttachedToDesktop)
-            {
-                key2.SetKey("PixelX", @this.InPixel.X);
-                key2.SetKey("PixelY", @this.InPixel.Y);
-                key2.SetKey("PixelWidth", @this.InPixel.Width);
-                key2.SetKey("PixelHeight", @this.InPixel.Height);
-
-                key2.SetKey("DisplayName", @this.DisplayName);
-
-                @this.Saved = true;
-
-                key2.SetKey("Primary", @this.Primary);
-            }
+            key.SetKey($@"{id}\DisplayName", @this.DisplayName);
+            key.SetKey($@"{id}\Primary", @this.Primary);
         }
-
         @this.Saved = true;
     }
 

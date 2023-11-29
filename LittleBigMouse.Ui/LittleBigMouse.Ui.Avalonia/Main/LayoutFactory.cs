@@ -194,7 +194,10 @@ public static class LayoutFactory
 
             if (display?.CurrentMode != null)
             {
-                @this.PhysicalSize.Set(display.CurrentMode.DisplayOrientation % 2 == 0 ? display.Capabilities.Size : display.Capabilities.Size.Transpose());
+                @this.PhysicalSize.Set(
+                    display.CurrentMode.DisplayOrientation % 2 == 0 
+                    ? display.Capabilities.Size 
+                    : display.Capabilities.Size.Transpose());
             }
             else if (monitor.Edid != null)
             {

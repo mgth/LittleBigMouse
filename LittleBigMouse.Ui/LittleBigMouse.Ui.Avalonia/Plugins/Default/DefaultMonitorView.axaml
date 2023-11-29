@@ -34,7 +34,7 @@
         />-->
 
 		<!-- Central Device No -->
-		<!--<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+		<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
 			<Border x:Name="Center"
                     Width ="{Binding Height, ElementName=Center}"
                     BorderThickness = "{Binding Path=Bounds.Height, ElementName=Center, Converter={StaticResource Scale},ConverterParameter=0.05}"
@@ -47,7 +47,7 @@
                 <Label
                     FontSize="{Binding Path=Bounds.Height, ElementName=Center, Converter={StaticResource Scale},ConverterParameter=0.5}"
                     Margin="0,-7,0,-5"
-                    Content ="{Binding Path=Model.ActiveSource.Device.MonitorNo,FallbackValue=X}"
+                    Content ="{Binding Path=Model.ActiveSource.Source.SourceNumber,FallbackValue=X}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     VerticalContentAlignment="Center"
@@ -56,7 +56,7 @@
                     />
 
 			</Border>
-		</StackPanel>-->
+		</StackPanel>
 
         <!-- PNP Code -->
  <!--TODO : VerticalAlignment="{Binding PnpNameVerticalAlignment}"-->

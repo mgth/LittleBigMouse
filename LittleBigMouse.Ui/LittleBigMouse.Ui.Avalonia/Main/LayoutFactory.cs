@@ -162,6 +162,9 @@ public static class LayoutFactory
 
         source.WallpaperPath = device.WallpaperPath;
 
+        source.SourceNumber = device.MonitorNumber.ToString();
+
+
         return source;
     }
 

@@ -122,52 +122,6 @@
 
 		</StackPanel>
 
-		<StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" >
-			<Grid>
-				<Border CornerRadius="50" Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.3">
-					<Border.Effect>
-						<BlurEffect Radius="20"/>
-					</Border.Effect>
-				</Border>
-
-				<StackPanel Margin="10">
-
-                    <!-- PNP Device name  -->
-                    <Label Margin ="-5" HorizontalAlignment="Right"
-                           Content="{Binding Path=Model.Model.PnpDeviceName, FallbackValue=xxx}"
-                           Foreground="{DynamicResource HLab.Brushes.Foreground}"/>
-
-                    <!-- Serial Number -->
-					<Label Margin="-5" HorizontalAlignment="Right"
-					   Content="{Binding Path=Model.SerialNumber, FallbackValue=xxx}"
-					   FontWeight="Bold" Foreground="{DynamicResource HLab.Brushes.Foreground}" Opacity="0.5"
-					   FontSize ="{Binding Path=Bounds.Height, ElementName=Grid, Converter={StaticResource Scale},ConverterParameter=0.05|0.1|20}"
-                    />
-
-
-                    <!-- Brand Icon -->
-					<icons:IconView 
-                        Path="{Binding Model.ActiveSource.Source.InterfaceLogo}" 
-                        Foreground="{DynamicResource HLab.Brushes.Foreground}"
-                        Height="{Binding Path=Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.05|0.1|100}"
-                        >
-						<icons:IconView.Caption>
-							<Label VerticalAlignment="Center" Margin="0"
-								   Padding="0"
-							   Content="{Binding Path=Model.ActiveSource.Source.InterfaceName, FallbackValue=xxx}"
-                               FontSize="{Binding Path=Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.04|0.1|20}"
-                            />
-						</icons:IconView.Caption>
-
-					</icons:IconView>
-					
-					<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}">Attach</Button>
-					<Button IsVisible="{Binding Attached}" Command="{Binding DetachCommand}">Detach</Button>
-				</StackPanel>
-
-			</Grid>
-
-		</StackPanel>
 		<!-- Y Position -->
 
 		<!-- X Position -->
@@ -254,6 +208,58 @@
 				</StackPanel>
 			</Grid>
 		</Label>
+		
+		<StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" >
+			<Grid>
+				<Border CornerRadius="50" Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.3">
+					<Border.Effect>
+						<BlurEffect Radius="20"/>
+					</Border.Effect>
+				</Border>
+
+				<StackPanel Margin="10">
+
+                    <!-- PNP Device name  -->
+                    <Label Margin ="-5" HorizontalAlignment="Right"
+                           Content="{Binding Path=Model.Model.PnpDeviceName, FallbackValue=xxx}"
+                           Foreground="{DynamicResource HLab.Brushes.Foreground}"/>
+
+                    <!-- Serial Number -->
+					<Label Margin="-5" HorizontalAlignment="Right"
+					   Content="{Binding Path=Model.SerialNumber, FallbackValue=xxx}"
+					   FontWeight="Bold" Foreground="{DynamicResource HLab.Brushes.Foreground}" Opacity="0.5"
+					   FontSize ="{Binding Path=Bounds.Height, ElementName=Grid, Converter={StaticResource Scale},ConverterParameter=0.05|0.1|20}"
+                    />
+
+
+                    <!-- Brand Icon -->
+					<icons:IconView 
+						HorizontalAlignment="Right"
+                        Path="{Binding Model.ActiveSource.Source.InterfaceLogo}" 
+                        Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                        Height="{Binding Path=Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.05|0.1|100}"
+                        >
+						<icons:IconView.Caption>
+							<Label VerticalAlignment="Center" Margin="0"
+								   Padding="0"
+							   Content="{Binding Path=Model.ActiveSource.Source.InterfaceName, FallbackValue=xxx}"
+                               FontSize="{Binding Path=Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.04|0.1|20}"
+                            />
+						</icons:IconView.Caption>
+
+					</icons:IconView>
+					
+				</StackPanel>
+
+			</Grid>
+
+		</StackPanel>
+
+		<StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom">
+			<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}">Attach</Button>
+			<Button IsVisible="{Binding DetachVisible}" Command="{Binding DetachCommand}">Detach</Button>
+			<Label IsVisible="{Binding Primary}">Primary</Label>
+		</StackPanel>
 
 	</Grid>
 </UserControl>

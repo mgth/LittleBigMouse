@@ -43,12 +43,21 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
         _attached = this.WhenAnyValue(e => e.Model.ActiveSource.Source.AttachedToDesktop)
             .ToProperty(this, e => e.Attached);
 
+        _primary = this.WhenAnyValue(e => e.Model.ActiveSource.Source.Primary)
+            .ToProperty(this, e => e.Primary);
+
+        _detachVisible = this.WhenAnyValue(
+            e => e.Attached,
+            e => e.Primary,
+            (attached, primary) => attached && !primary)
+            .ToProperty(this, e => e.DetachVisible);
+
         DetachCommand = ReactiveCommand.Create(() =>
         {
             DetachFromDesktop();
         },this.WhenAnyValue(
             e => e.Attached, 
-            e => e.Model.ActiveSource.Source.Primary,
+            e => e.Primary,
             (attached,primary) => attached && !primary)
         .ObserveOn(RxApp.MainThreadScheduler));
 
@@ -61,6 +70,14 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     public bool Attached => _attached.Value;
     readonly ObservableAsPropertyHelper<bool> _attached;
 
+    public bool AttachVisible => _attachVisible.Value;
+    readonly ObservableAsPropertyHelper<bool> _attachVisible;
+
+    public bool DetachVisible => _detachVisible.Value;
+    readonly ObservableAsPropertyHelper<bool> _detachVisible;
+
+    public bool Primary => _primary.Value;
+    readonly ObservableAsPropertyHelper<bool> _primary;
 
     public string Inches => _inches.Value;
     readonly ObservableAsPropertyHelper<string> _inches;

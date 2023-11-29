@@ -22,6 +22,8 @@
 */
 
 #nullable enable
+#pragma warning disable CA1416 // Valider la compatibilité de la plateforme
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -33,6 +35,8 @@ using Avalonia.Media;
 using DynamicData;
 using HLab.Sys.Windows.API;
 using Microsoft.Win32;
+using OneOf;
+using OneOf.Types;
 
 namespace HLab.Sys.Windows.Monitors;
 
@@ -94,85 +98,4 @@ public class MonitorsService : IMonitorsSet
 
         return path;
     }
-
-    bool ParseWindowsConfig()
-    {
-        using var configurationKey = GetConfigurationKey();
-        if(configurationKey?.GetValue("SetId") is not string setId) return false;
-
-        setId= setId.Trim('\0');
-        var monitorNo = 1;
-
-        var monitors = Monitors.ToList();
-        var idDisplays = setId.Split('+').Reverse();
-        foreach (var idDisplay in idDisplays)
-        {
-            var idMonitors = idDisplay.Split('*').Reverse();
-            DisplayDevice display = null;
-            foreach(var idMonitor in idMonitors)
-            {
-                var monitor = monitors.FirstOrDefault(m => m.IdMonitor == idMonitor);
-                if (monitor == null) return false;
-
-                if(display!=null)
-                {
-                    if(!ReferenceEquals(display,monitor.AttachedDisplay)) return false;
-                }
-                else display = monitor.AttachedDisplay;
-                    
-                monitor.MonitorNumber = monitorNo++;
-
-                monitors.Remove(monitor);
-            }
-        }
-        return !monitors.Any();
-    }
-
-    RegistryKey GetConfigurationKey()
-    {
-        using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration");
-        foreach(var configurationKeyName in key.GetSubKeyNames())
-        {
-            var configurationKey = key.OpenSubKey(configurationKeyName);
-            if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0')))
-            {
-                return configurationKey;
-            }
-        }
-        return null;
-    }
-
-    bool MatchConfig(string setId)
-    {
-        var devices = new List<DisplayDevice>();
-
-        var monitors = Monitors.ToList();
-        var idDisplays = setId.Split('+');
-        foreach (var idDisplay in idDisplays)
-        {
-            var idMonitors = idDisplay.Split('*');
-            DisplayDevice display = null;
-            foreach(var idMonitor in idMonitors)
-            {
-                var monitor = monitors.FirstOrDefault(m => m.IdMonitor == idMonitor);
-                if (monitor == null) return false;
-
-                if(display!=null)
-                {
-                    if(!ReferenceEquals(display,monitor.AttachedDisplay)) return false;
-                }
-                else 
-                {
-                    display = monitor.AttachedDisplay; 
-                    if(devices.Contains(display)) return false;
-                    devices.Add(display);
-                }
-                    
-                monitors.Remove(monitor);
-            }
-        }
-        return !monitors.Any();
-    }
-
-
 }

@@ -18,12 +18,12 @@ using static HLab.Sys.Windows.API.WinGdi;
 using static HLab.Sys.Windows.API.WinGdi.DisplayModeFlags;
 using static HLab.Sys.Windows.API.WinReg;
 using static HLab.Sys.Windows.API.WinUser;
+using System.Threading;
 
 namespace HLab.Sys.Windows.Monitors;
 
 public static class MonitorDeviceHelper
 {
-
     public static DisplayMode GetDisplayMode(DevMode dm)
     {
         return new DisplayMode
@@ -513,7 +513,7 @@ public static class MonitorDeviceHelper
 
         //ReleaseDC(0, hdc);
 
-        //ParseWindowsConfig();
+        ParseWindowsConfig(service.Monitors);
 
         UpdateWallpaper(service);
 
@@ -588,7 +588,7 @@ public static class MonitorDeviceHelper
             var monitor = monitors.FirstOrDefault(m => m.MonitorArea == r);
             if (monitor != null)
             {
-                monitor.MonitorNumber = (int)wp.Index + 1;
+                //monitor.MonitorNumber = (int)wp.Index + 1;
                 monitor.WallpaperPath = wp.FilePath;
                 monitors.Remove(monitor);
             }
@@ -666,6 +666,97 @@ public static class MonitorDeviceHelper
                     .Split('#').SkipLast(1));
 
         return (path, id);
+    }
+
+
+    static bool MatchConfig(string setId, IEnumerable<MonitorDevice> monitors)
+    {
+        var remaining = monitors.ToList();
+
+        var ids = setId.Split('^');
+        foreach (var id in ids)
+        {
+            var monitor = monitors.FirstOrDefault(m => m.IdMonitor == id);
+            if (monitor == null) return false;
+
+            remaining.Remove(monitor);
+        }
+        return !remaining.Any();
+    }
+
+    static RegistryKey? GetConnectivityKey(IEnumerable<MonitorDevice> monitors)
+    {
+#pragma warning disable CA1416 // Valider la compatibilité de la plateforme
+        using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Connectivity");
+        if (key == null) return null;
+
+        foreach (var configurationKeyName in key.GetSubKeyNames())
+        {
+            var configurationKey = key.OpenSubKey(configurationKeyName);
+            if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0'), monitors))
+            {
+                return configurationKey;
+            }
+        }
+        return null;
+    }
+
+    static bool ParseSetId(RegistryKey key, string keyName, List<MonitorDevice> remaining, ref int number)
+    {
+        if(remaining.Count == 0) return true; 
+        if(remaining.Count == 1) 
+        {
+            remaining[0].MonitorNumber = number++;
+            return true;
+        }
+
+        var setId = key.GetValue(keyName) as string;
+        if (!string.IsNullOrEmpty(setId))
+        {
+            setId = setId.Trim('\0');
+            //displays are separated by +, clones are separated by *
+            foreach (var displayId in setId.Split('+'))
+            {
+                int count = 0;
+                // all monitors in the same clone group have the same number
+                foreach(var monitorId in displayId.Split('*'))
+                {
+                    var monitor = remaining.FirstOrDefault(m => m.IdMonitor == monitorId);
+                    if (monitor != null)
+                    {
+                        count = 1;
+                        monitor.MonitorNumber = number;
+                        remaining.Remove(monitor);
+                    }
+                }
+                number += count;
+            }
+        }
+        if(remaining.Count == 0) return true; 
+        if(remaining.Count == 1) 
+        {
+            remaining[0].MonitorNumber = number++;
+            return true;
+        }
+
+        return false;
+    }
+
+
+    static bool ParseWindowsConfig(IEnumerable<MonitorDevice> monitors)
+    {
+        var number = 1;
+
+        var remaining = monitors.ToList();
+
+        using var key = GetConnectivityKey(monitors);
+
+        if (ParseSetId(key,"Internal",remaining,ref number)) return true;
+        if (ParseSetId(key,"External",remaining,ref number)) return true;
+        if (ParseSetId(key,"eXtend",remaining,ref number)) return true;
+        if (ParseSetId(key,"Clone",remaining,ref number)) return true;
+        if (ParseSetId(key,"Recent",remaining,ref number)) return true;
+        return false;
     }
 
 }

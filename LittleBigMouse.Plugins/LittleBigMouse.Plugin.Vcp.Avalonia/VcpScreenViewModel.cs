@@ -44,14 +44,14 @@ public class VcpScreenViewModelDesign()
 
 public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 {
-    readonly IMonitorsSet _monitorsService;
+    readonly ISystemMonitorsService _monitorsService;
 
     // TODO : use reactive ui for collections
     public VcpScreenViewModel(
         Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, 
-        IMonitorsSet monitorsService)
+        ISystemMonitorsService monitorsService)
     {
-        _monitorsService = monitorsService;
+        _monitorsService = (monitorsService as SystemMonitorsService).UpdateDevices();
 
         TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circles).Set(Colors.White, Colors.Black));
         TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circle).Set(Color.FromRgb(0xFF, 0x80, 0x00), Colors.Black));

@@ -25,6 +25,7 @@ using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using HLab.Base.Avalonia;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
@@ -36,7 +37,6 @@ using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
 using Live.Avalonia;
-using ScottPlot;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
@@ -45,11 +45,10 @@ public class LiveView(Func<Window, object> windowFactory) : ILiveView
     public object CreateView(Window window) => windowFactory(window);
 }
 
-public class MainService : IMainService
+public class MainService : ReactiveModel, IMainService
 {
-
     readonly IMvvmService _mvvmService;
-    readonly IMonitorsSet _monitorsSet;
+    readonly Func<ISystemMonitorsService> _monitorsSetGetter;
 
     readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
@@ -58,18 +57,24 @@ public class MainService : IMainService
 
     readonly Func<IMainPluginsViewModel> _mainViewModelLocator;
 
-    public IMonitorsLayout MonitorsLayout { get; } = new MonitorsLayout();
+    public IMonitorsLayout MonitorsLayout 
+    { 
+        get => _monitorLayout; 
+        set => SetAndRaise(ref _monitorLayout, value);
+    }
+    private IMonitorsLayout _monitorLayout;
 
-    public MainService(
+    public MainService
+    (
         Func<IMainPluginsViewModel> mainViewModelLocator,
         IMvvmService mvvmService,
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
-        IMonitorsSet monitorsService
-        )
+        Func<ISystemMonitorsService> monitorsGetter
+    )
     {
         _notify = notify;
-        _monitorsSet = monitorsService;
+        _monitorsSetGetter = monitorsGetter;
         _littleBigMouseClientService = littleBigMouseClientService;
 
         _mvvmService = mvvmService;
@@ -77,17 +82,18 @@ public class MainService : IMainService
 
         // Relate service state with notify icon
         _littleBigMouseClientService.DaemonEventReceived += (o,a) => DaemonEventReceived(o,a);
-
     }
 
     public void UpdateLayout()
     {
         // TODO : move to plugin
-        if (_monitorsSet is MonitorsService monitors && MonitorsLayout is MonitorsLayout layout)
+        if (_monitorsSetGetter() is SystemMonitorsService monitors)
         {
             monitors.UpdateDevices();
-            layout.UpdateFrom(monitors);
-        }
+            var old = MonitorsLayout;
+            MonitorsLayout = new MonitorsLayout().UpdateFrom(monitors);
+            old?.Dispose();
+        }    
     }
 
     Window _mainWindow = null!;
@@ -103,7 +109,7 @@ public class MainService : IMainService
         }
 
         var viewModel = _mainViewModelLocator();
-        viewModel.Content = MonitorsLayout;
+        viewModel.MainService = this;
 
         _actions?.Invoke(viewModel);
 
@@ -173,6 +179,7 @@ public class MainService : IMainService
                 break;
             case LittleBigMouseEvent.DesktopChanged:
             case LittleBigMouseEvent.FocusChanged:
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(args.Event), args.Event, null);
         }

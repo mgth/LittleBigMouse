@@ -29,35 +29,36 @@ namespace HLab.Sys.Windows.Monitors;
 [DataContract]
 public class DisplayMode
 {
+    public override string ToString() => $"{Pels.Width}x{Pels.Height}:{DisplayFrequency} - {DisplayOrientation} - {BitsPerPixel}";
     /// <summary>
     /// Display position as of EnumDisplaySettingsEx 
     /// </summary>
-    [DataMember] public Point Position { get; set; }
+    [DataMember] public Point Position { get; init; }
 
     /// <summary>
     /// Display bits per pixel (EnumDisplaySettingsEx)
     /// </summary>
-    [DataMember] public uint BitsPerPixel { get; set; }
+    [DataMember] public uint BitsPerPixel { get; init; }
 
     /// <summary>
     ///  Size in pixels, of the visible device surface (EnumDisplaySettingsEx)
     /// </summary>
-    [DataMember] public Size Pels { get; set; }
+    [DataMember] public Size Pels { get; init; }
 
     /// <summary>
     /// 
     /// </summary>
-    [DataMember] public int DisplayFlags { get; set; }
+    [DataMember] public int DisplayFlags { get; init; }
 
     /// <summary>
     /// Display frequency in Hertz (EnumDisplaySettingsEx)
     /// </summary>
-    [DataMember] public int DisplayFrequency { get; set; }
+    [DataMember] public int DisplayFrequency { get; init; }
 
-    [DataMember] public int DisplayFixedOutput { get; set; }
+    [DataMember] public int DisplayFixedOutput { get; init; }
 
     /// <summary>
     /// Display orientation (EnumDisplaySettingsEx)
     /// </summary>
-    [DataMember] public int DisplayOrientation { get; set; }
+    [DataMember] public int DisplayOrientation { get; init; }
 }

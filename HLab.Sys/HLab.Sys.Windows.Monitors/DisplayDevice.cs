@@ -21,6 +21,8 @@
 	  http://www.mgth.fr
 */
 
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
 using DynamicData;
 
@@ -29,36 +31,50 @@ namespace HLab.Sys.Windows.Monitors;
 [DataContract]
 public class DisplayDevice
 {
-    public DisplayDevice(string deviceName)
+    public override string ToString() => $"{GetType().Name} {DeviceName} {DeviceString}";
+
+    readonly List<DisplayDevice> _children = [];
+
+    internal void AddChild(DisplayDevice device)
     {
-        DeviceName = deviceName;
+        _children.Add(device);
+    }
+
+    public IEnumerable<T> AllChildren<T>() where T : DisplayDevice
+    {
+        foreach (var child in Children)
+        {
+            if(child is T t) yield return t;
+            foreach (var c in child.AllChildren<T>()) yield return c;
+        }
     }
 
     public DisplayDevice Parent { get; set; }
+    public IEnumerable<DisplayDevice> Children  => _children; 
 
     /// <summary>
     /// Device name as returned by EnumDisplayDevices :
     /// "ROOT", "\\\\.\\DISPLAY1", "\\\\.\\DISPLAY1\monitor0" 
     /// </summary>
-    [DataMember] public string DeviceName { get; set; }
+    [DataMember] public string DeviceName { get; init; }
 
     /// <summary>
     /// Device name in human readable format :
     /// "NVIDIA GeForce RTX 3080 Ti"
     /// </summary>
-    [DataMember] public string DeviceString { get; set; }
+    [DataMember] public string DeviceString { get; init; }
 
     /// <summary>
     /// Device id as returned by EnumDisplayDevices :
     /// "PCI\\VEN_10DE&DEV_2206&SUBSYS_3A3C1458&REV_A1"
     /// </summary>
-    [DataMember] public string DeviceId { get; set; }
+    [DataMember] public string DeviceId { get; init; }
 
     /// <summary>
     /// Path to the device registry key :
     /// "\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Video\\{AC0F00F9-3A6E-11ED-84B1-EBFE3BE9690A}\\0000"
     /// </summary>
-    [DataMember] public string DeviceKey { get; set; }
+    [DataMember] public string DeviceKey { get; init; }
 
     [DataMember] public SourceList<DisplayMode> DisplayModes { get; } = new ();
 
@@ -66,10 +82,9 @@ public class DisplayDevice
     /// Device mode as returned by EnumDisplaySettingsEx :
     /// 
     /// </summary>
-    [DataMember] public DisplayMode CurrentMode { get; set; }
+    [DataMember] public DisplayMode CurrentMode { get; init; }
 
-    [DataMember] public DeviceCaps Capabilities { get; set; }
-    [DataMember] public DeviceState State { get; set; }
+    [DataMember] public DeviceCaps Capabilities { get; init; }
+    [DataMember] public DeviceState State { get; init; }
 
-    public override string ToString() => DeviceId;
 }

@@ -70,10 +70,8 @@ public static class MonitorDeviceHelper
         return !EnumDisplaySettingsEx(deviceName, -1, ref devMode, 0) ? null : GetDisplayMode(devMode);
     }
 
-    public static DeviceState BuildDeviceState(WinGdi.DisplayDevice @this)
+    public static DeviceState BuildDeviceState(DisplayDeviceStateFlags state)
     {
-        var state = @this.StateFlags;
-
         return new DeviceState()
         {
             AttachedToDesktop = (state & DisplayDeviceStateFlags.AttachedToDesktop) != 0,
@@ -88,9 +86,9 @@ public static class MonitorDeviceHelper
         };
     }
 
-    public static DeviceCaps BuildDeviceCaps(this WinGdi.DisplayDevice @this)
+    public static DeviceCaps BuildDeviceCaps(string deviceName)
     {
-        var hdc = CreateDC("DISPLAY", @this.DeviceName, null, 0);
+        var hdc = CreateDC("DISPLAY", deviceName, null, 0);
         try
         {
             return new DeviceCaps()
@@ -127,99 +125,16 @@ public static class MonitorDeviceHelper
 
     }
 
-    public static void Init(this DisplayDevice @this
-        , DisplayDevice parent
-        , WinGdi.DisplayDevice dev
-        , IList<DisplayDevice> oldDevices
-        , IList<MonitorDevice> oldMonitors
-        , MonitorsService service)
+    public static void UpdateFromMonitorInfo(this PhysicalAdapter @this, MonitorInfoEx mi)
     {
-        @this.Parent = parent;
-
-        var deviceId = @this.DeviceId = dev.DeviceID;
-        var deviceString = @this.DeviceString = dev.DeviceString;
-
-        var deviceKey = @this.DeviceKey = dev.DeviceKey;
-        var deviceName = @this.DeviceName = dev.DeviceName;
-
-        @this.State = BuildDeviceState(dev);
-
-        @this.Capabilities = dev.BuildDeviceCaps();
-
-        switch (deviceId.Split('\\')[0])
-        {
-            case "ROOT":
-                break;
-
-            case "MONITOR":
-
-                var monitor = service.GetOrAddMonitor(deviceId, (id) =>
-                {
-                    var m = BuildFromId(id);
-                    return m;
-                });
-
-                monitor.DeviceKey = deviceKey;
-                monitor.DeviceString = deviceString;
-
-                if (@this.State.AttachedToDesktop)
-                {
-                    monitor.AttachedDisplay = parent;
-                    monitor.AttachedDevice = @this;
-                }
-                else
-                {
-                    monitor.AttachedDisplay = null;
-                    monitor.AttachedDevice = null;
-                }
-                monitor.AttachedToDesktop = @this.State.AttachedToDesktop;
-
-                var idx = oldMonitors.IndexOf(monitor);
-                if (idx >= 0) oldMonitors.RemoveAt(idx);
-                break;
-
-            case "PCI":
-            case "RdpIdd_IndirectDisplay":
-            case string s when s.StartsWith("VID_DATRONICSOFT_PID_SPACEDESK_VIRTUAL_DISPLAY_"):
-
-                var adapter = service.GetOrAddAdapter(deviceId, (id) => new PhysicalAdapter(id)
-                {
-                    DeviceString = deviceString
-                });
-
-                @this.CurrentMode = GetCurrentMode(@this.DeviceName);
-
-                break;
-            default:
-                break;
-        }
-
-        uint i = 0;
-        var child = new WinGdi.DisplayDevice();
-
-        while (EnumDisplayDevices(deviceName, i++, ref child, 0))
-        {
-            var c = child;
-            var device = service.GetOrAddDevice(c.DeviceName,
-                (id) => new DisplayDevice(id));
-
-            oldDevices.Remove(device);
-            device.Init(@this, c, oldDevices, oldMonitors, service);
-            child = new WinGdi.DisplayDevice();
-        }
-    }
-
-
-    public static void UpdateFromMonitorInfo(this MonitorDevice @this, MonitorInfoEx mi, IEnumerable<MonitorDevice> monitors)
-    {
-        @this.SetPrimary(monitors, mi.Flags == 1);
+        @this.Primary = mi.Flags == 1;
         @this.MonitorArea = mi.Monitor.ToRect();
         @this.WorkArea = mi.WorkArea.ToRect();
     }
 
-    public static void UpdateFromMonitorInfo(this MonitorDevice @this, MonitorInfo mi, IEnumerable<MonitorDevice> monitors)
+    public static void UpdateFromMonitorInfo(this PhysicalAdapter @this, MonitorInfo mi)
     {
-        @this.SetPrimary(monitors, mi.Flags == 1);
+        @this.Primary = mi.Flags == 1;
         @this.MonitorArea = mi.Monitor.ToRect();
         @this.WorkArea = mi.WorkArea.ToRect();
     }
@@ -305,7 +220,7 @@ public static class MonitorDeviceHelper
         return create ? key.CreateSubKey(@"monitors\" + @this.IdMonitor) : key.OpenSubKey(@"monitors\" + @this.IdMonitor);
     }
 
-    public static void UpdateDpi(this MonitorDevice @this, nint hMonitor)
+    public static void UpdateDpi(this PhysicalAdapter @this, nint hMonitor)
     {
         {
             var hResult = ShellScalingApi.GetDpiForMonitor(hMonitor, ShellScalingApi.DpiType.Effective, out var x, out var y);
@@ -347,36 +262,13 @@ public static class MonitorDeviceHelper
     }
 
 
-    public static MonitorDevice BuildFromId(string id)
-    {
-        var edid = GetEdid(id);
-
-        return new MonitorDevice
-        {
-            DeviceId = id,
-            IdPhysicalMonitor = id,
-
-            PnpCode = GetPnpCodeFromId(id),
-            Edid = edid,
-            IdMonitor = GetMicrosoftId(id, edid),
-            //Devices = service
-            //    .Devices
-            //    .Connect()
-            //    .Filter(e => e.DeviceId == id)
-            //    .ObserveOn(RxApp.MainThreadScheduler)
-            //    .AsObservableCache()
-
-        };
-    }
-
-    static string GetPnpCodeFromId(string deviceId)
+    public static string GetPnpCodeFromId(string deviceId)
     {
         var id = deviceId.Split('\\');
         return id.Length > 1 ? id[1] : id[0];
     }
 
-
-    static string GetMicrosoftId(string deviceId, Edid edid)
+    public static string GetMicrosoftId(string deviceId, Edid edid)
     {
         var pnpCode = GetPnpCodeFromId(deviceId);
 
@@ -393,7 +285,7 @@ public static class MonitorDeviceHelper
             : $"{pnpCode}{edid.SerialNumber}_{edid.Week:X2}_{edid.Year:X4}";
     }
 
-    static Edid GetEdid(string deviceId)
+    public static Edid GetEdid(string deviceId)
     {
         var devInfo = SetupDiGetClassDevsEx(
             ref GUID_CLASS_MONITOR, //class GUID
@@ -466,26 +358,15 @@ public static class MonitorDeviceHelper
         return null;
     }
 
-    public static void UpdateDevices(this MonitorsService service)
+    public static SystemMonitorsService UpdateDevices(this SystemMonitorsService service)
     {
-        var oldDevices = service.Devices.ToList();
-        var oldMonitors = service.Monitors.ToList();
-
-        var root = new DisplayDevice("ROOT");
-
-        root.Init(null, new WinGdi.DisplayDevice() { DeviceID = "ROOT", DeviceName = null }, oldDevices, oldMonitors, service);
-
-        foreach (var d in oldDevices)
-        {
-            service.RemoveDevice(d.DeviceId);
-        }
-
-        foreach (var m in oldMonitors)
-        {
-            service.RemoveMonitor(m.DeviceId);
-        }
+        service.Root = DeviceFactory.BuildDisplayDeviceAndChildren(null,new WinGdi.DisplayDevice() 
+        { DeviceID = "ROOT", DeviceName = null });
 
         var hdc = 0;//GetDCEx(0, 0, DeviceContextValues.Window);
+
+        var monitors = service.Root.AllChildren<PhysicalAdapter>().ToList();
+        //var monitors = root.AllChildren<MonitorDevice>().ToList();
 
         // GetMonitorInfo
         EnumDisplayMonitors(hdc, 0,
@@ -500,11 +381,11 @@ public static class MonitorDeviceHelper
                     return true;
                 }
 
-                var monitors = service.Monitors.Where(d => d.AttachedDisplay?.DeviceName == new string(mi.DeviceName)).ToList();
-                foreach (var monitor in monitors)
+                var matches = monitors.Where(d => d.DeviceName == new string(mi.DeviceName)).ToList();
+                foreach (var monitor in matches)
                 {
                     monitor.HMonitor = hMonitor;
-                    monitor.UpdateFromMonitorInfo(mi, monitors);
+                    monitor.UpdateFromMonitorInfo(mi);
                     monitor.UpdateDpi(hMonitor);
                 }
 
@@ -513,9 +394,11 @@ public static class MonitorDeviceHelper
 
         //ReleaseDC(0, hdc);
 
-        ParseWindowsConfig(service.Monitors);
+        var list = service.Root.AllChildren<MonitorDevice>().ToList();
 
-        UpdateWallpaper(service);
+        ParseWindowsConfig(list);
+
+        UpdateWallpaper(service.Root, service);
 
         string FromUShort(IEnumerable<ushort> array)
         {
@@ -575,39 +458,40 @@ public static class MonitorDeviceHelper
 
 
         //DevicesUpdated?.Invoke(this, EventArgs.Empty);
+
+        return service;
     }
 
-    public static void UpdateWallpaper(this MonitorsService service)
+    public static void UpdateWallpaper(this DisplayDevice root, SystemMonitorsService service)
     {
-        var monitors = service.Monitors.ToList();
+        var adapters = root.AllChildren<PhysicalAdapter>().ToList();
 
         var info = WindowsWallpaperHelper.ParseWallpapers(wp =>
         {
             var r = new Rect(wp.Rect.X, wp.Rect.Y, wp.Rect.Width, wp.Rect.Height);
 
-            var monitor = monitors.FirstOrDefault(m => m.MonitorArea == r);
-            if (monitor != null)
+            var adapter = adapters.FirstOrDefault(m => m.MonitorArea == r);
+            if (adapter != null)
             {
-                //monitor.MonitorNumber = (int)wp.Index + 1;
-                monitor.WallpaperPath = wp.FilePath;
-                monitors.Remove(monitor);
+                adapter.WallpaperPath = wp.FilePath;
+                adapters.Remove(adapter);
             }
         });
 
-        foreach (var monitor in monitors)
+        foreach (var adapter in adapters)
         {
-            monitor.WallpaperPath = null;
+            adapter.WallpaperPath = null;
         }
-
+        // TODO
         service.WallpaperPosition = info.Position;
         service.Background = info.Background.ToAvaloniaColor();
     }
 
-    public static void UpdateWallpaper2(this MonitorsService service)
+    public static void UpdateWallpaper2(this DisplayDevice root)
     {
         string path, id;
 
-        var todo = service.Monitors.ToList();
+        var todo = root.AllChildren<PhysicalAdapter>().ToList();
         using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\\Desktop");
 
         // retrieve per monitor wallpaper if it exists
@@ -619,13 +503,13 @@ public static class MonitorDeviceHelper
 
                 (path, id) = GetTranscodedImageCache(imgCacheN);
 
-                var monitors = service.Monitors.Where(m => m.Edid.HKeyName.Contains(id)).ToList();
+                var monitors = root.AllChildren<MonitorDevice>().Where(m => m.Edid.HKeyName.Contains(id)).ToList();
 
                 if (!monitors.Any()) continue;
 
                 foreach (var monitor in monitors)
                 {
-                    var mirrors = service.Monitors.Where(m => m.AttachedDisplay?.DeviceName == monitor.AttachedDisplay?.DeviceName);
+                    var mirrors = root.AllChildren<PhysicalAdapter>().Where(m => m.DeviceName == monitor.Parent.DeviceName);
                     foreach (var mirror in mirrors)
                     {
                         mirror.WallpaperPath = path;
@@ -676,10 +560,14 @@ public static class MonitorDeviceHelper
         var ids = setId.Split('^');
         foreach (var id in ids)
         {
-            var monitor = monitors.FirstOrDefault(m => m.IdMonitor == id);
-            if (monitor == null) return false;
+            var result = monitors.Where(m => m.IdMonitor == id).ToList();
 
-            remaining.Remove(monitor);
+            if(result.Count==0) return false;
+
+            foreach (var monitor in result)
+            {
+                remaining.Remove(monitor);
+            }
         }
         return !remaining.Any();
     }
@@ -721,8 +609,8 @@ public static class MonitorDeviceHelper
                 // all monitors in the same clone group have the same number
                 foreach(var monitorId in displayId.Split('*'))
                 {
-                    var monitor = remaining.FirstOrDefault(m => m.IdMonitor == monitorId);
-                    if (monitor != null)
+                    var monitors = remaining.Where(m => m.IdMonitor == monitorId).ToList();
+                    foreach (var monitor in monitors)
                     {
                         count = 1;
                         monitor.MonitorNumber = number;

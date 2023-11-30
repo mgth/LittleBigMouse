@@ -82,8 +82,8 @@ internal class Program
             c.Export<UserNotificationServiceAvalonia>().As<IUserNotificationService>().Lifestyle.Singleton();
 
             c.Export<MainService>().As<IMainService>().Lifestyle.Singleton();
-            c.Export<MonitorsService>().As<IMonitorsSet>().Lifestyle.Singleton();
 
+            c.Export<SystemMonitorsService>().As<ISystemMonitorsService>();
             c.Export<MainBootloader>().As<IBootloader>();
 
             c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();

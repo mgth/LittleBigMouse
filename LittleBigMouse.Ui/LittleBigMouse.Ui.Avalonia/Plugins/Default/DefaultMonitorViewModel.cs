@@ -70,9 +70,6 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     public bool Attached => _attached.Value;
     readonly ObservableAsPropertyHelper<bool> _attached;
 
-    public bool AttachVisible => _attachVisible.Value;
-    readonly ObservableAsPropertyHelper<bool> _attachVisible;
-
     public bool DetachVisible => _detachVisible.Value;
     readonly ObservableAsPropertyHelper<bool> _detachVisible;
 
@@ -85,15 +82,11 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     public ICommand AttachCommand { get; }
     public ICommand DetachCommand { get; }
 
-    //static string GetDeviceString(string? deviceString)
-    //{
-    //    return deviceString != null ? string.Join(' ', deviceString.Split(' ').Where(l => !Brands.Contains(l.ToLower()))) : "";
-    //}
-
     void DetachFromDesktop()
     {
         MonitorDeviceHelper.DetachFromDesktop(Model.ActiveSource.Source.DisplayName);
     }
+
     void AttachToDesktop()
     {
         MonitorDeviceHelper.AttachToDesktop(

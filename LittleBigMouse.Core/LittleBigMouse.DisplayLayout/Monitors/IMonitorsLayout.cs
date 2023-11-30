@@ -1,11 +1,12 @@
 ﻿using Avalonia;
 using HLab.Sys.Windows.API;
 using LittleBigMouse.Zoning;
+using System;
 using System.Collections.ObjectModel;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
-public interface IMonitorsLayout
+public interface IMonitorsLayout : IDisposable
 {
     bool Saved { get; set; }
 

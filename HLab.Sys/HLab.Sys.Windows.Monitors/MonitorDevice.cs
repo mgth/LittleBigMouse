@@ -9,63 +9,23 @@ using Microsoft.Win32;
 
 namespace HLab.Sys.Windows.Monitors;
 
-public class MonitorDevice {
-    public nint HMonitor { get; set; }
+public class MonitorDevice : DisplayDevice
+{
+    public new PhysicalAdapter Parent
+    {
+        get => base.Parent as PhysicalAdapter;
+        set => base.Parent = value;
+    }
 
-    public string DeviceId { get; set; }
-
-    public string IdPhysicalMonitor { get; set; }
-
-    public string PnpCode { get; set; }
+    public string PnpCode { get; init; }
 
     public string IdMonitor { get; set; }
 
-    public string DeviceKey { get; set; }
-
-    public string DeviceString { get; set; }
+    public IEdid Edid { get; init; }
 
     public IObservableCache<DisplayDevice, string> Devices { get; internal set; }
 
-    public DisplayDevice AttachedDevice { get; set; }
-
-    public DisplayDevice AttachedDisplay { get; set; }
-
-    public Rect MonitorArea { get; set; }// MONITORINFOEX 
-
-    public Rect WorkArea { get; set; }// MONITORINFOEX
-
-    public bool AttachedToDesktop { get; set; }// EnumDisplayDevices
-
-    public bool Primary { get; set; }// MONITORINFOEX
-
-    public void SetPrimary(IEnumerable<MonitorDevice> monitors, bool value) {
-        if (value) {
-            // Must remove old primary screen before setting this one
-            foreach (var monitor in monitors.Where(m => !m.Equals(this))) {
-                monitor.Primary = false;
-            }
-        }
-
-        Primary = value;
-    }
-
-    public IEdid Edid { get; internal set; }
-
-    [DataMember] public Vector EffectiveDpi { get; set; }//GetDpiForMonitor
-
-    [DataMember] public Vector AngularDpi { get; set; }//GetDpiForMonitor
-
-    [DataMember] public Vector RawDpi { get; set; }//GetDpiForMonitor
-
-    //https://msdn.microsoft.com/fr-fr/library/windows/desktop/dn302060.aspx
-    [DataMember] public double ScaleFactor { get; set; }//GetScaleFactorForMonitor
-
-    [DataMember] public string CapabilitiesString { get; set; }//DDCCIGetCapabilitiesString
-
     [DataMember] public int MonitorNumber { get; set; }
-
-    [DataMember] public string WallpaperPath { get; set; }
-
 
 
     class EdidDesign : IEdid
@@ -143,35 +103,35 @@ public class MonitorDevice {
 
         // EnumDisplaySettings
         addValue("", "EnumDisplaySettings", null, true);
-        addValue("DisplayOrientation", AttachedDisplay?.CurrentMode?.DisplayOrientation.ToString(), null, false);
-        addValue("Position", AttachedDisplay?.CurrentMode?.Position.ToString(), null, false);
-        addValue("Pels", AttachedDisplay?.CurrentMode?.Pels.ToString(), null, false);
-        addValue("BitsPerPixel", AttachedDisplay?.CurrentMode?.BitsPerPixel.ToString(), null, false);
-        addValue("DisplayFrequency", AttachedDisplay?.CurrentMode?.DisplayFrequency.ToString(), null, false);
-        addValue("DisplayFlags", AttachedDisplay?.CurrentMode?.DisplayFlags.ToString(), null, false);
-        addValue("DisplayFixedOutput", AttachedDisplay?.CurrentMode?.DisplayFixedOutput.ToString(), null, false);
+        addValue("DisplayOrientation", Parent?.CurrentMode?.DisplayOrientation.ToString(), null, false);
+        addValue("Position", Parent?.CurrentMode?.Position.ToString(), null, false);
+        addValue("Pels", Parent?.CurrentMode?.Pels.ToString(), null, false);
+        addValue("BitsPerPixel", Parent?.CurrentMode?.BitsPerPixel.ToString(), null, false);
+        addValue("DisplayFrequency", Parent?.CurrentMode?.DisplayFrequency.ToString(), null, false);
+        addValue("DisplayFlags", Parent?.CurrentMode?.DisplayFlags.ToString(), null, false);
+        addValue("DisplayFixedOutput", Parent?.CurrentMode?.DisplayFixedOutput.ToString(), null, false);
 
         // GetDeviceCaps
         addValue("", "GetDeviceCaps", null, true);
-        addValue("Size", AttachedDisplay?.Capabilities.Size.ToString(), null, false);
-        addValue("Res", AttachedDisplay?.Capabilities.Resolution.ToString(), null, false);
-        addValue("LogPixels", AttachedDisplay?.Capabilities.LogPixels.ToString(), null, false);
-        addValue("BitsPixel", AttachedDisplay?.Capabilities.BitsPixel.ToString(), null, false);
+        addValue("Size", Parent.Capabilities.Size.ToString(), null, false);
+        addValue("Res", Parent.Capabilities.Resolution.ToString(), null, false);
+        addValue("LogPixels", Parent.Capabilities.LogPixels.ToString(), null, false);
+        addValue("BitsPixel", Parent.Capabilities.BitsPixel.ToString(), null, false);
         //AddValue("Color Planes", Monitor.Adapter.DeviceCaps.Planes.ToString());
-        addValue("Aspect", AttachedDisplay?.Capabilities.Aspect.ToString(), null, false);
+        addValue("Aspect", Parent.Capabilities.Aspect.ToString(), null, false);
         //AddValue("BltAlignment", Monitor.Adapter.DeviceCaps.BltAlignment.ToString());
 
         //GetDpiForMonitor
         addValue("", "GetDpiForMonitor", null, true);
-        addValue("EffectiveDpi", EffectiveDpi.ToString(), null, false);
-        addValue("AngularDpi", AngularDpi.ToString(), null, false);
-        addValue("RawDpi", RawDpi.ToString(), null, false);
+        addValue("EffectiveDpi", Parent.EffectiveDpi.ToString(), null, false);
+        addValue("AngularDpi", Parent.AngularDpi.ToString(), null, false);
+        addValue("RawDpi", Parent.RawDpi.ToString(), null, false);
 
         // GetMonitorInfo
         addValue("", "GetMonitorInfo", null, true);
-        addValue("Primary", Primary.ToString(), null, false);
-        addValue("MonitorArea", MonitorArea.ToString(), null, false);
-        addValue("WorkArea", WorkArea.ToString(), null, false);
+        addValue("Primary", Parent.Primary.ToString(), null, false);
+        addValue("MonitorArea", Parent.MonitorArea.ToString(), null, false);
+        addValue("WorkArea", Parent.WorkArea.ToString(), null, false);
 
 
         // EDID
@@ -185,22 +145,22 @@ public class MonitorDevice {
 
         // GetScaleFactorForMonitor
         addValue("", "GetScaleFactorForMonitor", null, true);
-        addValue("ScaleFactor", ScaleFactor.ToString(), null, false);
+        addValue("ScaleFactor", Parent.ScaleFactor.ToString(), null, false);
 
         // EnumDisplayDevices
         addValue("", "EnumDisplayDevices", null, true);
-        addValue("DeviceId", AttachedDisplay?.DeviceId, null, false);
-        addValue("DeviceKey", AttachedDisplay?.DeviceKey, null, false);
-        addValue("DeviceString", AttachedDisplay?.DeviceString, null, false);
-        addValue("DeviceName", AttachedDisplay?.DeviceName, null, false);
-        // TODO : addValue("StateFlags", AttachedDisplay?.State.ToString(), null, false);
+        addValue("DeviceId", Parent?.DeviceId, null, false);
+        addValue("DeviceKey", Parent?.DeviceKey, null, false);
+        addValue("DeviceString", Parent?.DeviceString, null, false);
+        addValue("DeviceName", Parent?.DeviceName, null, false);
+        addValue("StateFlags", Parent?.State.ToString(), null, false);
 
         addValue("", "EnumDisplayDevices", null, true);
         addValue("DeviceId", DeviceId, null, false);
         addValue("DeviceKey", DeviceKey, null, false);
         addValue("DeviceString", DeviceString, null, false);
-        addValue("DeviceName", AttachedDevice?.DeviceName, null, false);
-        // TODO : addValue("StateFlags", AttachedDevice?.State.ToString(), null, false);
+        addValue("DeviceName", DeviceName, null, false);
+        addValue("StateFlags", State.ToString(), null, false);
 
     }
     public override string ToString() => DeviceString;

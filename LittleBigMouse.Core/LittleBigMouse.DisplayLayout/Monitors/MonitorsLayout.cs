@@ -29,7 +29,7 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 /// 
 /// </summary>
 [DataContract]
-public class MonitorsLayout : ReactiveModel, IMonitorsLayout
+public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 {
     public MonitorsLayout()
     {

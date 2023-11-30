@@ -98,6 +98,7 @@
 
 
 <ItemGroup>
+  <ProjectReference Include="..\..\HLab\HLab.Base.Avalonia\HLab.Base.Avalonia.csproj" />
   <ProjectReference Include="..\..\HLab\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
   <ProjectReference Include="..\..\HLab\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
   <ProjectReference Include="..\..\HLab\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />

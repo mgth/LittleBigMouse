@@ -61,7 +61,7 @@ public class ListItem
 
 public class LocationControlViewModel : ViewModel<MonitorsLayout>
 {
-    readonly IMonitorsSet _monitorsService;
+    readonly ISystemMonitorsService _monitorsService;
     readonly IMainService _mainService;
 
     readonly ILittleBigMouseClientService _service;
@@ -69,7 +69,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     //public DisplayLayout.MonitorsLayout Layout => _layout.Get();
     //private readonly IProperty<DisplayLayout.MonitorsLayout> _layout = H.BindProperty(e => e.Model);
 
-    public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, IMonitorsSet monitorsService)
+    public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService)
     {
         _service = service;
         _mainService = main;
@@ -178,7 +178,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         [DataMember]
         public MonitorsLayout? Layout { get; init; }
         [DataMember]
-        public List<MonitorDevice>? Monitors { get; init; }
+        public DisplayDevice Devices { get; init; }
         [DataMember]
         public ZonesLayout? Zones { get; init; }
     }
@@ -190,7 +190,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         var export = new JsonExport
         {
             Layout = Model,
-            Monitors = _monitorsService.Monitors.ToList(),
+            Devices = _monitorsService.Root,
             Zones = Model?.ComputeZones()
         };
         var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings

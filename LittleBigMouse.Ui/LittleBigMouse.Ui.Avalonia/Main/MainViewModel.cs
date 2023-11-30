@@ -38,15 +38,15 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
             WindowState = WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal);
     }
 
+    public IMainService MainService 
+    { 
+        get => _mainService; 
+        set => SetAndRaise(ref _mainService, value);
+    }
+    IMainService _mainService;
+
     public IIconService IconService { get; }
     public ILocalizationService LocalizationService { get; }
-
-    public object? Content
-    {
-        get => _content;
-        set => this.RaiseAndSetIfChanged(ref _content, value);
-    }
-    object? _content = null;
 
     public Type ContentViewMode
     {

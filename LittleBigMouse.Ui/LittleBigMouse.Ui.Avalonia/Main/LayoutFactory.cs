@@ -9,6 +9,7 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Persistency;
+using System.Reflection.Metadata;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
@@ -20,8 +21,9 @@ public static class LayoutFactory
     /// </summary>
     /// <param name="layout"></param>
     /// <param name="service"></param>
-    public static void UpdateFrom(this MonitorsLayout layout, IMonitorsSet service)
+    public static MonitorsLayout UpdateFrom(this MonitorsLayout layout, ISystemMonitorsService service)
     {
+
         /// <summary>
         ///    0 => Stretch.None,
         ///    2 => Stretch.Fill,
@@ -41,11 +43,11 @@ public static class LayoutFactory
         };
 
 
-        foreach (var device in service.Monitors)
+        foreach (var device in service.Root.AllChildren<MonitorDevice>())
         {
             //if(!layout.ShowUnattachedMonitors && !device.AttachedToDesktop) continue;
 
-            if (!device.AttachedToDesktop) { }
+            if (!device.State.AttachedToDesktop) { }
 
             var source = layout.PhysicalSources.FirstOrDefault(s => s.DeviceId == device.DeviceId);
 
@@ -57,7 +59,7 @@ public static class LayoutFactory
 
             var monitor = layout.PhysicalMonitors.FirstOrDefault(m =>
                 m.Model.PnpCode == device.PnpCode
-                && m.IdPhysicalMonitor == device.IdPhysicalMonitor
+                && m.IdPhysicalMonitor == device.DeviceId
             );
 
             if (monitor == null)
@@ -90,6 +92,8 @@ public static class LayoutFactory
 
         //retrieve saved layout
         layout.Load();
+
+        return layout;
     }
 
     /// <summary>
@@ -134,17 +138,17 @@ public static class LayoutFactory
 
     public static DisplaySource UpdateFrom(this DisplaySource source, MonitorDevice device)
     {
-        source.DisplayName = device.AttachedDisplay?.DeviceName;
-        source.DeviceName = device.AttachedDevice?.DeviceName;
+        source.DisplayName = device.Parent?.DeviceName;
+        source.DeviceName = device?.DeviceName;
 
-        source.Primary = device.Primary;
-        source.AttachedToDesktop = device.AttachedToDesktop;
+        source.Primary = device.Parent.Primary;
+        source.AttachedToDesktop = device.State.AttachedToDesktop;
 
-        source.EffectiveDpi.Set(device.EffectiveDpi);
-        source.DpiAwareAngularDpi.Set(device.AngularDpi);
-        source.RawDpi.Set(device.RawDpi);
+        source.EffectiveDpi.Set(device.Parent.EffectiveDpi);
+        source.DpiAwareAngularDpi.Set(device.Parent.AngularDpi);
+        source.RawDpi.Set(device.Parent.RawDpi);
 
-        if (device.AttachedDisplay?.CurrentMode is { } mode)
+        if (device.Parent?.CurrentMode is { } mode)
         {
             source.DisplayFrequency = mode.DisplayFrequency;
 
@@ -158,12 +162,11 @@ public static class LayoutFactory
             source.InPixel.Set(new Rect(new Point(0, 0),new Size(0, 0)));
         }
 
-        (source.InterfaceName, source.InterfaceLogo) = device.InterfaceBrandNameAndLogo();
+        (source.InterfaceName, source.InterfaceLogo) = device.Parent.InterfaceBrandNameAndLogo();
+        source.WallpaperPath = device.Parent.WallpaperPath;
 
-        source.WallpaperPath = device.WallpaperPath;
 
         source.SourceNumber = device.MonitorNumber.ToString();
-
 
         return source;
     }
@@ -193,7 +196,7 @@ public static class LayoutFactory
             var old = @this.PhysicalSize.FixedAspectRatio;
             @this.PhysicalSize.FixedAspectRatio = false;
 
-            var display = monitor.AttachedDisplay;
+            var display = monitor.Parent;
 
             if (display?.CurrentMode != null)
             {
@@ -227,18 +230,18 @@ public static class LayoutFactory
     }
 
     public static PhysicalMonitor CreatePhysicalMonitor(this MonitorDevice device, IMonitorsLayout layout, PhysicalMonitorModel model)
-        => new PhysicalMonitor(device.IdPhysicalMonitor, layout, model).UpdateFrom(device);
+        => new PhysicalMonitor(device.DeviceId, layout, model).UpdateFrom(device);
 
     public static PhysicalMonitor UpdateFrom(this PhysicalMonitor monitor, MonitorDevice device)
     {
-        if (device.IdPhysicalMonitor != monitor.IdPhysicalMonitor)
+        if (device.DeviceId != monitor.IdPhysicalMonitor)
             throw new Exception("Cannot update monitor from different device");
 
         // Serial Number
         monitor.SerialNumber = device.Edid?.SerialNumber ?? "N/A";
 
         // Orientation
-        var display = device.AttachedDisplay;
+        var display = device.Parent;
         if (display?.CurrentMode is { } mode)
         {
             monitor.Orientation = mode.DisplayOrientation;
@@ -252,7 +255,7 @@ public static class LayoutFactory
 
     static string BrandLogo(this MonitorDevice device)
     {
-        var dev = device.AttachedDevice?.Parent.DeviceString;
+        var dev = device.Parent?.Parent.DeviceString;
         if (dev != null)
         {
             // special case for Spacedesk support
@@ -264,11 +267,11 @@ public static class LayoutFactory
     }
 
     static readonly string[] Brands = { "intel", "amd", "nvidia", "microsoft" };
-    public static (string, string) InterfaceBrandNameAndLogo(this MonitorDevice device)
+    public static (string, string) InterfaceBrandNameAndLogo(this PhysicalAdapter adapter)
     {
-        if(device.AttachedDevice == null) return ("detached", "icon/parts/detached");
+        if(adapter.Parent == null) return ("detached", "icon/parts/detached");
 
-        var dev = device.AttachedDevice?.Parent?.DeviceString?.ToLower() ?? "";
+        var dev = adapter.DeviceString?.ToLower() ?? "";
 
         foreach (var brand in Brands)
         {

@@ -50,11 +50,11 @@ public partial class Luminance : UserControl
 
     LuminanceViewModel ViewModel => DataContext as LuminanceViewModel;
 
-    public static readonly StyledProperty<IMonitorsSet> MonitorsProperty = H.Property<IMonitorsSet>().Register();
+    public static readonly StyledProperty<ISystemMonitorsService> MonitorsProperty = H.Property<ISystemMonitorsService>().Register();
 
-    public IMonitorsSet Monitors
+    public ISystemMonitorsService Monitors
     {
-        get => (IMonitorsSet)GetValue(MonitorsProperty); set
+        get => (ISystemMonitorsService)GetValue(MonitorsProperty); set
         {
             ViewModel.Monitors = value;
             SetValue(MonitorsProperty, value);

@@ -3,13 +3,9 @@ using HLab.Sys.Windows.API;
 
 namespace HLab.Sys.Windows.Monitors;
 
-public interface IMonitorsSet
+public interface ISystemMonitorsService
 {
-    public IEnumerable<PhysicalAdapter> Adapters { get; }
-
-    public IEnumerable<DisplayDevice> Devices { get; }
-
-    public IEnumerable<MonitorDevice> Monitors { get; }
+    public DisplayDevice Root {get; set; }
 
     DesktopWallpaperPosition WallpaperPosition { get; }
 }

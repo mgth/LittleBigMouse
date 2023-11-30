@@ -7,8 +7,7 @@ public interface IMainPluginsViewModel
     void AddButton(IUiCommand cmd);
 
     Type ContentViewMode { get; set; }
-
-    object? Content { get; set; }
+    IMainService MainService { get; set; }
 
     void SetMonitorFrameViewMode<T>() where T : ViewMode
     {

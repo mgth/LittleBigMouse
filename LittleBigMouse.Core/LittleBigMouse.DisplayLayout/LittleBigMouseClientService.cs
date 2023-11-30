@@ -65,7 +65,7 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
     Process? _daemonProcess;
 
-    void LaunchDaemon()
+    public void LaunchDaemon()
     {
         var processes = Process.GetProcessesByName("LittleBigMouse.Daemon");
         foreach (var process in processes)
@@ -113,7 +113,7 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
             process.Start();
 
-            _daemonProcess = process;//Process.Start(path);
+            _daemonProcess = process;
 
             process.WaitForInputIdle();
         }
@@ -140,7 +140,7 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
             //_client = new NamedPipeClientStream(".", "lbm-daemon", PipeDirection.Out);
             _client = new RemoteClientSocket("localhost",25196);
 
-            //_client.ConnectionFailed += (sender, args) => LaunchDaemon();
+            _client.ConnectionFailed += (sender, args) => LaunchDaemon();
 
             _client.MessageReceived += (sender, args) =>
             {

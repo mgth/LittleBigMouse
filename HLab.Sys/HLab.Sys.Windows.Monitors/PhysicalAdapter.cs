@@ -1,33 +1,36 @@
 ﻿using DynamicData;
 using ReactiveUI;
+using Avalonia;
+using System.Runtime.Serialization;
 
 namespace HLab.Sys.Windows.Monitors;
 
-public class PhysicalAdapter : ReactiveObject
+public class PhysicalAdapter : DisplayDevice
 {
-    public PhysicalAdapter(string deviceId)
-    {
-        DeviceId = deviceId;
-        //MonitorsService = service;
+    public nint HMonitor { get; set; }
 
-        // TODO 
-        //Displays = service
-        //    .Devices
-        //    .Connect()
-        //    .Filter(e => e.DeviceId == deviceId)
-        //    .ObserveOn(RxApp.MainThreadScheduler)
-        //    .AsObservableCache();
-    }
+// MONITORINFOEX 
+    public Rect MonitorArea { get; set; }
 
-    public string DeviceId { get; }
+    public Rect WorkArea { get; set; }
 
-    public string DeviceString
-    {
-        get => _deviceString;
-        internal set => this.RaiseAndSetIfChanged(ref _deviceString, value??"");
-    }
-    string _deviceString;
+    public bool Primary { get; set; }
+
+    [DataMember] public string CapabilitiesString { get; set; }//DDCCIGetCapabilitiesString
+
+    [DataMember] public Vector EffectiveDpi { get; set; } //GetDpiForMonitor
+
+    [DataMember] public Vector AngularDpi { get; set; } //GetDpiForMonitor
+
+    [DataMember] public Vector RawDpi { get; set; } //GetDpiForMonitor
+
+    //https://msdn.microsoft.com/fr-fr/library/windows/desktop/dn302060.aspx
+    [DataMember] public double ScaleFactor { get; set; }//GetScaleFactorForMonitor
+
+    [DataMember] public string WallpaperPath { get; set; }
 
 
     public IObservableCache<DisplayDevice,string> Displays { get; }
+
+
 }

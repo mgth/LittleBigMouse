@@ -25,37 +25,17 @@
 #pragma warning disable CA1416 // Valider la compatibilité de la plateforme
 
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using Avalonia.Media;
-using DynamicData;
 using HLab.Sys.Windows.API;
-using Microsoft.Win32;
-using OneOf;
-using OneOf.Types;
 
 namespace HLab.Sys.Windows.Monitors;
 
 [DataContract]
-public class MonitorsService : IMonitorsSet
+public class SystemMonitorsService : ISystemMonitorsService
 {
-    public MonitorsService()
-    {
-    }
-
-    public IEnumerable<PhysicalAdapter> Adapters => _adapters.Values;
-    readonly ConcurrentDictionary<string,PhysicalAdapter> _adapters = new();
-
-
-    public IEnumerable<DisplayDevice> Devices => _devices.Values;
-    readonly ConcurrentDictionary<string,DisplayDevice> _devices = new();
-
-    public IEnumerable<MonitorDevice> Monitors => _monitors.Values;
-    readonly ConcurrentDictionary<string,MonitorDevice> _monitors = new();
+    public DisplayDevice? Root {get; set; }
 
     [DataMember] public Color Background { get; set; }
 
@@ -63,31 +43,7 @@ public class MonitorsService : IMonitorsSet
 
     //IObservableCache<MonitorDevice, string> _attachedMonitors;
     //public IObservableCache<MonitorDevice,string> AttachedMonitors => _attachedMonitors;    
-    public static IMonitorsSet MonitorsSetDesign => new MonitorsService();
-
-    public DisplayDevice GetOrAddDevice(string deviceId, Func<string,DisplayDevice> get) 
-        => _devices.GetOrAdd(deviceId, get);
-
-    public DisplayDevice? RemoveDevice(string deviceId)
-    {
-        return _devices.TryRemove(deviceId, out var device) ? device : null;
-    }
-
-    public MonitorDevice GetOrAddMonitor(string deviceId, Func<string, MonitorDevice> get)
-        => _monitors.GetOrAdd(deviceId, get);
-
-    public MonitorDevice? RemoveMonitor(string deviceId)
-    {
-        return _monitors.TryRemove(deviceId, out var monitor) ? monitor : null;
-    }
-
-    public PhysicalAdapter GetOrAddAdapter(string deviceId, Func<string, PhysicalAdapter> get)
-        => _adapters.GetOrAdd(deviceId, get);
-
-    public PhysicalAdapter? RemoveAdapter(string deviceId)
-    {
-        return _adapters.TryRemove(deviceId, out var adapter) ? adapter : null;
-    }
+    public static ISystemMonitorsService MonitorsSetDesign => new SystemMonitorsService();
 
     public string AppDataPath(bool create)
     {

@@ -358,14 +358,14 @@ public static class MonitorDeviceHelper
         return null;
     }
 
-    public static SystemMonitorsService UpdateDevices(this SystemMonitorsService service)
+    public static DisplayDevice GetDisplayDevices()
     {
-        service.Root = DeviceFactory.BuildDisplayDeviceAndChildren(null,new WinGdi.DisplayDevice() 
+        var root = DeviceFactory.BuildDisplayDeviceAndChildren(null,new WinGdi.DisplayDevice() 
         { DeviceID = "ROOT", DeviceName = null });
 
         var hdc = 0;//GetDCEx(0, 0, DeviceContextValues.Window);
 
-        var monitors = service.Root.AllChildren<PhysicalAdapter>().ToList();
+        var monitors = root.AllChildren<PhysicalAdapter>().ToList();
         //var monitors = root.AllChildren<MonitorDevice>().ToList();
 
         // GetMonitorInfo
@@ -394,11 +394,10 @@ public static class MonitorDeviceHelper
 
         //ReleaseDC(0, hdc);
 
-        var list = service.Root.AllChildren<MonitorDevice>().ToList();
+        var list = root.AllChildren<MonitorDevice>().ToList();
 
         ParseWindowsConfig(list);
 
-        UpdateWallpaper(service.Root, service);
 
         string FromUShort(IEnumerable<ushort> array)
         {
@@ -459,7 +458,7 @@ public static class MonitorDeviceHelper
 
         //DevicesUpdated?.Invoke(this, EventArgs.Empty);
 
-        return service;
+        return root;
     }
 
     public static void UpdateWallpaper(this DisplayDevice root, SystemMonitorsService service)

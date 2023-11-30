@@ -5,7 +5,7 @@ namespace HLab.Sys.Windows.Monitors;
 
 public interface ISystemMonitorsService
 {
-    public DisplayDevice Root {get; set; }
+    public DisplayDevice Root {get; }
 
     DesktopWallpaperPosition WallpaperPosition { get; }
 }

@@ -7,8 +7,6 @@ public interface IMainService
 {
     void UpdateLayout();
 
-    ISystemMonitorsService MonitorsSet {get;}
-
     IMonitorsLayout MonitorsLayout {get;}
 
     Task StartNotifierAsync();

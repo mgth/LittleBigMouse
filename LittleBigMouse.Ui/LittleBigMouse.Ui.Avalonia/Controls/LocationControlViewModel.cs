@@ -128,7 +128,9 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
     void StateChanged(object? sender, LittleBigMouseServiceEventArgs e)
     {
-        Dispatcher.UIThread.Invoke(new Action(() => 
+        try
+        {
+            Dispatcher.UIThread.Invoke(new Action(() =>
                 Running = e.Event switch
                 {
                     LittleBigMouseEvent.Running => true,
@@ -137,6 +139,11 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
                     _ => Running
                 }
             ));
+        }
+        catch(TaskCanceledException)
+        {
+             
+        }
     }
 
     protected override MonitorsLayout? OnModelChanging(MonitorsLayout? oldModel, MonitorsLayout? newModel)

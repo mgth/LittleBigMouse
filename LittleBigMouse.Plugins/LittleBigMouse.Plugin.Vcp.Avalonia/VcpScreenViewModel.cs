@@ -51,7 +51,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
         Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, 
         ISystemMonitorsService monitorsService)
     {
-        _monitorsService = (monitorsService as SystemMonitorsService).UpdateDevices();
+        _monitorsService = monitorsService;
 
         TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circles).Set(Colors.White, Colors.Black));
         TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circle).Set(Color.FromRgb(0xFF, 0x80, 0x00), Colors.Black));

@@ -35,7 +35,26 @@ namespace HLab.Sys.Windows.Monitors;
 [DataContract]
 public class SystemMonitorsService : ISystemMonitorsService
 {
-    public DisplayDevice? Root {get; set; }
+    WeakReference<DisplayDevice>? _root; 
+    public DisplayDevice? Root
+    {
+        get
+        {
+            if (_root == null || !_root.TryGetTarget(out var root))
+            {
+                root = MonitorDeviceHelper.GetDisplayDevices();
+                _root = new WeakReference<DisplayDevice>(root);
+
+                root.UpdateWallpaper(this);
+            }
+            return root;
+        }
+    }
+
+    public void UpdateDevices()
+    {
+        _root = null;
+    }
 
     [DataMember] public Color Background { get; set; }
 

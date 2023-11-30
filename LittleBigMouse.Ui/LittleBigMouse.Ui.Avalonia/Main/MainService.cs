@@ -48,7 +48,7 @@ public class LiveView(Func<Window, object> windowFactory) : ILiveView
 public class MainService : ReactiveModel, IMainService
 {
     readonly IMvvmService _mvvmService;
-    readonly Func<ISystemMonitorsService> _monitorsSetGetter;
+    readonly ISystemMonitorsService _monitors;
 
     readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
@@ -70,11 +70,11 @@ public class MainService : ReactiveModel, IMainService
         IMvvmService mvvmService,
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
-        Func<ISystemMonitorsService> monitorsGetter
+        ISystemMonitorsService monitors
     )
     {
         _notify = notify;
-        _monitorsSetGetter = monitorsGetter;
+        _monitors = monitors;
         _littleBigMouseClientService = littleBigMouseClientService;
 
         _mvvmService = mvvmService;
@@ -87,7 +87,7 @@ public class MainService : ReactiveModel, IMainService
     public void UpdateLayout()
     {
         // TODO : move to plugin
-        if (_monitorsSetGetter() is SystemMonitorsService monitors)
+        if (_monitors is SystemMonitorsService monitors)
         {
             monitors.UpdateDevices();
             var old = MonitorsLayout;

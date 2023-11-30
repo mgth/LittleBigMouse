@@ -53,11 +53,11 @@ public struct MonitorDebugListValue
 public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
 {
     int _row = 0;
-//    Func<IMonitorsSet> _monitorsSetGetter;
+    readonly ISystemMonitorsService _monitors;
 
-    public MonitorDebugViewModel(/*Func<IMonitorsSet> monitorsSetGetter*/)
+    public MonitorDebugViewModel(ISystemMonitorsService monitors)
     {
-        //_monitorsSetGetter = monitorsSetGetter;
+        _monitors = monitors;
 
         Grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
         Grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -66,9 +66,7 @@ public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
 
     protected override PhysicalMonitor? OnModelChanging(PhysicalMonitor? oldModel, PhysicalMonitor? newModel)
     {
-        var monitors = new SystemMonitorsService().UpdateDevices();
-
-        var device = monitors.Root.AllChildren<MonitorDevice>()
+        var device = _monitors.Root.AllChildren<MonitorDevice>()
         .FirstOrDefault(d => d.DeviceId == newModel?.IdPhysicalMonitor);
 
         device?.DisplayValues(AddValue);

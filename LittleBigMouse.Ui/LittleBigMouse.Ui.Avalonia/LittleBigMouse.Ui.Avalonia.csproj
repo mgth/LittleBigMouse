@@ -12,8 +12,7 @@
 		<PackageIcon>lbm.png</PackageIcon>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/mgth/LittleBigMouse</RepositoryUrl>
-		<AssemblyVersion>5.0.1</AssemblyVersion>
-		<FileVersion>5.0.1</FileVersion>
+		<Version>5.0.2.0</Version>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<StartupObject>LittleBigMouse.Ui.Avalonia.Program</StartupObject>
 		<Title>Little Big Mouse</Title>

@@ -107,6 +107,12 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Daemon", "Daemon", "{C4896D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Core", "Core", "{22877609-6A62-492C-9E8B-481A2047FFF9}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Setup", "Setup", "{B71ECB15-F39E-4329-BEE3-73BBADF12BC7}"
+	ProjectSection(SolutionItems) = preProject
+		LittleBigMouse.Setup\LittleBigMouse.iss = LittleBigMouse.Setup\LittleBigMouse.iss
+		LittleBigMouse.Setup\LittleBigMouse.nsi = LittleBigMouse.Setup\LittleBigMouse.nsi
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -598,6 +604,7 @@ Global
 		{109D43C0-AF82-4A09-B149-55612D7D7142} = {C4896D26-022A-4707-A990-793BB21FE69E}
 		{C4896D26-022A-4707-A990-793BB21FE69E} = {35F8E798-DD0B-4382-AE4E-860720712F58}
 		{22877609-6A62-492C-9E8B-481A2047FFF9} = {35F8E798-DD0B-4382-AE4E-860720712F58}
+		{B71ECB15-F39E-4329-BEE3-73BBADF12BC7} = {35F8E798-DD0B-4382-AE4E-860720712F58}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2294431E-9ED9-4BB8-AEDA-305882A2919F}

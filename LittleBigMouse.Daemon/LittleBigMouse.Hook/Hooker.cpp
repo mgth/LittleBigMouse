@@ -72,7 +72,7 @@ void Hooker::Loop()
 	while (ret > 0 && msg.message != WM_QUIT)
 	{
 		#if defined(_DEBUG)
-		std::cout << msg.message;
+		std::cout << "msg" << msg.message << "\n";
 		#endif
 
 

@@ -169,6 +169,7 @@
     <ClCompile Include="RemoteServerPipe.cpp" />
     <ClCompile Include="RemoteServerSocket.cpp" />
     <ClCompile Include="RemoteClient.cpp" />
+    <ClCompile Include="strc.cpp" />
     <ClCompile Include="ThreadHost.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -179,6 +180,7 @@
     <ClInclude Include="RemoteServerPipe.h" />
     <ClInclude Include="RemoteServerSocket.h" />
     <ClInclude Include="RemoteClient.h" />
+    <ClInclude Include="str.h" />
     <ClInclude Include="ThreadHost.h" />
   </ItemGroup>
   <ItemGroup>

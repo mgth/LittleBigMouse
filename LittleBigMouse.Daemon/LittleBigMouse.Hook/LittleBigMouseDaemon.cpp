@@ -13,6 +13,7 @@
 #include "Hooker.h"
 #include "RemoteClient.h"
 #include "XmlHelper.h"
+#include "str.h"
 
 void LittleBigMouseDaemon::Send(const std::string& string) const
 {
@@ -41,8 +42,11 @@ LittleBigMouseDaemon::LittleBigMouseDaemon(RemoteServer* server, MouseEngine* en
 	}
 }
 
-void LittleBigMouseDaemon::Run(const std::string& path) const
+void LittleBigMouseDaemon::Run(const std::string& path) 
 {
+// load excluded list
+	LoadExcluded("\\Mgth\\LittleBigMouse\\Excluded.txt");
+
 // load layout from file
 	if(!path.empty())
 		LoadFromFile(path);
@@ -92,7 +96,7 @@ void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
 	}
 }
 
-void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, RemoteClient* client) const
+void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, RemoteClient* client) 
 {
 	if(!root) return;
 
@@ -115,7 +119,8 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 			if(_hook && !_hook->Hooked())
 			{
 				_hook->SetPriority(_engine->Layout.Priority);
-				_hook->Hook();
+				if(!_paused)
+					_hook->Hook();
 			}
 		}
 
@@ -126,6 +131,7 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 				_hook->SetPriority(Normal);
 				_hook->Unhook();
 			}
+			_paused = false;
 		}
 
 		else if(strcmp(command, "State")==0)
@@ -139,7 +145,7 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 	}
 }
 
-void LittleBigMouseDaemon::ReceiveMessage(tinyxml2::XMLElement* root, RemoteClient* client) const
+void LittleBigMouseDaemon::ReceiveMessage(tinyxml2::XMLElement* root, RemoteClient* client) 
 {
 	if(!root) return;
 
@@ -184,16 +190,62 @@ void LittleBigMouseDaemon::DesktopChanged() const
 	_remoteServer->Send("<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n",nullptr);
 }
 
-// Window focus has changed
-void LittleBigMouseDaemon::FocusChanged(const std::wstring& wpath) const
+bool LittleBigMouseDaemon::Excluded(const std::string& path) const
 {
-	std::string path( wpath.begin(), wpath.end() );
+
+	for (auto &line : _excluded) 
+	{  
+		if (line.length() > 1 && path.find(line) < path.length())
+	    {
+			#if defined(_DEBUG)
+			std::cout << "<daemon:excluded found> : " << line << "\n";
+			#endif
+			return true;
+		}
+	}
+	return false;
+}
+
+// Window focus has changed
+void LittleBigMouseDaemon::FocusChanged(const std::string& path) 
+{
+	if(Excluded(path))
+	{
+		#if defined(_DEBUG)
+		std::cout << "<daemon:excluded>" << "\n";
+		#endif
+		if(_paused) return;
+
+		if(_hook && _hook->Hooked())
+		{
+			_hook->Unhook();
+			_paused = true;
+			#if defined(_DEBUG)
+			std::cout << "<daemon:paused>" << "\n";
+			#endif
+		}
+	}
+    else
+    {
+		std::cout << "<daemon:included>" << "\n";
+		if(!_paused) return;
+
+		if(_hook && !_hook->Hooked())
+		{
+			_hook->Hook();
+		}
+		_paused = false;
+		#if defined(_DEBUG)
+		std::cout << "<daemon:wakeup>" << "\n";
+		#endif
+	}
+
 	//if(_hook && _hook->Hooked())
 	//	_hook->Stop();
 	_remoteServer->Send("<DaemonMessage><Event>FocusChanged</Event><Payload>"+path+"</Payload></DaemonMessage>\n",nullptr);
 }
 
-void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, RemoteClient* client) const
+void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, RemoteClient* client)
 {
 	if (message.empty())
 	{
@@ -207,22 +259,34 @@ void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, Remo
 	ReceiveMessage(doc.RootElement(), client);
 }
 
-void LittleBigMouseDaemon::LoadFromFile(const std::string& path) const
+void LittleBigMouseDaemon::LoadExcluded(const std::string& path) 
 {
-	int convertResult = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), path.length(), nullptr, 0); 
-	if(convertResult>=0)
-	{
-		std::wstring wide;
-		std::string s = path;
-		s.resize(convertResult + 10);
-		convertResult = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), s.length(), &wide[0], wide.size());
-		if(convertResult>=0)
-			LoadFromFile(wide);
-	}
+	auto wPath = to_wstring(path);
 
+    PWSTR szPath;
+
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
+    {
+	    std::ifstream file;
+
+        PathAppend(szPath, wPath.c_str());
+	    file.open(szPath, std::ios::in);
+
+	    std::string buffer;
+		std::string line;
+		while(file){
+			std::getline(file, line);
+		    _excluded.push_back(line);
+		#if defined(_DEBUG)
+		std::cout << "Excluded : " << line << "\n";
+		#endif
+		}
+
+	    file.close();
+    }
 }
 
-void LittleBigMouseDaemon::LoadFromFile(const std::wstring& path) const
+void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
 {
     PWSTR szPath;
 
@@ -230,7 +294,7 @@ void LittleBigMouseDaemon::LoadFromFile(const std::wstring& path) const
     {
 	    std::ifstream file;
 
-        PathAppend(szPath, path.c_str());
+        PathAppend(szPath, to_wstring(path).c_str());
 	    file.open(szPath, std::ios::in);
 
 	    std::string buffer;

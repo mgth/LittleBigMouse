@@ -2,6 +2,7 @@
 #include <ostream>
 
 #include "Hooker.h"
+#include "str.h"
 
 DWORD GetProcessIdFromWindow(HWND hWnd) {
     DWORD processId;
@@ -79,7 +80,7 @@ void CALLBACK Hooker::WindowChangeHook(
                 // Use the executable path as needed
                 wprintf(L"Executable Path: %s\n", exePath.c_str());
 
-                Instance()->OnFocusChanged.fire(exePath);
+                Instance()->OnFocusChanged.fire(to_string(exePath));
 
             } else {
                 wprintf(L"Unable to retrieve the executable path.\n");

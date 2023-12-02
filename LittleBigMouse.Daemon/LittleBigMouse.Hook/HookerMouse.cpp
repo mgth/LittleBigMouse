@@ -20,8 +20,6 @@ void Hooker::HookMouse()
 			std::cout << "<Hook:HookMouse FAILED>\n";
 			#endif
 		}
-//	_iniHookId = SetWindowsHookEx(WM_WININICHANGE, &IniChangedCallback, nullptr, 0);
-//	_displayHookId = SetWindowsHookEx(WM_DISPLAYCHANGE, &DisplayChangedCallback, nullptr, 0);
 }
 
 void Hooker::UnhookMouse()
@@ -36,26 +34,20 @@ void Hooker::UnhookMouse()
 			p.Running = false;
 			OnMouseMove.fire(p);
 
-			OnMessage.fire("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n");
-
 			#if defined(_DEBUG)
 			std::cout << "<Hook:UnhookMouse>\n";
 			#endif
-
-				//SetPriority(_priority);
-
-			//SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
 		}
 		else
 		{
 			_mouseHookId = nullptr;
 
-			OnMessage.fire("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n");
-
 			#if defined(_DEBUG)
 			std::cout << "<Hook:UnhookMouse FAILED>\n";
 			#endif
 		}
+
+		OnMessage.fire("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n");
 	}
 }
 

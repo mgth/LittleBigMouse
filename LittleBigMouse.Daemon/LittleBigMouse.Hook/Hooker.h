@@ -23,8 +23,6 @@ class Hooker final : public ThreadHost
 
 	HHOOK _mouseHookId = nullptr;
 	HHOOK _displayHookId = nullptr;
-	//HHOOK _displayHookId = nullptr;
-	//HHOOK _iniHookId = nullptr;
 
 	HWINEVENTHOOK _hEventFocusHook = nullptr;
 	HWINEVENTHOOK _hEventDesktopHook = nullptr;

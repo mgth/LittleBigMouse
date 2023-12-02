@@ -15,7 +15,6 @@ void DoSetPriority(const Priority priority)
 	std::cout << "<Hook:SetPriority> " << priority <<"\n";
 	#endif
 
-
 	switch(priority)
 	{
 	case Idle:
@@ -99,8 +98,6 @@ void Hooker::RunThread()
 {
 	_currentThreadId = GetCurrentThreadId();
 
-
-
 	while(_run)
 	{
 		DoSetPriority(_priority);
@@ -122,13 +119,6 @@ void Hooker::RunThread()
 void Hooker::DoUnhook()
 {
 	UnhookMouse();
-
-	//MSG msg;
-	//while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)>=0)
-	//{
-	//	TranslateMessage(&msg);
-	//	DispatchMessage(&msg);
-	//}
 
 	UnhookFocusEvent();
 	UnhookEventSystemDesktopSwitch();

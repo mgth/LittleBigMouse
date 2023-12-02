@@ -60,7 +60,8 @@ public interface IMonitorsLayout : IDisposable
     bool AutoUpdate { get; }
 
     ZonesLayout ComputeZones();
-    void Compact(bool force = false);
+    void Compact();
+    void ForceCompact();
 
     void UpdatePhysicalMonitors();
 }

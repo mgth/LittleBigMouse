@@ -566,11 +566,18 @@ public class PhysicalMonitor : ReactiveModel
     public double MoveDownToTouch(PhysicalMonitor monitor) 
         => (!VerticallyAligned(monitor))?monitor.DepthProjection.Y - DepthProjection.Bounds.Bottom:-1;
 
-
+    /// <summary>
+    /// Adjust monitor position to touch another monitor.
+    /// </summary>
+    /// <param name="monitors">List of other monitors to take into account</param>
+    /// <param name="allowDiscontinuity">Allow monitors to not touch each other</param>
+    /// <param name="allowOverlaps">Allow monitors to overlap</param>
     public void PlaceAuto(IEnumerable<PhysicalMonitor> monitors, bool allowDiscontinuity=false, bool allowOverlaps=false)
     {
+        //Calculation of the distance to the closest monitor
         var distance = this.DistanceToTouch(monitors, true);
 
+        //If the monitor cannot touch by single translation
         if (!allowDiscontinuity && distance.IsPositiveInfinity())
         {
             distance = this.Distance(monitors);
@@ -605,9 +612,9 @@ public class PhysicalMonitor : ReactiveModel
             distance = this.DistanceToTouch(monitors, false);    
         }
 
+        // Move to touch
         if (!allowDiscontinuity)
         {
-
             if (distance is { Top: > 0, Left: > 0 })
             {
                 if (distance.Left < distance.Top) DepthProjection.X += distance.Left;
@@ -665,6 +672,7 @@ public class PhysicalMonitor : ReactiveModel
             }
         }
 
+        //Move the monitor to not overlap
         if (!allowOverlaps && distance is { Left: < 0, Right: < 0, Top: < 0, Bottom: < 0 })
         {
             if (distance.Left > distance.Right && distance.Left > distance.Top && distance.Left > distance.Bottom)

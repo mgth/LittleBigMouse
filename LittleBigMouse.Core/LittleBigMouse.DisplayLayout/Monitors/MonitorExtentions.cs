@@ -16,6 +16,13 @@ public static class MonitorExtensions
                && @this.Bottom == double.PositiveInfinity;
     }
 
+    /// <summary>
+    /// Distance for this monitor to touch another, or infinity if they do not touch.
+    /// </summary>
+    /// <param name="this"></param>
+    /// <param name="other"></param>
+    /// <param name="zero"></param>
+    /// <returns></returns>
     public static Thickness DistanceToTouch(this PhysicalMonitor @this, PhysicalMonitor other, bool zero = false)
     {
         var distance = @this.Distance(other);
@@ -45,7 +52,12 @@ public static class MonitorExtensions
         return distance;
     }
 
-
+    /// <summary>
+    /// Distance from this monitor borders to another monitor opposit border.
+    /// </summary>
+    /// <param name="this"></param>
+    /// <param name="other"></param>
+    /// <returns></returns>
     public static Thickness Distance(this PhysicalMonitor @this, PhysicalMonitor other)
     {
         return new Thickness(
@@ -76,9 +88,11 @@ public static class MonitorExtensions
         }
         return min;
     }
+
+
     public static Thickness DistanceToTouch(this PhysicalMonitor @this, IEnumerable<PhysicalMonitor> others, bool zero = false)
     {
-        var min = new Thickness(double.MaxValue);
+        var min = new Thickness(double.PositiveInfinity);
 
         foreach (var other in others)
         {

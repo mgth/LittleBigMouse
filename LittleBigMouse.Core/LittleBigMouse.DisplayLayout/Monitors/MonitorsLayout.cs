@@ -618,32 +618,37 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
     readonly object _compactLock = new object();
 
+    public void Compact()
+    {
+        if(AllowDiscontinuity) return;
+
+        ForceCompact();
+    }
+
     /// <summary>
     /// Remove all gaps between screens 
     /// </summary>
-    public void Compact(bool force = false)
+    public void ForceCompact()
     {
-        if(AllowDiscontinuity && !force) return;
-
+        // we cannot compact until primary monitor is placed
         if (PrimaryMonitor == null) return;
 
         lock (_compactLock)
         {
-            // Primary monitor is alwais at 0,0
+            // Primary monitor is always at 0,0
             var done = new List<PhysicalMonitor> { PrimaryMonitor };
 
             // Enqueue all other monitors to be placed
-            var todo = this.PhysicalMonitorsExcept(PrimaryMonitor).OrderBy(s => s.DistanceHV(PrimaryMonitor)).ToList();
+            var todo = this.PhysicalMonitorsExcept(PrimaryMonitor).OrderBy(s => s.DistanceHV(PrimaryMonitor));
 
-            while (todo.Count > 0)
+            while (todo.Any())
             {
-                var monitor = todo[0];
-                todo.Remove(monitor);
+                var monitor = todo.First();
 
                 monitor.PlaceAuto(done,AllowDiscontinuity,AllowOverlaps);
                 done.Add(monitor);
 
-                todo = todo.OrderBy(s => s.DistanceHV(done)).ToList();
+                todo = todo.Except([monitor]).OrderBy(s => s.DistanceHV(done));
             }
         }
     }

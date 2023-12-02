@@ -9,25 +9,32 @@ Hooker* Hooker::_instance = nullptr;
 
 void DoSetPriority(const Priority priority)
 {
+	auto process = GetCurrentProcess();
+
+	#if defined(_DEBUG)
+	std::cout << "<Hook:SetPriority> " << priority <<"\n";
+	#endif
+
+
 	switch(priority)
 	{
 	case Idle:
-		SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
+		SetPriorityClass(process, IDLE_PRIORITY_CLASS);
 		break;
 	case Below:
-		SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+		SetPriorityClass(process, BELOW_NORMAL_PRIORITY_CLASS);
 		break;
 	case Normal:
-		SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+		SetPriorityClass(process, NORMAL_PRIORITY_CLASS);
 		break;
 	case Above:
-		SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
+		SetPriorityClass(process, ABOVE_NORMAL_PRIORITY_CLASS);
 		break;
 	case High:
-		SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+		SetPriorityClass(process, HIGH_PRIORITY_CLASS);
 		break;
 	case Realtime:
-		SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
+		SetPriorityClass(process, REALTIME_PRIORITY_CLASS);
 		break;
 	}
 }
@@ -39,8 +46,6 @@ Hooker::Hooker()
 
 void Hooker::DoHook()
 {
-	// SetPriority(priority);
-
 	if(_hookMouse)
 	{
 		HookMouse();
@@ -69,7 +74,7 @@ void Hooker::Loop()
 	}
 
 	//while we do not close our application
-	while (ret > 0 && msg.message != WM_QUIT)
+	while (ret >= 0 && msg.message != WM_QUIT)
 	{
 		#if defined(_DEBUG)
 		std::cout << "msg" << msg.message << "\n";
@@ -88,28 +93,25 @@ void Hooker::Loop()
 		std::cout << "<Hook:Error>";
 		#endif
 	}
-	if(ret == 0)
-	{
-		#if defined(_DEBUG)
-		std::cout << "<Hook:Zero>";
-		#endif
-	}
 }
 
 void Hooker::RunThread()
 {
 	_currentThreadId = GetCurrentThreadId();
 
-	DoSetPriority(_priority);
 
 
 	while(_run)
 	{
+		DoSetPriority(_priority);
+
 		DoHook();
 
 		Loop();
 
 		DoUnhook();
+
+		SetPriority(Below);
 	}
 
 	#if defined(_DEBUG)
@@ -120,6 +122,14 @@ void Hooker::RunThread()
 void Hooker::DoUnhook()
 {
 	UnhookMouse();
+
+	//MSG msg;
+	//while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)>=0)
+	//{
+	//	TranslateMessage(&msg);
+	//	DispatchMessage(&msg);
+	//}
+
 	UnhookFocusEvent();
 	UnhookEventSystemDesktopSwitch();
 	UnhookDisplayChange();

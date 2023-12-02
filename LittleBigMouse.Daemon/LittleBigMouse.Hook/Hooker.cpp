@@ -111,7 +111,7 @@ void Hooker::RunThread()
 
 		DoUnhook();
 
-		SetPriority(Below);
+		DoSetPriority(Below);
 	}
 
 	#if defined(_DEBUG)

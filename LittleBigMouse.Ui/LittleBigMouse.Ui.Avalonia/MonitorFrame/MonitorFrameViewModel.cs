@@ -11,6 +11,7 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
+using Color = Avalonia.Media.Color;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 

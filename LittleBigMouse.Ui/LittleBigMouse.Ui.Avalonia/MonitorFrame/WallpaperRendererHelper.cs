@@ -74,7 +74,7 @@ public static class WallpaperRendererHelper
                     e = e.DrawImage(source,new Point(x,y), new Rectangle(0, 0,w,h),1.0f);
                 }
             });
-
+            
             return img;
         });
     }

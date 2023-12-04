@@ -636,13 +636,21 @@ public static class MonitorDeviceHelper
 
         var remaining = monitors.ToList();
 
-        using var key = GetConnectivityKey(monitors);
+        using var key = GetConnectivityKey(remaining);
+        if (key is not null)
+        {
+            if (ParseSetId(key,"Internal",remaining,ref number)) return true;
+            if (ParseSetId(key,"External",remaining,ref number)) return true;
+            if (ParseSetId(key,"eXtend",remaining,ref number)) return true;
+            if (ParseSetId(key,"Clone",remaining,ref number)) return true;
+            if (ParseSetId(key,"Recent",remaining,ref number)) return true;
+        }
 
-        if (ParseSetId(key,"Internal",remaining,ref number)) return true;
-        if (ParseSetId(key,"External",remaining,ref number)) return true;
-        if (ParseSetId(key,"eXtend",remaining,ref number)) return true;
-        if (ParseSetId(key,"Clone",remaining,ref number)) return true;
-        if (ParseSetId(key,"Recent",remaining,ref number)) return true;
+        foreach (var monitor in remaining)
+        {
+            monitor.MonitorNumber = number++;
+        }
+
         return false;
     }
 

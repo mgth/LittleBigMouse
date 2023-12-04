@@ -13,6 +13,7 @@ using LittleBigMouse.Plugins;
 using ReactiveUI;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Diagnostics;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 using Color = Avalonia.Media.Color;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
@@ -123,15 +124,15 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         });
     }
 
-    Rect GetBounds()
+    Rect GetBounds(int shrink)
     {
-        var bounds = new Rect();
+        var r = new Rect();
         foreach (var s in Model.Layout.PhysicalSources)
         {
-            bounds = bounds.Union(s.Source.InPixel.Bounds);
+            r = r.Union(s.Source.InPixel.Bounds);
         }
 
-        return bounds;
+        return new Rect(r.X/shrink,r.Y/shrink,r.Width/shrink,r.Height/shrink);
     }
 
     async Task SetWallpaper(string path, WallpaperStyle style, Color color)
@@ -142,21 +143,24 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
             return;
         }
 
-        var monitor = Model.ActiveSource.Source.InPixel.Bounds;
+        const int shrink = 4;
 
-        Wallpaper = style switch // = wallpaper;
+        var r = Model.ActiveSource.Source.InPixel.Bounds;
+        var monitor = new Rect(r.X/shrink,r.Y/shrink,r.Width/shrink,r.Height/shrink);
+
+        Wallpaper = style switch 
         {
-            WallpaperStyle.Fill => await WallpaperRendererHelper.GetWallpaperFillAsync(path, monitor.Size),
+            WallpaperStyle.Fill => await WallpaperRendererHelper.GetWallpaperFillAsync(path, monitor.Size, shrink),
 
-            WallpaperStyle.Fit => await WallpaperRendererHelper.GetWallpaperFitAsync(path, monitor.Size, color),
+            WallpaperStyle.Fit => await WallpaperRendererHelper.GetWallpaperFitAsync(path, monitor.Size, color, shrink),
 
-            WallpaperStyle.Stretch => await WallpaperRendererHelper.GetWallpaperStretchAsync(path, monitor.Size),
+            WallpaperStyle.Stretch => await WallpaperRendererHelper.GetWallpaperStretchAsync(path, monitor.Size, shrink),
 
-            WallpaperStyle.Tile =>  await WallpaperRendererHelper.GetWallpaperTileAsync(path, monitor, GetBounds()),
+            WallpaperStyle.Tile =>  await WallpaperRendererHelper.GetWallpaperTileAsync(path, monitor, GetBounds(shrink), shrink),
 
-            WallpaperStyle.Center => await WallpaperRendererHelper.GetWallpaperCenterAsync(path, monitor.Size, color),
+            WallpaperStyle.Center => await WallpaperRendererHelper.GetWallpaperCenterAsync(path, monitor.Size, color, shrink),
 
-            WallpaperStyle.Span => await WallpaperRendererHelper.GetWallpaperSpanAsync(path, monitor, GetBounds()),
+            WallpaperStyle.Span => await WallpaperRendererHelper.GetWallpaperSpanAsync(path, monitor, GetBounds(shrink), shrink),
 
             _ => throw new ArgumentOutOfRangeException()
         };

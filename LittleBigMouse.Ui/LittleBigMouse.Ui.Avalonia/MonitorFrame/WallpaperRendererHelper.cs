@@ -21,41 +21,41 @@ namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
 public static class WallpaperRendererHelper
 {
-    public static Task<Bitmap> GetWallpaperFillAsync(string path, AvaloniaSize size) 
+    public static Task<Bitmap> GetWallpaperFillAsync(string path, AvaloniaSize size, int shrink) 
         => Image.LoadAsync(path)
-            .MutateFluent(e => e.Fill(size.ToImageSharp()))
+            .MutateFluent(e => e.Shrink(shrink).Fill(size.ToImageSharp()))
             .ToBitmapAsync();
 
-    public static Task<Bitmap> GetWallpaperCenterAsync(string path, AvaloniaSize size, AvaloniaColor color) 
+    public static Task<Bitmap> GetWallpaperCenterAsync(string path, AvaloniaSize size, AvaloniaColor color, int shrink) 
         => Image.LoadAsync(path)
-            .MutateFluent(e => e.Center(size.ToImageSharp(),color.ToImageSharp()))
+            .MutateFluent(e => e.Shrink(shrink).Center(size.ToImageSharp(),color.ToImageSharp()))
             .ToBitmapAsync();
 
-    public static Task<Bitmap> GetWallpaperFitAsync(string path, AvaloniaSize size, AvaloniaColor color) 
-        => Image.LoadAsync(path)
-            .MutateFluent(e => e.Fit(size.ToImageSharp(), color.ToImageSharp()))
+    public static Task<Bitmap> GetWallpaperFitAsync(string path, AvaloniaSize size, AvaloniaColor color, int shrink)
+    => Image.LoadAsync(path)
+            .MutateFluent(e => e.Shrink(shrink).Fit(size.ToImageSharp(), color.ToImageSharp()))
             .ToBitmapAsync();
 
-    public static Task<Bitmap> GetWallpaperStretchAsync(string path, AvaloniaSize size) 
+    public static Task<Bitmap> GetWallpaperStretchAsync(string path, AvaloniaSize size, int shrink) 
         => Image.LoadAsync(path)
-            .MutateFluent(e => e.Stretch(size.ToImageSharp()))
+            .MutateFluent(e => e.Shrink(shrink).Stretch(size.ToImageSharp()))
             .ToBitmapAsync();
 
-    public static Task<Bitmap> GetWallpaperTileAsync(string path, Rect target, Rect fullArea) 
-        => MakeTileWall(path, fullArea.Size.ToImageSharp())
+    public static Task<Bitmap> GetWallpaperTileAsync(string path, Rect target, Rect fullArea, int shrink) 
+        => MakeTileWall(path, fullArea.Size.ToImageSharp(), shrink)
             .MutateFluent(e => e.SpanOrigin(target.ToImageSharp(),fullArea.ToImageSharp()))
             .ToBitmapAsync();
 
-    public static Task<Bitmap> GetWallpaperSpanAsync(string path, Rect target, Rect fullArea) 
+    public static Task<Bitmap> GetWallpaperSpanAsync(string path, Rect target, Rect fullArea, int shrink) 
         => Image.LoadAsync(path)
-            .MutateFluent(e => e.SpanCenter(target.ToImageSharp(),fullArea.ToImageSharp()))
+            .MutateFluent(e => e.Shrink(shrink).SpanCenter(target.ToImageSharp(),fullArea.ToImageSharp()))
             .ToBitmapAsync();
 
 
 
-    static async Task<Image> MakeTileWall(string path, Size size)
+    static async Task<Image> MakeTileWall(string path, Size size, int shrink)
     {
-        var source =await (await Image.LoadAsync(path)).ToRgba32Async();
+        var source =await (await Image.LoadAsync(path).MutateFluent(ctx => ctx.Shrink(shrink))).ToRgba32Async();
 
         return await Task.Run(() =>
         {
@@ -145,7 +145,9 @@ public static class WallpaperRendererHelper
         //await Bench("PNG ", () => _source.SaveAsPngAsync(ms));
 
         ms.Position = 0;
-        return new Bitmap(ms);
+        var result = new Bitmap(ms);
+        source.Dispose();
+        return result;
     }
 
     public static Bitmap GetBitmapFromImage(Image<Rgba32> image)
@@ -172,6 +174,16 @@ public static class WallpaperRendererHelper
         return image;
     }
 
+    static IImageProcessingContext Shrink(this IImageProcessingContext ctx, int shrink)
+    {
+        if (shrink == 1) return ctx;
+
+        var source = ctx.GetCurrentSize();
+
+        var resize = new Size((int)(source.Width / shrink),(int)(source.Height / shrink));
+
+        return ctx.Resize(resize);
+    }
 
     static IImageProcessingContext Fill(this IImageProcessingContext ctx, Size target)
     {

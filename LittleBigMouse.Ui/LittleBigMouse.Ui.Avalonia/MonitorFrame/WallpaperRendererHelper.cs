@@ -34,7 +34,7 @@ public static class WallpaperRendererHelper
             .ToBitmapAsync();
 
     public static Task<Bitmap> GetWallpaperFitAsync(string path, AvaloniaSize size, AvaloniaColor color, int shrink)
-    => Image.LoadAsync(path)
+        => Image.LoadAsync(path)
             .MutateFluent(e => e.Shrink(shrink).Fit(size.ToImageSharp(), color.ToImageSharp()))
             .ToBitmapAsync();
 
@@ -74,7 +74,7 @@ public static class WallpaperRendererHelper
                     e = e.DrawImage(source,new Point(x,y), new Rectangle(0, 0,w,h),1.0f);
                 }
             });
-            
+
             return img;
         });
     }

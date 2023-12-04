@@ -249,7 +249,7 @@
             <!-- WallPaper -->
             <Image Grid.Column="1" Grid.Row="1" 
                    Source ="{Binding Wallpaper}"
-                   Stretch="UniformToFill"
+                   Stretch="Fill"
                    StretchDirection="Both"
                    RenderOptions.BitmapInterpolationMode="HighQuality"
                 />

@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -87,20 +88,18 @@ public class MainService : ReactiveModel, IMainService
     public void UpdateLayout()
     {
         // TODO : move to plugin
-        if (_monitors is SystemMonitorsService monitors)
-        {
-            monitors.UpdateDevices();
-            var old = MonitorsLayout;
-            MonitorsLayout = new MonitorsLayout().UpdateFrom(monitors);
-            old?.Dispose();
-        }    
+        if (_monitors is not SystemMonitorsService monitors) return;
+
+        monitors.UpdateDevices();
+        var old = MonitorsLayout;
+        MonitorsLayout = new MonitorsLayout().UpdateFrom(monitors);
+        old?.Dispose();
     }
 
     Window _mainWindow = null!;
 
     public async Task ShowControlAsync()
     {
-
         if (_mainWindow?.IsLoaded == true)
         {
             _mainWindow.WindowState = WindowState.Normal;
@@ -122,6 +121,10 @@ public class MainService : ReactiveModel, IMainService
         _mainWindow.Closed += (s, a) => _mainWindow = null!;
 
         _mainWindow.Show();
+
+        // TODO : memory test
+        Dispatcher.UIThread.RunJobs();
+        GC.Collect();
     }
 
 

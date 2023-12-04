@@ -42,15 +42,21 @@ internal class Program
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()
     {
-        GC.KeepAlive(typeof(SvgImageExtension).Assembly);
-        GC.KeepAlive(typeof(global::Avalonia.Svg.Skia.Svg).Assembly);
+        //GC.KeepAlive(typeof(SvgImageExtension).Assembly);
+        //GC.KeepAlive(typeof(global::Avalonia.Svg.Skia.Svg).Assembly);
 
         return AppBuilder.Configure<App>()
             .UseReactiveUI()
             .UsePlatformDetect()
             .WithInterFont()
+            //.With(new Win32PlatformOptions
+            //{
+            //    RenderingMode = [Win32RenderingMode.AngleEgl],
+            //    CompositionMode = [Win32CompositionMode.WinUIComposition]
+
+            //})
             .UseSkia()
-            .LogToTrace()
+            //.LogToTrace()
             ;
     }
 
@@ -116,7 +122,6 @@ internal class Program
 
         var theme = new ThemeService(app.Resources);
         theme.SetTheme(ThemeService.WindowsTheme.Auto);
-
 
         var cts = new CancellationTokenSource();
 

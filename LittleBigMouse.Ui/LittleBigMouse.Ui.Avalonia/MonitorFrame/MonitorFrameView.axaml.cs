@@ -27,21 +27,22 @@ using Avalonia.VisualTree;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
+using System;
+using Avalonia.LogicalTree;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
 public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, MonitorFrameViewModel>, IDefaultViewClass, IMonitorFrameView 
 {
 
-    public MonitorFrameView() {
+    public MonitorFrameView() 
+    {
         InitializeComponent();
     }
 
-    protected override void OnLoaded(RoutedEventArgs e)
+    protected override void OnAttachedToLogicalTree(LogicalTreeAttachmentEventArgs e)
     {
-        base.OnLoaded(e);
-        if(Design.IsDesignMode) return;
-
+        base.OnAttachedToLogicalTree(e);
         var parent = this.FindAncestorOfType<MultiMonitorsLayoutPresenterView>();
 
         if(DataContext is IMonitorFrameViewModel viewModel) 

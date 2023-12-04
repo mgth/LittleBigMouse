@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -12,6 +13,8 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using ImageSharpColor = SixLabors.ImageSharp.Color;
+using AvaloniaColor = Avalonia.Media.Color;
 using Point = SixLabors.ImageSharp.Point;
 using Size = SixLabors.ImageSharp.Size;
 
@@ -21,17 +24,19 @@ public class WallpaperRenderer
 {
     Image<Rgba32>? _source;
     readonly Rectangle _bounds;
+    readonly ImageSharpColor _background;
 
-    public static WallpaperRenderer Load(string path)
+    public static WallpaperRenderer Load(string path, AvaloniaColor background)
     {
         using var img = Image.Load(path);
-        return new WallpaperRenderer(img.CloneAs<Rgba32>(), new Rectangle());
+        return new WallpaperRenderer(img.CloneAs<Rgba32>(), new Rectangle(), ImageSharpColor.FromRgb(background.R,background.G,background.B));
     }
 
-    WallpaperRenderer(Image<Rgba32> source, Rectangle bounds)
+    WallpaperRenderer(Image<Rgba32> source, Rectangle bounds, ImageSharpColor background)
     {
         _source = source;
         _bounds = bounds;
+        _background = background;
     }
 
     public WallpaperRenderer Measure(IEnumerable<PhysicalSource> sources)
@@ -126,11 +131,18 @@ public class WallpaperRenderer
 
         var ratio = Math.Min( width / (double)source.Width, height / (double)source.Height);
 
-        return Return(
-             source.Clone(e => e
-            .Resize(new Size((int)(ratio * source.Width), (int)(ratio * source.Height)))
-        )
-        );
+        var imgWidth = (int)(ratio * source.Width);
+        var imgHeight = (int)(ratio * source.Height);
+        var x = (width - imgWidth) / 2;
+        var y = (height - imgHeight) / 2;
+
+        var result = new Image<Rgba32>(width, height);
+
+        source.Mutate(i => i.Resize(imgWidth,imgHeight));
+
+        result.Mutate(i => i.DrawImage(source, new Point(x,y), 1.0f));
+
+        return Return(result);
     }
 
     public WallpaperRenderer CropCenter(int width, int height)
@@ -221,10 +233,10 @@ public class WallpaperRenderer
     }
     WallpaperRenderer ReturnAndDispose(Rectangle bounds)
     {
-        return new WallpaperRenderer(_source, bounds);
+        return new WallpaperRenderer(_source, bounds, _background);
     }
 
-    WallpaperRenderer Return(Image<Rgba32> src) => new(src, _bounds);
+    WallpaperRenderer Return(Image<Rgba32> src) => new(src, _bounds, _background);
 
-    WallpaperRenderer Return(Image<Rgba32> src, Rectangle bounds) => new(src, bounds);
+    WallpaperRenderer Return(Image<Rgba32> src, Rectangle bounds) => new(src, bounds, _background);
 }

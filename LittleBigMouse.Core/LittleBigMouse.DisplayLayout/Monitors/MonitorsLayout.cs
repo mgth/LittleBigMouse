@@ -151,27 +151,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
     public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
 
-    public string WallPaperPath
-    {
-        get => _wallPaperPath;
-        set => this.RaiseAndSetIfChanged(ref _wallPaperPath, value);
-    }
-    string _wallPaperPath;
-
-    public WallpaperStyle WallpaperStyle
-    {
-        get => _wallpaperStyle;
-        set => this.RaiseAndSetIfChanged(ref _wallpaperStyle, value);
-    }
-    WallpaperStyle _wallpaperStyle;
-
-    public Color BackgroundColor
-    {
-        get => _backgroundColor;
-        set => this.RaiseAndSetIfChanged(ref _backgroundColor, value);
-    }
-    Color _backgroundColor = Colors.Black;
-
     //void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
     //{
     //    switch (args.Action)

@@ -2,6 +2,7 @@
 using ReactiveUI;
 using Avalonia;
 using System.Runtime.Serialization;
+using HLab.Sys.Windows.API;
 
 namespace HLab.Sys.Windows.Monitors;
 
@@ -28,9 +29,6 @@ public class PhysicalAdapter : DisplayDevice
     [DataMember] public double ScaleFactor { get; set; }//GetScaleFactorForMonitor
 
     [DataMember] public string WallpaperPath { get; set; }
-
-
-    public IObservableCache<DisplayDevice,string> Displays { get; }
-
-
+    [DataMember] public DesktopWallpaperPosition WallpaperPosition { get; set; }
+    [DataMember] public uint Background { get; set; }
 }

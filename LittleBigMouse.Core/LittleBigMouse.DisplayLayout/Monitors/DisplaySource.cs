@@ -116,6 +116,13 @@ public class DisplaySource : ReactiveModel
     }
     string _wallpaperPath;
 
+    public WallpaperStyle WallpaperStyle
+    {
+        get => _wallpaperStyle;
+        set => this.RaiseAndSetIfChanged(ref _wallpaperStyle, value);
+    }
+    WallpaperStyle _wallpaperStyle;
+
 
     public Color BackgroundColor {
         get => _backgroundColor;
@@ -171,6 +178,4 @@ public class DisplaySource : ReactiveModel
     [DataMember] public DisplayRatioValue EffectiveDpi { get; } = new(96);
 
     [DataMember] public DisplayRatioValue DpiAwareAngularDpi { get; } = new(96);
-
-
 }

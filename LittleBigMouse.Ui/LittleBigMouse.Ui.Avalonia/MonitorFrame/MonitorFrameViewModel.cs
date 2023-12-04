@@ -11,7 +11,9 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
+using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Diagnostics;
+using Color = Avalonia.Media.Color;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
@@ -90,11 +92,12 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
             (ratio, mmu, o) => mmu.ScaleWithLocation(ratio)
         ).Log(this, "_unrotated").ToProperty(this, e => e.Unrotated);
 
-        var cmd = ReactiveCommand.CreateFromTask<(string, WallpaperStyle)>(p => SetWallpaper(p.Item1, p.Item2));
+        var cmd = ReactiveCommand.CreateFromTask<(string, WallpaperStyle, Color)>(p => SetWallpaper(p.Item1, p.Item2, p.Item3));
 
         this.WhenAnyValue(
             e => e.Model.ActiveSource.Source.WallpaperPath,
-            e => e.MonitorsPresenter.Model.WallpaperStyle)
+            e => e.Model.ActiveSource.Source.WallpaperStyle,
+            e => e.Model.ActiveSource.Source.BackgroundColor)
             .InvokeCommand(cmd).DisposeWith(this);
 
         this
@@ -116,10 +119,11 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
             {
                 bmp.Dispose();
             }
+            _wallpaper = null;
         });
     }
 
-    async Task SetWallpaper(string path, WallpaperStyle style)
+    async Task SetWallpaper(string path, WallpaperStyle style, Color color)
     {
         if(string.IsNullOrWhiteSpace(path))
         {
@@ -130,35 +134,37 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         var monitorWidth = (int)Model.ActiveSource.Source.InPixel.Width / 4;
         var monitorHeight = (int)Model.ActiveSource.Source.InPixel.Height / 4;
 
+        var bounds = Model.Layout.PhysicalBounds;
+
         Wallpaper = style switch // = wallpaper;
         {
-            WallpaperStyle.Fill => await WallpaperRenderer.Load(path)
-                .Fill((int)monitorWidth, (int)monitorHeight)
-                .CropCenter((int)monitorWidth, (int)monitorHeight)
+            WallpaperStyle.Fill => await WallpaperRenderer.Load(path, color)
+                .Fill(monitorWidth, monitorHeight)
+                .CropCenter(monitorWidth, monitorHeight)
                 .ToBitmapAsync(),
 
-            WallpaperStyle.Fit => await WallpaperRenderer.Load(path)
-                .Fit((int)monitorWidth, (int)monitorHeight)
-                .CropCenter((int)monitorWidth, (int)monitorHeight)
+            WallpaperStyle.Fit => await WallpaperRenderer.Load(path, color)
+                .Fit(monitorWidth, monitorHeight)
+                //.CropCenter((int)monitorWidth, (int)monitorHeight)
                 .ToBitmapAsync(),
 
-            WallpaperStyle.Stretch => await WallpaperRenderer.Load(path)
-                .Stretch((int)monitorWidth, (int)monitorHeight)
-                .CropCenter((int)monitorWidth, (int)monitorHeight)
+            WallpaperStyle.Stretch => await WallpaperRenderer.Load(path, color)
+                .Stretch(monitorWidth, monitorHeight)
+                .CropCenter(monitorWidth, monitorHeight)
                 .ToBitmapAsync(),
 
-            WallpaperStyle.Tile => await WallpaperRenderer.Load(path)
+            WallpaperStyle.Tile => await WallpaperRenderer.Load(path, color)
                 .Measure(MonitorsPresenter.Model.PhysicalSources)
                 .MakeTileWall()
                 .Crop(Model.ActiveSource.Source.InPixel)
                 .ToBitmapAsync(),
 
             // crop the wallpaper to the monitor size
-            WallpaperStyle.Center => await WallpaperRenderer.Load(path)
-                .CropCenter((int)monitorWidth, (int)monitorHeight)
+            WallpaperStyle.Center => await WallpaperRenderer.Load(path, color)
+                .CropCenter(monitorWidth, monitorHeight)
                 .ToBitmapAsync(),
 
-            WallpaperStyle.Span => await WallpaperRenderer.Load(path)
+            WallpaperStyle.Span => await WallpaperRenderer.Load(path, color)
                 .Measure(MonitorsPresenter.Model.PhysicalSources)
                 .MakeSpanWall()
                 .Crop(Model.ActiveSource.Source.InPixel)
@@ -211,7 +217,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         get => _wallpaper;
         set => this.RaiseAndSetIfChanged(ref _wallpaper, value);
     }
-    IImage _wallpaper;
+    IImage? _wallpaper;
 
     public Stretch WallpaperStretch
     {

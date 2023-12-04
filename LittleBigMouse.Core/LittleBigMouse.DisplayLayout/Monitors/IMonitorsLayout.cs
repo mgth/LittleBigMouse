@@ -54,7 +54,6 @@ public interface IMonitorsLayout : IDisposable
     WinDef.DpiAwareness DpiAwareness { get; }
     PhysicalMonitor PrimaryMonitor { get; }
 
-    WallpaperStyle WallpaperStyle { get; }
     bool Enabled { get; }
 
     bool AutoUpdate { get; }

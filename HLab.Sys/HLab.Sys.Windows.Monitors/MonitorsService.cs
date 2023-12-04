@@ -40,13 +40,11 @@ public class SystemMonitorsService : ISystemMonitorsService
     {
         get
         {
-            if (_root == null || !_root.TryGetTarget(out var root))
-            {
-                root = MonitorDeviceHelper.GetDisplayDevices();
-                _root = new WeakReference<DisplayDevice>(root);
+            if (_root != null && _root.TryGetTarget(out var root)) return root;
 
-                root.UpdateWallpaper(this);
-            }
+            root = MonitorDeviceHelper.GetDisplayDevices();
+            _root = new WeakReference<DisplayDevice>(root);
+
             return root;
         }
     }

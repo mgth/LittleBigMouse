@@ -24,25 +24,6 @@ public static class LayoutFactory
     public static MonitorsLayout UpdateFrom(this MonitorsLayout layout, ISystemMonitorsService service)
     {
 
-        /// <summary>
-        ///    0 => Stretch.None,
-        ///    2 => Stretch.Fill,
-        ///    6 => Stretch.Uniform,
-        ///    10 => Stretch.UniformToFill,
-        ///    22 => // stretched across all screens
-        /// </summary>
-
-        layout.WallpaperStyle = service.WallpaperPosition switch
-        {
-            DesktopWallpaperPosition.Fill => WallpaperStyle.Fill,
-            DesktopWallpaperPosition.Fit => WallpaperStyle.Fit,
-            DesktopWallpaperPosition.Center => WallpaperStyle.Center,
-            DesktopWallpaperPosition.Tile => WallpaperStyle.Tile,
-            DesktopWallpaperPosition.Span => WallpaperStyle.Span,
-            _ => WallpaperStyle.Stretch
-        };
-
-
         foreach (var device in service.Root.AllChildren<MonitorDevice>())
         {
             //if(!layout.ShowUnattachedMonitors && !device.AttachedToDesktop) continue;
@@ -164,7 +145,15 @@ public static class LayoutFactory
 
         (source.InterfaceName, source.InterfaceLogo) = device.Parent.InterfaceBrandNameAndLogo();
         source.WallpaperPath = device.Parent.WallpaperPath;
-
+        source.WallpaperStyle = device.Parent.WallpaperPosition switch
+        {
+            DesktopWallpaperPosition.Fill => WallpaperStyle.Fill,
+            DesktopWallpaperPosition.Fit => WallpaperStyle.Fit,
+            DesktopWallpaperPosition.Center => WallpaperStyle.Center,
+            DesktopWallpaperPosition.Tile => WallpaperStyle.Tile,
+            DesktopWallpaperPosition.Span => WallpaperStyle.Span,
+            _ => WallpaperStyle.Stretch
+        };
 
         source.SourceNumber = device.MonitorNumber.ToString();
 

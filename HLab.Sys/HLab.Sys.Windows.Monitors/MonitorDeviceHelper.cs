@@ -394,6 +394,9 @@ public static class MonitorDeviceHelper
 
         //ReleaseDC(0, hdc);
 
+        root.UpdateWallpaper();
+
+
         var list = root.AllChildren<MonitorDevice>().ToList();
 
         ParseWindowsConfig(list);
@@ -461,7 +464,7 @@ public static class MonitorDeviceHelper
         return root;
     }
 
-    public static void UpdateWallpaper(this DisplayDevice root, SystemMonitorsService service)
+    public static void UpdateWallpaper(this DisplayDevice root)
     {
         var adapters = root.AllChildren<PhysicalAdapter>().ToList();
 
@@ -470,20 +473,18 @@ public static class MonitorDeviceHelper
             var r = new Rect(wp.Rect.X, wp.Rect.Y, wp.Rect.Width, wp.Rect.Height);
 
             var adapter = adapters.FirstOrDefault(m => m.MonitorArea == r);
-            if (adapter != null)
-            {
-                adapter.WallpaperPath = wp.FilePath;
-                adapters.Remove(adapter);
-            }
+            if (adapter == null) return;
+
+            adapter.WallpaperPath = wp.FilePath;
+            adapter.WallpaperPosition = wp.Position;
+            adapter.Background = wp.Background;
+            adapters.Remove(adapter);
         });
 
         foreach (var adapter in adapters)
         {
             adapter.WallpaperPath = null;
         }
-        // TODO
-        service.WallpaperPosition = info.Position;
-        service.Background = info.Background.ToAvaloniaColor();
     }
 
     public static void UpdateWallpaper2(this DisplayDevice root)

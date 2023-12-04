@@ -10,6 +10,8 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Persistency;
 using System.Reflection.Metadata;
+using Avalonia.Media;
+using HLab.ColorTools.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
@@ -154,6 +156,9 @@ public static class LayoutFactory
             DesktopWallpaperPosition.Span => WallpaperStyle.Span,
             _ => WallpaperStyle.Stretch
         };
+
+        var color = device.Parent.Background;
+        source.BackgroundColor = Color.FromRgb((byte)(color & 0xFF),(byte)((color >> 8) & 0xFF),(byte)((color >> 16) & 0xFF));
 
         source.SourceNumber = device.MonitorNumber.ToString();
 

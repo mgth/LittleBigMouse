@@ -123,6 +123,17 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         });
     }
 
+    Rect GetBounds()
+    {
+        var bounds = new Rect();
+        foreach (var s in Model.Layout.PhysicalSources)
+        {
+            bounds = bounds.Union(s.Source.InPixel.Bounds);
+        }
+
+        return bounds;
+    }
+
     async Task SetWallpaper(string path, WallpaperStyle style, Color color)
     {
         if(string.IsNullOrWhiteSpace(path))
@@ -131,44 +142,21 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
             return;
         }
 
-        var monitorWidth = (int)Model.ActiveSource.Source.InPixel.Width / 4;
-        var monitorHeight = (int)Model.ActiveSource.Source.InPixel.Height / 4;
-
-        var bounds = Model.Layout.PhysicalBounds;
+        var monitor = Model.ActiveSource.Source.InPixel.Bounds;
 
         Wallpaper = style switch // = wallpaper;
         {
-            WallpaperStyle.Fill => await WallpaperRenderer.Load(path, color)
-                .Fill(monitorWidth, monitorHeight)
-                .CropCenter(monitorWidth, monitorHeight)
-                .ToBitmapAsync(),
+            WallpaperStyle.Fill => await WallpaperRendererHelper.GetWallpaperFillAsync(path, monitor.Size),
 
-            WallpaperStyle.Fit => await WallpaperRenderer.Load(path, color)
-                .Fit(monitorWidth, monitorHeight)
-                //.CropCenter((int)monitorWidth, (int)monitorHeight)
-                .ToBitmapAsync(),
+            WallpaperStyle.Fit => await WallpaperRendererHelper.GetWallpaperFitAsync(path, monitor.Size, color),
 
-            WallpaperStyle.Stretch => await WallpaperRenderer.Load(path, color)
-                .Stretch(monitorWidth, monitorHeight)
-                .CropCenter(monitorWidth, monitorHeight)
-                .ToBitmapAsync(),
+            WallpaperStyle.Stretch => await WallpaperRendererHelper.GetWallpaperStretchAsync(path, monitor.Size),
 
-            WallpaperStyle.Tile => await WallpaperRenderer.Load(path, color)
-                .Measure(MonitorsPresenter.Model.PhysicalSources)
-                .MakeTileWall()
-                .Crop(Model.ActiveSource.Source.InPixel)
-                .ToBitmapAsync(),
+            WallpaperStyle.Tile =>  await WallpaperRendererHelper.GetWallpaperTileAsync(path, monitor, GetBounds()),
 
-            // crop the wallpaper to the monitor size
-            WallpaperStyle.Center => await WallpaperRenderer.Load(path, color)
-                .CropCenter(monitorWidth, monitorHeight)
-                .ToBitmapAsync(),
+            WallpaperStyle.Center => await WallpaperRendererHelper.GetWallpaperCenterAsync(path, monitor.Size, color),
 
-            WallpaperStyle.Span => await WallpaperRenderer.Load(path, color)
-                .Measure(MonitorsPresenter.Model.PhysicalSources)
-                .MakeSpanWall()
-                .Crop(Model.ActiveSource.Source.InPixel)
-                .ToBitmapAsync(),
+            WallpaperStyle.Span => await WallpaperRendererHelper.GetWallpaperSpanAsync(path, monitor, GetBounds()),
 
             _ => throw new ArgumentOutOfRangeException()
         };

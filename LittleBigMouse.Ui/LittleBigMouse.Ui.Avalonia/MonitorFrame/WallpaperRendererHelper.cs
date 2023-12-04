@@ -55,7 +55,7 @@ public static class WallpaperRendererHelper
 
     static async Task<Image> MakeTileWall(string path, Size size, int shrink)
     {
-        var source =await (await Image.LoadAsync(path).MutateFluent(ctx => ctx.Shrink(shrink))).ToRgba32Async();
+        using var source =/*await (*/await Image.LoadAsync(path).MutateFluent(ctx => ctx.Shrink(shrink));//).ToRgba32Async();
 
         return await Task.Run(() =>
         {
@@ -72,7 +72,7 @@ public static class WallpaperRendererHelper
                     e = e.DrawImage(source,new Point(x,y), new Rectangle(0, 0,w,h),1.0f);
                 }
             });
-
+            
             return img;
         });
     }
@@ -116,7 +116,9 @@ public static class WallpaperRendererHelper
             return img.ToBitmapAsync();
         }
 
-        return source.CloneAs<Rgba32>().ToBitmapAsync();
+        var result = source.CloneAs<Rgba32>();
+        source.Dispose();
+        return result.ToBitmapAsync();
     }
 
     public static async Task<Bitmap> ToBitmapAsync(this Image<Rgba32> source)

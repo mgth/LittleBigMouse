@@ -16,7 +16,7 @@ class Hooker final : public ThreadHost
 {
 	static Hooker* _instance;
 
-	Priority _priority;
+	Priority _priority = Normal;
 	bool _run = true;
 
 	DWORD _currentThreadId = 0;
@@ -28,6 +28,8 @@ class Hooker final : public ThreadHost
 	HWINEVENTHOOK _hEventDesktopHook = nullptr;
 
 	HWND _hwnd = nullptr;
+
+	bool _hookMouse = false;
 
 	void HookMouse();
 	void UnhookMouse();
@@ -43,8 +45,6 @@ class Hooker final : public ThreadHost
 
 	void HookWindows();
 	void UnhookWindows();
-
-	bool _hookMouse;
 
 	void DoHook();
 	void DoUnhook();

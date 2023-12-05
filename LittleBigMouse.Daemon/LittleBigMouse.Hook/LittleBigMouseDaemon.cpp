@@ -168,9 +168,13 @@ void LittleBigMouseDaemon::SendState(RemoteClient* client) const
 	if(!_remoteServer) return;
 
 	if(_hook && _hook->Hooked())
+	{
 		_remoteServer->Send("<DaemonMessage><Event>Running</Event></DaemonMessage>\n",client);
+	}
 	else
+	{
 		_remoteServer->Send("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n",client);
+	}
 }
 
 // Display configuration has changed.
@@ -235,6 +239,7 @@ void LittleBigMouseDaemon::FocusChanged(const std::string& path)
 			_hook->Hook();
 		}
 		_paused = false;
+
 		#if defined(_DEBUG)
 		std::cout << "<daemon:wakeup>" << "\n";
 		#endif

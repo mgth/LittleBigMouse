@@ -67,4 +67,7 @@ void RemoteClient::Send(const std::string& message)
 			_socket = 0;
 		}
 	}
+	#if defined(_DEBUG)
+	std::cout << "<Client:Sent:" << result << "->" << _socket << ">" << message << "\n";
+	#endif
 }

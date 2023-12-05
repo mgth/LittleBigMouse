@@ -19,7 +19,7 @@ class LittleBigMouseDaemon
 	std::vector<std::string> _excluded;
 
 	// paused when current process is excluded
-	bool _paused;
+	bool _paused = false;
 
 	//int _onMouseMoveId;
 	//int _onMessageId;
@@ -32,7 +32,7 @@ class LittleBigMouseDaemon
 
 	void DisplayChanged() const;
 	void DesktopChanged() const;
-	bool Excluded(const std::string& path) const;
+	[[nodiscard]] bool Excluded(const std::string& path) const;
 
 	void FocusChanged(const std::string& path);
 

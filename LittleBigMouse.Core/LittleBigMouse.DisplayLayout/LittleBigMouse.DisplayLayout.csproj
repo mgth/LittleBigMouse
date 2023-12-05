@@ -5,7 +5,7 @@
     <Platforms>x64;x86;AnyCpu</Platforms>
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
-	<Version>5.0.2.0</Version>
+	<Version>5.0.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

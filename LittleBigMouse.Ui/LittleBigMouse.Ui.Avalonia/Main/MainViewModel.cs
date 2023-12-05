@@ -21,7 +21,7 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 {
     public string Title => "Little Big Mouse";
-    public object MainIcon { get; } = new WindowIcon(AssetLoader.Open(new Uri("avares://LittleBigMouse.Ui.Avalonia/Assets/MainIcon.ico")));
+    public object MainIcon { get; } = new WindowIcon(AssetLoader.Open(new Uri("avares://LittleBigMouse.Ui.Avalonia/Assets/lbm-logo.ico")));
 
     public MainViewModel(IIconService iconService, ILocalizationService localizationService)
     {

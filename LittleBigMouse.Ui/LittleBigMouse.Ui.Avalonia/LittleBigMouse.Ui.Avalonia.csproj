@@ -4,7 +4,7 @@
 		<Nullable>enable</Nullable>
 		<Platforms>x64;x86;AnyCPU</Platforms>
 		<OutputType>WinExe</OutputType>
-		<ApplicationIcon>MainIcon.ico</ApplicationIcon>
+		<ApplicationIcon>Assets\lbm-logo.ico</ApplicationIcon>
         <LangVersion>preview</LangVersion>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<Copyright>Mathieu GRENET</Copyright>
@@ -79,7 +79,7 @@
 
 
 <ItemGroup>
-    <Content Include="Assets\MainIcon.ico" />
+    <Content Include="Assets\lbm-logo.ico" />
     <Content Include="MainIcon.ico" />
 </ItemGroup>
 

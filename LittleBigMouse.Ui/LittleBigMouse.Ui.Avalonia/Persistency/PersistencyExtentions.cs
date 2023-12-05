@@ -66,7 +66,7 @@ public static class PersistencyExtensions
 
     }
 
-    public static bool SaveEnabled(this MonitorsLayout @this)
+    public static bool SaveEnabled(this IMonitorsLayout @this)
     {
         using var k = @this.OpenRegKey(true);
         if (k == null) return false;

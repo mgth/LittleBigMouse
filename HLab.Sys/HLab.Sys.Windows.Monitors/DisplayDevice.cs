@@ -50,7 +50,7 @@ public class DisplayDevice
     }
 
     public DisplayDevice Parent { get; set; }
-    public IEnumerable<DisplayDevice> Children  => _children; 
+    [DataMember] public IEnumerable<DisplayDevice> Children  => _children; 
 
     /// <summary>
     /// Device name as returned by EnumDisplayDevices :

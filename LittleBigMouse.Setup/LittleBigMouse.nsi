@@ -43,8 +43,8 @@
 ;---------------------------------
 ;General
  
-  !define MUI_ICON "${main}\MainIcon.ico"
-  !define MUI_UNICON "${main}\MainIcon.ico"
+  !define MUI_ICON "${main}\Assets\lbm-logo.ico"
+  !define MUI_UNICON "${main}\Assets\lbm-logo.ico"
 ;  !define MUI_SPECIALBITMAP "Bitmap.bmp"
 
 ;--------------------------------

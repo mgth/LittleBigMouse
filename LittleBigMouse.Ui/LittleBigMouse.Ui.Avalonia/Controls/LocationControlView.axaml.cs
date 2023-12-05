@@ -26,8 +26,15 @@ using Avalonia.Interactivity;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 using System;
+using System.IO.Compression;
+using System.IO;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Avalonia.Platform.Storage;
+using System.Security.Cryptography.X509Certificates;
+using Avalonia.Controls.Shapes;
+using System.Diagnostics;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
@@ -45,7 +52,7 @@ public partial class LocationControlView : UserControl
 
     private async void Button_Click(object? sender, RoutedEventArgs e)
     {
-        if(!(DataContext is LocationControlViewModel vm)) return;
+        if(DataContext is not LocationControlViewModel vm) return;
 
         var json = vm.Copy();
 
@@ -56,11 +63,55 @@ public partial class LocationControlView : UserControl
             {
                 await clipboard.SetTextAsync(json);
             }
+          
+            var provider = TopLevel.GetTopLevel(this)?.StorageProvider;
+            if (provider == null) return;
+
+            var folder = await provider.TryGetWellKnownFolderAsync(WellKnownFolder.Documents);
+            var filename = "LittleBigMouse.Export.gz";
+
+            var result = await provider.SaveFilePickerAsync(new FilePickerSaveOptions{ 
+                DefaultExtension = ".export.gz" , 
+                SuggestedFileName = filename, 
+                SuggestedStartLocation = folder
+            });
+
+            if(result!=null)
+            {
+                var path =  result.TryGetLocalPath();
+                if(path != null)
+                {
+                    SaveConfig(json, path);
+                    OpenExplorerWithSelectedFile(path);
+                }
+            }
         }
         catch (Exception ex)
         {
 
         }
-
     }
+
+    static void SaveConfig(string txt, string path)
+    {
+        byte[] donnees = Encoding.UTF8.GetBytes(txt);
+
+        using FileStream fichierSortie = File.Create(path);
+        using GZipStream fluxGZip = new GZipStream(fichierSortie, CompressionMode.Compress);
+
+        fluxGZip.Write(donnees, 0, donnees.Length);
+    }
+
+    static void OpenExplorerWithSelectedFile(string filePath)
+    {
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+        }
+        else
+        {
+            Console.WriteLine("Invalid file path.");
+        }
+    }
+
 }

@@ -66,7 +66,7 @@ static std::string getParentProcess()
 
 int main(int argc, char *argv[]){
 
-    #if !defined(_DEBUG)
+    //#if !defined(_DEBUG)
 	constexpr char szUniqueNamedMutex[] = "LittleBigMouse_Daemon";
 
 	HANDLE hHandle = CreateMutex(nullptr, TRUE, reinterpret_cast<LPCWSTR>(szUniqueNamedMutex));
@@ -82,7 +82,8 @@ int main(int argc, char *argv[]){
 		return(1); // Exit program
 	}
 
-        ShowWindow( GetConsoleWindow(), SW_HIDE );
+    #if !defined(_DEBUG)
+    ShowWindow( GetConsoleWindow(), SW_HIDE );
     #endif
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 );
@@ -110,25 +111,23 @@ int main(int argc, char *argv[]){
     if(uiMode)
     {
         #if defined(_DEBUG)
-	    std::cout << "Starting in UI mode" << std::endl;
+	    std::cout << "Starting in UI mode\n";
         #endif
 		LittleBigMouseDaemon(  &server, &engine, &hook ).Run("");
 	}
 	else
 	{
         #if defined(_DEBUG)
-		std::cout << "Starting in Daemon mode" << std::endl;
+		std::cout << "Starting in Daemon mode\n";
         #endif
 		LittleBigMouseDaemon( &server, &engine, &hook ).Run(R"(\Mgth\LittleBigMouse\Current.xml)");
 	}
 
-    #if !defined(_DEBUG)
     if(hHandle)
     {
         ReleaseMutex (hHandle);
 	    CloseHandle (hHandle);
     }
-    #endif
 #if defined(_DEBUG)
     system("pause");
 #endif

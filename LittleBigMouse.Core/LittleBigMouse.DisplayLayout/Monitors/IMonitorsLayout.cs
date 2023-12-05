@@ -3,6 +3,7 @@ using HLab.Sys.Windows.API;
 using LittleBigMouse.Zoning;
 using System;
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
@@ -54,13 +55,16 @@ public interface IMonitorsLayout : IDisposable
     WinDef.DpiAwareness DpiAwareness { get; }
     PhysicalMonitor PrimaryMonitor { get; }
 
-    bool Enabled { get; }
+    bool Enabled { get; set; }
 
     bool AutoUpdate { get; }
+    bool LoadAtStartup { get; }
 
     ZonesLayout ComputeZones();
     void Compact();
     void ForceCompact();
 
     void UpdatePhysicalMonitors();
+    bool Schedule();
+    void Unschedule();
 }

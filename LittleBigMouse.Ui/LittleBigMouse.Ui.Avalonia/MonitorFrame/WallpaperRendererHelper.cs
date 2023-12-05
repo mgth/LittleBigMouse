@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -6,6 +7,7 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Diagnostics;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -267,6 +269,12 @@ public static class WallpaperRendererHelper
         return ctx
             .Resize(resize)
             .Crop(target);
+    }
+
+    public static void ImageSharpDebugStats()
+    {
+        Debug.WriteLine(@$"Number of undisposed ImageSharp buffers: {MemoryDiagnostics.TotalUndisposedAllocationCount}");
+
     }
 }
 

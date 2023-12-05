@@ -11,10 +11,6 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Diagnostics;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using Color = Avalonia.Media.Color;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
@@ -143,6 +139,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
             return;
         }
 
+        //All dimensions are divided by this value to reduce memory usage
         const int shrink = 4;
 
         var r = Model.ActiveSource.Source.InPixel.Bounds;
@@ -165,8 +162,9 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
             _ => throw new ArgumentOutOfRangeException()
         };
 
-        Debug.WriteLine(@$"Number of undisposed ImageSharp buffers: {MemoryDiagnostics.TotalUndisposedAllocationCount}");
-
+        #if DEBUG
+        WallpaperRendererHelper.ImageSharpDebugStats();
+        #endif
     }
 
 
@@ -201,23 +199,12 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
     public bool Selected => _selected.Value;
     readonly ObservableAsPropertyHelper<bool> _selected;
 
-    //public Bitmap? Wallpaper => _wallpaper.Value;
-    //readonly ObservableAsPropertyHelper<Bitmap?> _wallpaper;
-
     public IImage? Wallpaper
     {
         get => _wallpaper;
         set => this.RaiseAndSetIfChanged(ref _wallpaper, value);
     }
     IImage? _wallpaper;
-
-    public Stretch WallpaperStretch
-    {
-        get => _wallpaperStretch;
-        set => this.RaiseAndSetIfChanged(ref _wallpaperStretch, value);
-    }
-    Stretch _wallpaperStretch = Stretch.UniformToFill;
-
 
     public IFrameLocation Location
     {

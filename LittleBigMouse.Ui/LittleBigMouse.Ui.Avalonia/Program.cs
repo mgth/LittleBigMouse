@@ -4,6 +4,7 @@ using System.Reactive;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Logging;
 using Avalonia.ReactiveUI;
 using Avalonia.Svg.Skia;
 using Grace.DependencyInjection;
@@ -56,7 +57,7 @@ internal class Program
 
             //})
             .UseSkia()
-            //.LogToTrace()
+            .LogToTrace(LogEventLevel.Verbose)
             ;
     }
 

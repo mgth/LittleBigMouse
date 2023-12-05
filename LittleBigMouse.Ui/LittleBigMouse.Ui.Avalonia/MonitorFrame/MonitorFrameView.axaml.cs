@@ -49,6 +49,18 @@ public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, Moni
             viewModel.MonitorsPresenter = parent?.DataContext as IMonitorsLayoutPresenterViewModel;
     }
 
+    protected override void OnLoaded(RoutedEventArgs e)
+    {
+        base.OnLoaded(e);
+        if(Design.IsDesignMode) return;
+
+        var parent = this.FindAncestorOfType<MultiMonitorsLayoutPresenterView>();
+
+        if(DataContext is IMonitorFrameViewModel viewModel) 
+            viewModel.MonitorsPresenter = parent?.DataContext as IMonitorsLayoutPresenterViewModel;
+    }
+
+
     void ResetSize_Click(object sender, RoutedEventArgs e) {
         if (DataContext is IMonitorFrameViewModel vm)
         {

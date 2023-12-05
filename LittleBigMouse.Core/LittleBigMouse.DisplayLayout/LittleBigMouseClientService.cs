@@ -67,9 +67,10 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
     public void LaunchDaemon()
     {
-        var processes = Process.GetProcessesByName("LittleBigMouse.Daemon");
+        var processes = Process.GetProcessesByName("LittleBigMouse.Hook");
         foreach (var process in processes)
         {
+            Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
             return;
         }
 
@@ -88,11 +89,14 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
         path = path.Replace(@"\LittleBigMouse.Ui.Avalonia.dll", @"\LittleBigMouse.Hook.exe");
 
-        if(!File.Exists(path)) return;
+        if (!File.Exists(path))
+        {
+            Debug.WriteLine($"Not found : {path}");
+            return;
+        }
 
         try
         {
-
             var startInfo = new ProcessStartInfo
             {
                 FileName = path,
@@ -116,6 +120,8 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
             _daemonProcess = process;
 
             process.WaitForInputIdle();
+
+            Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
         }
         catch (ExecutionEngineException ex)
         {
@@ -140,7 +146,11 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
             //_client = new NamedPipeClientStream(".", "lbm-daemon", PipeDirection.Out);
             _client = new RemoteClientSocket("localhost",25196);
 
-            _client.ConnectionFailed += (sender, args) => LaunchDaemon();
+            _client.ConnectionFailed += (sender, args) =>
+            {
+                Debug.WriteLine($"ConnectionFailed : Launch daemon");
+                LaunchDaemon();
+            };
 
             _client.MessageReceived += (sender, args) =>
             {

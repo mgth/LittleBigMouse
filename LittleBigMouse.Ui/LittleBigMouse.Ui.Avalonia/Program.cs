@@ -57,7 +57,10 @@ internal class Program
 
             //})
             .UseSkia()
-            .LogToTrace(LogEventLevel.Verbose)
+            #if DEBUG
+//            .LogToTrace(LogEventLevel.Verbose)
+            .LogToTrace(LogEventLevel.Debug)
+            #endif
             ;
     }
 

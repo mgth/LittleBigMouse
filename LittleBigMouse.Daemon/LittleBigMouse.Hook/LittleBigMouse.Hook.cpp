@@ -129,5 +129,8 @@ int main(int argc, char *argv[]){
 	    CloseHandle (hHandle);
     }
     #endif
+#if defined(_DEBUG)
+    system("pause");
+#endif
 	return 0;
 }

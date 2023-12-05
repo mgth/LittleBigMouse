@@ -87,8 +87,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         SaveCommand = ReactiveCommand.CreateFromTask(
             SaveAsync, 
             this.WhenAnyValue(e => e.Model.Saved, 
-            selector: saved  => !saved
-            ).ObserveOn(RxApp.MainThreadScheduler));
+            selector: saved  => !saved)
+                .ObserveOn(RxApp.MainThreadScheduler));
 
         UndoCommand = ReactiveCommand.CreateFromTask(
             LoadAsync,
@@ -100,13 +100,13 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
             this.
                 WhenAnyValue(
                 e => e.Running,
+                e => e.Dead,
                 e => e.Model.Saved,
-                (running, saved) => !(running && saved)
-                ).ObserveOn(RxApp.MainThreadScheduler));
+                (running, dead, saved) => (!running || !saved) && !dead)
+                .ObserveOn(RxApp.MainThreadScheduler));
 
         StopCommand = ReactiveCommand.CreateFromTask(
-            StopAsync
-            ,
+            StopAsync,
             this.WhenAnyValue(e => e.Running)
         );
 
@@ -130,15 +130,47 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     {
         try
         {
-            Dispatcher.UIThread.Invoke(new Action(() =>
-                Running = e.Event switch
-                {
-                    LittleBigMouseEvent.Running => true,
-                    LittleBigMouseEvent.Stopped => false,
-                    LittleBigMouseEvent.Dead => false,
-                    _ => Running
-                }
-            ));
+            switch (e.Event)
+            {
+                case LittleBigMouseEvent.Running:
+                    Dispatcher.UIThread.Invoke(() =>
+                    {
+                        Dead = false;
+                        Running = true;
+                    });
+                    break;
+                case LittleBigMouseEvent.Stopped:
+                    Dispatcher.UIThread.Invoke(() =>
+                    {
+                        Dead = false;
+                        Running = false;
+                    });
+                    break;
+                case LittleBigMouseEvent.Dead:
+                    Dispatcher.UIThread.Invoke(() =>
+                    {
+                        Dead = true;
+                        Running = false;
+                    });
+                    break;
+                case LittleBigMouseEvent.DisplayChanged:
+                case LittleBigMouseEvent.DesktopChanged:
+                case LittleBigMouseEvent.FocusChanged:
+                case LittleBigMouseEvent.Paused:
+                case LittleBigMouseEvent.Connected:
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(e.Event), e.Event, null);
+            }
+            //Dispatcher.UIThread.Invoke(new Action(() =>
+            //    Running = e.Event switch
+            //    {
+            //        LittleBigMouseEvent.Running => true,
+            //        LittleBigMouseEvent.Stopped => false,
+            //        LittleBigMouseEvent.Dead => false,
+            //        _ => Running
+            //    }
+            //));
         }
         catch(TaskCanceledException)
         {
@@ -180,26 +212,24 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
 
     [DataContract]
-    class JsonExport
+    class JsonExport(DisplayDevice devices, MonitorsLayout? layout, ZonesLayout? zones)
     {
         [DataMember]
-        public MonitorsLayout? Layout { get; init; }
+        public MonitorsLayout? Layout { get; } = layout;
+
         [DataMember]
-        public DisplayDevice Devices { get; init; }
+        public DisplayDevice Devices { get; } = devices;
+
         [DataMember]
-        public ZonesLayout? Zones { get; init; }
+        public ZonesLayout? Zones { get; } = zones;
     }
 
     public string Copy()
     {
         if (Model == null) return "";
 
-        var export = new JsonExport
-        {
-            Layout = Model,
-            Devices = _monitorsService.Root,
-            Zones = Model?.ComputeZones()
-        };
+        var export = new JsonExport(_monitorsService.Root, Model, Model?.ComputeZones());
+
         var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings
         {
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore
@@ -208,7 +238,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         return json;
     }
 
-//    public ReactiveCommand<Unit, Unit> CopyCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> UndoCommand { get; }
     public ReactiveCommand<Unit, Unit> StartCommand { get; }
@@ -223,9 +252,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         if (!Model.Saved)
             await SaveAsync();
         else
-        {
-            await Task.Run(() => Model.SaveEnabled());
-        }
+            await SaveEnabledAsync();
 
         await _service.StartAsync(_mainService.MonitorsLayout.ComputeZones());
     }
@@ -244,6 +271,12 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         {
             if (!(Model?.Saved??true))
                 Model.Save();
+        });
+
+    Task SaveEnabledAsync() =>
+        Task.Run(() =>
+        {
+            Model?.SaveEnabled();
         });
 
     Task LoadAsync() =>
@@ -283,6 +316,13 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         private set => this.RaiseAndSetIfChanged(ref _running,value);
     }
     bool _running;
+
+    public bool Dead
+    {
+        get => _dead;
+        private set => this.RaiseAndSetIfChanged(ref _dead,value);
+    }
+    bool _dead;
 
     public bool LiveUpdate
     {

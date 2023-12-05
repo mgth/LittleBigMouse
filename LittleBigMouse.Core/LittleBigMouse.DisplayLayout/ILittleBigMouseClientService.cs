@@ -35,5 +35,5 @@ public class LittleBigMouseServiceEventArgs(LittleBigMouseEvent evt, string payl
 public interface ILittleBigMouseClientService : ILittleBigMouseService
 {
     event EventHandler<LittleBigMouseServiceEventArgs> DaemonEventReceived;
-    LittleBigMouseEvent State { get; set; }
+    LittleBigMouseEvent State { get; }
 }

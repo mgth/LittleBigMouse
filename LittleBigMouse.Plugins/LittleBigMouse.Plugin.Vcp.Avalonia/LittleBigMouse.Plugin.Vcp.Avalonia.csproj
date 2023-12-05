@@ -23,7 +23,7 @@
   <ItemGroup>
 	  <PackageReference Include="Avalonia" Version="11.0.5" />
 	  <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.5" />
-	  <PackageReference Include="ScottPlot.Avalonia" Version="5.0.9-beta" />
+	  <PackageReference Include="ScottPlot.Avalonia" Version="5.0.10-beta" />
   </ItemGroup>
 
   <ItemGroup>

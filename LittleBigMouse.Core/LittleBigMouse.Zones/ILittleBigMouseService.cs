@@ -27,10 +27,12 @@ public enum LittleBigMouseEvent
 {
     Running,
     Stopped,
+    Paused,
     Dead,
     DisplayChanged,
     DesktopChanged,
     FocusChanged,
+    Connected,
 }
 public enum LittleBigMouseCommand
 {
@@ -40,37 +42,9 @@ public enum LittleBigMouseCommand
     Quit
 }
 
-
-public class CommandMessage : IZonesSerializable
-{
-    public CommandMessage()
-    {
-    }
-    public CommandMessage(LittleBigMouseCommand command)
-    {
-        Command = command;
-    }
-
-    public CommandMessage(LittleBigMouseCommand command, ZonesLayout payload)
-    {
-        Command = command;
-        Payload = payload;
-    }
-    public LittleBigMouseCommand Command { get; set; }
-    public ZonesLayout? Payload { get; set; }
-
-    public string Serialize()
-    {
-        return ZoneSerializer.Serialize(this,e => e.Command, e => e.Payload);
-    }
-}
-
-
 public interface ILittleBigMouseService
 {
     Task QuitAsync(CancellationToken token = default);
     Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default);
-    //Func<ZonesLayout?> ZonesLayoutGetter { get; set; }
     Task StopAsync(CancellationToken token = default);
-    Task CommandLineAsync(IList<string> args, CancellationToken token = default);
 }

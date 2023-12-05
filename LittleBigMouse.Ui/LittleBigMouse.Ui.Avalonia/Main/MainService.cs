@@ -82,7 +82,7 @@ public class MainService : ReactiveModel, IMainService
         _mainViewModelLocator = mainViewModelLocator;
 
         // Relate service state with notify icon
-        _littleBigMouseClientService.DaemonEventReceived += (o,a) => DaemonEventReceived(o,a);
+        _littleBigMouseClientService.DaemonEventReceived += (o, a) => DaemonEventReceived(o, a);
     }
 
     public void UpdateLayout()
@@ -142,10 +142,10 @@ public class MainService : ReactiveModel, IMainService
 
         _notify.Show();
 
-        if (MonitorsLayout.Enabled)
-        {
-            await StartAsync();
-        }
+        //if (MonitorsLayout.Enabled)
+        //{
+        //    await StartAsync();
+        //}
 
         if(MonitorsLayout.AutoUpdate)
             await CheckUpdateBlindAsync();
@@ -166,22 +166,42 @@ public class MainService : ReactiveModel, IMainService
 
     Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
 
+    bool _justConnected = false;
     async Task DaemonEventReceived(object? sender, LittleBigMouseServiceEventArgs args)
     {
         switch (args.Event)
         {
             case LittleBigMouseEvent.Running:
+                _justConnected = false;
                 await _notify.SetIconAsync("icon/lbm_on",32);
                 break;
+
             case LittleBigMouseEvent.Stopped:
-            case LittleBigMouseEvent.Dead:
+                if (MonitorsLayout.Enabled && _justConnected)
+                {
+                    _justConnected = false;
+                    await StartAsync();
+                }
                 await _notify.SetIconAsync("icon/lbm_off",32);
                 break;
+
+            case LittleBigMouseEvent.Dead:
+                await _notify.SetIconAsync("icon/lbm_dead",32);
+                break;
+
+            case LittleBigMouseEvent.Paused:
+                await _notify.SetIconAsync("icon/lbm_paused",32);
+                break;
+
             case LittleBigMouseEvent.DisplayChanged:
                 await DisplayChangedAsync();
                 break;
+
             case LittleBigMouseEvent.DesktopChanged:
             case LittleBigMouseEvent.FocusChanged:
+                break;
+            case LittleBigMouseEvent.Connected:
+                _justConnected = true;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(args.Event), args.Event, null);

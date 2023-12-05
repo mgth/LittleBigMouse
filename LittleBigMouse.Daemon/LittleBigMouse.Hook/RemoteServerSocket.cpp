@@ -132,7 +132,9 @@ void RemoteServerSocket::Remove(RemoteClient* remoteClient)
 void RemoteServerSocket::Send(const std::string& message, RemoteClient* client) 
 {
 	if(client)
+	{
 		client->Send(message);
+	}
 	else
 	{
 		_lock.lock();
@@ -141,7 +143,11 @@ void RemoteServerSocket::Send(const std::string& message, RemoteClient* client)
 
 	    for(const auto c : _clients)
 	    {
-	        if(c) c->Send(message);
+	        if(c) 
+			{
+	        	c->Send(message);
+			}
 	    }
 	}
+
 }

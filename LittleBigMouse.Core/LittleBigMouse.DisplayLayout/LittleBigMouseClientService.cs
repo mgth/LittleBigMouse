@@ -14,11 +14,11 @@ using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.DisplayLayout;
 
-public class LittleBigMouseClientService : ILittleBigMouseClientService
+public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 {
     public event EventHandler<LittleBigMouseServiceEventArgs> DaemonEventReceived;
     //NamedPipeClientStream _client;
-    RemoteClientSocket _client;
+    readonly RemoteClientSocket _client = new("localhost",25196);
 
     protected void OnStateChanged(LittleBigMouseEvent evt, string payload = "")
     {
@@ -31,39 +31,72 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
     public LittleBigMouseClientService()
     {
-        Task.Run(()=>StartDaemonAsync());
-     }
+        _client.ConnectionFailed += (sender, args) =>
+        {
+            Debug.WriteLine($"ConnectionFailed : Launch daemon");
+            LaunchDaemon();
+        };
 
-    public async void Start() => await SendAsync();
+        _client.MessageReceived += (sender, args) =>
+        {
+            //TODO : message interpretation too lazy
+            if(args.Contains("Stopped"))
+                OnStateChanged(LittleBigMouseEvent.Stopped);
+            else if(args.Contains("Running"))
+                OnStateChanged(LittleBigMouseEvent.Running);
+            else if(args.Contains("Dead"))
+                OnStateChanged(LittleBigMouseEvent.Dead);
+            else if(args.Contains("DisplayChanged"))
+                OnStateChanged(LittleBigMouseEvent.DisplayChanged);
+            else if(args.Contains("DesktopChanged"))
+                OnStateChanged(LittleBigMouseEvent.DesktopChanged);
+            else if(args.Contains("FocusChanged"))
+            {
+                var payload = PayloadRegex().Match(args).Groups[1].Value;
+                OnStateChanged(LittleBigMouseEvent.FocusChanged,payload);
+            }
+        };
+
+        _client.Connected += (sender, args) =>
+        {
+            Debug.WriteLine($"Connected");
+            OnStateChanged(LittleBigMouseEvent.Connected);
+        };
+
+        _client.Listen();
+    }
+
+    public Func<ZonesLayout> ZonesLayoutGetter { get; set; } = () => null;
+    public LittleBigMouseEvent State { get; private set; }
+
 
     public Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
     {
-
         var commands = new List<CommandMessage>()
         {
             new(LittleBigMouseCommand.Load, zonesLayout),
             new(LittleBigMouseCommand.Run)
         };
 
-        return SendMessageWithStartAsync(commands, _timeout, token);
+        return SendMessagesAsync(commands, token);
     }
 
-    public Func<ZonesLayout> ZonesLayoutGetter { get; set; } = () => null;
-    public LittleBigMouseEvent State { get; set; }
 
     public async Task StopAsync(CancellationToken token = default) => await SendAsync(token);
 
     public async Task QuitAsync(CancellationToken token = default) => await SendAsync(token);
 
-    public async Task LoadAtStartupAsync(bool state = true) => await SendAsync();
-
-    public async Task CommandLineAsync(IList<string> args, CancellationToken token = default) => await SendAsync(token);
-
-    public async Task RunningAsync() => await SendAsync();
-
     readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
 
     Process? _daemonProcess;
+
+    private void CreateExcludedFile()
+    {
+        string path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
+        if(File.Exists(file)) return;
+        File.WriteAllText(file, "\\Epic Games\\\n\\SteamLibrary\\\n\\Riot games\\\n");
+    }
 
     public void LaunchDaemon()
     {
@@ -95,6 +128,8 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
             return;
         }
 
+        CreateExcludedFile();
+
         try
         {
             var startInfo = new ProcessStartInfo
@@ -119,8 +154,6 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
 
             _daemonProcess = process;
 
-            process.WaitForInputIdle();
-
             Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
         }
         catch (ExecutionEngineException ex)
@@ -129,76 +162,9 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
         }
     }
 
-    async Task<bool> StartDaemonAsync(int timeout = 10000, CancellationToken token = default)
-    {
-        //await StopDaemon();
-
-        await _startingSemaphore.WaitAsync(token);
-        if (token.IsCancellationRequested) return false;
-        try
-        {
-            if (_client != null)
-            {
-                if (_client.IsConnected) return true;
-                _client = null;
-            }
-                
-            //_client = new NamedPipeClientStream(".", "lbm-daemon", PipeDirection.Out);
-            _client = new RemoteClientSocket("localhost",25196);
-
-            _client.ConnectionFailed += (sender, args) =>
-            {
-                Debug.WriteLine($"ConnectionFailed : Launch daemon");
-                LaunchDaemon();
-            };
-
-            _client.MessageReceived += (sender, args) =>
-            {
-                //TODO : message interpretation too lazy
-                if(args.Contains("Stopped"))
-                    OnStateChanged(LittleBigMouseEvent.Stopped);
-                else if(args.Contains("Running"))
-                    OnStateChanged(LittleBigMouseEvent.Running);
-                else if(args.Contains("Dead"))
-                    OnStateChanged(LittleBigMouseEvent.Dead);
-                else if(args.Contains("DisplayChanged"))
-                    OnStateChanged(LittleBigMouseEvent.DisplayChanged);
-                else if(args.Contains("DesktopChanged"))
-                    OnStateChanged(LittleBigMouseEvent.DesktopChanged);
-                else if(args.Contains("FocusChanged"))
-                {
-                    var payload = Regex.Match(args,"<Payload>(.*)</Payload>").Groups[1].Value;
-                    OnStateChanged(LittleBigMouseEvent.FocusChanged,payload);
-                }
-            };
-
-            _client.Listen();
-
-            return true;
-
-
-        }
-        catch (TimeoutException)
-        {
-            return false;
-        }
-
-        finally
-        {
-            _startingSemaphore.Release();
-        }
-    }
-
-
     async Task StopDaemon(CancellationToken token = default)
     {
-        //TODO : Maybe we should not use WithStart here.
-        await SendMessageWithStartAsync(new CommandMessage(LittleBigMouseCommand.Stop,null), _timeout, token);
-    }
-
-    void _daemonProcess_Exited(object sender, EventArgs e)
-    {
-        throw new NotImplementedException();
+        await SendMessageAsync(new CommandMessage(LittleBigMouseCommand.Stop,null), _timeout, token);
     }
 
     readonly int _timeout = 5000;
@@ -207,36 +173,17 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
     {
         if(name==null) throw new ArgumentNullException(nameof(name));
         if (name.EndsWith("Async")) name = name[..^5];
-        return Enum.TryParse<LittleBigMouseCommand>(name, out var command) ? SendMessageWithStartAsync(
+        return Enum.TryParse<LittleBigMouseCommand>(name, out var command) ? SendMessageAsync(
             new CommandMessage(command,null),_timeout,token) : Task.CompletedTask;
     }
 
-    Task SendMessageWithStartAsync(CommandMessage message, int timeout,
+    Task SendMessageAsync(CommandMessage message, int timeout,
         CancellationToken token = default)
     {
-        return SendMessageWithStartAsync(new List<CommandMessage>() {message}, timeout, token);
+        return SendMessagesAsync([message], token);
     }
 
-    async Task SendMessageWithStartAsync(List<CommandMessage> messages, int timeout, CancellationToken token = default)
-    {
-        if (!await StartDaemonAsync(timeout, token)) return;
-
-        var retry = true;
-        while (retry)
-        {
-            try
-            {
-                await SendMessageAsync(messages, token);
-                return;
-            }
-            catch (TimeoutException)
-            {
-                retry = await StartDaemonAsync(timeout, token);
-            }
-        }
-    }
-
-    async Task SendMessageAsync(List<CommandMessage> messages, CancellationToken token = default)
+    async Task SendMessagesAsync(IEnumerable<CommandMessage> messages, CancellationToken token = default)
     {
         var xml = messages.Aggregate("", (current, command) => current + $"{command.Serialize()}\n");
 
@@ -262,5 +209,6 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService
         await _client.SendMessageAsync(xml, token); //.StandardInput.WriteAsync(xml);
     }
 
-
+    [GeneratedRegex("<Payload>(.*)</Payload>")]
+    private static partial Regex PayloadRegex();
 }

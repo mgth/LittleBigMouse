@@ -42,15 +42,6 @@ public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, Moni
 
     protected override void OnLoaded(RoutedEventArgs e)
     {
-        base.OnAttachedToLogicalTree(e);
-        var parent = this.FindAncestorOfType<MultiMonitorsLayoutPresenterView>();
-
-        if(DataContext is IMonitorFrameViewModel viewModel) 
-            viewModel.MonitorsPresenter = parent?.DataContext as IMonitorsLayoutPresenterViewModel;
-    }
-
-    protected override void OnLoaded(RoutedEventArgs e)
-    {
         base.OnLoaded(e);
         if(Design.IsDesignMode) return;
 

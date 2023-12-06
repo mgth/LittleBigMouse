@@ -35,9 +35,11 @@ using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
 using Live.Avalonia;
+using ScottPlot;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
@@ -135,7 +137,12 @@ public class MainService : ReactiveModel, IMainService
         await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", CheckUpdateAsync);
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
         await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
-        await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () => _littleBigMouseClientService.StopAsync());
+        await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
+        {
+            MonitorsLayout.Enabled = false; 
+            MonitorsLayout.SaveEnabled();
+            return _littleBigMouseClientService.StopAsync();
+        });
         await _notify.AddMenuAsync(-1, "Exit", "Icon/sys/Close", QuitAsync);
 
         await _notify.SetIconAsync("Icon/lbm_off",128);

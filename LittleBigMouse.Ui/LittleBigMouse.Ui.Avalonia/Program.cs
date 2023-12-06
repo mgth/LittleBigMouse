@@ -131,12 +131,20 @@ internal class Program
 
         var task = boot.BootAsync();
 
-        // Once console Main is finished we cancel the token, so avalonia run loop will be stopped as well
-        //task.ContinueWith(_ => cts.Cancel());
-    
-        app.Run(cts.Token);
-    
-        // Rethrow any exceptions from ConsoleMain
-        task.Wait(cts.Token);
+        try
+        {
+            app.Run(cts.Token);
+        }
+        catch(InvalidOperationException)
+        {
+            cts.Cancel();
+        }
+
+        try
+        {
+            task.Wait(cts.Token);
+        }
+        catch(OperationCanceledException)
+        { }
     }
 }

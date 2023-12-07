@@ -18,6 +18,7 @@ using AvaloniaPoint = Avalonia.Point;
 using Point = SixLabors.ImageSharp.Point;
 using Size = SixLabors.ImageSharp.Size;
 using Color = SixLabors.ImageSharp.Color;
+using System.Xml.Schema;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
@@ -195,16 +196,15 @@ public static class WallpaperRendererHelper
 
         var ratio = Math.Max( target.Width / (double)source.Width, target.Height / (double)source.Height);
 
-        var resize = new Size((int)(ratio * source.Width),(int)(ratio * source.Height));
+        var w = (int)(target.Width/ratio);
+        var h = (int)(target.Height/ratio);
 
         var crop = new Rectangle(
-            (source.Width - target.Width) / 2,
-            (source.Height - target.Height) / 2,
-            target.Width,
-            target.Height
-            );
+            (source.Width - w) / 2,
+            (source.Height - h) / 2,
+            w, h);
 
-        return ctx.Resize(resize).Crop(crop);
+        return ctx.Crop(crop).Resize(target);
     }
 
     static IImageProcessingContext Center(this IImageProcessingContext ctx, Size target, Color color)
@@ -212,9 +212,6 @@ public static class WallpaperRendererHelper
         var source = ctx.GetCurrentSize();
         var width = Math.Min(source.Width, target.Width);
         var height = Math.Min(source.Height, target.Height);
-
-//        var x = (target.Width - width) / 2;
-//        var y = (target.Height - height) / 2;
 
         var crop = new Rectangle(0,0, width, height);
 

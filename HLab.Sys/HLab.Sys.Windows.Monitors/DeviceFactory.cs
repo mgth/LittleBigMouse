@@ -27,7 +27,8 @@ internal static class DeviceFactory
             //MonitorDevice
             Edid = edid,
             PnpCode = MonitorDeviceHelper.GetPnpCodeFromId(device.DeviceID),
-            IdMonitor = MonitorDeviceHelper.GetMicrosoftId(device.DeviceID, edid),
+            PhysicalId = MonitorDeviceHelper.GetPhysicalId(device.DeviceID, edid),
+            SourceId = MonitorDeviceHelper.GetSourceId(device.DeviceID, edid),
         };
 
         monitor.UpdateDevModes();

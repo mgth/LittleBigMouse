@@ -184,12 +184,13 @@ public class MainService : ReactiveModel, IMainService
                 break;
 
             case LittleBigMouseEvent.Stopped:
-                if (MonitorsLayout.Enabled && _justConnected)
+                await _notify.SetIconAsync("icon/lbm_off",32);
+
+                if (MonitorsLayout is not null && MonitorsLayout.Enabled && _justConnected)
                 {
                     _justConnected = false;
                     await StartAsync();
                 }
-                await _notify.SetIconAsync("icon/lbm_off",32);
                 break;
 
             case LittleBigMouseEvent.Dead:

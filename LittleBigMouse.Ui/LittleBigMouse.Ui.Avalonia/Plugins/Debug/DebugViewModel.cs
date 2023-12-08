@@ -67,7 +67,7 @@ public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
     protected override PhysicalMonitor? OnModelChanging(PhysicalMonitor? oldModel, PhysicalMonitor? newModel)
     {
         var device = _monitors.Root.AllChildren<MonitorDevice>()
-        .FirstOrDefault(d => d.DeviceId == newModel?.IdPhysicalMonitor);
+        .FirstOrDefault(d => d.DeviceId == newModel?.DeviceId);
 
         device?.DisplayValues(AddValue);
 

@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.Serialization;
 using Avalonia;
 using Avalonia.Controls;
-using DynamicData;
 using Microsoft.Win32;
 
 namespace HLab.Sys.Windows.Monitors;
@@ -17,16 +14,14 @@ public class MonitorDevice : DisplayDevice
         set => base.Parent = value;
     }
 
-    public string PnpCode { get; init; }
+    [DataMember] public string PnpCode { get; init; }
 
-    public string IdMonitor { get; set; }
+    [DataMember] public string PhysicalId { get; set; }
+    [DataMember] public string SourceId { get; set; }
 
-    public IEdid Edid { get; init; }
+    [DataMember] public IEdid Edid { get; init; }
 
-    public IObservableCache<DisplayDevice, string> Devices { get; internal set; }
-
-    [DataMember] public int MonitorNumber { get; set; }
-
+    [DataMember] public string MonitorNumber { get; set; }
 
     class EdidDesign : IEdid
     {
@@ -95,11 +90,11 @@ public class MonitorDevice : DisplayDevice
         }
     }
 
-    public string ConfigPath() => IdMonitor;
+    public string ConfigPath() => PhysicalId;
 
     public void DisplayValues(Action<string, string, Action, bool> addValue) {
         addValue("Registry", Edid.HKeyName, () => { OpenRegKey(Edid.HKeyName); }, false);
-        addValue("Microsoft Id", IdMonitor, null, false);
+        addValue("Microsoft Id", PhysicalId, null, false);
 
         // EnumDisplaySettings
         addValue("", "EnumDisplaySettings", null, true);
@@ -142,6 +137,7 @@ public class MonitorDevice : DisplayDevice
         addValue("Model", Edid?.Model, null, false);
         addValue("SerialNo", Edid?.SerialNumber, null, false);
         addValue("SizeInMm", Edid?.PhysicalSize.ToString(), null, false);
+        addValue("VideoInterface", Edid?.VideoInterface.ToString(), null, false);
 
         // GetScaleFactorForMonitor
         addValue("", "GetScaleFactorForMonitor", null, true);

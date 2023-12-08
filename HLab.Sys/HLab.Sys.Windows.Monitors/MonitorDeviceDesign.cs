@@ -10,6 +10,6 @@ public class MonitorDeviceDesign : MonitorDevice
         if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
 
         PnpCode = "DEL0000";
-        IdMonitor = "1";
+        PhysicalId = "1";
     }
 }

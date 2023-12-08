@@ -22,6 +22,7 @@
 */
 
 using Avalonia;
+using System.Runtime.Serialization;
 
 namespace HLab.Sys.Windows.Monitors;
 
@@ -196,41 +197,64 @@ public class Edid : IEdid
 
     }
 
+    [DataMember] 
     public string HKeyName { get; }
-
+    [DataMember]
     public string ProductCode { get; }
+    [DataMember]
     public string Serial { get; }
+    [DataMember]
     public Size PhysicalSize { get; }
-
+    [DataMember]
     public string ManufacturerCode { get; }
-
+    [DataMember]
     public string Model { get; }
-
+    [DataMember]
     public string SerialNumber { get; }
+    [DataMember]
     public int Week { get; }
+    [DataMember]
     public int Year { get; }
+    [DataMember]
     public string Version { get; }
+    [DataMember]
     public bool Digital { get; }
+    [DataMember]        
     public int BitDepth { get; }
+    [DataMember]
     public string VideoInterface { get; }
+    [DataMember]
     public double Gamma { get; }
-
+    [DataMember]
     public bool DpmsStandbySupported { get; }
+    [DataMember]
     public bool DpmsSuspendSupported { get; }
+    [DataMember]
     public bool DpmsActiveOffSupported { get; }
-
+    [DataMember]
     public bool YCrCb444Support { get; }
+    [DataMember]
     public bool YCrCb422Support { get; }
+    [DataMember]
     public double sRGB { get; }
 
+    [DataMember]    
     public double RedX { get; }
+    [DataMember]
     public double RedY { get; }
+    [DataMember]
     public double GreenX { get; }
+    [DataMember]
     public double GreenY { get; }
+    [DataMember]
     public double BlueX { get; }
+    [DataMember]
     public double BlueY { get; }
+    [DataMember]
     public double WhiteX { get; }
+    [DataMember]
     public double WhiteY { get; }
+    [DataMember]
     public int Checksum { get; }
 
     static string Block(char code, byte[] edid)

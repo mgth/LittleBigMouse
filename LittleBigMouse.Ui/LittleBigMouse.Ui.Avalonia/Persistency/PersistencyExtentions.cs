@@ -24,7 +24,7 @@ public static class PersistencyExtensions
     public static RegistryKey? OpenRegKey(this IMonitorsLayout layout,  bool create = false)
     {
         using var key = OpenRootRegKey(create);
-        return key?.OpenRegKey(@"Layouts\Default", create);
+        return key?.OpenRegKey(@$"Layouts\{layout.Id}", create);
     }
 
     //==================//
@@ -136,16 +136,15 @@ public static class PersistencyExtensions
 
         @this.DepthRatio.Saved = true;
 
-        var active = key.GetOrSet("ActiveSource", () => @this.ActiveSource?.Source.IdMonitorDevice??"");
+        var active = key.GetOrSet("ActiveSource", () => @this.ActiveSource?.Source.Id??"");
 
         foreach (var source in @this.Sources.Items)
         {
             source.Source.Load(key);
-            if (source.Source.IdMonitorDevice == active || @this.ActiveSource == null)
-            {
-                @this.ActiveSource = source; 
-                key.SetKey("ActiveSource",source.Source.IdMonitorDevice);
-            }
+            if (source.Source.Id != active && @this.ActiveSource != null) continue;
+
+            @this.ActiveSource = source; 
+            key.SetKey("ActiveSource",source.Source.Id);
         }
 
         @this.Saved = true;
@@ -174,7 +173,7 @@ public static class PersistencyExtensions
             source.Source.Save(key);
         }
 
-        key.SetKey("ActiveSource", @this.ActiveSource.Source.IdMonitorDevice);
+        key.SetKey("ActiveSource", @this.ActiveSource.Source.Id);
         key.SetKey("Orientation", @this.Orientation);
         key.SetKey("SerialNumber", @this.SerialNumber);
 
@@ -250,14 +249,8 @@ public static class PersistencyExtensions
     //================//
     public static void Load(this DisplaySource @this, RegistryKey key)
     {
-        var left = key.GetOrSet(@"GuiLocation\Left", () => @this.GuiLocation.Left);
-        var width = key.GetOrSet(@"GuiLocation\Width", () => @this.GuiLocation.Width);
-        var top = key.GetOrSet(@"GuiLocation\Top", () => @this.GuiLocation.Top);
-        var height = key.GetOrSet(@"GuiLocation\Height", () => @this.GuiLocation.Height);
 
-        @this.GuiLocation = new Rect(new Point(left, top), new Size(width, height));
-
-        var id = @this.IdMonitorDevice;
+        var id = @this.Id;
 
         if(!@this.AttachedToDesktop)
         {
@@ -288,12 +281,7 @@ public static class PersistencyExtensions
 
     public static void Save(this DisplaySource @this, RegistryKey? key)
     {
-        key.SetKey(@"GuiLocation\Left", @this.GuiLocation.Left);
-        key.SetKey(@"GuiLocation\Width", @this.GuiLocation.Width);
-        key.SetKey(@"GuiLocation\Top", @this.GuiLocation.Top);
-        key.SetKey(@"GuiLocation\Height", @this.GuiLocation.Height);
-
-        var id = @this.IdMonitorDevice;
+        var id = @this.Id;
 
         // This values are stored in order to be retrieved to be restored when the monitor is re-attached
         if(@this.AttachedToDesktop)

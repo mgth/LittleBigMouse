@@ -8,7 +8,7 @@ internal static class PhysicalMonitorsExtensions
     public static MonitorDevice FromPhysical(this ISystemMonitorsService service, PhysicalMonitor monitor) 
         => service.Root
         .AllChildren<MonitorDevice>()
-        .FirstOrDefault(e => e.IdMonitor == monitor.ActiveSource.Source.IdMonitorDevice);
+        .FirstOrDefault(e => e.PhysicalId == monitor.ActiveSource.Source.Id);
 
     public static MonitorDevice MonitorDevice(this PhysicalMonitor monitor, ISystemMonitorsService service) 
         => service.FromPhysical(monitor);

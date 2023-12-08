@@ -2,13 +2,11 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
 using DynamicData;
 using Avalonia;
 using Microsoft.Win32;
-using HLab.ColorTools.Avalonia;
 using HLab.Sys.Windows.API;
 
 using static HLab.Sys.Windows.API.ErrHandlingApi;
@@ -18,7 +16,6 @@ using static HLab.Sys.Windows.API.WinGdi;
 using static HLab.Sys.Windows.API.WinGdi.DisplayModeFlags;
 using static HLab.Sys.Windows.API.WinReg;
 using static HLab.Sys.Windows.API.WinUser;
-using System.Threading;
 
 namespace HLab.Sys.Windows.Monitors;
 
@@ -217,7 +214,7 @@ public static class MonitorDeviceHelper
     public static RegistryKey OpenMonitorRegKey(this MonitorDevice @this, RegistryKey key, bool create = false)
     {
         if (key == null) return null;
-        return create ? key.CreateSubKey(@"monitors\" + @this.IdMonitor) : key.OpenSubKey(@"monitors\" + @this.IdMonitor);
+        return create ? key.CreateSubKey(@"monitors\" + @this.PhysicalId) : key.OpenSubKey(@"monitors\" + @this.PhysicalId);
     }
 
     public static void UpdateDpi(this PhysicalAdapter @this, nint hMonitor)
@@ -268,21 +265,21 @@ public static class MonitorDeviceHelper
         return id.Length > 1 ? id[1] : id[0];
     }
 
-    public static string GetMicrosoftId(string deviceId, Edid edid)
-    {
-        var pnpCode = GetPnpCodeFromId(deviceId);
-
-        return edid is null
-            ? GetPhysicalId(deviceId, null)
-            : $"{GetPhysicalId(deviceId, edid)}_{edid.Checksum:X2}";
-    }
-
-    static string GetPhysicalId(string deviceId, Edid edid)
+    public static string GetPhysicalId(string deviceId, Edid edid)
     {
         var pnpCode = GetPnpCodeFromId(deviceId);
         return edid == null
             ? $"NOEDID_{pnpCode}_{deviceId.Split('\\').Last()}"
             : $"{pnpCode}{edid.SerialNumber}_{edid.Week:X2}_{edid.Year:X4}";
+    }
+
+
+    public static string GetSourceId(string deviceId, Edid edid)
+    {
+        var pnpCode = GetPnpCodeFromId(deviceId);
+        return edid == null
+            ? $"NOEDID_{pnpCode}_{deviceId.Split('\\').Last()}"
+            : $"{pnpCode}{edid.SerialNumber}_{edid.Week:X2}_{edid.Year:X4}_{edid.Checksum:X2}";
     }
 
     public static Edid GetEdid(string deviceId)
@@ -366,7 +363,7 @@ public static class MonitorDeviceHelper
         var hdc = 0;//GetDCEx(0, 0, DeviceContextValues.Window);
 
         var monitors = root.AllChildren<PhysicalAdapter>().ToList();
-        //var monitors = root.AllChildren<MonitorDevice>().ToList();
+
 
         // GetMonitorInfo
         EnumDisplayMonitors(hdc, 0,
@@ -397,69 +394,45 @@ public static class MonitorDeviceHelper
         root.UpdateWallpaper();
 
 
-        var list = root.AllChildren<MonitorDevice>().ToList();
+        var list = root.AllChildren<MonitorDevice>().OrderBy(e => e.PhysicalId).ToList();
 
-        ParseWindowsConfig(list);
+        // Some monitors may have generic serial so we fallback to DeviceId to descriminiate them
+        // Reason wy we don't use DeviceId as primary key is that it may change when monitors are plugged/unplugged
 
-
-        string FromUShort(IEnumerable<ushort> array)
+        bool splitPhysical = true;
+        var lastSourceId = "";
+        var lastPhysicalId = "";
+        MonitorDevice? last = null;
+        foreach (var monitor in list)
         {
-            var sb = new StringBuilder();
-            foreach (var t in array)
-            {
-                sb.Append((char)(t));
-            }
-            return sb.ToString().Split('\0').First();
-        }
-
-        try
-        {
-            var aConnectionOptions = new ConnectionOptions();
-            var aManagementScope = new ManagementScope(@"\\.\root\WMI", aConnectionOptions);
-            var aObjectQuery = new ObjectQuery("SELECT * FROM WmiMonitorID");
-            var aManagementObjectSearcher =
-                new ManagementObjectSearcher(aManagementScope, aObjectQuery);
-            var aManagementObjectCollection = aManagementObjectSearcher.Get();
-            foreach (var aManagementObject in aManagementObjectCollection.OfType<ManagementObject>())
-            {
-                foreach (var property in aManagementObject.Properties)
+            if(last!=null && monitor.SourceId==lastSourceId)
+            { 
+                if(last.SourceId == lastSourceId)
                 {
-                    if (property.Value is ushort[] a)
+                    last.SourceId = $"{lastSourceId}_{last.DeviceId.Split('\\').Last()}";
+                    if (splitPhysical)
                     {
-                        Debug.Print($"{property.Name} = {FromUShort(a)}");
-                    }
-                    else
-                    {
-                        Debug.Print($"{property.Name} = {property.Value}");
+                        last.PhysicalId = $"{lastPhysicalId}_{last.DeviceId.Split('\\').Last()}";
                     }
                 }
 
-                //var DEVPKEY_Device_BiosDeviceName = aManagementObject["DEVPKEY_Device_BiosDeviceName"];
+                monitor.SourceId = $"{lastSourceId}_{monitor.DeviceId.Split('\\').Last()}";
+
+                if (splitPhysical)
+                {
+                    monitor.PhysicalId = $"{lastPhysicalId}_{monitor.DeviceId.Split('\\').Last()}";
+                }
+            }
+            else
+            {
+                lastSourceId = monitor.SourceId;
+                lastPhysicalId = monitor.PhysicalId;
             }
 
-        }
-        catch
-        {
-
+            last = monitor;
         }
 
-        //ConnectionOptions aConnectionOptions = new(); 
-        //ManagementScope aManagementScope = new("\\\\.\\root\\WMI", aConnectionOptions);
-        //ObjectQuery aObjectQuery = new("SELECT * FROM WmiMonitorID"); 
-        //ManagementObjectSearcher aManagementObjectSearcher = new(aManagementScope, aObjectQuery);
-        //ManagementObjectCollection aManagementObjectCollection = aManagementObjectSearcher.Get();
-        //foreach ( ManagementObject aManagementObject in aManagementObjectCollection) 
-        //{
-        //    var InstanceName = aManagementObject["InstanceName"];
-        //    var ManufacturerName = FromUShort((ushort[])aManagementObject["ManufacturerName"]); ;
-        //    var ProductCodeID = FromUShort((ushort[])aManagementObject["ProductCodeID"]); ;
-        //    var SerialNumberID = FromUShort((ushort[])aManagementObject["SerialNumberID"]); ;
-        //    var UserFriendlyName = FromUShort((ushort[])aManagementObject["UserFriendlyName"]); ;
-
-        //}
-
-
-        //DevicesUpdated?.Invoke(this, EventArgs.Empty);
+        ParseWindowsConfig(list);
 
         return root;
     }
@@ -516,7 +489,6 @@ public static class MonitorDeviceHelper
                         if (todo.Contains(mirror)) todo.Remove(mirror);
                     }
 
-                    monitor.MonitorNumber = i + 1;
                 }
             }
         }
@@ -560,7 +532,7 @@ public static class MonitorDeviceHelper
         var ids = setId.Split('^');
         foreach (var id in ids)
         {
-            var result = monitors.Where(m => m.IdMonitor == id).ToList();
+            var result = monitors.Where(m => m.SourceId == id).ToList();
 
             if(result.Count==0) return false;
 
@@ -591,11 +563,13 @@ public static class MonitorDeviceHelper
 
     static bool ParseSetId(RegistryKey key, string keyName, List<MonitorDevice> remaining, ref int number)
     {
-        if(remaining.Count == 0) return true; 
-        if(remaining.Count == 1) 
+        switch (remaining.Count)
         {
-            remaining[0].MonitorNumber = number++;
-            return true;
+            case 0:
+                return true;
+            case 1:
+                remaining[0].MonitorNumber = $"{number++}<";
+                return true;
         }
 
         var setId = key.GetValue(keyName) as string;
@@ -605,32 +579,35 @@ public static class MonitorDeviceHelper
             //displays are separated by +, clones are separated by *
             foreach (var displayId in setId.Split('+'))
             {
-                int count = 0;
                 // all monitors in the same clone group have the same number
                 foreach(var monitorId in displayId.Split('*'))
                 {
-                    var monitors = remaining.Where(m => m.IdMonitor == monitorId).ToList();
+                    var monitors = remaining.Where(m => m.SourceId == monitorId).ToList();
                     foreach (var monitor in monitors)
                     {
-                        count = 1;
-                        monitor.MonitorNumber = number;
+                        monitor.MonitorNumber = $"{number++}+";
                         remaining.Remove(monitor);
                     }
                 }
-                number += count;
             }
         }
-        if(remaining.Count == 0) return true; 
-        if(remaining.Count == 1) 
+        switch (remaining.Count)
         {
-            remaining[0].MonitorNumber = number++;
-            return true;
+            case 0:
+                return true;
+            case 1:
+                remaining[0].MonitorNumber = $"{number++}>";
+                return true;
+            default:
+                return false;
         }
-
-        return false;
     }
 
-
+    /// <summary>
+    /// Try to gess monitor number from windows configuration
+    /// </summary>
+    /// <param name="monitors"></param>
+    /// <returns></returns>
     static bool ParseWindowsConfig(IEnumerable<MonitorDevice> monitors)
     {
         var number = 1;
@@ -649,7 +626,7 @@ public static class MonitorDeviceHelper
 
         foreach (var monitor in remaining)
         {
-            monitor.MonitorNumber = number++;
+            monitor.MonitorNumber = $".{(number++)}.";
         }
 
         return false;

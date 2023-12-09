@@ -49,14 +49,14 @@ public class VcpControl : ReactiveObject
 {
     PhysicalMonitor[] _pPhysicalMonitorArray;
 
-    public MonitorDeviceConnection Monitor { get; }
+    public MonitorDevice Monitor { get; }
     readonly LevelParser _levelParser;
-    public VcpControl(MonitorDeviceConnection monitor, LevelParser levelParser)
+    public VcpControl(MonitorDevice monitor, LevelParser levelParser)
     {
         Monitor = monitor;
         _levelParser = levelParser;
 
-        _pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(monitor.Parent.HMonitor);
+        _pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(monitor.Connections[0].Parent.HMonitor);
 
         var retry = 1;
         while (retry > 0)
@@ -107,7 +107,7 @@ public class VcpControl : ReactiveObject
         Cleanup(false);
     }
 
-    public bool AlternatePower => Monitor.Monitor.Edid?.ManufacturerCode == "DEL";
+    public bool AlternatePower => Monitor.Edid?.ManufacturerCode == "DEL";
 
     public bool Power
     {

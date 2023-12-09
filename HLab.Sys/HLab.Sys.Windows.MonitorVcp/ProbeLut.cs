@@ -36,11 +36,11 @@ public class ProbeLut : ReactiveObject
 {
     public ProbedColor DIlluminant { get; }
 
-    readonly MonitorDeviceConnection _monitor;
+    readonly MonitorDevice _monitor;
 
     List<Tune> _lut = new();
 
-    internal ProbeLut(MonitorDeviceConnection monitor)
+    internal ProbeLut(MonitorDevice monitor)
     {
         _monitor = monitor;
 

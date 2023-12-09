@@ -44,7 +44,7 @@ public class LuminanceViewModel : ViewModel
 
         if (Monitors == null) return l;
 
-        foreach (var monitor in Monitors.Root.AllChildren<MonitorDeviceConnection>())
+        foreach (var monitor in Monitors.Root.AllMonitorDevices())
         {
             var lut = monitor.ProbeLut(); 
             lut.Load();
@@ -65,7 +65,7 @@ public class LuminanceViewModel : ViewModel
             using (DelayChangeNotifications())
             {
                 this.RaiseAndSetIfChanged(ref _value, value);
-                foreach (var monitor in Monitors.Root.AllChildren<MonitorDeviceConnection>())
+                foreach (var monitor in Monitors.Root.AllMonitorDevices())
                 {
                     var lut = monitor.ProbeLut();
                     //lut.Load();
@@ -85,7 +85,7 @@ public class LuminanceViewModel : ViewModel
 
             double max = 0;
 
-            foreach (var monitor in Monitors.Root.AllChildren<MonitorDeviceConnection>())
+            foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
                 var lut = monitor.ProbeLut();
                 lut.Load();
@@ -103,7 +103,7 @@ public class LuminanceViewModel : ViewModel
 
             var max = double.MaxValue;
 
-            foreach (var monitor in Monitors.Root.AllChildren<MonitorDeviceConnection>())
+            foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
                 var lut = monitor.ProbeLut();
                 lut.Load();
@@ -122,7 +122,7 @@ public class LuminanceViewModel : ViewModel
 
             var min = double.MaxValue;
 
-            foreach (var monitor in Monitors.Root.AllChildren<MonitorDeviceConnection>())
+            foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
                 var lut = monitor.ProbeLut();
                 lut.Load();
@@ -139,7 +139,7 @@ public class LuminanceViewModel : ViewModel
 
             double min = 0;
 
-            foreach (var monitor in Monitors.Root.AllChildren<MonitorDeviceConnection>())
+            foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
                 var lut = monitor.ProbeLut();
                 lut.Load();
@@ -160,7 +160,7 @@ public class LuminanceViewModel : ViewModel
         get
         {
             if (Monitors is not  null)
-                foreach (var monitor in Monitors.Root.AllChildren<MonitorDeviceConnection>())
+                foreach (var monitor in Monitors.Root.AllMonitorDevices())
                 {
                     var lut = monitor.ProbeLut();
                     lut.Load();

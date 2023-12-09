@@ -5,11 +5,11 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
 internal static class PhysicalMonitorsExtensions
 {
-    public static MonitorDeviceConnection FromPhysical(this ISystemMonitorsService service, PhysicalMonitor monitor) 
+    public static MonitorDevice FromPhysical(this ISystemMonitorsService service, PhysicalMonitor monitor) 
         => service.Root
-        .AllChildren<MonitorDeviceConnection>()
-        .FirstOrDefault(e => e.Monitor.PhysicalId == monitor.ActiveSource.Source.Id);
+        .AllMonitorDevices()
+        .FirstOrDefault(e => e.SourceId == monitor.ActiveSource.Source.Id);
 
-    public static MonitorDeviceConnection MonitorDevice(this PhysicalMonitor monitor, ISystemMonitorsService service) 
+    public static MonitorDevice MonitorDevice(this PhysicalMonitor monitor, ISystemMonitorsService service) 
         => service.FromPhysical(monitor);
 }

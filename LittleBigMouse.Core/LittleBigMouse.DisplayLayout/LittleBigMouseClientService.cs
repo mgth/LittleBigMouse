@@ -95,7 +95,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         string path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
         if(File.Exists(file)) return;
-        File.WriteAllText(file, "\\Epic Games\\\n\\SteamLibrary\\\n\\Riot games\\\n");
+        File.WriteAllText(file, ":Excluded processes\n\\Epic Games\\\n\\SteamLibrary\\\n\\Riot games\\\n");
     }
 
     public void LaunchDaemon()

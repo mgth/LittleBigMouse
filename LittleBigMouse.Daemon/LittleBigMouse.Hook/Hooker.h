@@ -60,7 +60,10 @@ public:
 	Nano::Signal<void(const std::string&)> OnFocusChanged;
 	Nano::Signal<void()> OnDisplayChanged;
 	Nano::Signal<void()> OnDesktopChanged;
-	Nano::Signal<void(const std::string&)> OnMessage;
+
+	Nano::Signal<void()> OnHooked;
+	Nano::Signal<void()> OnUnhooked;
+
 
 
 	HWND Hwnd() const { return _hwnd; }

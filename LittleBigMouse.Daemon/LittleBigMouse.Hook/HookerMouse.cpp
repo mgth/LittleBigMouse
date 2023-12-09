@@ -8,14 +8,14 @@ void Hooker::HookMouse()
 
 		if(_mouseHookId)
 		{
-			OnMessage.fire("<DaemonMessage><Event>Running</Event></DaemonMessage>\n");
-
+			OnHooked.fire();
 			#if defined(_DEBUG)
 			std::cout << "<Hook:HookMouse>\n";
 			#endif
 		}
 		else
 		{
+			OnUnhooked.fire();
 			#if defined(_DEBUG)
 			std::cout << "<Hook:HookMouse FAILED>\n";
 			#endif
@@ -46,8 +46,7 @@ void Hooker::UnhookMouse()
 			std::cout << "<Hook:UnhookMouse FAILED>\n";
 			#endif
 		}
-
-		OnMessage.fire("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n");
+		OnUnhooked.fire();
 	}
 }
 

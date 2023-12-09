@@ -12,7 +12,6 @@ void Hooker::HookDisplayChange()
 
     RegisterClass(&wc);
 	_hwnd = CreateWindow(wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_DESKTOP, NULL, NULL, NULL);
-    //HWND _hwnd = CreateWindowEx(0, wc.lpszClassName, 0, WS_OVERLAPPEDWINDOW, 0, 0, 0, 0, HWND_DESKTOP, NULL, NULL, NULL);
 }
 
 void Hooker::UnhookDisplayChange()

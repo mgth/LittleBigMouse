@@ -73,7 +73,6 @@ LRESULT __stdcall Hooker::MouseCallback(const int nCode, const WPARAM wParam, co
 			hook->OnMouseMove.fire(p);
 
 			if (p.Handled) return 1;
-			//if (p.Handled) return -1;
 		}
 	}
 

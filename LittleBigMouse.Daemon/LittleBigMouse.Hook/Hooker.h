@@ -49,7 +49,7 @@ class Hooker final : public ThreadHost
 	void DoHook();
 	void DoUnhook();
 
-	void Loop();
+	static void Loop();
 	void QuitLoop();
 
 public:

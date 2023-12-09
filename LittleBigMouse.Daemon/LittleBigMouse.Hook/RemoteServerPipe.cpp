@@ -7,13 +7,14 @@
 #include <iostream>
 
 #include "ClientMessage.h"
+#include "str.h"
 
 bool RemoteServerPipe::StartListener()
 {
     DWORD dwRead;
 
 	const auto s = std::string(R"(\\.\pipe\lbm-daemon)");
-	const auto ws = std::wstring(s.begin(), s.end());
+	const auto ws = to_wstring(s);
 	_inputPipe = CreateNamedPipe(
         ws.c_str(), //L"\\\\.\\pipe\\lbm-daemon-beta",// name of the pipe
         PIPE_ACCESS_INBOUND, // 1-way pipe -- receive
@@ -57,7 +58,7 @@ bool RemoteServerPipe::StartListener()
 bool RemoteServerPipe::StartNotifier()
 {
 	const auto s = std::string(R"(\\.\pipe\lbm-feedback)");
-	const auto ws = std::wstring(s.begin(), s.end());
+	const auto ws = to_wstring(s);
 	_outputPipe = CreateNamedPipe(
         ws.c_str(), //L"\\\\.\\pipe\\lbm-daemon-beta",// name of the pipe
         PIPE_ACCESS_OUTBOUND, // 1-way pipe -- receive

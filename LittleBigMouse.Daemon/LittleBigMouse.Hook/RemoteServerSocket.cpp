@@ -17,7 +17,12 @@ void RemoteServerSocket::RunThread()
 	WSADATA WSAData;
 	SOCKADDR_IN csin{};
 
-    WSAStartup(MAKEWORD(2,0), &WSAData);
+    auto result = WSAStartup(MAKEWORD(2,0), &WSAData);
+	if(result!=0)
+	{
+			std::cout << "WSAStartup failed.\n";
+			return;
+	}
 
     SOCKADDR_IN sin;
 	sin.sin_addr.s_addr    = INADDR_ANY; 

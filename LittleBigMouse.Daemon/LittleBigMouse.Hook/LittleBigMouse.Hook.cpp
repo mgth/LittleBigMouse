@@ -69,18 +69,19 @@ std::string GetParentProcess()
 int main(int argc, char *argv[]){
 
     //#if !defined(_DEBUG)
-	constexpr char szUniqueNamedMutex[] = "LittleBigMouse_Daemon";
+	constexpr LPCWSTR szUniqueNamedMutex = L"LittleBigMouse_Daemon";
 
-	HANDLE hHandle = CreateMutex(nullptr, TRUE, reinterpret_cast<LPCWSTR>(szUniqueNamedMutex));
+	HANDLE hHandle = CreateMutex(nullptr, TRUE, szUniqueNamedMutex);
 	if( ERROR_ALREADY_EXISTS == GetLastError() )
 	{
 	  // Program already running somewhere
         #if defined(_DEBUG)
-		std::cout << "Program already running, Press Enter to exit\n";
-		std::cin.ignore();
+		std::cout << "Program already running\n";
 		#endif
         if(hHandle)
+        {
 		    CloseHandle (hHandle);
+        }
 		return(1); // Exit program
 	}
 
@@ -124,7 +125,7 @@ int main(int argc, char *argv[]){
         #if defined(_DEBUG)
 		std::cout << "Starting in Daemon mode\n";
         #endif
-		daemon.Run(R"(\Mgth\LittleBigMouse\Current.xml)");
+		daemon.Run("(\Mgth\LittleBigMouse\Current.xml)");
 	}
 
     if(hHandle)

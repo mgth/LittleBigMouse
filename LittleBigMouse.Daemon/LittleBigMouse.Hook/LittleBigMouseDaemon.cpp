@@ -317,9 +317,21 @@ void LittleBigMouseDaemon::LoadExcluded(const std::string& path)
 
 void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
 {
-    PWSTR szPath;
+    PWSTR szPath = nullptr;
+	long result = 0;
 
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
+	try{
+		result = SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath);
+	}
+	catch (...)
+	{
+		#if defined(_DEBUG)
+		std::cout << "Failed to get ProgramData folder\n";
+		#endif
+		return;
+	}
+
+    if (result == S_OK)
     {
 	    std::ifstream file;
 
@@ -328,12 +340,18 @@ void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
 
 	    std::string buffer;
 		std::string line;
-		while(file){
+		while(!file.eof()){
 			std::getline(file, line);
 		    ReceiveClientMessage(line,nullptr);
 		}
 
 	    file.close();
     }
+	else
+	{
+		#if defined(_DEBUG)
+		std::cout << "Failed to load layout from file : " << path << "\n";
+		#endif
+	}
 
 }

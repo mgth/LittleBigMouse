@@ -1,9 +1,7 @@
 ﻿#nullable enable
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -13,7 +11,6 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
 using DynamicData;
 using DynamicData.Binding;
 using HLab.Base.Avalonia;
@@ -35,6 +32,11 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     {
         DpiAwareness = WinUser.GetAwarenessFromDpiAwarenessContext(WinUser.GetThreadDpiAwarenessContext());
 
+        _physicalMonitorModelsCache.Connect()
+            .StartWithEmpty()
+            .Bind(out _physicalMonitorModels)
+            .Subscribe();
+
         _physicalMonitorsCache.Connect()
             // Sort Ascending on the OrderIndex property
             //.Sort(SortExpressionComparer<PhysicalMonitor>.Ascending(t => t.Id))
@@ -44,7 +46,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             .Subscribe();
 
         _physicalSourcesCache.Connect()
-            // Sort Ascending on the OrderIndex property
             .Sort(SortExpressionComparer<PhysicalSource>.Ascending(t => t.DeviceId))
             //.Filter(x => x.Id.ToString().EndsWith('1'))
             .Bind(out _physicalSources)
@@ -147,67 +148,38 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     //    }
     //}
 
-    public PhysicalSource PhysicalSourceFromPixel(Point pixel) => PhysicalSources.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
+    public PhysicalSource PhysicalSourceFromPixel(Point pixel) 
+        => PhysicalSources.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
 
-    public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
+    public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) 
+        => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
 
-    //void MonitorsOnCollectionChanged(object sender, NotifyCollectionChangedEventArgs args)
-    //{
-    //    switch (args.Action)
-    //    {
-    //        case NotifyCollectionChangedAction.Add:
-    //            if (args.NewItems != null)
-    //                foreach (var device in args.NewItems.OfType<MonitorDevice>())
-    //                {
-    //                    var source = AllSources.Items.FirstOrDefault(s => s.Device.Equals(device));
-    //                    if (source != null) continue;
+    [JsonIgnore]
+    public ReadOnlyObservableCollection<PhysicalMonitorModel> PhysicalMonitorModels => _physicalMonitorModels;
+    readonly ReadOnlyObservableCollection<PhysicalMonitorModel> _physicalMonitorModels;
+    readonly SourceCache<PhysicalMonitorModel, string> _physicalMonitorModelsCache = new(m => m.PnpCode);
+    public void AddOrUpdatePhysicalMonitor(PhysicalMonitorModel monitor)
+    {
+        _physicalMonitorModelsCache.AddOrUpdate(monitor);
+    }
+    public PhysicalMonitorModel GetOrAddPhysicalMonitorModel(string id, Func<string, PhysicalMonitorModel> value)
+    {
+        PhysicalMonitorModel? result = null;
+        _physicalMonitorModelsCache.Lookup(id);
+        _physicalMonitorModelsCache.Edit(u =>
+        {
+            var lookup = u.Lookup(id);
+            if (lookup.HasValue) 
+            {
+                result = lookup.Value;
+            }
+            result = value(id);
+            u.AddOrUpdate(result);
+        });
+        if (result==null) throw new Exception("GetOrAddPhysicalMonitorModel failed");
+        return result;
+    }
 
-    //                    var monitor = _allMonitors.FirstOrDefault(m => 
-    //                        m.Model.PnpCode == device.PnpCode 
-    //                        && m.ActiveSource.Device.IdPhysicalMonitor == device.IdPhysicalMonitor
-    //                        );
-
-    //                    if (monitor == null)
-    //                    {
-    //                        monitor = new Monitor(this, device);
-    //                        source = monitor.ActiveSource;
-
-    //                        _allMonitors.AddOrUpdate(monitor);
-    //                    }
-    //                    else
-    //                    {
-    //                        source = new MonitorSource(monitor, device);
-    //                        monitor.Sources.Add(source);
-    //                    }
-
-    //                    _allSources.Add(source);
-    //                }
-    //            break;
-
-    //        case NotifyCollectionChangedAction.Remove:
-    //            if (args.OldItems != null)
-    //                foreach (var monitor in args.OldItems.OfType<MonitorDevice>())
-    //                {
-    //                    var screen = AllSources.Items.FirstOrDefault(s => s.Monitor.Equals(monitor));
-
-    //                    if (screen != null) _allSources.Remove(screen);
-    //                }
-    //            break;
-
-    //        case NotifyCollectionChangedAction.Replace:
-    //        case NotifyCollectionChangedAction.Move:
-    //        case NotifyCollectionChangedAction.Reset:
-    //            throw new NotImplementedException();
-    //        default:
-    //            throw new ArgumentOutOfRangeException();
-    //    }
-
-
-    //    Load();
-    //    SetPhysicalAuto(false);
-    //}
-
-    //        [DataMember] public SourceCache<Monitor, string> AllMonitors => _allMonitors;
 
     [JsonIgnore]
     public ReadOnlyObservableCollection<PhysicalMonitor> PhysicalMonitors => _physicalMonitors;
@@ -221,7 +193,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     [JsonIgnore]
     public ReadOnlyObservableCollection<PhysicalSource> PhysicalSources => _physicalSources;
     readonly ReadOnlyObservableCollection<PhysicalSource> _physicalSources;
-    readonly SourceCache<PhysicalSource, string> _physicalSourcesCache = new(s => s.Source.IdMonitorDevice);
+    readonly SourceCache<PhysicalSource, string> _physicalSourcesCache = new(s => s.Source.Id);
     public void AddOrUpdatePhysicalSource(PhysicalSource source)
     {
         _physicalSourcesCache.AddOrUpdate(source);
@@ -237,17 +209,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     }
     PhysicalMonitor? _selected;
 
-
-    const string ROOT_KEY = @"SOFTWARE\Mgth\LittleBigMouse";
-
-    //internal static RegistryKey OpenLayoutRegKey(string configId, bool create)
-    //{
-    //    using (var key = OpenRootRegKey(create))
-    //    {
-    //        if (key == null) return null;
-    //        return create ? key.CreateSubKey(@"configs\" + configId) : key.OpenSubKey(@"configs\" + configId);
-    //    }
-    //}
 
     internal static string LayoutPath(string layoutId, bool create)
     {
@@ -424,13 +385,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     void ParsePhysicalMonitors(IEnumerable<PhysicalMonitor> monitors)
     {
         Rect? physicalBounds = null;
-        var id = "";
-        monitors = monitors.OrderBy(s => s.Id);
         foreach (var m in monitors)
         {
-            if (!string.IsNullOrEmpty(id)) id += ".";
-            id += m.Id;
-
             if (m.DepthProjection != null)
             {
                 physicalBounds = physicalBounds?.Union(m.DepthProjection.OutsideBounds) ?? m.DepthProjection.OutsideBounds;
@@ -439,10 +395,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
         using (DelayChangeNotifications())
         {
-            Id = id;
             PhysicalBounds = physicalBounds ?? new Rect();
         }
-
     }
 
     public double X0 => _x0.Value;
@@ -804,7 +758,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         {
             if (source == source.Monitor.ActiveSource && source.Source.AttachedToDesktop)
                 zones.Zones.Add(new Zone(
-                    source.Source.IdMonitorDevice,
+                    source.Source.Id,
                     source.Monitor.Model.PnpDeviceName,
                     source.Source.InPixel.Bounds,
                     source.Monitor.DepthProjection.Bounds

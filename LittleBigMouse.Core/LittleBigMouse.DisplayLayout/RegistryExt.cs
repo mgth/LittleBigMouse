@@ -25,7 +25,6 @@ using System;
 using System.Globalization;
 
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace LittleBigMouse.DisplayLayout;
 
@@ -57,6 +56,11 @@ public static class RegistryExt
 
     public static double GetOrSet(this RegistryKey key, string keyName, Func<double> getter, Action ifLoaded = null) 
         => double.Parse(
+            GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
+            CultureInfo.InvariantCulture);
+
+    public static int GetOrSet(this RegistryKey key, string keyName, Func<int> getter, Action ifLoaded = null) 
+        => int.Parse(
             GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
             CultureInfo.InvariantCulture);
 

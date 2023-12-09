@@ -24,7 +24,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
@@ -53,7 +52,7 @@ public class PhysicalMonitor : ReactiveModel
         }
     }
 
-    public string IdPhysicalMonitor { get; }
+    [DataMember] public string Id { get; }
 
     [JsonIgnore] public IMonitorsLayout Layout { get; }
 
@@ -72,14 +71,19 @@ public class PhysicalMonitor : ReactiveModel
     }
     PhysicalSource _activeSource;
 
-
-    //public static Monitor Design => new Monitor(DisplayLayout.Layout.Design, MonitorDevice.Design);
-
-    public PhysicalMonitor(string idPhysicalMonitor, IMonitorsLayout layout, PhysicalMonitorModel model)
+    [DataMember] 
+    public string DeviceId 
     {
+        get => _deviceId;
+        set => SetUnsavedValue(ref _deviceId, value);
+    }
+    string _deviceId;
+
+    public PhysicalMonitor(string id, IMonitorsLayout layout, PhysicalMonitorModel model)
+    {
+        Id = id;
         Layout = layout;
         Model = model;
-        IdPhysicalMonitor = idPhysicalMonitor;
 
         Sources.Connect()
             .AutoRefresh(e => e.Saved)
@@ -89,19 +93,13 @@ public class PhysicalMonitor : ReactiveModel
 
         _physicalRotated = this.WhenAnyValue(
             e => e.Model.PhysicalSize,
-            e => e.Orientation,
+            e => e.ActiveSource.Source.Orientation,
             (physicalSize, orientation) => physicalSize.Rotate(orientation)
         ).Log(this, "_physicalRotated").ToProperty(this, e => e.PhysicalRotated);
 
         //RemainingPhysicalMonitors = Layout.PhysicalMonitors.Items.AsObservableChangeSet().Filter(s => !Equals(s, this)).AsObservableList();
 
         DepthRatio = new DisplayRatioValue(1.0, 1.0);
-
-        _id = this.WhenAnyValue(
-            e => e.ActiveSource.Source.IdMonitorDevice,
-            e => e.Orientation,
-            (id, o) => $"{id}_{o}"
-                ).Log(this, "_id").ToProperty(this, e => e.Id, scheduler: Scheduler.Immediate);
 
         _depthProjection = this.WhenAnyValue(
             e => e.PhysicalRotated,
@@ -141,13 +139,6 @@ public class PhysicalMonitor : ReactiveModel
                 if (e) return;
                 Saved = false;
             });
-
-        //_overallBoundsWithoutThisInMm =
-        //        Layout.AllMonitors.Items
-        //        .AsObservableChangeSet()
-        //        .WhenValueChanged(e => e.InMm.Bounds)
-        //        .Select(i => GetOverallBoundsWithoutThisInMm())
-        //        .Log(this,"_overallBoundsWithoutThisInMm").ToProperty(this, e => e.OverallBoundsWithoutThisInMm);
     }
 
     void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)
@@ -158,33 +149,33 @@ public class PhysicalMonitor : ReactiveModel
         }
     }
 
-    public void AddSource(PhysicalSource source) => Sources.Add(source);
-
-    // TODO : Avalonia
-    //readonly ITrigger _updateModel = H.Trigger(c => c
-    //    .On(e => e.Device.AttachedDisplay)
-    //    .Do(s => s.Model.Load(s.Device))
-    //);
+    // References properties
 
     /// <summary>
-    /// List of other monitors in the layout 
+    /// Monitor orientation (0=0°, 1=90°, 2=180°, 3=270°)
     /// </summary>
-    [JsonIgnore] public IObservableList<PhysicalMonitor> RemainingPhysicalMonitors { get; }
+    //[DataMember]
+    //public int Orientation
+    //{
+    //    get => _orientation;
+    //    set => this.SetUnsavedValue(ref _orientation, value);
+    //}
+    //int _orientation;
 
-
-    // References properties
-    [DataMember] public string Id => _id.Value;
-    readonly ObservableAsPropertyHelper<string> _id;
-
-
+    /// <summary>
+    /// Show each source as a separate monitor
+    /// </summary>
     [DataMember]
-    public int Orientation
+    public bool SplitSources
     {
-        get => _orientation;
-        set => this.SetUnsavedValue(ref _orientation, value);
+        get => _splitSources;
+        set => this.SetUnsavedValue(ref _splitSources, value);
     }
-    int _orientation;
+    bool _splitSources;
 
+    /// <summary>
+    /// Serial number from EDID
+    /// </summary>
     [DataMember]
     public string SerialNumber
     {
@@ -193,6 +184,9 @@ public class PhysicalMonitor : ReactiveModel
     }
     string _serialNumber;
 
+    /// <summary>
+    /// True when placement has been set by user or by automatic placement
+    /// </summary>
     public bool Placed
     {
         get => _placed;
@@ -200,11 +194,14 @@ public class PhysicalMonitor : ReactiveModel
     }
     bool _placed;
 
-    // Mm dimensions
-    // Natives
-
+    /// <summary>
+    /// Monitor model
+    /// </summary>
     public PhysicalMonitorModel Model { get; }
 
+    /// <summary>
+    /// Dimensions with rotation applied
+    /// </summary>
     [DataMember] public IDisplaySize PhysicalRotated => _physicalRotated.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _physicalRotated;
 
@@ -212,23 +209,18 @@ public class PhysicalMonitor : ReactiveModel
     // Mm
 
     /// <summary>
-    /// 
+    /// Dimensions with depth ratio applied to deal with monitor distance
     /// </summary>
     [DataMember]
     public IDisplaySize DepthProjection => _depthProjection.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _depthProjection;
 
+    /// <summary>
+    /// Dimensions with depth ratio applied but without rotation
+    /// </summary>
     [DataMember]
     public IDisplaySize DepthProjectionUnrotated => _depthProjectionUnrotated.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _depthProjectionUnrotated;
-
-
-    // TODO
-    //ITrigger _setUnsaved = H.Trigger(c => c
-    //    .On(e => e.InMm.OutsideBounds)
-    //    .On(e => e.InMm.Bounds)
-    //    .Do(e => e.Layout.Saved = false)
-    //);
 
     /// <summary>
     /// Final ratio to deal with monitor distance
@@ -236,103 +228,11 @@ public class PhysicalMonitor : ReactiveModel
     [DataMember]
     public IDisplayRatio DepthRatio { get; }
 
+    /// <summary>
+    /// Diagonal
+    /// </summary>
     public double Diagonal => _diagonal.Value;
-
     readonly ObservableAsPropertyHelper<double> _diagonal;
-
-    //[DataMember] public Rect OverallBoundsWithoutThisInMm => _overallBoundsWithoutThisInMm.Value;
-
-    //readonly ObservableAsPropertyHelper<Rect> _overallBoundsWithoutThisInMm;
-
-    //Rect GetOverallBoundsWithoutThisInMm()
-    //{
-    //    return MonitorsLayout.Union(
-    //        Layout
-    //        .PhysicalMonitorsExcept(this)
-    //        .Where(e => e.DepthProjection is not null)
-    //        .Select(e => e.DepthProjection.Bounds)
-    //    );
-    //}
-
-
-
-
-
-
-
-    //[TriggerOn(nameof(Monitor), "WorkArea")]
-    //public AbsoluteRectangle AbsoluteWorkingArea => this.Get(() => new AbsoluteRectangle(
-    //    new PixelPoint(Config, this, Monitor.WorkArea.X, Monitor.WorkArea.Y),
-    //    new PixelPoint(Config, this, Monitor.WorkArea.Right, Monitor.WorkArea.Bottom)
-    //));
-
-    static readonly List<string> SideNames = new List<string> { "Left", "Top", "Right", "Bottom" };
-    static readonly List<string> DimNames = new List<string> { "Width", "Height" };
-
-    //private double LoadRotatedValue(List<string> names, string name, string side, Func<double> def,
-    //    bool fromConfig = false)
-    //{
-    //    int n = names.Count;
-    //    int pos = (names.IndexOf(side) + Orientation) % n;
-    //    using (RegistryKey key = fromConfig ? OpenLayoutRegKey() : Device.OpenMonitorRegKey())
-    //    {
-    //        return key.GetKey(name.Replace("%", names[pos]), def);
-    //    }
-    //}
-
-
-    //private void SaveRotatedValue(List<string> names, string name, string side, double value,
-    //    bool fromConfig = false)
-    //{
-    //    int n = names.Count;
-    //    int pos = (names.IndexOf(side) + n - Orientation) % n;
-    //    using (RegistryKey key = fromConfig ? OpenLayoutRegKey(true) : Device.OpenMonitorRegKey(true))
-    //    {
-    //        key.SetKey(name.Replace("%", names[pos]), value);
-    //    }
-    //}
-
-
-
-
-
-    //        private NativeMethods.Process_DPI_Awareness DpiAwareness => this.Get(() =>
-    //        {
-    ////            Process p = Process.GetCurrentProcess();
-
-    //            NativeMethods.Process_DPI_Awareness aw = NativeMethods.Process_DPI_Awareness.Per_Monitor_DPI_Aware;
-
-    //            NativeMethods.GetProcessDpiAwareness(/*p.Handle*/IntPtr.Zero, out aw);
-
-    //            return aw;
-    //        });
-
-
-
-
-
-
-
-
-
-    //    .Set(e => e.InMm.Y)
-    //    .On(e => e.Moving)
-    //    .On(e => e.InMm.Y)
-    //    .When(e => !e.Moving)
-    //    .Update()
-    //);
-
-    //double LogPixelSx
-    //{
-    //    get
-    //    {
-    //        var hdc = CreateDC("DISPLAY", Device.AttachedDisplay.DeviceName, null, 0);
-    //        double dpi = GetDeviceCaps(hdc, DeviceCap.LogPixelsX);
-    //        DeleteDC(hdc);
-    //        return dpi;
-    //    }
-    //}
-
 
     double RightDistance(PhysicalMonitor monitor) => DepthProjection.OutsideBounds.X - monitor.DepthProjection.OutsideBounds.Right;
 

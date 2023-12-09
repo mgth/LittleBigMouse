@@ -9,7 +9,7 @@ Hooker* Hooker::_instance = nullptr;
 
 void DoSetPriority(const Priority priority)
 {
-	auto process = GetCurrentProcess();
+	const auto process = GetCurrentProcess();
 
 	#if defined(_DEBUG)
 	std::cout << "<Hook:SetPriority> " << priority <<"\n";
@@ -53,10 +53,6 @@ void Hooker::DoHook()
 	HookFocusEvent();
 	HookEventSystemDesktopSwitch();
 	HookDisplayChange();
-
-//	_iniHookId = SetWindowsHookEx(WM_WININICHANGE, &IniChangedCallback, nullptr, 0);
-//	_displayHookId = SetWindowsHookEx(WM_DISPLAYCHANGE, &DisplayChangedCallback, nullptr, 0);
-
 }
 
 void Hooker::Loop()

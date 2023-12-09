@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -26,7 +25,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         ).Log(this, "_rotated").ToProperty(this, e => e.Rotated);
 
         _rotation = this.WhenAnyValue(
-            e => e.Model.Orientation,
+            e => e.Model.ActiveSource.Source.Orientation,
             e => e.Rotated.Height,
             e => e.Rotated.Width,
             (o, h, w) =>
@@ -86,7 +85,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         _unrotated = this.WhenAnyValue(
             e => e.MonitorsPresenter.VisualRatio,
             e => e.Model.DepthProjectionUnrotated,
-            e => e.Model.Orientation,
+            e => e.Model.ActiveSource.Source.Orientation,
             (ratio, mmu, o) => mmu.ScaleWithLocation(ratio)
         ).Log(this, "_unrotated").ToProperty(this, e => e.Unrotated);
 

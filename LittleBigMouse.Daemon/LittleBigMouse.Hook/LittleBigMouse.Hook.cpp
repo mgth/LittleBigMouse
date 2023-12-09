@@ -30,7 +30,7 @@ DWORD GetParentPid(const DWORD pid)
     return (ppid);
 }
 
-static auto getProcessName(const DWORD pid, LPWSTR fname, DWORD size) -> DWORD
+DWORD GetProcessName(const DWORD pid, LPWSTR fname, DWORD size)
 {
     HANDLE h = nullptr;
     DWORD e = 0;
@@ -44,7 +44,9 @@ static auto getProcessName(const DWORD pid, LPWSTR fname, DWORD size) -> DWORD
 	if (h) 
     {
         if (GetModuleFileNameEx(h, nullptr, fname, size) == 0)
-            e = GetLastError();
+        {
+        	e = GetLastError();
+        }
         CloseHandle(h);
     }
     else
@@ -54,12 +56,12 @@ static auto getProcessName(const DWORD pid, LPWSTR fname, DWORD size) -> DWORD
     return e;
 }
 
-static std::string getParentProcess()
+std::string GetParentProcess()
 {
 	wchar_t fname[MAX_PATH] = {0};
 	const DWORD pid = GetCurrentProcessId();
 	const DWORD ppid = GetParentPid(pid);
-    DWORD e = getProcessName(ppid, fname, MAX_PATH);
+    DWORD e = GetProcessName(ppid, fname, MAX_PATH);
 	std::wstring ws(fname);
 	return std::string(ws.begin(), ws.end());
 }
@@ -67,18 +69,19 @@ static std::string getParentProcess()
 int main(int argc, char *argv[]){
 
     //#if !defined(_DEBUG)
-	constexpr char szUniqueNamedMutex[] = "LittleBigMouse_Daemon";
+	constexpr LPCWSTR szUniqueNamedMutex = L"LittleBigMouse_Daemon";
 
-	HANDLE hHandle = CreateMutex(nullptr, TRUE, reinterpret_cast<LPCWSTR>(szUniqueNamedMutex));
+	HANDLE hHandle = CreateMutex(nullptr, TRUE, szUniqueNamedMutex);
 	if( ERROR_ALREADY_EXISTS == GetLastError() )
 	{
 	  // Program already running somewhere
         #if defined(_DEBUG)
-		std::cout << "Program already running, Press Enter to exit\n";
-		std::cin.ignore();
+		std::cout << "Program already running\n";
 		#endif
         if(hHandle)
+        {
 		    CloseHandle (hHandle);
+        }
 		return(1); // Exit program
 	}
 
@@ -92,7 +95,7 @@ int main(int argc, char *argv[]){
     MouseEngine engine;
     Hooker hook;
 
-    auto p = getParentProcess();
+    auto p = GetParentProcess();
 
     // Test if daemon was started from UI
     bool uiMode = p.find("LittleBigMouse") != std::string::npos;
@@ -108,19 +111,21 @@ int main(int argc, char *argv[]){
 		}
 	}
 
+    auto daemon = LittleBigMouseDaemon(  &server, &engine, &hook );
+
     if(uiMode)
     {
         #if defined(_DEBUG)
 	    std::cout << "Starting in UI mode\n";
         #endif
-		LittleBigMouseDaemon(  &server, &engine, &hook ).Run("");
+		daemon.Run("");
 	}
 	else
 	{
         #if defined(_DEBUG)
 		std::cout << "Starting in Daemon mode\n";
         #endif
-		LittleBigMouseDaemon( &server, &engine, &hook ).Run(R"(\Mgth\LittleBigMouse\Current.xml)");
+		daemon.Run("(\Mgth\LittleBigMouse\Current.xml)");
 	}
 
     if(hHandle)

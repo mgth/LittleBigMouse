@@ -56,7 +56,7 @@ public class VcpControl : ReactiveObject
         Monitor = monitor;
         _levelParser = levelParser;
 
-        _pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(monitor.Parent.HMonitor);
+        _pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(monitor.Connections[0].Parent.HMonitor);
 
         var retry = 1;
         while (retry > 0)

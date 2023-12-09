@@ -23,7 +23,6 @@
 
 using System;
 using Avalonia;
-using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 

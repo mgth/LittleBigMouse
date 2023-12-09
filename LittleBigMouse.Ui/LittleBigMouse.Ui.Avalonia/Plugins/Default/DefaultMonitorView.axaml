@@ -6,6 +6,7 @@
              xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:default="clr-namespace:LittleBigMouse.Ui.Avalonia.Plugins.Default"
+             xmlns:monitors="clr-namespace:LittleBigMouse.DisplayLayout.Monitors;assembly=LittleBigMouse.DisplayLayout"
              mc:Ignorable="d"
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
@@ -34,7 +35,7 @@
         />-->
 
 		<!-- Central Device No -->
-		<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+		<Grid HorizontalAlignment="Center" VerticalAlignment="Center">
 			<Border x:Name="Center"
                     Width ="{Binding Height, ElementName=Center}"
                     BorderThickness = "{Binding Path=Bounds.Height, ElementName=Center, Converter={StaticResource Scale},ConverterParameter=0.05}"
@@ -50,13 +51,14 @@
                     Content ="{Binding Path=Model.ActiveSource.Source.SourceNumber,FallbackValue=X}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
+					HorizontalContentAlignment="Center"
                     VerticalContentAlignment="Center"
                     Foreground="{DynamicResource HLab.Brushes.Foreground}"
                     FontWeight="Bold"
                     />
 
 			</Border>
-		</StackPanel>
+		</Grid>
 
         <!-- PNP Code -->
  <!--TODO : VerticalAlignment="{Binding PnpNameVerticalAlignment}"-->
@@ -74,51 +76,33 @@
 					</Label>
 				</Border>
 			</Grid>
-			<Label Foreground="LightBlue" FontSize="{Binding Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.03|0.1|20}">
-				<Grid>
-					<Border Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5"/>
-					<!--<ListBox
-                        ItemsSource="{Binding Model.Sources, FallbackValue=Null}"
-                        SelectedItem="{Binding Model.ActiveSource, FallbackValue=Null}" Background="Transparent">
-						<ListBox.Resources>
-							<ControlTemplate x:Key="SelectedTemplate" TargetType="ListBoxItem">
-								<WrapPanel>
-									<Label Foreground="Green" Content="{Binding Path=Model.Device.Edid.VideoInterface, FallbackValue=XXX000}"/>
-									<Label Content="{Binding Path=Model.Device.AttachedDevice.DeviceName, FallbackValue=XXX000}"/>
-								</WrapPanel>
-							</ControlTemplate>
-
-						</ListBox.Resources>
-						<ListBox.ItemTemplate>
-							<DataTemplate>
-								<WrapPanel>
-									<Label
-                                        Foreground="Blue"
-                                        Content="{Binding Path=Model.Device.Edid.VideoInterface, FallbackValue=XXX000}"/>
-									<Label
-                                        Content="{Binding Path=Device.AttachedDevice.DeviceName, FallbackValue=XXX000}"/>
-								</WrapPanel>
-							</DataTemplate>
-						</ListBox.ItemTemplate>
-					</ListBox>-->
-
-
-							<!--TODO : Avalonia <Style Selector="ListBoxItem">
-                                <Style.Triggers>
-                                    <MultiTrigger>
-                                        <MultiTrigger.Conditions>
-                                            <Condition Property="IsSelected" Value="true" />
-                                            --><!--
-							--><!--<Condition Property="Selector.IsSelectionActive" Value="true" />--><!--
-							--><!--
-                                        </MultiTrigger.Conditions>
-                                        <Setter Property="Template" Value="{StaticResource SelectedTemplate}" />
-                                    </MultiTrigger>
-                                </Style.Triggers>
-                            </Style>-->
-
-				</Grid>
-			</Label>
+			
+			<Grid ColumnDefinitions="2*,*">
+				<Border Background="{DynamicResource HLab.Brushes.Background}" Opacity="0.5"/>
+				<ListBox
+					ItemsSource="{Binding Model.Sources.Items, FallbackValue=Null}"
+					SelectedItem="{Binding Model.ActiveSource, FallbackValue=Null}" Background="Transparent">
+					<!--<ListBox.Resources>
+						<ControlTemplate x:Key="SelectedTemplate" TargetType="ListBoxItem">
+							<WrapPanel>
+								<Label Foreground="Green" Content="{Binding Path=Model.Source.InterfaceName, FallbackValue=XXX000}"/>
+								--><!--<Label Content="{Binding Path=Model.Device.AttachedDevice.DeviceName, FallbackValue=XXX000}"/>--><!--
+							</WrapPanel>
+						</ControlTemplate>
+					</ListBox.Resources>-->
+					<ListBox.ItemTemplate>
+						<DataTemplate>
+								<TextBlock x:DataType ="monitors:PhysicalSource"
+									TextWrapping ="WrapWithOverflow"	  
+									Text="{Binding Path=Source.SourceName, FallbackValue=XXX000}"
+									FontSize="{Binding Bounds, ElementName=Grid, Converter={StaticResource Scale}, ConverterParameter=0.05|0.05|20}"
+									/>
+								<!--<Label
+									Content="{Binding Path=Device.AttachedDevice.DeviceName, FallbackValue=XXX000}"/>-->
+						</DataTemplate>
+					</ListBox.ItemTemplate>
+				</ListBox>
+			</Grid>
 
 		</StackPanel>
 

@@ -29,11 +29,7 @@ using System;
 using System.IO.Compression;
 using System.IO;
 using System.Text;
-using System.Text.Json.Nodes;
-using System.Threading.Tasks;
 using Avalonia.Platform.Storage;
-using System.Security.Cryptography.X509Certificates;
-using Avalonia.Controls.Shapes;
 using System.Diagnostics;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;

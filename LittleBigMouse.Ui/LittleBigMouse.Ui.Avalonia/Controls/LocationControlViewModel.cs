@@ -28,7 +28,6 @@ using System.Reactive;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Threading.Tasks;
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using DynamicData;
@@ -66,9 +65,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
     readonly ILittleBigMouseClientService _service;
 
-    //public DisplayLayout.MonitorsLayout Layout => _layout.Get();
-    //private readonly IProperty<DisplayLayout.MonitorsLayout> _layout = H.BindProperty(e => e.Model);
-
     public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService)
     {
         _service = service;
@@ -81,8 +77,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
         _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
             .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedPriority));
-
-//        CopyCommand = ReactiveCommand.CreateFromTask(Copy);
 
         SaveCommand = ReactiveCommand.CreateFromTask(
             SaveAsync, 
@@ -188,7 +182,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
                 .Do(e =>
                 {
                     if (!e) Saved = false;
-                }).Subscribe().DisposeWith(this);
+                }).Subscribe().DisposeWith(model);
 
             model.PhysicalMonitors.AsObservableChangeSet()
                 .ObserveOn(RxApp.MainThreadScheduler)
@@ -196,7 +190,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
                 .Do(e =>
                 {
                     if (!e) Saved = false;
-                }).Subscribe().DisposeWith(this);
+                }).Subscribe().DisposeWith(model);
 
             model.PhysicalSources.AsObservableChangeSet()
                 .ObserveOn(RxApp.MainThreadScheduler)
@@ -204,7 +198,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
                 .Do(e =>
                 {
                     if (!e) Saved = false;
-                }).Subscribe().DisposeWith(this);
+                }).Subscribe().DisposeWith(model);
 
         }
 

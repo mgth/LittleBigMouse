@@ -4,7 +4,6 @@ using Microsoft.Win32;
 using System.Globalization;
 using Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
-using System;
 #pragma warning disable CA1416
 
 namespace LittleBigMouse.Ui.Avalonia.Persistency;
@@ -24,7 +23,7 @@ public static class PersistencyExtensions
     public static RegistryKey? OpenRegKey(this IMonitorsLayout layout,  bool create = false)
     {
         using var key = OpenRootRegKey(create);
-        return key?.OpenRegKey(@"Layouts\Default", create);
+        return key?.OpenRegKey(@$"Layouts\{layout.Id}", create);
     }
 
     //==================//
@@ -126,6 +125,17 @@ public static class PersistencyExtensions
     {
         using var key = @this.OpenRegKey(true);
 
+        var active = key.GetOrSet("ActiveSource", () => @this.ActiveSource?.Source.Id??"");
+
+        foreach (var source in @this.Sources.Items)
+        {
+            source.Source.Load(key);
+            if (source.Source.Id != active && @this.ActiveSource != null) continue;
+
+            @this.ActiveSource = source; 
+            key.SetKey("ActiveSource",source.Source.Id);
+        }
+
         @this.DepthProjection.X = key.GetOrSet("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
         @this.DepthProjection.Y = key.GetOrSet("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
 
@@ -135,18 +145,6 @@ public static class PersistencyExtensions
         @this.DepthRatio.Y = key.GetOrSet("PhysicalRatioY", () => @this.DepthRatio.Y);
 
         @this.DepthRatio.Saved = true;
-
-        var active = key.GetOrSet("ActiveSource", () => @this.ActiveSource?.Source.IdMonitorDevice??"");
-
-        foreach (var source in @this.Sources.Items)
-        {
-            source.Source.Load(key);
-            if (source.Source.IdMonitorDevice == active || @this.ActiveSource == null)
-            {
-                @this.ActiveSource = source; 
-                key.SetKey("ActiveSource",source.Source.IdMonitorDevice);
-            }
-        }
 
         @this.Saved = true;
 
@@ -174,8 +172,7 @@ public static class PersistencyExtensions
             source.Source.Save(key);
         }
 
-        key.SetKey("ActiveSource", @this.ActiveSource.Source.IdMonitorDevice);
-        key.SetKey("Orientation", @this.Orientation);
+        key.SetKey("ActiveSource", @this.ActiveSource.Source.Id);
         key.SetKey("SerialNumber", @this.SerialNumber);
 
         @this.Saved = true;
@@ -250,50 +247,33 @@ public static class PersistencyExtensions
     //================//
     public static void Load(this DisplaySource @this, RegistryKey key)
     {
-        var left = key.GetOrSet(@"GuiLocation\Left", () => @this.GuiLocation.Left);
-        var width = key.GetOrSet(@"GuiLocation\Width", () => @this.GuiLocation.Width);
-        var top = key.GetOrSet(@"GuiLocation\Top", () => @this.GuiLocation.Top);
-        var height = key.GetOrSet(@"GuiLocation\Height", () => @this.GuiLocation.Height);
 
-        @this.GuiLocation = new Rect(new Point(left, top), new Size(width, height));
-
-        var id = @this.IdMonitorDevice;
+        var id = @this.Id;
 
         if(!@this.AttachedToDesktop)
         {
             var x = key.GetOrSet($@"{id}\PixelX", () => @this.InPixel.X);
             var y = key.GetOrSet($@"{id}\PixelY", () => @this.InPixel.Y);
-            var w = key.GetOrSet($@"{id}\PixelWidth", () => @this.InPixel.Width);
-            var h = key.GetOrSet($@"{id}\PixelHeight", () => @this.InPixel.Height);
+            var width = key.GetOrSet($@"{id}\PixelWidth", () => @this.InPixel.Width);
+            var height = key.GetOrSet($@"{id}\PixelHeight", () => @this.InPixel.Height);
 
-            @this.InPixel.Set(new Rect(new Point(x, y), new Size(w, h)));
+            var orientation = key.GetOrSet($@"{id}\Orientation", () => @this.Orientation);
+
+            @this.InPixel.Set(new Rect(new Point(x, y), new Size(width, height)));
+
+            @this.Orientation = orientation;
 
             @this.DisplayName = key.GetOrSet($@"{id}\DisplayName", () => @this.DisplayName);
+
+            @this.Saved = true;
         }
-        else 
-        {    
-            key.SetKey($@"{id}\PixelX", @this.InPixel.X);
-            key.SetKey($@"{id}\PixelY", @this.InPixel.Y);
-            key.SetKey($@"{id}\PixelWidth", @this.InPixel.Width);
-            key.SetKey($@"{id}\PixelHeight", @this.InPixel.Height);
+        else @this.Save(key);
 
-            @this.InPixel.Saved = true;
-
-            key.SetKey($@"{id}\DisplayName", @this.DisplayName);
-            key.SetKey($@"{id}\Primary", @this.Primary);
-        }
-
-        @this.Saved = true;
     }
 
     public static void Save(this DisplaySource @this, RegistryKey? key)
     {
-        key.SetKey(@"GuiLocation\Left", @this.GuiLocation.Left);
-        key.SetKey(@"GuiLocation\Width", @this.GuiLocation.Width);
-        key.SetKey(@"GuiLocation\Top", @this.GuiLocation.Top);
-        key.SetKey(@"GuiLocation\Height", @this.GuiLocation.Height);
-
-        var id = @this.IdMonitorDevice;
+        var id = @this.Id;
 
         // This values are stored in order to be retrieved to be restored when the monitor is re-attached
         if(@this.AttachedToDesktop)
@@ -302,6 +282,7 @@ public static class PersistencyExtensions
             key.SetKey($@"{id}\PixelY", @this.InPixel.Y);
             key.SetKey($@"{id}\PixelWidth", @this.InPixel.Width);
             key.SetKey($@"{id}\PixelHeight", @this.InPixel.Height);
+            key.SetKey($@"{id}\Orientation", @this.Orientation);
             @this.InPixel.Saved = true;
 
             key.SetKey($@"{id}\DisplayName", @this.DisplayName);

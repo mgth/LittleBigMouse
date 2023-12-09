@@ -22,11 +22,11 @@ public enum WallpaperStyle
 /// </summary>
 public class DisplaySource : ReactiveModel
 {
-    public string IdMonitorDevice { get; }
+    public string Id { get; }
 
-    public DisplaySource(string idMonitor)
+    public DisplaySource(string id)
     {
-        IdMonitorDevice = idMonitor;
+        Id = id;
 
         _idResolution = this.WhenAnyValue(
             e => e.InPixel.Width,
@@ -72,6 +72,17 @@ public class DisplaySource : ReactiveModel
     string _deviceName;
 
     /// <summary>
+    /// Source Name
+    /// </summary>
+    [DataMember]
+    public string SourceName
+    {
+        get => _sourceName;
+        set => this.RaiseAndSetIfChanged(ref _sourceName, value) ;
+    }
+    string _sourceName;
+
+    /// <summary>
     /// Display Device Name
     /// </summary>
     [DataMember]
@@ -110,12 +121,26 @@ public class DisplaySource : ReactiveModel
     [DataMember]
     public DisplaySizeInPixels InPixel { get; } = new(new Rect());
 
+    /// <summary>
+    /// Monitor orientation (0=0°, 1=90°, 2=180°, 3=270°)
+    /// </summary>
+    [DataMember]
+    public int Orientation
+    {
+        get => _orientation;
+        set => this.SetUnsavedValue(ref _orientation, value);
+    }
+    int _orientation;
+
+
+    [DataMember]
     public string WallpaperPath {
         get => _wallpaperPath;
         set => this.RaiseAndSetIfChanged(ref _wallpaperPath, value);
     }
     string _wallpaperPath;
 
+    [DataMember]
     public WallpaperStyle WallpaperStyle
     {
         get => _wallpaperStyle;
@@ -124,6 +149,7 @@ public class DisplaySource : ReactiveModel
     WallpaperStyle _wallpaperStyle;
 
 
+    [DataMember]
     public Color BackgroundColor {
         get => _backgroundColor;
         set => this.RaiseAndSetIfChanged(ref _backgroundColor, value);
@@ -131,19 +157,6 @@ public class DisplaySource : ReactiveModel
     Color _backgroundColor;
 
     [DataMember]
-    public Rect GuiLocation
-    {
-        get => _guiLocation;
-        //{
-        //    Width = 0.5,
-        //    Height = (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
-        //    Y = 1 - (9 * Monitor.WorkArea.Width / 16) / Monitor.WorkArea.Height,
-        //    X = 1 - 0.5
-        //});
-        set => this.SetUnsavedValue(ref _guiLocation, value);
-    }
-    Rect _guiLocation;
-
     public string InterfaceName
     {
         get => _interfaceName;
@@ -151,6 +164,7 @@ public class DisplaySource : ReactiveModel
     }
     string _interfaceName;
 
+    [DataMember]
     public string InterfaceLogo
     {
         get => _interfaceLogo;
@@ -158,6 +172,7 @@ public class DisplaySource : ReactiveModel
     }
     string _interfaceLogo;
 
+    [DataMember]
     public bool AttachedToDesktop
     {
         get => _attachedToDesktop;

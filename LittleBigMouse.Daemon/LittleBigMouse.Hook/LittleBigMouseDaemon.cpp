@@ -15,9 +15,9 @@
 #include "XmlHelper.h"
 #include "str.h"
 
-void LittleBigMouseDaemon::Send(const std::string& string) const
+void LittleBigMouseDaemon::Send() const
 {
-	_remoteServer->Send(string,nullptr);
+	SendState(nullptr);
 }
 
 LittleBigMouseDaemon::LittleBigMouseDaemon(RemoteServer* server, MouseEngine* engine, Hooker* hook):
@@ -25,12 +25,17 @@ LittleBigMouseDaemon::LittleBigMouseDaemon(RemoteServer* server, MouseEngine* en
 	_engine(engine),
 	_hook(hook)
 {
+}
+
+void LittleBigMouseDaemon::Connect()
+{
 	if(_hook)
 	{
 		if(_engine)
 			_hook->OnMouseMove.connect<&MouseEngine::OnMouseMove>(_engine);
 
-		_hook->OnMessage.connect<&LittleBigMouseDaemon::Send>(this);
+		_hook->OnHooked.connect<&LittleBigMouseDaemon::Send>(this);
+		_hook->OnUnhooked.connect<&LittleBigMouseDaemon::Send>(this);
 
 		_hook->OnDisplayChanged.connect<&LittleBigMouseDaemon::DisplayChanged>(this);
 		_hook->OnDesktopChanged.connect<&LittleBigMouseDaemon::DesktopChanged>(this);
@@ -50,6 +55,8 @@ void LittleBigMouseDaemon::Run(const std::string& path)
 // load layout from file
 	if(!path.empty())
 		LoadFromFile(path);
+
+	Connect();
 
 //start remote server
 	if(_remoteServer)
@@ -71,7 +78,8 @@ LittleBigMouseDaemon::~LittleBigMouseDaemon()
 	if(_hook)
 	{
 		_hook->OnMouseMove.disconnect<&MouseEngine::OnMouseMove>(_engine);
-		_hook->OnMessage.disconnect<&LittleBigMouseDaemon::Send>(this);
+		_hook->OnHooked.disconnect<&LittleBigMouseDaemon::Send>(this);
+		_hook->OnUnhooked.disconnect<&LittleBigMouseDaemon::Send>(this);
 
 		_hook->OnDisplayChanged.disconnect<&LittleBigMouseDaemon::DisplayChanged>(this);
 		_hook->OnDesktopChanged.disconnect<&LittleBigMouseDaemon::DesktopChanged>(this);
@@ -139,6 +147,13 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 
 		else if(strcmp(command, "Quit")==0)
 		{
+			if(_hook && _hook->Hooked())
+			{
+				_hook->SetPriority(Normal);
+				_hook->Unhook();
+			}
+			_paused = false;
+
 			if(_remoteServer)
 				_remoteServer->Stop();
 		}
@@ -173,7 +188,10 @@ void LittleBigMouseDaemon::SendState(RemoteClient* client) const
 	}
 	else
 	{
-		_remoteServer->Send("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n",client);
+		if(_paused)
+			_remoteServer->Send("<DaemonMessage><Event>Paused</Event></DaemonMessage>\n",client);
+		else
+			_remoteServer->Send("<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n",client);
 	}
 }
 
@@ -279,12 +297,18 @@ void LittleBigMouseDaemon::LoadExcluded(const std::string& path)
 
 	    std::string buffer;
 		std::string line;
-		while(file){
+		while(file)
+		{
 			std::getline(file, line);
+
+			if(line.empty()) continue;
+			if(line[0] == ':') continue;
+
 		    _excluded.push_back(line);
-		#if defined(_DEBUG)
-		std::cout << "Excluded : " << line << "\n";
-		#endif
+
+			#if defined(_DEBUG)
+			std::cout << "Excluded : " << line << "\n";
+			#endif
 		}
 
 	    file.close();
@@ -293,9 +317,21 @@ void LittleBigMouseDaemon::LoadExcluded(const std::string& path)
 
 void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
 {
-    PWSTR szPath;
+    PWSTR szPath = nullptr;
+	long result = 0;
 
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
+	try{
+		result = SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath);
+	}
+	catch (...)
+	{
+		#if defined(_DEBUG)
+		std::cout << "Failed to get ProgramData folder\n";
+		#endif
+		return;
+	}
+
+    if (result == S_OK)
     {
 	    std::ifstream file;
 
@@ -304,12 +340,18 @@ void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
 
 	    std::string buffer;
 		std::string line;
-		while(file){
+		while(!file.eof()){
 			std::getline(file, line);
 		    ReceiveClientMessage(line,nullptr);
 		}
 
 	    file.close();
     }
+	else
+	{
+		#if defined(_DEBUG)
+		std::cout << "Failed to load layout from file : " << path << "\n";
+		#endif
+	}
 
 }

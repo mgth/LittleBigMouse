@@ -21,9 +21,8 @@
 	  http://www.mgth.fr
 */
 
-using Avalonia.Styling;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Sys.Windows.Monitors;
+using HLab.Sys.Windows.Monitors.Factory;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
 using System.Reactive.Linq;
@@ -93,9 +92,8 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
             Model.ActiveSource.Source.DisplayName,
             Model.ActiveSource.Source.Primary,
             Model.ActiveSource.Source.InPixel.Bounds,
-            Model.Orientation
+            Model.ActiveSource.Source.Orientation
             );
-        //MonitorDeviceHelper.AttachToDesktop(Model.ActiveSource.Source.DeviceName);
     }
 
  }

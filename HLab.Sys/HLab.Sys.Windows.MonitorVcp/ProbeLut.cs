@@ -193,7 +193,7 @@ public class ProbeLut : ReactiveObject
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "LittleBigMouse"
         );
-        path = Path.Combine(path, _monitor.ConfigPath());
+        path = Path.Combine(path, _monitor.Id);
         path = Path.Combine(path, "Luminance.xml");
 
         if(create) Directory.CreateDirectory(path);

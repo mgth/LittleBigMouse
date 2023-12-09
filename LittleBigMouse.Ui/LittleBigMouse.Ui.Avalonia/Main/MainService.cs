@@ -22,10 +22,10 @@
 */
 
 using System;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using ExCSS;
 using HLab.Base.Avalonia;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
@@ -39,7 +39,7 @@ using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
 using Live.Avalonia;
-using ScottPlot;
+using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
@@ -63,7 +63,7 @@ public class MainService : ReactiveModel, IMainService
     public IMonitorsLayout MonitorsLayout 
     { 
         get => _monitorLayout; 
-        set => SetAndRaise(ref _monitorLayout, value);
+        set => this.RaiseAndSetIfChanged(ref _monitorLayout, value);
     }
     private IMonitorsLayout _monitorLayout;
 
@@ -93,9 +93,15 @@ public class MainService : ReactiveModel, IMainService
         if (_monitors is not SystemMonitorsService monitors) return;
 
         monitors.UpdateDevices();
+
         var old = MonitorsLayout;
-        MonitorsLayout = new MonitorsLayout().UpdateFrom(monitors);
         old?.Dispose();
+
+        MonitorsLayout = new MonitorsLayout().UpdateFrom(monitors);
+
+        //Dispatcher.UIThread.RunJobs(DispatcherPriority.Normal);
+
+        _mainWindow?.UpdateLayout();
     }
 
     Window _mainWindow = null!;
@@ -149,11 +155,6 @@ public class MainService : ReactiveModel, IMainService
 
         _notify.Show();
 
-        //if (MonitorsLayout.Enabled)
-        //{
-        //    await StartAsync();
-        //}
-
         if(MonitorsLayout.AutoUpdate)
             await CheckUpdateBlindAsync();
     }
@@ -184,12 +185,13 @@ public class MainService : ReactiveModel, IMainService
                 break;
 
             case LittleBigMouseEvent.Stopped:
-                if (MonitorsLayout.Enabled && _justConnected)
+                await _notify.SetIconAsync("icon/lbm_off",32);
+
+                if (MonitorsLayout is not null && MonitorsLayout.Enabled && _justConnected)
                 {
                     _justConnected = false;
                     await StartAsync();
                 }
-                await _notify.SetIconAsync("icon/lbm_off",32);
                 break;
 
             case LittleBigMouseEvent.Dead:

@@ -21,9 +21,7 @@ class LittleBigMouseDaemon
 	// paused when current process is excluded
 	bool _paused = false;
 
-	//int _onMouseMoveId;
-	//int _onMessageId;
-	//int _onServerMessageId;
+	void Connect();
 
 	void ReceiveLoadMessage(tinyxml2::XMLElement* root) const;
 	void ReceiveCommandMessage(tinyxml2::XMLElement* root, RemoteClient* client);
@@ -37,7 +35,7 @@ class LittleBigMouseDaemon
 	void FocusChanged(const std::string& path);
 
 	void ReceiveClientMessage(const std::string& message, RemoteClient* client);
-	void Send(const std::string& string) const;
+	void Send() const;
 
 	void LoadFromFile(const std::string& path);
 	void LoadExcluded(const std::string& path);

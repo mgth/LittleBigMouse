@@ -4,12 +4,12 @@
 	<TargetFrameworks>net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <Platforms>x64;x86;AnyCpu</Platforms>
-	<Version>5.0.3.0</Version>
+	<Version>5.0.4.0</Version>
 	<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.5" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.6" />
   </ItemGroup>
 
   <ItemGroup>

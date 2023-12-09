@@ -5,12 +5,12 @@
     <Platforms>x64;x86;AnyCpu</Platforms>
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
-	<Version>5.0.3.0</Version>
+	<Version>5.0.4.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.5" />
-    <PackageReference Include="H.Pipes" Version="2.0.56" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.6" />
+    <PackageReference Include="H.Pipes" Version="2.0.59" />
     <PackageReference Include="MessageBox.Avalonia" Version="3.1.5.1" />
     <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
     <PackageReference Include="System.Management" Version="8.0.0" />

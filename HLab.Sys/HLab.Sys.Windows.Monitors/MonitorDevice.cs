@@ -1,15 +1,36 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Diagnostics;
 using System.Runtime.Serialization;
 using Avalonia;
 using Avalonia.Controls;
-using DynamicData;
 using Microsoft.Win32;
 
 namespace HLab.Sys.Windows.Monitors;
 
-public class MonitorDevice : DisplayDevice
+public class MonitorDevice : IEquatable<MonitorDevice>
+{
+    [DataMember] public string Id { get; init; }
+    [DataMember] public string PnpCode { get; init; }
+    [DataMember] public string PhysicalId { get; set; }
+    [DataMember] public string SourceId { get; set; }
+    [DataMember] public IEdid Edid { get; init; }
+    [DataMember] public string MonitorNumber { get; set; }
+
+    public List<MonitorDeviceConnection> Connections = new ();
+
+    public override bool Equals(object obj)
+    {
+        if(obj is MonitorDevice other) return Id == other.Id;
+        return base.Equals(obj);
+    }
+
+    public override int GetHashCode() => HashCode.Combine(Id);
+
+    public bool Equals(MonitorDevice other) => Id == other.Id;
+}
+
+public class MonitorDeviceConnection : DisplayDevice
 {
     public new PhysicalAdapter Parent
     {
@@ -17,16 +38,7 @@ public class MonitorDevice : DisplayDevice
         set => base.Parent = value;
     }
 
-    public string PnpCode { get; init; }
-
-    public string IdMonitor { get; set; }
-
-    public IEdid Edid { get; init; }
-
-    public IObservableCache<DisplayDevice, string> Devices { get; internal set; }
-
-    [DataMember] public int MonitorNumber { get; set; }
-
+    public MonitorDevice Monitor { get; set; }
 
     class EdidDesign : IEdid
     {
@@ -66,40 +78,52 @@ public class MonitorDevice : DisplayDevice
         public int Checksum => int.MinValue;
     }
 
-    public static MonitorDevice MonitorDesign
+    public static MonitorDeviceConnection MonitorDesign
     {
         get
         {
             if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
 
-            return new MonitorDevice
+            return new MonitorDeviceConnection
             {
-                Edid = new EdidDesign()
+                //Edid = new EdidDesign()
             };
         }
     }
 
-    string _hKeyName;
-
     //------------------------------------------------------------------------
-    public override bool Equals(object obj) => obj is MonitorDevice other ? DeviceId == other.DeviceId : base.Equals(obj);
+    public override bool Equals(object obj) => obj is MonitorDeviceConnection other ? Id == other.Id : base.Equals(obj);
 
 
     public override int GetHashCode() {
-        return ("DisplayMonitor" + DeviceId).GetHashCode();
+        return ("DisplayMonitor" + Id).GetHashCode();
     }
 
-    void OpenRegKey(string keystring) {
-        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Applets\Regedit\Lastkey", true)) {
-            //key;
+    void OpenRegKey(string keyString) {
+
+        keyString = keyString.Replace(@"\MACHINE\",@"\HKEY_LOCAL_MACHINE\");
+        keyString = keyString.Replace(@"\USER\",@"\HKEY_CURRENT_USER\");
+
+        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Applets\Regedit", true)) {
+            
+            if(key == null) return;
+            var value = key.GetValue("LastKey").ToString();
+
+            var list = value.Split('\\');
+            if(list.Length > 0)
+            {
+                keyString = keyString.Replace(@"\REGISTRY\",@$"{list[0]}\");
+                key.SetValue("LastKey", keyString);
+            }
         }
+
+        Process.Start("regedit.exe");
     }
 
-    public string ConfigPath() => IdMonitor;
 
     public void DisplayValues(Action<string, string, Action, bool> addValue) {
-        addValue("Registry", Edid.HKeyName, () => { OpenRegKey(Edid.HKeyName); }, false);
-        addValue("Microsoft Id", IdMonitor, null, false);
+        //addValue("Registry", Edid.HKeyName, () => { OpenRegKey(Edid.HKeyName); }, false);
+        //addValue("Microsoft Id", PhysicalId, null, false);
 
         // EnumDisplaySettings
         addValue("", "EnumDisplaySettings", null, true);
@@ -134,14 +158,15 @@ public class MonitorDevice : DisplayDevice
         addValue("WorkArea", Parent.WorkArea.ToString(), null, false);
 
 
-        // EDID
-        addValue("", "EDID", null, true);
-        addValue("ManufacturerCode", Edid?.ManufacturerCode, null, false);
-        addValue("ProductCode", Edid?.ProductCode, null, false);
-        addValue("Serial", Edid?.Serial, null, false);
-        addValue("Model", Edid?.Model, null, false);
-        addValue("SerialNo", Edid?.SerialNumber, null, false);
-        addValue("SizeInMm", Edid?.PhysicalSize.ToString(), null, false);
+        //// EDID
+        //addValue("", "EDID", null, true);
+        //addValue("ManufacturerCode", Edid?.ManufacturerCode, null, false);
+        //addValue("ProductCode", Edid?.ProductCode, null, false);
+        //addValue("Serial", Edid?.Serial, null, false);
+        //addValue("Model", Edid?.Model, null, false);
+        //addValue("SerialNo", Edid?.SerialNumber, null, false);
+        //addValue("SizeInMm", Edid?.PhysicalSize.ToString(), null, false);
+        //addValue("VideoInterface", Edid?.VideoInterface.ToString(), null, false);
 
         // GetScaleFactorForMonitor
         addValue("", "GetScaleFactorForMonitor", null, true);
@@ -149,14 +174,14 @@ public class MonitorDevice : DisplayDevice
 
         // EnumDisplayDevices
         addValue("", "EnumDisplayDevices", null, true);
-        addValue("DeviceId", Parent?.DeviceId, null, false);
+        addValue("DeviceId", Parent?.Id, null, false);
         addValue("DeviceKey", Parent?.DeviceKey, null, false);
         addValue("DeviceString", Parent?.DeviceString, null, false);
         addValue("DeviceName", Parent?.DeviceName, null, false);
         addValue("StateFlags", Parent?.State.ToString(), null, false);
 
         addValue("", "EnumDisplayDevices", null, true);
-        addValue("DeviceId", DeviceId, null, false);
+        addValue("DeviceId", Id, null, false);
         addValue("DeviceKey", DeviceKey, null, false);
         addValue("DeviceString", DeviceString, null, false);
         addValue("DeviceName", DeviceName, null, false);

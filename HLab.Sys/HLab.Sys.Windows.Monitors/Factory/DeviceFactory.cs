@@ -1,21 +1,41 @@
 ﻿using HLab.Sys.Windows.API;
 using System;
+using System.Linq;
 using static HLab.Sys.Windows.API.WinGdi;
 
 
-namespace HLab.Sys.Windows.Monitors;
+namespace HLab.Sys.Windows.Monitors.Factory;
 
 internal static class DeviceFactory
 {
-    public static MonitorDevice BuildMonitorDevice(DisplayDevice parent, WinGdi.DisplayDevice device)
+    public static MonitorDeviceConnection BuildMonitorDevice(DisplayDevice parent, WinGdi.DisplayDevice device)
     {
-        var edid = MonitorDeviceHelper.GetEdid(device.DeviceID);
-        var monitor = new MonitorDevice
+
+        var monitors = parent.Parent.AllMonitorDevices().ToList();
+
+        var monitor = monitors.FirstOrDefault(m => m.Id == device.DeviceID);
+
+        if (monitor == null)
+        {
+            var edid = MonitorDeviceHelper.GetEdid(device.DeviceID);
+
+            monitor = new MonitorDevice
+            {
+                Id = device.DeviceID,
+                //MonitorDevice
+                Edid = edid,
+                PnpCode = MonitorDeviceHelper.GetPnpCodeFromId(device.DeviceID),
+                PhysicalId = MonitorDeviceHelper.GetPhysicalId(device.DeviceID, edid),
+                SourceId = MonitorDeviceHelper.GetSourceId(device.DeviceID, edid),
+            };
+        }
+
+        var connection = new MonitorDeviceConnection
         {
             Parent = parent as PhysicalAdapter,
 
             //DisplayDevice
-            DeviceId = device.DeviceID,
+            Id = device.DeviceID,
             DeviceName = device.DeviceName,
             DeviceString = device.DeviceString,
             DeviceKey = device.DeviceKey,
@@ -24,15 +44,14 @@ internal static class DeviceFactory
             Capabilities = MonitorDeviceHelper.BuildDeviceCaps(device.DeviceName),
             CurrentMode = MonitorDeviceHelper.GetCurrentMode(device.DeviceName),
 
-            //MonitorDevice
-            Edid = edid,
-            PnpCode = MonitorDeviceHelper.GetPnpCodeFromId(device.DeviceID),
-            IdMonitor = MonitorDeviceHelper.GetMicrosoftId(device.DeviceID, edid),
+            Monitor = monitor,
         };
 
-        monitor.UpdateDevModes();
+        monitor.Connections.Add(connection);
 
-        return monitor;
+        connection.UpdateDevModes();
+
+        return connection;
     }
 
 
@@ -42,7 +61,7 @@ internal static class DeviceFactory
         {
             Parent = parent,
             //DisplayDevice
-            DeviceId = device.DeviceID,
+            Id = device.DeviceID,
             DeviceName = device.DeviceName,
             DeviceString = device.DeviceString,
             DeviceKey = device.DeviceKey,
@@ -59,7 +78,7 @@ internal static class DeviceFactory
     }
 
     public static DisplayDevice BuildDisplayDeviceAndChildren(
-        DisplayDevice? parent,
+        DisplayDevice parent,
         WinGdi.DisplayDevice dev
         )
     {
@@ -75,7 +94,7 @@ internal static class DeviceFactory
         return result;
     }
 
-    static DisplayDevice BuildDisplayDevice(DisplayDevice? parent, WinGdi.DisplayDevice device)
+    static DisplayDevice BuildDisplayDevice(DisplayDevice parent, WinGdi.DisplayDevice device)
     {
         switch (device.DeviceID.Split('\\')[0])
         {
@@ -84,7 +103,7 @@ internal static class DeviceFactory
                 {
                     Parent = parent,
                     //DisplayDevice
-                    DeviceId = device.DeviceID,
+                    Id = device.DeviceID,
                     DeviceName = device.DeviceName,
                     DeviceString = device.DeviceString,
                     DeviceKey = device.DeviceKey,

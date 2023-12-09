@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Markup.Xaml;
-using Grace.DependencyInjection;
 
 namespace LittleBigMouse.Ui.Avalonia;
 

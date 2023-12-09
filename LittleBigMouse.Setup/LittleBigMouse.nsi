@@ -10,9 +10,7 @@
 ;	${CONFIGUREUNINSTALL}
   
   !define lbm "LittleBigMouse"
-;  !define lbm_version "5.0.0"
   !define lbm_file "LittleBigMouse.Ui.Avalonia.exe"
-  
   
   !define main "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia"
   !define daemon "..\LittleBigMouse.Daemon"

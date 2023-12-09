@@ -2,7 +2,6 @@
 using HLab.Core.Annotations;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
-using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.About;
 

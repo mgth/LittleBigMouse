@@ -1,9 +1,7 @@
 ﻿#nullable enable
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -13,7 +11,6 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
 using DynamicData;
 using DynamicData.Binding;
 using HLab.Base.Avalonia;

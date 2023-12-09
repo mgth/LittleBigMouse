@@ -24,7 +24,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
@@ -140,7 +139,6 @@ public class PhysicalMonitor : ReactiveModel
                 if (e) return;
                 Saved = false;
             });
-
     }
 
     void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)
@@ -151,10 +149,11 @@ public class PhysicalMonitor : ReactiveModel
         }
     }
 
-    public void AddSource(PhysicalSource source) => Sources.Add(source);
-
     // References properties
 
+    /// <summary>
+    /// Monitor orientation (0=0°, 1=90°, 2=180°, 3=270°)
+    /// </summary>
     [DataMember]
     public int Orientation
     {
@@ -163,6 +162,20 @@ public class PhysicalMonitor : ReactiveModel
     }
     int _orientation;
 
+    /// <summary>
+    /// Show each source as a separate monitor
+    /// </summary>
+    [DataMember]
+    public bool SplitSources
+    {
+        get => _splitSources;
+        set => this.SetUnsavedValue(ref _splitSources, value);
+    }
+    bool _splitSources;
+
+    /// <summary>
+    /// Serial number from EDID
+    /// </summary>
     [DataMember]
     public string SerialNumber
     {
@@ -171,6 +184,9 @@ public class PhysicalMonitor : ReactiveModel
     }
     string _serialNumber;
 
+    /// <summary>
+    /// True when placement has been set by user or by automatic placement
+    /// </summary>
     public bool Placed
     {
         get => _placed;
@@ -178,8 +194,14 @@ public class PhysicalMonitor : ReactiveModel
     }
     bool _placed;
 
+    /// <summary>
+    /// Monitor model
+    /// </summary>
     public PhysicalMonitorModel Model { get; }
 
+    /// <summary>
+    /// Dimensions with rotation applied
+    /// </summary>
     [DataMember] public IDisplaySize PhysicalRotated => _physicalRotated.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _physicalRotated;
 
@@ -187,12 +209,15 @@ public class PhysicalMonitor : ReactiveModel
     // Mm
 
     /// <summary>
-    /// Dimentions with final ratio to deal with monitor distance
+    /// Dimensions with depth ratio applied to deal with monitor distance
     /// </summary>
     [DataMember]
     public IDisplaySize DepthProjection => _depthProjection.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _depthProjection;
 
+    /// <summary>
+    /// Dimensions with depth ratio applied but without rotation
+    /// </summary>
     [DataMember]
     public IDisplaySize DepthProjectionUnrotated => _depthProjectionUnrotated.Value;
     readonly ObservableAsPropertyHelper<IDisplaySize> _depthProjectionUnrotated;
@@ -203,13 +228,11 @@ public class PhysicalMonitor : ReactiveModel
     [DataMember]
     public IDisplayRatio DepthRatio { get; }
 
+    /// <summary>
+    /// Diagonal
+    /// </summary>
     public double Diagonal => _diagonal.Value;
-
     readonly ObservableAsPropertyHelper<double> _diagonal;
-
-    static readonly List<string> SideNames = new List<string> { "Left", "Top", "Right", "Bottom" };
-    static readonly List<string> DimNames = new List<string> { "Width", "Height" };
-
 
     double RightDistance(PhysicalMonitor monitor) => DepthProjection.OutsideBounds.X - monitor.DepthProjection.OutsideBounds.Right;
 

@@ -399,9 +399,7 @@ public static class MonitorDeviceHelper
         // Some monitors may have generic serial so we fallback to DeviceId to descriminiate them
         // Reason wy we don't use DeviceId as primary key is that it may change when monitors are plugged/unplugged
 
-        bool splitPhysical = true;
         var lastSourceId = "";
-        var lastPhysicalId = "";
         MonitorDevice? last = null;
         foreach (var monitor in list)
         {
@@ -410,23 +408,14 @@ public static class MonitorDeviceHelper
                 if(last.SourceId == lastSourceId)
                 {
                     last.SourceId = $"{lastSourceId}_{last.DeviceId.Split('\\').Last()}";
-                    if (splitPhysical)
-                    {
-                        last.PhysicalId = $"{lastPhysicalId}_{last.DeviceId.Split('\\').Last()}";
-                    }
                 }
 
                 monitor.SourceId = $"{lastSourceId}_{monitor.DeviceId.Split('\\').Last()}";
 
-                if (splitPhysical)
-                {
-                    monitor.PhysicalId = $"{lastPhysicalId}_{monitor.DeviceId.Split('\\').Last()}";
-                }
             }
             else
             {
                 lastSourceId = monitor.SourceId;
-                lastPhysicalId = monitor.PhysicalId;
             }
 
             last = monitor;
@@ -568,7 +557,7 @@ public static class MonitorDeviceHelper
             case 0:
                 return true;
             case 1:
-                remaining[0].MonitorNumber = $"{number++}<";
+                remaining[0].MonitorNumber = $"{number++}";
                 return true;
         }
 
@@ -585,7 +574,7 @@ public static class MonitorDeviceHelper
                     var monitors = remaining.Where(m => m.SourceId == monitorId).ToList();
                     foreach (var monitor in monitors)
                     {
-                        monitor.MonitorNumber = $"{number++}+";
+                        monitor.MonitorNumber = $"{number++}";
                         remaining.Remove(monitor);
                     }
                 }
@@ -596,7 +585,7 @@ public static class MonitorDeviceHelper
             case 0:
                 return true;
             case 1:
-                remaining[0].MonitorNumber = $"{number++}>";
+                remaining[0].MonitorNumber = $"{number++}";
                 return true;
             default:
                 return false;
@@ -626,7 +615,7 @@ public static class MonitorDeviceHelper
 
         foreach (var monitor in remaining)
         {
-            monitor.MonitorNumber = $".{(number++)}.";
+            monitor.MonitorNumber = $"{(number++)}";
         }
 
         return false;

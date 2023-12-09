@@ -3,7 +3,6 @@ using HLab.Sys.Windows.API;
 using LittleBigMouse.Zoning;
 using System;
 using System.Collections.ObjectModel;
-using System.Threading.Tasks;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 

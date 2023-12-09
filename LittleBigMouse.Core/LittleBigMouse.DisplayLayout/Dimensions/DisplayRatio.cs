@@ -24,7 +24,6 @@
 using System;
 using System.Runtime.Serialization;
 using HLab.Base.Avalonia;
-using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 

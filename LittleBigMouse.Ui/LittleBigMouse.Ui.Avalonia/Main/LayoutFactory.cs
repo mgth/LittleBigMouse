@@ -34,15 +34,16 @@ public static class LayoutFactory
                 continue;
             }
 
-            var id = device.PhysicalId;
+            var id = device.SourceId;
 
             var monitor = layout.PhysicalMonitors.FirstOrDefault(m => m.Id == id);
 
             if (monitor == null)
             {
-                var model = layout.GetOrAddPhysicalMonitorModel(device.PnpCode,id => device.CreatePhysicalMonitorModel(id));
+                // first get the monitor model, it defines physical size
+                var model = layout.GetOrAddPhysicalMonitorModel(device.PnpCode,s => device.CreatePhysicalMonitorModel(s));
 
-                monitor = device.CreatePhysicalMonitor(layout, model);
+                monitor = device.CreatePhysicalMonitor(id, layout, model);
 
                 source = new PhysicalSource(device.DeviceId, monitor, device.CreateDisplaySource());
 
@@ -185,8 +186,8 @@ public static class LayoutFactory
         return @this;
     }
 
-    public static PhysicalMonitor CreatePhysicalMonitor(this MonitorDevice device, IMonitorsLayout layout, PhysicalMonitorModel model)
-        => new PhysicalMonitor(device.PhysicalId, layout, model).UpdateFrom(device);
+    public static PhysicalMonitor CreatePhysicalMonitor(this MonitorDevice device, string id, IMonitorsLayout layout, PhysicalMonitorModel model)
+        => new PhysicalMonitor(id, layout, model).UpdateFrom(device);
 
     public static PhysicalMonitor UpdateFrom(this PhysicalMonitor monitor, MonitorDevice device)
     {

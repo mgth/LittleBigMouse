@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using HLab.Base.Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -8,6 +6,9 @@ using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
+/// <summary>
+/// Defines monitor physical properties (size, brand, model, etc...)
+/// </summary>
 [DataContract]
 public class PhysicalMonitorModel : ReactiveModel
 {

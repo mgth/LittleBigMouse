@@ -25,7 +25,6 @@ using System;
 using System.Globalization;
 
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace LittleBigMouse.DisplayLayout;
 

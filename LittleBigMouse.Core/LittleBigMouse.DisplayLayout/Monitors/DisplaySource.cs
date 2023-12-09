@@ -121,6 +121,18 @@ public class DisplaySource : ReactiveModel
     [DataMember]
     public DisplaySizeInPixels InPixel { get; } = new(new Rect());
 
+    /// <summary>
+    /// Monitor orientation (0=0°, 1=90°, 2=180°, 3=270°)
+    /// </summary>
+    [DataMember]
+    public int Orientation
+    {
+        get => _orientation;
+        set => this.SetUnsavedValue(ref _orientation, value);
+    }
+    int _orientation;
+
+
     [DataMember]
     public string WallpaperPath {
         get => _wallpaperPath;

@@ -21,19 +21,9 @@
 	  http://www.mgth.fr
 */
 
-using System;
-using System.Linq;
-using System.Reactive.Linq;
 using System.Reflection;
-using Avalonia.Controls;
-using Avalonia.Media;
-using DynamicData;
-using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors;
-using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
-using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.About;
 public class AboutMonitorViewModel : ViewModel<PhysicalMonitor>

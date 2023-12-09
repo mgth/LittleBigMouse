@@ -24,45 +24,46 @@ public static class LayoutFactory
     public static MonitorsLayout UpdateFrom(this MonitorsLayout layout, ISystemMonitorsService service)
     {
 
-        foreach (var device in service.Root.AllChildren<MonitorDevice>())
+        foreach (var monitor in service.Root.AllMonitorDevices())
         {
-            var source = layout.PhysicalSources.FirstOrDefault(s => s.DeviceId == device.DeviceId);
+            var source = layout.PhysicalSources.FirstOrDefault(s => s.DeviceId == monitor.Id);
 
             if (source != null)
             {
-                source.Source.UpdateFrom(device);
+                source.Source.UpdateFrom(monitor);
                 continue;
             }
 
-            var id = device.SourceId;
+            var id = monitor.SourceId;
 
-            var monitor = layout.PhysicalMonitors.FirstOrDefault(m => m.Id == id);
+            var physicalMonitor = layout.PhysicalMonitors.FirstOrDefault(m => m.Id == id);
 
-            if (monitor == null)
+            if (physicalMonitor == null)
             {
                 // first get the monitor model, it defines physical size
-                var model = layout.GetOrAddPhysicalMonitorModel(device.PnpCode,s => device.CreatePhysicalMonitorModel(s));
+                var model = layout.GetOrAddPhysicalMonitorModel(monitor.PnpCode,s => monitor.CreatePhysicalMonitorModel(s));
 
-                monitor = device.CreatePhysicalMonitor(id, layout, model);
+                physicalMonitor = monitor.CreatePhysicalMonitor(id, layout, model);
 
-                source = new PhysicalSource(device.DeviceId, monitor, device.CreateDisplaySource());
+                source = new PhysicalSource(monitor.Id, physicalMonitor, monitor.CreateDisplaySource());
 
-                monitor.ActiveSource = source;
-                monitor.Sources.Add(source);
+                physicalMonitor.ActiveSource = source;
+                physicalMonitor.Sources.Add(source);
 
-                layout.AddOrUpdatePhysicalMonitor(monitor);
+                layout.AddOrUpdatePhysicalMonitor(physicalMonitor);
             }
             else
             {
                 // new source for an existing monitor
-                source = new PhysicalSource(device.DeviceId, monitor, device.CreateDisplaySource());
-                monitor.Sources.Add(source);
+                source = new PhysicalSource(monitor.Id, physicalMonitor, monitor.CreateDisplaySource());
+                physicalMonitor.Sources.Add(source);
             }
 
             layout.AddOrUpdatePhysicalSource(source);
         }
 
-        layout.Id = string.Join("+",layout.PhysicalMonitors.Select(m => $"{m.Id}_{m.Orientation}"));
+//        layout.Id = string.Join("+",layout.PhysicalMonitors.Select(m => $"{m.Id}_{m.Orientation}").OrderBy(s => s));
+        layout.Id = string.Join("+",layout.PhysicalMonitors.Select(m => $"{m.Id}").OrderBy(s => s));
 
         // places monitors from windows configuration as best as possible
         layout.SetLocationsFromSystemConfiguration();
@@ -74,17 +75,19 @@ public static class LayoutFactory
     }
 
 
-    public static DisplaySource CreateDisplaySource(this MonitorDevice device)
+    public static DisplaySource CreateDisplaySource(this MonitorDevice monitor)
     {
-        return new DisplaySource(device.SourceId).UpdateFrom(device);
+        return new DisplaySource(monitor.SourceId).UpdateFrom(monitor);
     }
 
-    public static DisplaySource UpdateFrom(this DisplaySource source, MonitorDevice device)
+    public static DisplaySource UpdateFrom(this DisplaySource source, MonitorDevice monitor)
     {
+        var device = monitor.Connections[0];
+
         source.DisplayName = device.Parent?.DeviceName;
         source.DeviceName = device.DeviceName;
 
-        source.SourceName = $"{device.Edid.VideoInterface}:{device.DeviceName}";
+        source.SourceName = $"{monitor.Edid.VideoInterface}:{device.DeviceName}";
 
 
         source.Primary = device.Parent.Primary;
@@ -101,6 +104,8 @@ public static class LayoutFactory
             source.InPixel.Set(new Rect(
                 mode.Position,
                 mode.Pels));
+
+            source.Orientation = mode.DisplayOrientation;
         }
         else
         {
@@ -123,22 +128,22 @@ public static class LayoutFactory
         var color = device.Parent.Background;
         source.BackgroundColor = Color.FromRgb((byte)(color & 0xFF),(byte)((color >> 8) & 0xFF),(byte)((color >> 16) & 0xFF));
 
-        source.SourceNumber = device.MonitorNumber;
+        source.SourceNumber = monitor.MonitorNumber;
 
         return source;
     }
 
-    public static PhysicalMonitorModel CreatePhysicalMonitorModel(this MonitorDevice device, string id)
-        => new PhysicalMonitorModel(id).UpdateFrom(device);
+    public static PhysicalMonitorModel CreatePhysicalMonitorModel(this MonitorDevice monitor, string id)
+        => new PhysicalMonitorModel(id).UpdateFrom(monitor);
 
-    public static PhysicalMonitorModel UpdateFrom(this PhysicalMonitorModel @this, MonitorDevice device)
+    public static PhysicalMonitorModel UpdateFrom(this PhysicalMonitorModel @this, MonitorDevice monitor)
     {
         using (@this.DelayChangeNotifications())
         {
-            @this.SetSizeFrom(device);
-            @this.SetPnpDeviceName(device);
+            @this.SetSizeFrom(monitor);
+            @this.SetPnpDeviceName(monitor);
 
-            @this.Logo = device.BrandLogo();
+            @this.Logo = monitor.BrandLogo();
 
             return @this;
         }
@@ -153,7 +158,7 @@ public static class LayoutFactory
             var old = @this.PhysicalSize.FixedAspectRatio;
             @this.PhysicalSize.FixedAspectRatio = false;
 
-            var display = monitor.Parent;
+            var display = monitor.Connections[0].Parent;
 
             if (display?.CurrentMode != null)
             {
@@ -177,7 +182,7 @@ public static class LayoutFactory
     {
         if (!string.IsNullOrEmpty(@this.PnpDeviceName)) return @this;
 
-        var name = HtmlHelper.CleanupPnpName(monitor.DeviceString);
+        var name = HtmlHelper.CleanupPnpName(monitor.Connections[0].DeviceString);
         if (name.ToLower() == "generic pnp monitor") name = monitor.Edid.Model;
         //        if (name.ToLower() == "generic pnp monitor") name = HtmlHelper.GetPnpName(@this.PnpCode);
 
@@ -191,24 +196,17 @@ public static class LayoutFactory
 
     public static PhysicalMonitor UpdateFrom(this PhysicalMonitor monitor, MonitorDevice device)
     {
-        monitor.DeviceId = device.DeviceId;
+        monitor.DeviceId = device.Id;
 
         // Serial Number
         monitor.SerialNumber = device.Edid?.SerialNumber ?? "N/A";
-
-        // Orientation
-        var display = device.Parent;
-        if (display?.CurrentMode is { } mode)
-        {
-            monitor.Orientation = mode.DisplayOrientation;
-        }
 
         return monitor;
     }
 
     static string BrandLogo(this MonitorDevice device)
     {
-        var dev = device.Parent?.Parent.DeviceString;
+        var dev = device.Connections[0].Parent?.Parent.DeviceString;
         if (dev != null)
         {
             // special case for Spacedesk support

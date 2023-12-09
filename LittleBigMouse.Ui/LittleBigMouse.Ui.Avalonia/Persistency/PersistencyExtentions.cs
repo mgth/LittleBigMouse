@@ -4,7 +4,6 @@ using Microsoft.Win32;
 using System.Globalization;
 using Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
-using System;
 #pragma warning disable CA1416
 
 namespace LittleBigMouse.Ui.Avalonia.Persistency;
@@ -126,16 +125,6 @@ public static class PersistencyExtensions
     {
         using var key = @this.OpenRegKey(true);
 
-        @this.DepthProjection.X = key.GetOrSet("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
-        @this.DepthProjection.Y = key.GetOrSet("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
-
-        @this.DepthProjection.Saved = true;
-
-        @this.DepthRatio.X = key.GetOrSet("PhysicalRatioX", () => @this.DepthRatio.X);
-        @this.DepthRatio.Y = key.GetOrSet("PhysicalRatioY", () => @this.DepthRatio.Y);
-
-        @this.DepthRatio.Saved = true;
-
         var active = key.GetOrSet("ActiveSource", () => @this.ActiveSource?.Source.Id??"");
 
         foreach (var source in @this.Sources.Items)
@@ -146,6 +135,16 @@ public static class PersistencyExtensions
             @this.ActiveSource = source; 
             key.SetKey("ActiveSource",source.Source.Id);
         }
+
+        @this.DepthProjection.X = key.GetOrSet("XLocationInMm", () => @this.DepthProjection.X, () => @this.Placed = true);
+        @this.DepthProjection.Y = key.GetOrSet("YLocationInMm", () => @this.DepthProjection.Y, () => @this.Placed = true);
+
+        @this.DepthProjection.Saved = true;
+
+        @this.DepthRatio.X = key.GetOrSet("PhysicalRatioX", () => @this.DepthRatio.X);
+        @this.DepthRatio.Y = key.GetOrSet("PhysicalRatioY", () => @this.DepthRatio.Y);
+
+        @this.DepthRatio.Saved = true;
 
         @this.Saved = true;
 
@@ -174,7 +173,6 @@ public static class PersistencyExtensions
         }
 
         key.SetKey("ActiveSource", @this.ActiveSource.Source.Id);
-        key.SetKey("Orientation", @this.Orientation);
         key.SetKey("SerialNumber", @this.SerialNumber);
 
         @this.Saved = true;
@@ -256,27 +254,21 @@ public static class PersistencyExtensions
         {
             var x = key.GetOrSet($@"{id}\PixelX", () => @this.InPixel.X);
             var y = key.GetOrSet($@"{id}\PixelY", () => @this.InPixel.Y);
-            var w = key.GetOrSet($@"{id}\PixelWidth", () => @this.InPixel.Width);
-            var h = key.GetOrSet($@"{id}\PixelHeight", () => @this.InPixel.Height);
+            var width = key.GetOrSet($@"{id}\PixelWidth", () => @this.InPixel.Width);
+            var height = key.GetOrSet($@"{id}\PixelHeight", () => @this.InPixel.Height);
 
-            @this.InPixel.Set(new Rect(new Point(x, y), new Size(w, h)));
+            var orientation = key.GetOrSet($@"{id}\Orientation", () => @this.Orientation);
+
+            @this.InPixel.Set(new Rect(new Point(x, y), new Size(width, height)));
+
+            @this.Orientation = orientation;
 
             @this.DisplayName = key.GetOrSet($@"{id}\DisplayName", () => @this.DisplayName);
+
+            @this.Saved = true;
         }
-        else 
-        {    
-            key.SetKey($@"{id}\PixelX", @this.InPixel.X);
-            key.SetKey($@"{id}\PixelY", @this.InPixel.Y);
-            key.SetKey($@"{id}\PixelWidth", @this.InPixel.Width);
-            key.SetKey($@"{id}\PixelHeight", @this.InPixel.Height);
+        else @this.Save(key);
 
-            @this.InPixel.Saved = true;
-
-            key.SetKey($@"{id}\DisplayName", @this.DisplayName);
-            key.SetKey($@"{id}\Primary", @this.Primary);
-        }
-
-        @this.Saved = true;
     }
 
     public static void Save(this DisplaySource @this, RegistryKey? key)
@@ -290,6 +282,7 @@ public static class PersistencyExtensions
             key.SetKey($@"{id}\PixelY", @this.InPixel.Y);
             key.SetKey($@"{id}\PixelWidth", @this.InPixel.Width);
             key.SetKey($@"{id}\PixelHeight", @this.InPixel.Height);
+            key.SetKey($@"{id}\Orientation", @this.Orientation);
             @this.InPixel.Saved = true;
 
             key.SetKey($@"{id}\DisplayName", @this.DisplayName);

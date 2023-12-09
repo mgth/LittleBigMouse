@@ -27,8 +27,6 @@ using Avalonia.VisualTree;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
-using System;
-using Avalonia.LogicalTree;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 

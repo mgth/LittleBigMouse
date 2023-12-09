@@ -57,7 +57,7 @@ public partial class TestPatternWindow : Window
 
 
     //TODO
-    public void ShowOnMonitor(MonitorDevice m)
+    public void ShowOnMonitor(MonitorDeviceConnection m)
     {
         if (m != null)
         {

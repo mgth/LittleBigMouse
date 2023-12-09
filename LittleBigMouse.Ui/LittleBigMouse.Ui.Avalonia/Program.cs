@@ -6,7 +6,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Logging;
 using Avalonia.ReactiveUI;
-using Avalonia.Svg.Skia;
 using Grace.DependencyInjection;
 using HLab.Base.Avalonia.Themes;
 using HLab.Core;

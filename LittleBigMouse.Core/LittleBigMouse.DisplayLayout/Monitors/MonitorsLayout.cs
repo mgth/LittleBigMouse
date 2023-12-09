@@ -148,9 +148,11 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     //    }
     //}
 
-    public PhysicalSource PhysicalSourceFromPixel(Point pixel) => PhysicalSources.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
+    public PhysicalSource PhysicalSourceFromPixel(Point pixel) 
+        => PhysicalSources.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
 
-    public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
+    public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) 
+        => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
 
     [JsonIgnore]
     public ReadOnlyObservableCollection<PhysicalMonitorModel> PhysicalMonitorModels => _physicalMonitorModels;

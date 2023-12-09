@@ -36,11 +36,11 @@ public class ProbeLut : ReactiveObject
 {
     public ProbedColor DIlluminant { get; }
 
-    readonly MonitorDevice _monitor;
+    readonly MonitorDeviceConnection _monitor;
 
     List<Tune> _lut = new();
 
-    internal ProbeLut(MonitorDevice monitor)
+    internal ProbeLut(MonitorDeviceConnection monitor)
     {
         _monitor = monitor;
 
@@ -193,7 +193,7 @@ public class ProbeLut : ReactiveObject
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "LittleBigMouse"
         );
-        path = Path.Combine(path, _monitor.ConfigPath());
+        path = Path.Combine(path, _monitor.Id);
         path = Path.Combine(path, "Luminance.xml");
 
         if(create) Directory.CreateDirectory(path);

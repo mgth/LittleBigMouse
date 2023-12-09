@@ -7,7 +7,7 @@
     <Platforms>x64;x86;AnyCpu</Platforms>
 	<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <LangVersion>preview</LangVersion>
-	<Version>5.0.3.0</Version>
+	<Version>5.0.4.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,8 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.0.5" />
-    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.5" />
+    <PackageReference Include="Avalonia" Version="11.0.6" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.0.6" />
   </ItemGroup>
 
 	<ItemGroup>

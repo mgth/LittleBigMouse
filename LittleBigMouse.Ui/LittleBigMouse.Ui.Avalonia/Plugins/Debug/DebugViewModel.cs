@@ -27,11 +27,9 @@ using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
-using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors;
-using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 public struct MonitorDebugListValue
@@ -66,8 +64,8 @@ public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
 
     protected override PhysicalMonitor? OnModelChanging(PhysicalMonitor? oldModel, PhysicalMonitor? newModel)
     {
-        var device = _monitors.Root.AllChildren<MonitorDevice>()
-        .FirstOrDefault(d => d.DeviceId == newModel?.DeviceId);
+        var device = _monitors.Root.AllChildren<MonitorDeviceConnection>()
+        .FirstOrDefault(d => d.Id == newModel?.DeviceId);
 
         device?.DisplayValues(AddValue);
 

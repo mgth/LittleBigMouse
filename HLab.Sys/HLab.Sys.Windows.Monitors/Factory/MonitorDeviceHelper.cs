@@ -17,7 +17,7 @@ using static HLab.Sys.Windows.API.WinGdi.DisplayModeFlags;
 using static HLab.Sys.Windows.API.WinReg;
 using static HLab.Sys.Windows.API.WinUser;
 
-namespace HLab.Sys.Windows.Monitors;
+namespace HLab.Sys.Windows.Monitors.Factory;
 
 public static class MonitorDeviceHelper
 {
@@ -25,25 +25,25 @@ public static class MonitorDeviceHelper
     {
         return new DisplayMode
         {
-            DisplayOrientation = (int)(((dm.Fields & DisplayOrientation) != 0)
+            DisplayOrientation = (int)((dm.Fields & DisplayOrientation) != 0
                 ? dm.DisplayOrientation : DevMode.DisplayOrientationEnum.Default),
 
-            Position = ((dm.Fields & Position) != 0)
+            Position = (dm.Fields & Position) != 0
                 ? new Point(dm.Position.X, dm.Position.Y) : new Point(0, 0),
 
-            BitsPerPixel = ((dm.Fields & BitsPerPixel) != 0)
+            BitsPerPixel = (dm.Fields & BitsPerPixel) != 0
                 ? dm.BitsPerPel : 0,
 
-            Pels = ((dm.Fields & (PixelsWidth | PixelsHeight)) != 0)
+            Pels = (dm.Fields & (PixelsWidth | PixelsHeight)) != 0
                 ? new Size(dm.PixelsWidth, dm.PixelsHeight) : new Size(1, 1),
 
             DisplayFlags = (int)((dm.Fields & DisplayFlags) != 0
                 ? dm.DisplayFlags : 0),
 
-            DisplayFrequency = (int)(((dm.Fields & DisplayFrequency) != 0)
+            DisplayFrequency = (int)((dm.Fields & DisplayFrequency) != 0
                 ? dm.DisplayFrequency : 0),
 
-            DisplayFixedOutput = (int)(((dm.Fields & DisplayFixedOutput) != 0)
+            DisplayFixedOutput = (int)((dm.Fields & DisplayFixedOutput) != 0
                 ? dm.DisplayFixedOutput : 0),
         };
     }
@@ -252,7 +252,7 @@ public static class MonitorDeviceHelper
                 var errorCode = Marshal.GetLastWin32Error();
                 Debug.WriteLine("GetScaleFactorForMonitor failed with error code: {0}", errorCode);
             }
-            @this.ScaleFactor = (double)factor / 100.0;
+            @this.ScaleFactor = factor / 100.0;
         }
 
         @this.CapabilitiesString = Gdi32.DDCCIGetCapabilitiesString(hMonitor);
@@ -315,7 +315,7 @@ public static class MonitorDeviceHelper
 
                     try
                     {
-                        if (hEdidRegKey != 0 && ((int)hEdidRegKey != -1))
+                        if (hEdidRegKey != 0 && (int)hEdidRegKey != -1)
                         {
                             using var key = RegistryKey(hEdidRegKey, 1);
                             var value = key?.GetValue("HardwareID");
@@ -357,7 +357,7 @@ public static class MonitorDeviceHelper
 
     public static DisplayDevice GetDisplayDevices()
     {
-        var root = DeviceFactory.BuildDisplayDeviceAndChildren(null,new WinGdi.DisplayDevice() 
+        var root = DeviceFactory.BuildDisplayDeviceAndChildren(null, new WinGdi.DisplayDevice()
         { DeviceID = "ROOT", DeviceName = null });
 
         var hdc = 0;//GetDCEx(0, 0, DeviceContextValues.Window);
@@ -394,24 +394,22 @@ public static class MonitorDeviceHelper
         root.UpdateWallpaper();
 
 
-        var list = root.AllChildren<MonitorDevice>().OrderBy(e => e.PhysicalId).ToList();
+        var list = root.AllMonitorDevices().ToList();
 
         // Some monitors may have generic serial so we fallback to DeviceId to descriminiate them
         // Reason wy we don't use DeviceId as primary key is that it may change when monitors are plugged/unplugged
 
         var lastSourceId = "";
-        MonitorDevice? last = null;
+        MonitorDevice last = null;
         foreach (var monitor in list)
         {
-            if(last!=null && monitor.SourceId==lastSourceId)
-            { 
-                if(last.SourceId == lastSourceId)
-                {
-                    last.SourceId = $"{lastSourceId}_{last.DeviceId.Split('\\').Last()}";
-                }
+            if (last != null && monitor.SourceId == lastSourceId)
+            {
+                if (last.SourceId == lastSourceId)
+                    last.SourceId = $"{lastSourceId}_{last.Id.Split('\\').Last()}";
 
-                monitor.SourceId = $"{lastSourceId}_{monitor.DeviceId.Split('\\').Last()}";
-
+                if (monitor.SourceId == lastSourceId)
+                    monitor.SourceId = $"{lastSourceId}_{monitor.Id.Split('\\').Last()}";
             }
             else
             {
@@ -465,7 +463,7 @@ public static class MonitorDeviceHelper
 
                 (path, id) = GetTranscodedImageCache(imgCacheN);
 
-                var monitors = root.AllChildren<MonitorDevice>().Where(m => m.Edid.HKeyName.Contains(id)).ToList();
+                var monitors = root.AllChildren<MonitorDeviceConnection>().Where(m => m.Monitor.Edid.HKeyName.Contains(id)).ToList();
 
                 if (!monitors.Any()) continue;
 
@@ -523,7 +521,7 @@ public static class MonitorDeviceHelper
         {
             var result = monitors.Where(m => m.SourceId == id).ToList();
 
-            if(result.Count==0) return false;
+            if (result.Count == 0) return false;
 
             foreach (var monitor in result)
             {
@@ -533,7 +531,7 @@ public static class MonitorDeviceHelper
         return !remaining.Any();
     }
 
-    static RegistryKey? GetConnectivityKey(IEnumerable<MonitorDevice> monitors)
+    static RegistryKey GetConnectivityKey(IEnumerable<MonitorDevice> monitors)
     {
 #pragma warning disable CA1416 // Valider la compatibilité de la plateforme
         using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Connectivity");
@@ -569,7 +567,7 @@ public static class MonitorDeviceHelper
             foreach (var displayId in setId.Split('+'))
             {
                 // all monitors in the same clone group have the same number
-                foreach(var monitorId in displayId.Split('*'))
+                foreach (var monitorId in displayId.Split('*'))
                 {
                     var monitors = remaining.Where(m => m.SourceId == monitorId).ToList();
                     foreach (var monitor in monitors)
@@ -606,16 +604,16 @@ public static class MonitorDeviceHelper
         using var key = GetConnectivityKey(remaining);
         if (key is not null)
         {
-            if (ParseSetId(key,"Internal",remaining,ref number)) return true;
-            if (ParseSetId(key,"External",remaining,ref number)) return true;
-            if (ParseSetId(key,"eXtend",remaining,ref number)) return true;
-            if (ParseSetId(key,"Clone",remaining,ref number)) return true;
-            if (ParseSetId(key,"Recent",remaining,ref number)) return true;
+            if (ParseSetId(key, "Internal", remaining, ref number)) return true;
+            if (ParseSetId(key, "External", remaining, ref number)) return true;
+            if (ParseSetId(key, "eXtend", remaining, ref number)) return true;
+            if (ParseSetId(key, "Clone", remaining, ref number)) return true;
+            if (ParseSetId(key, "Recent", remaining, ref number)) return true;
         }
 
         foreach (var monitor in remaining)
         {
-            monitor.MonitorNumber = $"{(number++)}";
+            monitor.MonitorNumber = $"{number++}";
         }
 
         return false;

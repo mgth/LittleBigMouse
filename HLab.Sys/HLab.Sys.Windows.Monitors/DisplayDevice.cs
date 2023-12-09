@@ -22,10 +22,13 @@
 */
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
 using DynamicData;
 
 namespace HLab.Sys.Windows.Monitors;
+
+
 
 [DataContract]
 public class DisplayDevice
@@ -48,6 +51,13 @@ public class DisplayDevice
         }
     }
 
+    public IEnumerable<MonitorDevice> AllMonitorDevices() 
+        => AllChildren<MonitorDeviceConnection>()
+            .Select(e => e.Monitor)
+            .GroupBy(e => e.Id)
+            .Select(e => e.First())
+            .OrderBy(e => e.PhysicalId);
+
     public DisplayDevice Parent { get; set; }
     [DataMember] public IEnumerable<DisplayDevice> Children  => _children; 
 
@@ -67,7 +77,7 @@ public class DisplayDevice
     /// Device id as returned by EnumDisplayDevices :
     /// "PCI\\VEN_10DE&DEV_2206&SUBSYS_3A3C1458&REV_A1"
     /// </summary>
-    [DataMember] public string DeviceId { get; init; }
+    [DataMember] public string Id { get; init; }
 
     /// <summary>
     /// Path to the device registry key :
@@ -85,5 +95,19 @@ public class DisplayDevice
 
     [DataMember] public DeviceCaps Capabilities { get; init; }
     [DataMember] public DeviceState State { get; init; }
+
+    public DisplayMode GetBestDisplayMode()
+    {
+        var best = DisplayModes.Items.FirstOrDefault();
+        foreach (var mode in DisplayModes.Items)
+        {
+            if (mode.BitsPerPixel < best.BitsPerPixel) continue;
+            if (mode.DisplayFrequency < best.DisplayFrequency) continue;
+            if(mode.Pels.Width < best.Pels.Width) continue; 
+            if(mode.Pels.Height < best.Pels.Height) continue; 
+            best = mode;
+        }
+        return best;
+    }
 
 }

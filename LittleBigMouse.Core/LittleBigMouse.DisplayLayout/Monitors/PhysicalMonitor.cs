@@ -93,7 +93,7 @@ public class PhysicalMonitor : ReactiveModel
 
         _physicalRotated = this.WhenAnyValue(
             e => e.Model.PhysicalSize,
-            e => e.Orientation,
+            e => e.ActiveSource.Source.Orientation,
             (physicalSize, orientation) => physicalSize.Rotate(orientation)
         ).Log(this, "_physicalRotated").ToProperty(this, e => e.PhysicalRotated);
 
@@ -154,13 +154,13 @@ public class PhysicalMonitor : ReactiveModel
     /// <summary>
     /// Monitor orientation (0=0°, 1=90°, 2=180°, 3=270°)
     /// </summary>
-    [DataMember]
-    public int Orientation
-    {
-        get => _orientation;
-        set => this.SetUnsavedValue(ref _orientation, value);
-    }
-    int _orientation;
+    //[DataMember]
+    //public int Orientation
+    //{
+    //    get => _orientation;
+    //    set => this.SetUnsavedValue(ref _orientation, value);
+    //}
+    //int _orientation;
 
     /// <summary>
     /// Show each source as a separate monitor

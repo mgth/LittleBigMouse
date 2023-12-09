@@ -59,6 +59,11 @@ public static class RegistryExt
             GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
             CultureInfo.InvariantCulture);
 
+    public static int GetOrSet(this RegistryKey key, string keyName, Func<int> getter, Action ifLoaded = null) 
+        => int.Parse(
+            GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
+            CultureInfo.InvariantCulture);
+
     static (RegistryKey, string) ParseKeyName(this RegistryKey key, string keyName)
     {
         var i = keyName.LastIndexOf('\\');

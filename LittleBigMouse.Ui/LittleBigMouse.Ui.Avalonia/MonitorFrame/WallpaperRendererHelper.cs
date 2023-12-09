@@ -18,7 +18,6 @@ using AvaloniaPoint = Avalonia.Point;
 using Point = SixLabors.ImageSharp.Point;
 using Size = SixLabors.ImageSharp.Size;
 using Color = SixLabors.ImageSharp.Color;
-using System.Xml.Schema;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 

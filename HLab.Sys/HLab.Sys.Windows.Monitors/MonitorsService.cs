@@ -29,6 +29,7 @@ using System.IO;
 using System.Runtime.Serialization;
 using Avalonia.Media;
 using HLab.Sys.Windows.API;
+using HLab.Sys.Windows.Monitors.Factory;
 
 namespace HLab.Sys.Windows.Monitors;
 

@@ -94,8 +94,18 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     {
         string path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
-        if(File.Exists(file)) return;
-        File.WriteAllText(file, ":Excluded processes\n\\Epic Games\\\n\\SteamLibrary\\\n\\Riot games\\\n");
+        if(File.Exists(file))
+        {
+            // Riot games -> Riot Games (was misspelled in 5.0.4.0) TODO : remove in a version or two
+            string text = File.ReadAllText(file);
+            if(!text.Contains("\\Riot games\\"))
+            {
+                text = text.Replace("\\Riot games\\", "\\Riot Games\\");
+                File.WriteAllText(file, text);
+            }
+            return;
+        }
+        File.WriteAllText(file, ":Excluded processes\n\\Epic Games\\\n\\SteamLibrary\\\n\\Riot Games\\\n");
     }
 
     public void LaunchDaemon()

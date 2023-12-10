@@ -98,7 +98,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         {
             // Riot games -> Riot Games (was misspelled in 5.0.4.0) TODO : remove in a version or two
             string text = File.ReadAllText(file);
-            if(!text.Contains("\\Riot games\\"))
+            if(text.Contains("\\Riot games\\"))
             {
                 text = text.Replace("\\Riot games\\", "\\Riot Games\\");
                 File.WriteAllText(file, text);

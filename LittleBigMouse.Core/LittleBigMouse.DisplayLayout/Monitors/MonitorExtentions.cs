@@ -10,10 +10,7 @@ public static class MonitorExtensions
 
     public static bool IsPositiveInfinity(this Thickness @this)
     {
-        return @this.Left == double.PositiveInfinity
-               && @this.Top == double.PositiveInfinity
-               && @this.Right == double.PositiveInfinity
-               && @this.Bottom == double.PositiveInfinity;
+        return @this is { Left: double.PositiveInfinity, Top: double.PositiveInfinity, Right: double.PositiveInfinity, Bottom: double.PositiveInfinity };
     }
 
     /// <summary>
@@ -23,7 +20,7 @@ public static class MonitorExtensions
     /// <param name="other"></param>
     /// <param name="zero"></param>
     /// <returns></returns>
-    public static Thickness DistanceToTouch(this PhysicalMonitor @this, PhysicalMonitor other, bool zero = false)
+    public static Thickness DistanceToTouch(this Rect @this, Rect other, bool zero = false)
     {
         var distance = @this.Distance(other);
         if(distance.Top > 0 || distance.Bottom > 0 || zero && (distance.Top == 0 || distance.Bottom == 0))
@@ -53,18 +50,18 @@ public static class MonitorExtensions
     }
 
     /// <summary>
-    /// Distance from this monitor borders to another monitor opposit border.
+    /// Distance from this monitor borders to another monitor opposite border.
     /// </summary>
     /// <param name="this"></param>
     /// <param name="other"></param>
     /// <returns></returns>
-    public static Thickness Distance(this PhysicalMonitor @this, PhysicalMonitor other)
+    public static Thickness Distance(this Rect @this, Rect other)
     {
         return new Thickness(
-            other.DepthProjection.OutsideBounds.X - @this.DepthProjection.OutsideBounds.Right,
-            other.DepthProjection.OutsideBounds.Y - @this.DepthProjection.OutsideBounds.Bottom,
-            @this.DepthProjection.OutsideBounds.X - other.DepthProjection.OutsideBounds.Right,
-            @this.DepthProjection.OutsideBounds.Y - other.DepthProjection.OutsideBounds.Bottom
+            other.X - @this.Right,
+            other.Y - @this.Bottom,
+            @this.X - other.Right,
+            @this.Y - other.Bottom
         );
     }
 
@@ -78,7 +75,7 @@ public static class MonitorExtensions
         );
     }
 
-    public static Thickness Distance(this PhysicalMonitor @this, IEnumerable<PhysicalMonitor> others)
+    public static Thickness Distance(this Rect @this, IEnumerable<Rect> others)
     {
         var min = new Thickness(double.MaxValue);
 
@@ -90,7 +87,10 @@ public static class MonitorExtensions
     }
 
 
-    public static Thickness DistanceToTouch(this PhysicalMonitor @this, IEnumerable<PhysicalMonitor> others, bool zero = false)
+    public static Thickness DistanceToTouch(
+        this Rect @this, 
+        IEnumerable<Rect> others,
+        bool zero = false)
     {
         var min = new Thickness(double.PositiveInfinity);
 
@@ -99,5 +99,20 @@ public static class MonitorExtensions
             min = min.Min(@this.DistanceToTouch(other, zero));
         }
         return min;
+    }
+
+    public static double DistanceHV(this Thickness distance)
+    {
+        var x = distance.Left >= 0 ? distance.Left : distance.Right >= 0 ? distance.Right : Math.Max(distance.Left, distance.Right);
+        var y = distance.Top >= 0 ? distance.Top : distance.Bottom >= 0 ? distance.Bottom : Math.Max(distance.Top, distance.Bottom);
+
+        var v = new Vector(x,y);
+
+        if (v is { X: >= 0, Y: >= 0 }) return v.Length;
+
+        if (v.X >= 0) return v.X;
+        if (v.Y >= 0) return v.Y;
+
+        return Math.Max(v.X, v.Y);
     }
 }

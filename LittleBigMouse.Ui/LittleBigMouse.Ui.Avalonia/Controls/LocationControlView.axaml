@@ -73,7 +73,12 @@
 					ToolTip.Tip="Choose the algorithm to handle screen transitions."
         >Max travel distance</Label>
 
-				<NumericUpDown Increment="10" Value="{Binding Model.MaxTravelDistance, FallbackValue=200.0}"/>
+				<NumericUpDown 
+                    Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}" 
+                    Increment="10" 
+                    Value="{Binding Model.MaxTravelDistance, FallbackValue=200.0}"
+                    ClipValueToMinMax="True"
+                    />
 			</StackPanel>
 			<StackPanel Classes="Options">
 				<CheckBox

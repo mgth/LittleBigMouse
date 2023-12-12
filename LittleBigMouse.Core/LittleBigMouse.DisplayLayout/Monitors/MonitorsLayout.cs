@@ -16,6 +16,7 @@ using DynamicData.Binding;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Sys.Windows.API;
+using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.Zoning;
 using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
@@ -45,13 +46,20 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             .Bind(out _physicalMonitors)
             .Subscribe();
 
+
         _physicalSourcesCache.Connect()
             .Sort(SortExpressionComparer<PhysicalSource>.Ascending(t => t.DeviceId))
             //.Filter(x => x.Id.ToString().EndsWith('1'))
             .Bind(out _physicalSources)
             .Subscribe();
 
+        //_physicalMonitorsCache.Connect()
+        //    .ToCollection()
+        //    .Do(ParsePhysicalMonitors)
+        //    .Subscribe().DisposeWith(this);
+
         _physicalMonitorsCache.Connect()
+            //.AutoRefresh(e => e.DepthProjection.Bounds)
             .ToCollection()
             .Do(ParsePhysicalMonitors)
             .Subscribe().DisposeWith(this);
@@ -393,6 +401,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             }
         }
 
+        MinimalMaxTravelDistance = Math.Ceiling(GetMinimalMaxTravelDistance());
+
         using (DelayChangeNotifications())
         {
             PhysicalBounds = physicalBounds ?? new Rect();
@@ -533,6 +543,13 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     }
     double _maxTravelDistance = 200.0;
 
+    public double MinimalMaxTravelDistance 
+    {
+        get => _minimalMaxTravelDistance;
+        set => SetUnsavedValue(ref _minimalMaxTravelDistance, value);
+    }
+    double _minimalMaxTravelDistance = 0.0;
+
 
     /// <summary>
     /// Keep window on top
@@ -580,7 +597,12 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             var done = new List<PhysicalMonitor> { PrimaryMonitor };
 
             // Enqueue all other monitors to be placed
-            var todo = this.PhysicalMonitorsExcept(PrimaryMonitor).OrderBy(s => s.DistanceHV(PrimaryMonitor));
+            var todo = this
+                .PhysicalMonitorsExcept(PrimaryMonitor)
+                .OrderBy(s => s
+                    .DepthProjection.OutsideBounds.DistanceToTouch(PrimaryMonitor.DepthProjection.OutsideBounds)
+                    .DistanceHV()
+                );
 
             while (todo.Any())
             {
@@ -589,7 +611,10 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
                 monitor.PlaceAuto(done,AllowDiscontinuity,AllowOverlaps);
                 done.Add(monitor);
 
-                todo = todo.Except([monitor]).OrderBy(s => s.DistanceHV(done));
+                todo = todo.Except([monitor]).OrderBy(s => s
+                    .DepthProjection.OutsideBounds.DistanceToTouch(done.Select(m => m.DepthProjection.OutsideBounds) )
+                    .DistanceHV()
+                    );
             }
         }
     }
@@ -814,5 +839,51 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
         return zones;
     }
+
+    struct TravelStep
+    {
+        public PhysicalMonitor Monitor;
+        public double Distance;
+    }
+
+    static TravelStep[] GetTravels(List<PhysicalMonitor> monitors, TravelStep? source=null)
+    {
+        var min = double.MaxValue;
+        var result = Array.Empty<TravelStep>();
+
+        foreach (var monitor in monitors)
+        {
+            var distance = 0.0;
+            if (source.HasValue)
+            {
+                distance = monitor.DepthProjection.Bounds.Distance(source.Value.Monitor.DepthProjection.Bounds).DistanceHV();
+            }
+
+            var step = new TravelStep { Monitor = monitor, Distance = distance };
+            if (monitors.Count <= 1)
+            {
+                return new[] { step };
+            }
+
+            var others = monitors.Except([monitor]).ToList();
+            var travel = GetTravels(others, step);
+            var max = travel.Max(t => t.Distance);
+
+            if (min < max) continue;
+
+            min = max;
+            result = travel.Append(step).ToArray();
+        }
+
+        return result;
+    }
+
+    public double GetMinimalMaxTravelDistance()
+    {
+        var travels = GetTravels( PhysicalMonitors.ToList());
+        return travels.Max(t => t.Distance);
+    }
+
+
 
 }

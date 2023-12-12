@@ -68,6 +68,7 @@ void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 {
 	Unload();
 
+	MaxTravelDistanceSquared = pow(XmlHelper::GetDouble(layoutElement,"MaxTravelDistance"),2);
 	AdjustPointer = XmlHelper::GetBool(layoutElement,"AdjustPointer");
 	AdjustSpeed = XmlHelper::GetBool(layoutElement,"AdjustSpeed");
 	LoopX = XmlHelper::GetBool(layoutElement,"LoopX");
@@ -76,12 +77,8 @@ void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 	const auto algorithm =  XmlHelper::GetString(layoutElement,"Algorithm");
 	if(algorithm=="Cross")
 		Algorithm = CornerCrossing;
-	else if(algorithm=="Strait")
-		Algorithm = Strait;
 	else
 		Algorithm = Strait;
-
-	//enum Priority {Idle, Below, Normal, Above, High, Realtime};
 
 	const auto priority =  XmlHelper::GetString(layoutElement,"Priority");
 

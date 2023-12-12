@@ -47,6 +47,7 @@ public static class PersistencyExtensions
                 @this.LoopX = key.GetOrSet("LoopX", () => false);
                 @this.LoopY = key.GetOrSet("LoopY", () => false);
                 @this.AutoUpdate = key.GetOrSet("AutoUpdate", () => false);
+                @this.MaxTravelDistance = key.GetOrSet("MaxTravelDistance", () => 200.0);
             }
 
             @this.LoadAtStartup = @this.IsScheduled();
@@ -83,17 +84,18 @@ public static class PersistencyExtensions
         using var k = @this.OpenRegKey(true);
         if (k == null) return false;
 
-        k.SetValue("Enabled",  @this.Enabled ? "1" : "0");
-        k.SetValue("AdjustPointer",  @this.AdjustPointer ? "1" : "0");
-        k.SetValue("AdjustSpeed", @this.AdjustSpeed ? "1" : "0");
-        k.SetValue("Algorithm", @this.Algorithm);
-        k.SetValue("AllowOverlaps", @this.AllowOverlaps ? "1" : "0");
-        k.SetValue("AllowDiscontinuity", @this.AllowDiscontinuity ? "1" : "0");
-        k.SetValue("HomeCinema", @this.HomeCinema ? "1" : "0");
-        k.SetValue("Pinned", @this.Pinned ? "1" : "0");
-        k.SetValue("LoopX", @this.LoopX ? "1" : "0");
-        k.SetValue("LoopY", @this.LoopY ? "1" : "0");
-        k.SetValue("AutoUpdate", @this.AutoUpdate ? "1" : "0");
+        k.SetKey("Enabled",  @this.Enabled);
+        k.SetKey("AdjustPointer",  @this.AdjustPointer);
+        k.SetKey("AdjustSpeed", @this.AdjustSpeed );
+        k.SetKey("Algorithm", @this.Algorithm);
+        k.SetKey("AllowOverlaps", @this.AllowOverlaps);
+        k.SetKey("AllowDiscontinuity", @this.AllowDiscontinuity);
+        k.SetKey("HomeCinema", @this.HomeCinema);
+        k.SetKey("Pinned", @this.Pinned);
+        k.SetKey("LoopX", @this.LoopX);
+        k.SetKey("LoopY", @this.LoopY);
+        k.SetKey("AutoUpdate", @this.AutoUpdate);
+        k.SetKey("MaxTravelDistance", @this.MaxTravelDistance);
 
         if (@this.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
 

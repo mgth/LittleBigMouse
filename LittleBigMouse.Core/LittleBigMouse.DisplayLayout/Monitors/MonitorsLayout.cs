@@ -526,6 +526,14 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     }
     bool _homeCinema;
 
+    public double MaxTravelDistance 
+    {
+        get => _maxTravelDistance;
+        set => SetUnsavedValue(ref _maxTravelDistance, value);
+    }
+    double _maxTravelDistance = 200.0;
+
+
     /// <summary>
     /// Keep window on top
     /// </summary>
@@ -792,6 +800,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         }
 
         zones.Init();
+
+        zones.MaxTravelDistance = MaxTravelDistance;
 
         zones.AdjustPointer = AdjustPointer;
         zones.AdjustSpeed = AdjustSpeed;

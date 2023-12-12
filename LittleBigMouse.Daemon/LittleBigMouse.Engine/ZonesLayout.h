@@ -19,14 +19,16 @@ class ZonesLayout
 	double _bottom = 0.0;
 
 public:
-	bool AdjustPointer;
-	bool AdjustSpeed;
+	double MaxTravelDistanceSquared = pow(200.0,2.0);
 
-	Algorithm Algorithm;
-	Priority Priority;
+	bool AdjustPointer = false;
+	bool AdjustSpeed = false;
 
-	bool LoopX;
-	bool LoopY;
+	Algorithm Algorithm = Strait;
+	Priority Priority = Above;
+
+	bool LoopX = false;
+	bool LoopY = false;
 
 	[[nodiscard]] Zone* Containing(const geo::Point<long>& pixel) const;
 	[[nodiscard]] Zone* Containing(const geo::Point<double>& physical) const;

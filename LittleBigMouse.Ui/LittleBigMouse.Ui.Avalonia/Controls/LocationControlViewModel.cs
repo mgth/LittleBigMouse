@@ -341,6 +341,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         new ("Realtime","Realtime",""),
 
     };
+
+
     void DoLiveUpdate()
     {
         if (LiveUpdate && !Saved)

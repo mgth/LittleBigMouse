@@ -11,6 +11,7 @@ namespace LittleBigMouse.Zoning
         public string Priority {get; set;}
 
         public string Algorithm { get; set; } = "strait";
+        public double MaxTravelDistance { get; set; } = 200.0;
 
         public Zone FromPixel(Point pixel) => MainZones.FirstOrDefault(zone => zone.ContainsPixel(pixel));
         public Zone FromPhysical(Point physical) => Zones.FirstOrDefault(zone => zone.ContainsMm(physical));
@@ -42,7 +43,8 @@ namespace LittleBigMouse.Zoning
                 e => e.LoopY,
                 e => e.Priority,
                 e => e.Algorithm,
-                e=> e.MainZones);
+                e => e.MaxTravelDistance,
+                e => e.MainZones);
         }
     }
 }

@@ -9,6 +9,7 @@
 
 class MouseEngine 
 {
+
 	geo::Point<long> _oldPoint = geo::Point<long>(0,0);
     Zone* _oldZone = nullptr;
 
@@ -40,7 +41,7 @@ class MouseEngine
 	void NoZoneMatches(MouseEventArg& e);
 
 	//Find first zone intersecting with mouse direction
-	Zone* FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDist) const;
+	Zone* FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDistSquared) const;
 	bool CheckForStopped(const MouseEventArg& e);
 
 public:

@@ -89,42 +89,31 @@ public class Zone : IZonesSerializable
             var from = values[i];
             var to = values[i+ 1];
             Zone? target = null;
-            var min = double.MaxValue;
+            var min = layout.MaxTravelDistance;
 
-            foreach (var nextZone in layout.Zones)
+
+            //test if this zone is in or intersect current range 
+            if (from <= toFunc(this) && to >= fromFunc(this))
             {
-                if (ReferenceEquals(nextZone, this)) continue;
+                foreach (var nextZone in layout.Zones.Except([this]))
+                {
+                    //test if next zone is in the right direction
+                    if (direction * (farFunc(nextZone) - farFunc(this)) < 0) continue;
 
-                var farNext = farFunc(nextZone);
-                var far = farFunc(this);
+                    // test if next zone is in or intersect current range
+                    if (from < fromFunc(nextZone) || to > toFunc(nextZone)) continue;
 
-                if (direction * (farFunc(nextZone) - farFunc(this)) < 0) continue;
-                if (from > toFunc(this)) continue;
-                if (to < fromFunc(this)) continue;
-                if (from < fromFunc(nextZone)) continue;
-                if (to > toFunc(nextZone)) continue;
+                    var distance = direction * (nearFunc(nextZone) - farFunc(this));
 
-                var distance = direction * (nearFunc(nextZone) - farFunc(this));
+                    // test if next zone is nearer than best candidate
+                    if (distance > min) continue;
 
-                if (distance >= min) continue;
+                    target = nextZone;
+                    min = distance;
+                }
 
-                target = nextZone;
-                min = distance;
+                target = target?.Main;
             }
-
-            target = target?.Main;
-
-            int interpolate(double value, double fromMm, double toMm, int pixelFrom, int pixelTo)
-            {
-                if (value == double.MaxValue) return int.MaxValue;
-                if (value == double.MinValue) return int.MinValue;
-
-                var length = toMm - fromMm;
-                var pixelLength = pixelTo - pixelFrom;
-
-                return (int)((value - fromMm) * (double)pixelLength / length) + pixelFrom;
-            }
-
 
             var sourceFrom = fromFunc(this);
             var sourceTo = toFunc(this);
@@ -139,8 +128,8 @@ public class Zone : IZonesSerializable
             if (links.Count > 0 && ReferenceEquals(links.Last().Target, target))
             {
                 links.Last().To = to;
-                links.Last().SourceToPixel = interpolate(to,sourceFrom,sourceTo, sourceFromPixel,sourceToPixel);
-                links.Last().TargetToPixel = interpolate(to,targetFrom,targetTo, targetFromPixel,targetToPixel);
+                links.Last().SourceToPixel = Interpolate(to,sourceFrom,sourceTo, sourceFromPixel,sourceToPixel);
+                links.Last().TargetToPixel = Interpolate(to,targetFrom,targetTo, targetFromPixel,targetToPixel);
             }
             else
             {
@@ -150,12 +139,30 @@ public class Zone : IZonesSerializable
                     Distance = min,
                     From = from,
                     To = to,
-                    SourceFromPixel = interpolate(from,sourceFrom,sourceTo, sourceFromPixel,sourceToPixel),
-                    SourceToPixel = interpolate(to,sourceFrom,sourceTo, sourceFromPixel,sourceToPixel),
-                    TargetFromPixel = interpolate(from,targetFrom,targetTo, targetFromPixel,targetToPixel),
-                    TargetToPixel = interpolate(to,targetFrom,targetTo, targetFromPixel,targetToPixel),
+                    SourceFromPixel = Interpolate(from,sourceFrom,sourceTo, sourceFromPixel,sourceToPixel),
+                    SourceToPixel = Interpolate(to,sourceFrom,sourceTo, sourceFromPixel,sourceToPixel),
+                    TargetFromPixel = Interpolate(from,targetFrom,targetTo, targetFromPixel,targetToPixel),
+                    TargetToPixel = Interpolate(to,targetFrom,targetTo, targetFromPixel,targetToPixel),
                     Target = target
                 });
+            }
+
+            continue;
+
+            int Interpolate(double value, double fromMm, double toMm, int pixelFrom, int pixelTo)
+            {
+                switch (value)
+                {
+                    case >= double.MaxValue:
+                        return int.MaxValue;
+                    case <= double.MinValue:
+                        return int.MinValue;
+                }
+
+                var length = toMm - fromMm;
+                var pixelLength = pixelTo - pixelFrom;
+
+                return (int)((value - fromMm) * (double)pixelLength / length) + pixelFrom;
             }
         }
 

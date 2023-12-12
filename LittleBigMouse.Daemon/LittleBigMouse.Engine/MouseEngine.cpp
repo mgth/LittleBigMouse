@@ -60,7 +60,7 @@ void MouseEngine::NoZoneMatches(MouseEventArg& e)
 
 }
 
-Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDist) const
+Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDistSquared) const
 {
 	Zone* zoneOut = nullptr;
 	pOutInMm = trip.B();
@@ -76,7 +76,7 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 		if (zone->Contains(trip.B()))
 		{
 			zoneOut = zone;
-			minDist = 0;
+			minDistSquared = 0;
 #ifdef _DEBUG_
 			std::cout << "#";
 #endif
@@ -135,7 +135,7 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 				// calculate distance (squared) to retain the intersection with minimal travel distance
 				const auto dist = pow(p.X() - trip.B().X(), 2) + pow(p.Y() - trip.B().Y(), 2);
 
-				if (dist > minDist) {
+				if (dist > minDistSquared) {
 #ifdef _DEBUG_
 					std::cout << "+\n";
 #endif
@@ -145,7 +145,7 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 #ifdef _DEBUG_
 				std::cout << "*\n";
 #endif
-				minDist = dist;
+				minDistSquared = dist;
 				zoneOut = zone;
 				pOutInMm = p;
 			}
@@ -185,11 +185,11 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 
 	//Get line from previous point to current point
 	const auto trip = geo::Segment<double>(pInMmOld, pInMm);
-	const auto minDist = DBL_MAX;
+	const auto minDistSquared = Layout.MaxTravelDistanceSquared;
 
 	geo::Point<double> pOutInMm;
 
-	if(const auto zoneOut = FindTargetZone(_oldZone, trip, pOutInMm, minDist))
+	if(const auto zoneOut = FindTargetZone(_oldZone, trip, pOutInMm, minDistSquared))
 	{
 		MoveInMm(e, pOutInMm, zoneOut);
 		return;
@@ -200,11 +200,11 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 		const Zone* zoneOut = nullptr;
 		// we are moving left
 		if(trip.B().X() < trip.A().X())
-			zoneOut = FindTargetZone(nullptr, trip + geo::Point<double>(Layout.Width(),0), pOutInMm, minDist);
+			zoneOut = FindTargetZone(nullptr, trip + geo::Point<double>(Layout.Width(),0), pOutInMm, minDistSquared);
 
 		// we are moving right
 		else if(trip.B().X() > trip.A().X())
-			zoneOut = FindTargetZone(nullptr, trip - geo::Point<double>(Layout.Width(),0), pOutInMm, minDist);
+			zoneOut = FindTargetZone(nullptr, trip - geo::Point<double>(Layout.Width(),0), pOutInMm, minDistSquared);
 
 		if(zoneOut)
 		{
@@ -219,11 +219,11 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 
 		// we are moving top
 		if(trip.B().Y() < trip.A().Y())
-			zoneOut = FindTargetZone(nullptr, trip + geo::Point<double>(0,Layout.Height()), pOutInMm, minDist);
+			zoneOut = FindTargetZone(nullptr, trip + geo::Point<double>(0,Layout.Height()), pOutInMm, minDistSquared);
 
 		// we are moving bottom
 		else if(trip.B().Y() > trip.A().Y())
-			zoneOut = FindTargetZone(nullptr, trip - geo::Point<double>(0,Layout.Height()), pOutInMm, minDist);
+			zoneOut = FindTargetZone(nullptr, trip - geo::Point<double>(0,Layout.Height()), pOutInMm, minDistSquared);
 
 		if(zoneOut) 
 		{

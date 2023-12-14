@@ -840,60 +840,16 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         return zones;
     }
 
-    struct TravelStep
-    {
-        public PhysicalMonitor Monitor;
-        public double Distance;
-    }
-
-    static TravelStep[] GetTravels(List<PhysicalMonitor> monitors, TravelStep? source=null)
-    {
-        var min = double.MaxValue;
-        var result = Array.Empty<TravelStep>();
-
-        foreach (var monitor in monitors)
-        {
-            var distance = 0.0;
-            if (source.HasValue)
-            {
-                distance = monitor.DepthProjection.Bounds.Distance(source.Value.Monitor.DepthProjection.Bounds).DistanceHV();
-            }
-
-            var step = new TravelStep { Monitor = monitor, Distance = distance };
-            if (monitors.Count <= 1)
-            {
-                return new[] { step };
-            }
-
-            var others = monitors.Except([monitor]).ToList();
-            var travel = GetTravels(others, step);
-            var max = travel.Max(t => t.Distance);
-
-            if (min < max) continue;
-
-            min = max;
-            result = travel.Append(step).ToArray();
-        }
-
-        return result;
-    }
-
-    public double GetMinimalMaxTravelDistance_old()
-    {
-        var travels = GetTravels( PhysicalMonitors.ToList());
-        return travels.Max(t => t.Distance);
-    }
-
     class MonitorDistance
     {
-        public PhysicalMonitor Source;
-        public PhysicalMonitor Target;
+        public required PhysicalMonitor Source;
+        public required PhysicalMonitor Target;
         public double Distance;
     }
 
     public double GetMinimalMaxTravelDistance()
     {
-        List<MonitorDistance> distances = new();
+        List<MonitorDistance> distances = [];
 
         var primary = PrimaryMonitor;
         if (primary == null) return 0.0;
@@ -940,10 +896,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             }
 
         }
-
         return distances.Max(d => d.Distance);
     }
-
-
 
 }

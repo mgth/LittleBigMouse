@@ -27,7 +27,6 @@ using System.Linq;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
-using Avalonia;
 using DynamicData;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;

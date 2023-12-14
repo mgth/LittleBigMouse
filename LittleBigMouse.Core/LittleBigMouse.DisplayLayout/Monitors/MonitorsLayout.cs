@@ -594,15 +594,15 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         lock (_compactLock)
         {
             // Primary monitor is always at 0,0
-            var done = new List<PhysicalMonitor> { PrimaryMonitor };
+            List<PhysicalMonitor> done = [PrimaryMonitor];
 
             // Enqueue all other monitors to be placed
             var todo = this
-                .PhysicalMonitorsExcept(PrimaryMonitor)
-                .OrderBy(s => s
+                .PhysicalMonitors.Except(done)
+                .OrderBy(monitor => monitor
                     .DepthProjection.OutsideBounds.DistanceToTouch(PrimaryMonitor.DepthProjection.OutsideBounds)
                     .DistanceHV()
-                );
+                ).ToList();
 
             while (todo.Any())
             {
@@ -611,10 +611,10 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
                 monitor.PlaceAuto(done,AllowDiscontinuity,AllowOverlaps);
                 done.Add(monitor);
 
-                todo = todo.Except([monitor]).OrderBy(s => s
+                todo = [.. todo.Except([monitor]).OrderBy(s => s
                     .DepthProjection.OutsideBounds.DistanceToTouch(done.Select(m => m.DepthProjection.OutsideBounds) )
                     .DistanceHV()
-                    );
+                    )];
             }
         }
     }
@@ -878,10 +878,70 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         return result;
     }
 
-    public double GetMinimalMaxTravelDistance()
+    public double GetMinimalMaxTravelDistance_old()
     {
         var travels = GetTravels( PhysicalMonitors.ToList());
         return travels.Max(t => t.Distance);
+    }
+
+    class MonitorDistance
+    {
+        public PhysicalMonitor Source;
+        public PhysicalMonitor Target;
+        public double Distance;
+    }
+
+    public double GetMinimalMaxTravelDistance()
+    {
+        List<MonitorDistance> distances = new();
+
+        var primary = PrimaryMonitor;
+        if (primary == null) return 0.0;
+
+        foreach (var monitor in PhysicalMonitors)
+        {
+            var distance = primary.DepthProjection.Bounds.Distance(monitor.DepthProjection.Bounds).DistanceHV();
+            distances.Add(new MonitorDistance
+            {
+                Source = primary,
+                Target = monitor,
+                Distance = distance,
+            });
+        }
+
+        var progress = true;
+
+        while (progress)
+        {
+            distances = [.. distances.OrderBy(d => d.Distance)];
+            var last = distances.Last();
+
+            var others = distances.Except([last]).ToList();
+
+            progress = false;
+
+            foreach (var monitorDistance in others)
+            {
+                //check if monitor already in chain
+                var d = monitorDistance;
+                while(!ReferenceEquals(d.Source, primary))
+                {
+                    if(ReferenceEquals(d.Target,last.Target)) break;
+                    d = distances.First(e => ReferenceEquals(e.Target, d.Source));
+                }
+                if(ReferenceEquals(d.Target,last.Target)) continue;
+
+
+                var distance = last.Target.DepthProjection.Bounds.Distance(monitorDistance.Target.DepthProjection.Bounds).DistanceHV();
+                if (distance >= last.Distance) continue;
+                last.Source = monitorDistance.Target;
+                last.Distance = distance;
+                progress = true;
+            }
+
+        }
+
+        return distances.Max(d => d.Distance);
     }
 
 

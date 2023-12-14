@@ -58,10 +58,10 @@ public static class MonitorExtensions
     public static Thickness Distance(this Rect @this, Rect other)
     {
         return new Thickness(
-            other.X - @this.Right,
-            other.Y - @this.Bottom,
             @this.X - other.Right,
-            @this.Y - other.Bottom
+            @this.Y - other.Bottom,
+            other.X - @this.Right,
+            other.Y - @this.Bottom
         );
     }
 

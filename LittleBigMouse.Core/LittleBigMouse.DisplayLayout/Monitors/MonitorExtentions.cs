@@ -1,12 +1,13 @@
 ﻿using Avalonia;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
 public static class MonitorExtensions
 {
-    public static readonly Thickness _infinity = new(double.PositiveInfinity);
+    public static readonly Thickness Infinity = new(double.PositiveInfinity);
 
     public static bool IsPositiveInfinity(this Thickness @this)
     {
@@ -27,7 +28,7 @@ public static class MonitorExtensions
         {
             if(distance.Left > 0 || distance.Right > 0 || zero && (distance.Left == 0 || distance.Right == 0))
             {
-                return _infinity;
+                return Infinity;
             }
             return new Thickness(
                 double.PositiveInfinity,
@@ -115,4 +116,12 @@ public static class MonitorExtensions
 
         return Math.Max(v.X, v.Y);
     }
+
+    public static double MinPositive(this Thickness @this)
+    {
+        var src = @this.ToArray().Where(d => d >= 0.0).ToArray();
+        return src.Length == 0 ? double.PositiveInfinity : src.Min();
+    }
+
+    public static double[] ToArray(this Thickness distance) => [distance.Left, distance.Top, distance.Right, distance.Bottom];
 }

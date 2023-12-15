@@ -287,64 +287,28 @@ public class PhysicalMonitor : ReactiveModel
             distance = this.DepthProjection.OutsideBounds.DistanceToTouch(monitors.Select(m => m.DepthProjection.OutsideBounds), true);    
         }
 
+        var min = distance.MinPositive();
         // Move to touch
-        if (!allowDiscontinuity)
+        if (!allowDiscontinuity && min>0 && !double.IsInfinity(min))
         {
-            if (distance is { Top: > 0, Left: > 0 })
+
+            if (distance.Left > 0 && distance.Left <= min)
             {
-                if (distance.Left < distance.Top) DepthProjection.X -= distance.Left;
-                else DepthProjection.Y -= distance.Top;
-                return;
+                DepthProjection.X -= distance.Left;
+            }
+            else if (distance.Top > 0 && distance.Top <= min)
+            {
+                DepthProjection.Y -= distance.Top;
+            }
+            else if (distance.Right > 0 && distance.Right <= min)
+            {
+                DepthProjection.X += distance.Right;
+            }
+            else if (distance.Bottom > 0 && distance.Bottom <= min)
+            {
+                DepthProjection.Y += distance.Bottom;
             }
 
-            if (distance is { Top: > 0, Right: > 0 })
-            {
-                if (distance.Right < distance.Top) DepthProjection.X += distance.Right;
-                else DepthProjection.Y += distance.Top;
-                return;
-            }
-
-            if (distance is { Bottom: > 0, Right: > 0 })
-            {
-                if (distance.Right < distance.Bottom) DepthProjection.X -= distance.Right;
-                else DepthProjection.Y += distance.Bottom;
-                return;
-            }
-
-            if (distance is { Bottom: > 0, Left: > 0 })
-            {
-                if (distance.Left < distance.Bottom) DepthProjection.X += distance.Left;
-                else DepthProjection.Y += distance.Bottom;
-                return;
-            }
-
-            if (distance is { Top: < 0, Bottom: < 0 })
-            {
-                if (distance.Left >= 0)
-                {
-                    DepthProjection.X -= distance.Left;
-                    return;
-                }
-                if (distance.Right >= 0)
-                {
-                    DepthProjection.X += distance.Right;
-                    return;
-                }
-            }
-
-            if (distance is { Left: < 0, Right: < 0 })
-            {
-                if (distance.Top > 0)
-                {
-                    DepthProjection.Y -= distance.Top;
-                    return;
-                }
-                if (distance.Bottom >= 0)
-                {
-                    DepthProjection.Y += distance.Bottom;
-                    return;
-                }
-            }
         }
 
         //Move the monitor to not overlap

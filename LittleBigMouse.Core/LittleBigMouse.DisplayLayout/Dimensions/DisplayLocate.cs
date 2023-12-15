@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using System.Diagnostics;
 using Avalonia;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
@@ -35,15 +36,25 @@ public class DisplayLocate : DisplayMove
     public override double X
     {
         get => _x;
-        set => this.SetUnsavedValue(ref _x, value);
+        set
+        {
+            Debug.Assert(!double.IsInfinity(value));
+            this.SetUnsavedValue(ref _x, value);
+        }
     }
+
     double _x;
 
     public override double Y
     {
         get => _y;
-        set => this.SetUnsavedValue(ref _y, value);
+        set
+        {
+            Debug.Assert(!double.IsInfinity(value));
+            this.SetUnsavedValue(ref _y, value);
+        }
     }
+
     double _y;
 
     public override string TransformToString => $"To:{X},{Y}";

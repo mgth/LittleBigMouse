@@ -122,7 +122,7 @@ public class FrameMover : ReactiveObject, IFrameLocation
 
         if (_monitor.Sources.Items.Any(s => s.Source.Primary))
         {
-            foreach (var monitor in _layout.PhysicalMonitorsExcept(_monitor))
+            foreach (var monitor in _layout.PhysicalMonitors.Except([_monitor]))
             {
                 monitor.DepthProjection.X -= X;
                 monitor.DepthProjection.Y -= Y;

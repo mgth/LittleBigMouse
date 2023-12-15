@@ -7,16 +7,6 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 public static class MonitorsLayoutExtensions
 {
 
-    /// <summary>
-    /// Retrieve all monitors excluding the one passed as parameter
-    /// </summary>
-    /// <param name="layout"></param>
-    /// <param name="monitor"></param>
-    /// <returns></returns>
-    public static IEnumerable<PhysicalMonitor> PhysicalMonitorsExcept(this IMonitorsLayout layout, PhysicalMonitor monitor) 
-        => layout.PhysicalMonitors.Where(s => !Equals(s, monitor));
-
-
     static readonly object CompactLock = new();
 
     public static void SetSizesFromSystemConfiguration(this IMonitorsLayout layout, bool placeAll = true)

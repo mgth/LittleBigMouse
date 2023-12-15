@@ -27,7 +27,6 @@ using System.Linq;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
-using Avalonia;
 using DynamicData;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
@@ -234,238 +233,6 @@ public class PhysicalMonitor : ReactiveModel
     public double Diagonal => _diagonal.Value;
     readonly ObservableAsPropertyHelper<double> _diagonal;
 
-    double RightDistance(PhysicalMonitor monitor) => DepthProjection.OutsideBounds.X - monitor.DepthProjection.OutsideBounds.Right;
-
-    double LeftDistance(PhysicalMonitor monitor) => monitor.DepthProjection.OutsideBounds.X - DepthProjection.OutsideBounds.Right;
-
-    double TopDistance(PhysicalMonitor monitor) => monitor.DepthProjection.OutsideBounds.Y - DepthProjection.OutsideBounds.Bottom;
-
-    double BottomDistance(PhysicalMonitor monitor) => DepthProjection.OutsideBounds.Y - monitor.DepthProjection.OutsideBounds.Bottom;
-
-    double RightDistanceToTouch(PhysicalMonitor monitor, bool zero = false)
-    {
-        var top = TopDistance(monitor);
-        if (top > 0 || zero && top == 0) return double.PositiveInfinity;
-        var bottom = BottomDistance(monitor);
-        if (bottom > 0 || zero && bottom == 0) return double.PositiveInfinity;
-        return RightDistance(monitor);
-    }
-
-    double RightDistanceToTouch(IEnumerable<PhysicalMonitor> monitors, bool zero = false) 
-        => monitors
-            .Select(monitor => RightDistanceToTouch(monitor, zero))
-            .Prepend(double.PositiveInfinity)
-            .Min();
-
-    double RightDistance(IEnumerable<PhysicalMonitor> monitors) 
-        => monitors
-            .Select(RightDistance)
-            .Prepend(double.PositiveInfinity)
-            .Min();
-
-    double LeftDistanceToTouch(PhysicalMonitor monitor, bool zero = false)
-    {
-        var top = TopDistance(monitor);
-        if (top > 0 || zero && top == 0) return double.PositiveInfinity;
-
-        var bottom = BottomDistance(monitor);
-        if (bottom > 0 || zero && bottom == 0) return double.PositiveInfinity;
-
-        return LeftDistance(monitor);
-    }
-
-    double LeftDistanceToTouch(IEnumerable<PhysicalMonitor> monitors, bool zero = false) 
-        => monitors
-            .Select(monitor => LeftDistanceToTouch(monitor, zero))
-            .Prepend(double.PositiveInfinity)
-            .Min();
-
-    double LeftDistance(IEnumerable<PhysicalMonitor> monitors) 
-        => monitors
-            .Select(LeftDistance)
-            .Prepend(double.PositiveInfinity)
-            .Min();
-
-    double TopDistanceToTouch(PhysicalMonitor monitor, bool zero = false)
-    {
-        var left = LeftDistance(monitor);
-        if (left > 0 || zero && left == 0) return double.PositiveInfinity;
-
-        var right = RightDistance(monitor);
-        if (right > 0 || zero && right == 0) return double.PositiveInfinity;
-
-        return TopDistance(monitor);
-    }
-
-    double TopDistanceToTouch(IEnumerable<PhysicalMonitor> monitors, bool zero = false) 
-        => monitors.Select(monitor => TopDistanceToTouch(monitor, zero)).Prepend(double.PositiveInfinity).Min();
-
-    double TopDistance(IEnumerable<PhysicalMonitor> monitors) 
-        => monitors.Select(TopDistance).Prepend(double.PositiveInfinity).Min();
-
-    double BottomDistanceToTouch(PhysicalMonitor monitor, bool zero = false)
-    {
-        var left = LeftDistance(monitor);
-        if (left > 0 || zero && Math.Abs(left) < double.Epsilon) return double.PositiveInfinity;
-
-        var right = RightDistance(monitor);
-        if (right > 0 || zero && Math.Abs(right) < double.Epsilon) return double.PositiveInfinity;
-
-        return BottomDistance(monitor);
-    }
-
-    double BottomDistanceToTouch(IEnumerable<PhysicalMonitor> monitors, bool zero = false) 
-        => monitors
-            .Select(monitor => BottomDistanceToTouch(monitor, zero))
-            .Prepend(double.PositiveInfinity)
-            .Min();
-
-    double BottomDistance(IEnumerable<PhysicalMonitor> monitors) 
-        => monitors
-            .Select(BottomDistance)
-            .Prepend(double.PositiveInfinity)
-            .Min();
-
-    public double HorizontalDistance(PhysicalMonitor monitor)
-    {
-        double right = RightDistance(monitor);
-        if (right >= 0) return right;
-
-        double left = LeftDistance(monitor);
-        if (left >= 0) return left;
-
-        return Math.Max(right, left);
-    }
-
-    public double HorizontalDistance(IEnumerable<PhysicalMonitor> monitors)
-    {
-        var right = RightDistanceToTouch(monitors);
-        if (right >= 0) return right;
-
-        var left = LeftDistanceToTouch(monitors);
-        if (left >= 0) return left;
-
-        return Math.Max(right, left);
-    }
-
-    public double VerticalDistance(IEnumerable<PhysicalMonitor> monitors)
-    {
-        var top = TopDistanceToTouch(monitors);
-        if (top >= 0) return top;
-
-        var bottom = BottomDistanceToTouch(monitors);
-        if (bottom >= 0) return bottom;
-
-        return Math.Max(top, bottom);
-    }
-
-    public double VerticalDistance(PhysicalMonitor monitor)
-    {
-        var top = TopDistance(monitor);
-        if (top >= 0) return top;
-
-        var bottom = BottomDistance(monitor);
-        if (bottom >= 0) return bottom;
-
-        return Math.Max(top, bottom);
-    }
-
-    public double DistanceHV(PhysicalMonitor monitor)
-    {
-        var v = new Vector(HorizontalDistance(monitor), VerticalDistance(monitor));
-
-        if (v is { X: >= 0, Y: >= 0 }) return v.Length;
-
-        if (v.X >= 0) return v.X;
-        if (v.Y >= 0) return v.Y;
-
-        return Math.Max(v.X, v.Y);
-    }
-
-    public double DistanceHV(IEnumerable<PhysicalMonitor> monitors)
-    {
-        var v = new Vector(HorizontalDistance(monitors), VerticalDistance(monitors));
-
-        if (v is { X: >= 0, Y: >= 0 }) return v.Length;
-
-        if (v.X >= 0) return v.X;
-        if (v.Y >= 0) return v.Y;
-
-        return Math.Max(v.X, v.Y);
-    }
-
-    public bool Expand(PhysicalMonitor s)
-    {
-        var moveLeft = -LeftDistance(s); if (moveLeft <= 0) return false;
-
-        var moveRight = -RightDistance(s); if (moveRight <= 0) return false;
-
-        var moveUp = -TopDistance(s); if (moveUp <= 0) return false;
-
-        var moveDown = -BottomDistance(s); if (moveDown <= 0) return false;
-
-        if (moveLeft <= moveRight && moveLeft <= moveUp && moveLeft <= moveDown)
-        {
-            s.DepthProjection.X -= moveLeft;
-        }
-        else if (moveRight <= moveLeft && moveRight <= moveUp && moveRight <= moveDown)
-        {
-            s.DepthProjection.Y += moveRight;
-        }
-        else if (moveUp <= moveRight && moveUp <= moveLeft && moveUp <= moveDown)
-        {
-            s.DepthProjection.Y -= moveUp;
-        }
-        else
-        {
-            s.DepthProjection.Y += moveDown;
-        }
-
-        return true;
-    }
-
-    public bool PhysicalOverlapWith(PhysicalMonitor monitor)
-    {
-        if (DepthProjection.X >= monitor.DepthProjection.Bounds.Right) return false;
-        if (monitor.DepthProjection.X >= DepthProjection.Bounds.Right) return false;
-        if (DepthProjection.Y >= monitor.DepthProjection.Bounds.Bottom) return false;
-        if (monitor.DepthProjection.Y >= DepthProjection.Bounds.Bottom) return false;
-
-        return true;
-    }
-
-    public bool PhysicalTouch(PhysicalMonitor monitor)
-    {
-        if (PhysicalOverlapWith(monitor)) return false;
-        if (DepthProjection.X > monitor.DepthProjection.Bounds.Right) return false;
-        if (monitor.DepthProjection.X > DepthProjection.Bounds.Right) return false;
-        if (DepthProjection.Y > monitor.DepthProjection.Bounds.Bottom) return false;
-        if (monitor.DepthProjection.Y > DepthProjection.Bounds.Bottom) return false;
-
-        return true;
-    }
-
-
-    public bool HorizontallyAligned(PhysicalMonitor monitor) 
-        => DepthProjection.Y <= monitor.DepthProjection.Bounds.Bottom 
-           && monitor.DepthProjection.Y <= DepthProjection.Bounds.Bottom;
-
-    public bool VerticallyAligned(PhysicalMonitor monitor) 
-        => DepthProjection.X <= monitor.DepthProjection.Bounds.Right 
-           && monitor.DepthProjection.X <= DepthProjection.Bounds.Right;
-
-    public double MoveLeftToTouch(PhysicalMonitor monitor) 
-        => HorizontallyAligned(monitor)?DepthProjection.X - monitor.DepthProjection.Bounds.Right:-1;
-
-    public double MoveRightToTouch(PhysicalMonitor monitor) 
-        => HorizontallyAligned(monitor)?monitor.DepthProjection.X - DepthProjection.Bounds.Right:-1;
-
-    public double MoveUpToTouch(PhysicalMonitor monitor) 
-        => (VerticallyAligned(monitor))?DepthProjection.Y - monitor.DepthProjection.Bounds.Bottom:-1;
-
-    public double MoveDownToTouch(PhysicalMonitor monitor) 
-        => (!VerticallyAligned(monitor))?monitor.DepthProjection.Y - DepthProjection.Bounds.Bottom:-1;
-
     /// <summary>
     /// Adjust monitor position to touch another monitor.
     /// </summary>
@@ -475,101 +242,73 @@ public class PhysicalMonitor : ReactiveModel
     public void PlaceAuto(IEnumerable<PhysicalMonitor> monitors, bool allowDiscontinuity=false, bool allowOverlaps=false)
     {
         //Calculation of the distance to the closest monitor
-        var distance = this.DistanceToTouch(monitors, true);
+        var distance = this.DepthProjection.OutsideBounds.DistanceToTouch(monitors.Select(m => m.DepthProjection.OutsideBounds), true);
 
         //If the monitor cannot touch by single translation
         if (!allowDiscontinuity && distance.IsPositiveInfinity())
         {
-            distance = this.Distance(monitors);
+            var left = monitors.Min(m => m.DepthProjection.OutsideBounds.Left);
+            var top = monitors.Min(m => m.DepthProjection.OutsideBounds.Top);
+            var right = monitors.Max(m => m.DepthProjection.OutsideBounds.Right);
+            var bottom = monitors.Max(m => m.DepthProjection.OutsideBounds.Bottom);
 
-            if (distance.Left > 0)
-            {
-                if (distance.Top > 0)
+            var toLeft = left - DepthProjection.OutsideBounds.Right;
+            var toTop = top - DepthProjection.OutsideBounds.Bottom;
+            var toRight = DepthProjection.OutsideBounds.Left - right;
+            var toBottom = DepthProjection.OutsideBounds.Top - bottom;
+
+            if (toLeft >= 0)
+            {    
+                if (toTop >= 0)
                 {
-                    DepthProjection.X += distance.Left;
-                    DepthProjection.Y += distance.Top;
+                    if(toLeft < toTop) DepthProjection.X = left - DepthProjection.OutsideWidth / 2;
+                    else DepthProjection.Y = top - DepthProjection.OutsideHeight / 2;
                 }
-                if (distance.Bottom > 0)
+                else if (toBottom >= 0)
                 {
-                    DepthProjection.X += distance.Left;
-                    DepthProjection.Y -= distance.Bottom;
+                    if(toLeft < toBottom) DepthProjection.X = left - DepthProjection.OutsideWidth / 2;
+                    else DepthProjection.Y = bottom - DepthProjection.OutsideHeight / 2;
                 }
             }
-            if (distance.Right > 0)
+            else if (toRight >= 0)
             {
-                if (distance.Top > 0)
+                if (toTop >= 0)
                 {
-                    DepthProjection.X -= distance.Right;
-                    DepthProjection.Y += distance.Top;
+                    if(toRight < toTop) DepthProjection.X = right - DepthProjection.OutsideWidth / 2;
+                    else DepthProjection.Y = top - DepthProjection.OutsideHeight / 2;
                 }
-                if (distance.Bottom > 0)
+                else if (toBottom >= 0)
                 {
-                    DepthProjection.X -= distance.Right;
-                    DepthProjection.Y -= distance.Bottom;
+                    if(toRight < toBottom) DepthProjection.X = right - DepthProjection.OutsideWidth / 2;
+                    else DepthProjection.Y = bottom - DepthProjection.OutsideHeight / 2;
                 }
             }
 
-            distance = this.DistanceToTouch(monitors, false);    
+            distance = this.DepthProjection.OutsideBounds.DistanceToTouch(monitors.Select(m => m.DepthProjection.OutsideBounds), true);    
         }
 
+        var min = distance.MinPositive();
         // Move to touch
-        if (!allowDiscontinuity)
+        if (!allowDiscontinuity && min>0 && !double.IsInfinity(min))
         {
-            if (distance is { Top: > 0, Left: > 0 })
+
+            if (distance.Left > 0 && distance.Left <= min)
             {
-                if (distance.Left < distance.Top) DepthProjection.X += distance.Left;
-                else DepthProjection.Y += distance.Top;
-                return;
+                DepthProjection.X -= distance.Left;
+            }
+            else if (distance.Top > 0 && distance.Top <= min)
+            {
+                DepthProjection.Y -= distance.Top;
+            }
+            else if (distance.Right > 0 && distance.Right <= min)
+            {
+                DepthProjection.X += distance.Right;
+            }
+            else if (distance.Bottom > 0 && distance.Bottom <= min)
+            {
+                DepthProjection.Y += distance.Bottom;
             }
 
-            if (distance is { Top: > 0, Right: > 0 })
-            {
-                if (distance.Right < distance.Top) DepthProjection.X -= distance.Right;
-                else DepthProjection.Y += distance.Top;
-                return;
-            }
-
-            if (distance is { Bottom: > 0, Right: > 0 })
-            {
-                if (distance.Right < distance.Bottom) DepthProjection.X -= distance.Right;
-                else DepthProjection.Y -= distance.Bottom;
-                return;
-            }
-
-            if (distance is { Bottom: > 0, Left: > 0 })
-            {
-                if (distance.Left < distance.Bottom) DepthProjection.X += distance.Left;
-                else DepthProjection.Y -= distance.Bottom;
-                return;
-            }
-
-            if (distance is { Top: < 0, Bottom: < 0 })
-            {
-                if (distance.Left >= 0)
-                {
-                    DepthProjection.X += distance.Left;
-                    return;
-                }
-                if (distance.Right >= 0)
-                {
-                    DepthProjection.X -= distance.Right;
-                    return;
-                }
-            }
-
-            if (distance is { Left: < 0, Right: < 0 })
-            {
-                if (distance.Top > 0)
-                {
-                    DepthProjection.Y += distance.Top;
-                    return;
-                }
-                if (distance.Bottom >= 0)
-                {
-                    DepthProjection.Y -= distance.Bottom;
-                    return;
-                }
-            }
         }
 
         //Move the monitor to not overlap
@@ -577,17 +316,17 @@ public class PhysicalMonitor : ReactiveModel
         {
             if (distance.Left > distance.Right && distance.Left > distance.Top && distance.Left > distance.Bottom)
             {
-                DepthProjection.X += distance.Left;
+                DepthProjection.X -= distance.Left;
             }
             else if (distance.Right > distance.Top && distance.Right > distance.Bottom)
             {
-                DepthProjection.X -= distance.Right;
+                DepthProjection.X += distance.Right;
             }
             else if (distance.Top > distance.Bottom)
             {
-                DepthProjection.Y += distance.Top;
+                DepthProjection.Y -= distance.Top;
             }
-            else DepthProjection.Y -= distance.Bottom;
+            else DepthProjection.Y += distance.Bottom;
         }
     }
 

@@ -25,9 +25,9 @@ using System;
 using System.Reactive.Concurrency;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Text.Json.Serialization;
 using Avalonia;
 using HLab.Base.Avalonia;
-using Newtonsoft.Json;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;

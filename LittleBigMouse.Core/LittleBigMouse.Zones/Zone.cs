@@ -1,5 +1,6 @@
 ﻿
 using System.Collections.Concurrent;
+using System.Text.Json.Serialization;
 using Avalonia;
 
 namespace LittleBigMouse.Zoning;
@@ -13,7 +14,10 @@ public class Zone : IZonesSerializable
     public Rect PixelsBounds { get; set; }
     public Rect PhysicalBounds { get; set; }
 
+    [JsonIgnore]
     public Zone Main { get; set;}
+
+    public int MainId => Main.Id;
 
     public bool IsMain=> ReferenceEquals(this,Main);
 

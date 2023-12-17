@@ -23,14 +23,11 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.Serialization;
+using System.Text.Json.Serialization;
 using DynamicData;
 
 namespace HLab.Sys.Windows.Monitors;
 
-
-
-[DataContract]
 public class DisplayDevice
 {
     public override string ToString() => $"{GetType().Name} {DeviceName} {DeviceString}";
@@ -58,43 +55,45 @@ public class DisplayDevice
             .Select(e => e.First())
             .OrderBy(e => e.PhysicalId);
 
+    [JsonIgnore]
     public DisplayDevice Parent { get; set; }
-    [DataMember] public IEnumerable<DisplayDevice> Children  => _children; 
+
+    public IEnumerable<DisplayDevice> Children  => _children; 
 
     /// <summary>
     /// Device name as returned by EnumDisplayDevices :
     /// "ROOT", "\\\\.\\DISPLAY1", "\\\\.\\DISPLAY1\monitor0" 
     /// </summary>
-    [DataMember] public string DeviceName { get; init; }
+    public string DeviceName { get; init; }
 
     /// <summary>
     /// Device name in human readable format :
     /// "NVIDIA GeForce RTX 3080 Ti"
     /// </summary>
-    [DataMember] public string DeviceString { get; init; }
+    public string DeviceString { get; init; }
 
     /// <summary>
     /// Device id as returned by EnumDisplayDevices :
     /// "PCI\\VEN_10DE&DEV_2206&SUBSYS_3A3C1458&REV_A1"
     /// </summary>
-    [DataMember] public string Id { get; init; }
+    public string Id { get; init; }
 
     /// <summary>
     /// Path to the device registry key :
     /// "\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Video\\{AC0F00F9-3A6E-11ED-84B1-EBFE3BE9690A}\\0000"
     /// </summary>
-    [DataMember] public string DeviceKey { get; init; }
+    public string DeviceKey { get; init; }
 
-    [DataMember] public SourceList<DisplayMode> DisplayModes { get; } = new ();
+    public SourceList<DisplayMode> DisplayModes { get; } = new ();
 
     /// <summary>
     /// Device mode as returned by EnumDisplaySettingsEx :
     /// 
     /// </summary>
-    [DataMember] public DisplayMode CurrentMode { get; init; }
+    public DisplayMode CurrentMode { get; init; }
 
-    [DataMember] public DeviceCaps Capabilities { get; init; }
-    [DataMember] public DeviceState State { get; init; }
+    public DeviceCaps Capabilities { get; init; }
+    public DeviceState State { get; init; }
 
     public DisplayMode GetBestDisplayMode()
     {

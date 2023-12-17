@@ -358,12 +358,15 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     /// <summary>
     /// PhysicalMonitor on witch primary source get displayed.
     /// </summary>
+    [JsonIgnore]
     public PhysicalMonitor? PrimaryMonitor
     {
         get => _primaryMonitor;
         private set => this.RaiseAndSetIfChanged(ref _primaryMonitor, value);
     }
     PhysicalMonitor? _primaryMonitor;
+
+    public string PrimaryMonitorId => PrimaryMonitor?.Id??"";
 
     /// <summary>
     /// Source for primary display (always located at 0,0).

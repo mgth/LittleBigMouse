@@ -1,4 +1,6 @@
-﻿namespace LittleBigMouse.Zoning;
+﻿using System.Text.Json.Serialization;
+
+namespace LittleBigMouse.Zoning;
 
 public class ZoneLink : IZonesSerializable
 {
@@ -9,7 +11,7 @@ public class ZoneLink : IZonesSerializable
     public int SourceToPixel { get; set; }
     public int TargetFromPixel { get; set; }
     public int TargetToPixel { get; set; }
-    public Zone? Target { get; set; }
+    [JsonIgnore] public Zone? Target { get; set; }
     public int TargetId => Target?.Id??-1;
 
     public string Serialize()

@@ -5,12 +5,12 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Threading;
 using HLab.Mvvm.ReactiveUI;
-using Newtonsoft.Json.Linq;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Updater;
@@ -149,52 +149,15 @@ public class ApplicationUpdaterViewModel : ViewModel
         }
     }
 
-    void Update2()
-    {
-        var filename = FileName.Replace("{version}", NewVersion.ToString());
-        var path = Path.GetTempPath() + filename;
-
-        var request = WebRequest.CreateHttp(Url + filename);
-
-        request.Method = "GET";
-
-
-        try
-        {
-            var response = (HttpWebResponse)request.GetResponse();
-
-            var streamResponse = response.GetResponseStream();
-            if (streamResponse == null) return;
-
-            using (var fileStream =
-                   new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                streamResponse.CopyTo(fileStream);
-            }
-
-            var startInfo = new ProcessStartInfo(path) { Verb = "runas" };
-            Process.Start(startInfo);
-            //Application.Current.Shutdown();
-        }
-        catch (Win32Exception)
-        {
-            Message = "L'execution a échouée";
-        }
-        catch (WebException)
-        {
-            Message = "Le téléchargement a échoué";
-        }
-    }
-
     public async Task CheckVersion()
     {
         using var client = new HttpClient();
 
         client.DefaultRequestHeaders.Add("User-Agent", "LittleBigMouse");
         var r = await client.GetAsync("https://api.github.com/repos/Mgth/LittleBigMouse/releases");
-        var json = JArray.Parse(r.Content.ReadAsStringAsync().Result);
+        var json = JsonNode.Parse(r.Content.ReadAsStringAsync().Result);
 
-        var name = json[0]["name"].Value<string>();
+        var name = json[0]["name"].GetValue<string>();
 
         Message = json[0]["body"].ToString();
 

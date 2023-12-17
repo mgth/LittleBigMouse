@@ -66,7 +66,6 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         _client.Listen();
     }
 
-    public Func<ZonesLayout> ZonesLayoutGetter { get; set; } = () => null;
     public LittleBigMouseEvent State { get; private set; }
 
 

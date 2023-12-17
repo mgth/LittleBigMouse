@@ -1,4 +1,5 @@
-﻿using Avalonia;
+﻿using System.Text.Json.Serialization;
+using Avalonia;
 
 namespace LittleBigMouse.Zoning
 {
@@ -18,6 +19,7 @@ namespace LittleBigMouse.Zoning
 
         public List<Zone> Zones {get;} = new();
 
+        [JsonIgnore]
         public List<Zone> MainZones {get;} = new();
 
         public void Init()

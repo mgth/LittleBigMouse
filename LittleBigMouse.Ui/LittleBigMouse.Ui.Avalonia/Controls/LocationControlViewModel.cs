@@ -27,6 +27,8 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -39,7 +41,6 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Zoning;
-using Newtonsoft.Json;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
@@ -205,16 +206,10 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         return base.OnModelChanging(oldModel, newModel);
     }
 
-    [DataContract]
     class JsonExport(DisplayDevice devices, MonitorsLayout? layout, ZonesLayout? zones)
     {
-        [DataMember]
         public MonitorsLayout? Layout { get; } = layout;
-
-        [DataMember]
         public DisplayDevice Devices { get; } = devices;
-
-        [DataMember]
         public ZonesLayout? Zones { get; } = zones;
     }
 
@@ -224,10 +219,12 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
         var export = new JsonExport(_monitorsService.Root, Model, Model?.ComputeZones());
 
-        var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings
-        {
-            ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-        });
+        //var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings
+        //{
+        //    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+        //});
+
+        var json = JsonSerializer.Serialize(export, new JsonSerializerOptions{NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals});
 
         return json;
     }

@@ -11,7 +11,6 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.0.6" />
     <PackageReference Include="Avalonia.MatrixExtensions" Version="3.0.0-preview6" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.Linq.Expressions" Version="4.3.0" />
   </ItemGroup>
 

@@ -5,7 +5,6 @@
 
 #include "Geometry.h"
 #include "MouseHelper.h"
-#include "tinyxml2.h"
 #include "ZoneLink.h"
 #include "Zone.h"
 
@@ -278,7 +277,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	// leaving zone by bottom
 	else if (pIn.Y() >= bounds.Bottom())
 	{
-		zoneOut = _oldZone->BottomZones->AtPixel(pIn.Y());
+		zoneOut = _oldZone->BottomZones->AtPixel(pIn.X());
 		if (zoneOut->Target)
 		{
 			pOut = { zoneOut->ToTargetPixel(pIn.X()), zoneOut->Target->PixelsBounds().Top() };

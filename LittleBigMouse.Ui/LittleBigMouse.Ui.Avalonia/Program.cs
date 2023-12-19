@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reactive;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -8,6 +9,7 @@ using Avalonia.Logging;
 using Avalonia.ReactiveUI;
 using Grace.DependencyInjection;
 using HLab.Base.Avalonia.Themes;
+using HLab.Bugs.Avalonia;
 using HLab.Core;
 using HLab.Core.Annotations;
 using HLab.Icons.Avalonia;
@@ -56,10 +58,10 @@ internal class Program
 
             //})
             .UseSkia()
-            #if DEBUG
-//            .LogToTrace(LogEventLevel.Verbose)
+#if DEBUG
+            //            .LogToTrace(LogEventLevel.Verbose)
             .LogToTrace(LogEventLevel.Debug)
-            #endif
+#endif
             ;
     }
 
@@ -72,78 +74,97 @@ internal class Program
             return;
         }
 
-        RxApp.DefaultExceptionHandler = Observer.Create<Exception>(Console.WriteLine);
+        try
+        {
+
+            RxApp.DefaultExceptionHandler = Observer.Create<Exception>(Console.WriteLine);
 
 #if DEBUG
-        Locator.CurrentMutable.RegisterConstant(new LoggingService { Level = LogLevel.Info }, typeof(ILogger));
+            Locator.CurrentMutable.RegisterConstant(new LoggingService { Level = LogLevel.Info }, typeof(ILogger));
 #endif
 
-        var container = new DependencyInjectionContainer();
-        container.Configure(c =>
-        {
-            //c.ExportInstance(app.ApplicationLifetime);
+            var container = new DependencyInjectionContainer();
+            container.Configure(c =>
+            {
+                //c.ExportInstance(app.ApplicationLifetime);
 
-            c.Export<IconService>().As<IIconService>().Lifestyle.Singleton();
-            c.Export<LocalizationService>().As<ILocalizationService>().Lifestyle.Singleton();
-            c.Export<MvvmService>().As<IMvvmService>().Lifestyle.Singleton();
-            c.Export<MvvmAvaloniaImpl>().As<IMvvmPlatformImpl>().Lifestyle.Singleton();
-            c.Export<HLab.Core.MessageBus>().As<IMessagesService>().Lifestyle.Singleton();
-            c.Export<UserNotificationServiceAvalonia>().As<IUserNotificationService>().Lifestyle.Singleton();
+                c.Export<IconService>().As<IIconService>().Lifestyle.Singleton();
+                c.Export<LocalizationService>().As<ILocalizationService>().Lifestyle.Singleton();
+                c.Export<MvvmService>().As<IMvvmService>().Lifestyle.Singleton();
+                c.Export<MvvmAvaloniaImpl>().As<IMvvmPlatformImpl>().Lifestyle.Singleton();
+                c.Export<HLab.Core.MessageBus>().As<IMessagesService>().Lifestyle.Singleton();
+                c.Export<UserNotificationServiceAvalonia>().As<IUserNotificationService>().Lifestyle.Singleton();
 
-            c.Export<MainService>().As<IMainService>().Lifestyle.Singleton();
+                c.Export<MainService>().As<IMainService>().Lifestyle.Singleton();
 
-            c.Export<SystemMonitorsService>().As<ISystemMonitorsService>().Lifestyle.Singleton();
-            c.Export<MainBootloader>().As<IBootloader>();
+                c.Export<SystemMonitorsService>().As<ISystemMonitorsService>().Lifestyle.Singleton();
+                c.Export<MainBootloader>().As<IBootloader>();
 
-            c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
+                c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
 
-            //c.Export<MonitorsLayout>().As<IMonitorsLayout>();
+                //c.Export<MonitorsLayout>().As<IMonitorsLayout>();
 
-            c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
+                c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
 
-            c.Export<MonitorDebugPlugin>().As<IBootloader>();
-            c.Export<MonitorLocationPlugin>().As<IBootloader>();
+                c.Export<MonitorDebugPlugin>().As<IBootloader>();
+                c.Export<MonitorLocationPlugin>().As<IBootloader>();
 
-            c.Export<VcpPlugin>().As<IBootloader>();
+                c.Export<VcpPlugin>().As<IBootloader>();
 
 
-            var parser = new AssemblyParser();
+                var parser = new AssemblyParser();
 
-            parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
-            parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
+                parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
+                parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
 
-            parser.LoadModules();
+                parser.LoadModules();
 
-            parser.Add<IView>(t => c.Export(t).As(typeof(IView)));
-            parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)));
-            parser.Add<IBootloader>(t => c.Export(t).As(typeof(IBootloader)));
+                parser.Add<IView>(t => c.Export(t).As(typeof(IView)));
+                parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)));
+                parser.Add<IBootloader>(t => c.Export(t).As(typeof(IBootloader)));
 
-            parser.Parse();
-        });
+                parser.Parse();
+            });
 
-        var boot = new Bootstrapper(() => container.Locate<IEnumerable<IBootloader>>());
+            var boot = new Bootstrapper(() => container.Locate<IEnumerable<IBootloader>>());
 
-        var theme = new ThemeService(app.Resources);
-        theme.SetTheme(ThemeService.WindowsTheme.Auto);
+            var theme = new ThemeService(app.Resources);
+            theme.SetTheme(ThemeService.WindowsTheme.Auto);
 
-        var cts = new CancellationTokenSource();
+            var cts = new CancellationTokenSource();
 
-        var task = boot.BootAsync();
+            var task = boot.BootAsync();
 
-        try
-        {
-            app.Run(cts.Token);
+            try
+            {
+                app.Run(cts.Token);
+            }
+            catch (InvalidOperationException)
+            {
+                cts.Cancel();
+            }
+
+            try
+            {
+                task.Wait(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
         }
-        catch(InvalidOperationException)
+        catch (Exception ex)
         {
-            cts.Cancel();
+            var view = new ExceptionView
+            {
+                Exception = ex,
+                ProductHeaderValue = "LittleBigMouse",
+                Project = "LittleBigMouse",
+                Repository = "Mgth"
+            };
+            view.Show();
+            //throw;
+            //ExceptionDispatchInfo.Capture(ex).Throw();
         }
 
-        try
-        {
-            task.Wait(cts.Token);
-        }
-        catch(OperationCanceledException)
-        { }
     }
 }

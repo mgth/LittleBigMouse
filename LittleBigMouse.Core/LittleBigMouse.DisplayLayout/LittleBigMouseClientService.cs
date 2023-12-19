@@ -102,9 +102,14 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
                 text = text.Replace("\\Riot games\\", "\\Riot Games\\");
                 File.WriteAllText(file, text);
             }
+            if(text.Contains("\\SteamLibrary\\"))
+            {
+                text = text.Replace("\\SteamLibrary\\", "\\steamapps\\");
+                File.WriteAllText(file, text);
+            }
             return;
         }
-        File.WriteAllText(file, ":Excluded processes\n\\Epic Games\\\n\\SteamLibrary\\\n\\Riot Games\\\n");
+        File.WriteAllText(file, ":Excluded processes\n\\Epic Games\\\n\\steamapps\\\n\\Riot Games\\\n");
     }
 
     public void LaunchDaemon()

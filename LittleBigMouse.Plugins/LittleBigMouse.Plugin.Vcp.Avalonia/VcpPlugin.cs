@@ -34,12 +34,14 @@ public class VcpPlugin(IMainService mainService) : IBootloader
 {
     public Task LoadAsync(IBootContext bootstrapper)
     {
+        #if DEBUG
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<MonitorVcpViewMode>(
                 "vcp",
                 "Icon/MonitorVcp",
                 "Vcp control")
         );
+        #endif
         return Task.CompletedTask;
     }
 

@@ -52,4 +52,8 @@ public partial class AboutMonitorView : UserControl, IView<MonitorAboutViewMode,
         return delta;
     }
 
+    void InputElement_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        throw new System.NotImplementedException();
+    }
 }

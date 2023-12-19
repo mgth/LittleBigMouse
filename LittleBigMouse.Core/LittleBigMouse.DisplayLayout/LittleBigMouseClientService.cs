@@ -102,6 +102,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
                 text = text.Replace("\\Riot games\\", "\\Riot Games\\");
                 File.WriteAllText(file, text);
             }
+            // SteamLibrary -> steamapps is better for steam games TODO : remove in a version or two
             if(text.Contains("\\SteamLibrary\\"))
             {
                 text = text.Replace("\\SteamLibrary\\", "\\steamapps\\");

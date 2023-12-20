@@ -1,6 +1,3 @@
 [submodule "HLab"]
 	path = HLab
-	url = ../../CHMP-HLab/HLab
-[submodule "Lib/Avalonia"]
-	path = Lib/Avalonia
-	url = ../Avalonia
+	url = https://github.com/CHMP-HLab/HLab

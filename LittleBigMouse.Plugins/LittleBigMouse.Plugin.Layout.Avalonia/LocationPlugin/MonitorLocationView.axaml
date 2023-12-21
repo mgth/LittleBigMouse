@@ -49,6 +49,12 @@
 			<Setter Property="FontWeight" Value="Bold"/>
 			<Setter Property="BorderBrush" Value="{DynamicResource HLab.Brushes.Foreground}"/>
 			<Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Height" Value="{Binding 
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.1}"/>
+
 		</Style>
 	</UserControl.Styles>
 
@@ -235,13 +241,29 @@
 
 		<!--Ruler button-->
 		<ToggleButton 
-            Width ="40" Height="40" 
+            Width="{Binding 
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.1}"
+
+            Height="{Binding 
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.1}"
+
             Cursor="Hand" 
             VerticalAlignment="Bottom" HorizontalAlignment="Left" 
-            IsChecked="{Binding Ruler}">
-
+            IsChecked="{Binding Ruler}"
+			Padding="1"
+            >
+                <!--Margin="{Binding 
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.01}"-->
             <icons:IconView
-                Margin="5"
                 Foreground="{DynamicResource HLab.Brushes.Background}"
                 Path="Icon/Ruler"
             />

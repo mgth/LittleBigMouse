@@ -549,7 +549,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     public double MinimalMaxTravelDistance 
     {
         get => _minimalMaxTravelDistance;
-        set => SetUnsavedValue(ref _minimalMaxTravelDistance, value);
+        set => SetAndRaise(ref _minimalMaxTravelDistance, value);
     }
     double _minimalMaxTravelDistance = 0.0;
 

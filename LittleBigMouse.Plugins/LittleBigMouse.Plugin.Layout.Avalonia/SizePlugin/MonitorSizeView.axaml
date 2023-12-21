@@ -7,10 +7,9 @@
     xmlns:sizePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin"
     xmlns:controls="clr-namespace:HLab.Base.Avalonia.Controls;assembly=HLab.Base.Avalonia"
     xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
-    xmlns:converters1="clr-namespace:HLab.Base.Avalonia.Converters;assembly=HLab.Base.Avalonia"
     mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300"
-             x:Name="UserControl"
+    d:DesignHeight="300" d:DesignWidth="300"
+    x:Name="UserControl"
 
     ClipToBounds="False"
 
@@ -21,21 +20,6 @@
     </Design.DataContext>
 
     <UserControl.Resources>
-
-        <LinearGradientBrush x:Key="ScreenColor" StartPoint="0,0.3" EndPoint="1,0.7">
-            <GradientStop Color="#FF7288C0" Offset="0"/>
-            <GradientStop Color="#FF52669D" Offset="1"/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key="SelectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
-            <GradientStop Color="LightGreen" Offset="0"/>
-            <GradientStop Color="DarkGreen" Offset="1"/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key="UnselectedBrush" StartPoint="0,0.3" EndPoint="1,0.7">
-            <GradientStop Color="#FF7288C0" Offset="0"/>
-            <GradientStop Color="#FF333E9A" Offset="1"/>
-        </LinearGradientBrush>
-
-        <converters1:ToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
 
         <converters:ScaleConverter x:Key="Scale" />
 
@@ -62,6 +46,11 @@
 
         <Style Selector="controls|DoubleBox">
             <Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
+            <Setter Property="Height" Value="{Binding 
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.1}"/>
             <Setter Property="Decimals" Value="1"/>
         </Style>
     </UserControl.Styles>
@@ -199,7 +188,11 @@
                 Width ="{Binding 
                     ElementName=ChkLock,
                     Path=Height}"
-                Height ="{Binding Bounds,ElementName=UserControl,Converter={StaticResource Scale},ConverterParameter=0.05}"
+                Height ="{Binding 
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.05}"
                 >
                    
             <CheckBox  IsChecked="{Binding Model.Model.PhysicalSize.FixedAspectRatio, FallbackValue=true}" />
@@ -215,6 +208,7 @@
                 PointerWheelChanged="OnMouseWheel"
                 
                 Value="{Binding OutsideHeight}"
+
                 >
                 <controls:DoubleBox.Effect>
                     <DropShadowEffect Color="DarkBlue" Opacity="0.5"/>

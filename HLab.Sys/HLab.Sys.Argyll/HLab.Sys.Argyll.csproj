@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\HLab\HLab.Geo\HLab.Geo.csproj" />
+    <ProjectReference Include="..\..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
   </ItemGroup>
 
 </Project>

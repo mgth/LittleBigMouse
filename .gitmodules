@@ -1,3 +1,6 @@
-[submodule "HLab"]
-	path = HLab
-	url = https://github.com/CHMP-HLab/HLab
+[submodule "HLab.Core"]
+	path = HLab.Core
+	url = https://github.com/mgth/HLab.Core.git
+[submodule "HLab.Avalonia"]
+	path = HLab.Avalonia
+	url = https://github.com/mgth/HLab.Avalonia.git

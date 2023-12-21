@@ -18,10 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\HLab.Avalonia\HLab.Base.Avalonia\HLab.Base.Avalonia.csproj" />
+    <ProjectReference Include="..\..\HLab.Core\HLab.Remote\HLab.Remote.csproj" />
+    <ProjectReference Include="..\..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Base.Avalonia\HLab.Base.Avalonia.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Remote\HLab.Remote.csproj" />
-    <ProjectReference Include="..\..\HLab\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Zones\LittleBigMouse.Zoning.csproj" />
   </ItemGroup>
 

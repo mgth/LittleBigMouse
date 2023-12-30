@@ -211,10 +211,16 @@ public static class LayoutFactory
         {
             // special case for Spacedesk support
             if (dev.Contains("spacedesk", StringComparison.OrdinalIgnoreCase)) return "icon/Pnp/Spacedesk";
+            // special case for Remote desktop support
             if (dev == "Microsoft Remote Display Adapter") return "icon/Pnp/Windows";
         }
 
-        return $"icon/Pnp/{device.Edid?.ManufacturerCode ?? "LBM"}";
+        if (device.Edid is null) return "icon/Pnp/LBM";
+
+        // special case for Aorus support
+        if (device.Edid.Model.Contains("Aorus")) return "icon/Pnp/Aorus";
+
+        return $"icon/Pnp/{device.Edid.ManufacturerCode}?icon/Pnp/LBM";
     }
 
     static readonly string[] Brands = { "intel", "amd", "nvidia", "microsoft" };

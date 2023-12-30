@@ -4,10 +4,11 @@ using System.Threading.Tasks;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
-public sealed class LevelParser: IDisposable
+public sealed class LevelParser
 {
     Task _task;
     readonly ConcurrentQueue<MonitorLevel> _actions = new();
+    bool _stop = false;
 
     public void Enqueue(MonitorLevel level)
     {
@@ -18,7 +19,7 @@ public sealed class LevelParser: IDisposable
     void DoWork()
     {
         var doWork = true;
-        while (doWork)
+        while (doWork && !_stop)
         {
             if (_actions.TryDequeue(out var level))
             {
@@ -29,13 +30,17 @@ public sealed class LevelParser: IDisposable
                 doWork = false;
             }
         }
-    }
 
-    public void Dispose()
-    {
         while (_actions.TryDequeue(out var l))
         {
         }
+
+        _task = null;
+        _stop = false;
     }
 
+    public void Stop()
+    {
+        _stop = true;
+    }
 }

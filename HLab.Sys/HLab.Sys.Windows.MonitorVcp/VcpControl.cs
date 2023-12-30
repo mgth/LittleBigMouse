@@ -89,22 +89,22 @@ public class VcpControl : ReactiveObject
         }
     }
 
+    public VcpControl Start()
+    {
+        _brightness?.Start();
+        _contrast?.Start();
+        _gain?.Start();
+        _drive?.Start();
+        return this;
+    }
+
+
     nint HPhysical => _pPhysicalMonitorArray[0].hPhysicalMonitor;
 
-    void Cleanup(bool disposing)
+    ~VcpControl()
     {
         if (_pPhysicalMonitorArray is { Length: > 0 })
             DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
-    }
-
-    public void Dispose()
-    {
-        Cleanup(true);
-        GC.SuppressFinalize(this);
-    }
-    ~VcpControl()
-    {
-        Cleanup(false);
     }
 
     public bool AlternatePower => Monitor.Edid?.ManufacturerCode == "DEL";
@@ -146,10 +146,12 @@ public class VcpControl : ReactiveObject
 
     public void ActivateAnyway()
     {
-        Brightness ??= new MonitorLevel(_levelParser, GetBrightness, SetBrightness);
-        Contrast ??= new MonitorLevel(_levelParser, GetContrast, SetContrast);
-        Gain ??= new MonitorRgbLevel(_levelParser, GetGain, SetGain);
-        Drive ??= new MonitorRgbLevel(_levelParser, GetDrive, SetDrive);
+        Brightness ??= new MonitorLevel(_levelParser, GetBrightness, SetBrightness).Start();
+        Contrast ??= new MonitorLevel(_levelParser, GetContrast, SetContrast).Start();
+        Gain ??= new MonitorRgbLevel(_levelParser, GetGain, SetGain).Start();
+
+        // TODO : Drive seams to never work when not officially supported
+        // Drive ??= new MonitorRgbLevel(_levelParser, GetDrive, SetDrive).Start();
     }
 
     public MonitorLevel Brightness

@@ -54,10 +54,13 @@ public class MonitorLevel : ReactiveObject
         _componentGetter = getter;
 
         _levelParser = parser;
-
-        parser.Enqueue(this);
     }
 
+    public MonitorLevel Start()
+    {
+        _levelParser.Enqueue(this);
+        return this;
+    }
 
     public void SetToMax() { Value = Max; }
 
@@ -90,12 +93,14 @@ public class MonitorLevel : ReactiveObject
                 Min = v.min;
                 Max = v.max;
 
+                // if wanted value is reached, stop
                 if (v.value == Value)
                 {
                     Moving = false;
                     return;
                 }
 
+                // if moving, try to set remote value
                 if (Moving && Enabled)
                 {
                     if (_componentSetter(Value, Component))
@@ -104,15 +109,18 @@ public class MonitorLevel : ReactiveObject
                     }
                     else if (_retryWrite-- <= 0)
                     {
+                        // if failed too many times, disable control
                         Enabled = false;
                     }
                     else
                     {
+                        // if failed, wait a bit
                         Thread.Sleep(100);
                     }
                     return;
                 }
 
+                // if not moving, set local value to remote one
                 Value = v.value;
                 Moving = false;
             }), 
@@ -128,7 +136,7 @@ public class MonitorLevel : ReactiveObject
                 }
             });
 
-        _levelParser.Enqueue(this);
+         _levelParser.Enqueue(this);
     }
 
     uint _value;

@@ -1,4 +1,6 @@
-﻿using ReactiveUI;
+﻿using System;
+using Avalonia.Styling;
+using ReactiveUI;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
@@ -12,9 +14,18 @@ public class MonitorRgbLevel : ReactiveObject
             _values[i] = new MonitorLevel(parser, getter, setter, (VcpComponent)i);
     }
 
+    public MonitorRgbLevel Start()
+    {
+        foreach (var level in _values)
+            level.Start();
+
+        return this;
+    }
+
     public MonitorLevel Channel(uint channel) { return _values[channel]; }
 
     public MonitorLevel Red => Channel(0);
     public MonitorLevel Green => Channel(1);
     public MonitorLevel Blue => Channel(2);
+
 }

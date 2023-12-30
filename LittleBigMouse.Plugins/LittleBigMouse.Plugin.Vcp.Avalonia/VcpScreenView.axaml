@@ -15,8 +15,10 @@
     </Design.DataContext>
 
 
-    <Grid x:Name="Grid" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
-        <DockPanel Grid.Column="0" Grid.RowSpan="2">
+    <Grid x:Name="Grid" ColumnDefinitions="*,Auto">
+
+        <ScrollViewer AllowAutoHide="True" HorizontalScrollBarVisibility="Auto">
+        <StackPanel Orientation="Horizontal"> 
 
             <LayoutTransformControl>
                 <LayoutTransformControl.LayoutTransform>
@@ -67,14 +69,16 @@
 
             <!--<Button Command="{Binding SwitchSourceCommand}" Content="Test"/>-->
 
-            <ItemsControl VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <mvvm.Avalonia:ViewLocator Model="{Binding}"/>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </DockPanel>
+        </StackPanel>
+        </ScrollViewer>
+
+        <ItemsControl Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <mvvm.Avalonia:ViewLocator Model="{Binding}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <!--<avalonia:AvaPlot Grid.Row="0" Grid.Column="1" x:Name="Curve"></avalonia:AvaPlot>-->
 

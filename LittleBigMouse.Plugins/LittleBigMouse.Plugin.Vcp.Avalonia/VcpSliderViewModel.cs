@@ -40,6 +40,21 @@ public class VcpSliderViewModel : ViewModel<MonitorLevel>
     public IBrush SliderForeground => _sliderForeground.Value;
     readonly ObservableAsPropertyHelper<IBrush> _sliderForeground;
     public IBrush SliderBorderBrush => _sliderBorderBrush.Value;
+
+    public void Up()
+    {
+        if(Model == null) return;
+        if(Model.Value < Model.Max)
+            Model.Value++;
+    }
+
+    public void Down()
+    {
+        if(Model == null) return;
+        if(Model.Value > Model.Min)
+            Model.Value--;
+    }
+
     readonly ObservableAsPropertyHelper<IBrush> _sliderBorderBrush;
 
     static Color GetColor(VcpComponent component) =>

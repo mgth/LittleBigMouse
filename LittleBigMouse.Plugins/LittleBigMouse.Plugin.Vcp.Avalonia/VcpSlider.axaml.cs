@@ -22,6 +22,7 @@
 */
 
 using Avalonia.Controls;
+using Avalonia.Input;
 using HLab.Base.Avalonia.DependencyHelpers;
 using HLab.Mvvm.Annotations;
 using HLab.Sys.Windows.MonitorVcp;
@@ -46,6 +47,26 @@ public partial class VcpSlider : UserControl, IView<DefaultViewMode,VcpSliderVie
     public VcpSlider()
     {
         InitializeComponent();
+    }
+
+    void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        Delta(e.Delta.Y);
+    }
+
+    void Delta(double delta)
+    {
+        if (DataContext is not VcpSliderViewModel vm) return;
+ 
+        switch (delta)
+        {
+            case > 0:
+                vm.Up();
+                break;
+            case < 0:
+                vm.Down();
+                break;
+        }
     }
 
 }

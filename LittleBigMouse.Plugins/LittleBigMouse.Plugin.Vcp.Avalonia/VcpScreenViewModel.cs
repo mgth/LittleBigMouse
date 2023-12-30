@@ -63,7 +63,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
         _vcp = this.WhenAnyValue(
                 e => e.Model,
-                selector: e => e?.MonitorDevice(_monitorsService).Vcp())
+                selector: e => e?.MonitorDevice(_monitorsService).Vcp().Start())
             .ToProperty(this, e => e.Vcp);
 
         _brightnessVisibility = this.WhenAnyValue(
@@ -585,5 +585,10 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
     void SwitchSource()
     {
         Vcp.SetSource(12);
+    }
+
+    public override void OnDispose()
+    {
+        VcpExpendMonitor.Stop();
     }
 }

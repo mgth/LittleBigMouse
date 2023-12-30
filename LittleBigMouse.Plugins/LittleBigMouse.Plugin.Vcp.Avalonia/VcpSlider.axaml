@@ -10,15 +10,20 @@
              x:Name="UserControl"
              x:DataType="avalonia:VcpSliderViewModel"
              >
-        <Design.DataContext>
+
+    <Design.DataContext>
             <avalonia:VcpSliderViewModelDesign/>
         </Design.DataContext>
 
-    <Grid RowDefinitions="2*,8*,*,Auto,2*">
+    <Grid RowDefinitions="Auto,8*,Auto,Auto">
+
 
         <Border Grid.Row="1" Background="{Binding SliderBackground}"/>
 
         <Slider 
+
+            Margin="-10,0,-10,0"
+
             HorizontalAlignment="Center" 
             Grid.Row="1" 
             Orientation="Vertical" 
@@ -27,7 +32,6 @@
 
             Foreground="{Binding SliderForeground}"
             Background="{Binding SliderBackground}"
-            BorderBrush="Violet"
 
             SmallChange="1" 
             Value="{Binding Model.Value}"
@@ -36,9 +40,10 @@
             Maximum="{Binding Model.Max}"
 
             TickFrequency="10"
-            TickPlacement="Outside"
+            TickPlacement="None"
 
-            
+            PointerWheelChanged="OnPointerWheelChanged"
+
             >
             <Slider.Styles>
                 <Style Selector="Thumb">
@@ -54,9 +59,22 @@
                     </Setter>
                 </Style>
             </Slider.Styles>
-                <!--<SolidColorBrush  x:Key="SliderThumbBackground" Color="{Binding SliderBackground}"/>-->
 
         </Slider>
+
+        <Button  Grid.Row="0"
+                 HorizontalAlignment="Stretch" 
+                 HorizontalContentAlignment="Center"
+                 Command="{Binding Up}">
+            <Polygon Points="0 8 10 8 5 0" Stroke="Black" Fill="Black" />
+        </Button>
+
+        <Button Grid.Row="2"
+            HorizontalAlignment="Stretch" 
+            HorizontalContentAlignment="Center"
+            Command="{Binding Down}">
+            <Polygon Points="0 0 10 0 5 8" Stroke="Black" Fill="Black" />
+        </Button>
 
         <controls:DoubleBox 
             Grid.Row="3"
@@ -70,6 +88,8 @@
             FontWeight="Bold"
             Decimals="0"
             Value="{Binding Model.Value}"
+            PointerWheelChanged="OnPointerWheelChanged"
+            HorizontalAlignment="Stretch"
             />
 
     </Grid>

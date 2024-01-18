@@ -69,25 +69,36 @@ void CALLBACK Hooker::WindowChangeHook(
     if (hWnd != nullptr) {
 	    const DWORD processId = GetProcessIdFromWindow(hWnd);
 	    const LONG style = GetWindowLong(hWnd, GWL_STYLE);
-        if (processId != 0) {
-	        auto exePath = GetExecutablePathFromProcessId(processId);
+        if (processId != 0) 
+        {
+	        const auto exePath = GetExecutablePathFromProcessId(processId);
 
             #if defined(_DEBUG)
             std::cout << "Window: " << (style & WS_MAXIMIZE) << '\n';
             #endif
 
-            if (!exePath.empty()) {
-                // Use the executable path as needed
-                wprintf(L"Executable Path: %s\n", exePath.c_str());
+            if (!exePath.empty()) 
+            {
+	            #if defined(_DEBUG)
+	                wprintf(L"Executable Path: %s\n", exePath.c_str());
+	            #endif
 
                 Instance()->OnFocusChanged.fire(to_string(exePath));
 
-            } else {
+            }
+	        #if defined(_DEBUG)
+        	else 
+            {
                 wprintf(L"Unable to retrieve the executable path.\n");
             }
-        } else {
+	        #endif
+        }
+	    #if defined(_DEBUG)
+    	else 
+        {
             wprintf(L"Unable to retrieve the process ID.\n");
         }
+	    #endif
     }
 }
 

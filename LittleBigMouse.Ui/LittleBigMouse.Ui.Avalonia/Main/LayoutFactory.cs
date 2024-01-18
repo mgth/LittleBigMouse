@@ -87,7 +87,7 @@ public static class LayoutFactory
         source.DisplayName = device.Parent?.DeviceName;
         source.DeviceName = device.DeviceName;
 
-        source.SourceName = $"{monitor.Edid.VideoInterface}:{device.DeviceName}";
+        source.SourceName = $"{monitor.Edid?.VideoInterface??"Unknown"}:{device.DeviceName}";
 
 
         source.Primary = device.Parent.Primary;
@@ -206,13 +206,13 @@ public static class LayoutFactory
 
     static string BrandLogo(this MonitorDevice device)
     {
-        var dev = device.Connections[0].Parent?.Parent.DeviceString;
+        var dev = device.Connections[0].Parent?.DeviceString;
         if (dev != null)
         {
             // special case for Spacedesk support
             if (dev.Contains("spacedesk", StringComparison.OrdinalIgnoreCase)) return "icon/Pnp/Spacedesk";
             // special case for Remote desktop support
-            if (dev == "Microsoft Remote Display Adapter") return "icon/Pnp/Windows";
+            if (dev == "Microsoft Remote Display Adapter") return "icon/Pnp/Microsoft";
         }
 
         if (device.Edid is null) return "icon/Pnp/LBM";

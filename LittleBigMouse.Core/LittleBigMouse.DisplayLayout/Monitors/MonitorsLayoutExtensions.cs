@@ -26,22 +26,22 @@ public static class MonitorsLayoutExtensions
         lock (CompactLock)
         {
             // List all display not positioned
-            var unattachedScreens = placeAll ? layout.PhysicalMonitors.ToList() : layout.PhysicalMonitors.Where(s => !s.Placed).ToList();
+            var unplacedScreens = placeAll ? layout.PhysicalMonitors.ToList() : layout.PhysicalMonitors.Where(s => !s.Placed).ToList();
 
             // start with primary display
-            var todo = new Queue<PhysicalMonitor>();
+            Queue<PhysicalMonitor> todo = new();
             todo.Enqueue(layout.PrimaryMonitor);
 
             while (todo.Count > 0)
             {
                 foreach (var monitor in todo)
                 {
-                    unattachedScreens.Remove(monitor);
+                    unplacedScreens.Remove(monitor);
                 }
 
                 var placedScreen = todo.Dequeue();
 
-                foreach (var screenToPlace in unattachedScreens)
+                foreach (var screenToPlace in unplacedScreens)
                 {
                     if (screenToPlace == placedScreen) continue;
 
@@ -127,11 +127,13 @@ public static class MonitorsLayoutExtensions
                     }
                     if (somethingDone)
                     {
+                        layout.ForceCompact();
                         todo.Enqueue(screenToPlace);
                     }
                 }
             }
         }
+
         layout.UpdatePhysicalMonitors();
     }
 }

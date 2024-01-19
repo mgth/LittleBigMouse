@@ -582,8 +582,10 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     public void Compact()
     {
         if(AllowDiscontinuity) return;
-
-        ForceCompact();
+        lock (_compactLock)
+        {
+            ForceCompact();
+        }
     }
 
     /// <summary>
@@ -594,31 +596,28 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         // we cannot compact until primary monitor is placed
         if (PrimaryMonitor == null) return;
 
-        lock (_compactLock)
+        // Primary monitor is always at 0,0
+        List<PhysicalMonitor> done = [PrimaryMonitor];
+
+        // Enqueue all other monitors to be placed
+        var todo = this
+            .PhysicalMonitors.Except(done)
+            .OrderBy(monitor => monitor
+                .DepthProjection.OutsideBounds.DistanceToTouch(PrimaryMonitor.DepthProjection.OutsideBounds)
+                .DistanceHV()
+            ).ToList();
+
+        while (todo.Any())
         {
-            // Primary monitor is always at 0,0
-            List<PhysicalMonitor> done = [PrimaryMonitor];
+            var monitor = todo.First();
 
-            // Enqueue all other monitors to be placed
-            var todo = this
-                .PhysicalMonitors.Except(done)
-                .OrderBy(monitor => monitor
-                    .DepthProjection.OutsideBounds.DistanceToTouch(PrimaryMonitor.DepthProjection.OutsideBounds)
-                    .DistanceHV()
-                ).ToList();
+            monitor.PlaceAuto(done,AllowDiscontinuity,AllowOverlaps);
+            done.Add(monitor);
 
-            while (todo.Any())
-            {
-                var monitor = todo.First();
-
-                monitor.PlaceAuto(done,AllowDiscontinuity,AllowOverlaps);
-                done.Add(monitor);
-
-                todo = [.. todo.Except([monitor]).OrderBy(s => s
-                    .DepthProjection.OutsideBounds.DistanceToTouch(done.Select(m => m.DepthProjection.OutsideBounds) )
-                    .DistanceHV()
-                    )];
-            }
+            todo = [.. todo.Except([monitor]).OrderBy(s => s
+                .DepthProjection.OutsideBounds.DistanceToTouch(done.Select(m => m.DepthProjection.OutsideBounds) )
+                .DistanceHV()
+                )];
         }
     }
 

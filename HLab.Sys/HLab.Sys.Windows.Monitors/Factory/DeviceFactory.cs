@@ -121,10 +121,9 @@ internal static class DeviceFactory
             case "RdpIdd_IndirectDisplay":
             case string s when s.StartsWith("VID_DATRONICSOFT_PID_SPACEDESK_VIRTUAL_DISPLAY_"):
             case "PCI":
-
-                return BuildPhysicalAdapter(parent, device);
-
             default:
+                if(parent.Id=="ROOT")
+                    return BuildPhysicalAdapter(parent, device);
                 break;
         }
 

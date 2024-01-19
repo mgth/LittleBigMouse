@@ -143,6 +143,14 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         const int shrink = 4;
 
         var r = Model.ActiveSource.Source.InPixel.Bounds;
+
+
+        if (r.Width < shrink || r.Height < shrink)
+        {
+            Wallpaper = null;
+            return;
+        }
+
         var monitor = new Rect(r.X/shrink,r.Y/shrink,r.Width/shrink,r.Height/shrink);
 
         Wallpaper = style switch 

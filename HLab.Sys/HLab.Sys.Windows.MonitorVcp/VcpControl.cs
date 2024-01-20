@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+#nullable enable
 using System;
 using HLab.Sys.Windows.API.MonitorConfiguration;
 using ReactiveUI;
@@ -32,16 +33,17 @@ using static HLab.Sys.Windows.API.ErrHandlingApi;
 using static HLab.Sys.Windows.API.MonitorConfiguration.HighLevelMonitorConfigurationApi;
 using static HLab.Sys.Windows.API.MonitorConfiguration.LowLevelMonitorConfiguration;
 using static HLab.Sys.Windows.API.MonitorConfiguration.PhysicalMonitorEnumerationApi;
+using System.Threading;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
 public enum VcpComponent
 {
-    None = -1, 
-    Red = 0, 
-    Green = 1, 
-    Blue = 2, 
-    Brightness = -2, 
+    None = -1,
+    Red = 0,
+    Green = 1,
+    Blue = 2,
+    Brightness = -2,
     Contrast = -3
 }
 
@@ -56,12 +58,13 @@ public class VcpControl : ReactiveObject
         Monitor = monitor;
         _levelParser = levelParser;
 
-        _pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(monitor.Connections[0].Parent.HMonitor);
+        var hMonitor = (monitor.Connections.Count > 0) ? monitor.Connections[0].Parent.HMonitor : IntPtr.Zero;
+        _pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(hMonitor);
 
         var retry = 1;
         while (retry > 0)
         {
-            if (GetMonitorCapabilities(HPhysical, out var capabilities, out var colorTemperatures))
+            if (HPhysical != IntPtr.Zero && GetMonitorCapabilities(HPhysical, out var capabilities, out var colorTemperatures))
             {
                 if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.Brightness))
                     _brightness = new MonitorLevel(levelParser, GetBrightness, SetBrightness);
@@ -99,7 +102,7 @@ public class VcpControl : ReactiveObject
     }
 
 
-    nint HPhysical => _pPhysicalMonitorArray[0].hPhysicalMonitor;
+    nint HPhysical => _pPhysicalMonitorArray.Length>0 ? _pPhysicalMonitorArray[0].hPhysicalMonitor : IntPtr.Zero;
 
     ~VcpControl()
     {
@@ -117,14 +120,14 @@ public class VcpControl : ReactiveObject
             if (value == _power) return;
             if (value)
             {
-                if(AlternatePower)
+                if (AlternatePower)
                     SetVCPFeature(HPhysical, 0xE1, 0);
                 else
                     SetVCPFeature(HPhysical, 0xD6, 1);
             }
             else
             {
-                if(AlternatePower)
+                if (AlternatePower)
                     SetVCPFeature(HPhysical, 0xE1, 1);
                 else
                     SetVCPFeature(HPhysical, 0xD6, 4);
@@ -154,84 +157,92 @@ public class VcpControl : ReactiveObject
         // Drive ??= new MonitorRgbLevel(_levelParser, GetDrive, SetDrive).Start();
     }
 
-    public MonitorLevel Brightness
+    public MonitorLevel? Brightness
     {
         get => _brightness;
         private set => this.RaiseAndSetIfChanged(ref _brightness, value);
     }
-    MonitorLevel _brightness;
+    MonitorLevel? _brightness = null;
 
-    public MonitorLevel Contrast
+    public MonitorLevel? Contrast
     {
         get => _contrast;
         private set => this.RaiseAndSetIfChanged(ref _contrast, value);
     }
-    MonitorLevel _contrast;
+    MonitorLevel? _contrast = null;
 
-    public MonitorRgbLevel Gain
+    public MonitorRgbLevel? Gain
     {
         get => _gain;
         private set => this.RaiseAndSetIfChanged(ref _gain, value);
     }
-    MonitorRgbLevel _gain;
+    MonitorRgbLevel? _gain = null;
 
-    public MonitorRgbLevel Drive
+    public MonitorRgbLevel? Drive
     {
         get => _drive;
         private set => this.RaiseAndSetIfChanged(ref _drive, value);
     }
-    MonitorRgbLevel _drive;
+    MonitorRgbLevel? _drive = null;
 
-    OneOf<(uint value, uint min, uint max),int> GetBrightness(VcpComponent component = VcpComponent.None)
+    OneOf<(uint value, uint min, uint max), int> GetBrightness(VcpComponent component = VcpComponent.None)
     {
+        if (HPhysical == IntPtr.Zero) return 0;
+
         uint value = 0, min = 0, max = 0;
         var result = GetMonitorBrightness(HPhysical, ref min, ref value, ref max);
-        if (result) return (value,min,max);
+        if (result) return (value, min, max);
         return GetLastError();
     }
 
-    bool SetBrightness(uint value, VcpComponent component = VcpComponent.None) 
-        => SetMonitorBrightness(HPhysical, value);
+    bool SetBrightness(uint value, VcpComponent component = VcpComponent.None)
+        => HPhysical != IntPtr.Zero && SetMonitorBrightness(HPhysical, value);
 
-    OneOf<(uint value, uint min, uint max),int> GetContrast(VcpComponent component = VcpComponent.None)
+    OneOf<(uint value, uint min, uint max), int> GetContrast(VcpComponent component = VcpComponent.None)
     {
+        if (HPhysical == IntPtr.Zero) return 0;
+
         uint value = 0, min = 0, max = 0;
         if (GetMonitorContrast(HPhysical, ref min, ref value, ref max))
         {
-            return (value,min,max);
+            return (value, min, max);
         };
         return GetLastError();
     }
 
-    bool SetContrast(uint value, VcpComponent component = VcpComponent.None) 
-        => SetMonitorContrast(HPhysical, value);
+    bool SetContrast(uint value, VcpComponent component = VcpComponent.None)
+        => HPhysical != IntPtr.Zero && SetMonitorContrast(HPhysical, value);
 
-    OneOf<(uint value, uint min, uint max),int> GetGain(VcpComponent component)
+    OneOf<(uint value, uint min, uint max), int> GetGain(VcpComponent component)
     {
+        if (HPhysical == IntPtr.Zero) return 0;
+
         uint value = 0, min = 0, max = 0;
         if (GetMonitorRedGreenOrBlueGain(HPhysical, (uint)component, ref min, ref value, ref max))
         {
-            return (value,min,max);
+            return (value, min, max);
         }
         return GetLastError();
     }
 
-    bool SetGain(uint value, VcpComponent component = VcpComponent.None) 
-        => SetMonitorRedGreenOrBlueGain(HPhysical, (uint)component, value);
+    bool SetGain(uint value, VcpComponent component = VcpComponent.None)
+        => HPhysical != IntPtr.Zero && SetMonitorRedGreenOrBlueGain(HPhysical, (uint)component, value);
 
-    OneOf<(uint value, uint min, uint max),int> GetDrive(VcpComponent component)
+    OneOf<(uint value, uint min, uint max), int> GetDrive(VcpComponent component)
     {
+        if (HPhysical == IntPtr.Zero) return 0;
+
         uint value = 0, min = 0, max = 0;
         if (GetMonitorRedGreenOrBlueDrive(HPhysical, (uint)component, ref min, ref value, ref max))
         {
-            return (value,min,max);
+            return (value, min, max);
         }
         return GetLastError();
     }
 
-    bool SetDrive(uint value, VcpComponent component) 
-        => SetMonitorRedGreenOrBlueDrive(HPhysical, (uint)component, value);
+    bool SetDrive(uint value, VcpComponent component)
+        => HPhysical != IntPtr.Zero && SetMonitorRedGreenOrBlueDrive(HPhysical, (uint)component, value);
 }
 
-public delegate OneOf<(uint value, uint min, uint max),int> VcpGetter(VcpComponent component = VcpComponent.None);
+public delegate OneOf<(uint value, uint min, uint max), int> VcpGetter(VcpComponent component = VcpComponent.None);
 public delegate bool VcpSetter(uint value, VcpComponent component = VcpComponent.None);

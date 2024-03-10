@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
              xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="LittleBigMouse.Ui.Avalonia.Main.PluginsControlsView"
              x:DataType="main:MainViewModel"
@@ -34,7 +35,14 @@
 
 			</ItemsControl>
 
-			<ToggleButton IsChecked="{Binding ViewList}">List</ToggleButton>
+			<ToggleButton IsChecked="{Binding ViewList}">
+                <icons:IconView Height="40"
+                                Width="40"
+                                Margin="5"
+                                Path="Icon/MonitorList" 
+                                ToolTip.Tip="Switch to list view"
+                />
+            </ToggleButton>
 		</StackPanel>
 
 	</Grid>

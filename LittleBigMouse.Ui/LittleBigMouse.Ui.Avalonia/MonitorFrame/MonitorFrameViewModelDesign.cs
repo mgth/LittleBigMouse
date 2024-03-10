@@ -83,7 +83,7 @@ public class MonitorFrameViewModelDesign2 : MonitorFrameViewModel, IDesignViewMo
 
         public IMainPluginsViewModel MainViewModel => new MainViewModelDesign();
 
-        public IMonitorFrameViewModel? SelectedMonitor { get ; set ; }
+        public PhysicalMonitor? SelectedMonitor { get ; set ; }
         public ICommand ResetLocationsFromSystem { get; }
         public ICommand ResetSizesFromSystem { get; }
 

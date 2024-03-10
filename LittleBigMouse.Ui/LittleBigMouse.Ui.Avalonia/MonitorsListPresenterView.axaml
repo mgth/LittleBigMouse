@@ -1,0 +1,57 @@
+﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.MonitorsListPresenterView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:avalonia1="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
+             xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
+             xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+             xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
+             LayoutUpdated="OnLayoutUpdated"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" 
+             d:DesignWidth="500"
+             x:DataType="avalonia:MonitorsLayoutPresenterViewModel"
+>
+
+    <UserControl.Resources>
+        <avalonia:SizeRatioConverter x:Key="SizeRatioConverter" />
+    </UserControl.Resources>
+
+    <Design.DataContext>
+        <avalonia:MonitorsLayoutPresenterViewModel />
+    </Design.DataContext>
+
+    <Grid ClipToBounds="False">
+
+        <main:PresenterBackground/>
+
+        <Grid  Margin="30" ClipToBounds="False" ColumnDefinitions="*,2*">
+
+        <ListBox 
+            ItemsSource="{Binding Model.PhysicalMonitors, FallbackValue=NA}"
+            SelectedItem="{Binding SelectedMonitor}"
+            >
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <avalonia1:ViewLocator 
+                        Height="100"
+                        ViewClass="{x:Type plugins:IListItemMonitorViewClass}"
+                        Model="{Binding}"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <Grid Grid.Column="1" x:Name="ReferenceGrid">
+            <avalonia1:ViewLocator
+                ViewMode="{Binding MainViewModel.PresenterViewMode}"
+                Model="{Binding SelectedMonitor}"
+                />
+        </Grid>
+
+        <Canvas Grid.Column="1" x:Name="ContentGrid"/>
+
+        </Grid>
+    </Grid>
+</UserControl>

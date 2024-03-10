@@ -37,13 +37,12 @@ namespace LittleBigMouse.Ui.Avalonia;
 /// <summary>
 /// Logique d'interaction pour MultiScreensGui.xaml
 /// </summary>
-public partial class MultiMonitorsLayoutPresenterView : UserControl
-    , IView<DefaultViewMode,IMonitorsLayoutPresenterViewModel>
-//    , IView<MonitorListViewMode,IMonitorsLayoutPresenterViewModel>
+public partial class MonitorsListPresenterView : UserControl
+    , IView<ListViewMode,IMonitorsLayoutPresenterViewModel>
     , IMonitorsLayoutPresenterViewClass
     , IMonitorsLayoutPresenterView
 {
-    public MultiMonitorsLayoutPresenterView()
+    public MonitorsListPresenterView()
     {
         InitializeComponent();
     }
@@ -61,9 +60,9 @@ public partial class MultiMonitorsLayoutPresenterView : UserControl
 
     public double GetRatio()
     {
-        if (Layout == null) return 1.0;
+        if (ViewModel?.SelectedMonitor == null) return 1.0;
 
-        var all = Layout.PhysicalBounds;
+        var all = ViewModel.SelectedMonitor.PhysicalRotated.OutsideBounds;
 
         if (all.Width * all.Height > 0.0)
         {

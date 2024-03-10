@@ -82,12 +82,12 @@ public class MonitorsLayoutPresenterViewModel
 
     public IDisplayRatio VisualRatio { get; } = new DisplayRatioValue(1.0);
 
-    public IMonitorFrameViewModel? SelectedMonitor
+    public PhysicalMonitor? SelectedMonitor
     {
         get => _selectedMonitor;
         set => this.RaiseAndSetIfChanged(ref _selectedMonitor, value);
     }
-    private IMonitorFrameViewModel? _selectedMonitor;
+    private PhysicalMonitor? _selectedMonitor;
 
     public ICommand ResetLocationsFromSystem { get; }
     public ICommand ResetSizesFromSystem { get; }

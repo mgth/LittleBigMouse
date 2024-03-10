@@ -154,10 +154,9 @@ public class Edid : IEdid
             // todo : analog display
         }
 
+        if (edid.Length <= 34) return;
+
         if ((edid[24] & (0b1 << 2)) > 0)
-
-            if (edid.Length <= 34) return;
-
         {
             var redX = ((edid[25] >> 6) & 0b11) | (((int)edid[27]) << 2);
             var redY = ((edid[25] >> 4) & 0b11) | (((int)edid[28]) << 2);

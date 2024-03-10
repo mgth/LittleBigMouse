@@ -106,7 +106,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
         _selected = this.WhenAnyValue(
             e => e.MonitorsPresenter.SelectedMonitor,
             e => e.Model,
-            (selected, monitor) => selected?.Model == monitor
+            (selected, monitor) => selected == monitor
             )
             .ToProperty(this, e => e.Selected);
 

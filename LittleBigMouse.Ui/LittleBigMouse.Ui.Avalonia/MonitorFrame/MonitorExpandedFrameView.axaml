@@ -1,0 +1,270 @@
+﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.MonitorFrame.MonitorExpandedFrameView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
+    xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+    xmlns:avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
+    xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
+    xmlns:converters2="clr-namespace:HLab.Base.Avalonia.Converters;assembly=HLab.Base.Avalonia"
+    xmlns:annotations="clr-namespace:HLab.Mvvm.Annotations;assembly=HLab.Mvvm.Annotations"
+    xmlns:monitorFrame="clr-namespace:LittleBigMouse.Ui.Avalonia.MonitorFrame"
+    mc:Ignorable="d"
+    HorizontalAlignment="Left"
+    VerticalAlignment="Top"
+    MinHeight="0"
+    MinWidth="0"
+    RenderTransformOrigin="0,0"
+    x:Name="UserControl"
+    ClipToBounds="False"
+
+    x:DataType="monitorFrame:MonitorFrameViewModel"
+>
+	<!--
+    Margin="{Binding Margin}" 
+	-->
+
+	<Design.DataContext>
+		<monitorFrame:MonitorFrameViewModelDesign />
+	</Design.DataContext>
+
+	<UserControl.ContextMenu>
+		<ContextMenu>
+			<MenuItem Header="Place from windows config" Command="{Binding MonitorsPresenter.ResetLocationsFromSystem}"/>
+			<Separator />
+			<MenuItem Header="Reset Size" Command="{Binding MonitorsPresenter.ResetSizesFromSystem}" Click="ResetSize_Click"/>
+		</ContextMenu>
+	</UserControl.ContextMenu>
+
+	<UserControl.Resources>
+
+		<converters:MultiScaleConverter x:Key="MultiScale"/>
+		<converters:ScaleConverter x:Key="Scale"/>
+
+		<LinearGradientBrush x:Key="SelectedBrush"
+                             StartPoint="0%, 40%"
+                             EndPoint="100%, 60%">
+			<GradientStop Color="#FF002500" Offset="0"/>
+			<GradientStop Color ="#FF526452" Offset="0.5"/>
+			<GradientStop Color ="#FF051E05" Offset="0.5"/>
+			<GradientStop Color="#FF002500" Offset="1"/>
+		</LinearGradientBrush>
+
+		<LinearGradientBrush x:Key="UnselectedBrush"
+                             StartPoint="0%, 40%"
+                             EndPoint="100%, 60%"
+                             >
+			<GradientStop Color="Black" Offset="0"/>
+			<GradientStop Color ="#FF626161" Offset="0.5"/>
+			<GradientStop Color ="#FF1E1E1E" Offset="0.5"/>
+			<GradientStop Color="Black" Offset="1"/>
+		</LinearGradientBrush>
+
+		<converters2:ToBrushConverter
+            x:Key="Highlighter"
+            TrueValue="{StaticResource SelectedBrush}"
+            FalseValue="{StaticResource UnselectedBrush}"
+            />
+	</UserControl.Resources>
+
+	<Grid x:Name = "Grid">
+
+		<Grid x:Name = "SizedGrid"
+	        Width="{Binding Rotated.OutsideWidth}"
+            Height="{Binding Rotated.OutsideHeight}">
+
+			<!--Grid rotated containing objects that won't be rotated again-->
+			<Grid x:Name="GridRotated"
+				  ColumnDefinitions="Auto,*,Auto"
+				  RowDefinitions="Auto,*,Auto">
+
+                <TextBlock.FontSize>
+					<MultiBinding ConverterParameter="0.05|7" Converter="{StaticResource MultiScale}">
+						<Binding ElementName="GridRotated" Path="Bounds.Height"/>
+						<Binding ElementName="GridRotated" Path="Bounds.Width"/>
+					</MultiBinding>
+				</TextBlock.FontSize>
+
+				<Border
+					Width="{Binding Rotated.LeftBorder}"
+					Height="{Binding Rotated.TopBorder}"
+                />
+
+				<Border Grid.Row="2" Grid.Column="2"
+					Width="{Binding Rotated.RightBorder}"
+					Height="{Binding Rotated.BottomBorder}"
+                />
+
+				<Border Grid.Row="0" Grid.Column="0"
+					Grid.ColumnSpan="3"
+					Grid.RowSpan="3"
+					RenderOptions.TextRenderingMode="SubpixelAntialias"
+					Background="{Binding Selected, Converter={StaticResource Highlighter}, FallbackValue={StaticResource UnselectedBrush}}"
+                >
+
+					<Border.CornerRadius>
+						<MultiBinding ConverterParameter="0.025" Converter="{StaticResource MultiScale}">
+							<Binding ElementName="GridRotated" Path="Bounds.Height"/>
+							<Binding ElementName="GridRotated" Path="Bounds.Width"/>
+						</MultiBinding>
+					</Border.CornerRadius>
+
+				</Border>
+
+				<!--BottomRight Shadow-->
+				<Border Grid.Column="0"  Grid.ColumnSpan="3" Grid.Row="0" Grid.RowSpan="3" BorderThickness="0,0,1,1" BorderBrush="Black">
+					<Border.CornerRadius>
+						<MultiBinding ConverterParameter="0.025" Converter="{StaticResource MultiScale}">
+							<Binding ElementName="GridRotated" Path="Bounds.Height"/>
+							<Binding ElementName="GridRotated" Path="Bounds.Width"/>
+						</MultiBinding>
+					</Border.CornerRadius>
+				</Border>
+
+				<!--TopLeft Light-->
+				<Border Grid.Column="0"  Grid.ColumnSpan="3" Grid.Row="0" Grid.RowSpan="3" BorderThickness="1,1,0,0" BorderBrush="White" Opacity="0.3">
+					<Border.CornerRadius>
+						<MultiBinding ConverterParameter="0.025" Converter="{StaticResource MultiScale}">
+							<Binding ElementName="GridRotated" Path="Bounds.Height"/>
+							<Binding ElementName="GridRotated" Path="Bounds.Width"/>
+						</MultiBinding>
+					</Border.CornerRadius>
+				</Border>
+
+				<!--BottomRight Light-->
+				<Border Grid.Column="1"  Grid.Row="1" BorderThickness="0,0,2,2" Margin="-2" CornerRadius="2" BorderBrush="White" Opacity="0.4"/>
+
+				<!--TopLeft Shadow-->
+				<Border Grid.Column="1"  Grid.Row="1" BorderThickness="2,2,0,0" Margin="-2" CornerRadius="2" BorderBrush="Black" Opacity="0.4"/>
+
+			</Grid>
+
+
+
+			<!--Grid unrotated Containing objects that will be rotated after rendering-->
+			<Grid
+				IsHitTestVisible="False"
+				RenderTransform="{Binding Rotation}"
+				ColumnDefinitions="Auto,*,Auto"
+				RowDefinitions="Auto,*,Auto"
+				Width="{Binding Unrotated.OutsideWidth}"
+                Height="{Binding Unrotated.OutsideHeight}"
+            >
+
+
+
+				<Border
+					Width="{Binding Unrotated.LeftBorder}"
+					Height="{Binding Unrotated.TopBorder}"
+            />
+
+				<Border Grid.Row="2" Grid.Column="2"
+					Width="{Binding Unrotated.RightBorder}"
+					Height="{Binding Unrotated.BottomBorder}"
+            />
+
+				<TextBlock.FontSize>
+					<MultiBinding ConverterParameter="0.05" Converter="{StaticResource MultiScale}">
+						<Binding ElementName="GridRotated" Path="Bounds.Height"/>
+						<Binding ElementName="GridRotated" Path="Bounds.Width"/>
+					</MultiBinding>
+				</TextBlock.FontSize>
+
+				<!-- Monitor model name -->
+				<Border Grid.Row="0" Grid.Column="0" x:Name="TopRow"/>
+				<Label
+					VerticalAlignment="Bottom"
+					ClipToBounds="False"
+					Padding="0"
+					Grid.Row="0"
+					Grid.Column="1"
+					FontWeight="Black"
+					Opacity="0.75"
+					Content="{Binding Path=Model.Model.PnpDeviceName, FallbackValue=Unknown}">
+
+					<Label.FontSize>
+						<Binding ElementName="TopRow" Path="Bounds.Height" Converter="{StaticResource Scale}" ConverterParameter="0.5"
+								 FallbackValue="14" />
+					</Label.FontSize>
+					<Label.Foreground>
+						<LinearGradientBrush>
+							<GradientStop Offset="0" Color="#F0FFFFFF"/>
+							<GradientStop Offset="1" Color="#A0FFFFFF"/>
+						</LinearGradientBrush>
+					</Label.Foreground>
+				</Label>
+
+				<!-- Brand Icon -->
+				<icons:IconView
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center"
+					HorizontalContentAlignment="Center"
+					Grid.Row="2"
+					Grid.Column="1"
+					Opacity="0.8"
+					Height="{Binding Unrotated.BottomBorder}"
+					Foreground="LightGray" Path="{Binding Model.Model.Logo, FallbackValue=icon/brand/LBM}"/>
+				<!--Width="{Binding Unrotated.Width}"-->
+
+				<!-- Power button -->
+				<icons:IconView
+					Margin="0"
+					HorizontalAlignment="Right"
+					VerticalAlignment="Center"
+					Grid.Row="2"
+					Grid.Column="1"
+					Grid.ColumnSpan="2"
+					Height="{Binding Unrotated.BottomBorder}"
+					Foreground="LightGray"
+					Path ="icon/parts/power"
+					Opacity="0.25"
+                />
+			</Grid>
+
+			<Grid
+				ColumnDefinitions="Auto,*,Auto"
+				RowDefinitions="Auto,*,Auto"
+            >
+
+				<Border
+					Width="{Binding Rotated.LeftBorder}"
+					Height="{Binding Rotated.TopBorder}"
+            />
+
+				<Border Grid.Row="2" Grid.Column="2"
+					Width="{Binding Rotated.RightBorder}"
+					Height="{Binding Rotated.BottomBorder}"
+            />
+
+				<TextBlock.FontSize>
+					<MultiBinding ConverterParameter="0.05|7" Converter="{StaticResource MultiScale}">
+						<Binding ElementName="GridRotated" Path="Bounds.Height"/>
+						<Binding ElementName="GridRotated" Path="Bounds.Width"/>
+					</MultiBinding>
+				</TextBlock.FontSize>
+
+				<!-- Background color -->
+				<Grid Grid.Column="1" Grid.Row="1" Background="{Binding Model.ActiveSource.Source.BackgroundColor}"/>
+
+				<!-- WallPaper -->
+				<Image Grid.Column="1" Grid.Row="1"
+					   Source ="{Binding Wallpaper}"
+					   Stretch="Fill"
+					   StretchDirection="Both"
+					   RenderOptions.BitmapInterpolationMode="HighQuality"
+                />
+
+				<!-- Plugin content -->
+				<avalonia:ViewLocator
+					Grid.Column="1" Grid.Row="1"
+					ClipToBounds="False"
+					ViewClass="{x:Type plugins:IMonitorFrameContentViewClass}"
+					ViewMode="{Binding MonitorsPresenter.MainViewModel.ContentViewMode, FallbackValue={x:Type annotations:DefaultViewMode}}"
+					Model="{Binding Model}"
+            />
+
+			</Grid>
+		</Grid>
+	</Grid>
+</UserControl>

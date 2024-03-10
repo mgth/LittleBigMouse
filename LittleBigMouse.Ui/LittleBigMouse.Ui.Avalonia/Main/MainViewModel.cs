@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Reactive.Linq;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -36,6 +37,10 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
         MaximizeCommand = ReactiveCommand.Create(() =>
             WindowState = WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal);
+
+        _presenterViewMode = this.WhenAnyValue(v => v.ViewList)
+            .Select(v => v ? typeof(ListViewMode) : typeof(DefaultViewMode))
+            .ToProperty(this, v => v.PresenterViewMode);
     }
 
     public IMainService MainService 
@@ -55,15 +60,22 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     }
     Type _contentViewMode = typeof(DefaultViewMode);
 
+    public Type PresenterViewMode => _presenterViewMode.Value;
+    readonly ObservableAsPropertyHelper<Type> _presenterViewMode;
+
+    public bool ViewList
+    {
+        get => _viewList;
+        set => this.RaiseAndSetIfChanged(ref _viewList, value);
+    }
+    bool _viewList = false;
+
     public double VerticalResizerSize => 10.0;
 
     public double HorizontalResizerSize => 10.0;
 
 
     public ICommand CloseCommand { get; }
-    //public ICommand CloseCommand { get; } = H.Command(c => c
-    //    .Action(e => e.Close())
-    //);
 
     public ICommand MaximizeCommand { get; }
 

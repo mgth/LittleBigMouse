@@ -22,39 +22,26 @@
 */
 
 using Avalonia.Controls;
-using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
-using LittleBigMouse.Plugins.Avalonia;
+using LittleBigMouse.Ui.Avalonia.Plugins.Default;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
-public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, MonitorFrameViewModel>, IDefaultViewClass, IMonitorFrameView 
+//class DefaultScreenContentView : UserControl, IView<ViewModeDefault, LocationScreenViewModel>, IViewScreenFrameTopLayer
+//{
+//}
+/// <summary>
+/// Logique d'interaction pour LocationScreenView.xaml
+/// </summary>
+public partial class ListItemMonitorView : UserControl, IView<DefaultViewMode, DefaultMonitorViewModel>, IListItemMonitorViewClass
 {
-    public MonitorFrameView() => InitializeComponent();
-
-    protected override void OnLoaded(RoutedEventArgs e)
+    public ListItemMonitorView() 
     {
-        base.OnLoaded(e);
-        if(Design.IsDesignMode) return;
-
-        var parent = this.FindAncestorOfType<IMonitorsLayoutPresenterView>();
-
-        if(DataContext is IMonitorFrameViewModel viewModel) 
-            viewModel.MonitorsPresenter = parent?.DataContext as IMonitorsLayoutPresenterViewModel;
+        InitializeComponent();
     }
 
-
-    void ResetSize_Click(object sender, RoutedEventArgs e) {
-        if (DataContext is IMonitorFrameViewModel vm)
-        {
-            // TODO Avalonia
-            // vm.Model?.Model.InitSize(vm.Model.ActiveSource.Source.Device);
-        }
-    }
-
-    public IMonitorFrameViewModel? ViewModel => DataContext as IMonitorFrameViewModel;
+    DefaultMonitorViewModel? ViewModel => DataContext as DefaultMonitorViewModel;
+    MultiMonitorsLayoutPresenterView? MonitorsPresenterView => this.FindAncestorOfType<MultiMonitorsLayoutPresenterView>();
 }
-
-

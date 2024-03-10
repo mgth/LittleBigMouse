@@ -38,16 +38,13 @@
                         ClipToBounds="False"
 
                 >
-                        <!--Width="{Binding Width, Mode=OneWay}" 
-                        Height="{Binding Height, Mode=OneWay}"-->
 
                     <ItemsControl 
                         ItemsSource="{Binding Model.PhysicalMonitors, FallbackValue=NA}"
                         ClipToBounds="False"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-
-                        >
+                     >
                         <ItemsControl.Effect>
                             <DropShadowEffect 
                                 Color="AliceBlue" 

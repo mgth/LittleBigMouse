@@ -45,7 +45,7 @@
 		<mvvm:ViewLocator Grid.Row="1"
 
               ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
-              ViewMode="{x:Type annotations:DefaultViewMode}"
+              ViewMode="{Binding PresenterViewMode}"
 
               Model="{Binding MainService.MonitorsLayout}"
         />

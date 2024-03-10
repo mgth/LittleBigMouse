@@ -9,5 +9,7 @@ public interface IMonitorsLayoutPresenterView
     
     IMonitorsLayoutPresenterViewModel? ViewModel { get; }
 
+    object? DataContext { get; }
+
     double GetRatio();
 }

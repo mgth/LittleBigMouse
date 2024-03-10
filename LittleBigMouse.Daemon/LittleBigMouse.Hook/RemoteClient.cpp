@@ -57,6 +57,8 @@ void RemoteClient::RunThread()
 
 void RemoteClient::Send(const std::string& message)
 {
+	if(_stop) return;
+
 	const auto result = send(_socket,message.c_str(),message.length(),0);
 	if(result == SOCKET_ERROR)
 	{

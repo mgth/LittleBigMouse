@@ -17,55 +17,55 @@ void RemoteServerSocket::RunThread()
 	WSADATA WSAData;
 	SOCKADDR_IN csin{};
 
-    auto result = WSAStartup(MAKEWORD(2,0), &WSAData);
-	if(result!=0)
+	auto result = WSAStartup(MAKEWORD(2, 0), &WSAData);
+	if (result != 0)
 	{
-			std::cout << "WSAStartup failed.\n";
-			return;
+		std::cout << "WSAStartup failed.\n";
+		return;
 	}
 
-    SOCKADDR_IN sin;
-	sin.sin_addr.s_addr    = INADDR_ANY; 
-	sin.sin_family        = AF_INET;
-	sin.sin_port        = htons(25196);
+	SOCKADDR_IN sin;
+	sin.sin_addr.s_addr = INADDR_ANY;
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(25196);
 
 	_socket = socket(AF_INET, SOCK_STREAM, 0);
 
-	#if defined(_DEBUG)
+#if defined(_DEBUG)
 	std::cout << "<Server:Start>\n";
-	#endif
+#endif
 
-    if(bind(_socket, reinterpret_cast<SOCKADDR*>(&sin), sizeof(sin))==0)
-    {
-	    if(listen(_socket, 0)==0)
-	    {
-		    while(!_stop) 
-		    {
-		        int sinSize = sizeof(csin);
-		        const auto csock = accept(_socket, reinterpret_cast<SOCKADDR*>(&csin), &sinSize);
-		        if(csock != INVALID_SOCKET)
-		        {
+	if (bind(_socket, reinterpret_cast<SOCKADDR*>(&sin), sizeof(sin)) == 0)
+	{
+		if (listen(_socket, 0) == 0)
+		{
+			while (!_stop)
+			{
+				int sinSize = sizeof(csin);
+				const auto csock = accept(_socket, reinterpret_cast<SOCKADDR*>(&csin), &sinSize);
+				if (csock != INVALID_SOCKET)
+				{
 					auto c = new RemoteClient(this, csock);
 					_lock.lock();
-						_clients.push_back(c);
+					_clients.push_back(c);
 					_lock.unlock();
 
 					c->Start();
 
 					//immediately inform client of current state
-					OnMessage.fire("",c);
-		        }
-				#if defined(_DEBUG)
+					OnMessage.fire("", c);
+				}
+#if defined(_DEBUG)
 				else
 				{
-					std::cout << "<Server:Dead>.\n"; 
+					std::cout << "<Server:Dead>.\n";
 				}
-				#endif
+#endif
 
 				DeleteDeadClients();
-		    }
+			}
 
-			while(!_clients.empty())
+			while (!_clients.empty())
 			{
 				_lock.lock();
 				const auto c = _clients.back();
@@ -75,33 +75,34 @@ void RemoteServerSocket::RunThread()
 				c->Stop();
 			}
 			DeleteDeadClients();
-			#if defined(_DEBUG)
+#if defined(_DEBUG)
 			std::cout << "<Server:Stopped>\n";
-			#endif
+#endif
 
-	    }
-		#if defined(_DEBUG)
-	    else
-	    {
-		    std::cout << "Listen failed.\n";
-	    }
-		#endif
-    }
+		}
+#if defined(_DEBUG)
+		else
+		{
+			std::cout << "Listen failed.\n";
+		}
+#endif
+	}
 
-	if(_socket!=0)
+	if (_socket != 0)
 		closesocket(_socket);
 
-    WSACleanup();
+	WSACleanup();
 }
 
 void RemoteServerSocket::DeleteDeadClients()
 {
-	while(!_deadClients.empty())
+	while (!_deadClients.empty())
 	{
 		_lock.lock();
 		const auto c = _deadClients.back();
 		_deadClients.pop_back();
 		_lock.unlock();
+
 		c->Join();
 		delete c;
 	}
@@ -110,17 +111,17 @@ void RemoteServerSocket::DeleteDeadClients()
 void RemoteServerSocket::DoStop()
 {
 	RemoteServer::DoStop();
-	if(_socket!=0)
-		shutdown(_socket,2);
-	if(_socket!=0)
+	if (_socket != 0)
+		shutdown(_socket, 2);
+	if (_socket != 0)
 		closesocket(_socket);
 
 	_socket = 0;
 }
 
-void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client) 
+void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client)
 {
-	OnMessage.fire(m,client);
+	OnMessage.fire(m, client);
 }
 
 void RemoteServerSocket::Remove(RemoteClient* remoteClient)
@@ -134,25 +135,33 @@ void RemoteServerSocket::Remove(RemoteClient* remoteClient)
 	_lock.unlock();
 }
 
-void RemoteServerSocket::Send(const std::string& message, RemoteClient* client) 
+void RemoteServerSocket::WaitForReady() const
 {
-	if(client)
+	while (_socket == 0)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+}
+
+void RemoteServerSocket::Send(const std::string& message, RemoteClient* client)
+{
+	if (client)
 	{
 		client->Send(message);
 	}
 	else
 	{
 		_lock.lock();
-		const auto clients = _clients;
+		const std::vector<RemoteClient*> clients(_clients);
 		_lock.unlock();
 
-	    for(const auto c : _clients)
-	    {
-	        if(c) 
+		for (const auto c : clients)
+		{
+			if (c)
 			{
-	        	c->Send(message);
+				c->Send(message);
 			}
-	    }
+		}
 	}
 
 }

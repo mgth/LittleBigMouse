@@ -25,5 +25,6 @@ public:
 
     void ReceiveMessage(const std::string& m, RemoteClient* client);
     void Remove(RemoteClient* remoteClient);
+    void WaitForReady() const override;
 };
 

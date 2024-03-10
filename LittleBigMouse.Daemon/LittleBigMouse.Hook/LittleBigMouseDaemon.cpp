@@ -47,30 +47,40 @@ void LittleBigMouseDaemon::Connect()
 	}
 }
 
+
 void LittleBigMouseDaemon::Run(const std::string& path) 
 {
 // load excluded list
 	LoadExcluded("\\Mgth\\LittleBigMouse\\Excluded.txt");
 
-// load layout from file
+	// connect to events
+	Connect();
+
+	//start remote server
+	if(_remoteServer)
+	{
+		_remoteServer->Start();
+		_remoteServer->WaitForReady();
+	}
+
+	// pump messages
+	if(_hook)
+		_hook->Start();
+
+	// load layout from file
 	if(!path.empty())
 		LoadFromFile(path);
 
-	Connect();
-
-//start remote server
-	if(_remoteServer)
-		_remoteServer->Start();
-
-// pump messages
-	_hook->Start();
-
-// wait remote server to stop
+	// wait remote server to stop
 	if(_remoteServer)
 		_remoteServer->Join();
 
-// wait for mouse hook to stop
-	_hook->Stop();
+	// wait for mouse hook to stop
+	if(_hook)
+	{
+		_hook->Stop();
+		_hook->Join();
+	}
 }
 
 LittleBigMouseDaemon::~LittleBigMouseDaemon()
@@ -214,7 +224,7 @@ void LittleBigMouseDaemon::DesktopChanged() const
 
 bool LittleBigMouseDaemon::Excluded(const std::string& path) const
 {
-
+	if(path.empty()) return false;
 	for (auto &line : _excluded) 
 	{  
 		if (line.length() > 1 && path.find(line) < path.length())
@@ -284,8 +294,49 @@ void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, Remo
 
 void LittleBigMouseDaemon::LoadExcluded(const std::string& path) 
 {
-	auto wPath = to_wstring(path);
+    PWSTR szPath = NULL;
 
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
+    {
+	    std::ifstream file;
+		auto szCombined = (LPWSTR)CoTaskMemAlloc(MAX_PATH * sizeof(WCHAR));
+		if(szCombined == NULL)
+		{
+			CoTaskMemFree(szPath);
+			return;
+		}
+
+		auto wPath = to_wstring(path);
+		PathCombine(szCombined, szPath, wPath.c_str());
+
+	    file.open(szPath, std::ios::in);
+
+	    std::string buffer;
+		std::string line;
+		while(file)
+		{
+			if(file.eof()) break;
+
+			std::getline(file, line);
+
+			if(line.empty()) continue;
+			if(line[0] == ':') continue;
+
+		    _excluded.push_back(line);
+
+			#if defined(_DEBUG)
+			std::cout << "Excluded : " << line << "\n";
+			#endif
+		}
+		CoTaskMemFree(szCombined);
+		CoTaskMemFree(szPath);
+	    file.close();
+    }
+}
+
+void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
+{
+	auto wPath = to_wstring(path);
     PWSTR szPath;
 
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
@@ -300,58 +351,10 @@ void LittleBigMouseDaemon::LoadExcluded(const std::string& path)
 		while(file)
 		{
 			std::getline(file, line);
-
-			if(line.empty()) continue;
-			if(line[0] == ':') continue;
-
-		    _excluded.push_back(line);
-
-			#if defined(_DEBUG)
-			std::cout << "Excluded : " << line << "\n";
-			#endif
-		}
-
-	    file.close();
-    }
-}
-
-void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
-{
-    PWSTR szPath = nullptr;
-	long result = 0;
-
-	try{
-		result = SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath);
-	}
-	catch (...)
-	{
-		#if defined(_DEBUG)
-		std::cout << "Failed to get ProgramData folder\n";
-		#endif
-		return;
-	}
-
-    if (result == S_OK)
-    {
-	    std::ifstream file;
-
-        PathAppend(szPath, to_wstring(path).c_str());
-	    file.open(szPath, std::ios::in);
-
-	    std::string buffer;
-		std::string line;
-		while(!file.eof()){
-			std::getline(file, line);
 		    ReceiveClientMessage(line,nullptr);
 		}
 
 	    file.close();
     }
-	else
-	{
-		#if defined(_DEBUG)
-		std::cout << "Failed to load layout from file : " << path << "\n";
-		#endif
-	}
 
 }

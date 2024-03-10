@@ -19,5 +19,7 @@ public:
 
 	virtual void Send(const std::string& message, RemoteClient* client) = 0;
 
+	virtual void WaitForReady() const = 0;
+
 };
 

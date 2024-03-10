@@ -92,6 +92,7 @@ public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
         var labelValue = new TextBox {
             Text = value,
             Background = isTitle?new SolidColorBrush(Colors.Gray):new SolidColorBrush(Color.FromArgb(0x80,0x00, 0x00, 0x00)),
+            IsReadOnly = true
         };
 
         if (handler != null)

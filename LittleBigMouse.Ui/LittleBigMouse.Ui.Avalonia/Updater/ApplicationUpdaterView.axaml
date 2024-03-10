@@ -8,7 +8,9 @@
         Width="400"
         Height="260"
         WindowStartupLocation="CenterScreen"
+		SizeToContent="Height"
         Title="Update Little Big Mouse"
+		Icon="{Binding MainIcon}"
         d:DesignHeight="300" d:DesignWidth="300"
         x:DataType="updater:ApplicationUpdaterViewModel"
         >

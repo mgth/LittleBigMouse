@@ -9,6 +9,8 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Avalonia.Controls;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using HLab.Mvvm.ReactiveUI;
 using ReactiveUI;
@@ -27,6 +29,7 @@ public class ApplicationUpdaterViewModel : ViewModel
 
         UpdateCommand = ReactiveCommand.Create(Update, this.WhenAnyValue(e => e.NewVersionFound));
     }
+    public object MainIcon { get; } = new WindowIcon(AssetLoader.Open(new Uri("avares://LittleBigMouse.Ui.Avalonia/Assets/lbm-logo.ico")));
 
     public void Show()
     {

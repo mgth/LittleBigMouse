@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <Platforms>x64;x86;AnyCpu</Platforms>
     <LangVersion>preview</LangVersion>
-	<Version>5.0.5.0</Version>
+	<Version>5.1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

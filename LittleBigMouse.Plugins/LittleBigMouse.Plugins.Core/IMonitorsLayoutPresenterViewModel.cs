@@ -13,7 +13,7 @@ public interface IMonitorsLayoutPresenterViewModel : INotifyPropertyChanged
 
     IMonitorsLayout Model { get; }
 
-    IMonitorFrameViewModel? SelectedMonitor { get; set; }
+    PhysicalMonitor? SelectedMonitor { get; set; }
 
     public ICommand ResetLocationsFromSystem { get; }
     public ICommand ResetSizesFromSystem { get; }

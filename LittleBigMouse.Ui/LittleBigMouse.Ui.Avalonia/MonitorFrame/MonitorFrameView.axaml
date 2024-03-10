@@ -78,7 +78,7 @@
               RowDefinitions="Auto,*,Auto"
         >
             <TextBlock.FontSize>
-                <MultiBinding ConverterParameter="0.05" Converter="{StaticResource MultiScale}">
+                <MultiBinding ConverterParameter="0.05|7" Converter="{StaticResource MultiScale}">
                     <Binding ElementName="GridRotated" Path="Bounds.Height"/>
                     <Binding ElementName="GridRotated" Path="Bounds.Width"/>
                 </MultiBinding>
@@ -237,7 +237,7 @@
             />
 
 			<TextBlock.FontSize>
-                <MultiBinding ConverterParameter="0.05" Converter="{StaticResource MultiScale}">
+                <MultiBinding ConverterParameter="0.05|7" Converter="{StaticResource MultiScale}">
                     <Binding ElementName="GridRotated" Path="Bounds.Height"/>
                     <Binding ElementName="GridRotated" Path="Bounds.Width"/>
                 </MultiBinding>

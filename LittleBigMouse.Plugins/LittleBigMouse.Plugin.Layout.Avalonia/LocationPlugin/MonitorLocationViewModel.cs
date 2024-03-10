@@ -72,7 +72,7 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
                 e => e.MonitorFrameViewModel.MonitorsPresenter.SelectedMonitor)
             .Do(e =>
             {
-                if (Ruler && e?.Model != Model)
+                if (Ruler && e != Model)
                 {
                     Ruler = false;
                 }

@@ -3,3 +3,7 @@
 public interface IMonitorFrameContentViewClass : IMonitorFrameLayerViewClass
 {
 }
+
+public interface IListItemMonitorViewClass : IMonitorFrameLayerViewClass
+{
+}

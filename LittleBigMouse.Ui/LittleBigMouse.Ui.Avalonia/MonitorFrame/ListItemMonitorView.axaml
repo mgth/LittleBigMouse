@@ -1,0 +1,78 @@
+﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.MonitorFrame.ListItemMonitorView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
+             xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:default="clr-namespace:LittleBigMouse.Ui.Avalonia.Plugins.Default"
+             xmlns:monitors="clr-namespace:LittleBigMouse.DisplayLayout.Monitors;assembly=LittleBigMouse.DisplayLayout"
+             mc:Ignorable="d"
+             d:DesignHeight="300" d:DesignWidth="300"
+             x:Name="UserControl"
+             Foreground="{DynamicResource HLab.Brushes.Foreground}"
+			 x:DataType="default:DefaultMonitorViewModel"
+             >
+	<!--d:DataContext="{d:DesignInstance Type = default1:DefaultMonitorViewModel, IsDesignTimeCreatable = false}"-->
+	<Design.DataContext>
+		<default:DefaultMonitorViewModel />
+	</Design.DataContext>
+
+	<UserControl.Resources>
+		<converters:ScaleConverter x:Key="Scale"/>
+	</UserControl.Resources>
+<Grid>
+	<Grid ColumnDefinitions="Auto,*">
+        <StackPanel Orientation="Vertical">
+            <Label
+                FontSize="{Binding Path=Bounds.Height, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.5}"
+                Content ="{Binding Path=Model.ActiveSource.Source.SourceNumber,FallbackValue=X}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                HorizontalContentAlignment="Center"
+                VerticalContentAlignment="Center"
+                Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                FontWeight="Bold"
+            />
+
+            <Label 
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Content="{Binding Path=Model.Model.PnpCode, FallbackValue=XXX000}"
+                Foreground="{DynamicResource HLab.Brushes.Foreground}"
+            />
+
+        </StackPanel>
+
+		<StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+
+            <!-- Brand Icon -->
+            <!-- PNP Device name  -->
+            <icons:IconView 
+                HorizontalAlignment="Left"
+                Path="{Binding Model.Model.Logo}" 
+                Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                Height="{Binding Path=Bounds, ElementName=UserControl, Converter={StaticResource Scale}, ConverterParameter=0.3|0.1|100}"
+            >
+                <icons:IconView.Caption>
+                    <Label VerticalAlignment="Center" Margin="0"
+                           Padding="0"
+                           Content="{Binding Path=Model.Model.PnpDeviceName, FallbackValue=xxx}"
+                           FontSize="{Binding Path=Bounds, ElementName=UserControl, Converter={StaticResource Scale}, ConverterParameter=0.3|0.1|20}"
+                    />
+                </icons:IconView.Caption>
+
+            </icons:IconView>
+
+            <!-- Serial Number -->
+            <Label HorizontalAlignment="Left"
+                   Content="{Binding Path=Model.SerialNumber, FallbackValue=xxx}"
+                   FontWeight="Bold" Foreground="{DynamicResource HLab.Brushes.Foreground}" Opacity="0.5"
+                   FontSize ="{Binding Path=Bounds.Height, ElementName=UserControl, Converter={StaticResource Scale},ConverterParameter=0.3|0.1|20}"
+            />
+        </StackPanel>
+
+    </Grid>
+
+    </Grid>
+</UserControl>

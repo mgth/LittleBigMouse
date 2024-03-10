@@ -53,12 +53,6 @@ public partial class MonitorSizeView : UserControl, IView<ViewModeScreenSize, Sc
         base.OnMeasureInvalidated();
     }
 
-    void OnKeyEnterUpdate(object sender, KeyEventArgs e)
-    {
-        // TODO Avalonia
-        // ViewHelper.OnKeyEnterUpdate(sender, e);
-    }
-
     static double WheelDelta(PointerWheelEventArgs e)
     {
         double delta = (e.Delta.Y > 0) ? 1 : -1;

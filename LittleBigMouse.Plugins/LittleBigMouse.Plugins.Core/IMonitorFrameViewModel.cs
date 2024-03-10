@@ -13,6 +13,6 @@ public interface IMonitorFrameViewModel : IViewModel<PhysicalMonitor>
     public void Select()
     {
         if(MonitorsPresenter is {} presenter)
-            presenter.SelectedMonitor = this;
+            presenter.SelectedMonitor = Model;
     }
 }

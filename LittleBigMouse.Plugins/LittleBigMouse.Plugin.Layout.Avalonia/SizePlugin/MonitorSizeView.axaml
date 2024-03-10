@@ -168,10 +168,9 @@
 				</controls:DoubleBox>
 
 				<controls:DoubleBox
-                     Grid.Row="2"
+                    Grid.Row="2"
                     HorizontalAlignment="Center"
                     Value="{Binding Width}"
-                    KeyUp="OnKeyEnterUpdate"
                     PointerWheelChanged="OnMouseWheel"
                  >
 					<controls:DoubleBox.Effect>

@@ -110,9 +110,9 @@ public class FrameMover : ReactiveObject, IFrameLocation
 
     public void EndMove(Point p)
     {
-        if (_guiStartPosition == p)
+        if (_guiStartPosition == p && _presenter.ViewModel is not null)
         {
-            _presenter.ViewModel.SelectedMonitor = _frame.ViewModel;
+            _presenter.ViewModel.SelectedMonitor = _frame.ViewModel?.Model;
         }
 
         if(_anchorsCanvas is {} canvas)

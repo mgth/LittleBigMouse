@@ -30,9 +30,9 @@ using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
-public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, MonitorFrameViewModel>, IDefaultViewClass, IMonitorFrameView 
+public partial class MonitorExpandedFrameView : UserControl, IView<ListViewMode, MonitorFrameViewModel>, IMonitorFrameView 
 {
-    public MonitorFrameView() => InitializeComponent();
+    public MonitorExpandedFrameView() => InitializeComponent();
 
     protected override void OnLoaded(RoutedEventArgs e)
     {

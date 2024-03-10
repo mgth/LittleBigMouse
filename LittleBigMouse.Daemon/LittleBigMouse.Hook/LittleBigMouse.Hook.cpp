@@ -68,21 +68,6 @@ std::string GetParentProcess()
 
 int main(int argc, char *argv[]){
 
-    RemoteServerSocket server;
-    MouseEngine engine;
-    Hooker hook;
-
-    auto daemon = LittleBigMouseDaemon( &server , &engine, &hook );
-	daemon.Run("");
-
-    #if defined(_DEBUG)
-    system("pause");
-    #endif
-    return 0;
-}
-
-int old_main(int argc, char *argv[]){
-
 	constexpr LPCWSTR szUniqueNamedMutex = L"LittleBigMouse_Daemon";
 
 	HANDLE hHandle = CreateMutex(nullptr, TRUE, szUniqueNamedMutex);

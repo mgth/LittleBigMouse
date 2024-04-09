@@ -76,24 +76,24 @@
 				<NumericUpDown 
                     Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}" 
                     Increment="10" 
-                    Value="{Binding Model.MaxTravelDistance, FallbackValue=200.0}"
+                    Value="{Binding Model.MaxTravelDistance, FallbackValue='200,1'}"
                     ClipValueToMinMax="True"
                     />
 			</StackPanel>
 			<StackPanel Classes="Options">
 				<CheckBox
 					Content="Horizontal Loop"
-
 					IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
 					IsChecked="{Binding Path=Model.LoopX, FallbackValue=false, Mode=TwoWay}"
 					ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."
-                        />
+                />
+				
 				<CheckBox
 					Content="Vertical Loop"
 					IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
 					IsChecked="{Binding Path=Model.LoopY, FallbackValue=false, Mode=TwoWay}"
 					ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."
-                        />
+                />
 			</StackPanel>
 
 			<StackPanel  Classes="Options">

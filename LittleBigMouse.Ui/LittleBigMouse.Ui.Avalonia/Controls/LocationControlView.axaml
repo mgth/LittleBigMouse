@@ -76,7 +76,7 @@
 				<NumericUpDown 
                     Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}" 
                     Increment="10" 
-                    Value="{Binding Model.MaxTravelDistance, FallbackValue='200,1'}"
+                    Value="{Binding Model.MaxTravelDistance, FallbackValue=200}"
                     ClipValueToMinMax="True"
                     />
 			</StackPanel>

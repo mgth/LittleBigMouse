@@ -195,3 +195,4 @@ LittleBigMouse/Control.Loader/setup/*.exe
 /LittleBigMouse/Control.Loader/img/Logos/Intel
 /LittleBigMouse.Setup/LittleBigMouse_5.0.0.0.exe
 *.exe
+/LittleBigMouse.Daemon/LittleBigMouse_Hook_Rust/LittleBigMouse_Hook_Rust

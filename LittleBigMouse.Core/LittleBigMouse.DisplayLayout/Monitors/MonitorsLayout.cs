@@ -793,6 +793,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         {
             if (source == source.Monitor.ActiveSource && source.Source.AttachedToDesktop)
                 zones.Zones.Add(new Zone(
+                    source.Monitor.BorderResistance,
                     source.Source.Id,
                     source.Monitor.Model.PnpDeviceName,
                     source.Source.InPixel.Bounds,
@@ -809,8 +810,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
             foreach (var zone in actualZones)
             {
-                zones.Zones.Add(new Zone(zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftLeft), zone));
-                zones.Zones.Add(new Zone(zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftRight), zone));
+                zones.Zones.Add(new (zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftLeft), zone));
+                zones.Zones.Add(new (zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftRight), zone));
             }
         }
 
@@ -821,8 +822,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
             foreach (var zone in actualZones)
             {
-                zones.Zones.Add(new Zone(zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftUp), zone));
-                zones.Zones.Add(new Zone(zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftDown), zone));
+                zones.Zones.Add(new(zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftUp), zone));
+                zones.Zones.Add(new(zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftDown), zone));
             }
         }
 

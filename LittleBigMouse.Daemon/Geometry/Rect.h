@@ -16,15 +16,16 @@ namespace geo
 		T _width;
 		T _height;
 	public:
-		T Left() const { return _left; }
-		T Top() const { return _top; }
-		T Width() const { return _width; }
-		T Height() const { return _height; }
-		T Right() const { return _left + _width; }
-		T Bottom() const { return _top + _height; }
+		[[nodiscard]] T Left() const { return _left; }
+		[[nodiscard]] T Top() const { return _top; }
+		[[nodiscard]] T Width() const { return _width; }
+		[[nodiscard]] T Height() const { return _height; }
+		[[nodiscard]] T Right() const { return _left + _width; }
+		[[nodiscard]] T Bottom() const { return _top + _height; }
 
-		bool Contains(const Point<T>& point) const;
-		std::vector<Point<T>> Intersect(const Line<T>& l) const
+		[[nodiscard]] bool Contains(const Point<T>& point) const;
+
+		[[nodiscard]] std::vector<Point<T>> Intersect(const Line<T>& l) const
 		{
 			std::vector<Point<T>> result;
 
@@ -49,7 +50,7 @@ namespace geo
 		}
 
 		//	std::vector<Rect<T>> Travel(const Rect& target, const std::vector<Rect<long>>& allowed) const;
-	//	std::vector<Rect<T>> Reachable(const Rect& target) const;
+		//	std::vector<Rect<T>> Reachable(const Rect& target) const;
 
 		bool operator==(const Rect& target) const
 		{
@@ -65,22 +66,22 @@ namespace geo
 			return !operator==(target);
 		}
 
-		Point<T> TopLeft() const
+		[[nodiscard]] Point<T> TopLeft() const
 		{
 			return { Left(),Top() };
 		}
 
-		Point<T> TopRight() const
+		[[nodiscard]] Point<T> TopRight() const
 		{
 			return { Right(),Top() };
 		}
 
-		Point<T> BottomLeft() const
+		[[nodiscard]] Point<T> BottomLeft() const
 		{
 			return { Left(),Bottom() };
 		}
 
-		Point<T> BottomRight() const
+		[[nodiscard]] Point<T> BottomRight() const
 		{
 			return { Right(),Bottom() };
 		}

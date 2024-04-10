@@ -20,7 +20,7 @@ geo::Rect<long> GetClip()
 	RECT r;
 	if(GetClipCursor(&r))
 	{
-		return geo::Rect<long>(r.left,r.top,r.right-r.left,r.bottom-r.top);
+		return geo::Rect(r.left,r.top,r.right-r.left,r.bottom-r.top);
 	}
 	return geo::Rect<long>::Empty();
 }

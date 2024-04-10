@@ -32,7 +32,13 @@ void LittleBigMouseDaemon::Connect()
 	if(_hook)
 	{
 		if(_engine)
+		{
+			#if defined(_DEBUG_)
+			_engine->DebugUnhook.connect<&Hooker::DoUnhook>(_hook);
+			#endif
+
 			_hook->OnMouseMove.connect<&MouseEngine::OnMouseMove>(_engine);
+		}
 
 		_hook->OnHooked.connect<&LittleBigMouseDaemon::Send>(this);
 		_hook->OnUnhooked.connect<&LittleBigMouseDaemon::Send>(this);

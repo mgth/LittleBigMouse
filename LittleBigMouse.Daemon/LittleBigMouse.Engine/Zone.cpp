@@ -102,14 +102,19 @@ std::vector<geo::Rect<long>>& Zone::TravelPixels(const std::vector<Zone*>& zones
     return _travels[target->Main] = l;
 }
 
-Zone::Zone(int id, std::string deviceId, std::string name, const geo::Rect<long>& pixelsBounds,
-	const geo::Rect<double>& physicalBounds, Zone* main):Id(id)
-	                                                     ,_pixelsBounds(pixelsBounds)
-	                                                     ,_physicalBounds(physicalBounds)
-	                                                     ,_physicalInside(physicalBounds)
-	                                                     ,DeviceId(std::move(deviceId))
-	                                                     ,Name(std::move(name))
-	                                                     ,Main(main)
+Zone::Zone(
+	int id, 
+	std::string deviceId, 
+	std::string name, 
+	const geo::Rect<long>& pixelsBounds,
+	const geo::Rect<double>& physicalBounds, Zone* main):
+	Id(id),
+	_pixelsBounds(pixelsBounds),
+	_physicalBounds(physicalBounds),
+	_physicalInside(physicalBounds),
+	DeviceId(std::move(deviceId)),
+	Name(std::move(name)),
+	Main(main)
 {
 	if(!Main) Main = this;
 

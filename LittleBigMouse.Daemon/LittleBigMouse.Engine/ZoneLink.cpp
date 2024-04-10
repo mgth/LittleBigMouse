@@ -1,6 +1,18 @@
 #include "pch.h"
 #include "ZoneLink.h"
 
+bool ZoneLink::TryPassThrough(const long distance)
+{
+	const auto d = ResistanceTravel - distance;
+	if(d <= 0) 
+	{
+		ResistanceTravel = BorderResistance;
+		return true;
+	}
+	ResistanceTravel = d;
+	return false;
+}
+
 Zone* ZoneLink::At(const double pos) const
 {
 	auto z = this;
@@ -27,11 +39,21 @@ long ZoneLink::ToTargetPixel(long v) const
 	return ((v - SourceFromPixel) * tLength / sLength) + TargetFromPixel;
 }
 
-ZoneLink::ZoneLink(const double from, const double to, const long sourceFromPixel, const long sourceToPixel, const long targetFromPixel, const long targetToPixel, const long targetId)
+ZoneLink::ZoneLink(
+	const double from, 
+	const double to, 
+	const long sourceFromPixel, 
+	const long sourceToPixel, 
+	const long targetFromPixel, 
+	const long targetToPixel, 
+	const long borderResistance,
+	const long targetId
+)
 	: TargetId(targetId),
 	From(from), To(to),
 	SourceFromPixel(sourceFromPixel), SourceToPixel(sourceToPixel),
-	TargetFromPixel(targetFromPixel), TargetToPixel(targetToPixel)
+	TargetFromPixel(targetFromPixel), TargetToPixel(targetToPixel),
+	BorderResistance(borderResistance)
 {
 	Target = nullptr;
 	Next = nullptr;

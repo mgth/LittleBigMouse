@@ -127,7 +127,9 @@ ZoneLink* GetNewZoneLink(tinyxml2::XMLElement* element)
             const long targetFromPixel = XmlHelper::GetLong(zoneElement,"TargetFromPixel");
             const long targetToPixel = XmlHelper::GetLong(zoneElement,"TargetToPixel");
             const long targetId = XmlHelper::GetLong(zoneElement,"TargetId");
-			*currentLink = new ZoneLink(from,to,sourceFromPixel,sourceToPixel,targetFromPixel,targetToPixel,targetId);
+            const long borderResistance = XmlHelper::GetLong(zoneElement,"BorderResistance");
+
+			*currentLink = new ZoneLink(from,to,sourceFromPixel,sourceToPixel,targetFromPixel,targetToPixel,borderResistance,targetId);
 
             currentLink = &((*currentLink)->Next);
 

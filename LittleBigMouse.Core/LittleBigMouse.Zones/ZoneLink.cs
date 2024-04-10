@@ -11,6 +11,7 @@ public class ZoneLink : IZonesSerializable
     public int SourceToPixel { get; set; }
     public int TargetFromPixel { get; set; }
     public int TargetToPixel { get; set; }
+    public int BorderResistance { get; set; }
     [JsonIgnore] public Zone? Target { get; set; }
     public int TargetId => Target?.Id??-1;
 
@@ -23,6 +24,7 @@ public class ZoneLink : IZonesSerializable
             e => e.SourceToPixel, 
             e => e.TargetFromPixel, 
             e => e.TargetToPixel, 
+            e => e.BorderResistance,
            
             e => e.TargetId );
     }

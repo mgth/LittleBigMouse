@@ -15,12 +15,18 @@ public:
 	long SourceToPixel;
 	long TargetFromPixel;
 	long TargetToPixel;
+
+	long BorderResistance;
+	long ResistanceTravel;
+
+	bool TryPassThrough(long distance);
+
 	//long SourceLengthPixel;
 	//long TargetLengthPixel;
-	Zone* At(const double pos) const;
-	const ZoneLink* AtPixel(long pos) const;
-	long ToTargetPixel(long v) const;
-	ZoneLink(double from, double to, long sourceFromPixel, long sourceToPixel, long targetFromPixel, long targetToPixel, long targetId = -1);
+	[[nodiscard]] Zone* At(const double pos) const;
+	[[nodiscard]] const ZoneLink* AtPixel(long pos) const;
+	[[nodiscard]] long ToTargetPixel(long v) const;
+	ZoneLink(const double from, const double to, const long sourceFromPixel, const long sourceToPixel, const long targetFromPixel, const long targetToPixel, const long borderResistance, const long targetId = -1);
 	~ZoneLink() {delete Next;}
 };
 

@@ -63,9 +63,7 @@ LRESULT __stdcall Hooker::MouseCallback(const int nCode, const WPARAM wParam, co
 
 	if (nCode >= 0 && lParam != NULL && (wParam & WM_MOUSEMOVE) != 0)
 	{
-		const auto location = geo::Point<long>(pMouse->pt.x,pMouse->pt.y);
-
-		if ( previousLocation != location)
+		if (const auto location = geo::Point(pMouse->pt.x,pMouse->pt.y); previousLocation != location)
 		{
 			previousLocation = location;
 			MouseEventArg p = location;

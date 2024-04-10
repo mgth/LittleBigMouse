@@ -46,13 +46,14 @@ class Hooker final : public ThreadHost
 	void HookWindows();
 	void UnhookWindows();
 
-	void DoHook();
-	void DoUnhook();
 
 	static void Loop();
-	void QuitLoop();
+	void QuitLoop() const;
 
 public:
+
+	void DoHook();
+	void DoUnhook();
 
 	Hooker();
 

@@ -7,6 +7,8 @@
 #include "nano_signal_slot.hpp"
 #include "Segment.h"
 
+class ZoneLink;
+
 class MouseEngine 
 {
 
@@ -32,6 +34,7 @@ class MouseEngine
 
 	//Mouse movement taking care of direction, allows "corner crossing"
 	void OnMouseMoveCross(MouseEventArg& e);
+	bool TryPassBorder(const ZoneLink* zoneLink, const long distance);
 
 	//Final move
 	void Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut);
@@ -44,8 +47,15 @@ class MouseEngine
 	Zone* FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDistSquared) const;
 	bool CheckForStopped(const MouseEventArg& e);
 
+	const ZoneLink* _currentResistanceLink = nullptr;
+	long _borderResistance = 0;
+
 public:
 	Nano::Signal<void(std::string&)> OnMessage;
+
+#if defined(_DEBUG_)
+	Nano::Signal<void()> DebugUnhook;
+#endif
 
 	void Reset();
 	void OnMouseMove(MouseEventArg& e);

@@ -34,7 +34,7 @@ using HLab.Base.Avalonia.Extensions;
 //using HLab.Sys.Windows.Monitors;
 
 using LittleBigMouse.DisplayLayout.Dimensions;
-
+using LittleBigMouse.Zoning;
 using ReactiveUI;
 
 
@@ -214,7 +214,7 @@ public class PhysicalMonitor : ReactiveModel
     public IDisplayRatio DepthRatio { get; }
 
     [DataMember]
-    public IBorderResistance BorderResistance { get; } = new BorderResistance();
+    public BorderResistance BorderResistance { get; } = new BorderResistance();
 
     /// <summary>
     /// Diagonal

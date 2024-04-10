@@ -36,7 +36,7 @@ public class BorderResistancePlugin(IMainService mainService) : IBootloader
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<BorderResistanceViewMode>(
                 "resistance",
-                "Icon/BorderResistance",
+                "Icon/MonitorBorderResistance",
                 "Border resistance"
                 )
         );

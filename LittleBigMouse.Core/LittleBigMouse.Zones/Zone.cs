@@ -14,6 +14,8 @@ public class Zone : IZonesSerializable
     public Rect PixelsBounds { get; set; }
     public Rect PhysicalBounds { get; set; }
 
+    public IBorderResistance BorderResistance { get; set; }
+
     [JsonIgnore]
     public Zone Main { get; set;}
 
@@ -29,6 +31,7 @@ public class Zone : IZonesSerializable
     public Zone(){}
 
     public Zone(
+        IBorderResistance borderResistance,
         string deviceId,
         string name,
         Rect pixelsBounds,
@@ -37,6 +40,8 @@ public class Zone : IZonesSerializable
     {
         DeviceId = deviceId;
         Name = name;
+
+        BorderResistance = borderResistance;
 
         PixelsBounds = pixelsBounds;
         PhysicalBounds = physicalBounds;
@@ -67,6 +72,7 @@ public class Zone : IZonesSerializable
 
     List<ZoneLink> ComputeLinks(
         ZonesLayout layout, 
+        Func<Zone,double> getBorderResistance,
         Func<Zone,double> nearFunc,  
         Func<Zone,double> farFunc,  
         Func<Zone,double> fromFunc, 
@@ -129,6 +135,8 @@ public class Zone : IZonesSerializable
             var targetFromPixel = target!=null?fromPixelsFunc(target):0;
             var targetToPixel = target!=null?toPixelsFunc(target):0;
 
+            var borderResistance = getBorderResistance(this);
+
             if (links.Count > 0 && ReferenceEquals(links.Last().Target, target))
             {
                 links.Last().To = to;
@@ -138,8 +146,9 @@ public class Zone : IZonesSerializable
             else
             {
 
-                links.Add(new ZoneLink
+                links.Add(new()
                 {
+                    BorderResistance = (int)borderResistance, // TODO : should be dpi converted ?
                     Distance = min,
                     From = from,
                     To = to,
@@ -195,6 +204,7 @@ public class Zone : IZonesSerializable
     public void ComputeLinks(ZonesLayout layout)
     {
         LeftLinks = ComputeLinks(layout, 
+            z => z.BorderResistance.Left,
             z => z.PhysicalBounds.Right, 
             z => z.PhysicalBounds.Left, 
             z=>z.PhysicalBounds.Top,
@@ -204,6 +214,7 @@ public class Zone : IZonesSerializable
             -1);
 
         TopLinks = ComputeLinks(layout, 
+            z => z.BorderResistance.Top,
             z => z.PhysicalBounds.Bottom, 
             z => z.PhysicalBounds.Top, 
             z=>z.PhysicalBounds.Left,
@@ -213,6 +224,7 @@ public class Zone : IZonesSerializable
             -1);
 
         RightLinks = ComputeLinks(layout, 
+            z => z.BorderResistance.Right,
             z => z.PhysicalBounds.Left, 
             z => z.PhysicalBounds.Right, 
             z=>z.PhysicalBounds.Top,
@@ -223,6 +235,7 @@ public class Zone : IZonesSerializable
             1);
 
         BottomLinks = ComputeLinks(layout, 
+            z => z.BorderResistance.Bottom,
             z => z.PhysicalBounds.Top, 
             z => z.PhysicalBounds.Bottom, 
             z=>z.PhysicalBounds.Left,

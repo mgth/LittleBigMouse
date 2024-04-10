@@ -121,7 +121,7 @@ void Hooker::DoUnhook()
 	UnhookDisplayChange();
 }
 
-void Hooker::QuitLoop()
+void Hooker::QuitLoop() const
 {
     if (PostThreadMessage(_currentThreadId, WM_QUIT, 0, 0))
     {

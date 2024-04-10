@@ -171,7 +171,7 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 	if (_oldZone->PixelsBounds().Contains(e.Point))
 	{
 #ifdef _DEBUG_
-		std::cout << "no change : " << pIn << "\n";
+//		std::cout << "no change : " << pIn << "\n";
 #endif
 
 		_oldPoint = e.Point;
@@ -236,8 +236,32 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 	NoZoneMatches(e);
 }
 
+bool MouseEngine::TryPassBorder(const ZoneLink* zoneLink, const long distance)
+{
+	if(zoneLink != _currentResistanceLink)
+	{
+		#ifdef _DEBUG_
+			std::cout << "< != >" << std::endl;
+		#endif
+
+		_currentResistanceLink = zoneLink;
+		_borderResistance = zoneLink->BorderResistance;
+	}
+
+	#ifdef _DEBUG_
+		std::cout << "< -= >"<< distance << std::endl;
+	#endif
+
+	_borderResistance -= distance;
+
+	if (_borderResistance<=0) return true;
+
+	return false;
+}
+
 void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 {
+
 	ResetClip();
 	if(CheckForStopped(e)) return;
 
@@ -246,11 +270,14 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	const ZoneLink* zoneOut;
 	geo::Point<long> pOut;
 	const auto bounds = _oldZone->PixelsBounds();
+
 	// leaving zone by right
-	if (pIn.X() >= bounds.Right())
+	if (long dist; (dist = 1 + pIn.X() - bounds.Right()) >= 0)
 	{
+		//DebugUnhook.fire();
+
 		zoneOut = _oldZone->RightZones->AtPixel(pIn.Y());
-		if (zoneOut->Target)
+		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
 		{
 			pOut = { zoneOut->Target->PixelsBounds().Left(),zoneOut->ToTargetPixel(pIn.Y()) };
 		}
@@ -261,10 +288,10 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		}
 	}
 	// leaving zone by left
-	else if (pIn.X() < bounds.Left())
+	else if ((dist = bounds.Left() - pIn.X()) >= 0)
 	{
 		zoneOut = _oldZone->LeftZones->AtPixel(pIn.Y());
-		if (zoneOut->Target)
+		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
 		{
 			pOut = { zoneOut->Target->PixelsBounds().Right() - 1,zoneOut->ToTargetPixel(pIn.Y()) };
 		}
@@ -275,10 +302,10 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		}
 	}
 	// leaving zone by bottom
-	else if (pIn.Y() >= bounds.Bottom())
+	else if ((dist = 1 +  pIn.Y() - bounds.Bottom()) >= 0)
 	{
 		zoneOut = _oldZone->BottomZones->AtPixel(pIn.X());
-		if (zoneOut->Target)
+		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
 		{
 			pOut = { zoneOut->ToTargetPixel(pIn.X()), zoneOut->Target->PixelsBounds().Top() };
 		}
@@ -289,10 +316,10 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		}
 	}
 	// leaving zone by top
-	else if (pIn.Y() < _oldZone->PixelsBounds().Top())
+	else if ((dist = _oldZone->PixelsBounds().Top() - pIn.Y()) >= 0)
 	{
 		zoneOut = _oldZone->TopZones->AtPixel(pIn.X());
-		if (zoneOut->Target)
+		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
 		{
 			pOut = { zoneOut->ToTargetPixel(pIn.X()),zoneOut->Target->PixelsBounds().Bottom() - 1 };
 		}
@@ -304,6 +331,15 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	}
 	else
 	{
+		// no border crossed reset resistance link.
+		if(_currentResistanceLink)
+		{
+			#ifdef _DEBUG_
+				std::cout << "< nullptr >" << std::endl;
+			#endif
+			_currentResistanceLink = nullptr;
+		}
+
 		_oldPoint = pIn;
 		e.Handled = false;
 		return;
@@ -363,25 +399,19 @@ void MouseEngine::Reset()
 
 void MouseEngine::OnMouseMove(MouseEventArg& e)
 {
-#ifdef _DEBUG_
-	std::cout << e.Point << "\n";
-#endif
+//#ifdef _DEBUG_
+//	std::cout << e.Point << "\n";
+//#endif
 
 	if(_lock.try_lock())
 	{
-		(this->*_onMouseMoveFunc)(e);
+		if(_onMouseMoveFunc)
+			(this->*_onMouseMoveFunc)(e);
+
 		_lock.unlock();
 	}
 	else
 	{
 		e.Handled = false;
 	}
-	//_lock.lock();
-	//(this->*OnMouseMoveFunc)(e);
-	//_lock.unlock();
-
-	//if(e.Timing())
-	//{
-	//	std::cout << e.GetDuration() << "\n";
-	//}
 }

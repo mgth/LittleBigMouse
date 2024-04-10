@@ -24,16 +24,10 @@
 using System;
 using System.Runtime.Serialization;
 using HLab.Base.Avalonia;
+using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public interface IBorderResistance: ISavable
-{
-    double Left { get; set; }
-    double Top { get; set; }
-    double Right { get; set; }
-    double Bottom { get; set; }
-}
 
 public class BorderResistance : ReactiveModel, IBorderResistance
 {

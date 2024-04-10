@@ -5,13 +5,22 @@
 
 void Hooker::HookDisplayChange()
 {
-	WNDCLASS wc = { 0 };
-    wc.lpfnWndProc = DisplayChangeHandler;
-    wc.hInstance = GetModuleHandle(nullptr);
-    wc.lpszClassName = L"LbmWindowClass";
+	WNDCLASS wndClass;
+    wndClass.lpfnWndProc = DisplayChangeHandler;
+    wndClass.hInstance = GetModuleHandle(nullptr);
+    wndClass.lpszClassName = L"LittleBigMouse";
 
-    RegisterClass(&wc);
-	_hwnd = CreateWindow(wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_DESKTOP, NULL, NULL, NULL);
+    RegisterClass(&wndClass);
+    //(lpClassName, lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam)
+	_hwnd = CreateWindow(
+        wndClass.lpszClassName, 
+        wndClass.lpszClassName, 
+        0, 0, 0, 0, 0, 
+        HWND_DESKTOP, 
+        NULL, 
+        NULL, 
+        NULL
+    );
 }
 
 void Hooker::UnhookDisplayChange()

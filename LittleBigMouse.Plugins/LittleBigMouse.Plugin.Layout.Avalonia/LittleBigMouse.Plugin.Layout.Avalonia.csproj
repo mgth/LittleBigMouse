@@ -47,6 +47,9 @@
     <Compile Update="LocationPlugin\MonitorLocationView.axaml.cs">
       <DependentUpon>MonitorLocationView.axaml</DependentUpon>
     </Compile>
+    <Compile Update="BorderResistancePlugin\BorderResistanceView.axaml.cs">
+      <DependentUpon>BorderResistanceView.axaml</DependentUpon>
+    </Compile>
     <Compile Update="Rulers\RulerPanelView.axaml.cs">
       <DependentUpon>RulerPanelView.axaml</DependentUpon>
     </Compile>

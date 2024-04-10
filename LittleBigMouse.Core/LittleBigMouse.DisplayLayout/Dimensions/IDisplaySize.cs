@@ -1,14 +1,13 @@
 ﻿
 using System;
 using Avalonia;
+using HLab.Base.Avalonia;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public interface IDisplaySize : IEquatable<IDisplaySize>
+public interface IDisplaySize : IEquatable<IDisplaySize>, ISavable
 {
     IDisposable DelayChangeNotifications();
-
-    bool Saved { get; set; }
 
     double Width { get; set; }
     double Height { get; set; }

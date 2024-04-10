@@ -1,0 +1,112 @@
+﻿<UserControl
+    x:Class="LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin.BorderResistanceView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:sizePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin"
+    xmlns:controls="clr-namespace:HLab.Base.Avalonia.Controls;assembly=HLab.Base.Avalonia"
+    xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
+    xmlns:borderResistancePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin"
+    mc:Ignorable="d"
+    d:DesignHeight="300" d:DesignWidth="300"
+    x:Name="UserControl"
+
+    ClipToBounds="False"
+
+    x:DataType="borderResistancePlugin:BorderResistanceViewModel"
+    >
+
+	<UserControl.Resources>
+
+		<converters:ScaleConverter x:Key="Scale" />
+
+	</UserControl.Resources>
+
+	<UserControl.Styles>
+		<Style Selector="sizePlugin|MeasureArrow.Inside">
+			<Setter Property="StrokeThickness" Value="2.5"/>
+			<Setter Property="Stroke" Value="Bisque"/>
+			<Setter Property="Fill" Value="Bisque"/>
+		</Style>
+
+		<Style Selector="sizePlugin|MeasureArrow.Outside">
+			<Setter Property="StrokeThickness" Value="2"/>
+			<Setter Property="Stroke" Value="CadetBlue"/>
+			<Setter Property="Fill" Value="CadetBlue"/>
+		</Style>
+
+		<Style Selector="sizePlugin|MeasureArrow.Border">
+			<Setter Property="StrokeThickness" Value="1.5"/>
+			<Setter Property="Stroke" Value="White"/>
+			<Setter Property="Fill" Value="White"/>
+		</Style>
+
+		<Style Selector="controls|DoubleBox">
+			<Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
+			<Setter Property="Height" Value="{Binding 
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.1}"/>
+			<Setter Property="Decimals" Value="1"/>
+		</Style>
+	</UserControl.Styles>
+
+	<Grid>
+
+
+
+
+		<!--<Border BorderThickness="0" Background="{Binding Path=ScreenColor}"/>-->
+
+		<!--<ContentControl Content="{Binding InsideCoverControl}"/>-->
+
+		<!-- Borders -->
+		<Grid>
+			<!-- Top Border -->
+			<controls:DoubleBox
+				HorizontalAlignment="Center"
+				VerticalAlignment="Top"
+				PointerWheelChanged="OnMouseWheel"
+
+				Value="{Binding Path=Model.BorderResistance.Top}"
+            />
+
+			<!-- Left Border -->
+			<controls:DoubleBox 
+				HorizontalAlignment="Left"
+				VerticalAlignment="Center"
+				PointerWheelChanged="OnMouseWheel"
+
+				Value="{Binding Path=Model.BorderResistance.Left}"
+            />
+
+			<!-- Bottom Border -->
+			<controls:DoubleBox 
+				HorizontalAlignment="Center"
+				VerticalAlignment="Bottom"
+				PointerWheelChanged="OnMouseWheel"
+
+				Value="{Binding Path=Model.BorderResistance.Bottom}"
+            />
+
+			<!-- Right Border -->
+			<controls:DoubleBox 
+				HorizontalAlignment="Right"
+				VerticalAlignment="Center"
+				PointerWheelChanged="OnMouseWheel"
+
+				Value="{Binding Path=Model.BorderResistance.Right}"
+             />
+		</Grid>
+
+
+		<!--<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="{Binding Path=SelectedBrush, FallbackValue=#FF333E9A}" BorderBrush="#FFD9DCEC">
+                <Label FontSize="{Binding Path=FontSize}" x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />
+            </Border>
+        </StackPanel>-->
+
+	</Grid>
+</UserControl>

@@ -146,6 +146,11 @@ public static class PersistencyExtensions
         @this.DepthRatio.X = key.GetOrSet("PhysicalRatioX", () => @this.DepthRatio.X);
         @this.DepthRatio.Y = key.GetOrSet("PhysicalRatioY", () => @this.DepthRatio.Y);
 
+        @this.BorderResistance.Left = key.GetOrSet(@"BorderResistance\Left", ()=> @this.BorderResistance.Left);
+        @this.BorderResistance.Top =  key.GetOrSet(@"BorderResistance\Top", ()=> @this.BorderResistance.Top);
+        @this.BorderResistance.Right = key.GetOrSet(@"BorderResistance\Right", ()=> @this.BorderResistance.Right);
+        @this.BorderResistance.Top =  key.GetOrSet(@"BorderResistance\Bottom", ()=> @this.BorderResistance.Bottom);
+
         @this.DepthRatio.Saved = true;
 
         @this.Saved = true;
@@ -168,6 +173,14 @@ public static class PersistencyExtensions
         key.SetKey("PhysicalRatioY", @this.DepthRatio.Y);
 
         @this.DepthRatio.Saved = true;
+
+        key.SetKey(@"BorderResistance\Left", @this.BorderResistance.Left);
+        key.SetKey(@"BorderResistance\Top", @this.BorderResistance.Top);
+        key.SetKey(@"BorderResistance\Right", @this.BorderResistance.Right);
+        key.SetKey(@"BorderResistance\Bottom", @this.BorderResistance.Bottom);
+
+        @this.BorderResistance.Saved = true;
+
 
         foreach (var source in @this.Sources.Items)
         {

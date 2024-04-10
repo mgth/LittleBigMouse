@@ -27,9 +27,48 @@ using HLab.Base.Avalonia;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public interface IDisplayRatio 
+public interface IBorderResistance: ISavable
 {
-    bool Saved { get; set; }
+    double Left { get; set; }
+    double Top { get; set; }
+    double Right { get; set; }
+    double Bottom { get; set; }
+}
+
+public class BorderResistance : ReactiveModel, IBorderResistance
+{
+    public double Left 
+    { 
+        get => _left;
+        set => SetUnsavedValue(ref _left,value); 
+    }
+    double _left;
+
+    public double Top
+    {
+        get => _top;
+        set => SetUnsavedValue(ref _top,value);
+    }
+    double _top;
+
+    public double Right
+    {
+        get => _right;
+        set => SetUnsavedValue(ref _right, value);
+    }
+    double _right;
+
+    public double Bottom
+    {
+        get => _bottom;
+        set => SetUnsavedValue(ref _bottom, value);
+    }
+    double _bottom;
+}
+
+
+public interface IDisplayRatio : ISavable
+{
     double X { get; set; }
     double Y { get; set; }
     bool IsUnary { get; }

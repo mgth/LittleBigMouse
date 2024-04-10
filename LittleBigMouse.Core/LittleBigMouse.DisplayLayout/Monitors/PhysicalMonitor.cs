@@ -118,26 +118,12 @@ public class PhysicalMonitor : ReactiveModel
             (h, w) => Math.Sqrt(w * w + h * h)
             ).Log(this, "_diagonal").ToProperty(this, e => e.Diagonal);
 
-        this.WhenAnyValue(e => e.Model.Saved)
-            .Subscribe(e =>
-            {
-                if (e) return;
-                Saved = false;
-            });
-
-        this.WhenAnyValue(e => e.DepthProjection.Saved)
-            .Subscribe(e =>
-            {
-                if (e) return;
-                Saved = false;
-            });
-
-        this.WhenAnyValue(e => e.DepthRatio.Saved)
-            .Subscribe(e =>
-            {
-                if (e) return;
-                Saved = false;
-            });
+        this.UnsavedOn(
+            e => e.Model, 
+            e => e.DepthProjection, 
+            e => e.DepthRatio, 
+            e => e.BorderResistance
+            );
     }
 
     void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)
@@ -226,6 +212,9 @@ public class PhysicalMonitor : ReactiveModel
     /// </summary>
     [DataMember]
     public IDisplayRatio DepthRatio { get; }
+
+    [DataMember]
+    public IBorderResistance BorderResistance { get; } = new BorderResistance();
 
     /// <summary>
     /// Diagonal

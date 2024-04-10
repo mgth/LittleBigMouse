@@ -33,6 +33,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using DynamicData;
+using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
@@ -111,11 +112,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
             ).Subscribe(e => DoLiveUpdate());
 
 
-        this.WhenAnyValue(e => e.Model.Saved)
-            .Do(e =>
-            {
-                Saved = e;
-            });
+        this.UnsavedOn(e => e.Model);
 
         service.DaemonEventReceived += StateChanged;
         StateChanged(this,new LittleBigMouseServiceEventArgs(service.State,""));

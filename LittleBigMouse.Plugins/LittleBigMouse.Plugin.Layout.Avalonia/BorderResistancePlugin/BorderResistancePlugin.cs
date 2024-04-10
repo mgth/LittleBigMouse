@@ -26,18 +26,18 @@ using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 
-namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
+namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 
-public class ScreenSizeViewMode : ViewMode { }
-public class ScreenSizePlugin(IMainService mainService) : IBootloader
+public class BorderResistanceViewMode : ViewMode { }
+public class BorderResistancePlugin(IMainService mainService) : IBootloader
 {
     public Task LoadAsync(IBootContext bootstrapper)
     {
         mainService.AddControlPlugin(c =>
-            c.AddViewModeButton<ScreenSizeViewMode>(
-                "size",
-                "Icon/MonitorSize",
-                "Size"
+            c.AddViewModeButton<BorderResistanceViewMode>(
+                "resistance",
+                "Icon/BorderResistance",
+                "Border resistance"
                 )
         );
         return Task.CompletedTask;

@@ -28,14 +28,15 @@ using Avalonia.Threading;
 using HLab.Base.Avalonia.Controls;
 using HLab.Mvvm.Annotations;
 using HLab.Sys.Windows.API;
+using LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 
-namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
+namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 
-public partial class MonitorSizeView : UserControl, IView<ScreenSizeViewMode, ScreenSizeViewModel>, IMonitorFrameContentViewClass
+public partial class BorderResistanceView : UserControl, IView<BorderResistanceViewMode, ScreenSizeViewModel>, IMonitorFrameContentViewClass
 {
-    public MonitorSizeView()
+    public BorderResistanceView()
     {
         InitializeComponent();
 

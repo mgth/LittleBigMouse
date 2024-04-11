@@ -135,7 +135,8 @@ public class Zone : IZonesSerializable
             var targetFromPixel = target!=null?fromPixelsFunc(target):0;
             var targetToPixel = target!=null?toPixelsFunc(target):0;
 
-            var borderResistance = getBorderResistance(this);
+            // TODO : border resistance mm to pixel calculated from wrong orientation 
+            var borderResistance = (int)((sourceToPixel - sourceFromPixel) * getBorderResistance(this)  / (sourceTo - sourceFrom));
 
             if (links.Count > 0 && ReferenceEquals(links.Last().Target, target))
             {
@@ -148,7 +149,7 @@ public class Zone : IZonesSerializable
 
                 links.Add(new()
                 {
-                    BorderResistance = (int)borderResistance, // TODO : should be dpi converted ?
+                    BorderResistance = (int)borderResistance, 
                     Distance = min,
                     From = from,
                     To = to,

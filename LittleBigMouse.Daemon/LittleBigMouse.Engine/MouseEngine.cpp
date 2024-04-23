@@ -163,6 +163,10 @@ bool MouseEngine::CheckForStopped(const MouseEventArg& e)
 	return true;
 }
 
+/// <summary>
+/// Process mouse move using cross algorithm (calculate mouvement direction)
+/// </summary>
+/// <param name="e">Mouse event</param>
 void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 {
 	ResetClip();
@@ -236,8 +240,17 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 	NoZoneMatches(e);
 }
 
+/// <summary>
+/// Deal with border resistance 
+/// (Original idea by Kevin Mills https://github.com/mgfarmer/LittleBigMouse)
+/// </summary>
+/// <param name="zoneLink"></param>
+/// <param name="distance"></param>
+/// <returns></returns>
 bool MouseEngine::TryPassBorder(const ZoneLink* zoneLink, const long distance)
 {
+	if((GetAsyncKeyState(VK_CONTROL) & 0x8000) == 0x8000) return true;
+
 	if(zoneLink != _currentResistanceLink)
 	{
 		#ifdef _DEBUG_
@@ -259,6 +272,10 @@ bool MouseEngine::TryPassBorder(const ZoneLink* zoneLink, const long distance)
 	return false;
 }
 
+/// <summary>
+/// Process mouse move using strait algorithm (pre-calculated border links)
+/// </summary>
+/// <param name="e">Mouse event</param>
 void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 {
 

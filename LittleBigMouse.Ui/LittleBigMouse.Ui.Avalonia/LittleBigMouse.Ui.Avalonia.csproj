@@ -137,6 +137,9 @@
 		<Compile Update="Plugins\Debug\DebugMonitorView.axaml.cs">
 			<DependentUpon>DebugMonitorView.axaml</DependentUpon>
 		</Compile>
+		<Compile Update="Plugins\Options\OptionsPresenterView.axaml.cs">
+		  <DependentUpon>OptionsPresenterView.axaml</DependentUpon>
+		</Compile>
 		<Compile Update="Properties\Resources.Designer.cs">
 			<DesignTime>True</DesignTime>
 			<AutoGen>True</AutoGen>

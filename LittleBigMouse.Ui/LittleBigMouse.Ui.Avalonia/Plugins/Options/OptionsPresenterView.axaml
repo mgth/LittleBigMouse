@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.Plugins.Options.MonitorsListPresenterView"
+﻿<UserControl x:Class="LittleBigMouse.Ui.Avalonia.Plugins.Options.OptionsPresenterView"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -8,11 +8,12 @@
              xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
              xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
              xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
+             xmlns:options="clr-namespace:LittleBigMouse.Ui.Avalonia.Plugins.Options"
              LayoutUpdated="OnLayoutUpdated"
              mc:Ignorable="d" 
              d:DesignHeight="300" 
              d:DesignWidth="500"
-             x:DataType="avalonia:MonitorsLayoutPresenterViewModel"
+             x:DataType="options:OptionsPresenterViewModel"
 >
 
     <UserControl.Resources>

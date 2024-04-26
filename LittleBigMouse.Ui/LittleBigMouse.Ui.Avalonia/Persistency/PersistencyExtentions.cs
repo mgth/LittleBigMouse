@@ -1,7 +1,9 @@
-﻿using LittleBigMouse.DisplayLayout.Monitors;
+﻿using System;
+using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout;
 using Microsoft.Win32;
 using System.Globalization;
+using System.IO;
 using Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
 #pragma warning disable CA1416
@@ -26,6 +28,39 @@ public static class PersistencyExtensions
         return key?.OpenRegKey(@$"Layouts\{layout.Id}", create);
     }
 
+    public static void Load(this ILayoutOptions @this, RegistryKey key)
+    {
+        @this.AllowOverlaps = key.GetOrSet("AllowOverlaps", () => false);
+        @this.AllowDiscontinuity = key.GetOrSet("AllowDiscontinuity", () => false);
+
+        @this.Algorithm = key.GetOrSet("Algorithm", () => "Strait");
+        @this.MaxTravelDistance = key.GetOrSet("MaxTravelDistance", () => 200.0);
+        @this.LoopX = key.GetOrSet("LoopX", () => false);
+        @this.LoopY = key.GetOrSet("LoopY", () => false);
+
+        @this.Enabled = key.GetOrSet("Enabled", () => false);
+        @this.AdjustPointer = key.GetOrSet("AdjustPointer", () => false);
+        @this.AdjustSpeed = key.GetOrSet("AdjustSpeed", () => false);
+        @this.Priority = key.GetOrSet("Priority", () => "Normal");
+        @this.HomeCinema = key.GetOrSet("HomeCinema", () => false);
+        @this.Pinned = key.GetOrSet("Pinned", () => false);
+        @this.AutoUpdate = key.GetOrSet("AutoUpdate", () => false);
+
+
+        @this.ExcludedList.Clear();
+
+        var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
+        if (!File.Exists(file)) return;
+
+        foreach (var line in File.ReadAllLines(file))
+        {
+            @this.ExcludedList.Add(line);
+        }
+
+        @this.Saved = true;
+    }
+
     //==================//
     // Layout           //
     //==================//
@@ -33,27 +68,11 @@ public static class PersistencyExtensions
     {
         using (var key = @this.OpenRegKey(true))
         {
+            @this.Options.LoadAtStartup = @this.IsScheduled();
             if (key != null)
             {
-                @this.Enabled = key.GetOrSet("Enabled", () => false);
-                @this.AdjustPointer = key.GetOrSet("AdjustPointer", () => false);
-                @this.AdjustSpeed = key.GetOrSet("AdjustSpeed", () => false);
-                @this.Algorithm = key.GetOrSet("Algorithm", () => "Strait");
-                @this.Priority = key.GetOrSet("Priority", () => "Normal");
-                @this.AllowOverlaps = key.GetOrSet("AllowOverlaps", () => false);
-                @this.AllowDiscontinuity = key.GetOrSet("AllowDiscontinuity", () => false);
-                @this.HomeCinema = key.GetOrSet("HomeCinema", () => false);
-                @this.Pinned = key.GetOrSet("Pinned", () => false);
-                @this.LoopX = key.GetOrSet("LoopX", () => false);
-                @this.LoopY = key.GetOrSet("LoopY", () => false);
-                @this.AutoUpdate = key.GetOrSet("AutoUpdate", () => false);
-                @this.MaxTravelDistance = key.GetOrSet("MaxTravelDistance", () => 200.0);
-            }
+                @this.Options.Load(key);
 
-            @this.LoadAtStartup = @this.IsScheduled();
-
-            if (key != null)
-            {
                 foreach (var monitor in @this.PhysicalMonitors)
                 {
                     monitor.Model.Load();
@@ -71,19 +90,16 @@ public static class PersistencyExtensions
         using var k = @this.OpenRegKey(true);
         if (k == null) return false;
 
-        k.SetValue("Enabled", @this.Enabled ? "1" : "0");
+        k.SetValue("Enabled", @this.Options.Enabled ? "1" : "0");
 
-        if (@this.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
+        if (@this.Options.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
 
         //@this.Saved = true;
         return true;
     }
 
-    public static bool Save(this MonitorsLayout @this)
+    public static void Save(this ILayoutOptions @this, RegistryKey k)
     {
-        using var k = @this.OpenRegKey(true);
-        if (k == null) return false;
-
         k.SetKey("Enabled",  @this.Enabled);
         k.SetKey("AdjustPointer",  @this.AdjustPointer);
         k.SetKey("AdjustSpeed", @this.AdjustSpeed );
@@ -97,7 +113,29 @@ public static class PersistencyExtensions
         k.SetKey("AutoUpdate", @this.AutoUpdate);
         k.SetKey("MaxTravelDistance", @this.MaxTravelDistance);
 
-        if (@this.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
+        var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
+
+        using (var sw = File.CreateText(file))
+        {
+            foreach (var line in @this.ExcludedList)
+            {
+                sw.WriteLine(line);
+            }
+            sw.Close();
+        }
+
+        @this.Saved = true;
+    }
+
+    public static bool Save(this MonitorsLayout @this)
+    {
+        using var k = @this.OpenRegKey(true);
+        if (k == null) return false;
+
+        if (@this.Options.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
+
+        @this.Options.Save(k);
 
         foreach (var monitor in @this.PhysicalMonitors)
         {

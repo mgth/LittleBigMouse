@@ -15,6 +15,17 @@
         HorizontalAlignment="Left"
     >
 		<StackPanel Orientation="Horizontal">
+			
+            <ToggleButton IsChecked="{Binding  OptionsIsVisible}">
+                <icons:IconView Height="40"
+                                Width="40"
+                                Margin="5"
+                                Path="Icon/Options" 
+                                ToolTip.Tip="Options"/>
+            </ToggleButton>
+
+			
+			
 			<!--Background="{DynamicResource HLab.Brushes.Header.Active.Background}"-->
 			<ItemsControl
 				Foreground="{DynamicResource HLab.Brushes.Foreground}"
@@ -34,6 +45,7 @@
 				</ItemsControl.ItemTemplate>
 
 			</ItemsControl>
+			
 
 			<ToggleButton IsChecked="{Binding ViewList}">
                 <icons:IconView Height="40"

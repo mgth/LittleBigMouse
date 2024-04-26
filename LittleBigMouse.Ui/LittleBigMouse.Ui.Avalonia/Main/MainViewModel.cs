@@ -8,9 +8,11 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
 using DynamicData;
 using DynamicData.Binding;
+using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
+using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
@@ -18,16 +20,27 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
+public interface IProcessesCollector
+{
+    ObservableCollection<string> SeenProcesses { get; }
+}
+
+public class ProcessesCollector : ReactiveModel, IProcessesCollector
+{
+    public ObservableCollection<string> SeenProcesses { get; } = [];
+
+}
 
 public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 {
     public string Title => "Little Big Mouse";
     public object MainIcon { get; } = new WindowIcon(AssetLoader.Open(new Uri("avares://LittleBigMouse.Ui.Avalonia/Assets/lbm-logo.ico")));
 
-    public MainViewModel(IIconService iconService, ILocalizationService localizationService)
+    public MainViewModel(IIconService iconService, ILocalizationService localizationService,  ILayoutOptions options)
     {
         IconService = iconService;
         LocalizationService = localizationService;
+        Options = options;
         CloseCommand = ReactiveCommand.Create(Close);
 
         _commandsCache.Connect()
@@ -38,20 +51,23 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         MaximizeCommand = ReactiveCommand.Create(() =>
             WindowState = WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal);
 
+        OptionsCommand = ReactiveCommand.Create(ViewOptions);
+
         _presenterViewMode = this.WhenAnyValue(v => v.ViewList)
             .Select(v => v ? typeof(ListViewMode) : typeof(DefaultViewMode))
             .ToProperty(this, v => v.PresenterViewMode);
     }
 
-    public IMainService MainService 
+    public IMainService? MainService 
     { 
         get => _mainService; 
         set => SetAndRaise(ref _mainService, value);
     }
-    IMainService _mainService;
+    IMainService? _mainService;
 
     public IIconService IconService { get; }
     public ILocalizationService LocalizationService { get; }
+    public ILayoutOptions Options { get; }
 
     public Type ContentViewMode
     {
@@ -59,6 +75,20 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         set => this.RaiseAndSetIfChanged(ref _contentViewMode, value);
     }
     Type _contentViewMode = typeof(DefaultViewMode);
+
+    public Type ContentViewClass
+    {
+        get => _contentViewClass;
+        set => this.RaiseAndSetIfChanged(ref _contentViewClass, value);
+    }
+    Type _contentViewClass = typeof(IDefaultViewClass);
+
+    public object? Content
+    {
+        get => _content;
+        set => this.RaiseAndSetIfChanged(ref _content, value);
+    }
+    object? _content = null;
 
     public Type PresenterViewMode => _presenterViewMode.Value;
     readonly ObservableAsPropertyHelper<Type> _presenterViewMode;
@@ -70,6 +100,13 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     }
     bool _viewList = false;
 
+    public bool OptionsIsVisible
+    {
+        get => _optionsIsVisible;
+        set => this.RaiseAndSetIfChanged(ref _optionsIsVisible, value);
+    }
+    bool _optionsIsVisible = false;
+
     public double VerticalResizerSize => 10.0;
 
     public double HorizontalResizerSize => 10.0;
@@ -78,6 +115,8 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     public ICommand CloseCommand { get; }
 
     public ICommand MaximizeCommand { get; }
+
+    public ICommand OptionsCommand { get; }
 
     void Close()
     {
@@ -128,8 +167,6 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
     public void UnMaximize()
     {
-        //var w = Application.Current.MainWindow;
-        //if (w != null)
         WindowState = WindowState.Normal;
     }
 
@@ -138,7 +175,10 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
     SourceCache<IUiCommand, string> _commandsCache { get; } = new(c => c.Id);
 
+    void ViewOptions()
+    {
 
+    }
 
     public void AddButton(IUiCommand command)
     {

@@ -2,32 +2,40 @@
 #include <Windows.h>
 #include "str.h"
 
-std::string to_string(const std::wstring& wstr) 
-{ 
-    int strLength  = WideCharToMultiByte(
-        CP_UTF8, 0, wstr.c_str(), -1, 
+std::string ToString(const std::wstring& ws) 
+{
+    const size_t wLength = ws.size();
+    if (wLength > INT_MAX ) return {};
+    const int wLengthInt = static_cast<int>(wLength);
+
+	const int length  = WideCharToMultiByte(
+        CP_UTF8, 0, ws.data(), wLengthInt, 
         nullptr, 0, nullptr, nullptr
     ); 
-    std::string str(strLength, 0); 
+    std::string s(length, 0); 
   
     WideCharToMultiByte(
-        CP_UTF8, 0, wstr.c_str(), -1, &str[0], 
-        strLength, nullptr, nullptr
+        CP_UTF8, 0, ws.c_str(), wLengthInt, s.data(), 
+        length, nullptr, nullptr
     ); 
-    return str; 
+    return s; 
 } 
 
-std::wstring to_wstring(const std::string& str) 
+std::wstring ToWString(const std::string& s) 
 { 
-    int strLength = MultiByteToWideChar(
-        CP_UTF8, 0, str.c_str(), -1, 
+    const size_t sLength = s.size();
+    if (sLength > INT_MAX ) return {};
+    const int sLengthInt = static_cast<int>(sLength);
+
+    const int length = MultiByteToWideChar(
+        CP_UTF8, 0, s.data(), sLengthInt, 
         nullptr, 0
     ); 
-    std::wstring wstr(strLength, 0); 
+    std::wstring ws(length, 0); 
   
     MultiByteToWideChar(
-        CP_UTF8, 0, str.c_str(), -1, &wstr[0], 
-        strLength
+        CP_UTF8, 0, s.data(), sLengthInt, ws.data(), 
+        length
     ); 
-    return wstr; 
+    return ws; 
 } 

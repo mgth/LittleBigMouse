@@ -25,12 +25,13 @@ using System;
 using Avalonia.Controls;
 using HLab.Icons.Avalonia;
 using HLab.Mvvm.Annotations;
+using LittleBigMouse.DisplayLayout.Monitors;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public class MainViewModelDesign : MainViewModel
 {
-    public MainViewModelDesign() : base(new IconServiceDesign(), new LocalizationServiceDesign())
+    public MainViewModelDesign() : base(new IconService.Design(), new ILocalizationService.Design(), new ILayoutOptions.Design())
     {
         if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
     }

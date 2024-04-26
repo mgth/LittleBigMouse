@@ -6,7 +6,7 @@
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
              mc:Ignorable="d"
-             d:DesignHeight="200" d:DesignWidth="800"
+             d:DesignWidth="800"
              x:DataType="controls:LocationControlViewModel"
              x:CompileBindings="True"
              >
@@ -51,14 +51,14 @@
 		</Style>
 	</UserControl.Styles>
 
-	<Grid Margin="20">
+	<Grid Margin="20,5">
 		<StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Opacity="0.051" OpacityMask="Gray">
 			<icons:IconView
                 Foreground="Black"
-				IconMaxHeight="100"
+				IconMaxHeight="50"
                 Path="icon/lbm_logo"
             />
-			<Label FontSize="100" Foreground="{DynamicResource ThemeForegroundBrush}">Little Big Mouse</Label>
+			<Label FontSize="40" Foreground="{DynamicResource ThemeForegroundBrush}">Little Big Mouse</Label>
 		</StackPanel>
 
 
@@ -68,135 +68,6 @@
 			<!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
                     <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
                 </StackPanel>-->
-			<StackPanel Classes="Options">
-				<Label
-					ToolTip.Tip="Choose the algorithm to handle screen transitions."
-        >Max travel distance</Label>
-
-				<NumericUpDown 
-                    Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}" 
-                    Increment="10" 
-                    Value="{Binding Model.MaxTravelDistance, FallbackValue=200}"
-                    ClipValueToMinMax="True"
-                    />
-			</StackPanel>
-			<StackPanel Classes="Options">
-				<CheckBox
-					Content="Horizontal Loop"
-					IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
-					IsChecked="{Binding Path=Model.LoopX, FallbackValue=false, Mode=TwoWay}"
-					ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."
-                />
-				
-				<CheckBox
-					Content="Vertical Loop"
-					IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
-					IsChecked="{Binding Path=Model.LoopY, FallbackValue=false, Mode=TwoWay}"
-					ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."
-                />
-			</StackPanel>
-
-			<StackPanel  Classes="Options">
-				<CheckBox
-					Content="Allow overlaps"
-					IsChecked="{Binding Path=Model.AllowOverlaps, FallbackValue=false, Mode=TwoWay}"
-					ToolTip.Tip="Allow the screens to overlap."
-                        />
-
-				<CheckBox
-					Content="Allow discontinuity"
-					IsChecked="{Binding Path=Model.AllowDiscontinuity, FallbackValue=false, Mode=TwoWay}"
-					ToolTip.Tip="Allow gaps between monitors."
-                        />
-
-				<!--<CheckBox   Content="Show Rulers" IsChecked="{Binding Path=ShowRulers, Mode=TwoWay}" Foreground="LightGray" />-->
-			</StackPanel>
-
-			<StackPanel Classes="Options">
-				<CheckBox
-					Content="Adjust Speed"
-					IsEnabled="{Binding Path=Model.AdjustSpeedAllowed, FallbackValue=false}"
-					IsChecked="{Binding Path=Model.AdjustSpeed, FallbackValue=false, Mode=TwoWay}"
-					ToolTip.Tip="Adjust the pointer speed when the system doesn't consider the screens ratio"
-                        />
-				<CheckBox
-					Content="Adjust Pointer"
-					IsEnabled="{Binding Path=Model.AdjustPointerAllowed, FallbackValue=false}"
-					IsChecked="{Binding Path=Model.AdjustPointer, Mode=TwoWay, FallbackValue=false}"
-					ToolTip.Tip="Adjust the pointer size when the system doesn't consider the screens ratio"
-                        />
-			</StackPanel>
-
-			<StackPanel Classes="Options">
-				<Label
-					ToolTip.Tip="Choose the algorithm to handle screen transitions."
-                        >Algorithm</Label>
-
-				<ListBox Classes="RadioButtonListBox"
-						 Background="Transparent"
-						 ItemsSource="{Binding AlgorithmList}"
-							 
-						 SelectedItem="{Binding SelectedAlgorithm}"
-                             >
-
-					<ListBox.ItemTemplate>
-						<DataTemplate>
-							<Border Background="Transparent">
-								<RadioButton Classes="RadioButtonListBox"
-									x:DataType="controls:ListItem"
-									Content="{Binding Caption}"
-									Background="Transparent"
-									VerticalAlignment="Center"
-									IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}},Mode=TwoWay}"
-									ToolTip.Tip ="{Binding Description}"
-                                        />
-							</Border>
-						</DataTemplate>
-					</ListBox.ItemTemplate>
-
-				</ListBox>
-			</StackPanel>
-
-			<StackPanel Classes="Options">
-
-			</StackPanel>
-
-			<StackPanel Classes="Options">
-				<CheckBox
-					Content="Auto Check for update"
-					IsChecked="{Binding Path=Model.AutoUpdate, FallbackValue=false, Mode=TwoWay}"
-					ToolTip.Tip="Enable automatic background checks for updates available online."
-                        />
-
-				<CheckBox
-					Content="Load at startup"
-					IsChecked="{Binding Path=Model.LoadAtStartup, FallbackValue=false, Mode=TwoWay}"
-					ToolTip.Tip="Enable execution at session startup."
-                        />
-
-				<Label>Daemon Priority</Label>
-				<ComboBox
-					ItemsSource="{Binding PriorityList}"
-					SelectedItem="{Binding SelectedPriority}">
-
-					<ComboBox.ItemTemplate>
-						<DataTemplate>
-							<Border Background="Transparent">
-								<Label Classes="RadioButtonListBox"
-									   x:DataType="controls:ListItem"
-									   Content="{Binding Caption}"
-									   Background="Transparent"
-									   VerticalAlignment="Center"
-									   ToolTip.Tip ="{Binding Description}"
-                                    />
-							</Border>
-						</DataTemplate>
-					</ComboBox.ItemTemplate>
-
-				</ComboBox>
-
-			</StackPanel>
-
 			<StackPanel Orientation="Horizontal">
 
 				<Button Classes="Command"

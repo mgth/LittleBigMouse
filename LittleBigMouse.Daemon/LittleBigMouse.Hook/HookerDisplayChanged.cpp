@@ -6,7 +6,7 @@
 void Hooker::HookDisplayChange()
 {
 	WNDCLASS wndClass;
-    wndClass.lpfnWndProc = DisplayChangeHandler;
+    wndClass.lpfnWndProc = static_cast<WNDPROC>(DisplayChangeHandler);
     wndClass.hInstance = GetModuleHandle(nullptr);
     wndClass.lpszClassName = L"LittleBigMouse";
 
@@ -23,7 +23,7 @@ void Hooker::HookDisplayChange()
     );
 }
 
-void Hooker::UnhookDisplayChange()
+void Hooker::UnhookDisplayChange() const
 {
 	DestroyWindow(_hwnd);
 }

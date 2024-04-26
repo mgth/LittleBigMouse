@@ -14,7 +14,7 @@ bool RemoteServerPipe::StartListener()
     DWORD dwRead;
 
 	const auto s = std::string(R"(\\.\pipe\lbm-daemon)");
-	const auto ws = to_wstring(s);
+	const auto ws = ToWString(s);
 	_inputPipe = CreateNamedPipe(
         ws.c_str(), //L"\\\\.\\pipe\\lbm-daemon-beta",// name of the pipe
         PIPE_ACCESS_INBOUND, // 1-way pipe -- receive
@@ -58,7 +58,7 @@ bool RemoteServerPipe::StartListener()
 bool RemoteServerPipe::StartNotifier()
 {
 	const auto s = std::string(R"(\\.\pipe\lbm-feedback)");
-	const auto ws = to_wstring(s);
+	const auto ws = ToWString(s);
 	_outputPipe = CreateNamedPipe(
         ws.c_str(), //L"\\\\.\\pipe\\lbm-daemon-beta",// name of the pipe
         PIPE_ACCESS_OUTBOUND, // 1-way pipe -- receive

@@ -83,7 +83,7 @@ void CALLBACK Hooker::WindowChangeHook(
 	                wprintf(L"Executable Path: %s\n", exePath.c_str());
 	            #endif
 
-                Instance()->OnFocusChanged.fire(to_string(exePath));
+                Instance()->OnFocusChanged.fire(ToString(exePath));
 
             }
 	        #if defined(_DEBUG)

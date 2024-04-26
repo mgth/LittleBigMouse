@@ -9,10 +9,9 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using HLab.Remote;
-//using H.Pipes;
 using LittleBigMouse.Zoning;
 
-namespace LittleBigMouse.DisplayLayout;
+namespace LittleBigMouse.Ui.Avalonia.Remote;
 
 public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 {
@@ -89,14 +88,14 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
     Process? _daemonProcess;
 
-    private void CreateExcludedFile()
+    void CreateExcludedFile()
     {
-        string path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
         if(File.Exists(file))
         {
             // Riot games -> Riot Games (was misspelled in 5.0.4.0) TODO : remove in a version or two
-            string text = File.ReadAllText(file);
+            var text = File.ReadAllText(file);
             if(text.Contains("\\Riot games\\"))
             {
                 text = text.Replace("\\Riot games\\", "\\Riot Games\\");

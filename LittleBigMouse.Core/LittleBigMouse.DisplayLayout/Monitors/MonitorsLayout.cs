@@ -29,8 +29,10 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 [DataContract]
 public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 {
-    public MonitorsLayout()
+    public MonitorsLayout(ILayoutOptions options)
     {
+        Options = options;
+
         DpiAwareness = WinUser.GetAwarenessFromDpiAwarenessContext(WinUser.GetThreadDpiAwarenessContext());
 
         _physicalMonitorModelsCache.Connect()
@@ -83,18 +85,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             .ToProperty(this, e => e.Y0)
             .DisposeWith(this);
 
-        _adjustPointerAllowed = this
-            .WhenAnyValue(e => e.IsUnaryRatio, (bool r) => r)
-            .Log(this, "_adjustPointerAllowed")
-            .ToProperty(this, e => e.AdjustPointerAllowed)
-            .DisposeWith(this);
-
-        _adjustSpeedAllowed = this
-            .WhenAnyValue(e => e.IsUnaryRatio, (bool r) => r)
-            .Log(this, "_adjustSpeedAllowed")
-            .ToProperty(this, e => e.AdjustSpeedAllowed)
-            .DisposeWith(this);
-
         //if any physical monitor unsaved set layout not saved
         _physicalMonitorsCache.Connect()
             .AutoRefresh(e => e.Saved)
@@ -116,7 +106,11 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
                 Saved = false;
             })
             .Subscribe().DisposeWith(this);
+
+        this.WhenAnyValue(e => e.Options.Saved).Where(e => !e).Do(e => Saved = false).Subscribe().DisposeWith(this);
     }
+
+    public ILayoutOptions Options { get; }
 
     Rect GetOutsideBounds()
     {
@@ -342,19 +336,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         }
     }
 
-
-
-
-
-
-    [DataMember]
-    public bool AutoUpdate
-    {
-        get => _autoUpdate;
-        set => SetUnsavedValue(ref _autoUpdate, value);
-    }
-    bool _autoUpdate;
-
     /// <summary>
     /// PhysicalMonitor on witch primary source get displayed.
     /// </summary>
@@ -404,7 +385,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             }
         }
 
-        MinimalMaxTravelDistance = Math.Ceiling(GetMinimalMaxTravelDistance());
+        Options.MinimalMaxTravelDistance = Math.Ceiling(GetMinimalMaxTravelDistance());
 
         using (DelayChangeNotifications())
         {
@@ -422,148 +403,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     public double Y0 => _y0.Value;
     readonly ObservableAsPropertyHelper<double> _y0;
 
-    /// <summary>
-    /// Mouse management enabled
-    /// </summary>
-    [DataMember]
-    public bool Enabled
-    {
-        get => _enabled;
-        set => SetAndRaise(ref _enabled, value);
-    }
-    bool _enabled;
 
-    /// <summary>
-    /// Load at startup
-    /// </summary>
-    [DataMember]
-    public bool LoadAtStartup
-    {
-        get => _loadAtStartup;
-        set => SetUnsavedValue(ref _loadAtStartup, value);
-    }
-    bool _loadAtStartup;
-
-    /// <summary>
-    /// Load at startup
-    /// </summary>
-    [DataMember]
-    public string Priority
-    {
-        get => _priority;
-        set => SetUnsavedValue(ref _priority, value);
-    }
-    string _priority;
-
-    [DataMember]
-    public bool LoopAllowed => true;
-
-    /// <summary>
-    /// Allow mouse cursor looping in X direction
-    /// </summary>
-    [DataMember]
-    public bool LoopX
-    {
-        get => LoopAllowed && _loopX;
-        set => SetUnsavedValue(ref _loopX, value);
-    }
-    bool _loopX;
-
-    /// <summary>
-    /// Allow mouse cursor looping in Y direction
-    /// </summary>
-    [DataMember]
-    public bool LoopY
-    {
-        get => LoopAllowed && _loopY;
-        set => SetUnsavedValue(ref _loopY, value);
-    }
-    bool _loopY;
-
-    /// <summary>
-    /// True if all sources have a pixel to dip ratio of 1
-    /// </summary>
-    [DataMember]
-    public bool IsUnaryRatio
-    {
-        get => _isUnaryRatio;
-        set => this.RaiseAndSetIfChanged(ref _isUnaryRatio, value);
-    }
-    bool _isUnaryRatio;
-
-
-    /// <summary>
-    /// Allow pointer adjustment when all displays have a pixel to dip ratio of 1
-    /// </summary>
-    [DataMember]
-    public bool AdjustPointerAllowed => _adjustPointerAllowed.Value;
-    readonly ObservableAsPropertyHelper<bool> _adjustPointerAllowed;
-
-    /// <summary>
-    /// Adjust pointer size with display pixel to dip ratio
-    /// </summary>
-    [DataMember]
-    public bool AdjustPointer
-    {
-        get => AdjustPointerAllowed && _adjustPointer;
-        set => SetUnsavedValue(ref _adjustPointer, value);
-    }
-    bool _adjustPointer;
-
-    /// <summary>
-    /// Allow speed adjustment when all displays have a pixel to dip ratio of 1
-    /// </summary>
-    [DataMember]
-    public bool AdjustSpeedAllowed => _adjustSpeedAllowed.Value;
-    readonly ObservableAsPropertyHelper<bool> _adjustSpeedAllowed;
-
-    /// <summary>
-    /// Adjust speed with display pixel to dip ratio
-    /// </summary>
-    [DataMember]
-    public bool AdjustSpeed
-    {
-        get => AdjustSpeedAllowed && _adjustSpeed;
-        set => SetUnsavedValue(ref _adjustSpeed, value);
-    }
-    bool _adjustSpeed;
-
-    /// <summary>
-    /// Experimental : Sleep monitors not containing mouse cursor after a delay 
-    /// </summary>
-    [DataMember]
-    public bool HomeCinema
-    {
-        get => _homeCinema;
-        set => SetUnsavedValue(ref _homeCinema, value);
-    }
-    bool _homeCinema;
-
-    public double MaxTravelDistance 
-    {
-        get => _maxTravelDistance;
-        set => SetUnsavedValue(ref _maxTravelDistance, value);
-    }
-    double _maxTravelDistance = 200.0;
-
-    public double MinimalMaxTravelDistance 
-    {
-        get => _minimalMaxTravelDistance;
-        set => SetAndRaise(ref _minimalMaxTravelDistance, value);
-    }
-    double _minimalMaxTravelDistance = 0.0;
-
-
-    /// <summary>
-    /// Keep window on top
-    /// </summary>
-    [DataMember]
-    public bool Pinned
-    {
-        get => _pinned;
-        set => SetUnsavedValue(ref _pinned, value);
-    }
-    bool _pinned;
 
     /// <summary>
     /// Store window location betwin sessions 
@@ -581,7 +421,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
     public void Compact()
     {
-        if(AllowDiscontinuity) return;
+        if(Options.AllowDiscontinuity) return;
         lock (_compactLock)
         {
             ForceCompact();
@@ -611,7 +451,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         {
             var monitor = todo.First();
 
-            monitor.PlaceAuto(done,AllowDiscontinuity,AllowOverlaps);
+            monitor.PlaceAuto(done,Options.AllowDiscontinuity,Options.AllowOverlaps);
             done.Add(monitor);
 
             todo = [.. todo.Except([monitor]).OrderBy(s => s
@@ -621,40 +461,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         }
     }
 
-    /// <summary>
-    /// allow monitors to overlap, may be useful for overlapped borders
-    /// </summary>
-    [DataMember]
-    public bool AllowOverlaps
-    {
-        get => _allowOverlaps;
-        set => SetUnsavedValue(ref _allowOverlaps, value);
-    }
-    bool _allowOverlaps;
 
-    /// <summary>
-    /// allow monitors to be placed with a gap between them
-    /// </summary>
-    [DataMember]
-    public bool AllowDiscontinuity
-    {
-        get => _allowDiscontinuity;
-        set => SetUnsavedValue(ref _allowDiscontinuity, value);
-    }
-    bool _allowDiscontinuity;
-
-    /// <summary>
-    /// algorithm to be used for mouse movements
-    /// - Strait
-    /// - CornerCrossing
-    /// </summary>
-    [DataMember]
-    public string Algorithm 
-    {
-        get => _algorithm;
-        set => SetUnsavedValue(ref _algorithm, value);
-    }
-    string _algorithm;
 
 
     /// <summary>
@@ -704,7 +511,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             PrimarySource = primarySource?.Source;
             MaxEffectiveDpiX = maxEffectiveDpiX;
             MaxEffectiveDpiY = maxEffectiveDpiY;
-            IsUnaryRatio = isUnaryRatio;
+            Options.IsUnaryRatio = isUnaryRatio;
         }
     }
 
@@ -717,7 +524,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         get
         {
             if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
-            return new MonitorsLayout();
+            return new MonitorsLayout(null);
         }
     }
 
@@ -803,7 +610,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
         var actualZones = zones.Zones.ToArray();
 
-        if (LoopX)
+        if (Options.LoopX)
         {
             var shiftLeft = new Vector(-PhysicalBounds.Width, 0);
             var shiftRight = new Vector(PhysicalBounds.Width, 0);
@@ -815,7 +622,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
             }
         }
 
-        if (LoopY)
+        if (Options.LoopY)
         {
             var shiftUp = new Vector(0, -PhysicalBounds.Height);
             var shiftDown = new Vector(0, PhysicalBounds.Height);
@@ -829,16 +636,16 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
         zones.Init();
 
-        zones.MaxTravelDistance = MaxTravelDistance;
+        zones.MaxTravelDistance = Options.MaxTravelDistance;
 
-        zones.AdjustPointer = AdjustPointer;
-        zones.AdjustSpeed = AdjustSpeed;
+        zones.AdjustPointer = Options.AdjustPointer;
+        zones.AdjustSpeed = Options.AdjustSpeed;
 
-        zones.Algorithm = Algorithm;
-        zones.Priority = Priority;
+        zones.Algorithm = Options.Algorithm;
+        zones.Priority = Options.Priority;
 
-        zones.LoopX = LoopX;
-        zones.LoopY = LoopY;
+        zones.LoopX = Options.LoopX;
+        zones.LoopY = Options.LoopY;
 
         return zones;
     }

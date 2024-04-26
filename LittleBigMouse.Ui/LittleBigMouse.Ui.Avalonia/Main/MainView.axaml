@@ -8,6 +8,9 @@
         xmlns:mvvm="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
         xmlns:plugins="clr-namespace:LittleBigMouse.Plugins;assembly=LittleBigMouse.Plugins"
         xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
+        xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+        xmlns:avalonia="clr-namespace:LittleBigMouse.Ui.Avalonia"
+        xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
         mc:Ignorable="d"
     x:DataType="main:MainViewModel"
 >
@@ -41,28 +44,33 @@
 
         <main:PluginsControlsView/>
 
-        <!--Graphical view for the layout-->
-		<mvvm:ViewLocator Grid.Row="1"
+		<SplitView Grid.Row="1" IsPaneOpen="{Binding OptionsIsVisible}"  PaneBackground="Transparent" >
+			<SplitView.Pane>
+		        <mvvm:ViewLocator Model="{Binding Options}" />
+			</SplitView.Pane>
+			
+            <!--Graphical view for the layout-->
+		    <mvvm:ViewLocator
+                  ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
+                  ViewMode="{Binding PresenterViewMode}"
 
-              ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
-              ViewMode="{Binding PresenterViewMode}"
+                  Model="{Binding MainService.MonitorsLayout}"
+            />
+		</SplitView>
 
-              Model="{Binding MainService.MonitorsLayout}"
-        />
-
+		
         <!--Controls for the layout-->
-		<Border
+		<Border 
 			Grid.Row="2"
 			Grid.Column="0"
-			Background="{DynamicResource HLab.Brushes.Header.Active.Background}"
-        >
+			Background="{DynamicResource HLab.Brushes.Header.Active.Background}">
+			
 			<mvvm:ViewLocator
 				ViewClass="{x:Type plugins:IMonitorsLayoutControlViewClass}"
 				ViewMode="{x:Type annotations:DefaultViewMode}"
 				Model="{Binding MainService.MonitorsLayout}"
-                    />
+					/>
 		</Border>
-
 	</Grid>
 
 </UserControl>

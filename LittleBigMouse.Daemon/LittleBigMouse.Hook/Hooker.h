@@ -35,7 +35,7 @@ class Hooker final : public ThreadHost
 	void UnhookMouse();
 
 	void HookDisplayChange();
-	void UnhookDisplayChange();
+	void UnhookDisplayChange() const;
 
 	void HookFocusEvent();
 	void UnhookFocusEvent();
@@ -94,7 +94,7 @@ private:
 	static LRESULT __stdcall IniChangedCallback(const int nCode, const WPARAM wParam, const LPARAM lParam);
 	static LRESULT __stdcall WindowCallback(const int nCode, const WPARAM wParam, const LPARAM lParam);
 
-	static LRESULT DisplayChangeHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	static LRESULT CALLBACK DisplayChangeHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 	static void CALLBACK DesktopChangeHook(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hWnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 	static void CALLBACK WindowChangeHook(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hWnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);

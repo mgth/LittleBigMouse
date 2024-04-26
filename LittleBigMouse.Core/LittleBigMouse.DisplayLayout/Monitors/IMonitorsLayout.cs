@@ -8,6 +8,8 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 
 public interface IMonitorsLayout : IDisposable
 {
+    ILayoutOptions Options { get; }
+
     bool Saved { get; set; }
 
     /// <summary>
@@ -40,24 +42,11 @@ public interface IMonitorsLayout : IDisposable
     /// </summary>
     DisplaySource PrimarySource { get; }
 
-    /// <summary>
-    /// Allow for discontinuities between monitors.
-    /// </summary>
-    bool AllowDiscontinuity { get; }
 
-    /// <summary>
-    /// Allow overlaps between monitors.
-    /// </summary>
-    bool AllowOverlaps { get; }
     string Id { get; set; }
 
     WinDef.DpiAwareness DpiAwareness { get; }
     PhysicalMonitor PrimaryMonitor { get; }
-
-    bool Enabled { get; set; }
-
-    bool AutoUpdate { get; }
-    bool LoadAtStartup { get; }
 
     ZonesLayout ComputeZones();
     void Compact();

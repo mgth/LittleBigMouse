@@ -22,15 +22,11 @@
 */
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
-using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using Avalonia.Controls;
 using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia;
@@ -41,24 +37,11 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Persistency;
+using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Zoning;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
-
-public class ListItem
-{
-    public ListItem(string id, string caption, string description)
-    {
-        Id = id;
-        Caption = caption;
-        Description = description;
-    }
-
-    public string Id { get; }
-    public string Caption { get; }
-    public string Description { get; }
-}
 
 public class LocationControlViewModel : ViewModel<MonitorsLayout>
 {
@@ -74,11 +57,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
         _monitorsService = monitorsService;
 
-        _selectedAlgorithm = this.WhenAnyValue(e => e.Model.Algorithm)
-            .Select(a => AlgorithmList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedAlgorithm));
 
-        _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
-            .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedPriority));
 
         SaveCommand = ReactiveCommand.CreateFromTask(
             SaveAsync, 
@@ -235,7 +214,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     {
         if(Model == null) return;
 
-        Model.Enabled = true;
+        Model.Options.Enabled = true;
 
         if (!Model.Saved)
             await SaveAsync();
@@ -249,7 +228,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     {
         if(Model == null) return;
 
-        Model.Enabled = false; 
+        Model.Options.Enabled = false; 
         await Task.Run(() => Model.SaveEnabled());
         await _service.StopAsync();
     }
@@ -275,27 +254,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         });
 
 
-    public ListItem? SelectedAlgorithm
-    {
-        get => _selectedAlgorithm.Value;
-        set
-        {
-            if(Model == null) return;
-            Model.Algorithm = value?.Id ?? "";
-        }
-    }
-    readonly ObservableAsPropertyHelper<ListItem?> _selectedAlgorithm;
-
-    public ListItem? SelectedPriority
-    {
-        get => _selectedPriority.Value;
-        set
-        {
-            if(Model == null) return;
-            Model.Priority = value?.Id ?? "";
-        }
-    }
-    readonly ObservableAsPropertyHelper<ListItem?> _selectedPriority;
 
 
     public bool Running
@@ -319,22 +277,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
     }
     bool _liveUpdate;
 
-    public List<ListItem> AlgorithmList { get; } = new()
-    {
-        new ("Strait","Strait","Simple and highly CPU-efficient transition."),
-        new ("Cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
-    };
-
-    public List<ListItem> PriorityList { get; } = new()
-    {
-        new ("Idle","Idle",""),
-        new ("Below","Below",""),
-        new ("Normal","Normal",""),
-        new ("Above","Above",""),
-        new ("High","High",""),
-        new ("Realtime","Realtime",""),
-
-    };
 
 
     void DoLiveUpdate()

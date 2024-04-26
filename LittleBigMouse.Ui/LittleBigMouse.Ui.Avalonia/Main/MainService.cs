@@ -31,10 +31,10 @@ using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
 using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
-using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Persistency;
+using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
 using Live.Avalonia;
@@ -54,6 +54,9 @@ public class MainService : ReactiveModel, IMainService
 
     readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
+    readonly Func<MonitorsLayout> _getNewMonitorLayout;
+    readonly IProcessesCollector _processesCollector;
+
 
     Action<IMainPluginsViewModel>? _actions;
 
@@ -64,7 +67,7 @@ public class MainService : ReactiveModel, IMainService
         get => _monitorLayout; 
         set => this.RaiseAndSetIfChanged(ref _monitorLayout, value);
     }
-    private IMonitorsLayout _monitorLayout;
+    IMonitorsLayout _monitorLayout;
 
     public MainService
     (
@@ -72,11 +75,15 @@ public class MainService : ReactiveModel, IMainService
         IMvvmService mvvmService,
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
-        ISystemMonitorsService monitors
+        ISystemMonitorsService monitors,
+        Func<MonitorsLayout> getNewMonitorLayout,
+        IProcessesCollector processesCollector
     )
     {
         _notify = notify;
         _monitors = monitors;
+        _getNewMonitorLayout = getNewMonitorLayout;
+        _processesCollector = processesCollector;
         _littleBigMouseClientService = littleBigMouseClientService;
 
         _mvvmService = mvvmService;
@@ -96,9 +103,7 @@ public class MainService : ReactiveModel, IMainService
         var old = MonitorsLayout;
         old?.Dispose();
 
-        MonitorsLayout = new MonitorsLayout().UpdateFrom(monitors);
-
-        //Dispatcher.UIThread.RunJobs(DispatcherPriority.Normal);
+        MonitorsLayout = _getNewMonitorLayout().UpdateFrom(monitors);
 
         _mainWindow?.UpdateLayout();
     }
@@ -144,7 +149,7 @@ public class MainService : ReactiveModel, IMainService
         await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
         {
-            MonitorsLayout.Enabled = false; 
+            MonitorsLayout.Options.Enabled = false; 
             MonitorsLayout.SaveEnabled();
             return _littleBigMouseClientService.StopAsync();
         });
@@ -154,7 +159,7 @@ public class MainService : ReactiveModel, IMainService
 
         _notify.Show();
 
-        if(MonitorsLayout.AutoUpdate)
+        if(MonitorsLayout.Options.AutoUpdate)
             await CheckUpdateBlindAsync();
     }
 
@@ -186,7 +191,7 @@ public class MainService : ReactiveModel, IMainService
             case LittleBigMouseEvent.Stopped:
                 await _notify.SetIconAsync("icon/lbm_off",32);
 
-                if (MonitorsLayout is not null && MonitorsLayout.Enabled && _justConnected)
+                if (MonitorsLayout is not null && MonitorsLayout.Options.Enabled && _justConnected)
                 {
                     _justConnected = false;
                     await StartAsync();
@@ -207,6 +212,7 @@ public class MainService : ReactiveModel, IMainService
 
             case LittleBigMouseEvent.DesktopChanged:
             case LittleBigMouseEvent.FocusChanged:
+                AddSeenProcess(args.Payload);
                 break;
             case LittleBigMouseEvent.Connected:
                 _justConnected = true;
@@ -216,10 +222,17 @@ public class MainService : ReactiveModel, IMainService
         }
     }
 
+    void AddSeenProcess(string process)
+    {
+        if(_processesCollector.SeenProcesses.Contains(process)) return;
+
+        _processesCollector.SeenProcesses.Add(process);
+    }
+
     private async Task DisplayChangedAsync()
     {
         UpdateLayout();
-        if(MonitorsLayout.Enabled)
+        if(MonitorsLayout.Options.Enabled)
         {
             await StartAsync();
         }

@@ -20,14 +20,17 @@ using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
 using HLab.UserNotification.Avalonia;
 using LittleBigMouse.DisplayLayout;
+using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.Plugin.Vcp.Avalonia;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
+using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Ui.Core;
 using ReactiveUI;
 using Splat;
+using LittleBigMouseClientService = LittleBigMouse.Ui.Avalonia.Remote.LittleBigMouseClientService;
 
 namespace LittleBigMouse.Ui.Avalonia;
 
@@ -101,7 +104,8 @@ internal class Program
                 c.Export<MainBootloader>().As<IBootloader>();
 
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
-
+                c.Export<LbmOptions>().As<ILayoutOptions>().Lifestyle.Singleton();
+                c.Export<ProcessesCollector>().As<IProcessesCollector>().Lifestyle.Singleton();
                 //c.Export<MonitorsLayout>().As<IMonitorsLayout>();
 
                 c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
@@ -110,7 +114,6 @@ internal class Program
                 c.Export<MonitorLocationPlugin>().As<IBootloader>();
 
                 c.Export<VcpPlugin>().As<IBootloader>();
-
 
                 var parser = new AssemblyParser();
 

@@ -39,7 +39,7 @@ class LittleBigMouseDaemon
 
 	void LoadFromFile(const std::string& path);
 	void LoadExcluded(const std::string& path);
-
+	void LoadExcluded();
 public:
 	LittleBigMouseDaemon(RemoteServer* server, MouseEngine* engine, Hooker* hook);
 	~LittleBigMouseDaemon();

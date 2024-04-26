@@ -24,13 +24,7 @@
 using System;
 using LittleBigMouse.Zoning;
 
-namespace LittleBigMouse.DisplayLayout;
-
-public class LittleBigMouseServiceEventArgs(LittleBigMouseEvent evt, string payload) : EventArgs
-{
-    public LittleBigMouseEvent Event { get; } = evt;
-    public string Payload { get; } = payload;
-}
+namespace LittleBigMouse.Ui.Avalonia.Remote;
 
 public interface ILittleBigMouseClientService : ILittleBigMouseService
 {

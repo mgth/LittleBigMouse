@@ -1,0 +1,241 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="LittleBigMouse.Ui.Avalonia.Controls.LayoutOptions"
+             x:DataType="controls:LbmOptionsViewModel"
+			 Background="Transparent"
+			 >
+	<UserControl.Styles>
+
+		<Style Selector="ListBox.RadioButtonListBox">
+			<Setter Property="BorderBrush" Value="Transparent"/>
+		</Style>
+
+		<Style Selector="ListBox.RadioButtonListBox ListBoxItem">
+			<Setter Property="Padding" Value="6,3,6,4" />
+			<Setter Property="BorderBrush" Value="Transparent" />
+
+			<Style Selector="^:selected">
+				<Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
+					<Setter Property="Background" Value="Transparent" />
+				</Style>
+			</Style>
+			<Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+				<Setter Property="Background" Value="Transparent" />
+			</Style>
+		</Style>
+
+		<Style Selector="Button.Command">
+			<Setter Property="MinWidth" Value="50"/>
+			<Setter Property="Margin" Value="5,0,0,0" />
+		</Style>
+
+		<Style Selector="Button.Command:disabled /template/ ContentPresenter">
+			<Setter Property="Background" Value="Transparent"/>
+			<Setter Property="Opacity" Value="0.25"/>
+			<Setter Property="OpacityMask" Value="Black"/>
+		</Style>
+		<Style Selector="StackPanel.Options">
+			<Setter Property="Orientation" Value="Vertical"/>
+			<Setter Property="Margin" Value="5,0,0,0"/>
+			<Setter Property="VerticalAlignment" Value="Top"/>
+		</Style>
+	</UserControl.Styles>
+
+	<ScrollViewer>
+		<Grid>
+			<Border Opacity="0.9" Background="{DynamicResource HLab.Brushes.Background}">
+
+				<StackPanel>
+
+					<Grid>
+						<Border
+							Margin="5,10" BorderThickness="2" BorderBrush="{DynamicResource HLab.Brushes.Foreground}" CornerRadius="5"
+							Padding="10">
+							<StackPanel>
+								<CheckBox
+									Content="Auto Check for update"
+									IsChecked="{Binding Path=Model.AutoUpdate, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Enable automatic background checks for updates available online."/>
+
+								<CheckBox
+									Content="Load at startup"
+									IsChecked="{Binding Path=Model.LoadAtStartup, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Enable execution at session startup."/>
+
+								<Label>Daemon Priority</Label>
+								<ComboBox
+									ItemsSource="{Binding PriorityList}"
+									SelectedItem="{Binding SelectedPriority}">
+
+									<ComboBox.ItemTemplate>
+										<DataTemplate>
+											<Border Background="Transparent">
+												<Label Classes="RadioButtonListBox"
+													   x:DataType="controls:ListItem"
+													   Content="{Binding Caption}"
+													   Background="Transparent"
+													   VerticalAlignment="Center"
+													   ToolTip.Tip ="{Binding Description}"/>
+											</Border>
+										</DataTemplate>
+									</ComboBox.ItemTemplate>
+
+								</ComboBox>
+							</StackPanel>
+						</Border>
+						<Label
+							Background="{DynamicResource HLab.Brushes.Background}"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Top"
+            >System</Label>
+					</Grid>
+
+
+
+					<Grid>
+						<Border
+							Margin="5,10" BorderThickness="2" BorderBrush="{DynamicResource HLab.Brushes.Foreground}" CornerRadius="5"
+							Padding="10">
+							<StackPanel>
+
+								<StackPanel Classes="Options">
+									<Label ToolTip.Tip="Choose the algorithm to handle screen transitions.">Algorithm</Label>
+
+									<ListBox Classes="RadioButtonListBox"
+											 Background="Transparent"
+											 ItemsSource="{Binding AlgorithmList}"
+											 SelectedItem="{Binding SelectedAlgorithm}">
+
+										<ListBox.ItemTemplate>
+											<DataTemplate>
+												<Border Background="Transparent">
+													<RadioButton Classes="RadioButtonListBox"
+																 x:DataType="controls:ListItem"
+																 Content="{Binding Caption}"
+																 Background="Transparent"
+																 VerticalAlignment="Center"
+																 IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}},Mode=TwoWay}"
+																 ToolTip.Tip ="{Binding Description}"/>
+												</Border>
+											</DataTemplate>
+										</ListBox.ItemTemplate>
+
+									</ListBox>
+								</StackPanel>
+
+
+								<StackPanel Classes="Options">
+									<Label ToolTip.Tip="Choose the algorithm to handle screen transitions.">Max travel distance</Label>
+
+									<NumericUpDown
+										Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}"
+										Increment="10"
+										Value="{Binding Model.MaxTravelDistance, FallbackValue=200}"
+										ClipValueToMinMax="True"/>
+								</StackPanel>
+
+								<CheckBox
+									Content="Horizontal loop"
+									IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
+									IsChecked="{Binding Path=Model.LoopX, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."/>
+								
+								<CheckBox
+									Content="Vertical loop"
+									IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
+									IsChecked="{Binding Path=Model.LoopY, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."/>
+
+								<CheckBox
+									Content="Adjust Speed"
+									IsEnabled="{Binding Path=AdjustSpeedAllowed, FallbackValue=false}"
+									IsChecked="{Binding Path=Model.AdjustSpeed, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Adjust the pointer speed when the system doesn't consider the screens ratio"/>
+
+								<CheckBox
+									Content="Adjust Pointer"
+									IsEnabled="{Binding Path=AdjustPointerAllowed, FallbackValue=false}"
+									IsChecked="{Binding Path=Model.AdjustPointer, Mode=TwoWay, FallbackValue=false}"
+									ToolTip.Tip="Adjust the pointer size when the system doesn't consider the screens ratio"/>
+
+							</StackPanel>
+						</Border>
+						<Label
+							Content="Mouse"
+							Background="{DynamicResource HLab.Brushes.Background}"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Top"/>
+					</Grid>
+
+					<Grid>
+						<Border
+							Margin="5,10" BorderThickness="2" BorderBrush="{DynamicResource HLab.Brushes.Foreground}" CornerRadius="5"
+							Padding="10">
+							<StackPanel>
+								<CheckBox
+									Content="Allow overlaps"
+									IsChecked="{Binding Path=Model.AllowOverlaps, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Allow the screens to overlap."/>
+
+								<CheckBox
+									Content="Allow discontinuity"
+									IsChecked="{Binding Path=Model.AllowDiscontinuity, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Allow gaps between monitors."/>
+
+							</StackPanel>
+						</Border>
+						<Label
+							Content="Layout"
+							Background="{DynamicResource HLab.Brushes.Background}"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Top"/>
+					</Grid>
+
+					<Grid>
+						<Border
+							Margin="5,10" 
+							BorderThickness="2" 
+							BorderBrush="{DynamicResource HLab.Brushes.Foreground}" 
+							CornerRadius="5"
+							Padding="10">
+
+							<StackPanel>
+								<ListBox
+									ItemsSource="{Binding Model.ExcludedList}"
+									ToolTip.Tip="Those processes will deactivate LittleBigMouse on reaching first plane"
+									SelectedValue="{Binding SelectedExcludedProcess}"
+									/>
+								
+								<StackPanel Orientation="Horizontal">
+									<Button Command="{Binding AddExcludedProcessCommand}">/\</Button>
+									<Button Command="{Binding RemoveExcludedProcessCommand}">\/</Button>
+								</StackPanel>
+								
+								<TextBox TextWrapping="Wrap" Text="{Binding SelectedSeenProcess}"/>
+								
+								<ListBox
+									ItemsSource="{Binding ProcessesCollector.SeenProcesses}"
+									ToolTip.Tip="Those processes will deactivate LittleBigMouse on reaching first plane"
+									SelectedValue="{Binding SelectedSeenProcess}"
+									/>
+
+							</StackPanel>
+							
+						</Border>
+
+						<Label
+							Content="Excluded processes"
+							Background="{DynamicResource HLab.Brushes.Background}"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Top"/>
+					</Grid>
+				</StackPanel>
+			</Border>
+		</Grid>
+	</ScrollViewer>
+
+</UserControl>

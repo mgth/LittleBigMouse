@@ -12,31 +12,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0467b62d-44a9-42c1-a773-75ffbb8083d8" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/HLab.Avalonia" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Avalonia/HLab.Base.Avalonia/Themes/ThemeHelper.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia/HLab.Base.Avalonia/Themes/ThemeHelper.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Core" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.Monitors/Edid.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.Monitors/Edid.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LocationPlugin/FrameMover.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LocationPlugin/FrameMover.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LocationPlugin/MonitorLocationViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LocationPlugin/MonitorLocationViewModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/SizePlugin/MonitorSizeView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/SizePlugin/MonitorSizeView.axaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/SizePlugin/MonitorSizeView.axaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/SizePlugin/MonitorSizeView.axaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Avalonia/IMultiScreensView.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Avalonia/IMultiScreensView.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IMainPluginsViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IMainPluginsViewModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IMonitorFrameViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IMonitorFrameViewModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IMonitorsLayoutPresenterViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IMonitorsLayoutPresenterViewModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IViewScreenFrameContent.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/IViewScreenFrameContent.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/MainView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/MainView.axaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/Hooker.h" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/Hooker.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/HookerDisplayChanged.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/HookerDisplayChanged.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/MainViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/MainViewModel.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/PluginsControlsView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/PluginsControlsView.axaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameView.axaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameView.axaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameView.axaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameViewModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameViewModelDesign.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameViewModelDesign.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorsLayoutPresenterViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorsLayoutPresenterViewModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MultiMonitorsLayoutPresenterView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MultiMonitorsLayoutPresenterView.axaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MultiMonitorsLayoutPresenterView.axaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MultiMonitorsLayoutPresenterView.axaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.sln" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.sln" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorsListPresenterView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorsListPresenterView.axaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPlugin.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPlugin.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsViewMode.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsViewMode.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -44,11 +30,11 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/HLab.Avalonia" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
     <option name="ROOT_SYNC" value="DONT_SYNC" />
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="mock://L:/Docs/_docs_/_projets/_HLab_Projects_2023/LittleBigMouse/HLab.Sys/HLab.Sys.Windows.Monitors/Edid.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/um/WinUser.h" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -64,11 +50,11 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    ".NET Launch Settings Profile.LittleBigMouse.Ui.Avalonia.executor": "Debug",
+    ".NET Launch Settings Profile.LittleBigMouse.Ui.Avalonia.executor": "Run",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "XThreadsFramesViewSplitterKey": "0.68308353",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "Add-Options",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -79,9 +65,9 @@
   },
   "keyToStringList": {
     "rider.external.source.directories": [
-      "/home/mathieu/.config/JetBrains/Rider2023.3/resharper-host/DecompilerCache",
-      "/home/mathieu/.config/JetBrains/Rider2023.3/resharper-host/SourcesCache",
-      "/home/mathieu/.local/share/Symbols/src"
+      "C:\\Users\\user\\AppData\\Roaming\\JetBrains\\Rider2024.1\\resharper-host\\DecompilerCache",
+      "C:\\Users\\user\\AppData\\Roaming\\JetBrains\\Rider2024.1\\resharper-host\\SourcesCache",
+      "C:\\Users\\user\\AppData\\Local\\Symbols\\src"
     ]
   }
 }]]></component>
@@ -97,6 +83,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_1>
       <configuration_2>
         <option name="CONFIGURATION" value="DebugRelease" />
@@ -108,6 +95,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_2>
       <configuration_3>
         <option name="CONFIGURATION" value="Debug" />
@@ -119,6 +107,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_3>
       <configuration_4>
         <option name="CONFIGURATION" value="Debug" />
@@ -130,6 +119,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_4>
       <configuration_5>
         <option name="CONFIGURATION" value="DebugRelease" />
@@ -141,6 +131,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_5>
       <configuration_6>
         <option name="CONFIGURATION" value="DebugRelease" />
@@ -152,6 +143,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_6>
       <configuration_7>
         <option name="CONFIGURATION" value="Release" />
@@ -163,6 +155,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_7>
       <configuration_8>
         <option name="CONFIGURATION" value="Release" />
@@ -174,6 +167,7 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_8>
       <configuration_9>
         <option name="CONFIGURATION" value="Release" />
@@ -185,8 +179,10 @@
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
+        <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
       </configuration_9>
       <option name="DEFAULT_PROJECT_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
+      <option name="AUTO_SELECT_PRIORITY" value="0" />
       <method v="2">
         <option name="Build" />
       </method>
@@ -259,6 +255,9 @@
       <workItem from="1706050367730" duration="6821000" />
       <workItem from="1706129274456" duration="1370000" />
       <workItem from="1709319757930" duration="1454000" />
+      <workItem from="1713949791623" duration="121000" />
+      <workItem from="1713950006894" duration="363000" />
+      <workItem from="1713950515390" duration="911000" />
     </task>
     <servers />
   </component>
@@ -266,6 +265,7 @@
     <option name="version" value="3" />
   </component>
   <component name="UnityCheckinConfiguration" checkUnsavedScenes="true" />
+  <component name="UnityProjectConfiguration" hasMinimizedUI="false" />
   <component name="Vcs.Log.Tabs.Properties">
     <option name="TAB_STATES">
       <map>

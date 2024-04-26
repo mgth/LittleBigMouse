@@ -304,44 +304,43 @@ void LittleBigMouseDaemon::LoadExcluded(const std::string& path)
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
     {
 	    std::ifstream file;
-	    const auto szCombined = static_cast<LPWSTR>(CoTaskMemAlloc(MAX_PATH * sizeof(WCHAR)));
-		if(szCombined == nullptr)
-		{
-			CoTaskMemFree(szPath);
-			return;
-		}
 
-	    const auto wPath = ToWString(path);
-		PathCombine(szCombined, szPath, wPath.c_str());
+		PathAppend(szPath, ToWString(path).c_str());
+		#if defined(_DEBUG)
+			std::cout << "Load Excluded : " << ToString(szPath) << "\n";
+		#endif
 
 	    file.open(szPath, std::ios::in);
 
 	    std::string buffer;
 		std::string line;
-		while(file)
+		while(file && !file.eof())
 		{
-			if(file.eof()) break;
-
 			std::getline(file, line);
+			#if defined(_DEBUG)
+			std::cout << "Excluded : " << line << "\n";
+			#endif
 
 			if(line.empty()) continue;
 			if(line[0] == ':') continue;
 
 		    _excluded.push_back(line);
 
-			#if defined(_DEBUG)
-			std::cout << "Excluded : " << line << "\n";
-			#endif
 		}
-		CoTaskMemFree(szCombined);
 		CoTaskMemFree(szPath);
 	    file.close();
     }
+	else
+	{
+			#if defined(_DEBUG)
+			std::cout << "Failed to load excluded" << "\n";
+			#endif
+	}
 }
 
 void LittleBigMouseDaemon::LoadExcluded()
 {
-	LoadExcluded("\\Mgth\\LittleBigMouse\\Excluded.txt");
+	LoadExcluded(R"(\Mgth\LittleBigMouse\Excluded.txt)");
 }
 
 void LittleBigMouseDaemon::LoadFromFile(const std::string& path)

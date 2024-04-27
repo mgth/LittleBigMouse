@@ -8,7 +8,7 @@
     <Configurations>Debug;Release</Configurations>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	<LangVersion>12</LangVersion>
-	<Version>2.3.0.0</Version>
+	<Version>2.4.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

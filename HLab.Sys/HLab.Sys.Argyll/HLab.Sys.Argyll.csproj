@@ -4,7 +4,7 @@
     <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
     <Platforms>AnyCPU;x64;x86</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
-	<Version>2.3.0.0</Version>
+	<Version>2.4.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

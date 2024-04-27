@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -33,6 +34,7 @@ using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Ui.Avalonia.Options;
 using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Ui.Avalonia.Updater;
@@ -224,7 +226,7 @@ public class MainService : ReactiveModel, IMainService
 
     void AddSeenProcess(string process)
     {
-        if(_processesCollector.SeenProcesses.Contains(process)) return;
+        if(_processesCollector.SeenProcesses.Any(e => e.Contains(process))) return;
 
         _processesCollector.SeenProcesses.Add(process);
     }

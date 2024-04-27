@@ -57,8 +57,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
 
         _monitorsService = monitorsService;
 
-
-
         SaveCommand = ReactiveCommand.CreateFromTask(
             SaveAsync, 
             this.WhenAnyValue(e => e.Model.Saved, 

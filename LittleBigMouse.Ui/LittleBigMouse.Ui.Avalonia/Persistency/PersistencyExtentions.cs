@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
+
 #pragma warning disable CA1416
 
 namespace LittleBigMouse.Ui.Avalonia.Persistency;

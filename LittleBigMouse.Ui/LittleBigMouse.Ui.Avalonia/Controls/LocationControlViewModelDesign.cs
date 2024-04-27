@@ -1,14 +1,11 @@
 ﻿using System.Collections.Generic;
 using HLab.Mvvm.Annotations;
+using LittleBigMouse.Ui.Avalonia.Options;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
 public class LocationControlViewModelDesign : IDesignViewModel
 {
-    public LocationControlViewModelDesign()
-    {
-    }
-
     public List<ListItem> AlgorithmList { get; } = new()
     {
         new ("strait","Strait","Simple and highly CPU-efficient transition."),
@@ -16,5 +13,5 @@ public class LocationControlViewModelDesign : IDesignViewModel
 
     };
 
-    public object SelectedAlgorithm { get; set; }
+    public object SelectedAlgorithm { get; set; } = "Strait";
 }

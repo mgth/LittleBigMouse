@@ -3,6 +3,15 @@ using System.Collections.ObjectModel;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
+public interface IExcludedListItem
+{
+    public class Design(string name) : IExcludedListItem
+    {
+        public string Name { get; } = name;
+    }
+    string Name { get; }
+}
+
 public interface ILayoutOptions
 {
     public class Design : ILayoutOptions

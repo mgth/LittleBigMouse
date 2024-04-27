@@ -22,12 +22,12 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public interface IProcessesCollector
 {
-    ObservableCollection<string> SeenProcesses { get; }
+    ObservableCollectionExtended<string> SeenProcesses { get; }
 }
 
 public class ProcessesCollector : ReactiveModel, IProcessesCollector
 {
-    public ObservableCollection<string> SeenProcesses { get; } = [];
+    public ObservableCollectionExtended<string> SeenProcesses { get; } = [];
 
 }
 
@@ -50,8 +50,6 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
         MaximizeCommand = ReactiveCommand.Create(() =>
             WindowState = WindowState != WindowState.Normal ? WindowState.Maximized : WindowState.Normal);
-
-        OptionsCommand = ReactiveCommand.Create(ViewOptions);
 
         _presenterViewMode = this.WhenAnyValue(v => v.ViewList)
             .Select(v => v ? typeof(ListViewMode) : typeof(DefaultViewMode))
@@ -116,8 +114,6 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
     public ICommand MaximizeCommand { get; }
 
-    public ICommand OptionsCommand { get; }
-
     void Close()
     {
         //if (Layout?.Saved ?? true)
@@ -175,10 +171,6 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
     SourceCache<IUiCommand, string> _commandsCache { get; } = new(c => c.Id);
 
-    void ViewOptions()
-    {
-
-    }
 
     public void AddButton(IUiCommand command)
     {

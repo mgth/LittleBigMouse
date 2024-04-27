@@ -1,25 +1,42 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Windows.Input;
+using DynamicData;
+using DynamicData.Binding;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Main;
 using ReactiveUI;
 
-namespace LittleBigMouse.Ui.Avalonia.Controls;
+namespace LittleBigMouse.Ui.Avalonia.Options;
 
 public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
 {
-    public IProcessesCollector ProcessesCollector { get; }
-
     public LbmOptionsViewModel(IProcessesCollector collector)
     {
-        ProcessesCollector = collector;
+        AddExcludedProcessCommand = ReactiveCommand.Create(
+            AddExcludedProcess, 
+            this.WhenAnyValue(
+                e => e.Model,
+                
+                e => e.Pattern)
+            .Select(s =>
+            {
+                var(model, p) = s;
+                if(model == null) return false;
+                if(model.ExcludedList.Contains(p)) return false;
+                return !string.IsNullOrWhiteSpace(p);
+            }));
 
-        AddExcludedProcessCommand = ReactiveCommand.Create(AddExcludedProcess);
-        RemoveExcludedProcessCommand = ReactiveCommand.Create(RemoveExcludedProcess);
+        RemoveExcludedProcessCommand = ReactiveCommand.Create(
+            RemoveExcludedProcess,
+            this.WhenAnyValue(e => e.SelectedExcludedProcess)
+            .Select(s => !string.IsNullOrWhiteSpace(s)));
 
         _adjustPointerAllowed = this
             .WhenAnyValue(e => e.Model.IsUnaryRatio, (bool r) => r)
@@ -34,26 +51,40 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             .DisposeWith(this);
 
         _selectedAlgorithm = this.WhenAnyValue(e => e.Model.Algorithm)
-            .Select(a => AlgorithmList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedAlgorithm));
+            .Select(a => AlgorithmList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedAlgorithm));
 
         _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
-            .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this,nameof(SelectedPriority));
+            .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedPriority));
+
+        this.WhenAnyValue(e => e.SelectedSeenProcess)
+            .Subscribe(p => Pattern = p?.Caption??"")
+            .DisposeWith(this);
+
+        collector.SeenProcesses
+            .ToObservableChangeSet()
+            .Transform(p => new SeenProcessViewModel(p,p, this))
+            .Bind(out _seenProcesses)
+            .Subscribe()
+            .DisposeWith(this);
     }
 
     public ICommand RemoveExcludedProcessCommand { get; }
 
     void RemoveExcludedProcess()
     {
-        if(string.IsNullOrEmpty(SelectedExcludedProcess)) return;
-        if(Model == null) return;
-        if(Model.ExcludedList.Contains(SelectedExcludedProcess)) Model.ExcludedList.Remove(SelectedExcludedProcess);
+        if (SelectedExcludedProcess is null) return;
+        if (Model == null) return;
+        if (Model.ExcludedList.Contains(SelectedExcludedProcess)) Model.ExcludedList.Remove(SelectedExcludedProcess);
     }
 
     public ICommand AddExcludedProcessCommand { get; }
     void AddExcludedProcess()
     {
-        if(string.IsNullOrEmpty(SelectedSeenProcess)) return;
-        Model.ExcludedList.Add(SelectedSeenProcess);
+        var p = Pattern;
+        if (string.IsNullOrEmpty(p)) return;
+        if(Model.ExcludedList.Contains(p)) return ;
+
+        Model.ExcludedList.Add(p);
     }
 
     /// <summary>
@@ -91,7 +122,7 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         get => _selectedAlgorithm.Value;
         set
         {
-            if(Model == null) return;
+            if (Model == null) return;
             Model.Algorithm = value?.Id ?? "";
         }
     }
@@ -102,26 +133,32 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         get => _selectedPriority.Value;
         set
         {
-            if(Model == null) return;
+            if (Model == null) return;
             Model.Priority = value?.Id ?? "";
         }
     }
     readonly ObservableAsPropertyHelper<ListItem?> _selectedPriority;
 
-    public string SelectedExcludedProcess 
-    { 
-        get => _selectedExcludedProcess; 
+    public ReadOnlyObservableCollection<SeenProcessViewModel> SeenProcesses => _seenProcesses;
+    readonly ReadOnlyObservableCollection<SeenProcessViewModel> _seenProcesses;
+    public string SelectedExcludedProcess
+    {
+        get => _selectedExcludedProcess;
         set => this.RaiseAndSetIfChanged(ref _selectedExcludedProcess, value);
     }
     string _selectedExcludedProcess = "";
+    public string Pattern
+    {
+        get => _pattern;
+        set => this.RaiseAndSetIfChanged(ref _pattern, value);
+    }
+    string _pattern;
 
-    public string SelectedSeenProcess 
-    { 
-        get => _selectedSeenProcess; 
+    public SeenProcessViewModel? SelectedSeenProcess
+    {
+        get => _selectedSeenProcess;
         set => this.RaiseAndSetIfChanged(ref _selectedSeenProcess, value);
     }
-    string _selectedSeenProcess = "";
-
-
+    SeenProcessViewModel? _selectedSeenProcess;
 
 }

@@ -1,8 +1,7 @@
 using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
-using LittleBigMouse.DisplayLayout.Monitors;
 
-namespace LittleBigMouse.Ui.Avalonia.Controls;
+namespace LittleBigMouse.Ui.Avalonia.Options;
 
 public partial class LayoutOptions : UserControl, IView<LbmOptionsViewModel>
 {

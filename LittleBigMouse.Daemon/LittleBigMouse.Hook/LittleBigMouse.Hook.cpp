@@ -68,6 +68,7 @@ std::string GetParentProcess()
 
 int main(int argc, char *argv[]){
 
+    #if !defined(_DEBUG)
 	constexpr LPCWSTR szUniqueNamedMutex = L"LittleBigMouse_Daemon";
 
 	HANDLE hHandle = CreateMutex(nullptr, TRUE, szUniqueNamedMutex);
@@ -84,7 +85,6 @@ int main(int argc, char *argv[]){
 		return(1); // Exit program
 	}
 
-    #if !defined(_DEBUG)
     ShowWindow( GetConsoleWindow(), SW_HIDE );
     #endif
 
@@ -134,11 +134,13 @@ int main(int argc, char *argv[]){
 		daemon.Run("\\Mgth\\LittleBigMouse\\Current.xml");
 	}
 
+#if !defined(_DEBUG)
     if(hHandle)
     {
         ReleaseMutex (hHandle);
 	    CloseHandle (hHandle);
     }
+#endif
 #if defined(_DEBUG)
     system("pause");
 #endif

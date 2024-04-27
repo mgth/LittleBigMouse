@@ -1,12 +1,11 @@
-﻿using System.Collections.Generic;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Runtime.Serialization;
 using HLab.Base.Avalonia;
-using HLab.Base.Avalonia.Extensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
+
 
 public class LbmOptions : ReactiveModel, ILayoutOptions
 {
@@ -158,5 +157,6 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     string _algorithm = "Strait";
 
     public ObservableCollection<string> ExcludedList { get; } = new();
+
 
 }

@@ -2,10 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
+             xmlns:options="clr-namespace:LittleBigMouse.Ui.Avalonia.Options"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-             x:Class="LittleBigMouse.Ui.Avalonia.Controls.LayoutOptions"
-             x:DataType="controls:LbmOptionsViewModel"
+             x:Class="LittleBigMouse.Ui.Avalonia.Options.LayoutOptions"
+             x:DataType="options:LbmOptionsViewModel"
 			 Background="Transparent"
 			 >
 	<UserControl.Styles>
@@ -75,7 +75,7 @@
 										<DataTemplate>
 											<Border Background="Transparent">
 												<Label Classes="RadioButtonListBox"
-													   x:DataType="controls:ListItem"
+													   x:DataType="options:ListItem"
 													   Content="{Binding Caption}"
 													   Background="Transparent"
 													   VerticalAlignment="Center"
@@ -114,7 +114,7 @@
 											<DataTemplate>
 												<Border Background="Transparent">
 													<RadioButton Classes="RadioButtonListBox"
-																 x:DataType="controls:ListItem"
+																 x:DataType="options:ListItem"
 																 Content="{Binding Caption}"
 																 Background="Transparent"
 																 VerticalAlignment="Center"
@@ -204,27 +204,59 @@
 							Padding="10">
 
 							<StackPanel>
+								
 								<ListBox
 									ItemsSource="{Binding Model.ExcludedList}"
 									ToolTip.Tip="Those processes will deactivate LittleBigMouse on reaching first plane"
 									SelectedValue="{Binding SelectedExcludedProcess}"
-									/>
+									>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="Transparent">
+                                                <TextBlock Text="{Binding }"
+                                                           Background="Transparent"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip.Tip ="{Binding }"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+								</ListBox>
 								
 								<StackPanel Orientation="Horizontal">
-									<Button Command="{Binding AddExcludedProcessCommand}">/\</Button>
-									<Button Command="{Binding RemoveExcludedProcessCommand}">\/</Button>
+									<Button Command="{Binding RemoveExcludedProcessCommand}">Remove</Button>
 								</StackPanel>
 								
-								<TextBox TextWrapping="Wrap" Text="{Binding SelectedSeenProcess}"/>
-								
+								<Label>Match pattern : </Label>
+								<Grid ColumnDefinitions="*,Auto">
+									<TextBox Grid.Column="0" TextWrapping="Wrap" Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
+									<Button Grid.Column="1" Command="{Binding AddExcludedProcessCommand}">Exclude</Button>
+								</Grid>
+								<Label>Seen processes : </Label>
 								<ListBox
-									ItemsSource="{Binding ProcessesCollector.SeenProcesses}"
+									ItemsSource="{Binding SeenProcesses}"
 									ToolTip.Tip="Those processes will deactivate LittleBigMouse on reaching first plane"
 									SelectedValue="{Binding SelectedSeenProcess}"
-									/>
+									>
+                                    <ListBox.Styles>
+                                        <Style Selector="Border.match">
+                                            <Setter Property="Background" Value="Green" />
+                                        </Style>
+                                    </ListBox.Styles>
 
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Classes.match="{Binding Match }">
+                                                <TextBlock
+													x:DataType="options:SeenProcessViewModel"
+													Text="{Binding Caption}"
+													VerticalAlignment="Center"
+													ToolTip.Tip ="{Binding Description}"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+									
+								</ListBox>
 							</StackPanel>
-							
 						</Border>
 
 						<Label

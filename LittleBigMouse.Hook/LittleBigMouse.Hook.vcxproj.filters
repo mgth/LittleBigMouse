@@ -1,0 +1,215 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Fichiers de ressources">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="src\Daemon">
+      <UniqueIdentifier>{8bdcc84b-53b2-465c-8689-208a843be59b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\SignalSlot">
+      <UniqueIdentifier>{025b7a7b-f176-4850-aeb3-221b761f6235}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Remote">
+      <UniqueIdentifier>{29180e95-50c2-4c3f-8352-04d58aaee606}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Strings">
+      <UniqueIdentifier>{1f8fe256-86ed-4db2-b070-995f47e51fce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Thread">
+      <UniqueIdentifier>{bd790ae5-568e-48ef-9177-eb4f4d42c186}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Xml">
+      <UniqueIdentifier>{f783a407-090f-4b38-b826-180b41087793}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Engine">
+      <UniqueIdentifier>{6417952d-ba81-42f3-9b8e-21bc737c43fe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Geometry">
+      <UniqueIdentifier>{438e1ecd-cde6-4163-a3cf-9d290bd18c63}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Hook">
+      <UniqueIdentifier>{45c37720-8476-45cd-abd6-a11b3db6c8b7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Logger">
+      <UniqueIdentifier>{7095f13b-1491-4ae9-8fcf-937eb3879257}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Program.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="Daemon\LittleBigMouseDaemon.cpp">
+      <Filter>src\Daemon</Filter>
+    </ClCompile>
+    <ClCompile Include="Remote\RemoteClient.cpp">
+      <Filter>src\Remote</Filter>
+    </ClCompile>
+    <ClCompile Include="Remote\RemoteServer.cpp">
+      <Filter>src\Remote</Filter>
+    </ClCompile>
+    <ClCompile Include="Remote\RemoteServerPipe.cpp">
+      <Filter>src\Remote</Filter>
+    </ClCompile>
+    <ClCompile Include="Remote\RemoteServerSocket.cpp">
+      <Filter>src\Remote</Filter>
+    </ClCompile>
+    <ClCompile Include="Strings\strc.cpp">
+      <Filter>src\Strings</Filter>
+    </ClCompile>
+    <ClCompile Include="Thread\ThreadHost.cpp">
+      <Filter>src\Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="Xml\tinyxml2.cpp">
+      <Filter>src\Xml</Filter>
+    </ClCompile>
+    <ClCompile Include="Xml\XmlHelper.cpp">
+      <Filter>src\Xml</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\HookMouseEventArg.cpp">
+      <Filter>src\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\MouseEngine.cpp">
+      <Filter>src\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\MouseHelper.cpp">
+      <Filter>src\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Zone.cpp">
+      <Filter>src\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ZoneLink.cpp">
+      <Filter>src\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ZonesLayout.cpp">
+      <Filter>src\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Hook\Hooker.cpp">
+      <Filter>src\Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="Hook\HookerDisplayChanged.cpp">
+      <Filter>src\Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="Hook\HookerMouse.cpp">
+      <Filter>src\Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="Hook\HookerWindows.cpp">
+      <Filter>src\Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="Hook\HookerWinEvents.cpp">
+      <Filter>src\Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="Logger\Logger.cpp">
+      <Filter>src\Logger</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Daemon\LittleBigMouseDaemon.h">
+      <Filter>src\Daemon</Filter>
+    </ClInclude>
+    <ClInclude Include="SignalSlot\nano_observer.hpp">
+      <Filter>src\SignalSlot</Filter>
+    </ClInclude>
+    <ClInclude Include="SignalSlot\nano_signal_slot.hpp">
+      <Filter>src\SignalSlot</Filter>
+    </ClInclude>
+    <ClInclude Include="SignalSlot\nano_function.hpp">
+      <Filter>src\SignalSlot</Filter>
+    </ClInclude>
+    <ClInclude Include="SignalSlot\nano_mutex.hpp">
+      <Filter>src\SignalSlot</Filter>
+    </ClInclude>
+    <ClInclude Include="Remote\ClientMessage.h">
+      <Filter>src\Remote</Filter>
+    </ClInclude>
+    <ClInclude Include="Remote\RemoteClient.h">
+      <Filter>src\Remote</Filter>
+    </ClInclude>
+    <ClInclude Include="Remote\RemoteServer.h">
+      <Filter>src\Remote</Filter>
+    </ClInclude>
+    <ClInclude Include="Remote\RemoteServerPipe.h">
+      <Filter>src\Remote</Filter>
+    </ClInclude>
+    <ClInclude Include="Remote\RemoteServerSocket.h">
+      <Filter>src\Remote</Filter>
+    </ClInclude>
+    <ClInclude Include="Strings\str.h">
+      <Filter>src\Strings</Filter>
+    </ClInclude>
+    <ClInclude Include="Thread\ThreadHost.h">
+      <Filter>src\Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="Xml\tinyxml2.h">
+      <Filter>src\Xml</Filter>
+    </ClInclude>
+    <ClInclude Include="Xml\XmlHelper.h">
+      <Filter>src\Xml</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\HookMouseEventArg.h">
+      <Filter>src\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\MouseEngine.h">
+      <Filter>src\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\MouseHelper.h">
+      <Filter>src\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Priority.h">
+      <Filter>src\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Zone.h">
+      <Filter>src\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ZoneLink.h">
+      <Filter>src\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ZonesLayout.h">
+      <Filter>src\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry\Geometry.h">
+      <Filter>src\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry\Line.h">
+      <Filter>src\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry\Point.h">
+      <Filter>src\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry\Rect.h">
+      <Filter>src\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry\Segment.h">
+      <Filter>src\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry\Sides.h">
+      <Filter>src\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Hook\Hooker.h">
+      <Filter>src\Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="Logger\Logger.h">
+      <Filter>src\Logger</Filter>
+    </ClInclude>
+    <ClInclude Include="Sigs.h">
+      <Filter>src\SignalSlot</Filter>
+    </ClInclude>
+    <ClInclude Include="Config.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="SignalSlot.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="Framework.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>src</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

@@ -1,4 +1,5 @@
 #pragma once
+#include "Config.h"
 
 #if _DEBUG && DEBUG_LOG 
 

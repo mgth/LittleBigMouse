@@ -117,6 +117,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         var processes = Process.GetProcessesByName("LittleBigMouse.Hook");
         foreach (var process in processes)
         {
+            if(process.HasExited) continue;
             Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
             return;
         }

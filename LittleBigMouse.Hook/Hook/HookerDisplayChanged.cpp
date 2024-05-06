@@ -1,4 +1,5 @@
 #include "Hooker.h"
+#include "Strings/str.h"
 
 #define MAX_LOADSTRING 100
 
@@ -19,7 +20,7 @@ ATOM Hooker::RegisterClassLbm(HINSTANCE hInstance)
     wcex.hCursor        = nullptr; //LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground  = nullptr; //(HBRUSH)(COLOR_WINDOW+1);
     wcex.lpszMenuName   = nullptr; //MAKEINTRESOURCEW(IDC_WINDOWSPROJECT1);
-    wcex.lpszClassName  = szWindowClass;
+    wcex.lpszClassName  = L"HookerDisplayChange";
     wcex.hIconSm        = nullptr; //LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
     return RegisterClassExW(&wcex);
@@ -28,9 +29,8 @@ ATOM Hooker::RegisterClassLbm(HINSTANCE hInstance)
 BOOL Hooker::InitInstance(HINSTANCE hInstance)
 {
    _hInst = hInstance; 
-   auto szWindowClass = L"HookerDisplayChange";
 
-   HWND hWnd = CreateWindowW(szWindowClass, szWindowClass, WS_OVERLAPPEDWINDOW,
+   HWND hWnd = CreateWindowW(L"HookerDisplayChange", szWindowClass, WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
    if (!hWnd)
@@ -52,8 +52,6 @@ bool Hooker::HookDisplayChange()
 {
 	LOG_TRACE("<Hook:HookDisplayChange> : CreateHookWindow");
 
-    auto test = this;
-
 	const auto hInstance = GetModuleHandle(nullptr);
 
     auto c = RegisterClassLbm(hInstance);
@@ -66,7 +64,7 @@ bool Hooker::HookDisplayChange()
             FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                            NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), 
                            buf, (sizeof(buf) / sizeof(wchar_t)), NULL);
-	        LOG_TRACE("<Hook:HookDisplayChange> : " << buf);
+	        LOG_TRACE("<Hook:HookDisplayChange> : " << ToString(buf));
         #endif
 
         return false;

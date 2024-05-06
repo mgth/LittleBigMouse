@@ -96,8 +96,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 );
 
-    //RemoteServerSocket server;
-    //MouseEngine engine;
+    RemoteServerSocket server;
+    MouseEngine engine;
     auto hook = Hooker();
 
     auto p = GetParentProcess();
@@ -115,8 +115,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	//	}
 	//}
 
-    ///auto daemon = LittleBigMouseDaemon( &server , &engine, &hook );
-    auto daemon = LittleBigMouseDaemon( nullptr , nullptr, &hook );
+    auto daemon = LittleBigMouseDaemon( &server , &engine, &hook );
+    ///auto daemon = LittleBigMouseDaemon( nullptr , nullptr, &hook );
 
     if(uiMode)
     {

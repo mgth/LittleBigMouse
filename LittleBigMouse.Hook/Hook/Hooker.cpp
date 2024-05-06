@@ -46,11 +46,11 @@ void Hooker::DoHook()
 
 	if(_hookMouse)
 	{
-		//HookMouse();
+		HookMouse();
 	}
 
-	// HookFocusEvent();
-	// HookEventSystemDesktopSwitch();
+	HookFocusEvent();
+	HookEventSystemDesktopSwitch();
 	HookDisplayChange();
 
 }
@@ -70,14 +70,25 @@ int Hooker::Loop()
 {
     MSG msg;
 
-    while (GetMessage(&msg, nullptr, 0, 0))
+	LOG_TRACE("<Hook:Start>");
+
+
+	auto ret = GetMessage(&msg, nullptr, 0, 0);
+    while (ret)
     {
 //        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
         TranslateMessage(&msg);
         DispatchMessage(&msg);
+
+		if(ret == -1)
+		{
+			LOG_DEBUG("<Hook:Error>");
+			(int)msg.wParam;
+		}
+		ret = GetMessage(&msg, nullptr, 0, 0);
     }
 
-    return (int) msg.wParam;
+    return (int)msg.wParam;
 }
 
 
@@ -115,15 +126,21 @@ void Hooker::RunThread()
 
 	while(!Stopping())
 	{
-		//DoSetPriority(_priority); // TODO : Activate this line
+		DoSetPriority(_priority);
+		LOG_TRACE("SetPriority");
+
 
 		DoHook();
+		LOG_TRACE("Hook");
 
 		Loop();
+		LOG_TRACE("Loop");
 
 		DoUnhook();
+		LOG_TRACE("Unhook");
 
-		//DoSetPriority(Below); // TODO : Activate this line
+		DoSetPriority(Below);
+		LOG_TRACE("SetPriority");
 	}
 
 	LOG_TRACE("<Hook:Stopped>");

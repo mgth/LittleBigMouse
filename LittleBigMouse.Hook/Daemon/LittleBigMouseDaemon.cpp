@@ -82,8 +82,10 @@ void LittleBigMouseDaemon::Connect()
 
 void LittleBigMouseDaemon::Run(const std::string& path) 
 {
+	LOG_TRACE("Daemon started");
 	// connect to events
 	Connect();
+	LOG_TRACE("Connected");
 
 	//start remote server
 	if(_remoteServer)
@@ -96,14 +98,15 @@ void LittleBigMouseDaemon::Run(const std::string& path)
 			return;
 		}
 	}
-
-	// pump messages
-	if(_hook)
-		_hook->Start();
+	LOG_TRACE("RemoteServer");
 
 	// load layout from file
 	if(!path.empty())
 		LoadFromFile(path);
+	
+	// pump messages
+	if(_hook)
+		_hook->RunThread();
 
 	// wait remote server to stop
 	if(_remoteServer)
@@ -318,7 +321,8 @@ void LittleBigMouseDaemon::FocusChanged(const std::string& path)
 		}
 	}
 
-	_remoteServer->Send("<DaemonMessage><Event>FocusChanged</Event><Payload>"+path+"</Payload></DaemonMessage>\n",nullptr);
+	if(_remoteServer)
+		_remoteServer->Send("<DaemonMessage><Event>FocusChanged</Event><Payload>"+path+"</Payload></DaemonMessage>\n",nullptr);
 }
 
 void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, RemoteClient* client)

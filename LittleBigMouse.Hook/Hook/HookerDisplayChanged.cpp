@@ -28,7 +28,7 @@ ATOM Hooker::RegisterClassLbm(HINSTANCE hInstance)
 BOOL Hooker::InitInstance(HINSTANCE hInstance)
 {
    _hInst = hInstance; 
-   szWindowClass = L"HookerDisplayChange";
+   auto szWindowClass = L"HookerDisplayChange";
 
    HWND hWnd = CreateWindowW(szWindowClass, szWindowClass, WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);

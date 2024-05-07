@@ -106,17 +106,13 @@ void LittleBigMouseDaemon::Run(const std::string& path)
 	
 	// pump messages
 	if(_hook)
-		_hook->RunThread();
+		_hook->Loop();
 
 	// wait remote server to stop
 	if(_remoteServer)
-		_remoteServer->Join();
-
-	// wait for mouse hook to stop
-	if(_hook)
 	{
-		_hook->Stop();
-		_hook->Join();
+		_remoteServer->Stop();
+		_remoteServer->Join();
 	}
 
 	// disconnect from events
@@ -191,7 +187,6 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 			if(_hook && !_hook->Hooked())
 			{
 				LoadExcluded();
-				_hook->SetPriority(_engine->Layout.Priority);
 				if(!_paused)
 					_hook->Hook();
 			}
@@ -201,7 +196,6 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 		{
 			if(_hook && _hook->Hooked())
 			{
-				_hook->SetPriority(Normal);
 				_hook->Unhook();
 			}
 			_paused = false;
@@ -212,15 +206,11 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 
 		else if(strcmp(command, "Quit")==0)
 		{
-			if(_hook && _hook->Hooked())
+			if(_hook)
 			{
-				_hook->SetPriority(Normal);
-				_hook->Unhook();
+				_hook->Quit();
 			}
 			_paused = false;
-
-			if(_remoteServer)
-				_remoteServer->Stop();
 		}
 	}
 }
@@ -341,59 +331,62 @@ void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, Remo
 
 void LittleBigMouseDaemon::LoadExcluded(const std::string& path) 
 {
-    PWSTR szPath = nullptr;
+
+	LPWSTR progDataPath = nullptr;
 	_excluded.clear();
 
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &progDataPath)))
     {
 	    std::ifstream file;
 
-		//PathAppend(szPath, ToWString(path).c_str());
-		PathAppend(szPath, ToWString(path).data());
+		TCHAR szPath[MAX_PATH] = { '\0' };
+		PathCombine(szPath, progDataPath, ToWString(path).data());
+		CoTaskMemFree(progDataPath);
 
 		LOG_TRACE("Load Excluded : " << ToString(szPath));
 
 	    file.open(szPath, std::ios::in);
 
-	    std::string buffer;
 		std::string line;
 		while(std::getline(file, line))
 		{
-			LOG_TRACE("Excluded : " << line);
 
 			if(line.empty()) continue;
 			if(line[0] == ':') continue;
 
+			LOG_TRACE("Excluded : " << line);
 		    _excluded.push_back(line);
 
 		}
-		CoTaskMemFree(szPath);
 	    file.close();
     }
 	else
 	{
 		LOG_DEBUG("Failed to load excluded");
 	}
+
+
 }
 
 void LittleBigMouseDaemon::LoadExcluded()
 {
-	LoadExcluded(R"(\Mgth\LittleBigMouse\Excluded.txt)");
+	LoadExcluded(R"(.\Mgth\LittleBigMouse\Excluded.txt)");
 }
 
 void LittleBigMouseDaemon::LoadFromFile(const std::string& path)
 {
-	auto wPath = ToWString(path);
-    PWSTR szPath;
+	LPWSTR progDataPath = nullptr;
 
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &szPath)))
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &progDataPath)))
     {
 	    std::ifstream file;
 
-        PathAppend(szPath, wPath.c_str());
+		TCHAR szPath[MAX_PATH] = { '\0' };
+		PathCombine(szPath, progDataPath, ToWString(path).data());
+		CoTaskMemFree(progDataPath);
+
 	    file.open(szPath, std::ios::in);
 
-	    std::string buffer;
 		std::string line;
 		while(file)
 		{

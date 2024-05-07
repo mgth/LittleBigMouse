@@ -20,7 +20,7 @@ ATOM Hooker::RegisterClassLbm(HINSTANCE hInstance)
     wcex.hCursor        = nullptr; //LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground  = nullptr; //(HBRUSH)(COLOR_WINDOW+1);
     wcex.lpszMenuName   = nullptr; //MAKEINTRESOURCEW(IDC_WINDOWSPROJECT1);
-    wcex.lpszClassName  = L"HookerDisplayChange";
+    wcex.lpszClassName  = szWindowClass;
     wcex.hIconSm        = nullptr; //LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
     return RegisterClassExW(&wcex);
@@ -28,9 +28,9 @@ ATOM Hooker::RegisterClassLbm(HINSTANCE hInstance)
 
 BOOL Hooker::InitInstance(HINSTANCE hInstance)
 {
-   _hInst = hInstance; 
+   _hInst = hInstance;
 
-   HWND hWnd = CreateWindowW(L"HookerDisplayChange", szWindowClass, WS_OVERLAPPEDWINDOW,
+   const HWND hWnd = CreateWindowW(szWindowClass, szWindowClass, WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
    if (!hWnd)
@@ -53,6 +53,9 @@ bool Hooker::HookDisplayChange()
 	LOG_TRACE("<Hook:HookDisplayChange> : CreateHookWindow");
 
 	const auto hInstance = GetModuleHandle(nullptr);
+
+	//LoadStringW(hInstance, IDS_APP_TITLE, szWindowClass, MAX_LOADSTRING);
+	wcscpy_s(szWindowClass, L"HookerDisplayChange");
 
     auto c = RegisterClassLbm(hInstance);
 

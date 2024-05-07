@@ -9,9 +9,9 @@
 class MouseEventArg;
 class MouseEngine;
 
-#define WM_CUSTOM_MESSAGE (WM_APP + 1)
+#define WM_BREAK_LOOP (WM_APP + 1)
 
-class Hooker final : public ThreadHost
+class Hooker final
 {
 	static std::atomic<Hooker*> _instance;
 
@@ -46,10 +46,9 @@ class Hooker final : public ThreadHost
 	void HookWindows();
 	void UnhookWindows();
 
-	static int Loop();
-	static void Loop2();
+	static bool PumpMessages();
 
-	void QuitLoop() const;
+	void BreakLoop() const;
 
 	static ATOM RegisterClassLbm(HINSTANCE hInstance);
 	BOOL InitInstance(HINSTANCE hInstance);
@@ -70,23 +69,17 @@ public:
 	HWND Hwnd() const { return _hwnd; }
 	static Hooker* Instance() { return _instance.load(); }
 
-	void RunThread() override;
-	void DoStop() override;
-	void OnStopped() override;
+	void Loop();
 
 	bool Hooked() const;
 
 	void SetPriority(const Priority priority) { _priority = priority; }
 
-	void Hook() {
-		_hookMouse = true;
-		QuitLoop();
-	}
+	void Hook();
 
-	void Unhook() {
-		_hookMouse = false;
-		QuitLoop();
-	}
+	void Unhook();
+
+	void Quit() const;
 
 private:
     static LRESULT __stdcall MouseCallback(const int nCode, const WPARAM wParam, const LPARAM lParam);

@@ -53,120 +53,108 @@ void Hooker::DoHook()
 	HookEventSystemDesktopSwitch();
 	HookDisplayChange();
 
-}
+}	
+
 
 void Hooker::DoUnhook()
 {
 	UnhookMouse();
 
 	UnhookFocusEvent();
-	//UnhookEventSystemDesktopSwitch();
+	UnhookEventSystemDesktopSwitch();
 	UnhookDisplayChange();
 
 	_instance.store(nullptr);
 }
 
-int Hooker::Loop()
+bool Hooker::PumpMessages()
 {
     MSG msg;
 
 	LOG_TRACE("<Hook:Start>");
 
-
 	auto ret = GetMessage(&msg, nullptr, 0, 0);
-    while (ret)
+    while (ret>=0)
     {
+		if (msg.message == WM_QUIT) {
+			LOG_TRACE("<Hook:Quit>");
+			return false;
+		}
+		if (msg.message == WM_BREAK_LOOP) {
+			LOG_TRACE("<Hook:Break Loop>");
+			return true;
+		}
+
 //        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
         TranslateMessage(&msg);
         DispatchMessage(&msg);
 
-		if(ret == -1)
-		{
-			LOG_DEBUG("<Hook:Error>");
-			(int)msg.wParam;
-		}
 		ret = GetMessage(&msg, nullptr, 0, 0);
     }
-
-    return (int)msg.wParam;
-}
-
-
-void Hooker::Loop2()
-{
-	LOG_TRACE("<Hook:Start>");
-
-    MSG msg;
-	int ret = PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE);
-	if(ret == 0)
-	{
-		ret = GetMessage(&msg, nullptr, 0, 0);
-	}
-
-	//while we do not close our application
-	while (ret >= 0 && msg.message != WM_QUIT)
-	{
-		LOG_TRACE("msg : " << msg.message);
-
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-
-		ret = GetMessage(&msg, nullptr, 0, 0);
-	}
-
 	if(ret == -1)
 	{
 		LOG_DEBUG("<Hook:Error>");
+		return false;
 	}
+
+    return false;
 }
 
-void Hooker::RunThread()
+
+
+void Hooker::Loop()
 {
 	_currentThreadId = GetCurrentThreadId();
 
-	while(!Stopping())
+	bool stopping = false;
+	while(!stopping)
 	{
 		DoSetPriority(_priority);
-		LOG_TRACE("SetPriority");
-
 
 		DoHook();
-		LOG_TRACE("Hook");
 
-		Loop();
-		LOG_TRACE("Loop");
+		stopping = !PumpMessages();
 
 		DoUnhook();
-		LOG_TRACE("Unhook");
 
 		DoSetPriority(Below);
-		LOG_TRACE("SetPriority");
 	}
 
 	LOG_TRACE("<Hook:Stopped>");
 }
 
 
-void Hooker::QuitLoop() const
+void Hooker::BreakLoop() const
 {
-    if (PostThreadMessage(_currentThreadId, WM_QUIT, 0, 0))
+    if (PostThreadMessage(_currentThreadId, WM_BREAK_LOOP, 0, 0))
     {
-        LOG_TRACE("<hook:quit>");
+        LOG_TRACE("<Hook:BreakLoop>");
     }
-}
-
-void Hooker::DoStop()
-{
-	QuitLoop();
-}
-
-void Hooker::OnStopped()
-{
 }
 
 bool Hooker::Hooked() const
 {
 	return _hookMouse && _mouseHookId;
+}
+
+void Hooker::Hook()
+{
+	_hookMouse = true;
+	BreakLoop();
+}
+
+void Hooker::Unhook()
+{
+	_hookMouse = false;
+	BreakLoop();
+}
+
+void Hooker::Quit() const
+{
+    if (PostThreadMessage(_currentThreadId, WM_QUIT, 0, 0))
+    {
+        LOG_TRACE("<Hook:BreakLoop>");
+    }
 }
 
 

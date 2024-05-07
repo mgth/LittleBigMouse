@@ -126,7 +126,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	else
 	{
 		LOG_TRACE("Starting in Daemon mode\n");
-		daemon.Run("\\Mgth\\LittleBigMouse\\Current.xml");
+		daemon.Run(R"(.\Mgth\LittleBigMouse\Current.xml)");
 	}
 
 #if defined(_use_mutex)

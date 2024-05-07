@@ -130,7 +130,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
             // .\LittleBigMouse.Ui.Avalonia\bin\x64\Debug\net8.0\LittleBigMouse.Ui.Avalonia.dll
             // .\x64\Debug\LittleBigMouse.Hook.exe
 
-            path = path.Replace(@"\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\", @"\LittleBigMouse.Daemon\");
+            path = path.Replace(@"\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\", @"\LittleBigMouse.Hook\");
             path = path.Replace(@"\net8.0\", @"\");
             path = path.Replace(@"\net7.0\", @"\");
         }

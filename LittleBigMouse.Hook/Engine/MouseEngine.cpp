@@ -141,6 +141,50 @@ bool MouseEngine::CheckForStopped(const MouseEventArg& e)
 	return true;
 }
 
+bool MouseEngine::TryPassBorderCross(const Zone* zone, const geo::Segment<double>& trip)
+{
+	const auto bounds = zone->PhysicalBounds();
+
+	geo::Point<double> p;
+	if (geo::Segment(bounds.TopLeft(), bounds.BottomLeft()).IsIntersecting(trip,p))
+	{
+		LOG_TRACE("left : " << p);
+		const auto distance = geo::Segment(p,trip.B()).Size();
+		LOG_TRACE("distance : " << distance);
+		const auto zoneLink = zone->LeftZones->AtPhysical(p.Y());
+		return TryPassBorder(zoneLink, distance);
+	}
+
+	if (geo::Segment(bounds.TopRight(), bounds.BottomRight()).IsIntersecting(trip,p))
+	{
+		LOG_TRACE("right : " << p);
+		const auto distance = geo::Segment(p,trip.B()).Size();
+		LOG_TRACE("distance : " << distance);
+		const auto zoneLink = zone->RightZones->AtPhysical(p.Y());
+		return TryPassBorder(zoneLink, distance);
+	}
+
+	if (geo::Segment(bounds.TopLeft(), bounds.TopRight()).IsIntersecting(trip, p))
+	{
+		LOG_TRACE("top : " << p);
+		const auto distance = geo::Segment(p,trip.B()).Size();
+		LOG_TRACE("distance : " << distance);
+		const auto zoneLink = zone->TopZones->AtPhysical(p.X());
+		return TryPassBorder(zoneLink, distance);
+	}
+
+	if (geo::Segment(bounds.BottomLeft(), bounds.BottomRight()).IsIntersecting(trip, p))
+	{
+		LOG_TRACE("bottom : " << p);
+		const auto distance = geo::Segment(p,trip.B()).Size();
+		LOG_TRACE("distance : " << distance);
+		const auto zoneLink = zone->BottomZones->AtPhysical(p.X());
+		return TryPassBorder(zoneLink, distance);
+	}
+
+	return false;
+}
+
 /// <summary>
 /// Process mouse move using cross algorithm (calculate mouvement direction)
 /// </summary>
@@ -168,14 +212,19 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 	const auto pInMm = _oldZone->ToPhysical(e.Point);
 
 	//Get line from previous point to current point
-	const auto trip = geo::Segment<double>(pInMmOld, pInMm);
+	const auto trip = geo::Segment(pInMmOld, pInMm);
 	const auto minDistSquared = Layout.MaxTravelDistanceSquared;
 
 	geo::Point<double> pOutInMm;
 
 	if(const auto zoneOut = FindTargetZone(_oldZone, trip, pOutInMm, minDistSquared))
 	{
-		MoveInMm(e, pOutInMm, zoneOut);
+		if (TryPassBorderCross(_oldZone, trip))
+		{
+			MoveInMm(e, pOutInMm, zoneOut);
+			return;
+		}
+		NoZoneMatches(e);
 		return;
 	}
 
@@ -192,7 +241,12 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 
 		if(zoneOut)
 		{
-			MoveInMm(e, pOutInMm, zoneOut);
+			if (TryPassBorderCross(_oldZone, trip))
+			{
+				MoveInMm(e, pOutInMm, zoneOut);
+				return;
+			}
+			NoZoneMatches(e);
 			return;
 		}
 	}
@@ -211,7 +265,12 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 
 		if(zoneOut) 
 		{
-			MoveInMm(e, pOutInMm, zoneOut);
+			if (TryPassBorderCross(_oldZone, trip))
+			{
+				MoveInMm(e, pOutInMm, zoneOut);
+				return;
+			}
+			NoZoneMatches(e);
 			return;
 		}
 	}
@@ -226,7 +285,7 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 /// <param name="zoneLink"></param>
 /// <param name="distance"></param>
 /// <returns></returns>
-bool MouseEngine::TryPassBorder(const ZoneLink* zoneLink, const long distance)
+bool MouseEngine::TryPassBorder(const ZoneLink* zoneLink, const double distance)
 {
 	if((GetAsyncKeyState(VK_CONTROL) & 0x8000) == 0x8000) return true;
 
@@ -259,7 +318,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 
 	const auto pIn = e.Point;
 
-	const ZoneLink* zoneOut;
+	const ZoneLink* zoneLinkOut;
 	geo::Point<long> pOut;
 	const auto bounds = _oldZone->PixelsBounds();
 
@@ -268,10 +327,10 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	{
 		//DebugUnhook.fire();
 
-		zoneOut = _oldZone->RightZones->AtPixel(pIn.Y());
-		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
+		zoneLinkOut = _oldZone->RightZones->AtPixel(pIn.Y());
+		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
 		{
-			pOut = { zoneOut->Target->PixelsBounds().Left(),zoneOut->ToTargetPixel(pIn.Y()) };
+			pOut = { zoneLinkOut->Target->PixelsBounds().Left(),zoneLinkOut->ToTargetPixel(pIn.Y()) };
 		}
 		else
 		{
@@ -282,10 +341,10 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	// leaving zone by left
 	else if ((dist = bounds.Left() - pIn.X()) >= 0)
 	{
-		zoneOut = _oldZone->LeftZones->AtPixel(pIn.Y());
-		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
+		zoneLinkOut = _oldZone->LeftZones->AtPixel(pIn.Y());
+		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
 		{
-			pOut = { zoneOut->Target->PixelsBounds().Right() - 1,zoneOut->ToTargetPixel(pIn.Y()) };
+			pOut = { zoneLinkOut->Target->PixelsBounds().Right() - 1,zoneLinkOut->ToTargetPixel(pIn.Y()) };
 		}
 		else
 		{
@@ -296,10 +355,10 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	// leaving zone by bottom
 	else if ((dist = 1 +  pIn.Y() - bounds.Bottom()) >= 0)
 	{
-		zoneOut = _oldZone->BottomZones->AtPixel(pIn.X());
-		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
+		zoneLinkOut = _oldZone->BottomZones->AtPixel(pIn.X());
+		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
 		{
-			pOut = { zoneOut->ToTargetPixel(pIn.X()), zoneOut->Target->PixelsBounds().Top() };
+			pOut = { zoneLinkOut->ToTargetPixel(pIn.X()), zoneLinkOut->Target->PixelsBounds().Top() };
 		}
 		else
 		{
@@ -310,10 +369,10 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	// leaving zone by top
 	else if ((dist = _oldZone->PixelsBounds().Top() - pIn.Y()) >= 0)
 	{
-		zoneOut = _oldZone->TopZones->AtPixel(pIn.X());
-		if (zoneOut->Target && TryPassBorder(zoneOut,dist))
+		zoneLinkOut = _oldZone->TopZones->AtPixel(pIn.X());
+		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
 		{
-			pOut = { zoneOut->ToTargetPixel(pIn.X()),zoneOut->Target->PixelsBounds().Bottom() - 1 };
+			pOut = { zoneLinkOut->ToTargetPixel(pIn.X()),zoneLinkOut->Target->PixelsBounds().Bottom() - 1 };
 		}
 		else
 		{
@@ -335,7 +394,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		return;
 	}
 
-	Move(e, pOut, zoneOut->Target);
+	Move(e, pOut, zoneLinkOut->Target);
 }
 
 void MouseEngine::MoveInMm(MouseEventArg& e, const geo::Point<double>& pOutInMm, const Zone* zoneOut)

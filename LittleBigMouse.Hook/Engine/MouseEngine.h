@@ -36,7 +36,7 @@ class MouseEngine
 
 	//Mouse movement taking care of direction, allows "corner crossing"
 	void OnMouseMoveCross(MouseEventArg& e);
-	bool TryPassBorder(const ZoneLink* zoneLink, const long distance);
+	bool TryPassBorder(const ZoneLink* zoneLink, const double distance);
 
 	//Final move
 	void Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut);
@@ -48,9 +48,10 @@ class MouseEngine
 	//Find first zone intersecting with mouse direction
 	Zone* FindTargetZone(const Zone* current, const geo::Segment<double>& trip, geo::Point<double>& pOutInMm, double minDistSquared) const;
 	bool CheckForStopped(const MouseEventArg& e);
+	bool TryPassBorderCross(const Zone* zone, const geo::Segment<double>& trip);
 
 	const ZoneLink* _currentResistanceLink = nullptr;
-	long _borderResistance = 0;
+	double _borderResistance = 0;
 
 public:
 	SIGNAL<void(std::string&)> OnMessage;

@@ -46,18 +46,17 @@ namespace geo
 			return (w * w) + (h * h);
 		}
 
-		Point<T> Intersect(const geo::Line<T>& l) const
+		[[nodiscard]] Point<T> Intersect(const geo::Line<T>& line) const
 		{
 			constexpr double epsilon = 0.001;
-
-			Point<T> p = Line().Intersect(l);
-			if (p.IsEmpty()) return p;
-
-			if (p.X() < min(_a.X(), _b.X()) - epsilon) return Point<double>::Empty();
-			if (p.Y() < min(_a.Y(), _b.Y()) - epsilon) return Point<double>::Empty();
-			if (p.X() > max(_a.X(), _b.X()) + epsilon) return Point<double>::Empty();
-			if (p.Y() > max(_a.Y(), _b.Y()) + epsilon) return Point<double>::Empty();
-
+			Point<T> p;
+			if (Line().IsIntersecting(line, &p))
+			{
+				if (p.X() < min(_a.X(), _b.X()) - epsilon) return Point<double>::Empty();
+				if (p.Y() < min(_a.Y(), _b.Y()) - epsilon) return Point<double>::Empty();
+				if (p.X() > max(_a.X(), _b.X()) + epsilon) return Point<double>::Empty();
+				if (p.Y() > max(_a.Y(), _b.Y()) + epsilon) return Point<double>::Empty();
+			}
 			return p;
 		}
 
@@ -70,45 +69,65 @@ namespace geo
 			return false;
 		}
 
-		bool IsIntersecting(const geo::Line<T>& l, Point<T>& p) const
+		bool IsIntersecting(const geo::Line<T>& line, geo::Point<T>& point) const
 		{
-			Point<T> p1;
-
-			if(Line().IsIntersecting(l,p1))
+			geo::Point<T> p;
+			if(Line().IsIntersecting(line,p))
 			{
-				if(OutSide(p1.X(),_a.X(),_b.X())) return false;
-				if(OutSide(p1.Y(),_a.Y(),_b.Y())) return false;
+				if(OutSide(p.X(),_a.X(),_b.X()) || OutSide(p.Y(),_a.Y(),_b.Y())) 
+				{
+					point = Point<T>::Empty();
+					return false;
+				}
 
-				p = p1;
+				point = p;
 				return true;
 			}
+			point = Point<T>::Empty();
 			return false;
 		}
 
-		std::vector<Point<T>> IntersectList(const geo::Line<T>& l) const
+		[[nodiscard]] std::vector<Point<T>> IntersectList(const geo::Line<T>& line) const
 		{
 			std::vector<Point<T>> result;
-			const Point<T> p = Intersect(l);
-			if (!p.IsEmpty())
+			if (Point<T> p; IsIntersecting(line,p))
 			{
 				result.push_back(p);
 			}
 			return result;
 		}
 
-		Point<T> Intersect(const Segment& s) const
+		[[nodiscard]] bool IsIntersecting(const Segment& s, geo::Point<T>& point) const
 		{
 			constexpr double epsilon = 0.001;
 
-			auto p = Line().Intersect(s.Line());
+			auto p = Point<T>::Empty();
+			if (s.IsIntersecting(Line(), p))
+			{
+				if (OutSide(p.X(), _a.X(), _b.X()) || OutSide(p.Y(), _a.Y(), _b.Y())) 
+				{
+					point = Point<T>::Empty();
+					return false;
+				}
+				point = p;
+				return true;
+			}
+			point = Point<T>::Empty();
+			return false;
+		}
 
-			if (p.IsEmpty()) return p;
+		[[nodiscard]] Point<T> Intersect(const Segment& s) const
+		{
+			constexpr double epsilon = 0.001;
 
-			if (p.X() < min(_a.X(), _b.X()) - epsilon) return Point<double>::Empty();
-			if (p.Y() < min(_a.Y(), _b.Y()) - epsilon) return Point<double>::Empty();
-			if (p.X() > max(_a.X(), _b.X()) + epsilon) return Point<double>::Empty();
-			if (p.Y() > max(_a.Y(), _b.Y()) + epsilon) return Point<double>::Empty();
-
+			Point<T> p;
+			if (s.IsIntersecting(Line(), p)) 
+			{
+				if (p.X() < min(_a.X(), _b.X()) - epsilon) return Point<double>::Empty();
+				if (p.Y() < min(_a.Y(), _b.Y()) - epsilon) return Point<double>::Empty();
+				if (p.X() > max(_a.X(), _b.X()) + epsilon) return Point<double>::Empty();
+				if (p.Y() > max(_a.Y(), _b.Y()) + epsilon) return Point<double>::Empty();
+			}
 			return p;
 		}
 

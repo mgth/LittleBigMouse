@@ -22,6 +22,15 @@ Zone* ZoneLink::At(const double pos) const
 	return z->Target;
 }
 
+const ZoneLink* ZoneLink::AtPhysical(const double pos) const
+{
+	auto z = this;
+	while(pos >= z->To)
+		z = z->Next;
+
+	return z;
+}
+
 const ZoneLink* ZoneLink::AtPixel(const long pos) const
 {
 	auto z = this;

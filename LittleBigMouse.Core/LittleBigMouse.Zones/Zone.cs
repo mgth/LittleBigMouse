@@ -135,8 +135,7 @@ public class Zone : IZonesSerializable
             var targetFromPixel = target!=null?fromPixelsFunc(target):0;
             var targetToPixel = target!=null?toPixelsFunc(target):0;
 
-            // TODO : border resistance mm to pixel calculated from wrong orientation 
-            var borderResistance = (int)((sourceToPixel - sourceFromPixel) * getBorderResistance(this)  / (sourceTo - sourceFrom));
+            var borderResistance = getBorderResistance(this);
 
             if (links.Count > 0 && ReferenceEquals(links.Last().Target, target))
             {
@@ -149,7 +148,7 @@ public class Zone : IZonesSerializable
 
                 links.Add(new()
                 {
-                    BorderResistance = (int)borderResistance, 
+                    BorderResistance = borderResistance, 
                     Distance = min,
                     From = from,
                     To = to,

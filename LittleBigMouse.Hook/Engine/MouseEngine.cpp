@@ -203,6 +203,12 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 		}
 #endif 
 
+		if(_currentResistanceLink)
+		{
+			LOG_TRACE("< nullptr >");
+			_currentResistanceLink = nullptr;
+		}
+
 		_oldPoint = e.Point;
 		e.Handled = false;
 		return;
@@ -274,6 +280,7 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 			return;
 		}
 	}
+
 	LOG_TRACE(" - " << pInMmOld << pInMm << " - ");
 	NoZoneMatches(e);
 }
@@ -307,6 +314,34 @@ bool MouseEngine::TryPassBorder(const ZoneLink* zoneLink, const double distance)
 }
 
 /// <summary>
+/// Deal with border resistance 
+/// (Original idea by Kevin Mills https://github.com/mgfarmer/LittleBigMouse)
+/// </summary>
+/// <param name="zoneLink"></param>
+/// <param name="distance"></param>
+/// <returns></returns>
+bool MouseEngine::TryPassBorderPixel(const ZoneLink* zoneLink, const long distance)
+{
+	if((GetAsyncKeyState(VK_CONTROL) & 0x8000) == 0x8000) return true;
+
+	if(zoneLink != _currentResistanceLink)
+	{
+		LOG_TRACE("< != >");
+
+		_currentResistanceLink = zoneLink;
+		_borderResistancePixel = zoneLink->BorderResistancePixel;
+	}
+
+	LOG_TRACE("< -= >" << distance);
+
+	_borderResistancePixel -= distance;
+
+	if (_borderResistancePixel<=0) return true;
+
+	return false;
+}
+
+/// <summary>
 /// Process mouse move using strait algorithm (pre-calculated border links)
 /// </summary>
 /// <param name="e">Mouse event</param>
@@ -328,7 +363,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		//DebugUnhook.fire();
 
 		zoneLinkOut = _oldZone->RightZones->AtPixel(pIn.Y());
-		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
 		{
 			pOut = { zoneLinkOut->Target->PixelsBounds().Left(),zoneLinkOut->ToTargetPixel(pIn.Y()) };
 		}
@@ -342,7 +377,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	else if ((dist = bounds.Left() - pIn.X()) >= 0)
 	{
 		zoneLinkOut = _oldZone->LeftZones->AtPixel(pIn.Y());
-		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
 		{
 			pOut = { zoneLinkOut->Target->PixelsBounds().Right() - 1,zoneLinkOut->ToTargetPixel(pIn.Y()) };
 		}
@@ -356,7 +391,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	else if ((dist = 1 +  pIn.Y() - bounds.Bottom()) >= 0)
 	{
 		zoneLinkOut = _oldZone->BottomZones->AtPixel(pIn.X());
-		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
 		{
 			pOut = { zoneLinkOut->ToTargetPixel(pIn.X()), zoneLinkOut->Target->PixelsBounds().Top() };
 		}
@@ -370,7 +405,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	else if ((dist = _oldZone->PixelsBounds().Top() - pIn.Y()) >= 0)
 	{
 		zoneLinkOut = _oldZone->TopZones->AtPixel(pIn.X());
-		if (zoneLinkOut->Target && TryPassBorder(zoneLinkOut,dist))
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
 		{
 			pOut = { zoneLinkOut->ToTargetPixel(pIn.X()),zoneLinkOut->Target->PixelsBounds().Bottom() - 1 };
 		}

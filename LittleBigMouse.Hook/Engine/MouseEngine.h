@@ -37,6 +37,7 @@ class MouseEngine
 	//Mouse movement taking care of direction, allows "corner crossing"
 	void OnMouseMoveCross(MouseEventArg& e);
 	bool TryPassBorder(const ZoneLink* zoneLink, const double distance);
+	bool TryPassBorderPixel(const ZoneLink* zoneLink, long distance);
 
 	//Final move
 	void Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut);
@@ -52,6 +53,7 @@ class MouseEngine
 
 	const ZoneLink* _currentResistanceLink = nullptr;
 	double _borderResistance = 0;
+	long _borderResistancePixel = 0;
 
 public:
 	SIGNAL<void(std::string&)> OnMessage;

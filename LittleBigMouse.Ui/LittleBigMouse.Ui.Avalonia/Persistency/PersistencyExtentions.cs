@@ -184,13 +184,13 @@ public static class PersistencyExtensions
 
         @this.DepthRatio.X = key.GetOrSet("PhysicalRatioX", () => @this.DepthRatio.X);
         @this.DepthRatio.Y = key.GetOrSet("PhysicalRatioY", () => @this.DepthRatio.Y);
+        @this.DepthRatio.Saved = true;
 
         @this.BorderResistance.Left = key.GetOrSet(@"BorderResistance\Left", ()=> @this.BorderResistance.Left);
         @this.BorderResistance.Top =  key.GetOrSet(@"BorderResistance\Top", ()=> @this.BorderResistance.Top);
         @this.BorderResistance.Right = key.GetOrSet(@"BorderResistance\Right", ()=> @this.BorderResistance.Right);
         @this.BorderResistance.Top =  key.GetOrSet(@"BorderResistance\Bottom", ()=> @this.BorderResistance.Bottom);
-
-        @this.DepthRatio.Saved = true;
+        @this.BorderResistance.Saved = true;
 
         @this.Saved = true;
 

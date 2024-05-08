@@ -123,7 +123,7 @@ public class PhysicalMonitor : ReactiveModel
             e => e.DepthProjection, 
             e => e.DepthRatio, 
             e => e.BorderResistance
-            );
+        );
     }
 
     void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)

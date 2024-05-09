@@ -46,7 +46,12 @@ void Hooker::DoHook()
 
 	if(_hookMouse)
 	{
+		DoSetPriority(_priority);
 		HookMouse();
+	}
+	else
+	{
+		DoSetPriority(_priorityUnhooked);
 	}
 
 	HookFocusEvent();
@@ -117,7 +122,7 @@ void Hooker::Loop()
 
 		DoUnhook();
 
-		DoSetPriority(Below);
+		DoSetPriority(_priorityUnhooked);
 	}
 
 	LOG_TRACE("<Hook:Stopped>");

@@ -10,6 +10,7 @@ namespace LittleBigMouse.Zoning
         public bool LoopX {get;set;}
         public bool LoopY {get;set;}
         public string Priority {get; set;}
+        public string PriorityUnhooked {get; set;}
 
         public string Algorithm { get; set; } = "strait";
         public double MaxTravelDistance { get; set; } = 200.0;
@@ -44,6 +45,7 @@ namespace LittleBigMouse.Zoning
                 e => e.LoopX,
                 e => e.LoopY,
                 e => e.Priority,
+                e => e.PriorityUnhooked,
                 e => e.Algorithm,
                 e => e.MaxTravelDistance,
                 e => e.MainZones);

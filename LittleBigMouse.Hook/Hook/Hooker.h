@@ -16,6 +16,7 @@ class Hooker final
 	static std::atomic<Hooker*> _instance;
 
 	Priority _priority = Normal;
+	Priority _priorityUnhooked = Below;
 
 	DWORD _currentThreadId = 0;
 
@@ -74,6 +75,7 @@ public:
 	bool Hooked() const;
 
 	void SetPriority(const Priority priority) { _priority = priority; }
+	void SetPriorityUnhooked(const Priority priority) { _priorityUnhooked = priority; }
 
 	void Hook();
 

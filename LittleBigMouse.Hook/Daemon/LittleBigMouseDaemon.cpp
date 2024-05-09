@@ -162,7 +162,14 @@ void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
 			_hook->Unhook();
 
 		if(_engine)
+		{
 			_engine->Layout.Load(zonesLayout);
+			if(_hook)
+			{
+				_hook->SetPriority(_engine->Layout.Priority);
+				_hook->SetPriorityUnhooked(_engine->Layout.PriorityUnhooked);
+			}
+		}
 	}
 }
 

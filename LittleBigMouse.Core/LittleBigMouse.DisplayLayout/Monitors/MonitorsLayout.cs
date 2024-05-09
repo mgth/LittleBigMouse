@@ -643,6 +643,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
 
         zones.Algorithm = Options.Algorithm;
         zones.Priority = Options.Priority;
+        zones.PriorityUnhooked = Options.PriorityUnhooked;
 
         zones.LoopX = Options.LoopX;
         zones.LoopY = Options.LoopY;

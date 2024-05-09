@@ -26,12 +26,14 @@ public interface ILayoutOptions
         public bool AdjustSpeed { get; set; } = false;
         public string Algorithm { get; set; } = "Strait";
         public string Priority { get; set; } = "Normal";
+        public string PriorityUnhooked { get; set; } = "Below";
         public bool IsUnaryRatio { get; set; } = false;
         public bool Enabled { get; set; } = true;
         public bool AutoUpdate { get; set; } = true;
         public bool LoadAtStartup { get; set; } = false;
         public bool HomeCinema { get; set; } = false;
         public bool Pinned { get; set; } = false;
+        public bool StartMinimized { get; set; } = false;
 
         public bool AdjustSpeedAllowed { get; } = false;
         public ObservableCollection<string> ExcludedList { get; } = ["/game/","/another/game/"];
@@ -92,6 +94,10 @@ public interface ILayoutOptions
     /// </summary>
     string Priority { get; set; }
 
+    /// <summary>
+    /// Daemon process priority when not hooked
+    /// </summary>
+    string PriorityUnhooked { get; set; }
 
     /// <summary>
     /// True if all sources have a pixel to dip ratio of 1
@@ -122,6 +128,11 @@ public interface ILayoutOptions
     /// Keep ui window on top
     /// </summary>
     bool Pinned { get; set; }
+
+    /// <summary>
+    /// Start minimized in tray
+    /// </summary>
+    bool StartMinimized { get; set; }
 
     public bool LoopAllowed { get; }
     public ObservableCollection<string> ExcludedList { get; }

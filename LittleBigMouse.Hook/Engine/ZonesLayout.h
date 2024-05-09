@@ -27,7 +27,8 @@ public:
 	bool AdjustSpeed = false;
 
 	Algorithm Algorithm = Strait;
-	Priority Priority = Above;
+	Priority PriorityUnhooked = Above;
+	Priority Priority = Normal;
 
 	bool LoopX = false;
 	bool LoopY = false;

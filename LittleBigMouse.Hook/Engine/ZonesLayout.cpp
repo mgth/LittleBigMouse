@@ -65,6 +65,24 @@ void ZonesLayout::Init()
 
 }
 
+Priority GetPriority(const std::string& priority)
+{
+	if(priority=="Idle")
+		return Idle;
+	if(priority=="Below")
+		return Below;
+	if(priority=="Normal")
+		return Normal;
+	if(priority=="Above")
+		return Above;
+	if(priority=="High")
+		return High;
+	if(priority=="Realtime")
+		return Realtime;
+	
+	return Normal;
+}
+
 void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 {
 	Unload();
@@ -81,22 +99,8 @@ void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 	else
 		Algorithm = Strait;
 
-	const auto priority =  XmlHelper::GetString(layoutElement,"Priority");
-
-	if(priority=="Idle")
-		Priority = Idle;
-	else if(priority=="Below")
-		Priority = Below;
-	else if(priority=="Normal")
-		Priority = Normal;
-	else if(priority=="Above")
-		Priority = Above;
-	else if(priority=="High")
-		Priority = High;
-	else if(priority=="Realtime")
-		Priority = Realtime;
-	else
-		Priority = Normal;
+	Priority = GetPriority(XmlHelper::GetString(layoutElement,"Priority"));
+	PriorityUnhooked =  GetPriority(XmlHelper::GetString(layoutElement,"PriorityUnhooked"));
 
 	if(const auto zonesElement = layoutElement->FirstChildElement("MainZones"))
 	{

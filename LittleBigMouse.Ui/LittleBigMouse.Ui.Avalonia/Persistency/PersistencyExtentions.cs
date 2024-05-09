@@ -43,10 +43,12 @@ public static class PersistencyExtensions
         @this.AdjustPointer = key.GetOrSet("AdjustPointer", () => false);
         @this.AdjustSpeed = key.GetOrSet("AdjustSpeed", () => false);
         @this.Priority = key.GetOrSet("Priority", () => "Normal");
+        @this.PriorityUnhooked = key.GetOrSet("PriorityUnhooked", () => "Below");
+
         @this.HomeCinema = key.GetOrSet("HomeCinema", () => false);
         @this.Pinned = key.GetOrSet("Pinned", () => false);
         @this.AutoUpdate = key.GetOrSet("AutoUpdate", () => false);
-
+        @this.StartMinimized = key.GetOrSet("StartMinimized", () => false);
 
         @this.ExcludedList.Clear();
 
@@ -69,6 +71,7 @@ public static class PersistencyExtensions
     {
         using (var key = @this.OpenRegKey(true))
         {
+
             @this.Options.LoadAtStartup = @this.IsScheduled();
             if (key != null)
             {
@@ -83,7 +86,6 @@ public static class PersistencyExtensions
         }
         @this.Saved = true;
         @this.UpdatePhysicalMonitors();
-
     }
 
     public static bool SaveEnabled(this IMonitorsLayout @this)
@@ -101,18 +103,23 @@ public static class PersistencyExtensions
 
     public static void Save(this ILayoutOptions @this, RegistryKey k)
     {
+        k.SetKey("AllowOverlaps", @this.AllowOverlaps);
+        k.SetKey("AllowDiscontinuity", @this.AllowDiscontinuity);
+
+        k.SetKey("Algorithm", @this.Algorithm);
+        k.SetKey("MaxTravelDistance", @this.MaxTravelDistance);
+        k.SetKey("LoopX", @this.LoopX);
+        k.SetKey("LoopY", @this.LoopY);
+
         k.SetKey("Enabled",  @this.Enabled);
         k.SetKey("AdjustPointer",  @this.AdjustPointer);
         k.SetKey("AdjustSpeed", @this.AdjustSpeed );
-        k.SetKey("Algorithm", @this.Algorithm);
-        k.SetKey("AllowOverlaps", @this.AllowOverlaps);
-        k.SetKey("AllowDiscontinuity", @this.AllowDiscontinuity);
+        k.SetKey("Priority", @this.Priority);
+
         k.SetKey("HomeCinema", @this.HomeCinema);
         k.SetKey("Pinned", @this.Pinned);
-        k.SetKey("LoopX", @this.LoopX);
-        k.SetKey("LoopY", @this.LoopY);
         k.SetKey("AutoUpdate", @this.AutoUpdate);
-        k.SetKey("MaxTravelDistance", @this.MaxTravelDistance);
+        k.SetKey("StartMinimized", @this.StartMinimized);
 
         var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");

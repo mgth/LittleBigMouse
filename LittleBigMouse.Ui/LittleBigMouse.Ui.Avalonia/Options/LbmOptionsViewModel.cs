@@ -56,6 +56,9 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
             .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedPriority));
 
+        _selectedPriorityUnhooked = this.WhenAnyValue(e => e.Model.PriorityUnhooked)
+            .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedPriorityUnhooked));
+
         this.WhenAnyValue(e => e.SelectedSeenProcess)
             .Subscribe(p => Pattern = p?.Caption??"")
             .DisposeWith(this);
@@ -138,6 +141,16 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         }
     }
     readonly ObservableAsPropertyHelper<ListItem?> _selectedPriority;
+    public ListItem? SelectedPriorityUnhooked
+    {
+        get => _selectedPriorityUnhooked.Value;
+        set
+        {
+            if (Model == null) return;
+            Model.PriorityUnhooked = value?.Id ?? "";
+        }
+    }
+    readonly ObservableAsPropertyHelper<ListItem?> _selectedPriorityUnhooked;
 
     public ReadOnlyObservableCollection<SeenProcessViewModel> SeenProcesses => _seenProcesses;
     readonly ReadOnlyObservableCollection<SeenProcessViewModel> _seenProcesses;

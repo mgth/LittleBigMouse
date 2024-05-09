@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reactive;
-using System.Runtime.ExceptionServices;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -19,7 +18,6 @@ using HLab.Mvvm.Avalonia;
 using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
 using HLab.UserNotification.Avalonia;
-using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.Plugin.Vcp.Avalonia;

@@ -39,12 +39,28 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     bool _loadAtStartup;
 
     [DataMember]
+    public bool StartMinimized
+    {
+        get => _startMinimized;
+        set =>  SetUnsavedValue(ref _startMinimized, value);
+    }
+    bool _startMinimized;
+
+    [DataMember]
     public string Priority
     {
         get => _priority;
         set => SetUnsavedValue(ref _priority, value);
     }
     string _priority = "Normal";
+
+    [DataMember]
+    public string PriorityUnhooked
+    {
+        get => _priorityUnhooked;
+        set => SetUnsavedValue(ref _priorityUnhooked, value);
+    }
+    string _priorityUnhooked = "Below";
 
     [DataMember]
     public bool LoopAllowed => true;

@@ -65,8 +65,15 @@
 									Content="Load at startup"
 									IsChecked="{Binding Path=Model.LoadAtStartup, FallbackValue=false, Mode=TwoWay}"
 									ToolTip.Tip="Enable execution at session startup."/>
+								
+								<CheckBox
+									Content="Start minimized"
+									IsChecked="{Binding Path=Model.StartMinimized, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Minimize to tray at startup."/>
 
 								<Label>Daemon Priority</Label>
+								<StackPanel Orientation="Horizontal">
+								<Label VerticalAlignment="Center">Hooked</Label>
 								<ComboBox
 									ItemsSource="{Binding PriorityList}"
 									SelectedItem="{Binding SelectedPriority}">
@@ -85,6 +92,26 @@
 									</ComboBox.ItemTemplate>
 
 								</ComboBox>
+                                <Label VerticalAlignment="Center">Unhooked</Label>
+								<ComboBox
+									ItemsSource="{Binding PriorityList}"
+									SelectedItem="{Binding SelectedPriorityUnhooked}">
+
+									<ComboBox.ItemTemplate>
+										<DataTemplate>
+											<Border Background="Transparent">
+												<Label Classes="RadioButtonListBox"
+													   x:DataType="options:ListItem"
+													   Content="{Binding Caption}"
+													   Background="Transparent"
+													   VerticalAlignment="Center"
+													   ToolTip.Tip ="{Binding Description}"/>
+											</Border>
+										</DataTemplate>
+									</ComboBox.ItemTemplate>
+
+								</ComboBox>
+								</StackPanel>
 							</StackPanel>
 						</Border>
 						<Label

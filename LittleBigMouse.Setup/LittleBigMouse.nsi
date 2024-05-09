@@ -13,7 +13,7 @@
   !define lbm_file "LittleBigMouse.Ui.Avalonia.exe"
   
   !define main "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia"
-  !define daemon "..\LittleBigMouse.Daemon"
+  !define daemon "..\LittleBigMouse.Hook"
   !define main_out_dir "${main}\bin\x64\Release\net8.0"
   !define daemon_out_dir "${daemon}\bin\x64\Release"
   

@@ -161,8 +161,13 @@ public class MainService : ReactiveModel, IMainService
 
         _notify.Show();
 
-        if(MonitorsLayout.Options.AutoUpdate)
+        // Check for update
+        if (MonitorsLayout.Options.AutoUpdate)
             await CheckUpdateBlindAsync();
+
+        // Show control
+        if (!MonitorsLayout.Options.StartMinimized)
+            await ShowControlAsync();
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action)

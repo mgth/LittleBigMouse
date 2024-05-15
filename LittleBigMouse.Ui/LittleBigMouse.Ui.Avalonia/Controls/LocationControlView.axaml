@@ -72,7 +72,7 @@
 
 				<Button Classes="Command"
 					Click="Button_Click">
-					<ToolTip.Tip>Copy config to clipboard</ToolTip.Tip>
+					<ToolTip.Tip>Export configuration for debugging purpose</ToolTip.Tip>
 					<icons:IconView Height="30" Path="Icon/CopyConfig"/>
 				</Button>
 

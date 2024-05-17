@@ -31,7 +31,7 @@ class MouseEngine
 	//reset clip cursor from saved
 	void ResetClip();
 
-	//Mouse movement move least cpu usage strait between monitors
+	//Mouse movement move less cpu usage strait between monitors
 	void OnMouseMoveStraight(MouseEventArg& e);
 
 	//Mouse movement taking care of direction, allows "corner crossing"

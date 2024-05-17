@@ -3,7 +3,7 @@
   <PropertyGroup>
 	<TargetFrameworks>net7.0;net8.0</TargetFrameworks>
     <Platforms>x64;x86;AnyCpu</Platforms>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <RootNamespace>HLab.Sys.Windows.Monitors</RootNamespace>
     <Configurations>Debug;Release</Configurations>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

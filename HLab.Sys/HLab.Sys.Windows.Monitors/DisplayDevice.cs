@@ -56,7 +56,7 @@ public class DisplayDevice
             .OrderBy(e => e.PhysicalId);
 
     [JsonIgnore]
-    public DisplayDevice Parent { get; set; }
+    public DisplayDevice? Parent { get; set; }
 
     public IEnumerable<DisplayDevice> Children  => _children; 
 
@@ -64,25 +64,25 @@ public class DisplayDevice
     /// Device name as returned by EnumDisplayDevices :
     /// "ROOT", "\\\\.\\DISPLAY1", "\\\\.\\DISPLAY1\monitor0" 
     /// </summary>
-    public string DeviceName { get; init; }
+    public string DeviceName { get; init; } = "";
 
     /// <summary>
     /// Device name in human readable format :
     /// "NVIDIA GeForce RTX 3080 Ti"
     /// </summary>
-    public string DeviceString { get; init; }
+    public string DeviceString { get; init; } = "";
 
     /// <summary>
     /// Device id as returned by EnumDisplayDevices :
     /// "PCI\\VEN_10DE&DEV_2206&SUBSYS_3A3C1458&REV_A1"
     /// </summary>
-    public string Id { get; init; }
+    public string Id { get; init; } = "";
 
     /// <summary>
     /// Path to the device registry key :
     /// "\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Video\\{AC0F00F9-3A6E-11ED-84B1-EBFE3BE9690A}\\0000"
     /// </summary>
-    public string DeviceKey { get; init; }
+    public string DeviceKey { get; init; } = "";
 
     public SourceList<DisplayMode> DisplayModes { get; } = new ();
 

@@ -1,5 +1,6 @@
 ﻿using HLab.Sys.Windows.API;
 using System;
+using System.Diagnostics;
 using System.Linq;
 using static HLab.Sys.Windows.API.WinGdi;
 
@@ -33,6 +34,7 @@ internal static class DeviceFactory
         var connection = new MonitorDeviceConnection
         {
             Parent = parent as PhysicalAdapter,
+            Monitor = monitor,
 
             //DisplayDevice
             Id = device.DeviceID,
@@ -43,8 +45,6 @@ internal static class DeviceFactory
             State = MonitorDeviceHelper.BuildDeviceState(device.StateFlags),
             Capabilities = MonitorDeviceHelper.BuildDeviceCaps(device.DeviceName),
             CurrentMode = MonitorDeviceHelper.GetCurrentMode(device.DeviceName),
-
-            Monitor = monitor,
         };
 
         monitor.Connections.Add(connection);
@@ -94,38 +94,33 @@ internal static class DeviceFactory
         return result;
     }
 
-    static DisplayDevice BuildDisplayDevice(DisplayDevice parent, WinGdi.DisplayDevice device)
+    static DisplayDevice BuildDisplayDevice(DisplayDevice? parent, WinGdi.DisplayDevice device)
     {
-        switch (device.DeviceID.Split('\\')[0])
+        if(device.DeviceID == "ROOT")
         {
-            case "ROOT":
-                return new DisplayDevice
-                {
-                    Parent = parent,
-                    //DisplayDevice
-                    Id = device.DeviceID,
-                    DeviceName = device.DeviceName,
-                    DeviceString = device.DeviceString,
-                    DeviceKey = device.DeviceKey,
+            return new DisplayDevice
+            {
+                Parent = parent,
+                //DisplayDevice
+                Id = device.DeviceID,
+                DeviceName = device.DeviceName,
+                DeviceString = device.DeviceString,
+                DeviceKey = device.DeviceKey,
 
-                    State = MonitorDeviceHelper.BuildDeviceState(device.StateFlags),
-                    Capabilities = MonitorDeviceHelper.BuildDeviceCaps(device.DeviceName),
+                State = MonitorDeviceHelper.BuildDeviceState(device.StateFlags),
+                Capabilities = MonitorDeviceHelper.BuildDeviceCaps(device.DeviceName),
 
-                    CurrentMode = MonitorDeviceHelper.GetCurrentMode(device.DeviceName),
-                };
-
-            case "MONITOR":
-
-                return BuildMonitorDevice(parent, device);
-
-            case "RdpIdd_IndirectDisplay":
-            case string s when s.StartsWith("VID_DATRONICSOFT_PID_SPACEDESK_VIRTUAL_DISPLAY_"):
-            case "PCI":
-            default:
-                if(parent.Id=="ROOT")
-                    return BuildPhysicalAdapter(parent, device);
-                break;
+                CurrentMode = MonitorDeviceHelper.GetCurrentMode(device.DeviceName),
+            };
         }
+
+        Debug.Assert(parent != null);
+
+        if (parent.Id=="ROOT")
+            return BuildPhysicalAdapter(parent, device);
+
+        //if(device.DeviceID.Split('\\')[0] == "MONITOR")
+            return BuildMonitorDevice(parent, device);
 
         throw new ArgumentException($"Unknown device type {device.DeviceName}");
 

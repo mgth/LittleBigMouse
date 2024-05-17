@@ -82,9 +82,12 @@ public static class LayoutFactory
 
     public static DisplaySource UpdateFrom(this DisplaySource source, MonitorDevice monitor)
     {
+        if(monitor.Connections.Count == 0) return source;
         var device = monitor.Connections[0];
 
-        source.DisplayName = device.Parent?.DeviceName;
+        if(device.Parent == null) return source;
+
+        source.DisplayName = device.Parent.DeviceName;
         source.DeviceName = device.DeviceName;
 
         source.SourceName = $"{monitor.Edid?.VideoInterface??"Unknown"}:{device.DeviceName}";
@@ -97,7 +100,7 @@ public static class LayoutFactory
         source.DpiAwareAngularDpi.Set(device.Parent.AngularDpi);
         source.RawDpi.Set(device.Parent.RawDpi);
 
-        if (device.Parent?.CurrentMode is { } mode)
+        if (device.Parent.CurrentMode is { } mode)
         {
             source.DisplayFrequency = mode.DisplayFrequency;
 

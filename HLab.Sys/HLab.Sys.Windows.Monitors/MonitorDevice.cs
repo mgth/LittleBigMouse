@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.Serialization;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,12 +11,12 @@ namespace HLab.Sys.Windows.Monitors;
 
 public class MonitorDevice : IEquatable<MonitorDevice>
 {
-    [DataMember] public string Id { get; init; }
-    [DataMember] public string PnpCode { get; init; }
-    [DataMember] public string PhysicalId { get; set; }
-    [DataMember] public string SourceId { get; set; }
+    [DataMember] public string Id { get; init; } = "";
+    [DataMember] public string PnpCode { get; init; } = "";
+    [DataMember] public string PhysicalId { get; set; } = "";
+    [DataMember] public string SourceId { get; set; } = "";
     [DataMember] public IEdid Edid { get; init; }
-    [DataMember] public string MonitorNumber { get; set; }
+    [DataMember] public string MonitorNumber { get; set; } = "";
 
     public List<MonitorDeviceConnection> Connections = new ();
 
@@ -34,7 +35,10 @@ public class MonitorDeviceConnection : DisplayDevice
 {
     public new PhysicalAdapter Parent
     {
-        get => base.Parent as PhysicalAdapter;
+        get { 
+            if (base.Parent is PhysicalAdapter adapter) return adapter;
+            throw new InvalidOperationException("Parent is not a PhysicalAdapter");
+        }
         set => base.Parent = value;
     }
 
@@ -104,7 +108,7 @@ public class MonitorDeviceConnection : DisplayDevice
         keyString = keyString.Replace(@"\MACHINE\",@"\HKEY_LOCAL_MACHINE\");
         keyString = keyString.Replace(@"\USER\",@"\HKEY_CURRENT_USER\");
 
-        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Applets\Regedit", true)) {
+        using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Applets\Regedit", true)) {
             
             if(key == null) return;
             var value = key.GetValue("LastKey").ToString();
@@ -121,64 +125,67 @@ public class MonitorDeviceConnection : DisplayDevice
     }
 
 
-    public void DisplayValues(Action<string, string, Action, bool> addValue) {
+    public void DisplayValues(Action<string, string, Action?, bool> addValue) {
         //addValue("Registry", Edid.HKeyName, () => { OpenRegKey(Edid.HKeyName); }, false);
         //addValue("Microsoft Id", PhysicalId, null, false);
 
-        // EnumDisplaySettings
-        addValue("", "EnumDisplaySettings", null, true);
-        addValue("DisplayOrientation", Parent?.CurrentMode?.DisplayOrientation.ToString(), null, false);
-        addValue("Position", Parent?.CurrentMode?.Position.ToString(), null, false);
-        addValue("Pels", Parent?.CurrentMode?.Pels.ToString(), null, false);
-        addValue("BitsPerPixel", Parent?.CurrentMode?.BitsPerPixel.ToString(), null, false);
-        addValue("DisplayFrequency", Parent?.CurrentMode?.DisplayFrequency.ToString(), null, false);
-        addValue("DisplayFlags", Parent?.CurrentMode?.DisplayFlags.ToString(), null, false);
-        addValue("DisplayFixedOutput", Parent?.CurrentMode?.DisplayFixedOutput.ToString(), null, false);
+        if(Parent != null)
+        {
+            // EnumDisplaySettings
+            addValue("", "EnumDisplaySettings", null, true);
+            addValue("DisplayOrientation", Parent.CurrentMode?.DisplayOrientation.ToString() ?? "", null, false);
+            addValue("Position", Parent.CurrentMode?.Position.ToString() ?? "", null, false);
+            addValue("Pels", Parent.CurrentMode?.Pels.ToString() ?? "", null, false);
+            addValue("BitsPerPixel", Parent.CurrentMode?.BitsPerPixel.ToString() ?? "", null, false);
+            addValue("DisplayFrequency", Parent.CurrentMode?.DisplayFrequency.ToString() ?? "", null, false);
+            addValue("DisplayFlags", Parent.CurrentMode?.DisplayFlags.ToString() ?? "", null, false);
+            addValue("DisplayFixedOutput", Parent.CurrentMode?.DisplayFixedOutput.ToString() ?? "", null, false);
 
-        // GetDeviceCaps
-        addValue("", "GetDeviceCaps", null, true);
-        addValue("Size", Parent.Capabilities.Size.ToString(), null, false);
-        addValue("Res", Parent.Capabilities.Resolution.ToString(), null, false);
-        addValue("LogPixels", Parent.Capabilities.LogPixels.ToString(), null, false);
-        addValue("BitsPixel", Parent.Capabilities.BitsPixel.ToString(), null, false);
-        //AddValue("Color Planes", Monitor.Adapter.DeviceCaps.Planes.ToString());
-        addValue("Aspect", Parent.Capabilities.Aspect.ToString(), null, false);
-        //AddValue("BltAlignment", Monitor.Adapter.DeviceCaps.BltAlignment.ToString());
+            // GetDeviceCaps
+            addValue("", "GetDeviceCaps", null, true);
+            addValue("Size", Parent.Capabilities.Size.ToString(), null, false);
+            addValue("Res", Parent.Capabilities.Resolution.ToString(), null, false);
+            addValue("LogPixels", Parent.Capabilities.LogPixels.ToString(), null, false);
+            addValue("BitsPixel", Parent.Capabilities.BitsPixel.ToString(), null, false);
+            //AddValue("Color Planes", Monitor.Adapter.DeviceCaps.Planes.ToString());
+            addValue("Aspect", Parent.Capabilities.Aspect.ToString(), null, false);
+            //AddValue("BltAlignment", Monitor.Adapter.DeviceCaps.BltAlignment.ToString());
 
-        //GetDpiForMonitor
-        addValue("", "GetDpiForMonitor", null, true);
-        addValue("EffectiveDpi", Parent.EffectiveDpi.ToString(), null, false);
-        addValue("AngularDpi", Parent.AngularDpi.ToString(), null, false);
-        addValue("RawDpi", Parent.RawDpi.ToString(), null, false);
+            //GetDpiForMonitor
+            addValue("", "GetDpiForMonitor", null, true);
+            addValue("EffectiveDpi", Parent.EffectiveDpi.ToString(), null, false);
+            addValue("AngularDpi", Parent.AngularDpi.ToString(), null, false);
+            addValue("RawDpi", Parent.RawDpi.ToString(), null, false);
 
-        // GetMonitorInfo
-        addValue("", "GetMonitorInfo", null, true);
-        addValue("Primary", Parent.Primary.ToString(), null, false);
-        addValue("MonitorArea", Parent.MonitorArea.ToString(), null, false);
-        addValue("WorkArea", Parent.WorkArea.ToString(), null, false);
+            // GetMonitorInfo
+            addValue("", "GetMonitorInfo", null, true);
+            addValue("Primary", Parent.Primary.ToString(), null, false);
+            addValue("MonitorArea", Parent.MonitorArea.ToString(), null, false);
+            addValue("WorkArea", Parent.WorkArea.ToString(), null, false);
 
 
-        //// EDID
-        //addValue("", "EDID", null, true);
-        //addValue("ManufacturerCode", Edid?.ManufacturerCode, null, false);
-        //addValue("ProductCode", Edid?.ProductCode, null, false);
-        //addValue("Serial", Edid?.Serial, null, false);
-        //addValue("Model", Edid?.Model, null, false);
-        //addValue("SerialNo", Edid?.SerialNumber, null, false);
-        //addValue("SizeInMm", Edid?.PhysicalSize.ToString(), null, false);
-        //addValue("VideoInterface", Edid?.VideoInterface.ToString(), null, false);
+            //// EDID
+            //addValue("", "EDID", null, true);
+            //addValue("ManufacturerCode", Edid?.ManufacturerCode, null, false);
+            //addValue("ProductCode", Edid?.ProductCode, null, false);
+            //addValue("Serial", Edid?.Serial, null, false);
+            //addValue("Model", Edid?.Model, null, false);
+            //addValue("SerialNo", Edid?.SerialNumber, null, false);
+            //addValue("SizeInMm", Edid?.PhysicalSize.ToString(), null, false);
+            //addValue("VideoInterface", Edid?.VideoInterface.ToString(), null, false);
 
-        // GetScaleFactorForMonitor
-        addValue("", "GetScaleFactorForMonitor", null, true);
-        addValue("ScaleFactor", Parent.ScaleFactor.ToString(), null, false);
+            // GetScaleFactorForMonitor
+            addValue("", "GetScaleFactorForMonitor", null, true);
+            addValue("ScaleFactor", Parent.ScaleFactor.ToString(CultureInfo.CurrentCulture) ?? "", null, false);
 
-        // EnumDisplayDevices
-        addValue("", "EnumDisplayDevices", null, true);
-        addValue("DeviceId", Parent?.Id, null, false);
-        addValue("DeviceKey", Parent?.DeviceKey, null, false);
-        addValue("DeviceString", Parent?.DeviceString, null, false);
-        addValue("DeviceName", Parent?.DeviceName, null, false);
-        addValue("StateFlags", Parent?.State.ToString(), null, false);
+            // EnumDisplayDevices
+            addValue("", "EnumDisplayDevices", null, true);
+            addValue("DeviceId", Parent.Id, null, false);
+            addValue("DeviceKey", Parent.DeviceKey, null, false);
+            addValue("DeviceString", Parent.DeviceString, null, false);
+            addValue("DeviceName", Parent.DeviceName, null, false);
+            addValue("StateFlags", Parent.State.ToString(), null, false);
+        }
 
         addValue("", "EnumDisplayDevices", null, true);
         addValue("DeviceId", Id, null, false);

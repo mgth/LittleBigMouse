@@ -2,7 +2,6 @@
 using Avalonia;
 using Avalonia.VisualTree;
 using LittleBigMouse.DisplayLayout.Monitors;
-using LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
 namespace LittleBigMouse.Plugins.Avalonia;
 

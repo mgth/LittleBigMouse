@@ -1,5 +1,6 @@
 ﻿using ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
@@ -34,9 +35,17 @@ public class FrameLocation : ReactiveObject, IFrameLocation
     public double Height => _height.Value;
     readonly ObservableAsPropertyHelper<double> _height;
 
-    public double X => _x.Value;
+    public double X
+    {
+        get => _x.Value;
+        set => Monitor.DepthProjection.X = value;
+    }
     readonly ObservableAsPropertyHelper<double> _x;
 
-    public double Y => _y.Value;
+    public double Y
+    {
+        get => _y.Value;
+        set => Monitor.DepthProjection.Y = value;
+    }
     readonly ObservableAsPropertyHelper<double> _y;
 }

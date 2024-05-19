@@ -4,8 +4,8 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors;
+using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
-using LittleBigMouse.Ui.Avalonia.MonitorFrame;
 using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;

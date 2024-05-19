@@ -1,6 +1,5 @@
 ﻿using HLab.Mvvm.Annotations;
 using LittleBigMouse.DisplayLayout.Monitors;
-using LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
 namespace LittleBigMouse.Plugins;
 

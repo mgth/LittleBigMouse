@@ -35,8 +35,6 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin.Anchors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
-using LittleBigMouse.Ui.Avalonia.MonitorFrame;
-
 using static HLab.Sys.Windows.API.WinUser;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
@@ -135,7 +133,7 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
 
         _frameLocation = this.GetFrameLocation();
 
-        _frameMover = new FrameMover(
+        _frameMover = new (
             model, 
             layout, 
             frame, 
@@ -161,7 +159,8 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
         _frameMover?.EndMove(e.GetPosition(MainPanel));
         _frameMover = null;
         // restore frame location to normal behavior
-        this.SetFrameLocation(_frameLocation);
+        if(_frameLocation != null)
+            _ = this.SetFrameLocation(_frameLocation);
 
         e.Pointer.Capture(null);
     }

@@ -122,6 +122,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
                         Running = false;
                     });
                     break;
+                case LittleBigMouseEvent.SettingsChanged:
                 case LittleBigMouseEvent.DisplayChanged:
                 case LittleBigMouseEvent.DesktopChanged:
                 case LittleBigMouseEvent.FocusChanged:

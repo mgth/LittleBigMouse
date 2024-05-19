@@ -34,7 +34,6 @@ class Hooker final
 	void HookMouse();
 	void UnhookMouse();
 
-
 	bool HookDisplayChange();
 	void UnhookDisplayChange();
 
@@ -62,6 +61,7 @@ public:
 	SIGNAL<void(MouseEventArg&)> OnMouseMove;
 	SIGNAL<void(const std::string&)> OnFocusChanged;
 	SIGNAL<void()> OnDisplayChanged;
+	SIGNAL<void()> OnSettingChanged;
 	SIGNAL<void()> OnDesktopChanged;
 
 	SIGNAL<void()> OnHooked;
@@ -85,8 +85,6 @@ public:
 
 private:
     static LRESULT __stdcall MouseCallback(const int nCode, const WPARAM wParam, const LPARAM lParam);
-	static LRESULT __stdcall DisplayChangedCallback(const int nCode, const WPARAM wParam, const LPARAM lParam);
-	static LRESULT __stdcall IniChangedCallback(const int nCode, const WPARAM wParam, const LPARAM lParam);
 	static LRESULT __stdcall WindowCallback(const int nCode, const WPARAM wParam, const LPARAM lParam);
 
 	static LRESULT CALLBACK DisplayChangeHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);

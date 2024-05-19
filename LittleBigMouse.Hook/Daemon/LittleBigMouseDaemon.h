@@ -36,6 +36,7 @@ class LittleBigMouseDaemon
 	void SendState(RemoteClient* client) const;
 
 	void DisplayChanged() const;
+	void SettingChanged() const;
 	void DesktopChanged() const;
 	[[nodiscard]] bool Excluded(const std::string& path) const;
 

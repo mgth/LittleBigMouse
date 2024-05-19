@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Platforms>AnyCPU;x64;x86</Platforms>
-	<Version>5.2.1.0</Version>
+	<Version>5.2.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

@@ -29,6 +29,7 @@ public enum LittleBigMouseEvent
     Stopped,
     Paused,
     Dead,
+    SettingsChanged,
     DisplayChanged,
     DesktopChanged,
     FocusChanged,

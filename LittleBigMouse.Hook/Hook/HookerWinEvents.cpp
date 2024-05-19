@@ -66,7 +66,7 @@ void CALLBACK Hooker::WindowChangeHook(
 {
 	static HWND lastHwnd = nullptr;
 
-	auto hook = Instance();
+	const auto hook = Instance();
 	if (!hook) return;
 
 	if (hWnd != lastHwnd) {
@@ -103,9 +103,7 @@ void CALLBACK Hooker::DesktopChangeHook(
     DWORD event, HWND hWnd, LONG idObject, 
     LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
 {
-    LOG_TRACE("desktop: ");
-
-	auto hook = Instance();
+    const auto hook = Instance();
 	if (!hook) return;
 
     hook->OnDesktopChanged();

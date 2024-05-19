@@ -159,33 +159,3 @@ void Hooker::Quit() const
         LOG_TRACE("<Hook:BreakLoop>");
     }
 }
-
-
-LRESULT __stdcall Hooker::DisplayChangedCallback(const int nCode, const WPARAM wParam, const LPARAM lParam)
-{
-    LOG_TRACE("<hook:DisplayChanged2>");
-
-	const auto hook = Instance();
-	if (!hook) return CallNextHookEx(nullptr, nCode, wParam, lParam);
-
-	hook->OnDisplayChanged();
-
-	return CallNextHookEx(hook->_displayHookId, nCode, wParam, lParam);
-}
-
-LRESULT __stdcall Hooker::IniChangedCallback(const int nCode, const WPARAM wParam, const LPARAM lParam)
-{
-    LOG_TRACE("<hook:IniChanged>");
-
-	const auto hook = Instance();
-	if (!hook) return CallNextHookEx(nullptr, nCode, wParam, lParam);
-
-	//if (nCode >= 0 && lParam != NULL && (wParam & WM_DISPLAYCHANGE) != 0)
-	//{
-	//	hook && hook->OnIniChanged.fire();
-	//}
-
-	return CallNextHookEx(hook->_displayHookId, nCode, wParam, lParam);
-}
-
-

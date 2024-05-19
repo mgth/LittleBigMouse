@@ -50,6 +50,7 @@ void LittleBigMouseDaemon::Connect()
 		_hook->OnUnhooked.connect(this, &LittleBigMouseDaemon::Unhooked);
 
 		_hook->OnDisplayChanged.connect(this, &LittleBigMouseDaemon::DisplayChanged);
+		_hook->OnSettingChanged.connect(this, &LittleBigMouseDaemon::SettingChanged);
 		_hook->OnDesktopChanged.connect(this, &LittleBigMouseDaemon::DesktopChanged);
 		_hook->OnFocusChanged.connect(this, &LittleBigMouseDaemon::FocusChanged);
 	}
@@ -283,10 +284,18 @@ void LittleBigMouseDaemon::DisplayChanged() const
 	_remoteServer->Send("<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>\n",nullptr);
 }
 
+void LittleBigMouseDaemon::SettingChanged() const
+{
+	//When display changed, we need to recompute zones, here we just stop the hook and inform ui to reload layout
+	if(_hook && _hook->Hooked())
+		_hook->Unhook();
+
+	_remoteServer->Send("<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>\n",nullptr);
+}
+
 // Sytem switches to/from UAC desktop
 void LittleBigMouseDaemon::DesktopChanged() const
 {
-
 	_remoteServer->Send("<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n",nullptr);
 }
 

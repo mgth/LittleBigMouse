@@ -101,7 +101,7 @@ LRESULT CALLBACK Hooker::DisplayChangeHandler(HWND hwnd, UINT msg, WPARAM wParam
 			if (wParam == SPI_SETWORKAREA)
 			{
 				LOG_TRACE("<HookerDispayChanged:SettingChange>");
-				hook->OnDisplayChanged();
+				hook->OnSettingChanged();
 				return 0;
 			}
 	    default: 

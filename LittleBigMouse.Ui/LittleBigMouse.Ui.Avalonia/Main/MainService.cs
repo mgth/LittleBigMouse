@@ -107,7 +107,7 @@ public class MainService : ReactiveModel, IMainService
 
         MonitorsLayout = _getNewMonitorLayout().UpdateFrom(monitors);
 
-        _mainWindow?.UpdateLayout();
+        //_mainWindow?.UpdateLayout();
     }
 
     Window _mainWindow = null!;
@@ -213,11 +213,12 @@ public class MainService : ReactiveModel, IMainService
                 await _notify.SetIconAsync("icon/lbm_paused",32);
                 break;
 
+            case LittleBigMouseEvent.SettingsChanged:
+            case LittleBigMouseEvent.DesktopChanged:
             case LittleBigMouseEvent.DisplayChanged:
                 await DisplayChangedAsync();
                 break;
 
-            case LittleBigMouseEvent.DesktopChanged:
             case LittleBigMouseEvent.FocusChanged:
                 AddSeenProcess(args.Payload);
                 break;
@@ -236,8 +237,20 @@ public class MainService : ReactiveModel, IMainService
         _processesCollector.SeenProcesses.Add(process);
     }
 
-    private async Task DisplayChangedAsync()
+    bool _displayChangedTriggered = false;
+    readonly object _lockDisplayChanged = new();
+    async Task DisplayChangedAsync()
     {
+        lock (_lockDisplayChanged)
+        {
+            if (_displayChangedTriggered) return;
+            _displayChangedTriggered = true;
+        }
+        await Task.Delay(5000);
+        lock (_lockDisplayChanged)
+        {
+            _displayChangedTriggered = false;
+        }
         UpdateLayout();
         if(MonitorsLayout.Options.Enabled)
         {

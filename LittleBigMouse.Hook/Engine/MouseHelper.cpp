@@ -9,6 +9,11 @@ geo::Point<long> GetMouseLocation()
 
 void SetClip(const geo::Rect<long>& r)
 {
+#if _DEBUG
+	if (r.IsEmpty()) {LOG_DEBUG("r is EMPTY");}
+	else if (r.Width() < 0 || r.Height() < 0) {LOG_DEBUG("r is negative");}
+	else if (r.Width() < 100 || r.Height() < 100) {LOG_DEBUG("r is small");}
+#endif
 	const auto rect = RECT{r.Left(),r.Top(),r.Right(),r.Bottom()};
 	ClipCursor(&rect);
 }

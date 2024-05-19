@@ -33,7 +33,7 @@ void MouseEngine::SaveClip()
 #if _DEBUG_
 	if (!_oldClipRect.IsEmpty())
 	{
-		LOG_TRACE("/!\\ Saved clip override");
+		LOG_DEBUG("/!\\ Saved clip override");
 	}
 #endif
 	_oldClipRect = GetClip();

@@ -85,7 +85,7 @@ namespace geo
 
 		static Rect<T> Empty() { return Rect(0, 0, 0, 0); }
 
-		bool IsEmpty() {return _width == 0 || _height == 0;}
+		bool IsEmpty() const {return _width == 0 || _height == 0;}
 
 #define max(a, b)  (((a) > (b)) ? (a) : (b))
 #define min(a, b)  (((a) < (b)) ? (a) : (b))

@@ -97,7 +97,6 @@ public static class PersistencyExtensions
 
         if (@this.Options.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
 
-        //@this.Saved = true;
         return true;
     }
 
@@ -324,7 +323,7 @@ public static class PersistencyExtensions
 
             @this.Orientation = orientation;
 
-            @this.DisplayName = key.GetOrSet($@"{id}\DisplayName", () => @this.DisplayName);
+            // @this.DisplayName = key.GetOrSet($@"{id}\DisplayName", () => @this.DisplayName);
 
             @this.Saved = true;
         }

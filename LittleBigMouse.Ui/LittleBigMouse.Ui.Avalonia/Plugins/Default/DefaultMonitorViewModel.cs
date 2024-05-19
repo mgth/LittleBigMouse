@@ -51,19 +51,13 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
             (attached, primary) => attached && !primary)
             .ToProperty(this, e => e.DetachVisible);
 
-        DetachCommand = ReactiveCommand.Create(() =>
-        {
-            DetachFromDesktop();
-        },this.WhenAnyValue(
+        DetachCommand = ReactiveCommand.Create(DetachFromDesktop,this.WhenAnyValue(
             e => e.Attached, 
             e => e.Primary,
             (attached,primary) => attached && !primary)
         .ObserveOn(RxApp.MainThreadScheduler));
 
-        AttachCommand = ReactiveCommand.Create(() =>
-        {
-            AttachToDesktop();
-        },this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxApp.MainThreadScheduler));
+        AttachCommand = ReactiveCommand.Create(AttachToDesktop,this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxApp.MainThreadScheduler));
     }
 
     public bool Attached => _attached.Value;

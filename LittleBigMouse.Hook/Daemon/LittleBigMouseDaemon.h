@@ -28,6 +28,7 @@ class LittleBigMouseDaemon
 
 	void Connect();
 	void Disconnect();
+	void ReceiveListenMessage(RemoteClient* client) const;
 
 	void ReceiveLoadMessage(tinyxml2::XMLElement* root) const;
 	void ReceiveCommandMessage(tinyxml2::XMLElement* root, RemoteClient* client);
@@ -41,7 +42,8 @@ class LittleBigMouseDaemon
 	void FocusChanged(const std::string& path);
 
 	void ReceiveClientMessage(const std::string& message, RemoteClient* client);
-	void Send() const;
+	void Unhooked() const;
+	void Hooked() const;
 
 	void LoadFromFile(const std::string& path);
 	void LoadExcluded(const std::string& path);

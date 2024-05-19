@@ -33,10 +33,10 @@ void RemoteServerSocket::RunThread()
 			while (!Stopping())
 			{
 				int sinSize = sizeof(csin);
-				const auto csock = accept(_socket, reinterpret_cast<SOCKADDR*>(&csin), &sinSize);
-				if (csock != INVALID_SOCKET)
+				const auto s = accept(_socket, reinterpret_cast<SOCKADDR*>(&csin), &sinSize);
+				if (s != INVALID_SOCKET)
 				{
-					auto c = new RemoteClient(this, csock);
+					auto c = new RemoteClient(this, s);
 					_lock.lock();
 					_clients.push_back(c);
 					_lock.unlock();
@@ -44,14 +44,12 @@ void RemoteServerSocket::RunThread()
 					c->Start();
 
 					//immediately inform client of current state
-					OnMessage("", &*c);
+					//OnMessage("", &*c);
 				}
 				else
 				{
 					LOG_TRACE("<Server:Dead>.");
 				}
-
-				DeleteDeadClients();
 			}
 
 			while (!_clients.empty())
@@ -63,7 +61,6 @@ void RemoteServerSocket::RunThread()
 
 				c->Stop();
 			}
-			DeleteDeadClients();
 			LOG_TRACE("<Server:Stopped>");
 		}
 		else
@@ -80,20 +77,6 @@ void RemoteServerSocket::RunThread()
 	_isRunning = false;
 }
 
-void RemoteServerSocket::DeleteDeadClients()
-{
-	while (!_deadClients.empty())
-	{
-		_lock.lock();
-		const auto c = _deadClients.back();
-		_deadClients.pop_back();
-		_lock.unlock();
-
-		c->Join();
-		delete c;
-	}
-}
-
 void RemoteServerSocket::DoStop()
 {
 	RemoteServer::DoStop();
@@ -108,17 +91,28 @@ void RemoteServerSocket::DoStop()
 void RemoteServerSocket::ReceiveMessage(const std::string& m, RemoteClient* client)
 {
 	OnMessage(m, &*client);
+	//std::thread t([this, m, client] { OnMessage(m, &*client); });
+	//t.detach();
 }
 
 void RemoteServerSocket::Remove(RemoteClient* remoteClient)
 {
 	_lock.lock();
+	if (std::ranges::find(_clients, remoteClient) != _clients.end())
+	{
+		std::erase(_clients, remoteClient);
 
-	std::erase(_clients, remoteClient);
-	remoteClient->Stop();
-	_deadClients.push_back(remoteClient);
-
+		std::thread t([this, remoteClient] 
+			{ 
+				remoteClient->Stop();
+				remoteClient->Join();
+				delete remoteClient;
+		
+			});
+		t.detach();
+	}
 	_lock.unlock();
+
 }
 
 void RemoteServerSocket::WaitForReady(int delay) const
@@ -145,7 +139,7 @@ void RemoteServerSocket::Send(const std::string& message, RemoteClient* client)
 
 		for (const auto c : clients)
 		{
-			if (c)
+			if (c && c->Listening())
 			{
 				c->Send(message);
 			}

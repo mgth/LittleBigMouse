@@ -80,6 +80,7 @@ void Hooker::UnhookDisplayChange()
 {
 	if (!_hwnd) return;
 
+	LOG_TRACE("<Hook:HookDisplayChange> : DestroyWindow");
     DestroyWindow(_hwnd);
     _hwnd = nullptr;
 }

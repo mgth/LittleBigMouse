@@ -15,7 +15,12 @@
 #include "Xml/XmlHelper.h"
 #include "Strings/str.h"
 
-void LittleBigMouseDaemon::Send() const
+void LittleBigMouseDaemon::Unhooked() const
+{
+	SendState(nullptr);
+}
+
+void LittleBigMouseDaemon::Hooked() const
 {
 	SendState(nullptr);
 }
@@ -41,8 +46,8 @@ void LittleBigMouseDaemon::Connect()
 			_hook->OnMouseMove.connect(_engine, &MouseEngine::OnMouseMove);
 		}
 
-		_hook->OnHooked.connect(this, &LittleBigMouseDaemon::Send);
-		_hook->OnUnhooked.connect(this, &LittleBigMouseDaemon::Send);
+		_hook->OnHooked.connect(this, &LittleBigMouseDaemon::Hooked);
+		_hook->OnUnhooked.connect(this, &LittleBigMouseDaemon::Unhooked);
 
 		_hook->OnDisplayChanged.connect(this, &LittleBigMouseDaemon::DisplayChanged);
 		_hook->OnDesktopChanged.connect(this, &LittleBigMouseDaemon::DesktopChanged);
@@ -152,6 +157,13 @@ void LittleBigMouseDaemon::Disconnect()
 #endif
 }
 
+void LittleBigMouseDaemon::ReceiveListenMessage(RemoteClient* client) const
+{
+	if (!client) return;
+	client->Listen();
+	SendState(client);
+}
+
 void LittleBigMouseDaemon::ReceiveLoadMessage(tinyxml2::XMLElement* root) const
 {
 	if(!root) return;
@@ -183,7 +195,11 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 
 		LOG_TRACE("Command received : " << command);
 
-		if(strcmp(command, "Load")==0)
+
+		if(strcmp(command, "Listen")==0)
+			ReceiveListenMessage(client);
+
+		else if(strcmp(command, "Load")==0)
 			ReceiveLoadMessage(root->FirstChildElement("Payload"));
 
 		else if(strcmp(command, "LoadFromFile")==0)

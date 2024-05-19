@@ -8,6 +8,8 @@
 
 void MouseEngine::OnMouseMoveExtFirst(MouseEventArg& e)
 {
+	if(CheckForStopped(e)) return;
+
 	_oldPoint = e.Point;
 
 	_oldZone = Layout.Containing(_oldPoint);
@@ -28,6 +30,12 @@ void MouseEngine::OnMouseMoveExtFirst(MouseEventArg& e)
 
 void MouseEngine::SaveClip()
 {
+#if _DEBUG_
+	if (!_oldClipRect.IsEmpty())
+	{
+		LOG_TRACE("/!\\ Saved clip override");
+	}
+#endif
 	_oldClipRect = GetClip();
 }
 
@@ -35,6 +43,7 @@ void MouseEngine::ResetClip()
 {
 	if (!_oldClipRect.IsEmpty())
 	{
+		//LOG_TRACE("<engine:ResetClip>");
 		SetClip(_oldClipRect);
 		_oldClipRect = geo::Rect<long>::Empty();
 	}
@@ -52,7 +61,7 @@ void MouseEngine::NoZoneMatches(MouseEventArg& e)
 
 #ifdef _DEBUG_
 	const auto p = _oldZone->ToPhysical(e.Point);
-	LOG_TRACE("NoZoneMatches : " << _oldZone->Name << e.Point << p );
+	LOG_TRACE_1("NoZoneMatches : " << _oldZone->Name << e.Point << p );
 #endif
 
 }
@@ -135,8 +144,11 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 
 bool MouseEngine::CheckForStopped(const MouseEventArg& e)
 {
+	ResetClip();
+
 	if(e.Running) return false;
-	LOG_TRACE("<engine:no hook>");
+
+	LOG_TRACE("<engine:hook stopped>");
 	_onMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
 	return true;
 }
@@ -148,36 +160,36 @@ bool MouseEngine::TryPassBorderCross(const Zone* zone, const geo::Segment<double
 	geo::Point<double> p;
 	if (geo::Segment(bounds.TopLeft(), bounds.BottomLeft()).IsIntersecting(trip,p))
 	{
-		LOG_TRACE("left : " << p);
+		LOG_TRACE_1("left : " << p);
 		const auto distance = geo::Segment(p,trip.B()).Size();
-		LOG_TRACE("distance : " << distance);
+		LOG_TRACE_1("distance : " << distance);
 		const auto zoneLink = zone->LeftZones->AtPhysical(p.Y());
 		return TryPassBorder(zoneLink, distance);
 	}
 
 	if (geo::Segment(bounds.TopRight(), bounds.BottomRight()).IsIntersecting(trip,p))
 	{
-		LOG_TRACE("right : " << p);
+		LOG_TRACE_1("right : " << p);
 		const auto distance = geo::Segment(p,trip.B()).Size();
-		LOG_TRACE("distance : " << distance);
+		LOG_TRACE_1("distance : " << distance);
 		const auto zoneLink = zone->RightZones->AtPhysical(p.Y());
 		return TryPassBorder(zoneLink, distance);
 	}
 
 	if (geo::Segment(bounds.TopLeft(), bounds.TopRight()).IsIntersecting(trip, p))
 	{
-		LOG_TRACE("top : " << p);
+		LOG_TRACE_1("top : " << p);
 		const auto distance = geo::Segment(p,trip.B()).Size();
-		LOG_TRACE("distance : " << distance);
+		LOG_TRACE_1("distance : " << distance);
 		const auto zoneLink = zone->TopZones->AtPhysical(p.X());
 		return TryPassBorder(zoneLink, distance);
 	}
 
 	if (geo::Segment(bounds.BottomLeft(), bounds.BottomRight()).IsIntersecting(trip, p))
 	{
-		LOG_TRACE("bottom : " << p);
+		LOG_TRACE_1("bottom : " << p);
 		const auto distance = geo::Segment(p,trip.B()).Size();
-		LOG_TRACE("distance : " << distance);
+		LOG_TRACE_1("distance : " << distance);
 		const auto zoneLink = zone->BottomZones->AtPhysical(p.X());
 		return TryPassBorder(zoneLink, distance);
 	}
@@ -191,7 +203,6 @@ bool MouseEngine::TryPassBorderCross(const Zone* zone, const geo::Segment<double
 /// <param name="e">Mouse event</param>
 void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 {
-	ResetClip();
 	if(CheckForStopped(e)) return;
 
 	if (_oldZone->PixelsBounds().Contains(e.Point))
@@ -199,13 +210,13 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 #ifdef _DEBUG
 		if(GetAsyncKeyState(VK_SHIFT) & 0x01) 
 		{
-			LOG_TRACE("no change : " << e.Point);
+			LOG_TRACE_1("no change : " << e.Point);
 		}
 #endif 
 
 		if(_currentResistanceLink)
 		{
-			LOG_TRACE("< nullptr >");
+			LOG_TRACE_1("< nullptr >");
 			_currentResistanceLink = nullptr;
 		}
 
@@ -281,7 +292,7 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 		}
 	}
 
-	LOG_TRACE(" - " << pInMmOld << pInMm << " - ");
+	LOG_TRACE_1(" - " << pInMmOld << pInMm << " - ");
 	NoZoneMatches(e);
 }
 
@@ -298,13 +309,13 @@ bool MouseEngine::TryPassBorder(const ZoneLink* zoneLink, const double distance)
 
 	if(zoneLink != _currentResistanceLink)
 	{
-		LOG_TRACE("< != >");
+		LOG_TRACE_1("< != >");
 
 		_currentResistanceLink = zoneLink;
 		_borderResistance = zoneLink->BorderResistance;
 	}
 
-	LOG_TRACE("< -= >" << distance);
+	LOG_TRACE_1("< -= >" << distance);
 
 	_borderResistance -= distance;
 
@@ -326,13 +337,13 @@ bool MouseEngine::TryPassBorderPixel(const ZoneLink* zoneLink, const long distan
 
 	if(zoneLink != _currentResistanceLink)
 	{
-		LOG_TRACE("< != >");
+		LOG_TRACE_1("< != >");
 
 		_currentResistanceLink = zoneLink;
 		_borderResistancePixel = zoneLink->BorderResistancePixel;
 	}
 
-	LOG_TRACE("< -= >" << distance);
+	LOG_TRACE_1("< -= >" << distance);
 
 	_borderResistancePixel -= distance;
 
@@ -347,8 +358,6 @@ bool MouseEngine::TryPassBorderPixel(const ZoneLink* zoneLink, const long distan
 /// <param name="e">Mouse event</param>
 void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 {
-
-	ResetClip();
 	if(CheckForStopped(e)) return;
 
 	const auto pIn = e.Point;
@@ -420,7 +429,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		// no border crossed reset resistance link.
 		if(_currentResistanceLink)
 		{
-			LOG_TRACE("< nullptr >");
+			LOG_TRACE_1("< nullptr >");
 			_currentResistanceLink = nullptr;
 		}
 
@@ -468,13 +477,14 @@ void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zon
 
 	//_oldClipRect = GetClip();
 	//SetMouseLocation(pOut);
-	LOG_TRACE("moved : " << zoneOut->Name << " at " << pOut);
+	LOG_TRACE_1("moved : " << zoneOut->Name << " at " << pOut);
 
 	e.Handled = true;
 }
 
 void MouseEngine::Reset()
 {
+	LOG_TRACE("<engine:Reset>");
 	_onMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
 }
 

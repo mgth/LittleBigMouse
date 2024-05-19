@@ -14,13 +14,29 @@ void RemoteClient::RunThread()
 	while (!stopping)
 	{
 		const auto received = recv(_socket,_inputBuffer,sizeof(_inputBuffer),0);
-		if (received <= 0)
+
+		if(received <= 0)
 		{
+			if (received == 0)
+			{
+				LOG_TRACE("<Client:EndConnection:" << _socket << ">");
+				Stop();
+				break;
+			}
+			if (received == SOCKET_ERROR)
+			{
+				auto err = WSAGetLastError();
+				LOG_TRACE("<Client:SOCKET_ERROR:" << _socket << ">" << err);
+				Stop();
+				break;
+			}
+
+			LOG_TRACE("<Client:IllegalOutput:" << _socket << ">");
 			Stop();
 			break;
 		}
 
-		LOG_TRACE("<Client:Received:" << received << "<-" << _socket << ">");
+		LOG_TRACE_1("<Client:Received:" << received << "<-" << _socket << ">");
 
 		auto toParse = std::string(_inputBuffer,received);
 		auto eol = toParse.find('\n');
@@ -37,7 +53,13 @@ void RemoteClient::RunThread()
 			LOG_TRACE("<Client:MessageReceived:" << message << ">" );
 			if (_server)
 				_server->ReceiveMessage(message, this);
-			LOG_TRACE("<Client:MessageDone>");
+			LOG_TRACE_1("<Client:MessageDone>");
+
+			if(_listening) 
+			{
+				LOG_TRACE("<Client:Listening:" << _socket << ">");
+				return;
+			}
 
 			message = "";
 			eol = toParse.find('\n');
@@ -63,10 +85,13 @@ void RemoteClient::DoStop()
 		shutdown(_socket,2);
 	if(_socket)
 		closesocket(_socket);
+
+	_server->Remove(this);
 }
 
 void RemoteClient::Send(const std::string& message)
 {
+	LOG_TRACE("<Client:Send:" << _socket << ">" << message);
 	if(Stopping()) return;
 
 	if (message.length() > INT_MAX)
@@ -76,7 +101,7 @@ void RemoteClient::Send(const std::string& message)
 	}
 	const int length = message.length();
 
-	if(!_socket)
+	if(_socket == 0)
 	{
 		LOG_ERROR("No socket");
 		Stop();
@@ -94,5 +119,6 @@ void RemoteClient::Send(const std::string& message)
 		}
 	}
 	
-	LOG_TRACE("<Client:Sent:" << result << "->" << _socket << ">" << message );
+	LOG_TRACE("<Client:Sent:" << _socket << ">" << result);
 }
+

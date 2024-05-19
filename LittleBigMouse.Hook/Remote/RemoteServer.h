@@ -27,6 +27,5 @@ public:
 	virtual void WaitForReady(int delay) const = 0;
 
 	bool IsRunning() const { return _isRunning; }
-
 };
 

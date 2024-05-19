@@ -69,6 +69,8 @@ void Hooker::DoUnhook()
 	UnhookEventSystemDesktopSwitch();
 	UnhookDisplayChange();
 
+	DoSetPriority(_priorityUnhooked);
+
 	_instance.store(nullptr);
 }
 
@@ -82,11 +84,11 @@ bool Hooker::PumpMessages()
     while (ret>=0)
     {
 		if (msg.message == WM_QUIT) {
-			LOG_TRACE("<Hook:Quit>");
+			LOG_TRACE("<Hook:WM_QUIT>");
 			return false;
 		}
 		if (msg.message == WM_BREAK_LOOP) {
-			LOG_TRACE("<Hook:Break Loop>");
+			LOG_TRACE("<Hook:WM_BREAK_LOOP>");
 			return true;
 		}
 
@@ -114,15 +116,11 @@ void Hooker::Loop()
 	bool stopping = false;
 	while(!stopping)
 	{
-		DoSetPriority(_priority);
-
 		DoHook();
 
 		stopping = !PumpMessages();
 
 		DoUnhook();
-
-		DoSetPriority(_priorityUnhooked);
 	}
 
 	LOG_TRACE("<Hook:Stopped>");

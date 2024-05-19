@@ -11,6 +11,7 @@ class RemoteClient final : public ThreadHost
 {
 	RemoteServerSocket* _server;
 	SOCKET _socket;
+	bool _listening;
 
 protected:
     char _inputBuffer[1024*16];
@@ -23,5 +24,7 @@ public:
 	}
 
 	void Send(const std::string& message);
+	bool Listening() const { return _listening; }
+	void Listen() { _listening = true; }
 };
 

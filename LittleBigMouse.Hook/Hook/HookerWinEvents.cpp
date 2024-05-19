@@ -77,11 +77,11 @@ void CALLBACK Hooker::WindowChangeHook(
         {
 	        const auto exePath = GetExecutablePathFromProcessId(processId);
 
-            LOG_TRACE("Window: " << hWnd << ((style & WS_MAXIMIZE==WS_MAXIMIZE)?"max_":"std_") << ((style & WS_VISIBLE==WS_VISIBLE)?"visible":"hidden"));
+            LOG_TRACE_1("Window: " << hWnd << ((style & WS_MAXIMIZE==WS_MAXIMIZE)?"max_":"std_") << ((style & WS_VISIBLE==WS_VISIBLE)?"visible":"hidden"));
 
             if (!exePath.empty()) 
             {
-                LOG_TRACE("Executable Path: " << ToString(exePath));
+                LOG_TRACE_1("Executable Path: " << ToString(exePath));
 
                 hook->OnFocusChanged(ToString(exePath));
 

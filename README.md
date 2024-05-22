@@ -47,7 +47,7 @@ If you find Little Big Mouse helpful, consider supporting the project with a don
 
 ## Acknowledgements
 
-- **HLab Project**: Little Big Mouse depends on the HLab project for its functionality. Check out the [HLab](https://github.com/CHMP-HLab/HLab) and [HLab.Avalonia](https://github.com/mgth/HLab.Avalonia) repositories for more information.
+- **HLab Project**: Little Big Mouse depends on the HLab project for its functionality. Check out the [HLab](https://github.com/mgth/HLab.Core) and [HLab.Avalonia](https://github.com/mgth/HLab.Avalonia) repositories for more information.
 - **MouseKeyboardActivityMonitor**: Inspired by the [MouseKeyboardActivityMonitor](https://github.com/gmamaladze/globalmousekeyhook) project.
 - **Task Scheduler Managed Wrapper**: Utilizes the [Task Scheduler Managed Wrapper](https://github.com/dahall/TaskScheduler) for scheduling tasks.
 

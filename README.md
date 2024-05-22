@@ -11,6 +11,7 @@ Little Big Mouse (LBM) is an open-source software designed to enhance the multi-
 - **DPI Aware Mouse Movement**: Adjusts mouse speed to remain consistent across monitors with different DPI values.
 - **Infinite Mouse Scrolling**: Enables seamless cursor movement between screens, either horizontally or vertically.
 - **Display Size Adjustments**: Allows for adjustments in the relative sizes of displays.
+- **Border Resistance**: Allow some resistance before crossing.
 - **Display Color and Brightness Balancing**: Offers control over color and brightness profiles of displays.
 - **Access to Display Debugging Information**: Provides detailed information from your displays and drivers.
 
@@ -24,25 +25,13 @@ Little Big Mouse (LBM) is an open-source software designed to enhance the multi-
 
 ## Usage
 
+Documentation : https://github.com/mgth/LittleBigMouse/wiki
+
 Little Big Mouse provides a single-window interface with three main sections:
 
 - **Top Panel**: Access view tabs for display and display adapter information, changing relative sizes and positions of displays, and adjusting color and brightness profiles.
 - **Center Panel**: Displays information about your display devices, including makes and models, capabilities, adapters, and relative positions.
 - **Bottom Panel**: Offers options and operations, including copying config to clipboard, enabling/disabling LBM functionality, and adjusting speed, pointer size, and corner crossing.
-
-### Key Features
-
-- **View Display Info**: Access detailed information from your displays and drivers.
-- **Change Display Sizes**: Correct incorrect dimensions reported by your display driver.
-- **Change Display Positions**: Define the physical locations of each display for smooth mouse transitions.
-- **Change Display Color**: Adjust color profiles for better color matching between displays.
-
-## Command Line
-
-You can use the command line to start/stop Little Big Mouse:
-
-- To start: `<install_directory>\LittleBigMouse_Daemon.exe --start`
-- To stop: `<install_directory>\LittleBigMouse_Daemon.exe --stop`
 
 ## Support
 

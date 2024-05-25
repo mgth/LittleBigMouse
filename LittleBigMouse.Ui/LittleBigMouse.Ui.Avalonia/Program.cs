@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reactive;
 using System.Threading;
 using Avalonia;
@@ -34,13 +35,24 @@ namespace LittleBigMouse.Ui.Avalonia;
 
 internal class Program
 {
+    const string APP_GUID = "51B5711E-1A7F-436E-B3DD-B598901B3FD2";
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        //.StartWithClassicDesktopLifetime(args,ShutdownMode.OnExplicitShutdown);
-        .Start(UIMain, args);
+    public static void Main(string[] args)
+    {
+        using var mutex = new Mutex(true, APP_GUID);
+
+        if (!mutex.WaitOne(TimeSpan.Zero, false))
+        {
+            Debug.Print("there is already another instance running!");
+            return;
+        }
+
+        BuildAvaloniaApp().Start(UIMain, args);
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

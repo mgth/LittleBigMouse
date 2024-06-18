@@ -195,7 +195,7 @@ public static class PersistencyExtensions
         @this.BorderResistance.Left = key.GetOrSet(@"BorderResistance\Left", ()=> @this.BorderResistance.Left);
         @this.BorderResistance.Top =  key.GetOrSet(@"BorderResistance\Top", ()=> @this.BorderResistance.Top);
         @this.BorderResistance.Right = key.GetOrSet(@"BorderResistance\Right", ()=> @this.BorderResistance.Right);
-        @this.BorderResistance.Top =  key.GetOrSet(@"BorderResistance\Bottom", ()=> @this.BorderResistance.Bottom);
+        @this.BorderResistance.Bottom =  key.GetOrSet(@"BorderResistance\Bottom", ()=> @this.BorderResistance.Bottom);
         @this.BorderResistance.Saved = true;
 
         @this.Saved = true;

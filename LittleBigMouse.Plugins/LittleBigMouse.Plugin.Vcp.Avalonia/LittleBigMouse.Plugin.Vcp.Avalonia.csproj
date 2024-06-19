@@ -7,7 +7,7 @@
     <Platforms>AnyCPU;x64;x86</Platforms>
     <LangVersion>preview</LangVersion>
 	<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-	<Version>5.2.3.0</Version>
+	<Version>5.2.4.0</Version>
   </PropertyGroup>
 
 	<ItemGroup>

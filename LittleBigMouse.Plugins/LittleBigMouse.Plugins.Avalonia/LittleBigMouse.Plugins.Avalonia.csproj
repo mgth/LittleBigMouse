@@ -4,7 +4,7 @@
 	<TargetFrameworks>net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <Platforms>x64;x86;AnyCpu</Platforms>
-	<Version>5.2.3.0</Version>
+	<Version>5.2.4.0</Version>
 	<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 

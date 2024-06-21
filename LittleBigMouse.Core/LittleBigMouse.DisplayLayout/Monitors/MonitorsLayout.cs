@@ -16,7 +16,6 @@ using DynamicData.Binding;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Sys.Windows.API;
-using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.Zoning;
 using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
@@ -27,7 +26,7 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 /// 
 /// </summary>
 [DataContract]
-public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
+public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 {
     public MonitorsLayout(ILayoutOptions options)
     {
@@ -38,27 +37,17 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         _physicalMonitorModelsCache.Connect()
             .StartWithEmpty()
             .Bind(out _physicalMonitorModels)
-            .Subscribe();
+            .Subscribe().DisposeWith(this);
 
         _physicalMonitorsCache.Connect()
-            // Sort Ascending on the OrderIndex property
-            //.Sort(SortExpressionComparer<PhysicalMonitor>.Ascending(t => t.Id))
-            //.Filter(x => x.Id.ToString().EndsWith('1'))
             .StartWithEmpty()
             .Bind(out _physicalMonitors)
-            .Subscribe();
-
+            .Subscribe().DisposeWith(this);
 
         _physicalSourcesCache.Connect()
             .Sort(SortExpressionComparer<PhysicalSource>.Ascending(t => t.DeviceId))
-            //.Filter(x => x.Id.ToString().EndsWith('1'))
             .Bind(out _physicalSources)
-            .Subscribe();
-
-        //_physicalMonitorsCache.Connect()
-        //    .ToCollection()
-        //    .Do(ParsePhysicalMonitors)
-        //    .Subscribe().DisposeWith(this);
+            .Subscribe().DisposeWith(this);
 
         _physicalMonitorsCache.Connect()
             //.AutoRefresh(e => e.DepthProjection.Bounds)
@@ -134,7 +123,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
         get => _id;
         set => this.RaiseAndSetIfChanged(ref _id, value);
     }
-    string _id;
+    string _id = "";
 
     /// <summary>
     /// a list of string representing each known config in registry
@@ -183,7 +172,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout, IDisposable
     }
 
 
-    [JsonIgnore]
+    //[JsonIgnore]
     public ReadOnlyObservableCollection<PhysicalMonitor> PhysicalMonitors => _physicalMonitors;
     readonly ReadOnlyObservableCollection<PhysicalMonitor> _physicalMonitors;
     readonly SourceCache<PhysicalMonitor, string> _physicalMonitorsCache = new(m => m.Id);

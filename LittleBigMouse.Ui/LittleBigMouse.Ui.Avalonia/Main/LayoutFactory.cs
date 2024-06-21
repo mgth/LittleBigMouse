@@ -15,7 +15,6 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public static class LayoutFactory
 {
-
     /// <summary>
     /// Update the layout from the monitors service
     /// </summary>

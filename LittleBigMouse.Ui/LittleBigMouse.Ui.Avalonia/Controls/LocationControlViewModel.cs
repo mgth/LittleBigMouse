@@ -181,27 +181,29 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         return base.OnModelChanging(oldModel, newModel);
     }
 
-    class JsonExport(DisplayDevice devices, MonitorsLayout? layout, ZonesLayout? zones)
+    public class JsonExport(DisplayDevice devices, MonitorsLayout? layout, ZonesLayout? zones)
     {
         public MonitorsLayout? Layout { get; } = layout;
         public DisplayDevice Devices { get; } = devices;
         public ZonesLayout? Zones { get; } = zones;
     }
 
-    public string Copy()
+    public string ExportConfig()
     {
         if (Model == null) return "";
 
         var export = new JsonExport(_monitorsService.Root, Model, Model?.ComputeZones());
 
-        //var json = JsonConvert.SerializeObject(export, Formatting.Indented, new JsonSerializerSettings
-        //{
-        //    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-        //});
-
         var json = JsonSerializer.Serialize(export, new JsonSerializerOptions{NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals});
 
         return json;
+    }
+    
+    public JsonExport? ImportConfig(string json)
+    {
+        var export = JsonSerializer.Deserialize<JsonExport>(json);
+
+        return export;
     }
 
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }

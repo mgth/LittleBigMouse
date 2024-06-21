@@ -64,12 +64,12 @@ public class MainService : ReactiveModel, IMainService
 
     readonly Func<IMainPluginsViewModel> _mainViewModelLocator;
 
-    public IMonitorsLayout MonitorsLayout 
+    public IMonitorsLayout? MonitorsLayout 
     { 
         get => _monitorLayout; 
         set => this.RaiseAndSetIfChanged(ref _monitorLayout, value);
     }
-    IMonitorsLayout _monitorLayout;
+    IMonitorsLayout? _monitorLayout;
 
     public MainService
     (
@@ -103,11 +103,10 @@ public class MainService : ReactiveModel, IMainService
         monitors.UpdateDevices();
 
         var old = MonitorsLayout;
-        old?.Dispose();
-
+        
         MonitorsLayout = _getNewMonitorLayout().UpdateFrom(monitors);
-
-        //_mainWindow?.UpdateLayout();
+        
+        old?.Dispose();
     }
 
     Window _mainWindow = null!;

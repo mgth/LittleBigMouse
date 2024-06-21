@@ -26,6 +26,7 @@ using Avalonia.Interactivity;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
 using System;
+using System.Collections.Generic;
 using System.IO.Compression;
 using System.IO;
 using System.Text;
@@ -45,12 +46,50 @@ public partial class LocationControlView : UserControl
     {
         InitializeComponent();
     }
+    
+    async void ImportJSon_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var provider = TopLevel.GetTopLevel(this)?.StorageProvider;
+            if (provider == null) return;
 
-    private async void Button_Click(object? sender, RoutedEventArgs e)
+            var folder = await provider.TryGetWellKnownFolderAsync(WellKnownFolder.Documents);
+
+            var files = await provider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                AllowMultiple = false,
+                FileTypeFilter = new FilePickerFileType[]{ new ("Config file")
+                {
+                    Patterns = new[] { "*.json" },
+                    AppleUniformTypeIdentifiers = new[] { "public.json" },
+                    MimeTypes = new[] { "application/json" }
+                } },
+                SuggestedStartLocation = folder
+            });
+
+            if (files.Count < 1) return;
+            
+            await using var stream = await files[0].OpenReadAsync();
+            using var streamReader = new StreamReader(stream);
+            var json = await streamReader.ReadToEndAsync();
+                
+            if (DataContext is not LocationControlViewModel vm) return;
+
+            vm.ImportConfig(json);
+
+        }
+        catch (Exception ex)
+        {
+
+        }
+    }
+
+    async void ExportJSon_Click(object? sender, RoutedEventArgs e)
     {
         if(DataContext is not LocationControlViewModel vm) return;
 
-        var json = vm.Copy();
+        var json = vm.ExportConfig();
 
         try
         {
@@ -64,7 +103,7 @@ public partial class LocationControlView : UserControl
             if (provider == null) return;
 
             var folder = await provider.TryGetWellKnownFolderAsync(WellKnownFolder.Documents);
-            var filename = "LittleBigMouse.Export.gz";
+            const string filename = "LittleBigMouse.Export.gz";
 
             var result = await provider.SaveFilePickerAsync(new FilePickerSaveOptions{ 
                 DefaultExtension = ".export.gz" , 
@@ -72,15 +111,13 @@ public partial class LocationControlView : UserControl
                 SuggestedStartLocation = folder
             });
 
-            if(result!=null)
-            {
-                var path =  result.TryGetLocalPath();
-                if(path != null)
-                {
-                    SaveConfig(json, path);
-                    OpenExplorerWithSelectedFile(path);
-                }
-            }
+            if (result == null) return;
+            
+            var path =  result.TryGetLocalPath();
+            if (path == null) return;
+            
+            SaveConfig(json, path);
+            OpenExplorerWithSelectedFile(path);
         }
         catch (Exception ex)
         {

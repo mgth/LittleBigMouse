@@ -71,7 +71,13 @@
 			<StackPanel Orientation="Horizontal">
 
 				<Button Classes="Command"
-					Click="Button_Click">
+					Click="ImportJSon_Click">
+					<ToolTip.Tip>Import configuration for debugging purpose</ToolTip.Tip>
+					<icons:IconView Height="30" Path="Icon/Sys/LoadJson"/>
+				</Button>
+				
+				<Button Classes="Command"
+					Click="ExportJSon_Click">
 					<ToolTip.Tip>Export configuration for debugging purpose</ToolTip.Tip>
 					<icons:IconView Height="30" Path="Icon/CopyConfig"/>
 				</Button>

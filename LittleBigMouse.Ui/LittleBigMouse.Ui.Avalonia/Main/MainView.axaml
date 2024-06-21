@@ -38,7 +38,6 @@
             </LinearGradientBrush>
         </Grid.Background>
 
-
         <main:PluginsControlsView/>
 
 		<SplitView OpenPaneLength="500" Grid.Row="1" IsPaneOpen="{Binding OptionsIsVisible, Mode = TwoWay}"  PaneBackground="Transparent" >
@@ -54,7 +53,6 @@
                   Model="{Binding MainService.MonitorsLayout}"
             />
 		</SplitView>
-
 		
         <!--Controls for the layout-->
 		<Border 

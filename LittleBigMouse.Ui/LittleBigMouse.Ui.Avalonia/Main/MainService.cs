@@ -231,7 +231,9 @@ public class MainService : ReactiveModel, IMainService
 
     void AddSeenProcess(string process)
     {
-        if(_processesCollector.SeenProcesses.Any(e => e.Contains(process))) return;
+        if(string.IsNullOrEmpty(process)) return;
+
+        if (_processesCollector.SeenProcesses.Any(e => e?.Contains(process)??false)) return;
 
         _processesCollector.SeenProcesses.Add(process);
     }

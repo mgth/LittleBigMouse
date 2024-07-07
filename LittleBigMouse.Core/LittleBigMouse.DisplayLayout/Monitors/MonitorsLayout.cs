@@ -363,6 +363,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
 
     public void UpdatePhysicalMonitors() => ParsePhysicalMonitors(PhysicalMonitors);
+
     void ParsePhysicalMonitors(IEnumerable<PhysicalMonitor> monitors)
     {
         Rect? physicalBounds = null;
@@ -525,7 +526,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     }
 
 
-    public bool Schedule()
+    public bool Schedule(bool elevated)
     {
         Unschedule();
 
@@ -557,7 +558,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         {
         }
 
-        td.Principal.RunLevel = TaskRunLevel.LUA;
+        td.Principal.RunLevel = elevated ? TaskRunLevel.Highest : TaskRunLevel.LUA;
         try
         {
             ts.RootFolder.RegisterTaskDefinition(ServiceName, td);

@@ -53,6 +53,6 @@ public interface IMonitorsLayout : IDisposable
     void ForceCompact();
 
     void UpdatePhysicalMonitors();
-    bool Schedule();
+    bool Schedule(bool elevated);
     void Unschedule();
 }

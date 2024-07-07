@@ -45,6 +45,14 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
         set =>  SetUnsavedValue(ref _startMinimized, value);
     }
     bool _startMinimized;
+    
+    [DataMember]
+    public bool StartElevated
+    {
+        get => _startElevated;
+        set =>  SetUnsavedValue(ref _startElevated, value);
+    }
+    bool _startElevated;
 
     [DataMember]
     public string Priority

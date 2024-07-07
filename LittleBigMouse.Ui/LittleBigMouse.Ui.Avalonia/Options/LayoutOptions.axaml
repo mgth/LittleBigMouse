@@ -70,6 +70,11 @@
 									Content="Start minimized"
 									IsChecked="{Binding Path=Model.StartMinimized, FallbackValue=false, Mode=TwoWay}"
 									ToolTip.Tip="Minimize to tray at startup."/>
+								
+								<CheckBox
+									Content="Start with elevated privileges"
+									IsChecked="{Binding Path=Model.StartElevated, FallbackValue=false, Mode=TwoWay}"
+									ToolTip.Tip="Start with elevated privileges."/>
 
 								<Label>Daemon Priority</Label>
 								<StackPanel Orientation="Horizontal">

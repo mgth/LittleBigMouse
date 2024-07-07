@@ -49,6 +49,7 @@ public static class PersistencyExtensions
         @this.Pinned = key.GetOrSet("Pinned", () => false);
         @this.AutoUpdate = key.GetOrSet("AutoUpdate", () => false);
         @this.StartMinimized = key.GetOrSet("StartMinimized", () => false);
+        @this.StartElevated = key.GetOrSet("StartElevated", () => false);
 
         @this.ExcludedList.Clear();
 
@@ -95,7 +96,7 @@ public static class PersistencyExtensions
 
         k.SetValue("Enabled", @this.Options.Enabled ? "1" : "0");
 
-        if (@this.Options.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
+        if (@this.Options.LoadAtStartup) @this.Schedule(@this.Options.StartElevated); else @this.Unschedule();
 
         return true;
     }
@@ -119,6 +120,7 @@ public static class PersistencyExtensions
         k.SetKey("Pinned", @this.Pinned);
         k.SetKey("AutoUpdate", @this.AutoUpdate);
         k.SetKey("StartMinimized", @this.StartMinimized);
+        k.SetKey("StartElevated", @this.StartElevated);
 
         var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
@@ -140,7 +142,7 @@ public static class PersistencyExtensions
         using var k = @this.OpenRegKey(true);
         if (k == null) return false;
 
-        if (@this.Options.LoadAtStartup) @this.Schedule(); else @this.Unschedule();
+        if (@this.Options.LoadAtStartup) @this.Schedule(@this.Options.StartElevated); else @this.Unschedule();
 
         @this.Options.Save(k);
 

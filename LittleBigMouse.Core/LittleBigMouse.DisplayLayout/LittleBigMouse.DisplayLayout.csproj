@@ -10,10 +10,10 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia.ReactiveUI" Version="11.1.0-rc1" />
-    <PackageReference Include="H.Pipes" Version="2.0.59" />
+    <PackageReference Include="H.Pipes" Version="2.1.0-dev.322" />
     <PackageReference Include="MessageBox.Avalonia" Version="3.1.5.1" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
-    <PackageReference Include="System.Management" Version="9.0.0-preview.2.24128.5" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="9.0.0-preview.5.24306.7" />
+    <PackageReference Include="System.Management" Version="9.0.0-preview.5.24306.7" />
     <PackageReference Include="TaskScheduler" Version="2.11.0" />
   </ItemGroup>
 

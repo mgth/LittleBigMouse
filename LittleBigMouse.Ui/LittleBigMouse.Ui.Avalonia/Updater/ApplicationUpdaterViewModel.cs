@@ -12,15 +12,20 @@ using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
+using LittleBigMouse.Plugins;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Updater;
 
-public class ApplicationUpdaterViewModel : ViewModel
+
+public class ApplicationUpdaterViewModel : ViewModel, IApplicationUpdater
 {
-    public ApplicationUpdaterViewModel()
+    IMvvmService _mvvm;
+    public ApplicationUpdaterViewModel(IMvvmService mvvm)
     {
+        _mvvm = mvvm;
         _newVersionFound = this.WhenAnyValue(
             e => e.CurrentVersion,
             e => e.NewVersion,
@@ -171,4 +176,37 @@ public class ApplicationUpdaterViewModel : ViewModel
             NewVersion = onlineVersion;
         }
     }
+    
+    public async Task CheckUpdateAsync(bool show)
+    {
+        if(show)
+        {
+            var updaterView = new ApplicationUpdaterView
+            {
+                DataContext = this
+            };
+            updaterView.Show();
+        }
+
+        await CheckVersion();
+
+        if (NewVersionFound)
+        {
+            if(!show)
+            {
+                var updaterView = new ApplicationUpdaterView
+                {
+                    DataContext = this
+                };
+                updaterView.Show();
+            }
+
+            if (Updated)
+            {
+                //Application.Current.Shutdown();
+                return;
+            }
+        }
+    }
+    
 }

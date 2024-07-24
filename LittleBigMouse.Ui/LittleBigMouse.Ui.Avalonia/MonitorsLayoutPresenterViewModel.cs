@@ -28,6 +28,7 @@ using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;

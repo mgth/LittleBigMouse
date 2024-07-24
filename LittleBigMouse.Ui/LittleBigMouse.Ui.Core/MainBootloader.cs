@@ -6,7 +6,9 @@ namespace LittleBigMouse.Ui.Core;
 
 public class MainBootloader(
         IMainService mainService, 
-        IMvvmService mvvm) : IBootloader
+        IMvvmService mvvm,
+        IApplicationUpdater updater
+        ) : IBootloader
 {
     public async Task LoadAsync(IBootContext bootstrapper)
     {
@@ -15,5 +17,13 @@ public class MainBootloader(
         mainService.UpdateLayout();
 
         await mainService.StartNotifierAsync();
+        
+        // Check for update
+        if (mainService.MonitorsLayout.Options.AutoUpdate)
+            await updater.CheckUpdateAsync(false);
+
+        // Show control
+        if (!mainService.MonitorsLayout.Options.StartMinimized)
+            await mainService.ShowControlAsync();
     }
 }

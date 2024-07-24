@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace LittleBigMouse.DisplayLayout.Monitors;
+namespace LittleBigMouse.DisplayLayout.Monitors.Extensions;
 
-public static class MonitorsLayoutExtensions
+public static class MonitorsLocationsFromSystemExtensions
 {
 
     static readonly object CompactLock = new();

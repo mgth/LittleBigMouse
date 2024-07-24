@@ -26,6 +26,7 @@ using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 using LittleBigMouse.Ui.Avalonia.Remote;
+using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Ui.Core;
 using ReactiveUI;
 using Splat;
@@ -101,6 +102,7 @@ internal class Program
             {
                 //c.ExportInstance(app.ApplicationLifetime);
 
+                c.Export<ApplicationUpdaterViewModel>().As<IApplicationUpdater>().Lifestyle.Singleton();
                 c.Export<IconService>().As<IIconService>().Lifestyle.Singleton();
                 c.Export<LocalizationService>().As<ILocalizationService>().Lifestyle.Singleton();
                 c.Export<MvvmService>().As<IMvvmService>().Lifestyle.Singleton();

@@ -48,7 +48,6 @@ public interface IMonitorsLayout : IDisposable
     WinDef.DpiAwareness DpiAwareness { get; }
     PhysicalMonitor PrimaryMonitor { get; }
 
-    ZonesLayout ComputeZones();
     void Compact();
     void ForceCompact();
 

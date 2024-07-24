@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Windows.Input;
 using Avalonia;
@@ -23,11 +24,23 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 public interface IProcessesCollector
 {
     ObservableCollectionExtended<string> SeenProcesses { get; }
+    void AddProcess(string process);
+    
 }
 
 public class ProcessesCollector : ReactiveModel, IProcessesCollector
 {
     public ObservableCollectionExtended<string> SeenProcesses { get; } = [];
+    
+    public void AddProcess(string process)
+    {
+        if(string.IsNullOrEmpty(process)) return;
+
+        if (SeenProcesses.Any(e => e?.Contains(process)??false)) return;
+
+        SeenProcesses.Add(process);
+    }
+
 
 }
 
@@ -41,6 +54,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         IconService = iconService;
         LocalizationService = localizationService;
         Options = options;
+        
         CloseCommand = ReactiveCommand.Create(Close);
 
         _commandsCache.Connect()

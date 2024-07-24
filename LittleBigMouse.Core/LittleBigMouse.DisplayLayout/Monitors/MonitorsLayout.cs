@@ -16,6 +16,7 @@ using DynamicData.Binding;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Sys.Windows.API;
+using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Zoning;
 using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
@@ -33,11 +34,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         Options = options;
 
         DpiAwareness = WinUser.GetAwarenessFromDpiAwarenessContext(WinUser.GetThreadDpiAwarenessContext());
-
-        _physicalMonitorModelsCache.Connect()
-            .StartWithEmpty()
-            .Bind(out _physicalMonitorModels)
-            .Subscribe().DisposeWith(this);
 
         _physicalMonitorsCache.Connect()
             .StartWithEmpty()
@@ -139,20 +135,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     //    }
     //}
 
-    public PhysicalSource PhysicalSourceFromPixel(Point pixel) 
-        => PhysicalSources.FirstOrDefault(source => source.Source.InPixel.Bounds.Contains(pixel));
-
-    public PhysicalMonitor MonitorFromPhysicalPosition(Point mm) 
-        => PhysicalMonitors.FirstOrDefault(screen => screen.DepthProjection.Bounds.Contains(mm));
-
     [JsonIgnore]
-    public ReadOnlyObservableCollection<PhysicalMonitorModel> PhysicalMonitorModels => _physicalMonitorModels;
-    readonly ReadOnlyObservableCollection<PhysicalMonitorModel> _physicalMonitorModels;
     readonly SourceCache<PhysicalMonitorModel, string> _physicalMonitorModelsCache = new(m => m.PnpCode);
-    public void AddOrUpdatePhysicalMonitor(PhysicalMonitorModel monitor)
-    {
-        _physicalMonitorModelsCache.AddOrUpdate(monitor);
-    }
     public PhysicalMonitorModel GetOrAddPhysicalMonitorModel(string id, Func<string, PhysicalMonitorModel> value)
     {
         PhysicalMonitorModel? result = null;
@@ -171,8 +155,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         return result;
     }
 
-
-    //[JsonIgnore]
     public ReadOnlyObservableCollection<PhysicalMonitor> PhysicalMonitors => _physicalMonitors;
     readonly ReadOnlyObservableCollection<PhysicalMonitor> _physicalMonitors;
     readonly SourceCache<PhysicalMonitor, string> _physicalMonitorsCache = new(m => m.Id);
@@ -213,102 +195,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
 
     public string LayoutPath(bool create) => LayoutPath(Id, create);
 
-
-
-
-    // TODO Move to service
-
-    //public void MatchLayout(string id)
-    //{
-    //    using var rootKey = OpenRootRegKey();
-    //    using var key = rootKey.OpenSubKey(@"Layouts\" + id);
-
-    //    if (key != null)
-    //    {
-    //        var todo = key.GetSubKeyNames().ToList();
-
-    //        foreach (var source in AllSources.Items)
-    //        {
-    //            if (todo.Contains(source.Source.IdMonitor))
-    //            {
-    //                AttachToDesktop(id, source.Source.IdMonitor, false);
-    //                todo.Remove(source.Source.IdMonitor);
-    //            }
-    //            else
-    //            {
-    //                // TODO : Call back to monitor service to detach
-    //                // MonitorDeviceHelper.DetachFromDesktop(source.Source.Device.AttachedDisplay.DeviceName, false);
-    //            }
-    //        }
-
-    //        foreach (string s in todo)
-    //        {
-    //            AttachToDesktop(id, s, false);
-    //        }
-
-    //        MonitorDeviceHelper.ApplyDesktop();
-
-    //    }
-
-    //}
-
-
-    // TODO :
-
-    //public bool IsDoableLayout(string id)
-    //{
-    //    using var rootKey = OpenRootRegKey();
-    //    using var key = rootKey.OpenSubKey(@"Layouts\" + id);
-
-    //    if (key == null) return false;
-
-    //    var todo = key.GetSubKeyNames().ToList();
-
-    //    foreach (var s in todo)
-    //    {
-    //        var m = MonitorsService.Monitors.Items.FirstOrDefault(
-    //            d => s == d.IdMonitor);
-
-    //        if (m == null) return false;
-    //    }
-    //    return true;
-
-    //}
-
-    //TODO : move to service
-    //public void AttachToDesktop(string layoutId, string monitorId, bool apply = true)
-    //{
-    //    //using (RegistryKey monkey = Screen.OpenMonitorRegKey(monitorId))
-    //    //{
-    //    //    id = monkey?.GetValue("DeviceId").ToString();
-    //    //    if (id == null) return;
-    //    //}
-    //    var area = new Rect();
-    //    var primary = false;
-    //    var orientation = 0;
-
-    //    using (var monkey = PhysicalMonitor.OpenRegKey(layoutId, monitorId))
-    //    {
-    //        if (monkey is not null)
-    //        {
-    //            area = new(
-    //                double.Parse(monkey.GetValue("PixelX").ToString()),
-    //                double.Parse(monkey.GetValue("PixelY").ToString()),
-    //                double.Parse(monkey.GetValue("PixelWidth").ToString()),
-    //                double.Parse(monkey.GetValue("PixelHeight").ToString()));
-
-    //            primary = double.Parse(monkey.GetValue("Primary").ToString()) == 1;
-    //            orientation = (int)double.Parse(monkey.GetValue("Orientation").ToString());
-    //        }
-    //    }
-
-    //    var monitor = MonitorsService.Monitors.Items.FirstOrDefault(
-    //        d => monitorId == d.Edid.ManufacturerCode + d.Edid.ProductCode + "_" + d.Edid.Serial);
-
-    //    if (monitor != null)
-    //        MonitorDeviceHelper.AttachToDesktop(monitor.AttachedDisplay.DeviceName, primary, area, orientation, apply);
-    //}
-
     public void EnumWmi()
     {
         const string namespacePath = "\\\\.\\ROOT\\WMI\\ms_409";
@@ -336,8 +222,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     }
     PhysicalMonitor? _primaryMonitor;
 
-    public string PrimaryMonitorId => PrimaryMonitor?.Id??"";
-
     /// <summary>
     /// Source for primary display (always located at 0,0).
     /// </summary>
@@ -349,7 +233,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     }
     DisplaySource? _primarySource;
 
-
     /// <summary>
     /// Mm Bounds of overall screens without borders
     /// </summary>
@@ -360,7 +243,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         set => this.RaiseAndSetIfChanged(ref _physicalBounds, value);
     }
     Rect _physicalBounds;
-
 
     public void UpdatePhysicalMonitors() => ParsePhysicalMonitors(PhysicalMonitors);
 
@@ -375,7 +257,7 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
             }
         }
 
-        Options.MinimalMaxTravelDistance = Math.Ceiling(GetMinimalMaxTravelDistance());
+        Options.MinimalMaxTravelDistance = Math.Ceiling(this.GetMinimalMaxTravelDistance());
 
         using (DelayChangeNotifications())
         {
@@ -451,9 +333,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         }
     }
 
-
-
-
     /// <summary>
     /// Maximum effective Horizontal DPI of all screens
     /// </summary>
@@ -518,13 +397,11 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         }
     }
 
-
     public bool IsScheduled()
     {
         using var ts = new TaskService();
         return ts.RootFolder.GetTasks(new Regex(ServiceName)).Any();
     }
-
 
     public bool Schedule(bool elevated)
     {
@@ -583,121 +460,6 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
         }
     }
 
-    public ZonesLayout ComputeZones()
-    {
-        var zones = new ZonesLayout();
-        foreach (var source in PhysicalSources)
-        {
-            if (source == source.Monitor.ActiveSource && source.Source.AttachedToDesktop)
-                zones.Zones.Add(new Zone(
-                    source.Monitor.BorderResistance,
-                    source.Source.Id,
-                    source.Monitor.Model.PnpDeviceName,
-                    source.Source.InPixel.Bounds,
-                    source.Monitor.DepthProjection.Bounds
-                ));
-        }
 
-        var actualZones = zones.Zones.ToArray();
-
-        if (Options.LoopX)
-        {
-            var shiftLeft = new Vector(-PhysicalBounds.Width, 0);
-            var shiftRight = new Vector(PhysicalBounds.Width, 0);
-
-            foreach (var zone in actualZones)
-            {
-                zones.Zones.Add(new (zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftLeft), zone));
-                zones.Zones.Add(new (zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftRight), zone));
-            }
-        }
-
-        if (Options.LoopY)
-        {
-            var shiftUp = new Vector(0, -PhysicalBounds.Height);
-            var shiftDown = new Vector(0, PhysicalBounds.Height);
-
-            foreach (var zone in actualZones)
-            {
-                zones.Zones.Add(new(zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftUp), zone));
-                zones.Zones.Add(new(zone.BorderResistance, zone.DeviceId, zone.Name, zone.PixelsBounds, zone.PhysicalBounds.Translate(shiftDown), zone));
-            }
-        }
-
-        zones.Init();
-
-        zones.MaxTravelDistance = Options.MaxTravelDistance;
-
-        zones.AdjustPointer = Options.AdjustPointer;
-        zones.AdjustSpeed = Options.AdjustSpeed;
-
-        zones.Algorithm = Options.Algorithm;
-        zones.Priority = Options.Priority;
-        zones.PriorityUnhooked = Options.PriorityUnhooked;
-
-        zones.LoopX = Options.LoopX;
-        zones.LoopY = Options.LoopY;
-
-        return zones;
-    }
-
-    class MonitorDistance
-    {
-        public required PhysicalMonitor Source;
-        public required PhysicalMonitor Target;
-        public double Distance;
-    }
-
-    public double GetMinimalMaxTravelDistance()
-    {
-        List<MonitorDistance> distances = [];
-
-        var primary = PrimaryMonitor;
-        if (primary == null) return 0.0;
-
-        foreach (var monitor in PhysicalMonitors)
-        {
-            var distance = primary.DepthProjection.Bounds.Distance(monitor.DepthProjection.Bounds).DistanceHV();
-            distances.Add(new MonitorDistance
-            {
-                Source = primary,
-                Target = monitor,
-                Distance = distance,
-            });
-        }
-
-        var progress = true;
-
-        while (progress)
-        {
-            distances = [.. distances.OrderBy(d => d.Distance)];
-            var last = distances.Last();
-
-            var others = distances.Except([last]).ToList();
-
-            progress = false;
-
-            foreach (var monitorDistance in others)
-            {
-                //check if monitor already in chain
-                var d = monitorDistance;
-                while(!ReferenceEquals(d.Source, primary))
-                {
-                    if(ReferenceEquals(d.Target,last.Target)) break;
-                    d = distances.First(e => ReferenceEquals(e.Target, d.Source));
-                }
-                if(ReferenceEquals(d.Target,last.Target)) continue;
-
-
-                var distance = last.Target.DepthProjection.Bounds.Distance(monitorDistance.Target.DepthProjection.Bounds).DistanceHV();
-                if (distance >= last.Distance) continue;
-                last.Source = monitorDistance.Target;
-                last.Distance = distance;
-                progress = true;
-            }
-
-        }
-        return distances.Max(d => d.Distance);
-    }
 
 }

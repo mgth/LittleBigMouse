@@ -10,6 +10,7 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Persistency;
 using Avalonia.Media;
+using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 

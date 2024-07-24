@@ -33,6 +33,7 @@ using HLab.Mvvm.Avalonia;
 using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Options;
 using LittleBigMouse.Ui.Avalonia.Persistency;
@@ -58,6 +59,7 @@ public class MainService : ReactiveModel, IMainService
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
     readonly Func<MonitorsLayout> _getNewMonitorLayout;
     readonly IProcessesCollector _processesCollector;
+    readonly Func<ApplicationUpdaterViewModel> _updaterLocator;
 
 
     Action<IMainPluginsViewModel>? _actions;
@@ -145,7 +147,7 @@ public class MainService : ReactiveModel, IMainService
     {
         _notify.Click += async (s, a) => await ShowControlAsync();
 
-        await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", CheckUpdateAsync);
+        await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
         await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
@@ -160,13 +162,6 @@ public class MainService : ReactiveModel, IMainService
 
         _notify.Show();
 
-        // Check for update
-        if (MonitorsLayout.Options.AutoUpdate)
-            await CheckUpdateBlindAsync();
-
-        // Show control
-        if (!MonitorsLayout.Options.StartMinimized)
-            await ShowControlAsync();
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action)
@@ -219,7 +214,7 @@ public class MainService : ReactiveModel, IMainService
                 break;
 
             case LittleBigMouseEvent.FocusChanged:
-                AddSeenProcess(args.Payload);
+                _processesCollector?.AddProcess(args.Payload);
                 break;
             case LittleBigMouseEvent.Connected:
                 _justConnected = true;
@@ -227,15 +222,6 @@ public class MainService : ReactiveModel, IMainService
             default:
                 throw new ArgumentOutOfRangeException(nameof(args.Event), args.Event, null);
         }
-    }
-
-    void AddSeenProcess(string process)
-    {
-        if(string.IsNullOrEmpty(process)) return;
-
-        if (_processesCollector.SeenProcesses.Any(e => e?.Contains(process)??false)) return;
-
-        _processesCollector.SeenProcesses.Add(process);
     }
 
     bool _displayChangedTriggered = false;
@@ -259,49 +245,6 @@ public class MainService : ReactiveModel, IMainService
         }
     }
 
-    async Task CheckUpdateAsync()
-    {
-        var updater = new ApplicationUpdaterViewModel();
 
-        var updaterView = new ApplicationUpdaterView
-        {
-            DataContext = updater
-        };
-        updaterView.Show();
-
-        await updater.CheckVersion();
-
-        if (updater.NewVersionFound)
-        {
-
-            if (updater.Updated)
-            {
-                //Application.Current.Shutdown();
-                return;
-            }
-        }
-    }
-
-    async Task CheckUpdateBlindAsync()
-    {
-        var updater = new ApplicationUpdaterViewModel();
-
-        await updater.CheckVersion();
-
-        if (updater.NewVersionFound)
-        {
-            var updaterView = new ApplicationUpdaterView
-            {
-                DataContext = updater
-            };
-            updaterView.Show();
-
-            if (updater.Updated)
-            {
-                //Application.Current.Shutdown();
-                return;
-            }
-        }
-    }
 
 }

@@ -35,6 +35,7 @@ using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Ui.Avalonia.Remote;

@@ -81,13 +81,14 @@ public class MainService : ReactiveModel, IMainService
         IUserNotificationService notify,
         ISystemMonitorsService monitors,
         Func<MonitorsLayout> getNewMonitorLayout,
-        IProcessesCollector processesCollector
-    )
+        IProcessesCollector processesCollector, 
+        Func<ApplicationUpdaterViewModel> updaterLocator)
     {
         _notify = notify;
         _monitors = monitors;
         _getNewMonitorLayout = getNewMonitorLayout;
         _processesCollector = processesCollector;
+        _updaterLocator = updaterLocator;
         _littleBigMouseClientService = littleBigMouseClientService;
 
         _mvvmService = mvvmService;

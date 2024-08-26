@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Runtime.Serialization;
 using HLab.Base.Avalonia;
+using HLab.Base.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
 

@@ -13,11 +13,9 @@ using Avalonia;
 using Avalonia.Controls;
 using DynamicData;
 using DynamicData.Binding;
-using HLab.Base.Avalonia;
-using HLab.Base.Avalonia.Extensions;
+using HLab.Base.ReactiveUI;
 using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
-using LittleBigMouse.Zoning;
 using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
 

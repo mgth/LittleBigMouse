@@ -23,7 +23,8 @@
 
 using System;
 using System.Runtime.Serialization;
-using HLab.Base.Avalonia;
+using HLab.Base;
+using HLab.Base.ReactiveUI;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;

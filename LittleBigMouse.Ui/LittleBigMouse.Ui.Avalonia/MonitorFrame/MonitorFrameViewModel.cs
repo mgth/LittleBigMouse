@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media;
 using HLab.Base.Avalonia.Extensions;
+using HLab.Base.ReactiveUI;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Dimensions;

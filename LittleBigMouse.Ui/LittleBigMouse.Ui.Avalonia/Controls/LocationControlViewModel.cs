@@ -31,6 +31,7 @@ using Avalonia.Threading;
 using DynamicData;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
+using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout;

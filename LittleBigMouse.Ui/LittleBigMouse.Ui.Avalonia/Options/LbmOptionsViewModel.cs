@@ -8,6 +8,7 @@ using System.Windows.Input;
 using DynamicData;
 using DynamicData.Binding;
 using HLab.Base.Avalonia.Extensions;
+using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Main;

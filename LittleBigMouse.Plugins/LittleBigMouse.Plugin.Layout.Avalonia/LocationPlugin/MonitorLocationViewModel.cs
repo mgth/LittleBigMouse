@@ -25,7 +25,7 @@ using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using DynamicData.Binding;
-using HLab.Base.Avalonia.Extensions;
+using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.Rulers;

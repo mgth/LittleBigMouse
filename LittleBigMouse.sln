@@ -117,6 +117,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Color", "Color", "{9972D6F7
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Mvvm", "Mvvm", "{967B2151-69DE-4BF5-A8BA-878F4DB47855}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Base.ReactiveUI", "HLab.Core\HLab.Base.ReactiveUI\HLab.Base.ReactiveUI.csproj", "{054D5606-83D2-430F-A910-A4D7079A881A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -759,6 +761,24 @@ Global
 		{6CA136B2-9239-4A02-9007-B67D9940674D}.Release|x64.Build.0 = Release|Any CPU
 		{6CA136B2-9239-4A02-9007-B67D9940674D}.Release|x86.ActiveCfg = Release|Any CPU
 		{6CA136B2-9239-4A02-9007-B67D9940674D}.Release|x86.Build.0 = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Debug|x64.Build.0 = Debug|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Debug|x86.Build.0 = Debug|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.DebugRelease|Any CPU.ActiveCfg = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.DebugRelease|Any CPU.Build.0 = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.DebugRelease|x64.ActiveCfg = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.DebugRelease|x64.Build.0 = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.DebugRelease|x86.ActiveCfg = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.DebugRelease|x86.Build.0 = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Release|x64.ActiveCfg = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Release|x64.Build.0 = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Release|x86.ActiveCfg = Release|Any CPU
+		{054D5606-83D2-430F-A910-A4D7079A881A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -811,21 +831,10 @@ Global
 		{BEB5D4B6-387A-4FCC-BD84-2F105F8FD32E} = {F9285DF6-1EB8-4E3F-87AD-01F8AF60C2D9}
 		{9972D6F7-D725-4213-BC04-171E6C9C1BA1} = {F9285DF6-1EB8-4E3F-87AD-01F8AF60C2D9}
 		{967B2151-69DE-4BF5-A8BA-878F4DB47855} = {F9285DF6-1EB8-4E3F-87AD-01F8AF60C2D9}
+		{054D5606-83D2-430F-A910-A4D7079A881A} = {81C727CD-20AF-492A-BE56-50EB2F20D754}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2294431E-9ED9-4BB8-AEDA-305882A2919F}
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
-using HLab.Base.Avalonia;
+using HLab.Base.ReactiveUI;
 using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using ReactiveUI;

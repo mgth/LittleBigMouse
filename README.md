@@ -5,6 +5,19 @@
 </p>
 Little Big Mouse (LBM) is an open-source software designed to enhance the multi-monitor experience on Windows 10 and 11 by providing accurate mouse screen crossover location within multi-DPI monitors environments. This is particularly useful for setups involving a 4K monitor alongside a full HD monitor.
 
+## Donations
+
+If you find Little Big Mouse helpful, consider supporting the project with a donation. Your contribution helps us maintain and improve the software.
+
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=YLGYPSHWTQ5UW&lc=FR&item_name=Mgth&currency_code=EUR&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted)
+
+## Presentation Video
+
+Check the very nice video from Touble Chute (a very big thanks to him):
+
+[![TroubleChute](https://img.youtube.com/vi/6D46stJMP68/0.jpg)](https://www.youtube.com/watch?v=6D46stJMP68)
+
+
 ## Features
 
 - **Smooth Mouse Transitions**: Ensures smooth and accurate mouse movement across screens with different DPI settings.
@@ -38,12 +51,6 @@ Little Big Mouse provides a single-window interface with three main sections:
 If you encounter any issues or have suggestions for improvements, please open an issue on our [Issues](https://github.com/mgth/LittleBigMouse/issues) page. We appreciate your feedback and are always looking to improve the tool.
 
 **We Welcome Contributions**: Your help is invaluable! Whether it's reporting bugs, suggesting new features, or submitting pull requests, we encourage you to get involved. Your contributions can make a significant difference in the development and improvement of Little Big Mouse. **First time?** Check out [This guide](https://github.com/firstcontributions/first-contributions) to get started.
-
-## Donations
-
-If you find Little Big Mouse helpful, consider supporting the project with a donation. Your contribution helps us maintain and improve the software.
-
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=YLGYPSHWTQ5UW&lc=FR&item_name=Mgth&currency_code=EUR&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted)
 
 ## Acknowledgements
 

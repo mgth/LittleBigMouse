@@ -181,17 +181,8 @@ public class MonitorsLayout : ReactiveModel, IMonitorsLayout
     PhysicalMonitor? _selected;
 
 
-    internal static string LayoutPath(string layoutId, bool create)
-    {
-        var path = Path.Combine(Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData), "LittleBigMouse", layoutId);
 
-        if (create) Directory.CreateDirectory(path);
-
-        return path;
-    }
-
-    public string LayoutPath(bool create) => LayoutPath(Id, create);
+    public string LayoutPath(bool create) => Options.GetConfigPath(Id, create);
 
     public void EnumWmi()
     {

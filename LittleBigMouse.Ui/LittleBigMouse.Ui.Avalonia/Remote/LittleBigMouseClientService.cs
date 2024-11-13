@@ -9,15 +9,18 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using HLab.Remote;
+using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.Ui.Avalonia.Remote;
 
 public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 {
-    public event EventHandler<LittleBigMouseServiceEventArgs> DaemonEventReceived;
+    public event EventHandler<LittleBigMouseServiceEventArgs>? DaemonEventReceived;
     //NamedPipeClientStream _client;
-    readonly RemoteClientSocket _client = new("localhost",25196);
+    readonly RemoteClientSocket _client;
+
+
 
     protected void OnStateChanged(LittleBigMouseEvent evt, string payload = "")
     {
@@ -28,8 +31,10 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         DaemonEventReceived?.Invoke(this, new (evt,payload));
     }
 
-    public LittleBigMouseClientService()
+    public LittleBigMouseClientService(ILayoutOptions options)
     {
+        _client = new("localhost", options.DaemonPort);
+
         _client.ConnectionFailed += (sender, args) =>
         {
             Debug.WriteLine($"ConnectionFailed : Launch daemon");
@@ -90,7 +95,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
     void CreateExcludedFile()
     {
-        var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
         if(File.Exists(file))
         {
@@ -202,7 +207,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     {
         var xml = messages.Aggregate("", (current, command) => current + $"{command.Serialize()}\n");
 
-        var data = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var data = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
         var path = Path.Combine(
             data,

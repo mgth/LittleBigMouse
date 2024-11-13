@@ -63,13 +63,4 @@ public class SystemMonitorsService : ISystemMonitorsService
     //public IObservableCache<MonitorDevice,string> AttachedMonitors => _attachedMonitors;    
     public static ISystemMonitorsService MonitorsSetDesign => new SystemMonitorsService();
 
-    public string AppDataPath(bool create)
-    {
-        var path = Path.Combine(Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData), "LittleBigMouse");
-
-        if (create) Directory.CreateDirectory(path);
-
-        return path;
-    }
 }

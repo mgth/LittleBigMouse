@@ -4,6 +4,7 @@ using LittleBigMouse.DisplayLayout;
 using Microsoft.Win32;
 using System.Globalization;
 using System.IO;
+using System.Security.Principal;
 using Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -34,6 +35,7 @@ public static class PersistencyExtensions
         if (mainKey == null) return;
 
         // Options to be loaded from the main key, was previously loaded from the layout key
+        @this.DaemonPort = mainKey.GetOrSet("DaemonPort", () => 25196);
         @this.Priority = mainKey.GetOrSet("Priority",  () => key.GetOrSet("Priority",() => "Normal"));
         @this.PriorityUnhooked = mainKey.GetOrSet("PriorityUnhooked", () => key.GetOrSet("PriorityUnhooked",() => "Below"));
 
@@ -45,8 +47,7 @@ public static class PersistencyExtensions
 
         @this.ExcludedList.Clear();
 
-        var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-        var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
+        var file = @this.GetConfigPath("Excluded.txt",true);
         if (!File.Exists(file)) return;
 
         foreach (var line in File.ReadAllLines(file))
@@ -73,6 +74,14 @@ public static class PersistencyExtensions
         @this.Saved = true;
     }
 
+    static bool IsProcessElevated()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+
     //==================//
     // Layout           //
     //==================//
@@ -82,6 +91,8 @@ public static class PersistencyExtensions
         using var key = @this.OpenRegKey(true);
 
         @this.Options.LoadAtStartup = @this.IsScheduled();
+
+        @this.Options.Elevated = IsProcessElevated();
 
         @this.Options.Load(mainKey, key);
 
@@ -120,8 +131,7 @@ public static class PersistencyExtensions
         mainKey.SetKey("StartMinimized", @this.StartMinimized);
         mainKey.SetKey("StartElevated", @this.StartElevated);
 
-        var path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-        var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
+        var file = @this.GetConfigPath("Excluded.txt",true);
 
         using var sw = File.CreateText(file);
 

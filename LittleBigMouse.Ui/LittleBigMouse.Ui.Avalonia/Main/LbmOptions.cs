@@ -1,4 +1,6 @@
-﻿using System.Collections.ObjectModel;
+﻿using System;
+using System.Collections.ObjectModel;
+using System.IO;
 using System.Runtime.Serialization;
 using HLab.Base.Avalonia;
 using HLab.Base.ReactiveUI;
@@ -14,14 +16,6 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     {
         ExcludedList.CollectionChanged += (sender, args) => Saved = false;
     }
-
-    [DataMember]
-    public bool Enabled
-    {
-        get => _enabled;
-        set => SetAndRaise(ref _enabled, value);
-    }
-    bool _enabled;
 
     [DataMember]
     public bool AutoUpdate
@@ -56,7 +50,22 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     bool _startElevated;
 
     [DataMember]
-    public string Priority
+    public bool Elevated 
+    { 
+        get => _elevated; 
+        set => SetAndRaise(ref _elevated, value); 
+    }
+    bool _elevated = false;
+
+    public int DaemonPort
+    { 
+        get => _daemonPort; 
+        set => SetAndRaise(ref _daemonPort, value); 
+    }
+    int _daemonPort = 25196;
+
+    [DataMember]
+    public string Priority 
     {
         get => _priority;
         set => SetUnsavedValue(ref _priority, value);
@@ -70,6 +79,14 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
         set => SetUnsavedValue(ref _priorityUnhooked, value);
     }
     string _priorityUnhooked = "Below";
+
+    [DataMember]
+    public bool Enabled
+    {
+        get => _enabled;
+        set => SetAndRaise(ref _enabled, value);
+    }
+    bool _enabled;
 
     [DataMember]
     public bool LoopAllowed => true;
@@ -98,7 +115,6 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     }
     bool _isUnaryRatio;
 
-
     [DataMember]
     public bool AdjustPointer
     {
@@ -106,7 +122,6 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
         set => SetUnsavedValue(ref _adjustPointer, value);
     }
     bool _adjustPointer;
-
 
     [DataMember]
     public bool AdjustSpeed
@@ -124,6 +139,7 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     }
     bool _homeCinema;
 
+    [DataMember]
     public double MaxTravelDistance
     {
         get => _maxTravelDistance;
@@ -131,13 +147,13 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     }
     double _maxTravelDistance = 200.0;
 
+    [DataMember]
     public double MinimalMaxTravelDistance
     {
         get => _minimalMaxTravelDistance;
         set => SetAndRaise(ref _minimalMaxTravelDistance, value);
     }
     double _minimalMaxTravelDistance = 0.0;
-
 
     [DataMember]
     public bool Pinned
@@ -146,6 +162,7 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
         set => SetUnsavedValue(ref _pinned, value);
     }
     bool _pinned;
+
     /// <summary>
     /// allow monitors to overlap, may be useful for overlapped borders
     /// </summary>
@@ -182,6 +199,17 @@ public class LbmOptions : ReactiveModel, ILayoutOptions
     string _algorithm = "Strait";
 
     public ObservableCollection<string> ExcludedList { get; } = new();
+
+    public string GetConfigPath(string layoutId, bool create)
+    {
+        var path = Path.Combine(Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData), "Mgth", "LittleBigMouse", layoutId);
+
+        if (create) Directory.CreateDirectory(path);
+
+        return path;
+    }
+
 
 
 }

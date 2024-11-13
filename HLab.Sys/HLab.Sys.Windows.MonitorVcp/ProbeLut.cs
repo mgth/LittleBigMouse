@@ -188,11 +188,11 @@ public class ProbeLut : ReactiveObject
     public double MinLuminance =>
         (_lut.Count == 0) ? 0 : _lut.First().Y;
 
-    string ConfigPath(bool create = false)
+    string GetConfigPath(bool create = false)
     {
         var path = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "LittleBigMouse"
+            "Mgth", "LittleBigMouse"
         );
         path = Path.Combine(path, _monitor.Id);
         path = Path.Combine(path, "Luminance.xml");
@@ -205,7 +205,7 @@ public class ProbeLut : ReactiveObject
     public void Save()
     {
         var serializer = new XmlSerializer(typeof(List<Tune>));
-        using TextWriter writer = new StreamWriter(ConfigPath(true));
+        using TextWriter writer = new StreamWriter(GetConfigPath(true));
 
         serializer.Serialize(writer, _lut);
     }
@@ -215,7 +215,7 @@ public class ProbeLut : ReactiveObject
         var deserializer = new XmlSerializer(typeof(List<Tune>));
         try
         {
-            using TextReader reader = new StreamReader(ConfigPath());
+            using TextReader reader = new StreamReader(GetConfigPath());
             _lut = (List<Tune>)deserializer.Deserialize(reader);
             reader.Close();
         }

@@ -76,6 +76,12 @@
 									IsChecked="{Binding Path=Model.StartElevated, FallbackValue=false, Mode=TwoWay}"
 									ToolTip.Tip="Start with elevated privileges."/>
 
+                                <CheckBox
+                                    Content="Elevated"
+                                    IsChecked="{Binding Path=Model.Elevated, FallbackValue=false, Mode=OneWay}"
+									IsEnabled="False"
+                                    ToolTip.Tip="Start with elevated privileges."/>
+								
 								<Label>Daemon Priority</Label>
 								<StackPanel Orientation="Horizontal">
 								<Label VerticalAlignment="Center">Hooked</Label>

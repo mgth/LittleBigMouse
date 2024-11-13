@@ -531,21 +531,31 @@ public static class MonitorDeviceHelper
         return !remaining.Any();
     }
 
-    static RegistryKey GetConnectivityKey(IEnumerable<MonitorDevice> monitors)
+    static RegistryKey? GetConnectivityKey(IEnumerable<MonitorDevice> monitors)
     {
-#pragma warning disable CA1416 // Valider la compatibilité de la plateforme
-        using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Connectivity");
-        if (key == null) return null;
-
-        foreach (var configurationKeyName in key.GetSubKeyNames())
+        #pragma warning disable CA1416 // Valider la compatibilité de la plateforme
+        try
         {
-            var configurationKey = key.OpenSubKey(configurationKeyName);
-            if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0'), monitors))
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Connectivity");
+            if (key == null) return null;
+
+            var m = monitors.ToArray();
+
+            foreach (var configurationKeyName in key.GetSubKeyNames())
             {
-                return configurationKey;
+                var configurationKey = key.OpenSubKey(configurationKeyName);
+                if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0'), m))
+                {
+                    return configurationKey;
+                }
             }
+            return null;
         }
-        return null;
+        catch (Exception e)
+        {
+            Debug.WriteLine(e);
+            return null;
+        }
     }
 
     static bool ParseSetId(RegistryKey key, string keyName, List<MonitorDevice> remaining, ref int number)
@@ -591,7 +601,7 @@ public static class MonitorDeviceHelper
     }
 
     /// <summary>
-    /// Try to gess monitor number from windows configuration
+    /// Try to guess monitor number from windows configuration
     /// </summary>
     /// <param name="monitors"></param>
     /// <returns></returns>

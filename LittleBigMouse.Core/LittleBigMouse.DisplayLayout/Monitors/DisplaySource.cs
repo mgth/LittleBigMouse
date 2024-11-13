@@ -20,7 +20,7 @@ public enum WallpaperStyle
 /// <summary>
 /// 
 /// </summary>
-public class DisplaySource : ReactiveModel
+public class DisplaySource : SavableReactiveModel
 {
     public string Id { get; }
 

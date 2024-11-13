@@ -1,15 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <Platforms>AnyCPU;x64;x86</Platforms>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
 	<Version>2.4.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-	  <PackageReference Include="Avalonia" Version="11.2.0-beta1" />
-	  <PackageReference Include="Avalonia.ReactiveUI" Version="11.2.0-beta1" />
+	  <PackageReference Include="Avalonia" Version="11.2.0" />
+	  <PackageReference Include="Avalonia.ReactiveUI" Version="11.2.0" />
   </ItemGroup>
 
   <ItemGroup>

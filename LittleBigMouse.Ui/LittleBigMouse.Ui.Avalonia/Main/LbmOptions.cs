@@ -10,7 +10,7 @@ using ReactiveUI;
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
 
-public class LbmOptions : ReactiveModel, ILayoutOptions
+public class LbmOptions : SavableReactiveModel, ILayoutOptions
 {
     public LbmOptions()
     {

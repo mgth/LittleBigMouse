@@ -30,7 +30,7 @@ using LittleBigMouse.Zoning;
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 
-public class BorderResistance : ReactiveModel, IBorderResistance
+public class BorderResistance : SavableReactiveModel, IBorderResistance
 {
     public double Left 
     { 
@@ -70,7 +70,7 @@ public interface IDisplayRatio : ISavable
 }
 
 [DataContract]
-public abstract class DisplayRatio : ReactiveModel, IDisplayRatio, IEquatable<IDisplayRatio>
+public abstract class DisplayRatio : SavableReactiveModel, IDisplayRatio, IEquatable<IDisplayRatio>
 {
     protected DisplayRatio() { }
     [DataMember]

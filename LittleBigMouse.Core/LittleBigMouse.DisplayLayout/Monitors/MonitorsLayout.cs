@@ -25,7 +25,7 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 /// 
 /// </summary>
 [DataContract]
-public class MonitorsLayout : ReactiveModel, IMonitorsLayout
+public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
 {
     public MonitorsLayout(ILayoutOptions options)
     {

@@ -39,7 +39,7 @@ using ReactiveUI;
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
 [DataContract]
-public class PhysicalMonitor : ReactiveModel
+public class PhysicalMonitor : SavableReactiveModel
 {
     public class Design : PhysicalMonitor
     {

@@ -8,7 +8,7 @@ using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
-public class PhysicalSource : ReactiveModel
+public class PhysicalSource : SavableReactiveModel
 {
     [JsonIgnore]
     public PhysicalMonitor Monitor { get; }

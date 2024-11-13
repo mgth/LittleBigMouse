@@ -33,14 +33,9 @@ using ReactiveUI;
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 [DataContract]
-public abstract class DisplaySize : ReactiveModel, IDisplaySize
+public abstract class DisplaySize(IDisplaySize source) : SavableReactiveModel, IDisplaySize
 {
-    protected DisplaySize(IDisplaySize source)
-    {
-        Source = source;
-    }
-
-    protected void Init()
+   protected void Init()
     {
         _borders = this.WhenAnyValue(
                 e => e.LeftBorder,
@@ -109,7 +104,7 @@ public abstract class DisplaySize : ReactiveModel, IDisplaySize
     }
 
     [JsonIgnore]
-    public IDisplaySize Source { get; }
+    public IDisplaySize Source { get; } = source;
 
     //[DataMember]
     public abstract double Width { get; set; }

@@ -60,14 +60,14 @@
             <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Red}"/>
             <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Green}"/>
             <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Blue}"/>
+			
+            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Source}"/>
 
             <Rectangle Width="20"/>
             <StackPanel VerticalAlignment="Center" Orientation="Vertical" IsVisible="{Binding AnywayVisibility}">
                 <Label Foreground="White">DDC/CI not available</Label>
                 <Button Command="{Binding AnywayCommand}">Try anyway</Button>
             </StackPanel>
-
-            <!--<Button Command="{Binding SwitchSourceCommand}" Content="Test"/>-->
 
         </StackPanel>
         </ScrollViewer>

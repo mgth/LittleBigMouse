@@ -58,10 +58,10 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.0" />
     <PackageReference Include="Grace" Version="8.0.0-RC837" />
     <PackageReference Include="Live.Avalonia" Version="1.4.1" />
-    <PackageReference Include="MessageBox.Avalonia" Version="3.1.6" />
+    <PackageReference Include="MessageBox.Avalonia" Version="3.2.0" />
     <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.7.23375.6" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.5" />
-    <PackageReference Include="System.Resources.Extensions" Version="9.0.0-preview.7.24405.7" />
+    <PackageReference Include="System.Resources.Extensions" Version="9.0.0" />
   </ItemGroup>
 
 	<ItemGroup>

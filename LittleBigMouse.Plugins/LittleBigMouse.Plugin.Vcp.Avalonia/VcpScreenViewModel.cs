@@ -96,7 +96,6 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
        AnywayCommand = ReactiveCommand.Create(() => Vcp?.ActivateAnyway());
 
-       SwitchSourceCommand = ReactiveCommand.Create(SwitchSource);
     }
 
     public bool BrightnessVisibility => _brightnessVisibility.Value;
@@ -582,10 +581,6 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
     public ICommand SwitchSourceCommand { get; }
 
-    void SwitchSource()
-    {
-        Vcp.SetSource(12);
-    }
 
     public override void OnDispose()
     {

@@ -74,7 +74,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
     public IMainService? MainService 
     { 
         get => _mainService; 
-        set => SetAndRaise(ref _mainService, value);
+        set => this.SetAndRaise(ref _mainService, value);
     }
     IMainService? _mainService;
 

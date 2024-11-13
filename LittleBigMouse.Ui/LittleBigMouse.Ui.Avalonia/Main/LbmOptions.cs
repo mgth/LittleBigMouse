@@ -53,14 +53,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool Elevated 
     { 
         get => _elevated; 
-        set => SetAndRaise(ref _elevated, value); 
+        set => this.SetAndRaise(ref _elevated, value); 
     }
     bool _elevated = false;
 
     public int DaemonPort
     { 
         get => _daemonPort; 
-        set => SetAndRaise(ref _daemonPort, value); 
+        set => this.SetAndRaise(ref _daemonPort, value); 
     }
     int _daemonPort = 25196;
 
@@ -84,7 +84,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool Enabled
     {
         get => _enabled;
-        set => SetAndRaise(ref _enabled, value);
+        set => this.SetAndRaise(ref _enabled, value);
     }
     bool _enabled;
 
@@ -151,7 +151,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public double MinimalMaxTravelDistance
     {
         get => _minimalMaxTravelDistance;
-        set => SetAndRaise(ref _minimalMaxTravelDistance, value);
+        set => this.SetAndRaise(ref _minimalMaxTravelDistance, value);
     }
     double _minimalMaxTravelDistance = 0.0;
 

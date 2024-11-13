@@ -29,6 +29,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using DynamicData;
+using HLab.Base;
 using HLab.Base.Avalonia;
 using HLab.Base.Avalonia.Extensions;
 using HLab.Base.ReactiveUI;
@@ -45,7 +46,7 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
-public class LocationControlViewModel : ViewModel<MonitorsLayout>
+public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 {
     readonly ISystemMonitorsService _monitorsService;
     readonly IMainService _mainService;
@@ -278,7 +279,9 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>
         get => _liveUpdate;
         set => this.RaiseAndSetIfChanged(ref _liveUpdate,value);
     }
-    bool _liveUpdate;
+   public bool Saved { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
+   bool _liveUpdate;
 
 
 

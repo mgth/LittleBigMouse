@@ -8,7 +8,7 @@ public class MonitorRgbLevel : ReactiveObject
 {
     readonly MonitorLevel[] _values = new MonitorLevel[3];
 
-    public MonitorRgbLevel(LevelParser parser, VcpGetter getter, VcpSetter setter)
+    public MonitorRgbLevel(CommandWorker parser, VcpGetter getter, VcpSetter setter)
     {
         for (var i = 0; i < 3; i++)
             _values[i] = new MonitorLevel(parser, getter, setter, (VcpComponent)i);

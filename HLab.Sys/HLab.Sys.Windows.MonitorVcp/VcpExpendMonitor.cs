@@ -6,7 +6,7 @@ namespace HLab.Sys.Windows.MonitorVcp;
 
 public static class VcpExpendMonitor
 {
-    static readonly LevelParser LevelParser = new();
+    static readonly CommandWorker LevelParser = new();
 
     static readonly ConditionalWeakTable<MonitorDevice, VcpControl> AllVcp = new();
     public static VcpControl Vcp(this MonitorDevice monitor) 

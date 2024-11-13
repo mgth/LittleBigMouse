@@ -28,37 +28,28 @@ public class MonitorLevelDesign : MonitorLevel, IDesignViewModel
     }
    
     public MonitorLevelDesign(VcpComponent component = VcpComponent.None) 
-        : base(new LevelParser(), VcpGetter, VcpSetter, component)
+        : base(new CommandWorker(), VcpGetter, VcpSetter, component)
     {
         if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
     }
 }
 
-public class MonitorLevel : ReactiveObject
+public interface IWorkProvider
 {
-    public VcpComponent Component { get; }
+   void DoWork();
+}
 
-    readonly VcpSetter _componentSetter;
-    readonly VcpGetter _componentGetter;
-    readonly LevelParser _levelParser;
-
-    public MonitorLevel(
-        LevelParser parser, 
-        VcpGetter getter, 
-        VcpSetter setter, 
-        VcpComponent component = VcpComponent.None
-        )
-    {
-        Component = component;
-        _componentSetter = setter;
-        _componentGetter = getter;
-
-        _levelParser = parser;
-    }
+public class MonitorLevel(
+   CommandWorker parser,
+   VcpGetter getter, VcpSetter setter,
+   VcpComponent component = VcpComponent.None)
+   : ReactiveObject, IWorkProvider
+{
+    public VcpComponent Component { get; } = component;
 
     public MonitorLevel Start()
     {
-        _levelParser.Enqueue(this);
+        parser.Enqueue(this);
         return this;
     }
 
@@ -84,10 +75,11 @@ public class MonitorLevel : ReactiveObject
     const int MAX_RETRY = 10;
     int _retryRead = MAX_RETRY;
     int _retryWrite = MAX_RETRY;
-    internal void DoWork()
+
+    void IWorkProvider.DoWork()
     {
         // First get current value
-        _componentGetter(Component).Switch((v =>
+        getter(Component).Switch((v =>
             {
                 _retryRead = MAX_RETRY;
                 Min = v.min;
@@ -103,7 +95,7 @@ public class MonitorLevel : ReactiveObject
                 // if moving, try to set remote value
                 if (Moving && Enabled)
                 {
-                    if (_componentSetter(Value, Component))
+                    if (setter(Value, Component))
                     {
                         _retryWrite = MAX_RETRY;
                     }
@@ -136,7 +128,7 @@ public class MonitorLevel : ReactiveObject
                 }
             });
 
-         _levelParser.Enqueue(this);
+         parser.Enqueue(this);
     }
 
     uint _value;

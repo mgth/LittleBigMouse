@@ -4,13 +4,13 @@ using System.Threading.Tasks;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
-public sealed class LevelParser
+public sealed class CommandWorker
 {
     Task _task;
-    readonly ConcurrentQueue<MonitorLevel> _actions = new();
+    readonly ConcurrentQueue<IWorkProvider> _actions = new();
     bool _stop = false;
 
-    public void Enqueue(MonitorLevel level)
+    public void Enqueue(IWorkProvider level)
     {
         _actions.Enqueue(level);
         _task ??= Task.Run(DoWork);

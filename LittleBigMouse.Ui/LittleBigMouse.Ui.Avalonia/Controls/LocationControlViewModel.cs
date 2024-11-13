@@ -279,10 +279,14 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         get => _liveUpdate;
         set => this.RaiseAndSetIfChanged(ref _liveUpdate,value);
     }
-   public bool Saved { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-
    bool _liveUpdate;
 
+   public bool Saved
+   {
+      get => _saved;
+      set => this.RaiseAndSetIfChanged(ref _saved, value);
+   }
+   bool _saved;
 
 
     void DoLiveUpdate()

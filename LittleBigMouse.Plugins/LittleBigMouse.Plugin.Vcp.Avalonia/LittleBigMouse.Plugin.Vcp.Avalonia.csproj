@@ -21,9 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <PackageReference Include="Avalonia" Version="11.2.0" />
-	  <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.2.0" />
-	  <PackageReference Include="ScottPlot.Avalonia" Version="5.0.45" />
+	  <PackageReference Include="Avalonia" Version="11.2.3" />
+	  <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.2.3" />
+	  <PackageReference Include="ScottPlot.Avalonia" Version="5.0.47" />
   </ItemGroup>
 
   <ItemGroup>

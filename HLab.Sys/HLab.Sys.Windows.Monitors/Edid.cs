@@ -22,6 +22,7 @@
 */
 
 using Avalonia;
+using System;
 using System.Runtime.Serialization;
 
 namespace HLab.Sys.Windows.Monitors;
@@ -66,45 +67,47 @@ public interface IEdid
     int Checksum { get; }
 }
 
-
-public class Edid : IEdid
+public static class  EdidParser
 {
-    public Edid(string key, byte[] edid)
+    public static Edid Parse(string key, byte[] edid)
     {
-        HKeyName = key;
+      var e = new Edid
+      {
+         HKeyName = key
+      };
 
-        if (edid.Length <= 9) return;
+      if (edid.Length <= 9) return e;
 
-        ManufacturerCode = "" + (char)(64 + ((edid[8] >> 2) & 0x1F))
+        e.ManufacturerCode = "" + (char)(64 + ((edid[8] >> 2) & 0x1F))
                               + (char)(64 + (((edid[8] << 3) | (edid[9] >> 5)) & 0x1F))
                               + (char)(64 + (edid[9] & 0x1F));
 
-        if (edid.Length <= 11) return;
+        if (edid.Length <= 11) return e;
 
-        ProductCode = (edid[10] + (edid[11] << 8)).ToString("X4");
+        e.ProductCode = (edid[10] + (edid[11] << 8)).ToString("X4");
 
-        if (edid.Length <= 15) return;
+        if (edid.Length <= 15) return e;
 
         var serial = "";
         for (var i = 12; i <= 15; i++) serial = edid[i].ToString("X2") + serial;
-        Serial = serial;
+        e.Serial = serial;
 
-        if (edid.Length <= 16) return;
-        Week = edid[16];
+        if (edid.Length <= 16) return e;
+        e.Week = edid[16];
 
-        if (edid.Length < 18) return;
-        Year = edid[17] + 1990;
+        if (edid.Length < 18) return e;
+        e.Year = edid[17] + 1990;
 
-        if (edid.Length <= 19) return;
-        Version = edid[18] + "." + edid[19];
+        if (edid.Length <= 19) return e;
+        e.Version = edid[18] + "." + edid[19];
 
-        if (edid.Length <= 20) return;
+        if (edid.Length <= 20) return e;
 
-        Digital = (edid[20] >> 7) == 1;
-        if (Digital)
+        e.Digital = (edid[20] >> 7) == 1;
+        if (e.Digital)
         {
-            BitDepth = 4 + ((edid[20] & 0b01110000) >> 3);
-            VideoInterface = (edid[20] & 0b1111) switch
+            e.BitDepth = 4 + ((edid[20] & 0b01110000) >> 3);
+            e.VideoInterface = (edid[20] & 0b1111) switch
             {
                 0 => "undefined",
                 2 => "HDMIa",
@@ -119,42 +122,41 @@ public class Edid : IEdid
         {
 
         }
-        if (edid.Length <= 21) return;
+        if (edid.Length <= 21) return e;
 
-        var h = edid[21] * 10;
+        e.PhysicalWidth = edid[21] * 10;
 
-        if (edid.Length <= 22) return;
+        if (edid.Length <= 22) return e;
 
-        var v = edid[22] * 10;
+        e.PhysicalHeight = edid[22] * 10;
 
-        PhysicalSize = new Size(h, v);
 
-        if (edid.Length <= 23) return;
+        if (edid.Length <= 23) return e;
 
         if (edid[23] < 255)
         {
-            Gamma = 1.0 + edid[23] / 100.0;
+            e.Gamma = 1.0 + edid[23] / 100.0;
         }
         else
         {
             // todo : else check DI-EXT block
         }
-        if (edid.Length <= 24) return;
-        DpmsStandbySupported = (edid[24] & (0b1 << 7)) > 0;
-        DpmsSuspendSupported = (edid[24] & (0b1 << 6)) > 0;
-        DpmsActiveOffSupported = (edid[24] & (0b1 << 5)) > 0;
+        if (edid.Length <= 24) return e;
+        e.DpmsStandbySupported = (edid[24] & (0b1 << 7)) > 0;
+        e.DpmsSuspendSupported = (edid[24] & (0b1 << 6)) > 0;
+        e.DpmsActiveOffSupported = (edid[24] & (0b1 << 5)) > 0;
 
-        if (Digital)
+        if (e.Digital)
         {
-            YCrCb422Support = (edid[24] & (0b1 << 4)) > 0;
-            YCrCb444Support = (edid[24] & (0b1 << 3)) > 0;
+            e.YCrCb422Support = (edid[24] & (0b1 << 4)) > 0;
+            e.YCrCb444Support = (edid[24] & (0b1 << 3)) > 0;
         }
         else
         {
             // todo : analog display
         }
 
-        if (edid.Length <= 34) return;
+        if (edid.Length <= 34) return e;
 
         if ((edid[24] & (0b1 << 2)) > 0)
         {
@@ -168,111 +170,115 @@ public class Edid : IEdid
             var whiteX = ((edid[26] >> 2) & 0b11) | (((int)edid[33]) << 2);
             var whiteY = (edid[26] & 0b11) | (((int)edid[34]) << 2);
 
-            RedX = ((double)redX) / 1024.0;
-            RedY = ((double)redY) / 1024.0;
-            GreenX = ((double)greenX) / 1024.0;
-            GreenY = ((double)greenY) / 1024.0;
-            BlueX = ((double)blueX) / 1024.0;
-            BlueY = ((double)blueY) / 1024.0;
-            WhiteX = ((double)whiteX) / 1024.0;
-            WhiteY = ((double)whiteY) / 1024.0;
+            e.RedX = ((double)redX) / 1024.0;
+            e.RedY = ((double)redY) / 1024.0;
+            e.GreenX = ((double)greenX) / 1024.0;
+            e.GreenY = ((double)greenY) / 1024.0;
+            e.BlueX = ((double)blueX) / 1024.0;
+            e.BlueY = ((double)blueY) / 1024.0;
+            e.WhiteX = ((double)whiteX) / 1024.0;
+            e.WhiteY = ((double)whiteY) / 1024.0;
         }
 
 
-        if (edid.Length <= 68) return;
+        if (edid.Length <= 68) return e;
 
-        PhysicalSize = new Size(
-            ((edid[68] & 0xF0) << 4) + edid[66],
-            ((edid[68] & 0x0F) << 8) + edid[67]
-        );
+        e.PhysicalWidth =  ((edid[68] & 0xF0) << 4) + edid[66];
+        e.PhysicalHeight = ((edid[68] & 0x0F) << 8) + edid[67];
 
-        Model = Block((char)0xFC, edid);
+        e.Model = Block((char)0xFC, edid);
 
-        SerialNumber = Block((char)0xFF, edid);
+        e.SerialNumber = Block((char)0xFF, edid);
 
-        if (edid.Length <= 127) return;
-        Checksum = edid[127];
+        if (edid.Length <= 127) return e;
+        e.Checksum = edid[127];
 
-
+      return e;
     }
-
-    [DataMember] 
-    public string HKeyName { get; }
-    [DataMember]
-    public string ProductCode { get; }
-    [DataMember]
-    public string Serial { get; }
-    [DataMember]
-    public Size PhysicalSize { get; }
-    [DataMember]
-    public string ManufacturerCode { get; }
-    [DataMember]
-    public string Model { get; }
-    [DataMember]
-    public string SerialNumber { get; }
-    [DataMember]
-    public int Week { get; }
-    [DataMember]
-    public int Year { get; }
-    [DataMember]
-    public string Version { get; }
-    [DataMember]
-    public bool Digital { get; }
-    [DataMember]        
-    public int BitDepth { get; }
-    [DataMember]
-    public string VideoInterface { get; }
-    [DataMember]
-    public double Gamma { get; }
-    [DataMember]
-    public bool DpmsStandbySupported { get; }
-    [DataMember]
-    public bool DpmsSuspendSupported { get; }
-    [DataMember]
-    public bool DpmsActiveOffSupported { get; }
-    [DataMember]
-    public bool YCrCb444Support { get; }
-    [DataMember]
-    public bool YCrCb422Support { get; }
-    [DataMember]
-    public double sRGB { get; }
-
-    [DataMember]    
-    public double RedX { get; }
-    [DataMember]
-    public double RedY { get; }
-    [DataMember]
-    public double GreenX { get; }
-    [DataMember]
-    public double GreenY { get; }
-    [DataMember]
-    public double BlueX { get; }
-    [DataMember]
-    public double BlueY { get; }
-    [DataMember]
-    public double WhiteX { get; }
-    [DataMember]
-    public double WhiteY { get; }
-    [DataMember]
-    public int Checksum { get; }
-
     static string Block(char code, byte[] edid)
     {
-        for (var i = 54; i <= 108; i += 18)
-        {
-            if (i >= edid.Length || edid[i] != 0 || edid[i + 1] != 0 || edid[i + 2] != 0 ||
-                edid[i + 3] != code) continue;
-            var s = "";
-            for (var j = i + 5; j < i + 18; j++)
-            {
-                var c = (char)edid[j];
-                if (c == (char)0x0A) break;
-                if (c == (char)0x00) break;
-                s += c;
-            }
-            return s;
-        }
-        return "";
+       for (var i = 54; i <= 108; i += 18)
+       {
+          if (i >= edid.Length || edid[i] != 0 || edid[i + 1] != 0 || edid[i + 2] != 0 ||
+              edid[i + 3] != code) continue;
+          var s = "";
+          for (var j = i + 5; j < i + 18; j++)
+          {
+             var c = (char)edid[j];
+             if (c == (char)0x0A) break;
+             if (c == (char)0x00) break;
+             s += c;
+          }
+          return s;
+       }
+       return "";
     }
 
+ 
+}
+
+
+public class Edid
+{
+    [DataMember] 
+    public string HKeyName { get; set; }
+    [DataMember]
+    public string ProductCode { get; set; }
+    [DataMember]
+    public string Serial { get; set; }
+    [DataMember]
+    public double PhysicalWidth { get; set; }
+    [DataMember]
+    public double PhysicalHeight { get; set; }
+    [DataMember]
+    public string ManufacturerCode { get; set; }
+    [DataMember]
+    public string Model { get; set; }
+    [DataMember]
+    public string SerialNumber { get; set; }
+    [DataMember]
+    public int Week { get; set; }
+    [DataMember]
+    public int Year { get; set; }
+    [DataMember]
+    public string Version { get; set; }
+    [DataMember]
+    public bool Digital { get; set; }
+    [DataMember]        
+    public int BitDepth { get; set; }
+    [DataMember]
+    public string VideoInterface { get; set; }
+    [DataMember]
+    public double Gamma { get; set; }
+    [DataMember]
+    public bool DpmsStandbySupported { get; set; }
+    [DataMember]
+    public bool DpmsSuspendSupported { get; set; }
+    [DataMember]
+    public bool DpmsActiveOffSupported { get; set; }
+    [DataMember]
+    public bool YCrCb444Support { get; set; }
+    [DataMember]
+    public bool YCrCb422Support { get; set; }
+    [DataMember]
+    public double sRGB { get; set; }
+
+    [DataMember]    
+    public double RedX { get; set; }
+    [DataMember]
+    public double RedY { get; set; }
+    [DataMember]
+    public double GreenX { get; set; }
+    [DataMember]
+    public double GreenY { get; set; }
+    [DataMember]
+    public double BlueX { get; set; }
+    [DataMember]
+    public double BlueY { get ; set; }
+    [DataMember]
+    public double WhiteX { get; set; }
+    [DataMember]
+    public double WhiteY { get; set; }
+    [DataMember]
+    public int Checksum { get; set; }
 }

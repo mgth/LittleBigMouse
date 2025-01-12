@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ExtendedXmlSerializer" Version="3.8.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Core\LittleBigMouse.Zones\LittleBigMouse.Zoning.csproj" />
+  </ItemGroup>
+
+</Project>

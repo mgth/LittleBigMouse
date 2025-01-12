@@ -5,14 +5,13 @@
     <Platforms>x64;x86;AnyCpu</Platforms>
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
-	<Version>5.2.4.0</Version>
+	<Version>5.3.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.2.3" />
     <PackageReference Include="H.Pipes" Version="15.0.0" />
-    <PackageReference Include="MessageBox.Avalonia" Version="3.2.0" />
     <PackageReference Include="Microsoft.Win32.SystemEvents" Version="9.0.0" />
+    <PackageReference Include="ReactiveUI" Version="20.1.63" />
     <PackageReference Include="System.Management" Version="9.0.0" />
     <PackageReference Include="TaskScheduler" Version="2.11.0" />
   </ItemGroup>

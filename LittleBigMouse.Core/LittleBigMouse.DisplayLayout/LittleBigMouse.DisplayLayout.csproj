@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	<TargetFrameworks>net8.0</TargetFrameworks>
-    <Platforms>x64;x86;AnyCpu</Platforms>
+	<TargetFrameworks>net9.0</TargetFrameworks>
+    <Platforms>x64</Platforms>
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
 	<Version>5.3.0.0</Version>
@@ -10,10 +10,10 @@
 
   <ItemGroup>
     <PackageReference Include="H.Pipes" Version="15.0.0" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="9.0.0" />
-    <PackageReference Include="ReactiveUI" Version="20.1.63" />
-    <PackageReference Include="System.Management" Version="9.0.0" />
-    <PackageReference Include="TaskScheduler" Version="2.11.0" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="9.0.3" />
+    <PackageReference Include="ReactiveUI" Version="20.2.45" />
+    <PackageReference Include="System.Management" Version="9.0.3" />
+    <PackageReference Include="TaskScheduler" Version="2.12.1" />
   </ItemGroup>
 
   <ItemGroup>

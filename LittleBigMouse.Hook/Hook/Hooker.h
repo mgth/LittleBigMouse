@@ -1,10 +1,10 @@
 #pragma once
-#include "framework.h"
+#include "../framework.h"
 #include <atomic>
 
-#include "SignalSlot.h"
-#include "Engine/Priority.h"
-#include "Thread/ThreadHost.h"
+#include "../SignalSlot.h"
+#include "../Engine/Priority.h"
+#include "../Thread/ThreadHost.h"
 
 class MouseEventArg;
 class MouseEngine;

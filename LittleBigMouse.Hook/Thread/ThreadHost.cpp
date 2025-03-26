@@ -1,6 +1,6 @@
 #include "ThreadHost.h"
 
-#include "Daemon/LittleBigMouseDaemon.h"
+#include "../Daemon/LittleBigMouseDaemon.h"
 
 ThreadHost::~ThreadHost()
 {

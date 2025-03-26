@@ -1,5 +1,5 @@
 #pragma once
-#include "Config.h"
+#include "../Config.h"
 
 #if _DEBUG && DEBUG_LOG 
 

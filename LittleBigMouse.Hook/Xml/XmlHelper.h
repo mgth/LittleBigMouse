@@ -1,10 +1,10 @@
 #pragma once
-#include "Framework.h"
+#include "../Framework.h"
 
 #include <string>
 
-#include "Geometry/Rect.h"
-#include "Xml/tinyxml2.h"
+#include "../Geometry/Rect.h"
+#include "../Xml/tinyxml2.h"
 
 class XmlHelper
 {

@@ -1,8 +1,8 @@
 #pragma once
-#include "Framework.h"
+#include "../Framework.h"
 
 #include <chrono>
-#include "Geometry/Point.h"
+#include "../Geometry/Point.h"
 
 class MouseEventArg
 {

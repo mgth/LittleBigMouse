@@ -160,7 +160,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
             Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
         }
-        catch (ExecutionEngineException ex)
+        catch (Exception ex)
         {
 
         }

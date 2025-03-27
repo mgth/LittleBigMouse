@@ -100,9 +100,9 @@ public static class DrawingContextExtension
         }
 
         var startColor =
-            new ColorRGB<double>(1.0,  _g(colorA.Red / 2.0, startGamma),  _g(colorA.Green / 2.0, startGamma), _g(colorA.Blue / 2.0, startGamma));
+           HLabColors.RGB(1.0,  _g(colorA.Red / 2.0, startGamma),  _g(colorA.Green / 2.0, startGamma), _g(colorA.Blue / 2.0, startGamma));
         var endColor = 
-            new ColorRGB<double>(1.0, _g(colorA.Red/2.0, endGamma), _g(colorA.Green/2.0, endGamma), _g(colorA.Blue/2.0, endGamma));
+           HLabColors.RGB(1.0, _g(colorA.Red/2.0, endGamma), _g(colorA.Green/2.0, endGamma), _g(colorA.Blue/2.0, endGamma));
 
 //            var startColor = Color.FromScRgb(f1.0,  _g(colorA.ScG/2.0f, startGamma), _g(colorA.ScB/2.0f, startGamma));
 //            var endColor = Color.FromScRgb(1.0f, _g(colorA.ScR/2.0f, endGamma), _g(colorA.ScG/2.0f, endGamma), _g(colorA.ScB/2.0f, endGamma));
@@ -270,12 +270,12 @@ public static class DrawingContextExtension
             _db = (colorB.Blue - _ba);
         }
 
-        float g(double value) => (float)Math.Pow(value, _invgamma);
+        double g(double value) => Math.Pow(value, _invgamma);
 
         public ColorRGB<double> Get(double p)
         {
 
-            return new ColorRGB<double>(
+            return HLabColors.RGB(
                 g(_aa + _da * p),
                 g(_ra + _dr * p),
                 g(_ga + _dg * p),

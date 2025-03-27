@@ -172,7 +172,8 @@ public static class LayoutFactory
             }
             else if (monitor.Edid != null)
             {
-                @this.PhysicalSize.Set(monitor.Edid.PhysicalSize);
+                @this.PhysicalSize.Width = monitor.Edid.PhysicalWidth;
+                @this.PhysicalSize.Height = monitor.Edid.PhysicalHeight;
             }
 
             @this.PhysicalSize.FixedAspectRatio = old;

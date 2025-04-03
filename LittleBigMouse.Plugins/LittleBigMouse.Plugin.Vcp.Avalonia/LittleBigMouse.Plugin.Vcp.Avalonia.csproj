@@ -23,7 +23,7 @@
   <ItemGroup>
 	  <PackageReference Include="Avalonia" Version="11.2.5" />
 	  <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.2.5" />
-	  <PackageReference Include="ScottPlot.Avalonia" Version="5.0.47" />
+	  <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.0.0-rc5.4" />
   </ItemGroup>
 
   <ItemGroup>

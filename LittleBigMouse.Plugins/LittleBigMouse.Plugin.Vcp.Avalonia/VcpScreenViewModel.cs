@@ -35,7 +35,13 @@ using HLab.Sys.Windows.MonitorVcp;
 using HLab.Sys.Windows.MonitorVcp.Avalonia;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Vcp.Avalonia.Patterns;
+using LiveChartsCore;
+using LiveChartsCore.Kernel;
+using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Painting;
+using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using ReactiveUI;
+using SkiaSharp;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
@@ -44,546 +50,681 @@ public class VcpScreenViewModelDesign()
 
 public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 {
-    readonly ISystemMonitorsService _monitorsService;
+   readonly ISystemMonitorsService _monitorsService;
 
-    // TODO : use reactive ui for collections
-    public VcpScreenViewModel(
-        Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern, 
-        ISystemMonitorsService monitorsService)
-    {
-        _monitorsService = monitorsService;
+   // TODO : use reactive ui for collections
+   public VcpScreenViewModel(
+       Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern,
+       ISystemMonitorsService monitorsService)
+   {
+      _monitorsService = monitorsService;
 
-        TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circles).Set(Colors.White, Colors.Black));
-        TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Circle).Set(Color.FromRgb(0xFF, 0x80, 0x00), Colors.Black));
-        TestPatterns.Add(getButtonPattern(this).Set(TestPatternType.Gradient).SetRgb());
-        TestPatterns.Add(getButtonPattern(this)
-            .Set(TestPatternType.Gamma)
-            .Set(Colors.White, Colors.Black)
-            .Set(Orientation.Vertical).SetRgb());
+      TestPatterns.Add(getButtonPattern(this)
+         .Set(TestPatternType.ContrastBoth)
+         .Set(Colors.White, Colors.Black));
+      TestPatterns.Add(getButtonPattern(this)
+         .Set(TestPatternType.Contrast)
+         .Set(Colors.White, Colors.Black));
+      TestPatterns.Add(getButtonPattern(this)
+         .Set(TestPatternType.Contrast)
+         .Set(Colors.Black, Colors.White));
 
-        _vcp = this.WhenAnyValue(
-                e => e.Model,
-                selector: e => e?.MonitorDevice(_monitorsService).Vcp().Start())
-            .ToProperty(this, e => e.Vcp);
+      TestPatterns.Add(getButtonPattern(this)
+         .Set(TestPatternType.Circle)
+         .Set(Color.FromRgb(0xFF, 0x80, 0x00), Colors.Black));
 
-        _brightnessVisibility = this.WhenAnyValue(
-            e => e.Vcp.Brightness,
-            selector: e => e != null)
-            .ToProperty(this, e => e.BrightnessVisibility);
+      TestPatterns.Add(getButtonPattern(this)
+         .Set(TestPatternType.Circle)
+         .Set(Color.FromRgb(0xFF, 0xFF, 0xFF), Colors.Black));
 
-        _contrastVisibility = this.WhenAnyValue(
-            e => e.Vcp.Contrast,
-            selector: e => e != null)
-            .ToProperty(this, e => e.ContrastVisibility);
+      TestPatterns.Add(getButtonPattern(this)
+         .Set(TestPatternType.Gradient).SetRgb());
 
-       _gainVisibility = this.WhenAnyValue(
-            e => e.Vcp.Gain,
-            selector: e => e != null)
-            .ToProperty(this, e => e.GainVisibility);
+      TestPatterns.Add(getButtonPattern(this)
+          .Set(TestPatternType.Gamma)
+          .Set(Colors.White, Colors.Black)
+          .Set(Orientation.Vertical).SetRgb());
 
-       _driveVisibility = this.WhenAnyValue(
-            e => e.Vcp.Drive,
-            selector: e => e != null)
-            .ToProperty(this, e => e.DriveVisibility);
+      _vcp = this.WhenAnyValue(
+              e => e.Model,
+              selector: e => e?.MonitorDevice(_monitorsService).Vcp().Start())
+          .ToProperty(this, e => e.Vcp);
 
-       _anywayVisibility = this.WhenAnyValue(
-            e => e.Vcp.Brightness,
-            e => e.Vcp.Contrast,
-            (b,c) => b == null || c == null)
-            .ToProperty(this, e => e.AnywayVisibility);
+      _brightnessVisibility = this.WhenAnyValue(
+          e => e.Vcp.Brightness,
+          selector: e => e != null)
+          .ToProperty(this, e => e.BrightnessVisibility);
 
-       this.WhenAnyValue(e => e.Model).Do(e => InitLut()).Subscribe();
+      _contrastVisibility = this.WhenAnyValue(
+          e => e.Vcp.Contrast,
+          selector: e => e != null)
+          .ToProperty(this, e => e.ContrastVisibility);
 
-       AnywayCommand = ReactiveCommand.Create(() => Vcp?.ActivateAnyway());
+      _gainVisibility = this.WhenAnyValue(
+           e => e.Vcp.Gain,
+           selector: e => e != null)
+           .ToProperty(this, e => e.GainVisibility);
 
-    }
+      _driveVisibility = this.WhenAnyValue(
+           e => e.Vcp.Drive,
+           selector: e => e != null)
+           .ToProperty(this, e => e.DriveVisibility);
 
-    public bool BrightnessVisibility => _brightnessVisibility.Value;
-    readonly ObservableAsPropertyHelper<bool> _brightnessVisibility;
-
-    public bool ContrastVisibility => _contrastVisibility.Value;
-    readonly ObservableAsPropertyHelper<bool> _contrastVisibility ;
-
-    public bool GainVisibility => _gainVisibility.Value;
-    readonly ObservableAsPropertyHelper<bool> _gainVisibility;
-
-    public bool DriveVisibility => _driveVisibility.Value;
-    readonly ObservableAsPropertyHelper<bool> _driveVisibility;
-
-    public bool AnywayVisibility => _anywayVisibility.Value;
-    readonly ObservableAsPropertyHelper<bool> _anywayVisibility;
-
-    public ICommand AnywayCommand { get; }
-
-    public VcpControl? Vcp => _vcp.Value;
-    readonly ObservableAsPropertyHelper<VcpControl?> _vcp;
-
-    public Color ColorA
-    {
-        get => _colorA;
-        set => this.RaiseAndSetIfChanged(ref _colorA, value);
-    }
-    Color _colorA = Colors.White;
-
-    public Color ColorB
-    {
-        get => _colorB;
-        set => this.RaiseAndSetIfChanged(ref _colorB, value);
-    }
-    Color _colorB = Colors.Black;
-
-    public Window? TestPatternPanel { get; set; } = null;
-
-    public ObservableCollection<TestPatternButtonViewModel> TestPatterns { get; } = new();
-
-    public ProbeLut? Lut => Model?.MonitorDevice(_monitorsService).ProbeLut();
-
-    void InitLut()
-    {
-        Lut?.Load();
-    }
+      _anywayVisibility = this.WhenAnyValue(
+           e => e.Vcp.Brightness,
+           e => e.Vcp.Contrast,
+           (b, c) => b == null || c == null)
+           .ToProperty(this, e => e.AnywayVisibility);
 
 
-    public void ProbeLowLuminance()
-    {
-        var probe = new ArgyllProbe();
-        if (!probe.Installed)
-        {
-            PleaseInstall();
-            return;
-        }
+      AnywayCommand = ReactiveCommand.Create(() => Vcp?.ActivateAnyway());
+      ProbeBrightnessCommand = ReactiveCommand.Create(ProbeBrightness);
+
+      _probeLut = this.WhenAnyValue(
+          e => e.Model,
+          selector: e =>
+          {
+             var lut =  e?.MonitorDevice(_monitorsService).ProbeLut();
+             lut?.Load();
+             return lut;
+          })
+          .ToProperty(this, e => e.ProbeLut);
 
 
-        new Thread(() =>
-        {
-            var level = Vcp.Brightness;
-
-            var max = Vcp.Gain.Red.Max;
-            var min = Vcp.Gain.Red.Min;
-
-            var old = Model.MonitorDevice(_monitorsService).ProbeLut().Luminance;
-            level.Value = 0;
-
-            for (var i = max; i >= min; i--)
+      _series = this.WhenAnyValue(
+            e => e.ProbeLut,
+            selector: e => e?.SmoothLut)
+            .Select(lut => new ISeries[]
             {
+               new LineSeries<Tune>
+               {
+                     Values = lut,
+                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Y),
+
+                     Stroke = new SolidColorPaint(SKColors.Red),
+                     GeometryStroke = null,
+                     GeometryFill = null,
+                     Fill = null, 
+
+               },
+
+               new LineSeries<Tune>
+               {
+                     Values = lut,
+                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Red),
+
+                     Stroke = new SolidColorPaint(SKColors.Red),
+                     GeometryStroke = null,
+                     GeometryFill = null,
+                     Fill = null,
+                     ScalesYAt = 1
+               },
+               new LineSeries<Tune>
+               {
+                     Values = lut,
+                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Green),
+
+                     Stroke = new SolidColorPaint(SKColors.Green),
+                     GeometryStroke = null,
+                     GeometryFill = null,
+                     Fill = null,
+                     ScalesYAt = 1
+               },
+               new LineSeries<Tune>
+               {
+                     Values = lut,
+                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Blue),
+
+                     Stroke = new SolidColorPaint(SKColors.Blue),
+                     GeometryStroke = null,
+                     GeometryFill = null,
+                     Fill = null,
+                     ScalesYAt = 1
+               },
+
+            })
+            .ToProperty(this, e => e.Series);
+
+      _xAxes = this.WhenAnyValue(
+            e => e.ProbeLut,
+            selector: e => e?.SortedLut)
+            .Select(lut => new Axis[]
+            {
+               new Axis
+               {
+                  Name = "Brightness",
+                  NamePaint = new SolidColorPaint(SKColors.Black), 
+
+                  LabelsPaint = new SolidColorPaint(SKColors.Blue), 
+                  TextSize = 10,
+
+                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) { StrokeThickness = 2 }  ,
+                  MaxLimit = lut?.Max(t => t.Brightness),
+                  MinLimit = 0,
+                  
+               },
+            })
+            .ToProperty(this, e => e.XAxes);
+
+      _yAxes = this.WhenAnyValue(
+            e => e.ProbeLut,
+            selector: e => e?.SortedLut)
+            .Select(lut => new Axis[]
+            {
+               new Axis
+               {
+                  Name = "nits",
+                  NamePaint = new SolidColorPaint(SKColors.Red), 
+
+                  LabelsPaint = new SolidColorPaint(SKColors.Green), 
+                  TextSize = 20,
+
+                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) 
+                  { 
+                     StrokeThickness = 2, 
+                     PathEffect = new DashEffect([3, 3]) 
+                  }            ,
+                  MaxLimit = lut?.Max(t => t.Y),
+                  MinLimit = 0,
+
+                  
+               },
+
+               new Axis
+               {
+                  Name = "Gain",
+                  NamePaint = new SolidColorPaint(SKColors.Black), 
+
+                  LabelsPaint = new SolidColorPaint(SKColors.Blue), 
+                  TextSize = 10,
+
+                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) { StrokeThickness = 2 }  ,
+                  MaxLimit = Math.Max(lut?.Max(l => l.Red)??100,Math.Max(lut?.Max(l => l.Green)??100,lut?.Max(l => l.Blue)??100)) + 1 ,
+                  MinLimit = Math.Min(lut?.Min(l => l.Red)??100,Math.Max(lut?.Min(l => l.Green)??100,lut?.Min(l => l.Blue)??100)) - 1,
+                  Position = LiveChartsCore.Measure.AxisPosition.End
+               }
+
+            })
+            .ToProperty(this, e => e.YAxes);
+   }
+
+   public bool BrightnessVisibility => _brightnessVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _brightnessVisibility;
+
+   public bool ContrastVisibility => _contrastVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _contrastVisibility;
+
+   public bool GainVisibility => _gainVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _gainVisibility;
+
+   public bool DriveVisibility => _driveVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _driveVisibility;
+
+   public bool AnywayVisibility => _anywayVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _anywayVisibility;
+
+   public ICommand AnywayCommand { get; }
+   public ICommand ProbeBrightnessCommand { get; }
+
+   public VcpControl? Vcp => _vcp.Value;
+   readonly ObservableAsPropertyHelper<VcpControl?> _vcp;
+
+   public Color ColorA
+   {
+      get => _colorA;
+      set => this.RaiseAndSetIfChanged(ref _colorA, value);
+   }
+   Color _colorA = Colors.White;
+
+   public Color ColorB
+   {
+      get => _colorB;
+      set => this.RaiseAndSetIfChanged(ref _colorB, value);
+   }
+   Color _colorB = Colors.Black;
+
+   public Window? TestPatternPanel { get; set; } = null;
+
+   public ObservableCollection<TestPatternButtonViewModel> TestPatterns { get; } = new();
+
+   public string Message => _message.Value;
+   readonly ObservableAsPropertyHelper<string> _message;
 
 
-                TuneWhitePoint(i);
+   public ProbeLut? ProbeLut => _probeLut.Value;
+   readonly ObservableAsPropertyHelper<ProbeLut?> _probeLut;
+   public ArgyllProbe ArgyllProbe {get; } = new();
 
-                var t = Lut.Current;
+   public void ProbeLowLuminance()
+   {
+      if (!ArgyllProbe.Installed)
+      {
+         PleaseInstall();
+         return;
+      }
 
-                if (probe.SpotRead())
-                {
-                    t.Y = probe.ProbedColor.xyY.Y;
-                    t.x = probe.ProbedColor.xyY.x;
-                    t.y = probe.ProbedColor.xyY.y;
-                }
 
-                Lut.RemoveLowBrightness(i);
-                Lut.Add(t);
+      new Thread(() =>
+      {
+         var level = Vcp.Brightness;
 
-                    //_line.Points.Add(new DataPoint(i, t.Y));
-                    //Curve.Refresh();
+         var max = Vcp.Gain.Red.Max;
+         var min = Vcp.Gain.Red.Min;
 
-                    if (t.MinGain <= min) break;
+         var old = Model.MonitorDevice(_monitorsService).ProbeLut().Luminance;
+         level.Value = 0;
+
+         for (var i = max; i >= min; i--)
+         {
+            TuneWhitePoint(i);
+
+            var t = ProbeLut.Current;
+
+            if (ArgyllProbe.SpotRead())
+            {
+               t.Y = ArgyllProbe.ProbedColor.xyY.Y;
+               t.x = ArgyllProbe.ProbedColor.xyY.x;
+               t.y = ArgyllProbe.ProbedColor.xyY.y;
             }
 
-            Model.MonitorDevice(_monitorsService).ProbeLut().Luminance = old;
-        }
-        ).Start();
-        return;
-    }
 
-    void ProbeLuminance()
-    {
-        var probe = new ArgyllProbe();
-        if (!probe.Installed)
-        {
-            PleaseInstall();
-            return;
-        }
+            ProbeLut.RemoveLowBrightness(i);
+            ProbeLut.Add(t);
 
+            ProbeLut.Save();
 
-        Task.Run(() =>
-        {
+            if (t.MinGain <= min) break;
+         }
+
+         Model.MonitorDevice(_monitorsService).ProbeLut().Luminance = old;
+      }
+      ).Start();
+      return;
+   }
+
+   void ProbeBrightness()
+   {
+      if (Vcp?.Brightness is null) return;
+
+      var lut = ProbeLut;
+      if (lut is null) return;
+
+      var probe = new ArgyllProbe();
+      if (!probe.Installed)
+      {
+         PleaseInstall();
+         return;
+      }
+
+      Task.Run(() =>
+         {
             var level = Vcp.Brightness;
- 
+
             for (var i = level.Min; i <= level.Max; i++)
             {
-                level.Value = i;
+               if(ProbeLut.SortedLut.Any(t => t.Brightness == i)) continue;
 
-                TuneWhitePoint();
+               level.Value = i;
 
-                var t = Lut.Current;
-                if (probe.SpotRead())
-                {
-                    t.Y = probe.ProbedColor.xyY.Y;
-                    t.x = probe.ProbedColor.xyY.x;
-                    t.y = probe.ProbedColor.xyY.y;
-                }
+               TuneWhitePoint();
 
-                Lut.RemoveBrightness(t.Brightness);
-                Lut.Add(t);
+               var t = lut.Current;
+               if (probe.SpotRead())
+               {
+                  t.Y = probe.ProbedColor.xyY.Y;
+                  t.x = probe.ProbedColor.xyY.x;
+                  t.y = probe.ProbedColor.xyY.y;
+               }
 
+               lut.RemoveBrightness(t.Brightness);
+               lut.Add(t);
+
+               ProbeLut?.Save();
             }
-        }
-        );
-        return;
+         }
+      );
+      return;
 
-        new Thread(() =>
-        {
-            for (uint channel = 0; channel < 3; channel++)
+      new Thread(() =>
+      {
+         for (uint channel = 0; channel < 3; channel++)
+         {
+            var level = Vcp.Gain.Channel(channel);
+            //LineSeries line = new LineSeries();
+
+            switch (channel)
             {
-                var level = Vcp.Gain.Channel(channel);
-                //LineSeries line = new LineSeries();
-
-                switch (channel)
-                {
-                    case 0:
-                        //line.Color = OxyColors.Red;
-                        break;
-                    case 1:
-                        //line.Color = OxyColors.Green;
-                        break;
-                    case 2:
-                        //line.Color = OxyColors.Blue;
-                        break;
-                }
-
-                //  Curve.PlotModel.Series.Add(line);
-
-                var max = level.Value;
-
-                for (uint i = 32; i <= max; i++)
-                {
-                    level.Value = i; Thread.Sleep(1000);
-                    probe.SpotRead();
-                    var color = probe.ProbedColor;
-
-                    //line.Points.Add(new DataPoint(i, color.DeltaE00()));
-                    //Curve.Refresh();
-                }
-
-                var min = double.MaxValue;
-                var minIdx = level.Value;
-                //foreach (DataPoint dp in line.Points)
-                //{
-                //    if (dp.Y < min)
-                //    {
-                //        min = dp.Y;
-                //        minIdx = (uint)dp.X;
-                //    }
-                //}
-
-                level.Value = minIdx;
+               case 0:
+                  //line.Color = OxyColors.Red;
+                  break;
+               case 1:
+                  //line.Color = OxyColors.Green;
+                  break;
+               case 2:
+                  //line.Color = OxyColors.Blue;
+                  break;
             }
-        }
-        ).Start();
-    }
 
-    void Probe(ArgyllProbe probe, Color c, MonitorLevel level)
-    {
-        //LineSeries line = new LineSeries {Color = c};
+            //  Curve.PlotModel.Series.Add(line);
 
+            var max = level.Value;
 
-        //Curve.PlotModel.Series.Add(line);
-
-        for (var i = level.Min; i <= level.Max; i++)
-        {
-            level.Value = i;
-
-            if (probe.SpotRead())
+            for (uint i = 32; i <= max; i++)
             {
-                //line.Points.Add(new DataPoint(i, probe.ProbedColor.Lab.L));
-                //Curve.Refresh();                    
+               level.Value = i; Thread.Sleep(1000);
+               probe.SpotRead();
+               var color = probe.ProbedColor;
+
+               //line.Points.Add(new DataPoint(i, color.DeltaE00()));
+               //Curve.Refresh();
             }
-        }
 
-    }
-    public void Probe()
-    {
-        var probe = new ArgyllProbe();
-        if (!probe.Installed)
-        {
-            PleaseInstall();
-            return;
-        }
-        //Vcp.Brightness.SetToMax();
-        //Vcp.Contrast.SetToMax();
-        var red = Vcp.Gain.Red.Value;
-        var green = Vcp.Gain.Green.Value;
-        var blue = Vcp.Gain.Blue.Value;
-        //Vcp.Brightness.SetToMax();
-        //Vcp.Contrast.SetToMax();
-        //Vcp.Gain.Red.SetToMax();
-        //Vcp.Gain.Green.SetToMax();
-        //Vcp.Gain.Blue.SetToMax();
-        Task.Run(() =>
-        {
-            Vcp.Gain.Red.SetToMax();
-            Vcp.Gain.Green.SetToMin();
-            Vcp.Gain.Blue.SetToMin();
-            Probe(probe, Colors.Red, Vcp.Contrast);
+            var min = double.MaxValue;
+            var minIdx = level.Value;
+            //foreach (DataPoint dp in line.Points)
+            //{
+            //    if (dp.Y < min)
+            //    {
+            //        min = dp.Y;
+            //        minIdx = (uint)dp.X;
+            //    }
+            //}
 
-            Vcp.Gain.Red.SetToMin();
-            Vcp.Gain.Green.SetToMax();
-            Vcp.Gain.Blue.SetToMin();
-            Probe(probe, Colors.Green, Vcp.Contrast);
+            level.Value = minIdx;
+         }
+      }
+      ).Start();
+   }
 
-            Vcp.Gain.Red.SetToMin();
-            Vcp.Gain.Green.SetToMin();
-            Vcp.Gain.Blue.SetToMax();
-            Probe(probe, Colors.Blue, Vcp.Contrast);
+   void Probe(ArgyllProbe probe, Color c, MonitorLevel level)
+   {
+      //LineSeries line = new LineSeries {Color = c};
 
-            Vcp.Gain.Red.Value = red;
-            Vcp.Gain.Green.Value = green;
-            Vcp.Gain.Blue.Value = blue;
-        }
-        );
-        return;
 
-        new Thread(() =>
-        {
-            for (uint channel = 0; channel < 3; channel++)
+      //Curve.PlotModel.Series.Add(line);
+
+      for (var i = level.Min; i <= level.Max; i++)
+      {
+         level.Value = i;
+
+         if (probe.SpotRead())
+         {
+            //line.Points.Add(new DataPoint(i, probe.ProbedColor.Lab.L));
+            //Curve.Refresh();                    
+         }
+      }
+
+   }
+   public void Probe()
+   {
+      var probe = new ArgyllProbe();
+      if (!probe.Installed)
+      {
+         PleaseInstall();
+         return;
+      }
+      //Vcp.Brightness.SetToMax();
+      //Vcp.Contrast.SetToMax();
+      var red = Vcp.Gain.Red.Value;
+      var green = Vcp.Gain.Green.Value;
+      var blue = Vcp.Gain.Blue.Value;
+      //Vcp.Brightness.SetToMax();
+      //Vcp.Contrast.SetToMax();
+      //Vcp.Gain.Red.SetToMax();
+      //Vcp.Gain.Green.SetToMax();
+      //Vcp.Gain.Blue.SetToMax();
+      Task.Run(() =>
+      {
+         Vcp.Gain.Red.SetToMax();
+         Vcp.Gain.Green.SetToMin();
+         Vcp.Gain.Blue.SetToMin();
+         Probe(probe, Colors.Red, Vcp.Contrast);
+
+         Vcp.Gain.Red.SetToMin();
+         Vcp.Gain.Green.SetToMax();
+         Vcp.Gain.Blue.SetToMin();
+         Probe(probe, Colors.Green, Vcp.Contrast);
+
+         Vcp.Gain.Red.SetToMin();
+         Vcp.Gain.Green.SetToMin();
+         Vcp.Gain.Blue.SetToMax();
+         Probe(probe, Colors.Blue, Vcp.Contrast);
+
+         Vcp.Gain.Red.Value = red;
+         Vcp.Gain.Green.Value = green;
+         Vcp.Gain.Blue.Value = blue;
+      }
+      );
+      return;
+
+      new Thread(() =>
+      {
+         for (uint channel = 0; channel < 3; channel++)
+         {
+            var level = Vcp.Gain.Channel(channel);
+            //LineSeries line = new LineSeries();
+
+            switch (channel)
             {
-                var level = Vcp.Gain.Channel(channel);
-                //LineSeries line = new LineSeries();
-
-                switch (channel)
-                {
-                    case 0:
-                        //line.Color = OxyColors.Red;
-                        break;
-                    case 1:
-                        //line.Color = OxyColors.Green;
-                        break;
-                    case 2:
-                        //line.Color = OxyColors.Blue;
-                        break;
-                }
-
-                //    Curve.PlotModel.Series.Add(line);
-
-                var max = level.Value;
-
-                for (uint i = 32; i <= max; i++)
-                {
-                    level.Value = i; Thread.Sleep(1000);
-
-                    if (probe.SpotRead())
-                    {
-                        //line.Points.Add(new DataPoint(i,probe.ProbedColor.DeltaE00()));
-                        //Curve.Refresh();                                            
-                    }
-                }
-
-                var min = double.MaxValue;
-                var minIdx = level.Value;
-                //foreach (DataPoint dp in line.Points)
-                //{
-                //    if (dp.Y < min)
-                //    {
-                //        min = dp.Y;
-                //        minIdx = (uint)dp.X;
-                //    }
-                //}
-
-                level.Value = minIdx;
+               case 0:
+                  //line.Color = OxyColors.Red;
+                  break;
+               case 1:
+                  //line.Color = OxyColors.Green;
+                  break;
+               case 2:
+                  //line.Color = OxyColors.Blue;
+                  break;
             }
-        }
-        ).Start();
-    }
 
-    double[,,] _tune = new double[0,0,0];
-    //private LineSeries _line;
+            //    Curve.PlotModel.Series.Add(line);
 
-    public void Tune()
-    {
-        new Thread(TuneWhitePoint).Start();
-    }
+            var max = level.Value;
 
-
-    public void TuneWhitePoint()
-    {
-        TuneWhitePoint(0);
-    }
-    public void TuneWhitePoint(uint max)
-    {
-        //    _line = new LineSeries();
-        //    Curve.PlotModel.Series.Add(_line);
-
-        var count = 6;
-        uint channel = 0;
-
-        _tune = new double[Vcp.Gain.Red.Max + 1, Vcp.Gain.Green.Max + 1, Vcp.Gain.Blue.Max + 1];
-
-        uint[] rgb = { Vcp.Gain.Red.Value, Vcp.Gain.Green.Value, Vcp.Gain.Blue.Value };
-
-        while (count > 0)
-        {
-            if (TuneWhitePoint(channel, ref rgb, max)) count = 5;
-            else count--;
-
-            channel++;
-            channel %= 6;
-        }
-
-        Vcp.Gain.Red.Value = rgb[0];
-        Vcp.Gain.Green.Value = rgb[1];
-        Vcp.Gain.Blue.Value = rgb[2];
-    }
-
-    bool TuneWhitePoint(uint channel, ref uint[] rgb, uint maxlevel)
-    {
-        uint[] c;
-        var min = new uint[3];
-        var max = new uint[3];
-        uint n = 0;
-
-        switch (channel)
-        {
-            case 0:
-                c = new uint[] { 0, 1, 2 };
-                n = 1;
-                break;
-            case 1:
-                c = new uint[] { 1, 2, 0 };
-                n = 1;
-                break;
-            case 2:
-                c = new uint[] { 2, 0, 1 };
-                n = 1;
-                break;
-            case 3: //0
-                c = new uint[] { 0, 1, 2 };
-                n = 2;
-                break;
-            case 4: //1
-                c = new uint[] { 1, 2, 0 };
-                n = 2;
-                break;
-            case 5: //2
-                c = new uint[] { 2, 0, 1 };
-                n = 2;
-                break;
-            default:
-                c = new uint[] { 0, 1, 2 };
-                n = 3;
-                break;
-        }
-
-
-        for (var i = 0; i < 3; i++)
-        {
-            min[i] = Vcp.Gain.Channel(c[i]).Min;
-            max[i] = maxlevel == 0 ? Vcp.Gain.Channel(c[i]).Max : maxlevel;
-        }
-
-
-        // keep one channel to its max
-        switch (n)
-        {
-            case 1:
-                if (rgb[c[0]] == max[0] && rgb[c[1]] < max[1] && rgb[c[2]] < max[2]) return false;
-                break;
-            case 2:
-                if ((rgb[c[0]] == max[0] || rgb[c[1]] == max[1]) && rgb[c[2]] < max[2]) return false;
-                break;
-            case 3:
-                return false;
-        }
-
-
-
-        uint[] oldGain = { rgb[c[0]], rgb[c[1]], rgb[c[2]] };
-        //uint old2 = rgb[c2];
-
-        var deltaE = Probe(rgb);
-        //_line.Points.Add(new DataPoint(_line.Points.Count, deltaE));
-        //Curve.Refresh();
-
-        while (rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]] > min[2]))
-        {
-            var old = deltaE;
-
-            for (var i = 0; i < n; i++) rgb[c[i]]--;
-
-            deltaE = Probe(rgb);
-
-            if (deltaE > old) break;
-
-            //_line.Points.Add(new DataPoint(_line.Points.Count,deltaE));
-            //Curve.Refresh();
-        }
-
-        while (rgb[c[0]] < max[0] && (n < 2 || rgb[c[1]] < max[1]) && (n < 3 || rgb[c[2]] < max[2]))
-        {
-            var old = deltaE;
-
-            for (var i = 0; i < n; i++) rgb[c[i]]++;
-
-            deltaE = Probe(rgb);
-
-            if (deltaE > old)
+            for (uint i = 32; i <= max; i++)
             {
-                for (var i = 0; i < n; i++) rgb[c[i]]--;
-                deltaE = Probe(rgb);
-                break;
+               level.Value = i; Thread.Sleep(1000);
+
+               if (probe.SpotRead())
+               {
+                  //line.Points.Add(new DataPoint(i,probe.ProbedColor.DeltaE00()));
+                  //Curve.Refresh();                                            
+               }
             }
 
-            //_line.Points.Add(new DataPoint(_line.Points.Count, deltaE));
-            //Curve.Refresh();
-        }
+            var min = double.MaxValue;
+            var minIdx = level.Value;
+            //foreach (DataPoint dp in line.Points)
+            //{
+            //    if (dp.Y < min)
+            //    {
+            //        min = dp.Y;
+            //        minIdx = (uint)dp.X;
+            //    }
+            //}
 
-        return (
-            oldGain[0] != rgb[c[0]]
-            || oldGain[1] != rgb[c[1]]
-            || oldGain[2] != rgb[c[2]]
-            );
-    }
+            level.Value = minIdx;
+         }
+      }
+      ).Start();
+   }
 
-    double Probe(uint[] rgb)
-    {
-        if (_tune[rgb[0], rgb[1], rgb[2]] == 0)
-        {
-            Vcp.Gain.Red.Value = rgb[0];
-            Vcp.Gain.Green.Value = rgb[1];
-            Vcp.Gain.Blue.Value = rgb[2];
+   double[,,] _tune = new double[0, 0, 0];
 
-            Thread.Sleep(500);
+   public void Tune() => new Thread(TuneWhitePoint).Start();
 
-            var probe = new ArgyllProbe(true);
-            if (!probe.Installed)
-            {
-                PleaseInstall();
-                return 0;
-            }
-            if (probe.SpotRead())
-            {
-                _tune[rgb[0], rgb[1], rgb[2]] = probe.ProbedColor.DeltaE00();
-            }
+   public void TuneWhitePoint() => TuneWhitePoint(0);
 
-            //return color.DeltaE00();
-        }
-        return _tune[rgb[0], rgb[1], rgb[2]];
-    }
-    public void Save()
-    {
-        Lut.Save();
-    }
+   public void TuneWhitePoint(uint max)
+   {
+      var gain = Vcp?.Gain;
+      if (gain is null) return;
 
-    static void PleaseInstall()
-    {
-        // MessageBox.Show("Please install DispcalGUI & ArgyllCMS", "Calibration tools",
-        //              MessageBoxButton.OK, MessageBoxImage.Exclamation);
-    }
+      var count = 6;
+      uint channel = 0;
+
+      _tune = new double[gain.Red.Max + 1, gain.Green.Max + 1, gain.Blue.Max + 1];
+
+      var rgb = gain.GetValues();
+
+      while (count > 0)
+      {
+         if (TuneWhitePoint(channel, ref rgb, max)) count = 5;
+         else count--;
+
+         channel++;
+         channel %= 6;
+      }
+
+      gain.SetTo(rgb);
+   }
+
+   bool TuneWhitePoint(uint channel, ref uint[] rgb, uint maxLevel)
+   {
+      uint[] c;
+      var min = new uint[3];
+      var max = new uint[3];
+      uint n = 0;
+
+      switch (channel)
+      {
+         case 0:
+            c = [0, 1, 2];
+            n = 1;
+            break;
+         case 1:
+            c = [1, 2, 0];
+            n = 1;
+            break;
+         case 2:
+            c = [2, 0, 1];
+            n = 1;
+            break;
+         case 3: //0
+            c = [0, 1, 2];
+            n = 2;
+            break;
+         case 4: //1
+            c = [1, 2, 0];
+            n = 2;
+            break;
+         case 5: //2
+            c = [2, 0, 1];
+            n = 2;
+            break;
+         default:
+            c = [0, 1, 2];
+            n = 3;
+            break;
+      }
 
 
-    public ICommand SwitchSourceCommand { get; }
+      for (var i = 0; i < 3; i++)
+      {
+         min[i] = Vcp.Gain.Channel(c[i]).Min;
+         max[i] = maxLevel == 0 ? Vcp.Gain.Channel(c[i]).Max : maxLevel;
+      }
 
 
-    public override void OnDispose()
-    {
-        VcpExpendMonitor.Stop();
-    }
+      // keep one channel to its max
+      switch (n)
+      {
+         case 1:
+            if (rgb[c[0]] == max[0] && rgb[c[1]] < max[1] && rgb[c[2]] < max[2]) return false;
+            break;
+         case 2:
+            if ((rgb[c[0]] == max[0] || rgb[c[1]] == max[1]) && rgb[c[2]] < max[2]) return false;
+            break;
+         case 3:
+            return false;
+      }
+
+      uint[] oldGain = [rgb[c[0]], rgb[c[1]], rgb[c[2]]];
+
+      var deltaE = Probe(rgb);
+
+      while (rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]] > min[2]))
+      {
+         var old = deltaE;
+
+         for (var i = 0; i < n; i++) rgb[c[i]]--;
+
+         deltaE = Probe(rgb);
+
+         if (deltaE > old) break;
+      }
+
+      while (rgb[c[0]] < max[0] && (n < 2 || rgb[c[1]] < max[1]) && (n < 3 || rgb[c[2]] < max[2]))
+      {
+         var old = deltaE;
+
+         for (var i = 0; i < n; i++) rgb[c[i]]++;
+
+         deltaE = Probe(rgb);
+
+         if (deltaE <= old) continue;
+
+         for (var i = 0; i < n; i++) rgb[c[i]]--;
+         deltaE = Probe(rgb);
+         break;
+      }
+
+      return (
+          oldGain[0] != rgb[c[0]]
+          || oldGain[1] != rgb[c[1]]
+          || oldGain[2] != rgb[c[2]]
+          );
+   }
+
+   double Probe(uint[] rgb)
+   {
+      var gain = Vcp?.Gain;
+      if (gain is null) return 0;
+
+      ref var tune = ref _tune[rgb[0], rgb[1], rgb[2]];
+      if (tune != 0) return tune;
+
+      gain.SetTo(rgb);
+
+      Thread.Sleep(500);
+
+      var probe = new ArgyllProbe(true);
+      if (!probe.Installed)
+      {
+         PleaseInstall();
+         return 0;
+      }
+
+      if (probe.SpotRead())
+      {
+         tune = probe.ProbedColor.DeltaE00();
+      }
+      return tune;
+   }
+
+   public void Save()
+   {
+      ProbeLut?.Save();
+   }
+
+   static void PleaseInstall()
+   {
+      // MessageBox.Show("Please install DispcalGUI & ArgyllCMS", "Calibration tools",
+      //              MessageBoxButton.OK, MessageBoxImage.Exclamation);
+   }
+
+
+   public ICommand SwitchSourceCommand { get; }
+
+   public ISeries[] Series => _series.Value;
+   readonly ObservableAsPropertyHelper<ISeries[]> _series;
+   public Axis[] XAxes => _xAxes.Value;
+   readonly ObservableAsPropertyHelper<Axis[]> _xAxes;
+   public Axis[] YAxes => _yAxes.Value;
+   readonly ObservableAsPropertyHelper<Axis[]> _yAxes;
+
+   public override void OnDispose()
+   {
+      VcpExpendMonitor.Stop();
+   }
 }

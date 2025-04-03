@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Xml.Serialization;
 
 namespace HLab.Sys.Windows.MonitorVcp;
@@ -21,6 +22,8 @@ public class Tune
     public double Green;
     [XmlAttribute]
     public double Blue;
+    [XmlAttribute]
+    public DateTime Date;
 
     public double MaxGain => new[]{Red, Green, Blue}.Max();
     public double MinGain => new[] { Red, Green, Blue }.Min();

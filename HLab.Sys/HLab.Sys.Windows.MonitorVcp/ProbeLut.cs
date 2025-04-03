@@ -24,9 +24,13 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Xml.Serialization;
+using DynamicData;
+using DynamicData.Binding;
 using HLab.Sys.Argyll;
 using HLab.Sys.Windows.Monitors;
 using ReactiveUI;
@@ -35,213 +39,315 @@ namespace HLab.Sys.Windows.MonitorVcp;
 
 public class ProbeLut : ReactiveObject
 {
-    public ProbedColor DIlluminant { get; }
+   //public ProbedColor DIlluminant { get; }
 
-    readonly MonitorDevice _monitor;
+   readonly MonitorDevice _monitor;
 
-    List<Tune> _lut = new();
+   readonly SourceList<Tune> _lut = new();
 
-    internal ProbeLut(MonitorDevice monitor)
-    {
-        _monitor = monitor;
 
-        _luminance = this.WhenAnyValue(
-            e => e.Vcp.Brightness.Value,
-            selector: e => GetLuminance()
-        ).ToProperty(this, _ => _.Luminance);
-    }
+   readonly ReadOnlyObservableCollection<Tune> _sortedLut;
+   public ReadOnlyObservableCollection<Tune> SortedLut => _sortedLut;
 
-    public VcpControl Vcp => _monitor.Vcp();
+   readonly SourceList<Tune> _smoothLut = new();
+   readonly ReadOnlyObservableCollection<Tune> _smoothLutCollection;
+   public ReadOnlyObservableCollection<Tune> SmoothLut => _smoothLutCollection;
 
-    public bool RemoveBrightness(double brightness)
-    {
-        var t = _lut.FirstOrDefault(x => x.Brightness == brightness);
-        if (t == null) return false;
+   internal ProbeLut(MonitorDevice monitor)
+   {
+      _monitor = monitor;
+      Vcp = _monitor.Vcp();
 
-        _lut.Remove(t);
-        return true;
-    }
+      _luminance = this.WhenAnyValue(
+          e => e.Vcp.Brightness.Value,
+          selector: e => GetLuminance()
+      ).ToProperty(this, _ => _.Luminance);
 
-    public bool RemoveLowBrightness(double maxGain)
-    {
-        var t = _lut.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain == maxGain));
-        if (t == null) return false;
+     _lut
+         .Connect()
+         .Sort(SortExpressionComparer<Tune>.Ascending(t => t.Y))
+         .ObserveOn(RxApp.MainThreadScheduler)
+         .Bind(out _sortedLut)
+         .Subscribe();
 
-        _lut.Remove(t);
-        return true;
-    }
+     _smoothLut
+         .Connect()
+         .Sort(SortExpressionComparer<Tune>.Ascending(t => t.Y))
+         .ObserveOn(RxApp.MainThreadScheduler)
+         .Bind(out _smoothLutCollection)
+         .Subscribe();
+   }
 
-    public void Add(Tune tune)
-    {
-        _lut.Add(tune);
+   public (double Slope, double Intercept) LinearRegression<T>(IEnumerable<T>list, Func<T,double> getX, Func<T,double> getY)
+   {
+      var sumX = 0.0;
+      var sumY = 0.0;
+      var sumXY = 0.0;
+      var sumX2 = 0.0;
+      var n = _sortedLut.Count;
 
-        _lut = _lut.OrderBy(x => x.Y).ToList();
-    }
+      foreach (var tune in list)
+      {
+         var x = getX(tune);
+         var y = getY(tune);
 
-    public Tune FromLuminance(double luminance)
-    {
-        if (_lut.Count == 0) return Current;
+         sumX += x;
+         sumY += y;
+         sumXY += x * y;
+         sumX2 += x * x;
+      }
 
-        Tune tSup = null;
-        Tune tInf = null;
+      var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      var intercept = (sumY - slope * sumX) / n;
 
-        var i = 0;
-        for (; i < _lut.Count && _lut[i].Y < luminance; i++)
-            tInf = _lut[i];
+      return (slope, intercept);
+   }
 
-        // luminance is more than monitor capabilities
-        if (i >= _lut.Count) return tInf;
+   public void GenerateSmoothedCurve()
+   {
+      _smoothLut.Clear();
 
-        tSup = _lut[i];
+      var(slopeY,interceptY) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Y);
+      var(slopeR,interceptR) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Red);
+      var(slopeG,interceptG) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Green);
+      var(slopeB,interceptB) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Blue);
 
-        if (tInf == null) return tSup;
+      var start = (int)_sortedLut.First().Brightness;
+      var end = (int)_sortedLut.Last().Brightness;
 
-        var dist = tSup.Y - tInf.Y;
-        var ratio = (luminance - tInf.Y) / dist;
+      for (var i=start; i<end; i++ )
+      {
+         var tune = new Tune
+         {
+            Brightness = i,
+            Y = (uint)(slopeY * i + interceptY),
+            Red = (uint)(slopeR * i + interceptR),
+            Green = (uint)(slopeG * i + interceptG),
+            Blue = (uint)(slopeB * i + interceptB),
+         };
+         _smoothLut.Add(tune);
+      }
+   }
 
-        var t = new Tune
-        {
-            Y = (uint)Math.Round(tInf.Y + (tSup.Y - tInf.Y) * ratio, 0),
-            x = (uint)Math.Round(tInf.x + (tSup.x - tInf.x) * ratio, 0),
-            y = (uint)Math.Round(tInf.y + (tSup.y - tInf.y) * ratio, 0),
+   public VcpControl Vcp { get; }
 
-            Brightness = (uint)Math.Round(tInf.Brightness + (tSup.Brightness - tInf.Brightness) * ratio, 0),
-            Contrast = (uint)Math.Round(tInf.Contrast + (tSup.Contrast - tInf.Contrast) * ratio, 0),
+   public bool RemoveBrightness(double brightness)
+   {
+      var t = _sortedLut.FirstOrDefault(x => x.Brightness == brightness);
+      if (t == null) return false;
 
-            Red = (uint)Math.Round(tInf.Red + (tSup.Red - tInf.Red) * ratio, 0),
-            Blue = (uint)Math.Round(tInf.Blue + (tSup.Blue - tInf.Blue) * ratio, 0),
-            Green = (uint)Math.Round(tInf.Green + (tSup.Green - tInf.Green) * ratio, 0),
-        };
+      _lut.Remove(t);
+      return true;
+   }
 
-        return t;
-    }
+   public bool RemoveLowBrightness(double maxGain)
+   {
+      var t = _sortedLut.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain == maxGain));
+      if (t == null) return false;
 
-    public Tune FromBrightness(double brightness)
-    {
-        if (_lut.Count == 0) return Current;
+      _lut.Remove(t);
+      return true;
+   }
 
-        Tune tSup = null;
-        Tune tInf = null;
+   public void Add(Tune tune)
+   {
+      _lut.Add(tune);
+   }
 
-        var i = 0;
-        for (; i < _lut.Count && _lut[i].Brightness < brightness; i++)
-            tInf = _lut[i];
+   public Tune FromLuminance(double luminance)
+   {
+      if (_sortedLut.Count == 0) return Current;
 
-        // luminance is more than monitor capabilities
-        if (i >= _lut.Count) return tInf;
+      Tune tSup = null;
+      Tune tInf = null;
 
-        tSup = _lut[i];
+      var i = 0;
+      for (; i < _sortedLut.Count && _sortedLut[i].Y < luminance; i++)
+         tInf = _sortedLut[i];
 
-        if (tInf == null) return tSup;
+      // luminance is more than monitor capabilities
+      if (i >= _sortedLut.Count) return tInf;
 
-        var dist = tSup.Brightness - tInf.Brightness;
-        var ratio = (brightness - tInf.Brightness) / dist;
+      tSup = _sortedLut[i];
 
-        var t = new Tune
-        {
-            Y = (uint)Math.Round(tInf.Y + (tSup.Y - tInf.Y) * ratio, 0),
-            x = (uint)Math.Round(tInf.x + (tSup.x - tInf.x) * ratio, 0),
-            y = (uint)Math.Round(tInf.y + (tSup.y - tInf.y) * ratio, 0),
+      if (tInf == null) return tSup;
 
-            Brightness = (uint)Math.Round(tInf.Brightness + (tSup.Brightness - tInf.Brightness) * ratio, 0),
-            Contrast = (uint)Math.Round(tInf.Contrast + (tSup.Contrast - tInf.Contrast) * ratio, 0),
+      var dist = tSup.Y - tInf.Y;
+      var ratio = (luminance - tInf.Y) / dist;
 
-            Red = (uint)Math.Round(tInf.Red + (tSup.Red - tInf.Red) * ratio, 0),
-            Blue = (uint)Math.Round(tInf.Blue + (tSup.Blue - tInf.Blue) * ratio, 0),
-            Green = (uint)Math.Round(tInf.Green + (tSup.Green - tInf.Green) * ratio, 0),
-        };
+      var t = new Tune
+      {
+         Date = tSup.Date > tInf.Date ? tSup.Date : tInf.Date,
 
-        return t;
-    }
+         Y = (uint)Math.Round(tInf.Y + (tSup.Y - tInf.Y) * ratio, 0),
+         x = (uint)Math.Round(tInf.x + (tSup.x - tInf.x) * ratio, 0),
+         y = (uint)Math.Round(tInf.y + (tSup.y - tInf.y) * ratio, 0),
 
-    double GetLuminance() => FromBrightness(Vcp.Brightness.Value).Y;
+         Brightness = (uint)Math.Round(tInf.Brightness + (tSup.Brightness - tInf.Brightness) * ratio, 0),
+         Contrast = (uint)Math.Round(tInf.Contrast + (tSup.Contrast - tInf.Contrast) * ratio, 0),
 
-    void SetLuminance(double luminance)
-    {
-        var t = FromLuminance(luminance);
-        Vcp.Brightness.Value = (uint)Math.Round(t.Brightness, 0);
-        Vcp.Contrast.Value = (uint)Math.Round(t.Contrast, 0);
-        Vcp.Gain.Red.Value = (uint)Math.Round(t.Red, 0);
-        Vcp.Gain.Blue.Value = (uint)Math.Round(t.Blue, 0);
-        Vcp.Gain.Green.Value = (uint)Math.Round(t.Green, 0);
-    }
+         Red = (uint)Math.Round(tInf.Red + (tSup.Red - tInf.Red) * ratio, 0),
+         Blue = (uint)Math.Round(tInf.Blue + (tSup.Blue - tInf.Blue) * ratio, 0),
+         Green = (uint)Math.Round(tInf.Green + (tSup.Green - tInf.Green) * ratio, 0),
+      };
 
-    public Tune Current => new Tune
-    {
-        Brightness = Vcp.Brightness.Value,
-        Contrast = Vcp.Contrast.Value,
-        Red = Vcp.Gain.Red.Value,
-        Blue = Vcp.Gain.Blue.Value,
-        Green = Vcp.Gain.Green.Value,
-    };
+      return t;
+   }
 
-    public double Luminance
-    {
-        get => _luminance.Value;
-        set => SetLuminance(value);
-    }
-    readonly ObservableAsPropertyHelper<double> _luminance;
+   public Tune FromBrightness(double brightness)
+   {
+      if (_sortedLut is null) return Current;
+      if (_sortedLut.Count == 0) return Current;
 
-    public double MaxLuminance =>
-        (_lut.Count == 0) ? 1 : _lut.Last().Y;
+      Tune tSup = null;
+      Tune tInf = null;
 
-    public double MinLuminance =>
-        (_lut.Count == 0) ? 0 : _lut.First().Y;
+      var i = 0;
+      for (; i < _sortedLut.Count && _sortedLut[i].Brightness < brightness; i++)
+         tInf = _sortedLut[i];
 
-    string GetConfigPath(bool create = false)
-    {
-        var path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Mgth", "LittleBigMouse"
-        );
-        path = Path.Combine(path, _monitor.Id);
-        path = Path.Combine(path, "Luminance.xml");
+      // luminance is more than monitor capabilities
+      if (i >= _lut.Count) return tInf;
 
-        if(create) Directory.CreateDirectory(path);
+      tSup = _sortedLut[i];
 
-        return path;
-    }
+      if (tInf == null) return tSup;
 
-    public void Save()
-    {
-        var serializer = new XmlSerializer(typeof(List<Tune>));
-        using TextWriter writer = new StreamWriter(GetConfigPath(true));
+      var dist = tSup.Brightness - tInf.Brightness;
+      var ratio = (brightness - tInf.Brightness) / dist;
 
-        serializer.Serialize(writer, _lut);
-    }
+      var t = new Tune
+      {
+         Date = tSup.Date > tInf.Date ? tSup.Date : tInf.Date,
 
-    public void Load()
-    {
-        var deserializer = new XmlSerializer(typeof(List<Tune>));
-        try
-        {
-            using TextReader reader = new StreamReader(GetConfigPath());
-            _lut = (List<Tune>)deserializer.Deserialize(reader);
+         Y = (uint)Math.Round(tInf.Y + (tSup.Y - tInf.Y) * ratio, 0),
+         x = (uint)Math.Round(tInf.x + (tSup.x - tInf.x) * ratio, 0),
+         y = (uint)Math.Round(tInf.y + (tSup.y - tInf.y) * ratio, 0),
+
+         Brightness = (uint)Math.Round(tInf.Brightness + (tSup.Brightness - tInf.Brightness) * ratio, 0),
+         Contrast = (uint)Math.Round(tInf.Contrast + (tSup.Contrast - tInf.Contrast) * ratio, 0),
+
+         Red = (uint)Math.Round(tInf.Red + (tSup.Red - tInf.Red) * ratio, 0),
+         Blue = (uint)Math.Round(tInf.Blue + (tSup.Blue - tInf.Blue) * ratio, 0),
+         Green = (uint)Math.Round(tInf.Green + (tSup.Green - tInf.Green) * ratio, 0),
+      };
+
+      return t;
+   }
+
+   double GetLuminance() => FromBrightness(Vcp.Brightness.Value).Y;
+
+   void SetLuminance(double luminance)
+   {
+      var t = FromLuminance(luminance);
+      Vcp.Brightness.Value = (uint)Math.Round(t.Brightness, 0);
+      Vcp.Contrast.Value = (uint)Math.Round(t.Contrast, 0);
+      Vcp.Gain.Red.Value = (uint)Math.Round(t.Red, 0);
+      Vcp.Gain.Blue.Value = (uint)Math.Round(t.Blue, 0);
+      Vcp.Gain.Green.Value = (uint)Math.Round(t.Green, 0);
+   }
+
+   public Tune Current
+   {
+      get
+      {
+         var vcp = Vcp;
+         var gain = vcp?.Gain;
+         if (vcp is null || gain is null) return new();
+         return new()
+         {
+            Date = DateTime.Now,
+            Brightness = vcp.Brightness?.Value??0,
+            Contrast = vcp.Contrast?.Value??0,
+            Red = gain.Red.Value,
+            Blue = gain.Blue.Value,
+            Green = gain.Green.Value,
+         };
+      }
+   }
+
+   public double Luminance
+   {
+      get => _luminance.Value;
+      set => SetLuminance(value);
+   }
+   readonly ObservableAsPropertyHelper<double> _luminance;
+
+   public double MaxLuminance =>
+       (_sortedLut.Count == 0) ? 1 : _sortedLut.Last().Y;
+
+   public double MinLuminance =>
+       (_sortedLut.Count == 0) ? 0 : _sortedLut.First().Y;
+
+   string GetConfigPath(bool create = false)
+   {
+      var path = Path.Combine(
+          Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+          "Mgth", "LittleBigMouse"
+      );
+      path = Path.Combine(path, _monitor.Id);
+      if (create) Directory.CreateDirectory(path);
+
+      path = Path.Combine(path, "Luminance.xml");
+
+      return path;
+   }
+
+   public void Save()
+   {
+      var serializer = new XmlSerializer(typeof(List<Tune>));
+      using TextWriter writer = new StreamWriter(GetConfigPath(true));
+
+      serializer.Serialize(writer, SortedLut.ToList());
+   }
+
+   public void Load()
+   {
+      var deserializer = new XmlSerializer(typeof(List<Tune>));
+      try
+      {
+         using TextReader reader = new StreamReader(GetConfigPath());
+         try
+         {
+            var lut = deserializer.Deserialize(reader) as IEnumerable<Tune>;
+            if(lut is null) throw new Exception();
+
+            _lut.Clear();
+            foreach (var tune in lut) _lut.Add(tune);
+
+            GenerateSmoothedCurve();
+         }
+         finally
+         {
             reader.Close();
-        }
-        catch (IOException ex) when(ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            _lut = new List<Tune>
-            {
-                new()
-                {
-                    Brightness = MinLuminance,
-                    Y = 0,
-                    Red = Vcp.Gain?.Red.Value ?? 0,
-                    Blue = Vcp.Gain?.Blue.Value ?? 0,
-                    Green = Vcp.Gain?.Green.Value ?? 0,
-                    Contrast = Vcp.Contrast?.Value ?? 0
-                },
-                new()
-                {
-                    Brightness = MaxLuminance,
-                    Y = 160,
-                    Red = Vcp.Gain?.Red.Value ?? 0,
-                    Blue = Vcp.Gain?.Blue.Value ?? 0,
-                    Green = Vcp.Gain?.Green.Value ?? 0,
-                    Contrast = Vcp.Contrast?.Value ?? 0
-                },
-            };
-        }
-    }
+         }
+
+      }
+      catch (IOException ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+      {
+         _lut.Clear();
+
+         _lut.Add(new()
+         {
+            Brightness = MinLuminance,
+            Y = 0,
+            Red = Vcp.Gain?.Red.Value ?? 0,
+            Blue = Vcp.Gain?.Blue.Value ?? 0,
+            Green = Vcp.Gain?.Green.Value ?? 0,
+            Contrast = Vcp.Contrast?.Value ?? 0
+         }
+         );
+
+         _lut.Add(new()
+         {
+            Brightness = MaxLuminance,
+            Y = 160,
+            Red = Vcp.Gain?.Red.Value ?? 0,
+            Blue = Vcp.Gain?.Blue.Value ?? 0,
+            Green = Vcp.Gain?.Green.Value ?? 0,
+            Contrast = Vcp.Contrast?.Value ?? 0
+         }
+         );
+      }
+   }
 }

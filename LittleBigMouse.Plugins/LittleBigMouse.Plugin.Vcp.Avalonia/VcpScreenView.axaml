@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vcp.Avalonia="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia"
              xmlns:mvvm.Avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
-             xmlns:avalonia="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+             xmlns:avalonia="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="615.613" 
              x:DataType="vcp.Avalonia:VcpScreenViewModel"
@@ -15,7 +15,7 @@
     </Design.DataContext>
 
 
-    <Grid x:Name="Grid" ColumnDefinitions="*,Auto">
+    <Grid x:Name="Grid" ColumnDefinitions="Auto,*,Auto">
 
         <ScrollViewer AllowAutoHide="True" HorizontalScrollBarVisibility="Auto">
         <StackPanel Orientation="Horizontal"> 
@@ -61,8 +61,6 @@
             <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Green}"/>
             <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Blue}"/>
 			
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Source}"/>
-
             <Rectangle Width="20"/>
             <StackPanel VerticalAlignment="Center" Orientation="Vertical" IsVisible="{Binding AnywayVisibility}">
                 <Label Foreground="White">DDC/CI not available</Label>
@@ -72,7 +70,25 @@
         </StackPanel>
         </ScrollViewer>
 
-        <ItemsControl Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}">
+		<Grid RowDefinitions="*,Auto,Auto" Grid.Row="0" Grid.Column="1" >
+			
+            <avalonia:CartesianChart x:Name="Curve"
+                Series="{Binding Series}"
+                XAxes="{Binding XAxes}"
+                YAxes="{Binding YAxes}"
+				ZoomMode="Both">
+            </avalonia:CartesianChart>
+			
+            <Button    Grid.Row="1"
+					   Command="{Binding ProbeBrightnessCommand}"
+					   Content="Tune WP High"
+            />
+
+			<TextBlock Grid.Row="2" Text="{Binding ArgyllProbe.Message}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+			
+		</Grid>
+		
+        <ItemsControl Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <mvvm.Avalonia:ViewLocator Model="{Binding}"/>
@@ -80,8 +96,7 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!--<avalonia:AvaPlot Grid.Row="0" Grid.Column="1" x:Name="Curve"></avalonia:AvaPlot>-->
-
+		
         <!--<StackPanel  Grid.Column="1" Grid.Row="1" Orientation="Horizontal">
             <Button             
             Click="Probe_OnClick"

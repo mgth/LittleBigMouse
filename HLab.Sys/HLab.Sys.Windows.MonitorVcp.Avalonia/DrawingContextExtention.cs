@@ -14,16 +14,15 @@ public static class DrawingContextExtension
     {
         var hz = orientation == Orientation.Horizontal;
         var length = (hz?area.Width:area.Height)/count;
-        var w = (hz?area.Height:area.Width)/2;
+        var w = (hz?area.Height:area.Width);
 
-        var location = area.TopLeft; // was Location
+        var location = area.TopLeft; 
         var size = hz?new Size(length,w):new Size(w,length);
         var move = hz ? new Vector(length, 0) : new Vector(0, length);
 
         var dR = colorA.R < colorB.R ? +1 : colorA.R > colorB.R? -1 : 0;
         var dG = colorA.G < colorB.G ? +1 : colorA.G > colorB.G? -1 : 0;
         var dB = colorA.B < colorB.B ? +1 : colorA.B > colorB.B? -1 : 0;
-
 
         var color = colorA;
         for (var i = 0; i < count; i++)
@@ -32,22 +31,6 @@ public static class DrawingContextExtension
             dc.RenderCircle(color,colorA,new Rect(location,size));
             location += move;
         }
-
-        location = area.TopLeft + (hz ? new Vector(0,w) : new Vector(w,0));
-
-        dR = -dR;
-        dG = -dG;
-        dB = -dB;
-
-        color = colorB;
-        for (var i = 0; i < count; i++)
-        {
-            color = new Color(0xFF,(byte)((int)color.R+dR), (byte)((int)color.G + dG) , (byte)((int)color.B + dB));
-            dc.RenderCircle(color,colorB,new Rect(location,size));
-            location += move;
-        }
-
-
     }
 
     public static void DrawChessboard(this DrawingContext dc, Color colorA, Color colorB, Rect area, Size size)
@@ -205,14 +188,9 @@ public static class DrawingContextExtension
     {
         var gc = new GradientCalculator(colorA,colorB,gamma);
 
-        var brush = new SolidColorBrush();
-
         var length = orientation == Orientation.Horizontal ? area.Width : area.Height;
 
         if (length>500) { }
-
-        var bench = new Stopwatch();
-        bench.Start();
 
         if (orientation == Orientation.Horizontal)
         {
@@ -231,10 +209,6 @@ public static class DrawingContextExtension
             }
                 
         }
-
-        bench.Stop();
-        Debug.WriteLine("Gradient : " + area + " : " + bench.ElapsedTicks);
-
     }
 
     class GradientCalculator

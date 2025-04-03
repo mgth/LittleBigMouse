@@ -79,9 +79,10 @@
 				ZoomMode="Both">
             </avalonia:CartesianChart>
 			
-            <Button    Grid.Row="1"
-					   Command="{Binding ProbeBrightnessCommand}"
-					   Content="Tune WP High"
+            <Button
+				Grid.Row="1"
+				Command="{Binding ProbeBrightnessCommand}"
+				Content="Tune WP High"
             />
 
 			<TextBlock Grid.Row="2" Text="{Binding ArgyllProbe.Message}" HorizontalAlignment="Center" VerticalAlignment="Center"/>

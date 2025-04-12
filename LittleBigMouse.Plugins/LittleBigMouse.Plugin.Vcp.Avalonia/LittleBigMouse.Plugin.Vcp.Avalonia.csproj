@@ -21,8 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <PackageReference Include="Avalonia" Version="11.2.6" />
-	  <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.2.6" />
+	  <PackageReference Include="Avalonia" Version="11.3.0-beta1" />
+	  <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.3.0-beta1" />
 	  <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.0.0-rc5.4" />
   </ItemGroup>
 

@@ -141,6 +141,8 @@ internal class Program
                 parser.Parse();
             });
 
+
+
             var boot = new Bootstrapper(() => container.Locate<IEnumerable<IBootloader>>());
 
             var theme = new ThemeService(app.Resources);

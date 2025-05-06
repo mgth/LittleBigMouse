@@ -22,7 +22,7 @@
 */
 
 using System.Diagnostics;
-using Avalonia;
+using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -39,7 +39,7 @@ public class DisplayLocate : DisplayMove
         set
         {
             Debug.Assert(!double.IsInfinity(value));
-            this.SetUnsavedValue(ref _x, value);
+            SetUnsavedValue(ref _x, value);
         }
     }
 
@@ -51,7 +51,7 @@ public class DisplayLocate : DisplayMove
         set
         {
             Debug.Assert(!double.IsInfinity(value));
-            this.SetUnsavedValue(ref _y, value);
+            SetUnsavedValue(ref _y, value);
         }
     }
 

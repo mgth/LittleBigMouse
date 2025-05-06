@@ -1,7 +1,7 @@
-﻿using Avalonia;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 using HLab.Sys.Windows.API;
 using System.Xml.Serialization;
+using HLab.Geo;
 
 namespace HLab.Sys.Windows.Monitors;
 

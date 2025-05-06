@@ -1,5 +1,5 @@
 ﻿
-using Avalonia;
+using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -12,7 +12,7 @@ public static class DisplaySizeExtensions
         var x = (point.X - source.X) / source.Width;
         var y = (point.Y - source.Y) / source.Height;
 
-        return new Point(sz.X + x * sz.Width, sz.Y + y * sz.Height);
+        return new(sz.X + x * sz.Width, sz.Y + y * sz.Height);
     }
 
     public static Point Inside(this IDisplaySize sz, Point p)
@@ -20,7 +20,7 @@ public static class DisplaySizeExtensions
         var x = p.X < sz.X ? sz.X : p.X > sz.Bounds.Right - 1 ? sz.Bounds.Right - 1 : p.X;
         var y = p.Y < sz.Y ? sz.Y : p.Y > sz.Bounds.Bottom - 1 ? sz.Bounds.Bottom - 1 : p.Y;
 
-        return new Point(x, y);
+        return new(x, y);
     }
 
     public static T Set<T>(this T @this, Size size) where T : IDisplaySize

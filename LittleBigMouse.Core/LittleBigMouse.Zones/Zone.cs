@@ -1,7 +1,6 @@
-﻿
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
-using Avalonia;
+using HLab.Geo;
 
 namespace LittleBigMouse.Zoning;
 
@@ -55,14 +54,14 @@ public class Zone : IZonesSerializable
 
         _pixelsToPhysicalMatrix = Matrix
             .CreateTranslation(PixelsBounds.X, -PixelsBounds.Y)
-            .Append(Matrix.CreateScale(1 / PixelsBounds.Width, 1 / PixelsBounds.Height))
-            .Append(Matrix.CreateScale(PhysicalBounds.Width, PhysicalBounds.Height))
-            .Append(Matrix.CreateTranslation(PhysicalBounds.X, PhysicalBounds.Y));
+            * Matrix.CreateScale(1 / PixelsBounds.Width, 1 / PixelsBounds.Height)
+            * Matrix.CreateScale(PhysicalBounds.Width, PhysicalBounds.Height)
+            * Matrix.CreateTranslation(PhysicalBounds.X, PhysicalBounds.Y);
 
         _physicalToPixelsMatrix = Matrix.CreateTranslation(-PhysicalBounds.X, -PhysicalBounds.Y)
-            .Append(Matrix.CreateScale(1 / PhysicalBounds.Width, 1 / PhysicalBounds.Height))
-            .Append(Matrix.CreateScale(PixelsBounds.Width, PixelsBounds.Height))
-            .Append(Matrix.CreateTranslation(PixelsBounds.X, PixelsBounds.Y));
+            * Matrix.CreateScale(1 / PhysicalBounds.Width, 1 / PhysicalBounds.Height)
+            * Matrix.CreateScale(PixelsBounds.Width, PixelsBounds.Height)
+            * Matrix.CreateTranslation(PixelsBounds.X, PixelsBounds.Y);
 
         var dpiX = PixelsBounds.Width / (PhysicalBounds.Width / 25.4);
         var dpiY = PixelsBounds.Height / (PhysicalBounds.Height / 25.4);

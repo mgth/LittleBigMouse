@@ -4,6 +4,9 @@
     <projectFile>HLab.Avalonia/HLab.Base.Avalonia.UITest/HLab.Base.Avalonia.UITest.csproj</projectFile>
     <projectFile>HLab.Core/HLab.ColorTools.Benchmark/HLab.ColorTools.Benchmark.csproj</projectFile>
     <projectFile>LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj</projectFile>
+    <projectFile profileName="http">LittleBigMouse.Server/LittleBigMouse.Server.csproj</projectFile>
+    <projectFile profileName="https">LittleBigMouse.Server/LittleBigMouse.Server.csproj</projectFile>
+    <projectFile>LittleBigMouse.Ui.Loader/LittleBigMouse.Ui.Loader.csproj</projectFile>
     <projectFile profileName="LittleBigMouse.Ui.Avalonia">LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj</projectFile>
     <projectFile pubXmlPath="LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Properties/PublishProfiles/FolderProfile.pubxml">LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj</projectFile>
   </component>
@@ -12,17 +15,44 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0467b62d-44a9-42c1-a773-75ffbb8083d8" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/engine.rs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/line.rs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/point.rs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/rect.rs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/segment.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/projectSettingsUpdater.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/projectSettingsUpdater.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/Hooker.h" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/Hooker.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/HookerDisplayChanged.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/HookerDisplayChanged.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/MainViewModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/MainViewModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/PluginsControlsView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Main/PluginsControlsView.axaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorsListPresenterView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorsListPresenterView.axaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPlugin.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPlugin.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsPresenterView.axaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsViewMode.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Plugins/Options/OptionsViewMode.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Avalonia" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Avalonia/HLab.Base.Avalonia/HLab.Base.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia/HLab.Base.Avalonia/HLab.Base.Avalonia.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Avalonia/HLab.Bugs.Avalonia/HLab.Bugs.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia/HLab.Bugs.Avalonia/HLab.Bugs.Avalonia.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Core" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Matrix.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Matrix.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Point.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Point.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Rect.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Rect.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Size.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Size.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Argyll/HLab.Sys.Argyll.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Argyll/HLab.Sys.Argyll.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.MonitorVcp.Avalonia/HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.MonitorVcp.Avalonia/HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.Monitors/HLab.Sys.Windows.Monitors.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.Monitors/HLab.Sys.Windows.Monitors.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/LittleBigMouse.DisplayLayout.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/LittleBigMouse.DisplayLayout.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/Monitors/Extensions/ZonesLayoutFactory.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/Monitors/Extensions/ZonesLayoutFactory.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/IXmlSerializable.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/IXmlSerializable.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/LittleBigMouse.Zoning.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/LittleBigMouse.Zoning.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/RectExtentions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/RectExtentions.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/Zone.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/Zone.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/ZonesLayout.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/ZonesLayout.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/CopilotIndices/17.14.260.54502/CodeChunks.db" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/CopilotIndices/17.14.260.54502/SemanticSymbols.db" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/v17/.wsuo" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/v17/DocumentLayout.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/ProjectSettings.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/VSWorkspaceState.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/slnx.sqlite" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LittleBigMouse.Plugin.Layout.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LittleBigMouse.Plugin.Layout.Avalonia.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Vcp.Avalonia/LittleBigMouse.Plugin.Vcp.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Vcp.Avalonia/LittleBigMouse.Plugin.Vcp.Avalonia.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Avalonia/LittleBigMouse.Plugins.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Avalonia/LittleBigMouse.Plugins.Avalonia.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Server/Controllers/DisplayDeviceController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Server/Controllers/DisplayDeviceController.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.sln" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.sln" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -35,6 +65,7 @@
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/um/WinUser.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/ILViewer/89b22a68e0aa43c7b2558b1adf41795d114800/b7/c3e99955/0200007Apdb63Low.cs" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -54,7 +85,8 @@
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "XThreadsFramesViewSplitterKey": "0.68308353",
-    "git-widget-placeholder": "Add-Options",
+    "git-widget-placeholder": "Refactor-communication",
+    "ignore.virus.scanning.warn.message": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -62,21 +94,13 @@
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "preferences.pluginManager",
     "vue.rearranger.settings.migration": "true"
-  },
-  "keyToStringList": {
-    "rider.external.source.directories": [
-      "C:\\Users\\user\\AppData\\Roaming\\JetBrains\\Rider2024.1\\resharper-host\\DecompilerCache",
-      "C:\\Users\\user\\AppData\\Roaming\\JetBrains\\Rider2024.1\\resharper-host\\SourcesCache",
-      "C:\\Users\\user\\AppData\\Local\\Symbols\\src"
-    ]
   }
 }]]></component>
   <component name="RunManager" selected=".NET Launch Settings Profile.LittleBigMouse.Ui.Avalonia">
     <configuration name="LittleBigMouse.Hook" type="CppProject" factoryName="C++ Project">
-      <configuration_1>
+      <configuration_1 setup="1">
         <option name="CONFIGURATION" value="Debug" />
         <option name="PLATFORM" value="Any CPU" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -84,11 +108,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_1>
-      <configuration_2>
+      <configuration_2 setup="1">
         <option name="CONFIGURATION" value="DebugRelease" />
         <option name="PLATFORM" value="Any CPU" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -96,11 +120,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_2>
-      <configuration_3>
+      <configuration_3 setup="1">
         <option name="CONFIGURATION" value="Debug" />
         <option name="PLATFORM" value="x64" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -108,11 +132,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_3>
-      <configuration_4>
+      <configuration_4 setup="1">
         <option name="CONFIGURATION" value="Debug" />
         <option name="PLATFORM" value="x86" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -120,11 +144,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_4>
-      <configuration_5>
+      <configuration_5 setup="1">
         <option name="CONFIGURATION" value="DebugRelease" />
         <option name="PLATFORM" value="x64" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -132,11 +156,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_5>
-      <configuration_6>
+      <configuration_6 setup="1">
         <option name="CONFIGURATION" value="DebugRelease" />
         <option name="PLATFORM" value="x86" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -144,11 +168,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_6>
-      <configuration_7>
+      <configuration_7 setup="1">
         <option name="CONFIGURATION" value="Release" />
         <option name="PLATFORM" value="Any CPU" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -156,11 +180,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_7>
-      <configuration_8>
+      <configuration_8 setup="1">
         <option name="CONFIGURATION" value="Release" />
         <option name="PLATFORM" value="x64" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -168,11 +192,11 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_8>
-      <configuration_9>
+      <configuration_9 setup="1">
         <option name="CONFIGURATION" value="Release" />
         <option name="PLATFORM" value="x86" />
-        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
         <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
@@ -180,8 +204,10 @@
         <option name="PASS_PARENT_ENVS" value="1" />
         <option name="USE_EXTERNAL_CONSOLE" value="0" />
         <option name="TERMINAL_INTERACTION_BEHAVIOR" value="FORCE_CONSOLE" />
+        <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       </configuration_9>
       <option name="DEFAULT_PROJECT_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
+      <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Daemon/LittleBigMouse.Hook/LittleBigMouse.Hook.vcxproj" />
       <option name="AUTO_SELECT_PRIORITY" value="0" />
       <method v="2">
         <option name="Build" />
@@ -197,8 +223,13 @@
       <option name="WORKING_DIRECTORY" value="" />
       <option name="PASS_PARENT_ENVS" value="1" />
       <option name="USE_EXTERNAL_CONSOLE" value="0" />
+      <option name="ENV_FILE_PATHS" value="" />
+      <option name="REDIRECT_INPUT_PATH" value="" />
+      <option name="PTY_MODE" value="Auto" />
       <option name="USE_MONO" value="0" />
       <option name="RUNTIME_ARGUMENTS" value="" />
+      <option name="AUTO_ATTACH_CHILDREN" value="0" />
+      <option name="MIXED_MODE_DEBUG" value="0" />
       <option name="PROJECT_PATH" value="$PROJECT_DIR$/HLab.Avalonia/HLab.Base.Avalonia.UITest/HLab.Base.Avalonia.UITest.csproj" />
       <option name="PROJECT_EXE_PATH_TRACKING" value="1" />
       <option name="PROJECT_ARGUMENTS_TRACKING" value="1" />
@@ -215,14 +246,72 @@
       <option name="WORKING_DIRECTORY" value="" />
       <option name="PASS_PARENT_ENVS" value="1" />
       <option name="USE_EXTERNAL_CONSOLE" value="0" />
+      <option name="ENV_FILE_PATHS" value="" />
+      <option name="REDIRECT_INPUT_PATH" value="" />
+      <option name="PTY_MODE" value="Auto" />
       <option name="USE_MONO" value="0" />
       <option name="RUNTIME_ARGUMENTS" value="" />
+      <option name="AUTO_ATTACH_CHILDREN" value="0" />
+      <option name="MIXED_MODE_DEBUG" value="0" />
       <option name="PROJECT_PATH" value="$PROJECT_DIR$/HLab.Core/HLab.ColorTools.Benchmark/HLab.ColorTools.Benchmark.csproj" />
       <option name="PROJECT_EXE_PATH_TRACKING" value="1" />
       <option name="PROJECT_ARGUMENTS_TRACKING" value="1" />
       <option name="PROJECT_WORKING_DIRECTORY_TRACKING" value="1" />
       <option name="PROJECT_KIND" value="DotNetCore" />
       <option name="PROJECT_TFM" value="" />
+      <method v="2">
+        <option name="Build" />
+      </method>
+    </configuration>
+    <configuration name="LittleBigMouse.Ui.Loader" type="DotNetProject" factoryName=".NET Project">
+      <option name="EXE_PATH" value="" />
+      <option name="PROGRAM_PARAMETERS" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="PASS_PARENT_ENVS" value="1" />
+      <option name="USE_EXTERNAL_CONSOLE" value="0" />
+      <option name="ENV_FILE_PATHS" value="" />
+      <option name="REDIRECT_INPUT_PATH" value="" />
+      <option name="PTY_MODE" value="Auto" />
+      <option name="USE_MONO" value="0" />
+      <option name="RUNTIME_ARGUMENTS" value="" />
+      <option name="AUTO_ATTACH_CHILDREN" value="0" />
+      <option name="MIXED_MODE_DEBUG" value="0" />
+      <option name="PROJECT_PATH" value="$PROJECT_DIR$/LittleBigMouse.Ui.Loader/LittleBigMouse.Ui.Loader.csproj" />
+      <option name="PROJECT_EXE_PATH_TRACKING" value="1" />
+      <option name="PROJECT_ARGUMENTS_TRACKING" value="1" />
+      <option name="PROJECT_WORKING_DIRECTORY_TRACKING" value="1" />
+      <option name="PROJECT_KIND" value="DotNetCore" />
+      <option name="PROJECT_TFM" value="" />
+      <method v="2">
+        <option name="Build" />
+      </method>
+    </configuration>
+    <configuration name="LittleBigMouse.Server: http" type="LaunchSettings" factoryName=".NET Launch Settings Profile">
+      <option name="LAUNCH_PROFILE_PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Server/LittleBigMouse.Server.csproj" />
+      <option name="LAUNCH_PROFILE_TFM" value="net9.0" />
+      <option name="LAUNCH_PROFILE_NAME" value="http" />
+      <option name="USE_EXTERNAL_CONSOLE" value="0" />
+      <option name="USE_MONO" value="0" />
+      <option name="RUNTIME_ARGUMENTS" value="" />
+      <option name="GENERATE_APPLICATIONHOST_CONFIG" value="1" />
+      <option name="SHOW_IIS_EXPRESS_OUTPUT" value="0" />
+      <option name="SEND_DEBUG_REQUEST" value="1" />
+      <option name="ADDITIONAL_IIS_EXPRESS_ARGUMENTS" value="" />
+      <method v="2">
+        <option name="Build" />
+      </method>
+    </configuration>
+    <configuration name="LittleBigMouse.Server: https" type="LaunchSettings" factoryName=".NET Launch Settings Profile">
+      <option name="LAUNCH_PROFILE_PROJECT_FILE_PATH" value="$PROJECT_DIR$/LittleBigMouse.Server/LittleBigMouse.Server.csproj" />
+      <option name="LAUNCH_PROFILE_TFM" value="net9.0" />
+      <option name="LAUNCH_PROFILE_NAME" value="https" />
+      <option name="USE_EXTERNAL_CONSOLE" value="0" />
+      <option name="USE_MONO" value="0" />
+      <option name="RUNTIME_ARGUMENTS" value="" />
+      <option name="GENERATE_APPLICATIONHOST_CONFIG" value="1" />
+      <option name="SHOW_IIS_EXPRESS_OUTPUT" value="0" />
+      <option name="SEND_DEBUG_REQUEST" value="1" />
+      <option name="ADDITIONAL_IIS_EXPRESS_ARGUMENTS" value="" />
       <method v="2">
         <option name="Build" />
       </method>
@@ -258,6 +347,7 @@
       <workItem from="1713949791623" duration="121000" />
       <workItem from="1713950006894" duration="363000" />
       <workItem from="1713950515390" duration="911000" />
+      <workItem from="1746218888698" duration="36831000" />
     </task>
     <servers />
   </component>
@@ -279,5 +369,28 @@
   </component>
   <component name="VcsManagerConfiguration">
     <option name="CLEAR_INITIAL_COMMIT_MESSAGE" value="true" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <breakpoint enabled="true" type="DotNet_Exception_Breakpoints">
+          <properties exception="System.OperationCanceledException" breakIfHandledByOtherCode="false" displayValue="System.OperationCanceledException" />
+          <option name="timeStamp" value="1" />
+        </breakpoint>
+        <breakpoint enabled="true" type="DotNet_Exception_Breakpoints">
+          <properties exception="System.Threading.Tasks.TaskCanceledException" breakIfHandledByOtherCode="false" displayValue="System.Threading.Tasks.TaskCanceledException" />
+          <option name="timeStamp" value="2" />
+        </breakpoint>
+        <breakpoint enabled="true" type="DotNet_Exception_Breakpoints">
+          <properties exception="System.Threading.ThreadAbortException" breakIfHandledByOtherCode="false" displayValue="System.Threading.ThreadAbortException" />
+          <option name="timeStamp" value="3" />
+        </breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/LittleBigMouse.Hook/Geometry/Geometry.h</url>
+          <line>2</line>
+          <option name="timeStamp" value="4" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using Avalonia;
 using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;

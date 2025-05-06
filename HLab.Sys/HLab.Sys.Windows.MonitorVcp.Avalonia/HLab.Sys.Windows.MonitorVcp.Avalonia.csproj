@@ -9,10 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.0" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\HLab.Avalonia\HLab.Base.Avalonia\HLab.Base.Avalonia.csproj" />
     <ProjectReference Include="..\..\HLab.Avalonia\HLab.ColorTools.Avalonia\HLab.ColorTools.Avalonia.csproj" />
     <ProjectReference Include="..\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />

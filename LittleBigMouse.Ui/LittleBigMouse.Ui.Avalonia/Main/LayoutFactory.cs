@@ -10,6 +10,7 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Persistency;
 using Avalonia.Media;
+using HLab.ColorTools;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
@@ -104,7 +105,7 @@ public static class LayoutFactory
         {
             source.DisplayFrequency = mode.DisplayFrequency;
 
-            source.InPixel.Set(new Rect(
+            source.InPixel.Set(new HLab.Geo.Rect(
                 mode.Position,
                 mode.Pels));
 
@@ -113,7 +114,7 @@ public static class LayoutFactory
         else
         {
             source.DisplayFrequency = 0;
-            source.InPixel.Set(new Rect(new Point(0, 0),new Size(0, 0)));
+            source.InPixel.Set(new HLab.Geo.Rect(new HLab.Geo.Point(0, 0),new HLab.Geo.Size(0, 0)));
         }
 
         (source.InterfaceName, source.InterfaceLogo) = device.Parent.InterfaceBrandNameAndLogo();
@@ -129,7 +130,7 @@ public static class LayoutFactory
         };
 
         var color = device.Parent.Background;
-        source.BackgroundColor = Color.FromRgb((byte)(color & 0xFF),(byte)((color >> 8) & 0xFF),(byte)((color >> 16) & 0xFF));
+        source.BackgroundColor = HLabColors.RGB<double>((byte)(color & 0xFF),(byte)((color >> 8) & 0xFF),(byte)((color >> 16) & 0xFF));
 
         source.SourceNumber = monitor.MonitorNumber;
 

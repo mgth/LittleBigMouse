@@ -21,9 +21,8 @@
 	  http://www.mgth.fr
 */
 
-using Avalonia;
-using System;
 using System.Runtime.Serialization;
+using HLab.Geo;
 
 namespace HLab.Sys.Windows.Monitors;
 

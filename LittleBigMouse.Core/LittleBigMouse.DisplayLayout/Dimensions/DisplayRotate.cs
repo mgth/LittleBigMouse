@@ -21,9 +21,9 @@
 	  http://www.mgth.fr
 */
 
-using Avalonia;
 using ReactiveUI;
 using System.Reactive.Concurrency;
+using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 

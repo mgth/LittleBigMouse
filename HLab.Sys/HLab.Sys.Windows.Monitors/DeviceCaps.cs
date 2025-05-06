@@ -21,7 +21,7 @@
 	  http://www.mgth.fr
 */
 
-using Avalonia;
+using HLab.Geo;
 
 namespace HLab.Sys.Windows.Monitors;
 

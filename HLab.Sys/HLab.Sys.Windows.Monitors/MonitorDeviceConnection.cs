@@ -2,8 +2,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Xml.Serialization;
-using Avalonia;
-using Avalonia.Controls;
 using Microsoft.Win32;
 
 namespace HLab.Sys.Windows.Monitors;
@@ -27,7 +25,7 @@ public class MonitorDeviceConnection : DisplayDevice
    {
       public EdidDesign()
       {
-         if (!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+         //if (!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
          HKeyName = "HKLM://";
          ManufacturerCode = "SAM";
          ProductCode = "S24D300";
@@ -66,7 +64,7 @@ public class MonitorDeviceConnection : DisplayDevice
    {
       get
       {
-         if (!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+         //if (!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
 
          return new MonitorDeviceConnection
          {

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media;
 using HLab.Base.ReactiveUI;
+using HLab.Geo.Avalonia;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -128,7 +129,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       var r = new Rect();
       foreach (var s in Model.Layout.PhysicalSources)
       {
-         r = r.Union(s.Source.InPixel.Bounds);
+         r = r.Union(s.Source.InPixel.Bounds.ToAvalonia());
       }
 
       return new Rect(r.X / shrink, r.Y / shrink, r.Width / shrink, r.Height / shrink);

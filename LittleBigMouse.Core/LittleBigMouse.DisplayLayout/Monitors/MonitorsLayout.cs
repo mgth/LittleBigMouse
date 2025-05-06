@@ -9,11 +9,10 @@ using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using Avalonia;
-using Avalonia.Controls;
 using DynamicData;
 using DynamicData.Binding;
 using HLab.Base.ReactiveUI;
+using HLab.Geo;
 using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using Microsoft.Win32.TaskScheduler;
@@ -381,7 +380,7 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
     {
         get
         {
-            if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+            // if(!Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
             return new MonitorsLayout(null);
         }
     }

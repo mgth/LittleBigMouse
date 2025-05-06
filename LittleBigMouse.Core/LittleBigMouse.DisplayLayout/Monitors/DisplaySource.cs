@@ -1,8 +1,9 @@
-﻿using LittleBigMouse.DisplayLayout.Dimensions;
+﻿using System.Drawing;
+using LittleBigMouse.DisplayLayout.Dimensions;
 using System.Runtime.Serialization;
-using Avalonia;
-using Avalonia.Media;
 using HLab.Base.ReactiveUI;
+using HLab.ColorTools;
+using HLab.Geo;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
@@ -119,7 +120,7 @@ public class DisplaySource : SavableReactiveModel
     /// Display size in pixel
     /// </summary>
     [DataMember]
-    public DisplaySizeInPixels InPixel { get; } = new(new Rect());
+    public DisplaySizeInPixels InPixel { get; } = new(new ());
 
     /// <summary>
     /// Monitor orientation (0=0°, 1=90°, 2=180°, 3=270°)
@@ -150,11 +151,11 @@ public class DisplaySource : SavableReactiveModel
 
 
     [DataMember]
-    public Color BackgroundColor {
+    public ColorRGB<double> BackgroundColor {
         get => _backgroundColor;
         set => this.RaiseAndSetIfChanged(ref _backgroundColor, value);
     }
-    Color _backgroundColor;
+    ColorRGB<double> _backgroundColor;
 
     [DataMember]
     public string InterfaceName

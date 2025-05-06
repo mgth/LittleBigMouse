@@ -7,9 +7,9 @@
     xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
     xmlns:avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
     xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
-    xmlns:converters2="clr-namespace:HLab.Base.Avalonia.Converters;assembly=HLab.Base.Avalonia"
     xmlns:annotations="clr-namespace:HLab.Mvvm.Annotations;assembly=HLab.Mvvm.Annotations"
     xmlns:monitorFrame="clr-namespace:LittleBigMouse.Ui.Avalonia.MonitorFrame"
+    xmlns:converters1="clr-namespace:HLab.Base.Avalonia.Converters;assembly=HLab.Base.Avalonia"
     mc:Ignorable="d" 
     HorizontalAlignment="Left"
     VerticalAlignment="Top"
@@ -63,7 +63,7 @@
             <GradientStop Color="Black" Offset="1"/>
         </LinearGradientBrush>
 
-        <converters2:ToBrushConverter 
+        <converters1:ToBrushValueConverter 
             x:Key="Highlighter"  
             TrueValue="{StaticResource SelectedBrush}" 
             FalseValue="{StaticResource UnselectedBrush}"

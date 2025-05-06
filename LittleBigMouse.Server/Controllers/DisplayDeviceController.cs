@@ -6,19 +6,11 @@ namespace LittleBigMouse.Server.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class DisplayDeviceController : ControllerBase
+public class DisplayDeviceController(ILogger<DisplayDeviceController> logger) : ControllerBase
 {
-   private readonly ILogger<DisplayDeviceController> _logger;
-
-   public DisplayDeviceController(ILogger<DisplayDeviceController> logger)
-   {
-      _logger = logger;
-   }
+   readonly ILogger<DisplayDeviceController> _logger = logger;
 
    [HttpGet(Name = "GetDisplayDevice")]
    [Produces("application/xml")]
-   public DisplayDevice Get()
-   {
-      return MonitorDeviceHelper.GetDisplayDevices();
-   }
+   public DisplayDevice Get() => MonitorDeviceHelper.GetDisplayDevices();
 }

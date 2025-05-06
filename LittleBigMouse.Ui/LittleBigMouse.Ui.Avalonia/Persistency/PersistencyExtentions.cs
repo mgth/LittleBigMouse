@@ -343,7 +343,7 @@ public static class PersistencyExtensions
 
             var orientation = key.GetOrSet($@"{id}\Orientation", () => @this.Orientation);
 
-            @this.InPixel.Set(new Rect(new Point(x, y), new Size(width, height)));
+            @this.InPixel.Set(new HLab.Geo.Rect(new HLab.Geo.Point(x, y), new HLab.Geo.Size(width, height)));
 
             @this.Orientation = orientation;
 

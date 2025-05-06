@@ -26,8 +26,8 @@ using System.Reactive.Concurrency;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json.Serialization;
-using Avalonia;
 using HLab.Base.ReactiveUI;
+using HLab.Geo;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;

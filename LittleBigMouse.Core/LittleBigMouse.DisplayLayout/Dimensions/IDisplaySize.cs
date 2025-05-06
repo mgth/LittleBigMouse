@@ -1,7 +1,7 @@
 ﻿
 using System;
-using Avalonia;
 using HLab.Base;
+using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 

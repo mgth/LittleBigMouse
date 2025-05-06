@@ -17,7 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\HLab.Avalonia\HLab.Base.Avalonia\HLab.Base.Avalonia.csproj" />
+    <ProjectReference Include="..\..\HLab.Core\HLab.Base.ReactiveUI\HLab.Base.ReactiveUI.csproj" />
+    <ProjectReference Include="..\..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Remote\HLab.Remote.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />

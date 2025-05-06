@@ -4,8 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using DynamicData;
-using Avalonia;
+using HLab.Geo;
 using Microsoft.Win32;
 using HLab.Sys.Windows.API;
 

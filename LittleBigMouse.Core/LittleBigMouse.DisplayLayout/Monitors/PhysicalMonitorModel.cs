@@ -16,7 +16,7 @@ public class PhysicalMonitorModel : SavableReactiveModel
     {
         get
         {
-            if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+            //if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
             return new PhysicalMonitorModel("PNP0000")
             {
             };

@@ -38,7 +38,7 @@
 			<GradientStop Color="#FF333E9A" Offset="1"/>
 		</LinearGradientBrush>
 
-		<converters:ToBrushConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
+		<converters:ToBrushValueConverter x:Key="Highlighter" TrueValue="{StaticResource SelectedBrush}" FalseValue="{StaticResource UnselectedBrush}"/>
 		<converters1:ScaleConverter x:Key="Scale" />
 
 	</UserControl.Resources>

@@ -22,7 +22,7 @@
 */
 
 using System;
-using Avalonia;
+using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -38,7 +38,7 @@ public class DisplaySizeInPixels : DisplaySize
     public override double Width
     {
         get => _width;
-        set => this.SetUnsavedValue(ref _width, value);
+        set => SetUnsavedValue(ref _width, value);
     }
     double _width;
 
@@ -46,21 +46,21 @@ public class DisplaySizeInPixels : DisplaySize
     public override double Height
     {
         get => _height;
-        set => this.SetUnsavedValue(ref _height, value);
+        set => SetUnsavedValue(ref _height, value);
     }
     double _height;
 
     public override double X
     {
         get => _x;
-        set => this.SetUnsavedValue(ref _x, value);
+        set => SetUnsavedValue(ref _x, value);
     }
     double _x;
 
     public override double Y
     {
         get => _y;
-        set => this.SetUnsavedValue(ref _y, value);
+        set => SetUnsavedValue(ref _y, value);
     }
     double _y;
 

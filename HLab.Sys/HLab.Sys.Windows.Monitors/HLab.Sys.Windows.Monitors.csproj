@@ -12,11 +12,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.0" />
+    <PackageReference Include="DynamicData" Version="9.1.2" />
     <PackageReference Include="System.Management" Version="9.0.4" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\HLab.Core\HLab.ColorTools\HLab.ColorTools.csproj" />
+    <ProjectReference Include="..\..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
   </ItemGroup>
 

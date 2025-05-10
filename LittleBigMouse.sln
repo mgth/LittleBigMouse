@@ -127,6 +127,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Server", "Li
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Geo.Avalonia", "HLab.Avalonia\HLab.Geo.Avalonia\HLab.Geo.Avalonia.csproj", "{60294FC0-FE80-4828-8E31-7B82E93B80F3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Theme.Avalonia", "HLab.Avalonia\HLab.Theme.Avalonia\HLab.Theme.Avalonia.csproj", "{3F80D2D8-3D67-C556-14A4-F34E6DDD36D0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -288,6 +290,10 @@ Global
 		{60294FC0-FE80-4828-8E31-7B82E93B80F3}.Debug|x64.Build.0 = Debug|Any CPU
 		{60294FC0-FE80-4828-8E31-7B82E93B80F3}.Release|x64.ActiveCfg = Release|Any CPU
 		{60294FC0-FE80-4828-8E31-7B82E93B80F3}.Release|x64.Build.0 = Release|Any CPU
+		{3F80D2D8-3D67-C556-14A4-F34E6DDD36D0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3F80D2D8-3D67-C556-14A4-F34E6DDD36D0}.Debug|x64.Build.0 = Debug|Any CPU
+		{3F80D2D8-3D67-C556-14A4-F34E6DDD36D0}.Release|x64.ActiveCfg = Release|Any CPU
+		{3F80D2D8-3D67-C556-14A4-F34E6DDD36D0}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -345,6 +351,7 @@ Global
 		{122F5172-1BDA-4C7D-9CCB-41D70DBFB53D} = {35F8E798-DD0B-4382-AE4E-860720712F58}
 		{94719656-30B8-4C25-98D0-5DB42D968FAB} = {122F5172-1BDA-4C7D-9CCB-41D70DBFB53D}
 		{60294FC0-FE80-4828-8E31-7B82E93B80F3} = {F9285DF6-1EB8-4E3F-87AD-01F8AF60C2D9}
+		{3F80D2D8-3D67-C556-14A4-F34E6DDD36D0} = {F9285DF6-1EB8-4E3F-87AD-01F8AF60C2D9}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2294431E-9ED9-4BB8-AEDA-305882A2919F}

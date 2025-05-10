@@ -96,6 +96,7 @@
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Bugs.Avalonia\HLab.Bugs.Avalonia.csproj" />
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Geo.Avalonia\HLab.Geo.Avalonia.csproj" />
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
+		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Theme.Avalonia\HLab.Theme.Avalonia.csproj" />
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />
 		<ProjectReference Include="..\..\HLab.Core\HLab.Base\HLab.Base.csproj" />
 		<ProjectReference Include="..\..\HLab.Core\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
@@ -107,13 +108,6 @@
 		<ProjectReference Include="..\..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Core\LittleBigMouse.Plugins.csproj" />
 		<ProjectReference Include="..\..\LittleBigMouse.Ui.Loader\LittleBigMouse.Ui.Loader.csproj" />
 		<ProjectReference Include="..\LittleBigMouse.Ui.Core\LittleBigMouse.Ui.Core.csproj" />
-	</ItemGroup>
-
-
-	<ItemGroup>
-	  <Reference Include="HLab.Base.Avalonia">
-	    <HintPath>..\..\HLab.Sys\HLab.Sys.Windows.MonitorVcp.Avalonia\bin\x64\Debug\net8.0\HLab.Base.Avalonia.dll</HintPath>
-	  </Reference>
 	</ItemGroup>
 
 

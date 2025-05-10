@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DynamicData" Version="9.1.2" />
+    <PackageReference Include="DynamicData" Version="9.2.2" />
     <PackageReference Include="System.Management" Version="9.0.4" />
   </ItemGroup>
 

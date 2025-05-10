@@ -15,44 +15,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0467b62d-44a9-42c1-a773-75ffbb8083d8" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/engine.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/line.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/point.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/rect.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/LittleBigMouse-Hook-Rust/src/segment.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/projectSettingsUpdater.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/projectSettingsUpdater.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.LittleBigMouse/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/HLab.Avalonia" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Avalonia/HLab.Base.Avalonia/HLab.Base.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia/HLab.Base.Avalonia/HLab.Base.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Avalonia/HLab.Bugs.Avalonia/HLab.Bugs.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Avalonia/HLab.Bugs.Avalonia/HLab.Bugs.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Core" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Matrix.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Matrix.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Point.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Point.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Rect.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Rect.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Size.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Core/HLab.Geo/Size.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Argyll/HLab.Sys.Argyll.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Argyll/HLab.Sys.Argyll.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.MonitorVcp.Avalonia/HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.MonitorVcp.Avalonia/HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.Monitors/HLab.Sys.Windows.Monitors.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/HLab.Sys/HLab.Sys.Windows.Monitors/HLab.Sys.Windows.Monitors.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/LittleBigMouse.DisplayLayout.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/LittleBigMouse.DisplayLayout.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/Monitors/Extensions/ZonesLayoutFactory.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.DisplayLayout/Monitors/Extensions/ZonesLayoutFactory.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/IXmlSerializable.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/IXmlSerializable.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/LittleBigMouse.Zoning.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/LittleBigMouse.Zoning.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/RectExtentions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/RectExtentions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/Zone.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/Zone.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/ZonesLayout.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Core/LittleBigMouse.Zones/ZonesLayout.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/CopilotIndices/17.14.260.54502/CodeChunks.db" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/CopilotIndices/17.14.260.54502/SemanticSymbols.db" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/v17/.wsuo" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/LittleBigMouse.Hook.Rust/v17/DocumentLayout.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/ProjectSettings.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/VSWorkspaceState.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Hook.Rust/.vs/slnx.sqlite" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LittleBigMouse.Plugin.Layout.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Layout.Avalonia/LittleBigMouse.Plugin.Layout.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Vcp.Avalonia/LittleBigMouse.Plugin.Vcp.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugin.Vcp.Avalonia/LittleBigMouse.Plugin.Vcp.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Avalonia/LittleBigMouse.Plugins.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Plugins/LittleBigMouse.Plugins.Avalonia/LittleBigMouse.Plugins.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Server/Controllers/DisplayDeviceController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Server/Controllers/DisplayDeviceController.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LittleBigMouse.sln" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.sln" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HLab.Avalonia/HLab.Geo.Avalonia/Class1.cs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorExpandedFrameView.axaml" beforeDir="false" afterPath="$PROJECT_DIR$/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorExpandedFrameView.axaml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -66,6 +32,7 @@
   <component name="HighlightingSettingsPerFile">
     <setting file="file://C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/um/WinUser.h" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/ILViewer/89b22a68e0aa43c7b2558b1adf41795d114800/b7/c3e99955/0200007Apdb63Low.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/63083fe7afa64bc1b0a119a8663d925c11e00/c4/51cdd1db/ToBrushConverter.cs" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -348,6 +315,7 @@
       <workItem from="1713950006894" duration="363000" />
       <workItem from="1713950515390" duration="911000" />
       <workItem from="1746218888698" duration="36831000" />
+      <workItem from="1746558820543" duration="2211000" />
     </task>
     <servers />
   </component>

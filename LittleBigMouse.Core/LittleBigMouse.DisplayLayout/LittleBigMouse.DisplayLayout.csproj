@@ -10,9 +10,9 @@
 
   <ItemGroup>
     <PackageReference Include="H.Pipes" Version="15.0.0" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="9.0.5" />
     <PackageReference Include="ReactiveUI" Version="20.2.45" />
-    <PackageReference Include="System.Management" Version="9.0.4" />
+    <PackageReference Include="System.Management" Version="9.0.5" />
     <PackageReference Include="TaskScheduler" Version="2.12.1" />
   </ItemGroup>
 

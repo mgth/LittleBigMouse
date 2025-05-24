@@ -5,6 +5,7 @@
       <map>
         <entry key="LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorExpandedFrameView.axaml" value="LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" />
         <entry key="LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MonitorFrame/MonitorFrameView.axaml" value="LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" />
+        <entry key="LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/MultiMonitorsLayoutPresenterView.axaml" value="LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj" />
       </map>
     </option>
   </component>

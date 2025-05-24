@@ -28,61 +28,19 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public class DisplaySizeInPixels : DisplaySize
 {
-
     public DisplaySizeInPixels(Rect rect) : base(null)
     {
         Init();
         this.Set(rect);
     }
 
-    public override double Width
-    {
-        get => _width;
-        set => SetUnsavedValue(ref _width, value);
-    }
-    double _width;
+    public override double Width { get; set => SetUnsavedValue(ref field, value); }
+    public override double Height { get; set => SetUnsavedValue(ref field, value); }
+    public override double X { get; set => SetUnsavedValue(ref field, value); }
+    public override double Y { get; set => SetUnsavedValue(ref field, value); }
 
-
-    public override double Height
-    {
-        get => _height;
-        set => SetUnsavedValue(ref _height, value);
-    }
-    double _height;
-
-    public override double X
-    {
-        get => _x;
-        set => SetUnsavedValue(ref _x, value);
-    }
-    double _x;
-
-    public override double Y
-    {
-        get => _y;
-        set => SetUnsavedValue(ref _y, value);
-    }
-    double _y;
-
-    public override double TopBorder
-    {
-        get => 0;
-        set => throw new NotImplementedException();
-    }
-    public override double BottomBorder
-    {
-        get => 0;
-        set => throw new NotImplementedException();
-    }
-    public override double LeftBorder
-    {
-        get => 0;
-        set => throw new NotImplementedException();
-    }
-    public override double RightBorder
-    {
-        get => 0;
-        set => throw new NotImplementedException();
-    }
-
+    public override double TopBorder { get => 0; set => throw new NotImplementedException(); }
+    public override double BottomBorder { get => 0; set => throw new NotImplementedException(); }
+    public override double LeftBorder { get => 0; set => throw new NotImplementedException(); }
+    public override double RightBorder { get => 0; set => throw new NotImplementedException(); }
 }

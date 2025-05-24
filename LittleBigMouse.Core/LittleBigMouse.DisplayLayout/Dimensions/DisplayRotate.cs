@@ -112,15 +112,10 @@ public class DisplayRotate : DisplaySize
             )
             .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
 
-        base.Init();
+        Init();
     }
 
-    public Vector Translation
-    {
-        get => _translation;
-        set => this.RaiseAndSetIfChanged(ref _translation, value);
-    }
-    Vector _translation;
+    public Vector Translation { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     public override double Width
     {
@@ -157,23 +152,12 @@ public class DisplayRotate : DisplaySize
             }
         }
     }
+    readonly ObservableAsPropertyHelper<double> _height;
 
-    ObservableAsPropertyHelper<double> _height;
-
-    public override double X
-    {
-        get => _x.Value;
-        set => Source.X = value;
-    }
-
+    public override double X { get => _x.Value; set => Source.X = value; }
     readonly ObservableAsPropertyHelper<double> _x;
 
-    public override double Y
-    {
-        get => _y.Value;
-        set => Source.Y = value;
-    }
-
+    public override double Y { get => _y.Value; set => Source.Y = value; }
     readonly ObservableAsPropertyHelper<double> _y;
 
     static double GetBorder(int border, int rotation, double left, double top, double right, double bottom)
@@ -210,38 +194,16 @@ public class DisplayRotate : DisplaySize
         }
     }
 
-
-
-    public override double TopBorder
-    {
-        get => _topBorder.Value;
-        set => SetBorder(0, value);
-    }
-
+    public override double TopBorder{ get => _topBorder.Value; set => SetBorder(0, value); }
     readonly ObservableAsPropertyHelper<double> _topBorder;
 
-    public override double RightBorder
-    {
-        get => _rightBorder.Value;
-        set => SetBorder(1, value);
-    }
-
+    public override double RightBorder { get => _rightBorder.Value; set => SetBorder(1, value); }
     readonly ObservableAsPropertyHelper<double> _rightBorder;
 
-    public override double BottomBorder
-    {
-        get => _bottomBorder.Value;
-        set => SetBorder(2, value);
-    }
-
+    public override double BottomBorder { get => _bottomBorder.Value; set => SetBorder(2, value); }
     readonly ObservableAsPropertyHelper<double> _bottomBorder;
 
-    public override double LeftBorder
-    {
-        get => _leftBorder.Value;
-        set => SetBorder(3, value);
-    }
-
+    public override double LeftBorder { get => _leftBorder.Value; set => SetBorder(3, value); }
     readonly ObservableAsPropertyHelper<double> _leftBorder;
 
     public override string TransformToString => $"Rotate:{Rotation}";

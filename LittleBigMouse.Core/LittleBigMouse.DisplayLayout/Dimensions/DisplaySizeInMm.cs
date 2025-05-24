@@ -26,172 +26,64 @@ using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class DisplayRect : ReactiveObject
-{
-    public double X
-    {
-        get => _x;
-        set => this.RaiseAndSetIfChanged(ref _x, value);
-    }
-    double _x;
-
-    public double Y
-    {
-        get => _y;
-        set => this.RaiseAndSetIfChanged(ref _y, value);
-    }
-    double _y;
-    public double Width
-    {
-        get => _with;
-        set => this.RaiseAndSetIfChanged(ref _with, value);
-    }
-    double _with;
-
-    public double Height
-    {
-        get => _height;
-        set => this.RaiseAndSetIfChanged(ref _height, value);
-    }
-    double _height;
-}
-public class DisplayBorders : ReactiveObject
-{
-    public double Left
-    {
-        get => _left;
-        set => this.RaiseAndSetIfChanged(ref _left, value);
-    }
-    double _left;
-
-    public double Top
-    {
-        get => _top;
-        set => this.RaiseAndSetIfChanged(ref _top, value);
-    }
-    double _top;
-    public double Right
-    {
-        get => _right;
-        set => this.RaiseAndSetIfChanged(ref _right, value);
-    }
-    double _right;
-
-    public double Bottom
-    {
-        get => _bottom;
-        set => this.RaiseAndSetIfChanged(ref _bottom, value);
-    }
-    double _bottom;
-}
-
 /// <summary>
 /// Actual real monitor size 
 /// </summary>
 public class DisplaySizeInMm : DisplaySize
 {
-    public DisplaySizeInMm() : base(null)
-    {
-        Init();
+    public DisplaySizeInMm() : base(null) => Init();
+
+    public bool FixedAspectRatio { get; set => this.RaiseAndSetIfChanged(ref field, value); }
+
+    public override double Width { get; set {
+          using (DelayChangeNotifications())
+          {
+             var newValue = Math.Max(value, 0);
+             var oldValue = field;
+
+             if (FixedAspectRatio)
+             {
+                var ratio = newValue / oldValue;
+                FixedAspectRatio = false;
+                Height *= ratio;
+                FixedAspectRatio = true;
+             }
+
+             SetUnsavedValue(ref field, value);
+          }
+       }
     }
 
-    public bool FixedAspectRatio
-    {
-        get => _fixedAspectRatio;
-        set => this.RaiseAndSetIfChanged(ref _fixedAspectRatio, value);
+    public override double Height { get; set {
+          using (DelayChangeNotifications())
+          {
+             var newValue = Math.Max(value, 0);
+             var oldValue = field;
+
+             if (FixedAspectRatio)
+             {
+                var ratio = newValue / oldValue;
+                FixedAspectRatio = false;
+                Width *= ratio;
+                FixedAspectRatio = true;
+             }
+
+             SetUnsavedValue(ref field, value);
+          }
+       }
     }
-    bool _fixedAspectRatio;//PropertyBuilder.DefaultValue(true);
 
-    public override double Width
-    {
-        get => _width;
+    public override double X { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
-        set
-        {
-            using (DelayChangeNotifications())
-            {
-                var newValue = Math.Max(value, 0);
-                var oldValue = _width;
+    public override double Y { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
-                if (FixedAspectRatio)
-                {
-                    var ratio = newValue / oldValue;
-                    FixedAspectRatio = false;
-                    Height *= ratio;
-                    FixedAspectRatio = true;
-                }
+    public override double TopBorder { get; set => SetUnsavedValue(ref field, Math.Max(value, 0.0));} = 20.0;
 
-                this.SetUnsavedValue(ref _width, value);
-            }
-        }
-    }
-    double _width;
+    public override double RightBorder { get; set => SetUnsavedValue(ref field, Math.Max(value, 0.0)); } = 20.0;
 
-    public override double Height
-    {
-        get => _height;
-        set
-        {
-            using (DelayChangeNotifications())
-            {
-                var newValue = Math.Max(value, 0);
-                var oldValue = _height;
+    public override double BottomBorder { get; set => this.SetUnsavedValue(ref field, Math.Max(value, 0.0)); } = 20.0;
 
-                if (FixedAspectRatio)
-                {
-                    var ratio = newValue / oldValue;
-                    FixedAspectRatio = false;
-                    Width *= ratio;
-                    FixedAspectRatio = true;
-                }
-
-                this.SetUnsavedValue(ref _height, value);
-            }
-        }
-    }
-    double _height;
-
-    public override double X
-    {
-        get => _x;
-        set => this.RaiseAndSetIfChanged(ref _x, value);
-    }
-    double _x;
-
-    public override double Y
-    {
-        get => _y;
-        set => this.RaiseAndSetIfChanged(ref _y, value);
-    }
-    double _y;
-
-    public override double TopBorder
-    {
-        get => _topBorder;
-        set => this.SetUnsavedValue(ref _topBorder, Math.Max(value, 0.0));
-    }
-    double _topBorder = 20.0;
-
-    public override double RightBorder
-    {
-        get => _rightBorder;
-        set => this.SetUnsavedValue(ref _rightBorder, Math.Max(value, 0.0));
-    }
-    double _rightBorder = 20.0;
-
-    public override double BottomBorder
-    {
-        get => _bottomBorder;
-        set => this.SetUnsavedValue(ref _bottomBorder, Math.Max(value, 0.0));
-    }
-    double _bottomBorder = 20.0;
-
-    public override double LeftBorder
-    {
-        get => _leftBorder;
-        set => this.SetUnsavedValue(ref _leftBorder, Math.Max(value, 0.0));
-    }
-    double _leftBorder = 20.0;
+    public override double LeftBorder { get; set => this.SetUnsavedValue(ref field, Math.Max(value, 0.0)); } = 20.0;
 
     public override string TransformToString => $"InMm";
 

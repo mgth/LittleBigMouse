@@ -99,7 +99,8 @@ public abstract class DisplaySize(IDisplaySize source) : SavableReactiveModel, I
                 e => e.OutsideY,
                 e => e.OutsideWidth,
                 e => e.OutsideHeight,
-                (x,y,width,height) => new Rect(new Point(x, y), new Size(width, height)))
+                (x,y,width,height) => new Rect(x, y, width, height))
+//                (x,y,width,height) => new Rect(new Point(x,y), new Size(width, height)))
             .Log(this).ToProperty(this, e => e.OutsideBounds, scheduler: Scheduler.Immediate);
     }
 

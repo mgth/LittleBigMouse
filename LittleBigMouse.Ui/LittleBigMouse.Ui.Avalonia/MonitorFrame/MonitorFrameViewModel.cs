@@ -1,10 +1,7 @@
-﻿using System;
-using System.Diagnostics;
-using System.Reactive.Linq;
-using System.Threading.Tasks;
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Media;
 using HLab.Base.ReactiveUI;
+using HLab.ColorTools;
 using HLab.Geo.Avalonia;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
@@ -12,7 +9,10 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
-using Color = Avalonia.Media.Color;
+using System;
+using System.Diagnostics;
+using System.Reactive.Linq;
+using System.Threading.Tasks;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
@@ -66,7 +66,6 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
           e => e.Model.DepthProjection.LeftBorder,
 
           (rx, x, x0, leftBorder) => rx * (x0 + x - leftBorder)
-
       ).Log(this, "_left").ToProperty(this, e => e.Left);
 
       _top = this.WhenAnyValue(
@@ -81,8 +80,8 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
       _margin = this.WhenAnyValue(
           e => e.Left,
-          e => e.Top, (left, top) => new Thickness(Left, Top, 0, 0)
-      ).Log(this, "_margin").ToProperty(this, e => e.Margin);
+          e => e.Top, (left, top) => new Thickness(left, top, 0, 0)
+          ).Log(this, "_margin").ToProperty(this, e => e.Margin);
 
       _unrotated = this.WhenAnyValue(
           e => e.MonitorsPresenter.VisualRatio,
@@ -91,7 +90,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
           (ratio, mmu, o) => mmu.ScaleWithLocation(ratio)
       ).Log(this, "_unrotated").ToProperty(this, e => e.Unrotated);
 
-      var cmd = ReactiveCommand.CreateFromTask<(string, WallpaperStyle, Color)>(p => SetWallpaper(p.Item1, p.Item2, p.Item3));
+      var cmd = ReactiveCommand.CreateFromTask<(string, WallpaperStyle, ColorRGB<double>)>(p => SetWallpaper(p.Item1, p.Item2, p.Item3));
 
       this.WhenAnyValue(
           e => e.Model.ActiveSource.Source.WallpaperPath,
@@ -102,7 +101,11 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       this
           .WhenAnyValue(e => e.Model)
           .Select(e => e)
-          .Do(e => Location = new FrameLocation(e))
+          .Do(e =>
+          {
+             if(e is null) return;
+             Location = new FrameLocation(e);
+          })
           .Subscribe().DisposeWith(this);
 
       _selected = this.WhenAnyValue(
@@ -114,11 +117,10 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
       Disposer.OnDispose(() =>
       {
-         if (_wallpaper is IDisposable bmp)
+         if (Wallpaper is IDisposable bmp)
          {
             bmp.Dispose();
          }
-         _wallpaper = null;
       });
    }
 
@@ -132,10 +134,10 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
          r = r.Union(s.Source.InPixel.Bounds.ToAvalonia());
       }
 
-      return new Rect(r.X / shrink, r.Y / shrink, r.Width / shrink, r.Height / shrink);
+      return new(r.X / shrink, r.Y / shrink, r.Width / shrink, r.Height / shrink);
    }
 
-   async Task SetWallpaper(string path, WallpaperStyle style, Color color)
+   async Task SetWallpaper(string path, WallpaperStyle style, ColorRGB<double> color)
    {
       Debug.Assert(Model?.ActiveSource?.Source != null);
 
@@ -182,12 +184,9 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
    }
 
 
-   public IMonitorsLayoutPresenterViewModel? MonitorsPresenter
-   {
-      get => _monitorsPresenter;
-      set => this.RaiseAndSetIfChanged(ref _monitorsPresenter, value);
+   public IMonitorsLayoutPresenterViewModel? MonitorsPresenter { get;
+      set => this.RaiseAndSetIfChanged(ref field, value);
    }
-   IMonitorsLayoutPresenterViewModel? _monitorsPresenter;
 
    public TransformGroup? Rotation => _rotation.Value;
    readonly ObservableAsPropertyHelper<TransformGroup?> _rotation;
@@ -213,19 +212,13 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
    public bool Selected => _selected.Value;
    readonly ObservableAsPropertyHelper<bool> _selected;
 
-   public IImage? Wallpaper
-   {
-      get => _wallpaper;
-      set => this.RaiseAndSetIfChanged(ref _wallpaper, value);
+   public IImage? Wallpaper { get;
+      set => this.RaiseAndSetIfChanged(ref field, value);
    }
-   IImage? _wallpaper;
 
-   public IFrameLocation Location
-   {
-      get => _location;
-      set => this.RaiseAndSetIfChanged(ref _location, value);
+   public IFrameLocation Location { get;
+      set => this.RaiseAndSetIfChanged(ref field, value);
    }
-   IFrameLocation _location;
 
    public void ConfigureMvvmContext(IMvvmContext ctx)
    {

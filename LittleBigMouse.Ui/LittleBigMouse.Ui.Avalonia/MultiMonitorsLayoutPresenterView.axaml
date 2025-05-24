@@ -26,25 +26,19 @@
 
         <main:PresenterBackground/>
 
-
         <Grid  Margin="30" ClipToBounds="False">
 
             <Grid 
                 x:Name="ReferenceGrid" 
-                ClipToBounds="False"
-                >
+                ClipToBounds="False">
 
-                <Canvas x:Name="ContentGrid" 
-                        ClipToBounds="False"
-
-                >
+                <Canvas x:Name="ContentGrid" ClipToBounds="False">
 
                     <ItemsControl 
                         ItemsSource="{Binding Model.PhysicalMonitors, FallbackValue=NA}"
                         ClipToBounds="False"
                         HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                     >
+                        VerticalAlignment="Center">
                         <ItemsControl.Effect>
                             <DropShadowEffect 
                                 Color="AliceBlue" 
@@ -52,7 +46,6 @@
                                 OffsetY="0" 
                                 BlurRadius="40" Opacity="0.3"/>
                         </ItemsControl.Effect>
-
 
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

@@ -40,35 +40,16 @@ public class PhysicalSource : SavableReactiveModel
         double srcDpiX, double srcDpiY,
         double dpiEffectiveX, double dpiEffectiveY)
     {
-        switch (aware)
-        {
-            case WinDef.DpiAwareness.Unaware:
-                return new DisplayRatioValue(
-                    Math.Round(dpiRealX / dpiAngX * 10) / 10,
-                    Math.Round(dpiRealY / dpiAngY * 10) / 10);
-            //return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
-
-            case WinDef.DpiAwareness.SystemAware:
-                return new DisplayRatioValue(
-                    srcDpiX / 96,
-                    srcDpiY / 96
-                );
-
-            case WinDef.DpiAwareness.PerMonitorAware:
-                return new DisplayRatioValue(
-                    dpiEffectiveX / 96,
-                    dpiEffectiveY / 96
-                );
-
-            case WinDef.DpiAwareness.Invalid:
-                return new DisplayRatioValue(
-                    dpiEffectiveX / 96,
-                    dpiEffectiveY / 96
-                );
-
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
+       return aware switch
+       {
+          WinDef.DpiAwareness.Unaware => new DisplayRatioValue(Math.Round(dpiRealX / dpiAngX * 10) / 10,
+             Math.Round(dpiRealY / dpiAngY * 10) / 10),
+          //return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
+          WinDef.DpiAwareness.SystemAware => new(srcDpiX / 96, srcDpiY / 96),
+          WinDef.DpiAwareness.PerMonitorAware or WinDef.DpiAwareness.Invalid => new (
+             dpiEffectiveX / 96, dpiEffectiveY / 96),
+          _ => throw new ArgumentOutOfRangeException()
+       };
     }
 
     public PhysicalSource(string deviceId, PhysicalMonitor monitor, DisplaySource source)
@@ -150,11 +131,11 @@ public class PhysicalSource : SavableReactiveModel
     /// <summary>
     /// Device ID
     /// </summary>
-    public string DeviceId {
-        get => _deviceId;
-        set => this.RaiseAndSetIfChanged(ref _deviceId, value);
+    public string DeviceId
+    {
+       get;
+       set => this.RaiseAndSetIfChanged(ref field, value);
     }
-    string _deviceId;
 
 
     /// <summary>

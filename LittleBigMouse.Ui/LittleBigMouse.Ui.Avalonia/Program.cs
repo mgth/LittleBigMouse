@@ -51,6 +51,11 @@ internal class Program
             Debug.Print("there is already another instance running!");
             return;
         }
+        
+        RxApp.DefaultExceptionHandler = Observer.Create<Exception>(ex =>
+        {
+           Debug.WriteLine($"ReactiveUI Exception: {ex}");
+        });
 
         BuildAvaloniaApp().Start(UIMain, args);
     }

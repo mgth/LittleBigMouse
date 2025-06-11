@@ -289,7 +289,17 @@ public class Zone : IZonesSerializable
 
     public IEnumerable<Rect> TravelPixels(IEnumerable<Zone> zones, Zone target)
     {
-        return _travels.GetOrAdd(target.Main, z => PixelsBounds.TravelPixels(z.PixelsBounds, zones.Where(z => ReferenceEquals(z, z.Main)).Select(z => z.PixelsBounds).ToArray()));
+        return _travels.GetOrAdd(
+            target.Main, 
+            
+            z => PixelsBounds.TravelPath(
+                z.PixelsBounds, 
+                zones
+                    .Where(z => ReferenceEquals(z, z.Main))
+                    .Select(z => z.PixelsBounds)
+                    .ToArray()
+                )
+            );
     }
 
     public string Serialize()

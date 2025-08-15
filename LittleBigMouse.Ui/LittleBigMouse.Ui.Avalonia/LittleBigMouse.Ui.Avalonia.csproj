@@ -58,6 +58,7 @@
     <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.7.23375.6" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="System.Resources.Extensions" Version="9.0.8" />
+    <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="11.3.0.3" />
   </ItemGroup>
 
 	<ItemGroup>

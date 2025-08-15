@@ -385,7 +385,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       );
       return;
 
-      new Thread(() =>
+      Task.Run(async () =>
       {
          for (uint channel = 0; channel < 3; channel++)
          {
@@ -411,7 +411,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
             for (uint i = 32; i <= max; i++)
             {
-               level.Value = i; Thread.Sleep(1000);
+               level.Value = i; await Task.Delay(1000);
                probe.SpotRead();
                var color = probe.ProbedColor;
 
@@ -432,8 +432,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
             level.Value = minIdx;
          }
-      }
-      ).Start();
+      });
    }
 
    void Probe(ArgyllProbe probe, Color c, MonitorLevel level)
@@ -497,7 +496,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       );
       return;
 
-      new Thread(() =>
+      Task.Run(async () =>
       {
          for (uint channel = 0; channel < 3; channel++)
          {
@@ -523,7 +522,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
             for (uint i = 32; i <= max; i++)
             {
-               level.Value = i; Thread.Sleep(1000);
+               level.Value = i; await Task.Delay(1000);
 
                if (probe.SpotRead())
                {
@@ -545,8 +544,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
             level.Value = minIdx;
          }
-      }
-      ).Start();
+      });
    }
 
    double[,,] _tune = new double[0, 0, 0];

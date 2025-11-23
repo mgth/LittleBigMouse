@@ -18,6 +18,11 @@ void SetClip(const geo::Rect<long>& r)
 	ClipCursor(&rect);
 }
 
+void ClearClip()
+{
+	ClipCursor(NULL);
+}
+
 geo::Rect<long> GetClip()
 {
 	RECT r;

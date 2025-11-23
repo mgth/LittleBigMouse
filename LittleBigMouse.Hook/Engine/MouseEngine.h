@@ -16,6 +16,8 @@ class MouseEngine
 
 	geo::Point<long> _oldPoint = geo::Point<long>(0,0);
     Zone* _oldZone = nullptr;
+	geo::Point<long> _intendedPoint = geo::Point<long>(0,0);
+	bool _suppressNextBounce = false;
 
 	geo::Rect<long> _oldClipRect = geo::Rect<long>::Empty();
 

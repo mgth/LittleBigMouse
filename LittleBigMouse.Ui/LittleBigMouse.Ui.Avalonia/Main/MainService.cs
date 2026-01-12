@@ -154,10 +154,11 @@ public class MainService : ReactiveModel, IMainService
         await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
         {
-            MonitorsLayout.Options.Enabled = false; 
+            MonitorsLayout.Options.Enabled = false;
             MonitorsLayout.SaveEnabled();
             return _littleBigMouseClientService.StopAsync();
         });
+        await _notify.AddMenuAsync(-1, "Refresh", "Icon/lbm_on", RefreshAsync);
         await _notify.AddMenuAsync(-1, "Exit", "Icon/sys/Close", QuitAsync);
 
         await _notify.SetIconAsync("Icon/lbm_off",128);
@@ -180,6 +181,15 @@ public class MainService : ReactiveModel, IMainService
     }
 
     Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
+
+    async Task RefreshAsync()
+    {
+        UpdateLayout();
+        if (MonitorsLayout.Options.Enabled)
+        {
+            await StartAsync();
+        }
+    }
 
     bool _justConnected = false;
     async Task DaemonEventReceived(object? sender, LittleBigMouseServiceEventArgs args)

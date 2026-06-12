@@ -4,7 +4,7 @@
 std::mutex Logger::Lock;
 
 #ifdef LOGTOFILE
-std::ofstream Logger::Out = std::ofstream("L:\\log.txt", std::ios::app);
+std::ofstream Logger::Out = std::ofstream("C:\\Temp\\LittleBigMouse.log", std::ios::app);
 #else
 std::ostream Logger::Out = std::cout;
 #endif // LOGTOFILE

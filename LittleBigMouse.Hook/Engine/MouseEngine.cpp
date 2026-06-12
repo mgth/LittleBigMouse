@@ -59,10 +59,8 @@ void MouseEngine::NoZoneMatches(MouseEventArg& e)
 
 	e.Handled = false;// when set to true, cursor stick to frame
 
-#ifdef _DEBUG_
 	const auto p = _oldZone->ToPhysical(e.Point);
-	LOG_TRACE_1("NoZoneMatches : " << _oldZone->Name << e.Point << p );
-#endif
+	LOG_TRACE("NoZoneMatches : " << _oldZone->Name << " at " << e.Point << " (" << p << ")" );
 
 }
 
@@ -144,7 +142,7 @@ Zone* MouseEngine::FindTargetZone(const Zone* current, const geo::Segment<double
 
 bool MouseEngine::CheckForStopped(const MouseEventArg& e)
 {
-	ResetClip();
+	ClearClip();
 
 	if(e.Running) return false;
 
@@ -220,6 +218,7 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 			_currentResistanceLink = nullptr;
 		}
 
+		ClearClip();
 		_oldPoint = e.Point;
 		e.Handled = false;
 		return;
@@ -362,19 +361,60 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 
 	const auto pIn = e.Point;
 
+	// DisplayLink workaround: suppress immediate bounce-back after zone transition
+	if (_suppressNextBounce)
+	{
+		_suppressNextBounce = false;
+		// If cursor was moved by Windows/DisplayLink (not by user), correct it back
+		const auto dx = abs(pIn.X() - _intendedPoint.X());
+		const auto dy = abs(pIn.Y() - _intendedPoint.Y());
+		// Check for either large Y displacement or large X displacement (DisplayLink can move both)
+		if ((dx < 5 && dy > 100) || (dy < 5 && dx > 100) || (dx > 100 && dy > 100))
+		{
+			LOG_TRACE("Suppressing DisplayLink bounce: intended [" << _intendedPoint.X() << "," << _intendedPoint.Y() << "] actual [" << pIn.X() << "," << pIn.Y() << "] - correcting position");
+			SetMouseLocation(_intendedPoint);
+			_oldPoint = _intendedPoint;
+			e.Handled = true;
+			return;
+		}
+	}
+
 	const ZoneLink* zoneLinkOut;
 	geo::Point<long> pOut;
 	const auto bounds = _oldZone->PixelsBounds();
 
+	// Calculate distances to all borders
+	const long distRight = 1 + pIn.X() - bounds.Right();
+	const long distLeft = bounds.Left() - pIn.X();
+	const long distBottom = 1 + pIn.Y() - bounds.Bottom();
+	const long distTop = bounds.Top() - pIn.Y();
+
+	LOG_TRACE("Pos=" << pIn << " Bounds=[" << bounds.Left() << "," << bounds.Top() << " to " << bounds.Right() << "," << bounds.Bottom() << "] Dist: R=" << distRight << " L=" << distLeft << " B=" << distBottom << " T=" << distTop);
+
+	// Determine which border is being crossed (prefer the one with larger distance)
+	// This handles corner cases where cursor is exactly on an edge
+	// Note: Only consider borders that have been crossed (dist > 0), not just touched (dist == 0)
+	long maxDist = 0; // Changed from -1 to 0 so we require dist > 0
+	int borderCrossed = -1; // 0=right, 1=left, 2=bottom, 3=top
+
+	if (distRight > maxDist) { maxDist = distRight; borderCrossed = 0; }
+	if (distLeft > maxDist) { maxDist = distLeft; borderCrossed = 1; }
+	if (distBottom > maxDist) { maxDist = distBottom; borderCrossed = 2; }
+	if (distTop > maxDist) { maxDist = distTop; borderCrossed = 3; }
+
 	// leaving zone by right
-	if (long dist; (dist = 1 + pIn.X() - bounds.Right()) >= 0)
+	if (borderCrossed == 0)
 	{
 		//DebugUnhook.fire();
 
 		zoneLinkOut = _oldZone->RightZones->AtPixel(pIn.Y());
-		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
+		LOG_TRACE("RIGHT border: Y=" << pIn.Y() << " -> link target=" << (zoneLinkOut->Target ? zoneLinkOut->Target->Name : "NULL") << " targetId=" << zoneLinkOut->TargetId);
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,distRight))
 		{
-			pOut = { zoneLinkOut->Target->PixelsBounds().Left(),zoneLinkOut->ToTargetPixel(pIn.Y()) };
+			// Convert to physical coordinates and back to get proper position
+			const auto pInPhysical = _oldZone->ToPhysical(pIn);
+			const auto pOutPhysical = geo::Point<double>(zoneLinkOut->Target->PhysicalBounds().Left(), pInPhysical.Y());
+			pOut = zoneLinkOut->Target->ToPixels(pOutPhysical);
 		}
 		else
 		{
@@ -383,12 +423,16 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		}
 	}
 	// leaving zone by left
-	else if ((dist = bounds.Left() - pIn.X()) >= 0)
+	else if (borderCrossed == 1)
 	{
 		zoneLinkOut = _oldZone->LeftZones->AtPixel(pIn.Y());
-		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
+		LOG_TRACE("LEFT border: Y=" << pIn.Y() << " -> link target=" << (zoneLinkOut->Target ? zoneLinkOut->Target->Name : "NULL") << " targetId=" << zoneLinkOut->TargetId);
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,distLeft))
 		{
-			pOut = { zoneLinkOut->Target->PixelsBounds().Right() - 1,zoneLinkOut->ToTargetPixel(pIn.Y()) };
+			// Convert to physical coordinates and back to get proper position
+			const auto pInPhysical = _oldZone->ToPhysical(pIn);
+			const auto pOutPhysical = geo::Point<double>(zoneLinkOut->Target->PhysicalBounds().Right(), pInPhysical.Y());
+			pOut = zoneLinkOut->Target->ToPixels(pOutPhysical);
 		}
 		else
 		{
@@ -397,12 +441,16 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		}
 	}
 	// leaving zone by bottom
-	else if ((dist = 1 +  pIn.Y() - bounds.Bottom()) >= 0)
+	else if (borderCrossed == 2)
 	{
 		zoneLinkOut = _oldZone->BottomZones->AtPixel(pIn.X());
-		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
+		LOG_TRACE("BOTTOM border: X=" << pIn.X() << " -> link target=" << (zoneLinkOut->Target ? zoneLinkOut->Target->Name : "NULL") << " targetId=" << zoneLinkOut->TargetId);
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,distBottom))
 		{
-			pOut = { zoneLinkOut->ToTargetPixel(pIn.X()), zoneLinkOut->Target->PixelsBounds().Top() };
+			// Convert to physical coordinates and back to get proper position
+			const auto pInPhysical = _oldZone->ToPhysical(pIn);
+			const auto pOutPhysical = geo::Point<double>(pInPhysical.X(), zoneLinkOut->Target->PhysicalBounds().Top());
+			pOut = zoneLinkOut->Target->ToPixels(pOutPhysical);
 		}
 		else
 		{
@@ -411,12 +459,16 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 		}
 	}
 	// leaving zone by top
-	else if ((dist = _oldZone->PixelsBounds().Top() - pIn.Y()) >= 0)
+	else if (borderCrossed == 3)
 	{
 		zoneLinkOut = _oldZone->TopZones->AtPixel(pIn.X());
-		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,dist))
+		LOG_TRACE("TOP border: X=" << pIn.X() << " -> link target=" << (zoneLinkOut->Target ? zoneLinkOut->Target->Name : "NULL") << " targetId=" << zoneLinkOut->TargetId);
+		if (zoneLinkOut->Target && TryPassBorderPixel(zoneLinkOut,distTop))
 		{
-			pOut = { zoneLinkOut->ToTargetPixel(pIn.X()),zoneLinkOut->Target->PixelsBounds().Bottom() - 1 };
+			// Convert to physical coordinates and back to get proper position
+			const auto pInPhysical = _oldZone->ToPhysical(pIn);
+			const auto pOutPhysical = geo::Point<double>(pInPhysical.X(), zoneLinkOut->Target->PhysicalBounds().Bottom());
+			pOut = zoneLinkOut->Target->ToPixels(pOutPhysical);
 		}
 		else
 		{
@@ -433,6 +485,7 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 			_currentResistanceLink = nullptr;
 		}
 
+		ClearClip();
 		_oldPoint = pIn;
 		e.Handled = false;
 		return;
@@ -450,6 +503,8 @@ void MouseEngine::MoveInMm(MouseEventArg& e, const geo::Point<double>& pOutInMm,
 
 void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut)
 {
+	LOG_TRACE("Move from " << _oldZone->Name << " (" << e.Point << ") to " << zoneOut->Name << " at " << pOut);
+
 	const auto travel = _oldZone->TravelPixels(Layout.MainZones, zoneOut);
 
 	_oldZone = zoneOut->Main;
@@ -475,9 +530,14 @@ void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zon
 	SetClip(r);
 	SetMouseLocation(pOut);
 
-	//_oldClipRect = GetClip();
-	//SetMouseLocation(pOut);
-	LOG_TRACE_1("moved : " << zoneOut->Name << " at " << pOut);
+	// Clear clip completely after move to avoid cursor being trapped
+	ClearClip();
+
+	// Track intended position to suppress DisplayLink bounce-back
+	_intendedPoint = pOut;
+	_suppressNextBounce = true;
+
+	LOG_TRACE("moved : " << zoneOut->Name << " at " << pOut);
 
 	e.Handled = true;
 }

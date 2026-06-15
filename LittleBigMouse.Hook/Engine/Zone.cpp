@@ -62,7 +62,7 @@ bool Zone::Contains(const geo::Point<double>& mm) const
 geo::Point<long> Zone::InsidePixelsBounds(const geo::Point<long> px) const
 {
     auto x = px.X();
-    auto y = px.X();
+    auto y = px.Y();
 
     if (x < _pixelsBounds.Left()) x = _pixelsBounds.Left();
     else if (x > _pixelsBounds.Right() - 1) x = _pixelsBounds.Right() - 1;

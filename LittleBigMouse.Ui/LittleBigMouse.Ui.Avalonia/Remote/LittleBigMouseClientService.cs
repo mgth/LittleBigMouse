@@ -67,6 +67,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
             OnStateChanged(LittleBigMouseEvent.Connected);
         };
 
+        LaunchDaemon();
         _client.Listen();
     }
 
@@ -96,7 +97,16 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     void CreateExcludedFile()
     {
         var path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
+        var directory = Path.Combine(path,"Mgth","LittleBigMouse");
+        Directory.CreateDirectory(directory);
+
+        var file = Path.Combine(directory,"Excluded.txt");
+        if (Directory.Exists(file))
+        {
+            Debug.WriteLine($"Excluded path is a directory, skipping file setup : {file}");
+            return;
+        }
+
         if(File.Exists(file))
         {
             // Riot games -> Riot Games (was misspelled in 5.0.4.0) TODO : remove in a version or two
@@ -128,7 +138,11 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         }
 
         var path = Assembly.GetEntryAssembly()?.Location;
-        if (path is null) return;
+        if (path is null)
+        {
+            Debug.WriteLine("Unable to resolve entry assembly path for daemon launch");
+            return;
+        }
 
         if (path.Contains(@"\bin\"))
         {
@@ -140,7 +154,11 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         }
 
         var directory = Path.GetDirectoryName(path);
-        if (directory is null) return;
+        if (directory is null)
+        {
+            Debug.WriteLine($"Hook directory is null for path : {path}");
+            return;
+        }
 
         path = Path.Combine(directory, "LittleBigMouse.Hook.exe");
 
@@ -150,13 +168,21 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
             return;
         }
 
-        CreateExcludedFile();
+        try
+        {
+            CreateExcludedFile();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to create excluded file : {ex}");
+        }
 
         try
         {
             var startInfo = new ProcessStartInfo
             {
                 FileName = path,
+                WorkingDirectory = directory,
 
                 //RedirectStandardOutput = true,
                 //RedirectStandardError = true,
@@ -178,9 +204,9 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
             Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
         }
-        catch (ExecutionEngineException ex)
+        catch (Exception ex)
         {
-
+            Debug.WriteLine($"Failed to start daemon : {path} : {ex}");
         }
     }
 

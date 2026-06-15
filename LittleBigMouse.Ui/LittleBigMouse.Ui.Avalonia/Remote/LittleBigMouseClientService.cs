@@ -133,13 +133,16 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         if (path.Contains(@"\bin\"))
         {
             // .\LittleBigMouse.Ui.Avalonia\bin\x64\Debug\net8.0\LittleBigMouse.Ui.Avalonia.dll
-            // .\x64\Debug\LittleBigMouse.Hook.exe
+            // .\LittleBigMouse.Hook\bin\x64\Debug\LittleBigMouse.Hook.exe
 
             path = path.Replace(@"\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\", @"\LittleBigMouse.Hook\");
             path = path.Replace(@"\net8.0\", @"\");
         }
 
-        path = path.Replace(@"\LittleBigMouse.Ui.Avalonia.dll", @"\LittleBigMouse.Hook.exe");
+        var directory = Path.GetDirectoryName(path);
+        if (directory is null) return;
+
+        path = Path.Combine(directory, "LittleBigMouse.Hook.exe");
 
         if (!File.Exists(path))
         {

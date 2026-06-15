@@ -62,7 +62,7 @@ bool Zone::Contains(const geo::Point<double>& mm) const
 geo::Point<long> Zone::InsidePixelsBounds(const geo::Point<long> px) const
 {
     auto x = px.X();
-    auto y = px.X();
+    auto y = px.Y();
 
     if (x < _pixelsBounds.Left()) x = _pixelsBounds.Left();
     else if (x > _pixelsBounds.Right() - 1) x = _pixelsBounds.Right() - 1;
@@ -155,7 +155,7 @@ std::vector<geo::Rect<long>> Reachable(const geo::Rect<long>& source, const geo:
 
 	if(top >= bottom) 
 	{
-        auto start = geo::Rect<long>(left, source.Top(), right, source.Height());
+        auto start = geo::Rect<long>(left, source.Top(), right - left, source.Height());
         auto dest  = geo::Rect<long>(left, target.Top(), right - left, target.Height());
 		return {start,dest};
 	}

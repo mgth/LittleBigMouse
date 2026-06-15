@@ -155,7 +155,7 @@ std::vector<geo::Rect<long>> Reachable(const geo::Rect<long>& source, const geo:
 
 	if(top >= bottom) 
 	{
-        auto start = geo::Rect<long>(left, source.Top(), right, source.Height());
+        auto start = geo::Rect<long>(left, source.Top(), right - left, source.Height());
         auto dest  = geo::Rect<long>(left, target.Top(), right - left, target.Height());
 		return {start,dest};
 	}

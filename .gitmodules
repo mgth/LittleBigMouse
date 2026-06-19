@@ -3,4 +3,5 @@
 	url = https://github.com/mgth/HLab.Core.git
 [submodule "HLab.Avalonia"]
 	path = HLab.Avalonia
-	url = https://github.com/mgth/HLab.Avalonia.git
+    url = https://github.com/thomcuddihy/HLab.Avalonia.git
+    branch = codex/fix-iconservice-build

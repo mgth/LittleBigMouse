@@ -89,6 +89,7 @@ void LittleBigMouseDaemon::Connect()
 void LittleBigMouseDaemon::Run(const std::string& path) 
 {
 	LOG_TRACE("Daemon started");
+	StartClipWatcher();
 	// connect to events
 	Connect();
 	LOG_TRACE("Connected");
@@ -123,6 +124,7 @@ void LittleBigMouseDaemon::Run(const std::string& path)
 
 	// disconnect from events
 	Disconnect();
+	StopClipWatcher();
 }
 
 void LittleBigMouseDaemon::Disconnect()
@@ -316,6 +318,13 @@ bool LittleBigMouseDaemon::Excluded(const std::string& path) const
 // Window focus has changed
 void LittleBigMouseDaemon::FocusChanged(const std::string& path) 
 {
+	++_focusGen;
+	{
+		std::lock_guard<std::mutex> lock(_clipMutex);
+		_clipPending = true;
+	}
+	_cv.notify_one();
+
 	if(Excluded(path))
 	{
 		LOG_TRACE("<daemon:excluded>");
@@ -346,6 +355,95 @@ void LittleBigMouseDaemon::FocusChanged(const std::string& path)
 	if(_remoteServer)
 		_remoteServer->Send("<DaemonMessage><Event>FocusChanged</Event><Payload>"+path+"</Payload></DaemonMessage>\n",nullptr);
 }
+
+bool IsCursorClipped() {
+	RECT clip;
+	if (!GetClipCursor(&clip))
+		return false;
+
+	RECT virtualRect;
+	virtualRect.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+	virtualRect.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+	virtualRect.right = virtualRect.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+	virtualRect.bottom = virtualRect.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+	return !(clip.left == virtualRect.left &&
+		clip.top == virtualRect.top &&
+		clip.right == virtualRect.right &&
+		clip.bottom == virtualRect.bottom);
+}
+
+void LittleBigMouseDaemon::HandleClipCheck()
+{
+	if (IsCursorClipped()) {
+		LOG_TRACE("<daemon:mouseclip>");
+		if (!_paused)
+		{
+			if (_hook && _hook->Hooked())
+			{
+				_hook->Unhook();
+				_paused = true;
+				LOG_TRACE("<daemon:paused>");
+			}
+		}
+	} else {
+		if (_paused)
+		{
+			if (_hook && !_hook->Hooked())
+			{
+				_hook->Hook();
+			}
+			_paused = false;
+
+			LOG_TRACE("<daemon:wakeup>");
+		}
+	}
+}
+
+
+void LittleBigMouseDaemon::StartClipWatcher()
+{
+	_clipThread = std::thread([this]()
+		{
+			std::unique_lock<std::mutex> lock(_clipMutex);
+
+			while (!_stopping)
+			{
+				_cv.wait(lock, [this]
+					{
+						return _clipPending || _stopping;
+					});
+
+				if (_stopping)
+					break;
+
+				_clipPending = false;
+				auto gen = _focusGen.load();
+
+				lock.unlock();
+				std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+				lock.lock();
+
+				if (gen != _focusGen.load())
+					continue;
+
+				lock.unlock();
+				HandleClipCheck();
+				lock.lock();
+			}
+		});
+}
+
+
+void LittleBigMouseDaemon::StopClipWatcher()
+{
+	_stopping = true;
+	_cv.notify_all();
+
+	if (_clipThread.joinable())
+		_clipThread.join();
+}
+
 
 void LittleBigMouseDaemon::ReceiveClientMessage(const std::string& message, RemoteClient* client)
 {

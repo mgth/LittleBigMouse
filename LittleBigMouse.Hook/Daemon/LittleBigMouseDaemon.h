@@ -1,6 +1,9 @@
 #pragma once
 #include "Framework.h"
 
+#include <mutex>
+#include <atomic>
+#include <condition_variable>
 #include <string>
 #include <vector>
 
@@ -25,6 +28,17 @@ class LittleBigMouseDaemon
 
 	// paused when current process is excluded
 	bool _paused = false;
+
+	// deferred clip checks
+	std::thread _clipThread;
+	std::atomic<bool> _stopping{false};
+	std::atomic<uint64_t> _focusGen = 0;
+	std::mutex _clipMutex;
+	std::condition_variable _cv;
+	bool _clipPending = false;
+	void StartClipWatcher();
+	void StopClipWatcher();
+	void HandleClipCheck();
 
 	void Connect();
 	void Disconnect();

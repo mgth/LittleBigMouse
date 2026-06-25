@@ -15,6 +15,20 @@ namespace LittleBigMouse.Ui.Avalonia.Persistency;
 public static class PersistencyExtensions
 {
     const string ROOT_KEY = @"SOFTWARE\Mgth\LittleBigMouse";
+
+    /// <summary>
+    /// Full path of the excluded-processes list. It is a FILE in the app config folder;
+    /// it must not be built with GetConfigPath, which would create a *directory* named
+    /// "Excluded.txt" and break both the daemon launch and the exclusion feature.
+    /// </summary>
+    static string ExcludedListPath()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Mgth", "LittleBigMouse");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "Excluded.txt");
+    }
     public static RegistryKey? OpenRegKey(this RegistryKey @this, string key, bool create = false) 
         => create ? @this.CreateSubKey(key) : @this.OpenSubKey(key);
 
@@ -47,7 +61,7 @@ public static class PersistencyExtensions
 
         @this.ExcludedList.Clear();
 
-        var file = @this.GetConfigPath("Excluded.txt",true);
+        var file = ExcludedListPath();
         if (!File.Exists(file)) return;
 
         foreach (var line in File.ReadAllLines(file))
@@ -131,7 +145,7 @@ public static class PersistencyExtensions
         mainKey.SetKey("StartMinimized", @this.StartMinimized);
         mainKey.SetKey("StartElevated", @this.StartElevated);
 
-        var file = @this.GetConfigPath("Excluded.txt",true);
+        var file = ExcludedListPath();
 
         using var sw = File.CreateText(file);
 

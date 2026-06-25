@@ -5,19 +5,19 @@ using LittleBigMouse.Plugins;
 namespace LittleBigMouse.Ui.Core;
 
 public class MainBootloader(
-        IMainService mainService, 
+        IMainService mainService,
         IMvvmService mvvm,
         IApplicationUpdater updater
-        ) : IBootloader
+        ) : Bootloader
 {
-    public async Task LoadAsync(IBootContext bootstrapper)
+    public override async Task<BootState> LoadAsync()
     {
-        if(bootstrapper.WaitingForService(mvvm)) return; 
+        if (WaitingForServices(mvvm)) return BootState.Requeue;
 
         mainService.UpdateLayout();
 
         await mainService.StartNotifierAsync();
-        
+
         // Check for update
         if (mainService.MonitorsLayout.Options.AutoUpdate)
             await updater.CheckUpdateAsync(false);
@@ -25,5 +25,7 @@ public class MainBootloader(
         // Show control
         if (!mainService.MonitorsLayout.Options.StartMinimized)
             await mainService.ShowControlAsync();
+
+        return BootState.Completed;
     }
 }

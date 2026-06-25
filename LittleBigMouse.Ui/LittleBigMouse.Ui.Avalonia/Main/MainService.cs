@@ -41,15 +41,9 @@ using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
-using Live.Avalonia;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
-
-public class LiveView(Func<Window, object> windowFactory) : ILiveView
-{
-    public object CreateView(Window window) => windowFactory(window);
-}
 
 public class MainService : ReactiveModel, IMainService
 {

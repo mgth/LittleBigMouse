@@ -5,9 +5,9 @@ using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 
-public class MonitorDebugPlugin(IMainService mainService) : IBootloader
+public class MonitorDebugPlugin(IMainService mainService) : Bootloader
 {
-    public Task LoadAsync(IBootContext bootstrapper)
+    public override Task<BootState> LoadAsync()
     {
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<MonitorDebugViewMode>(
@@ -15,6 +15,6 @@ public class MonitorDebugPlugin(IMainService mainService) : IBootloader
                 "Icon/MonitorInfo",
                 "Info")
         );
-        return Task.CompletedTask;
+        return Task.FromResult(BootState.Completed);
     }
 }

@@ -29,9 +29,9 @@ using LittleBigMouse.Plugins.Avalonia;
 namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 
 public class ScreenSizeViewMode : ViewMode { }
-public class ScreenSizePlugin(IMainService mainService) : IBootloader
+public class ScreenSizePlugin(IMainService mainService) : Bootloader
 {
-    public Task LoadAsync(IBootContext bootstrapper)
+    public override Task<BootState> LoadAsync()
     {
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<ScreenSizeViewMode>(
@@ -40,6 +40,6 @@ public class ScreenSizePlugin(IMainService mainService) : IBootloader
                 "Size"
                 )
         );
-        return Task.CompletedTask;
+        return Task.FromResult(BootState.Completed);
     }
 }

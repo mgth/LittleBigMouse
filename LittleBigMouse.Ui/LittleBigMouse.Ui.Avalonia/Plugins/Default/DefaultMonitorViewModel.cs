@@ -55,9 +55,9 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
             e => e.Attached, 
             e => e.Primary,
             (attached,primary) => attached && !primary)
-        .ObserveOn(RxApp.MainThreadScheduler));
+        .ObserveOn(RxSchedulers.MainThreadScheduler));
 
-        AttachCommand = ReactiveCommand.Create(AttachToDesktop,this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxApp.MainThreadScheduler));
+        AttachCommand = ReactiveCommand.Create(AttachToDesktop,this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxSchedulers.MainThreadScheduler));
     }
 
     public bool Attached => _attached.Value;

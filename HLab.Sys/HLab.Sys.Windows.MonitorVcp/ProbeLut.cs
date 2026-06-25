@@ -66,14 +66,14 @@ public class ProbeLut : ReactiveObject
      _lut
          .Connect()
          .Sort(SortExpressionComparer<Tune>.Ascending(t => t.Y))
-         .ObserveOn(RxApp.MainThreadScheduler)
+         .ObserveOn(RxSchedulers.MainThreadScheduler)
          .Bind(out _sortedLut)
          .Subscribe();
 
      _smoothLut
          .Connect()
          .Sort(SortExpressionComparer<Tune>.Ascending(t => t.Y))
-         .ObserveOn(RxApp.MainThreadScheduler)
+         .ObserveOn(RxSchedulers.MainThreadScheduler)
          .Bind(out _smoothLutCollection)
          .Subscribe();
    }

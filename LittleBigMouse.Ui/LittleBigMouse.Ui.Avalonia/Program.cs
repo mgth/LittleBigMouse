@@ -52,10 +52,9 @@ internal class Program
             return;
         }
         
-        RxApp.DefaultExceptionHandler = Observer.Create<Exception>(ex =>
-        {
-           Debug.WriteLine($"ReactiveUI Exception: {ex}");
-        });
+        // TODO (Avalonia 12 / ReactiveUI 23): RxApp.DefaultExceptionHandler is now the read-only
+        // RxState.DefaultExceptionHandler. To restore a custom handler, configure it through
+        // RxAppBuilder.CreateReactiveUIBuilder().WithExceptionHandler(...).BuildApp().
 
         BuildAvaloniaApp().Start(UIMain, args);
     }
@@ -96,7 +95,7 @@ internal class Program
         try
         {
 
-            RxApp.DefaultExceptionHandler = Observer.Create<Exception>(Console.WriteLine);
+            // TODO (ReactiveUI 23): configure the exception handler via RxAppBuilder.WithExceptionHandler.
 
 #if DEBUG
             Locator.CurrentMutable.RegisterConstant(new LoggingService { Level = LogLevel.Info }, typeof(ILogger));

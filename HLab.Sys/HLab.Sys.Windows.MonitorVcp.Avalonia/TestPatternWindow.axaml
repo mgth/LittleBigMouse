@@ -7,7 +7,7 @@
         xmlns:avalonia="clr-namespace:HLab.Sys.Windows.MonitorVcp.Avalonia"
         mc:Ignorable="d"
         Title="TestPatternWindow" Height="300" Width="300" 
-        SystemDecorations="None"
+        WindowDecorations="None"
         ShowInTaskbar="False" 
         >
     <avalonia:TestPattern x:Name="Pattern"/>

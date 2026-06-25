@@ -12,7 +12,7 @@
         ShowActivated="False"
         Topmost="True"
         Margin="0"
-        SystemDecorations="None"
+        WindowDecorations="None"
 
         TransparencyLevelHint="Transparent"
         Background="Transparent"

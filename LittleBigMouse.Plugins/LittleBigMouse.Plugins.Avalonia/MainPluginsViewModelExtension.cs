@@ -21,7 +21,7 @@ public static class MainPluginsViewModelExtension
                         @this.SetMonitorFrameViewMode<DefaultViewMode>();
                 }
             }
-            , outputScheduler: RxApp.MainThreadScheduler
+            , outputScheduler: RxSchedulers.MainThreadScheduler
             , canExecute: Observable.Return(true));
 
 

@@ -55,7 +55,7 @@ public class TestPattern : Control
     {
         return new Window
         {
-            SystemDecorations = SystemDecorations.None,
+            WindowDecorations = WindowDecorations.None,
             CanResize = false,
             Position = location,
             Height = height,

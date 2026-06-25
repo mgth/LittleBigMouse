@@ -64,12 +64,12 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
             SaveAsync, 
             this.WhenAnyValue(e => e.Model.Saved, 
             selector: saved  => !saved)
-                .ObserveOn(RxApp.MainThreadScheduler));
+                .ObserveOn(RxSchedulers.MainThreadScheduler));
 
         UndoCommand = ReactiveCommand.CreateFromTask(
             LoadAsync,
             this.WhenAnyValue(e => e.Model.Saved,selector: s => !s)
-            .ObserveOn(RxApp.MainThreadScheduler));
+            .ObserveOn(RxSchedulers.MainThreadScheduler));
 
         StartCommand = ReactiveCommand.CreateFromTask(
             StartAsync,
@@ -79,7 +79,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                 e => e.Dead,
                 e => e.Model.Saved,
                 (running, dead, saved) => (!running || !saved) && !dead)
-                .ObserveOn(RxApp.MainThreadScheduler));
+                .ObserveOn(RxSchedulers.MainThreadScheduler));
 
         StopCommand = ReactiveCommand.CreateFromTask(
             StopAsync,
@@ -156,7 +156,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         if (newModel is { } model)
         {
             model.PhysicalMonitors.AsObservableChangeSet()
-                .ObserveOn(RxApp.MainThreadScheduler)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
                 .WhenValueChanged(e => e.Saved)
                 .Do(e =>
                 {
@@ -164,7 +164,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                 }).Subscribe().DisposeWith(model);
 
             model.PhysicalMonitors.AsObservableChangeSet()
-                .ObserveOn(RxApp.MainThreadScheduler)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
                 .WhenValueChanged(e => e.Model.Saved)
                 .Do(e =>
                 {
@@ -172,7 +172,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                 }).Subscribe().DisposeWith(model);
 
             model.PhysicalSources.AsObservableChangeSet()
-                .ObserveOn(RxApp.MainThreadScheduler)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
                 .WhenValueChanged(e => e.Saved)
                 .Do(e =>
                 {

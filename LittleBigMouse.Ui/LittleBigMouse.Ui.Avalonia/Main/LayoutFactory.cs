@@ -162,19 +162,11 @@ public static class LayoutFactory
             var old = @this.PhysicalSize.FixedAspectRatio;
             @this.PhysicalSize.FixedAspectRatio = false;
 
-            var display = monitor.Connections[0].Parent;
-
-            if (display?.CurrentMode != null)
+            var (width, height) = GetPhysicalSizeInMm(monitor);
+            if (width > 0 && height > 0)
             {
-                @this.PhysicalSize.Set(
-                    display.CurrentMode.DisplayOrientation % 2 == 0 
-                    ? display.Capabilities.Size 
-                    : display.Capabilities.Size.Transpose());
-            }
-            else if (monitor.Edid != null)
-            {
-                @this.PhysicalSize.Width = monitor.Edid.PhysicalWidth;
-                @this.PhysicalSize.Height = monitor.Edid.PhysicalHeight;
+                @this.PhysicalSize.Width = width;
+                @this.PhysicalSize.Height = height;
             }
 
             @this.PhysicalSize.FixedAspectRatio = old;
@@ -183,12 +175,74 @@ public static class LayoutFactory
         }
     }
 
+    /// <summary>
+    /// Physical size of the panel in millimeters, in the current display orientation.
+    /// Windows GDI (HORZSIZE/VERTSIZE) is used when it is consistent with the resolution
+    /// aspect ratio. A display without EDID (virtual, DisplayLink, RDP, spacedesk...) reports
+    /// a bogus square placeholder (e.g. 1000x1000): we then fall back to the EDID size, and
+    /// finally to an estimate derived from the resolution and the DPI (HORZRES / LOGPIXELSX).
+    /// </summary>
+    static (double Width, double Height) GetPhysicalSizeInMm(MonitorDevice monitor)
+    {
+        var display = monitor.Connections[0].Parent;
+
+        if (display?.CurrentMode != null)
+        {
+            var caps = display.Capabilities;
+            var rotated = display.CurrentMode.DisplayOrientation % 2 != 0;
+
+            // GDI physical size, oriented like the current resolution.
+            var gdiW = rotated ? caps.Size.Height : caps.Size.Width;
+            var gdiH = rotated ? caps.Size.Width : caps.Size.Height;
+
+            if (IsAspectConsistent(gdiW, gdiH, caps.Resolution.Width, caps.Resolution.Height))
+                return (gdiW, gdiH);
+
+            // GDI size unreliable (EDID-less display): prefer the EDID size when available.
+            if (monitor.Edid is { PhysicalWidth: > 0, PhysicalHeight: > 0 } edid)
+                return rotated
+                    ? (edid.PhysicalHeight, edid.PhysicalWidth)
+                    : (edid.PhysicalWidth, edid.PhysicalHeight);
+
+            // Otherwise estimate from the resolution and the DPI: inches = pixels / dpi.
+            if (caps.LogPixels.Width > 0 && caps.LogPixels.Height > 0)
+                return (
+                    caps.Resolution.Width / caps.LogPixels.Width * 25.4,
+                    caps.Resolution.Height / caps.LogPixels.Height * 25.4);
+
+            return (gdiW, gdiH); // nothing better than the GDI value
+        }
+
+        // Detached / no current mode: rely on EDID if present.
+        if (monitor.Edid is { PhysicalWidth: > 0, PhysicalHeight: > 0 } e)
+            return (e.PhysicalWidth, e.PhysicalHeight);
+
+        return (0, 0);
+    }
+
+    /// <summary>
+    /// True when the physical size aspect ratio roughly matches the pixel aspect ratio
+    /// (square pixels). A square placeholder (1000x1000) against a 16:9 resolution fails this.
+    /// </summary>
+    static bool IsAspectConsistent(double width, double height, double pixelsWidth, double pixelsHeight)
+    {
+        if (width <= 0 || height <= 0 || pixelsWidth <= 0 || pixelsHeight <= 0) return false;
+
+        var sizeAspect = width / height;
+        var pixelAspect = pixelsWidth / pixelsHeight;
+
+        return Math.Abs(sizeAspect / pixelAspect - 1.0) < 0.12;
+    }
+
     public static PhysicalMonitorModel SetPnpDeviceName(this PhysicalMonitorModel @this, MonitorDevice monitor)
     {
         if (!string.IsNullOrEmpty(@this.PnpDeviceName)) return @this;
 
         var name = HtmlHelper.CleanupPnpName(monitor.Connections[0].DeviceString);
-        if (name.ToLower() == "generic pnp monitor") name = monitor.Edid.Model;
+        // A monitor without EDID (virtual display, DisplayLink, RDP, spacedesk, some panels)
+        // reports "Generic PnP Monitor" and has a null Edid: keep the generic name then.
+        if (name.ToLower() == "generic pnp monitor" && !string.IsNullOrEmpty(monitor.Edid?.Model))
+            name = monitor.Edid.Model;
         //        if (name.ToLower() == "generic pnp monitor") name = HtmlHelper.GetPnpName(@this.PnpCode);
 
         @this.PnpDeviceName = name;
@@ -223,7 +277,7 @@ public static class LayoutFactory
         if (device.Edid is null) return "icon/Pnp/LBM";
 
         // special case for Aorus support
-        if (device.Edid.Model.Contains("Aorus")) return "icon/Pnp/Aorus";
+        if (device.Edid.Model?.Contains("Aorus") == true) return "icon/Pnp/Aorus";
 
         return $"icon/Pnp/{device.Edid.ManufacturerCode}?icon/Pnp/LBM";
     }

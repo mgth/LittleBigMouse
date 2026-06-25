@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	<TargetFrameworks>net9.0</TargetFrameworks>
+	<TargetFrameworks>net10.0</TargetFrameworks>
 	<LangVersion>preview</LangVersion>
     <Platforms>x64</Platforms>
     <OutputType>Library</OutputType>

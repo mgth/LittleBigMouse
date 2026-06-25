@@ -27,7 +27,11 @@ public static class PersistencyExtensions
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Mgth", "LittleBigMouse");
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "Excluded.txt");
+
+        var file = Path.Combine(dir, "Excluded.txt");
+        // Self-heal: a buggy earlier version created "Excluded.txt" as a *directory*.
+        if (Directory.Exists(file)) Directory.Delete(file, true);
+        return file;
     }
     public static RegistryKey? OpenRegKey(this RegistryKey @this, string key, bool create = false) 
         => create ? @this.CreateSubKey(key) : @this.OpenSubKey(key);

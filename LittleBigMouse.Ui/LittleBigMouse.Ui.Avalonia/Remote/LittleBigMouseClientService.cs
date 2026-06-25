@@ -101,6 +101,8 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         if(File.Exists(file)) return;
 
         Directory.CreateDirectory(dir);
+        // Self-heal: a buggy earlier version created "Excluded.txt" as a *directory*.
+        if (Directory.Exists(file)) Directory.Delete(file, true);
         File.WriteAllText(file, ":Excluded processes\n\\Epic Games\\\n\\steamapps\\\n\\Riot Games\\\n");
     }
 

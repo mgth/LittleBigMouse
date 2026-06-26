@@ -1,7 +1,7 @@
 #include "Hooker.h"
 
-#include "Logger/Logger.h"
-#include "Remote/RemoteServer.h"
+#include "../Logger/Logger.h"
+#include "../Remote/RemoteServer.h"
 
 std::atomic<Hooker*> Hooker::_instance = nullptr;
 

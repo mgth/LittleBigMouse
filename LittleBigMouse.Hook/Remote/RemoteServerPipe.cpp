@@ -2,7 +2,7 @@
 
 #include "RemoteServer.h"
 
-#include "Strings/str.h"
+#include "../Strings/str.h"
 
 bool RemoteServerPipe::StartListener()
 {

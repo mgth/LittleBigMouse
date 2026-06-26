@@ -69,7 +69,7 @@ abstract class RulerOrientation
     protected static Brush GetBrush(double x1, double y1, double x2, double y2, Color c0)
     {
         var c1 = c0.ToColor<double>();
-        var c2 = new ColorRGB<double>(0, c1.Red / 3, c1.Green / 3, c1.Blue / 3).ToAvaloniaColor();
+        var c2 = HLabColors.RGB(0, c1.Red / 3, c1.Green / 3, c1.Blue / 3).ToAvaloniaColor();
 
         return new LinearGradientBrush
         {
@@ -282,7 +282,7 @@ public class RulerViewTop : Control
 
 
     readonly Pen _penIn = new(Brushes.WhiteSmoke, 1);
-    readonly Pen _penOut = new(new SolidColorBrush(new ColorRGB<double>(0.7, 0.7, 0.7, 0.7).ToAvaloniaColor()), 1);
+    readonly Pen _penOut = new(new SolidColorBrush(HLabColors.RGB(0.7, 0.7, 0.7, 0.7).ToAvaloniaColor()), 1);
 
     protected void Render()
     {

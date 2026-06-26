@@ -21,9 +21,9 @@
 	  http://www.mgth.fr
 */
 
-using Avalonia;
 using ReactiveUI;
 using System.Reactive.Concurrency;
+using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
@@ -36,7 +36,7 @@ public class DisplayTranslate : DisplayMove
 {
     public DisplayTranslate(IDisplaySize source, Vector? translation = null) : base(source)
     {
-        _translation = translation ?? new Vector();
+        Translation = translation ?? new Vector();
         
         _x = this.WhenAnyValue(e => e.Source.X,e =>e.Translation, (x,t)=>x + t.X)
             .ToProperty(this, e => e.X, scheduler: Scheduler.Immediate);
@@ -45,12 +45,7 @@ public class DisplayTranslate : DisplayMove
             .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
     }
 
-    public Vector Translation
-    {
-        get => _translation;
-        set => this.RaiseAndSetIfChanged(ref _translation, value);
-    }
-    Vector _translation;
+    public Vector Translation { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     public override double X
     {
@@ -67,5 +62,4 @@ public class DisplayTranslate : DisplayMove
     readonly ObservableAsPropertyHelper<double> _y;
 
     public override string TransformToString => $"Translate:{Translation}";
-
 }

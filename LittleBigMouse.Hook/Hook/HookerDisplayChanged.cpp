@@ -1,5 +1,5 @@
 #include "Hooker.h"
-#include "Strings/str.h"
+#include "../Strings/str.h"
 
 #define MAX_LOADSTRING 100
 

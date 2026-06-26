@@ -1,12 +1,12 @@
 #pragma once
-#include "framework.h"
+#include "../framework.h"
 
 #include <atomic>
 #include <string>
 
-#include "SignalSlot.h"
+#include "../SignalSlot.h"
 #include "RemoteClient.h"
-#include "Thread/ThreadHost.h"
+#include "../Thread/ThreadHost.h"
 
 class RemoteClient;
 class ClientMessage;

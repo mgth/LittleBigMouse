@@ -37,7 +37,8 @@ public enum TestPatternType
     Solid,
     Gradient,
     Circle,
-    Circles,
+    Contrast,
+    ContrastBoth,
     Grid,
     Gamma
 }
@@ -54,7 +55,7 @@ public class TestPattern : Control
     {
         return new Window
         {
-            SystemDecorations = SystemDecorations.None,
+            WindowDecorations = WindowDecorations.None,
             CanResize = false,
             Position = location,
             Height = height,
@@ -123,23 +124,45 @@ public class TestPattern : Control
     {
         c._onRender = e.NewValue.Value switch
         {
-            TestPatternType.Solid => (dc, rect, colorA, colorB, orient) 
+            TestPatternType.Solid => (dc, rect, colorA, colorB, orientation) 
                 => dc.DrawRectangle(new SolidColorBrush(colorA), null, rect),
 
-            TestPatternType.Gradient => (dc, rect, colorA, colorB, orient) 
-                => dc.DrawGradient(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orient, 1.0 / 2.2 /*2.124*/),
+            TestPatternType.Gradient => (dc, rect, colorA, colorB, orientation) 
+                => dc.DrawGradient(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orientation, 1.0 / 2.2 /*2.124*/),
 
-            TestPatternType.Circle => (dc, rect, colorA, colorB, orient) 
+            TestPatternType.Circle => (dc, rect, colorA, colorB, orientation) 
                 => dc.RenderCircle(colorA, colorB, rect),
 
-            TestPatternType.Circles => (dc, rect, colorA, colorB, orient) 
-                => dc.DrawContrast(colorA, colorB, rect, 5, orient),
+            TestPatternType.ContrastBoth => (dc, rect, colorA, colorB, orientation) 
+                =>
+            {
+               Rect rectA, rectB;
+               if (orientation == Orientation.Vertical)
+               {
+                  rectA = new Rect(rect.X, rect.Y, rect.Width / 2, rect.Height);
+                  rectB = new Rect(rect.X + rect.Width / 2, rect.Y, rect.Width / 2, rect.Height);
+               }
+               else
+               {
+                  rectA = new Rect(rect.X, rect.Y, rect.Width, rect.Height / 2);
+                  rectB = new Rect(rect.X, rect.Y + rect.Height / 2, rect.Width, rect.Height / 2);
+               }
 
-            TestPatternType.Grid => (dc, rect, colorA, colorB, orient) 
+               dc.DrawContrast(colorB, colorA, rectA, 5, orientation);
+               dc.DrawContrast(colorA, colorB, rectB, 5, orientation);
+            },
+
+            TestPatternType.Contrast => (dc, rect, colorA, colorB, orientation) 
+                =>
+            {
+               dc.DrawContrast(colorA, colorB, rect, 5, orientation);
+            },
+
+            TestPatternType.Grid => (dc, rect, colorA, colorB, orientation) 
                 => dc.DrawHomeCinemaPattern(rect),
 
-            TestPatternType.Gamma => (dc, rect, colorA, colorB, orient) 
-                => dc.DrawGamma(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orient),
+            TestPatternType.Gamma => (dc, rect, colorA, colorB, orientation) 
+                => dc.DrawGamma(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orientation),
 
             _ => throw new ArgumentOutOfRangeException()
         };

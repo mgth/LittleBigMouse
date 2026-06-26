@@ -1,8 +1,9 @@
-﻿using LittleBigMouse.DisplayLayout.Dimensions;
+﻿using System.Drawing;
+using LittleBigMouse.DisplayLayout.Dimensions;
 using System.Runtime.Serialization;
-using Avalonia;
-using Avalonia.Media;
 using HLab.Base.ReactiveUI;
+using HLab.ColorTools;
+using HLab.Geo;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
@@ -53,132 +54,73 @@ public class DisplaySource : SavableReactiveModel
     /// Source is the primary display
     /// </summary>
     [DataMember]
-    public bool Primary
-    {
-        get => _primary;
-        set => this.RaiseAndSetIfChanged(ref _primary, value) ;
-    }
-    bool _primary;
+    public bool Primary { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     /// <summary>
     /// Source Device Name
     /// </summary>
     [DataMember]
-    public string DeviceName
-    {
-        get => _deviceName;
-        set => this.RaiseAndSetIfChanged(ref _deviceName, value) ;
-    }
-    string _deviceName;
+    public string DeviceName { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     /// <summary>
     /// Source Name
     /// </summary>
     [DataMember]
-    public string SourceName
-    {
-        get => _sourceName;
-        set => this.RaiseAndSetIfChanged(ref _sourceName, value) ;
-    }
-    string _sourceName;
+    public string SourceName { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     /// <summary>
     /// Display Device Name
     /// </summary>
     [DataMember]
-    public string DisplayName
-    {
-        get => _displayName;
-        set => this.RaiseAndSetIfChanged(ref _displayName, value) ;
-    }
-    string _displayName;
+    public string DisplayName { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     /// <summary>
     /// Source number in windows system
     /// </summary>
     [DataMember]
-    public string SourceNumber
-    {
-        get => _sourceNumber;
-        set => this.RaiseAndSetIfChanged(ref _sourceNumber, value) ;
-    }
-    string _sourceNumber;
+    public string SourceNumber { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     /// <summary>
     /// Current monitor frequency
     /// </summary>
     [DataMember]
-    public int DisplayFrequency
-    {
-        get => _displayFrequency;
-        set => this.RaiseAndSetIfChanged(ref _displayFrequency, value) ;
-    }
-    int _displayFrequency;
+    public int DisplayFrequency { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     /// <summary>
     /// Display size in pixel
     /// </summary>
     [DataMember]
-    public DisplaySizeInPixels InPixel { get; } = new(new Rect());
+    public DisplaySizeInPixels InPixel { get; } = new(new ());
 
     /// <summary>
     /// Monitor orientation (0=0°, 1=90°, 2=180°, 3=270°)
     /// </summary>
     [DataMember]
-    public int Orientation
+    public int Orientation { get; set => SetUnsavedValue(ref field, value); }
+
+
+    [DataMember]
+    public string WallpaperPath
     {
-        get => _orientation;
-        set => this.SetUnsavedValue(ref _orientation, value);
+       get;
+       set => this.RaiseAndSetIfChanged(ref field, value);
     }
-    int _orientation;
+
+    [DataMember]
+    public WallpaperStyle WallpaperStyle { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
 
     [DataMember]
-    public string WallpaperPath {
-        get => _wallpaperPath;
-        set => this.RaiseAndSetIfChanged(ref _wallpaperPath, value);
-    }
-    string _wallpaperPath;
+    public ColorRGB<double> BackgroundColor { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     [DataMember]
-    public WallpaperStyle WallpaperStyle
-    {
-        get => _wallpaperStyle;
-        set => this.RaiseAndSetIfChanged(ref _wallpaperStyle, value);
-    }
-    WallpaperStyle _wallpaperStyle;
-
+    public string InterfaceName { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     [DataMember]
-    public Color BackgroundColor {
-        get => _backgroundColor;
-        set => this.RaiseAndSetIfChanged(ref _backgroundColor, value);
-    }
-    Color _backgroundColor;
+    public string InterfaceLogo { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     [DataMember]
-    public string InterfaceName
-    {
-        get => _interfaceName;
-        set => this.RaiseAndSetIfChanged(ref _interfaceName, value);
-    }
-    string _interfaceName;
-
-    [DataMember]
-    public string InterfaceLogo
-    {
-        get => _interfaceLogo;
-        set => this.RaiseAndSetIfChanged(ref _interfaceLogo, value);
-    }
-    string _interfaceLogo;
-
-    [DataMember]
-    public bool AttachedToDesktop
-    {
-        get => _attachedToDesktop;
-        set => this.RaiseAndSetIfChanged(ref _attachedToDesktop, value);
-    }
-    bool _attachedToDesktop;
+    public bool AttachedToDesktop { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     [DataMember]
     public double WinDpiX => _winDpiX.Value;

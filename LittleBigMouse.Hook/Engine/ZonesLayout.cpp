@@ -1,6 +1,6 @@
 #include "ZonesLayout.h"
 
-#include "Xml/XmlHelper.h"
+#include "../Xml/XmlHelper.h"
 
 #include "ZoneLink.h"
 #include "Zone.h"

@@ -27,7 +27,7 @@
 using System;
 using System.IO;
 using System.Runtime.Serialization;
-using Avalonia.Media;
+using HLab.ColorTools;
 using HLab.Sys.Windows.API;
 using HLab.Sys.Windows.Monitors.Factory;
 
@@ -55,7 +55,7 @@ public class SystemMonitorsService : ISystemMonitorsService
         _root = null;
     }
 
-    [DataMember] public Color Background { get; set; }
+    [DataMember] public ColorRGB<double> Background { get; set; }
 
     [DataMember] public DesktopWallpaperPosition WallpaperPosition { get; set; }
 

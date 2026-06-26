@@ -62,7 +62,7 @@ public class MonitorsLayoutPresenterViewModel
         ResetLocationsFromSystem = ReactiveCommand.Create(() => Model?.SetLocationsFromSystemConfiguration());
         ResetSizesFromSystem = ReactiveCommand.Create(() => Model?.SetSizesFromSystemConfiguration());
 
-        RefreshCommand = ReactiveCommand.Create(()=> this.test());
+        RefreshCommand = ReactiveCommand.Create(test);
     }
 
     void test()
@@ -83,12 +83,7 @@ public class MonitorsLayoutPresenterViewModel
 
     public IDisplayRatio VisualRatio { get; } = new DisplayRatioValue(1.0);
 
-    public PhysicalMonitor? SelectedMonitor
-    {
-        get => _selectedMonitor;
-        set => this.RaiseAndSetIfChanged(ref _selectedMonitor, value);
-    }
-    private PhysicalMonitor? _selectedMonitor;
+    public PhysicalMonitor? SelectedMonitor { get; set => this.RaiseAndSetIfChanged(ref field, value);}
 
     public ICommand ResetLocationsFromSystem { get; }
     public ICommand ResetSizesFromSystem { get; }

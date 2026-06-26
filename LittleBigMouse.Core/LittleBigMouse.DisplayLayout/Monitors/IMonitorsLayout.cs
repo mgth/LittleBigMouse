@@ -1,7 +1,7 @@
-﻿using Avalonia;
-using HLab.Sys.Windows.API;
+﻿using HLab.Sys.Windows.API;
 using System;
 using System.Collections.ObjectModel;
+using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 

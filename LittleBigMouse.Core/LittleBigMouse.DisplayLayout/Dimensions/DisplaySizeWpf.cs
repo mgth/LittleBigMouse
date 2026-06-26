@@ -36,10 +36,9 @@ public class DisplaySizeWpf : DisplaySize
 
     public IDisplayRatio Ratio
     {
-        get => _ratio;
-        set => _ratio = value;
+       get;
+       set => field = value;
     }
-    IDisplayRatio _ratio;
 
     public override double Width
     {

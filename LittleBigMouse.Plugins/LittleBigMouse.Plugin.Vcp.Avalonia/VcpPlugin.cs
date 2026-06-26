@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using Avalonia;
 using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
@@ -30,9 +31,9 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
 internal class MonitorVcpViewMode : ViewMode { }
 
-public class VcpPlugin(IMainService mainService) : IBootloader
+public class VcpPlugin(IMainService mainService) : Bootloader
 {
-    public Task LoadAsync(IBootContext bootstrapper)
+    public override Task<BootState> LoadAsync()
     {
         #if DEBUG
         mainService.AddControlPlugin(c =>
@@ -42,7 +43,7 @@ public class VcpPlugin(IMainService mainService) : IBootloader
                 "Vcp control")
         );
         #endif
-        return Task.CompletedTask;
+        return Task.FromResult(BootState.Completed);
     }
 
 }

@@ -85,12 +85,6 @@ public partial class VcpScreenView : UserControl, IView<MonitorVcpViewMode, VcpS
         ViewModel?.ProbeLowLuminance();
     }
 
-    void ProbeLuminance_OnClick(object sender, RoutedEventArgs e)
-    {
-        ViewModel?.ProbeLowLuminance();
-    }
-
-
     void Probe_OnClick(object sender, RoutedEventArgs e)
     {
         ViewModel?.Probe();

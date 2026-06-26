@@ -96,24 +96,13 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     void CreateExcludedFile()
     {
         var path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var file = Path.Combine(path,"Mgth","LittleBigMouse","Excluded.txt");
-        if(File.Exists(file))
-        {
-            // Riot games -> Riot Games (was misspelled in 5.0.4.0) TODO : remove in a version or two
-            var text = File.ReadAllText(file);
-            if(text.Contains("\\Riot games\\"))
-            {
-                text = text.Replace("\\Riot games\\", "\\Riot Games\\");
-                File.WriteAllText(file, text);
-            }
-            // SteamLibrary -> steamapps is better for steam games TODO : remove in a version or two
-            if(text.Contains("\\SteamLibrary\\"))
-            {
-                text = text.Replace("\\SteamLibrary\\", "\\steamapps\\");
-                File.WriteAllText(file, text);
-            }
-            return;
-        }
+        var dir = Path.Combine(path,"Mgth","LittleBigMouse");
+        var file = Path.Combine(dir,"Excluded.txt");
+        if(File.Exists(file)) return;
+
+        Directory.CreateDirectory(dir);
+        // Self-heal: a buggy earlier version created "Excluded.txt" as a *directory*.
+        if (Directory.Exists(file)) Directory.Delete(file, true);
         File.WriteAllText(file, ":Excluded processes\n\\Epic Games\\\n\\steamapps\\\n\\Riot Games\\\n");
     }
 
@@ -127,27 +116,16 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
             return;
         }
 
-        var path = Assembly.GetEntryAssembly()?.Location;
-        if (path is null) return;
-
-        if (path.Contains(@"\bin\"))
+        var path = FindHookPath();
+        if (path is null)
         {
-            // .\LittleBigMouse.Ui.Avalonia\bin\x64\Debug\net8.0\LittleBigMouse.Ui.Avalonia.dll
-            // .\x64\Debug\LittleBigMouse.Hook.exe
-
-            path = path.Replace(@"\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\", @"\LittleBigMouse.Hook\");
-            path = path.Replace(@"\net8.0\", @"\");
-        }
-
-        path = path.Replace(@"\LittleBigMouse.Ui.Avalonia.dll", @"\LittleBigMouse.Hook.exe");
-
-        if (!File.Exists(path))
-        {
-            Debug.WriteLine($"Not found : {path}");
+            Debug.WriteLine($"Not found : {HookExeName}");
             return;
         }
 
-        CreateExcludedFile();
+        // Must not abort the daemon launch if the exclusion file can't be written.
+        try { CreateExcludedFile(); }
+        catch (Exception ex) { Debug.WriteLine($"CreateExcludedFile failed: {ex.Message}"); }
 
         try
         {
@@ -162,7 +140,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
                 UseShellExecute = true,
                 #else
                 UseShellExecute = false,
-                CreateNoWindow = true,   
+                CreateNoWindow = true,
                 #endif
 
             };
@@ -175,9 +153,49 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
             Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
         }
-        catch (ExecutionEngineException ex)
+        catch (Exception ex)
         {
+            Debug.WriteLine($"LaunchDaemon failed: {ex}");
+        }
+    }
 
+    const string HookExeName = "LittleBigMouse.Hook.exe";
+
+    /// <summary>
+    /// Locate LittleBigMouse.Hook.exe without depending on the .NET target framework folder
+    /// (net8.0, net9.0, net10.0, ...). Deployed builds keep the hook next to the UI; in the dev
+    /// tree the C++ hook is built under LittleBigMouse.Hook\bin with its own platform/config
+    /// layout and no TFM subfolder, so we search that bin folder. Resistant to .NET version,
+    /// platform (AnyCPU/x64) and configuration (Debug/Release) changes.
+    /// </summary>
+    static string? FindHookPath()
+    {
+        var uiDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        // 1. Deployed / published build: the hook sits right next to the UI.
+        var sibling = Path.Combine(uiDir, HookExeName);
+        if (File.Exists(sibling)) return sibling;
+
+        // 2. Dev tree: find the hook project's bin folder and search it.
+        try
+        {
+            var projectSegment = Path.Combine("LittleBigMouse.Ui", "LittleBigMouse.Ui.Avalonia");
+            var i = uiDir.IndexOf(projectSegment, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return null;
+
+            var hookBin = Path.Combine(uiDir[..i], "LittleBigMouse.Hook", "bin");
+            if (!Directory.Exists(hookBin)) return null;
+
+            // Prefer the build matching the UI's current configuration.
+            var config = uiDir.Contains(@"\Debug\", StringComparison.OrdinalIgnoreCase) ? "Debug" : "Release";
+
+            return Directory.EnumerateFiles(hookBin, HookExeName, SearchOption.AllDirectories)
+                .OrderByDescending(p => p.Contains($@"\{config}\", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
         }
     }
 

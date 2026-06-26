@@ -45,7 +45,7 @@ public class PhysicalMonitor : SavableReactiveModel
     {
         public Design() : base("PNP0000", MonitorsLayout.MonitorsLayoutDesign, PhysicalMonitorModel.Design)
         {
-            if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+            //if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
         }
     }
 
@@ -63,18 +63,16 @@ public class PhysicalMonitor : SavableReactiveModel
     /// </summary>
     public PhysicalSource ActiveSource
     {
-        get => _activeSource;
-        set => SetUnsavedValue(ref _activeSource, value);
+       get;
+       set => SetUnsavedValue(ref field, value);
     }
-    PhysicalSource _activeSource;
 
-    [DataMember] 
-    public string DeviceId 
+    [DataMember]
+    public string DeviceId
     {
-        get => _deviceId;
-        set => SetUnsavedValue(ref _deviceId, value);
+       get;
+       set => SetUnsavedValue(ref field, value);
     }
-    string _deviceId;
 
     public PhysicalMonitor(string id, IMonitorsLayout layout, PhysicalMonitorModel model)
     {
@@ -151,10 +149,9 @@ public class PhysicalMonitor : SavableReactiveModel
     [DataMember]
     public bool SplitSources
     {
-        get => _splitSources;
-        set => this.SetUnsavedValue(ref _splitSources, value);
+       get;
+       set => this.SetUnsavedValue(ref field, value);
     }
-    bool _splitSources;
 
     /// <summary>
     /// Serial number from EDID
@@ -162,20 +159,18 @@ public class PhysicalMonitor : SavableReactiveModel
     [DataMember]
     public string SerialNumber
     {
-        get => _serialNumber;
-        set => this.SetUnsavedValue(ref _serialNumber, value);
+       get;
+       set => this.SetUnsavedValue(ref field, value);
     }
-    string _serialNumber;
 
     /// <summary>
     /// True when placement has been set by user or by automatic placement
     /// </summary>
     public bool Placed
     {
-        get => _placed;
-        set => this.RaiseAndSetIfChanged(ref _placed, value);
+       get;
+       set => this.RaiseAndSetIfChanged(ref field, value);
     }
-    bool _placed;
 
     /// <summary>
     /// Monitor model

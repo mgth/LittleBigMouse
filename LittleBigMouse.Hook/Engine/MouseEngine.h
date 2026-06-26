@@ -1,13 +1,13 @@
 #pragma once
-#include "Framework.h"
+#include "../Framework.h"
 
 #include <mutex>
 
-#include "SignalSlot.h"
+#include "../SignalSlot.h"
 #include "HookMouseEventArg.h"
 #include "ZonesLayout.h"
-#include "Geometry/Rect.h"
-#include "Geometry/Segment.h"
+#include "../Geometry/Rect.h"
+#include "../Geometry/Segment.h"
 
 class ZoneLink;
 

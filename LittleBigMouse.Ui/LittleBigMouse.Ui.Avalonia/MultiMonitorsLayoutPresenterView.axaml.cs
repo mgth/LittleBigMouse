@@ -43,11 +43,7 @@ public partial class MultiMonitorsLayoutPresenterView : UserControl
     , IMonitorsLayoutPresenterViewClass
     , IMonitorsLayoutPresenterView
 {
-    public MultiMonitorsLayoutPresenterView()
-    {
-        InitializeComponent();
-    }
-
+    public MultiMonitorsLayoutPresenterView() => InitializeComponent();
 
     //    foreach (var frameView in Canvas.Children.OfType<ScreenFrameView>())
     //    {

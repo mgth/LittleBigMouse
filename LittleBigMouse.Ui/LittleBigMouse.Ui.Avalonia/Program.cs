@@ -6,9 +6,8 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Logging;
-using Avalonia.ReactiveUI;
+using ReactiveUI.Avalonia;
 using Grace.DependencyInjection;
-using HLab.Base.Avalonia.Themes;
 using HLab.Bugs.Avalonia;
 using HLab.Core;
 using HLab.Core.Annotations;
@@ -17,6 +16,7 @@ using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
 using HLab.Sys.Windows.Monitors;
+using HLab.Theme.Avalonia;
 using HLab.UserNotification;
 using HLab.UserNotification.Avalonia;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -51,6 +51,10 @@ internal class Program
             Debug.Print("there is already another instance running!");
             return;
         }
+        
+        // TODO (Avalonia 12 / ReactiveUI 23): RxApp.DefaultExceptionHandler is now the read-only
+        // RxState.DefaultExceptionHandler. To restore a custom handler, configure it through
+        // RxAppBuilder.CreateReactiveUIBuilder().WithExceptionHandler(...).BuildApp().
 
         BuildAvaloniaApp().Start(UIMain, args);
     }
@@ -62,7 +66,7 @@ internal class Program
         //GC.KeepAlive(typeof(global::Avalonia.Svg.Skia.Svg).Assembly);
 
         return AppBuilder.Configure<App>()
-            .UseReactiveUI()
+            .UseReactiveUI(_ => { })
             .UsePlatformDetect()
             .WithInterFont()
             //.With(new Win32PlatformOptions
@@ -91,7 +95,7 @@ internal class Program
         try
         {
 
-            RxApp.DefaultExceptionHandler = Observer.Create<Exception>(Console.WriteLine);
+            // TODO (ReactiveUI 23): configure the exception handler via RxAppBuilder.WithExceptionHandler.
 
 #if DEBUG
             Locator.CurrentMutable.RegisterConstant(new LoggingService { Level = LogLevel.Info }, typeof(ILogger));
@@ -106,14 +110,13 @@ internal class Program
                 c.Export<IconService>().As<IIconService>().Lifestyle.Singleton();
                 c.Export<LocalizationService>().As<ILocalizationService>().Lifestyle.Singleton();
                 c.Export<MvvmService>().As<IMvvmService>().Lifestyle.Singleton();
-                c.Export<MvvmAvaloniaImpl>().As<IMvvmPlatformImpl>().Lifestyle.Singleton();
+                c.ExportInstance<Func<Type, object>>(t => container.Locate(t));
                 c.Export<HLab.Core.MessageBus>().As<IMessagesService>().Lifestyle.Singleton();
                 c.Export<UserNotificationServiceAvalonia>().As<IUserNotificationService>().Lifestyle.Singleton();
 
                 c.Export<MainService>().As<IMainService>().Lifestyle.Singleton();
 
                 c.Export<SystemMonitorsService>().As<ISystemMonitorsService>().Lifestyle.Singleton();
-                c.Export<MainBootloader>().As<IBootloader>();
 
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
                 c.Export<LbmOptions>().As<ILayoutOptions>().Lifestyle.Singleton();
@@ -122,13 +125,9 @@ internal class Program
 
                 c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
 
-                c.Export<MonitorDebugPlugin>().As<IBootloader>();
-                c.Export<MonitorLocationPlugin>().As<IBootloader>();
-
-                c.Export<VcpPlugin>().As<IBootloader>();
-
                 var parser = new AssemblyParser();
 
+                parser.LoadDll("LittleBigMouse.Ui.Core");
                 parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
                 parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
 
@@ -136,12 +135,14 @@ internal class Program
 
                 parser.Add<IView>(t => c.Export(t).As(typeof(IView)));
                 parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)));
-                parser.Add<IBootloader>(t => c.Export(t).As(typeof(IBootloader)));
+                parser.Add<Bootloader>(t => c.Export(t).As(typeof(Bootloader)));
 
                 parser.Parse();
             });
 
-            var boot = new Bootstrapper(() => container.Locate<IEnumerable<IBootloader>>());
+
+
+            var boot = new Bootstrapper(() => container.Locate<IEnumerable<Bootloader>>());
 
             var theme = new ThemeService(app.Resources);
             theme.SetTheme(ThemeService.WindowsTheme.Auto);

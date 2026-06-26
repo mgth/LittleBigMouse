@@ -1,9 +1,9 @@
 #pragma once
-#include "Framework.h"
+#include "../Framework.h"
 
 #include <string>
 
-#include "Thread/ThreadHost.h"
+#include "../Thread/ThreadHost.h"
 
 class RemoteServerSocket;
 

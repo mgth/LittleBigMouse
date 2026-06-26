@@ -1,10 +1,10 @@
 #pragma once
-#include "Framework.h"
+#include "../Framework.h"
 
 #include <vector>
 
-#include "Geometry/Point.h"
-#include "Xml/tinyxml2.h"
+#include "../Geometry/Point.h"
+#include "../Xml/tinyxml2.h"
 #include "Priority.h"
 
 class Zone;

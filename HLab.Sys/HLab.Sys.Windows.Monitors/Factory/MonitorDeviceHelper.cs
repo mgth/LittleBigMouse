@@ -4,8 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using DynamicData;
-using Avalonia;
+using HLab.Geo;
 using Microsoft.Win32;
 using HLab.Sys.Windows.API;
 
@@ -282,7 +281,7 @@ public static class MonitorDeviceHelper
             : $"{pnpCode}{edid.SerialNumber}_{edid.Week:X2}_{edid.Year:X4}_{edid.Checksum:X2}";
     }
 
-    public static Edid GetEdid(string deviceId)
+    public static Edid? GetEdid(string deviceId)
     {
         var devInfo = SetupDiGetClassDevsEx(
             ref GUID_CLASS_MONITOR, //class GUID
@@ -330,7 +329,7 @@ public static class MonitorDeviceHelper
                                     using var keyEdid = RegistryKey(hEdidRegKey);
 
                                     var edid = (byte[])keyEdid.GetValue("EDID");
-                                    return edid != null ? new Edid(hKeyName, edid) : null;
+                                    return edid != null ? EdidParser.Parse(hKeyName, edid) : null;
                                 }
                             }
                         }

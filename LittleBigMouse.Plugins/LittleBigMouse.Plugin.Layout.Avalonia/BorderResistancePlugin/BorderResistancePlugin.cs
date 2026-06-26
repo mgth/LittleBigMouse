@@ -29,9 +29,9 @@ using LittleBigMouse.Plugins.Avalonia;
 namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 
 public class BorderResistanceViewMode : ViewMode { }
-public class BorderResistancePlugin(IMainService mainService) : IBootloader
+public class BorderResistancePlugin(IMainService mainService) : Bootloader
 {
-    public Task LoadAsync(IBootContext bootstrapper)
+    public override Task<BootState> LoadAsync()
     {
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<BorderResistanceViewMode>(
@@ -40,6 +40,6 @@ public class BorderResistancePlugin(IMainService mainService) : IBootloader
                 "Border resistance"
                 )
         );
-        return Task.CompletedTask;
+        return Task.FromResult(BootState.Completed);
     }
 }

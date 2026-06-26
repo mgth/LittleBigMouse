@@ -5,15 +5,15 @@
 #include <Shlwapi.h>
 #pragma comment(lib,"shlwapi.lib")
 
-#include "SignalSlot.h"
+#include "../SignalSlot.h"
 
-#include "Engine/MouseEngine.h"
-#include "Hook/Hooker.h"
-#include "Remote/RemoteServer.h"
-#include "Remote/RemoteClient.h"
-#include "Xml/tinyxml2.h"
-#include "Xml/XmlHelper.h"
-#include "Strings/str.h"
+#include "../Engine/MouseEngine.h"
+#include "../Hook/Hooker.h"
+#include "../Remote/RemoteServer.h"
+#include "../Remote/RemoteClient.h"
+#include "../Xml/tinyxml2.h"
+#include "../Xml/XmlHelper.h"
+#include "../Strings/str.h"
 
 void LittleBigMouseDaemon::Unhooked() const
 {

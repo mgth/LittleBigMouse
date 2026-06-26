@@ -86,6 +86,6 @@ public class VcpSliderViewModel : ViewModel<MonitorLevel>
 
     static Brush GetBorderBrush(Color c) =>
         new SolidColorBrush(
-            new ColorRGB<double>(c.A * 0.9, c.R * 0.5+0.5, c.G * 0.5 + 0.5, c.B * 0.5 + 0.5).ToAvaloniaColor()
+           HLabColors.RGB(c.A * 0.9, c.R * 0.5+0.5, c.G * 0.5 + 0.5, c.B * 0.5 + 0.5).ToAvaloniaColor()
         );
 }

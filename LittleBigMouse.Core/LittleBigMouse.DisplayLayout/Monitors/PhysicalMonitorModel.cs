@@ -16,7 +16,7 @@ public class PhysicalMonitorModel : SavableReactiveModel
     {
         get
         {
-            if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
+            //if(!Avalonia.Controls.Design.IsDesignMode) throw new InvalidOperationException("Only for design mode");
             return new PhysicalMonitorModel("PNP0000")
             {
             };
@@ -39,25 +39,13 @@ public class PhysicalMonitorModel : SavableReactiveModel
             });
     }
 
-
     [DataMember]
-    public string PnpDeviceName
-    {
-        get => _pnpDeviceName;
-        set => SetUnsavedValue(ref _pnpDeviceName, value);
-    }
-    string _pnpDeviceName;
+    public string PnpDeviceName { get; set => SetUnsavedValue(ref field, value); }
 
     /// <summary>
     /// Icon path for brand logo
     /// </summary>
-    public string Logo
-    {
-        get => _logo;
-        set => this.RaiseAndSetIfChanged(ref _logo, value);
-    }
-    string _logo;
-
+    public string Logo { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     [DataMember] public DisplaySizeInMm PhysicalSize { get; }
 

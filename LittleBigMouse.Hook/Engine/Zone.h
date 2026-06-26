@@ -1,13 +1,13 @@
 #pragma once
-#include "Framework.h"
+#include "../Framework.h"
 
 #include <string>
 #include <unordered_map>
 
-#include "Xml/tinyxml2.h"
+#include "../Xml/tinyxml2.h"
 
-#include "Geometry/Point.h"
-#include "Geometry/Rect.h"
+#include "../Geometry/Point.h"
+#include "../Geometry/Rect.h"
 
 class ZoneLink;
 class ZonesLayout;

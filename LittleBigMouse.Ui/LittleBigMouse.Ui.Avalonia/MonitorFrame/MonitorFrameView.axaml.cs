@@ -30,7 +30,7 @@ using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
-public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, MonitorFrameViewModel>, IDefaultViewClass, IMonitorFrameView 
+public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, MonitorFrameViewModel>, IMonitorFrameView 
 {
     public MonitorFrameView() => InitializeComponent();
 

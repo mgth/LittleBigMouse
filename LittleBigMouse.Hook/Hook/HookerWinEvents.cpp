@@ -1,6 +1,6 @@
 #include "Hooker.h"
 
-#include "Strings/str.h"
+#include "../Strings/str.h"
 
 DWORD GetProcessIdFromWindow(HWND hWnd) {
     DWORD processId;

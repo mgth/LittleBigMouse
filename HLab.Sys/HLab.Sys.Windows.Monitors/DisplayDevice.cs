@@ -24,19 +24,31 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
-using DynamicData;
+using System.Xml.Serialization;
 
 namespace HLab.Sys.Windows.Monitors;
 
+[XmlInclude(typeof(PhysicalAdapter))]
+[XmlInclude(typeof(MonitorDeviceConnection))]
 public class DisplayDevice
 {
     public override string ToString() => $"{GetType().Name} {DeviceName} {DeviceString}";
 
+    [XmlIgnore]
     readonly List<DisplayDevice> _children = [];
 
-    internal void AddChild(DisplayDevice device)
+   bool IsChildOf(DisplayDevice device)
+   {
+      if (Parent == device) return true;
+      if (Parent == null) return false;
+      return Parent.IsChildOf(device);
+   }
+
+
+   internal void AddChild(DisplayDevice device)
     {
-        _children.Add(device);
+      if(device.Parent!=this) return;
+      _children.Add(device);
     }
 
     public IEnumerable<T> AllChildren<T>() where T : DisplayDevice
@@ -55,10 +67,15 @@ public class DisplayDevice
             .Select(e => e.First())
             .OrderBy(e => e.PhysicalId);
 
+    [XmlIgnore]
     [JsonIgnore]
     public DisplayDevice? Parent { get; set; }
 
-    public IEnumerable<DisplayDevice> Children  => _children; 
+    public List<DisplayDevice> Children
+    {
+       get => _children;
+       set => throw new System.NotImplementedException();
+    }
 
     /// <summary>
     /// Device name as returned by EnumDisplayDevices :
@@ -84,21 +101,25 @@ public class DisplayDevice
     /// </summary>
     public string DeviceKey { get; init; } = "";
 
-    public SourceList<DisplayMode> DisplayModes { get; } = new ();
+    [XmlIgnore]
+    public List<DisplayMode> DisplayModes { get; set; } = new ();
 
     /// <summary>
     /// Device mode as returned by EnumDisplaySettingsEx :
     /// 
     /// </summary>
+    [XmlIgnore]
     public DisplayMode CurrentMode { get; init; }
 
+    [XmlIgnore]
     public DeviceCaps Capabilities { get; init; }
+    [XmlIgnore]
     public DeviceState State { get; init; }
 
     public DisplayMode GetBestDisplayMode()
     {
-        var best = DisplayModes.Items.FirstOrDefault();
-        foreach (var mode in DisplayModes.Items)
+        var best = DisplayModes.FirstOrDefault();
+        foreach (var mode in DisplayModes)
         {
             if (mode.BitsPerPixel < best.BitsPerPixel) continue;
             if (mode.DisplayFrequency < best.DisplayFrequency) continue;

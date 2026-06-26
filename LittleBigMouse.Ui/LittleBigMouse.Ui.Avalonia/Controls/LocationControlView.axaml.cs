@@ -96,7 +96,9 @@ public partial class LocationControlView : UserControl
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
             if (clipboard != null)
             {
-                await clipboard.SetTextAsync(json);
+                var data = new global::Avalonia.Input.DataTransfer();
+                data.Add(global::Avalonia.Input.DataTransferItem.CreateText(json));
+                await clipboard.SetDataAsync(data);
             }
           
             var provider = TopLevel.GetTopLevel(this)?.StorageProvider;

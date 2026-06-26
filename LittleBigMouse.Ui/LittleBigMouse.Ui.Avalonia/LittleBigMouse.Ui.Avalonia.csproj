@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFrameworks>net8.0</TargetFrameworks>
+		<TargetFrameworks>net10.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
-		<Platforms>x64;x86;AnyCPU</Platforms>
+		<Platforms>x64</Platforms>
 		<OutputType>WinExe</OutputType>
 		<ApplicationIcon>Assets\lbm-logo.ico</ApplicationIcon>
 		<LangVersion>preview</LangVersion>
@@ -12,7 +12,7 @@
 		<PackageIcon>lbm.png</PackageIcon>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/mgth/LittleBigMouse</RepositoryUrl>
-		<Version>5.2.4.0</Version>
+		<Version>5.3.0.0</Version>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<StartupObject>LittleBigMouse.Ui.Avalonia.Program</StartupObject>
 		<Title>Little Big Mouse</Title>
@@ -50,18 +50,14 @@
 
   <ItemGroup>
     <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-    <PackageReference Include="Avalonia" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="11.2.3" />
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
     <PackageReference Include="Grace" Version="8.0.0-RC837" />
-    <PackageReference Include="Live.Avalonia" Version="1.4.1" />
-    <PackageReference Include="MessageBox.Avalonia" Version="3.2.0" />
+    <PackageReference Include="MessageBox.Avalonia" Version="12.0.0" />
     <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.7.23375.6" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
-    <PackageReference Include="System.Resources.Extensions" Version="9.0.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+    <PackageReference Include="System.Resources.Extensions" Version="9.0.8" />
+    <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="12.0.0.13" />
   </ItemGroup>
 
 	<ItemGroup>
@@ -98,8 +94,11 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Base.Avalonia\HLab.Base.Avalonia.csproj" />
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Bugs.Avalonia\HLab.Bugs.Avalonia.csproj" />
+		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Geo.Avalonia\HLab.Geo.Avalonia.csproj" />
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
+		<ProjectReference Include="..\..\HLab.Avalonia\HLab.Theme.Avalonia\HLab.Theme.Avalonia.csproj" />
 		<ProjectReference Include="..\..\HLab.Avalonia\HLab.UserNotification.Avalonia\HLab.UserNotification.Avalonia.csproj" />
+		<ProjectReference Include="..\..\HLab.Core\HLab.Base\HLab.Base.csproj" />
 		<ProjectReference Include="..\..\HLab.Core\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
 		<ProjectReference Include="..\..\HLab.Core\HLab.UserNotification\HLab.UserNotification.csproj" />
 		<ProjectReference Include="..\..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />

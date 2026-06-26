@@ -1,8 +1,8 @@
 ﻿#pragma once
-#include "Framework.h"
+#include "../Framework.h"
 
-#include "Geometry/Point.h"
-#include "Geometry/Rect.h"
+#include "../Geometry/Point.h"
+#include "../Geometry/Rect.h"
 
 void SetMouseLocation(const geo::Point<long>& location);
 geo::Point<long> GetMouseLocation();

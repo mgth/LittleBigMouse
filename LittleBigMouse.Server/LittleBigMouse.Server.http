@@ -1,0 +1,6 @@
+@LittleBigMouse.Server_HostAddress = http://localhost:5021
+
+GET {{LittleBigMouse.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

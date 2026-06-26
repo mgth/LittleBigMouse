@@ -5,9 +5,9 @@ using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.About;
 
-public class AboutMonitorPlugin(IMainService mainService) : IBootloader
+public class AboutMonitorPlugin(IMainService mainService) : Bootloader
 {
-    public Task LoadAsync(IBootContext bootstrapper)
+    public override Task<BootState> LoadAsync()
     {
         mainService.AddControlPlugin(c =>
             c.AddViewModeButton<MonitorAboutViewMode>(
@@ -15,6 +15,6 @@ public class AboutMonitorPlugin(IMainService mainService) : IBootloader
                 "Icon/MonitorAbout",
                 "About")
         );
-        return Task.CompletedTask;
+        return Task.FromResult(BootState.Completed);
     }
 }

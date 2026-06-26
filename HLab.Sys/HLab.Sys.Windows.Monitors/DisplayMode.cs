@@ -22,7 +22,7 @@
 */
 
 using System.Runtime.Serialization;
-using Avalonia;
+using HLab.Geo;
 
 namespace HLab.Sys.Windows.Monitors;
 

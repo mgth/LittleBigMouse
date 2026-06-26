@@ -1,23 +1,22 @@
-﻿using System;
-using System.Diagnostics;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Threading.Tasks;
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using HLab.ColorTools;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Diagnostics;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using AvaloniaColor = Avalonia.Media.Color;
-using AvaloniaSize = Avalonia.Size;
 using AvaloniaPoint = Avalonia.Point;
-
+using AvaloniaSize = Avalonia.Size;
+using Color = SixLabors.ImageSharp.Color;
 using Point = SixLabors.ImageSharp.Point;
 using Size = SixLabors.ImageSharp.Size;
-using Color = SixLabors.ImageSharp.Color;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
@@ -28,12 +27,12 @@ public static class WallpaperRendererHelper
             .MutateFluent(e => e.Shrink(shrink).Fill(size.ToImageSharp()))
             .ToBitmapAsync();
 
-    public static Task<Bitmap> GetWallpaperCenterAsync(string path, AvaloniaSize size, AvaloniaColor color, int shrink) 
+    public static Task<Bitmap> GetWallpaperCenterAsync(string path, AvaloniaSize size, ColorRGB<double> color, int shrink) 
         => Image.LoadAsync(path)
             .MutateFluent(e => e.Shrink(shrink).Center(size.ToImageSharp(),color.ToImageSharp()))
             .ToBitmapAsync();
 
-    public static Task<Bitmap> GetWallpaperFitAsync(string path, AvaloniaSize size, AvaloniaColor color, int shrink)
+    public static Task<Bitmap> GetWallpaperFitAsync(string path, AvaloniaSize size, ColorRGB<double> color, int shrink)
         => Image.LoadAsync(path)
             .MutateFluent(e => e.Shrink(shrink).Fit(size.ToImageSharp(), color.ToImageSharp()))
             .ToBitmapAsync();
@@ -82,6 +81,12 @@ public static class WallpaperRendererHelper
     static Color ToImageSharp(this AvaloniaColor color)
     {
         return Color.FromRgba(color.R, color.G, color.B, color.A);
+    }
+   
+    static Color ToImageSharp(this ColorRGB<double> color)
+    {
+      var c = color.To<byte>();
+      return Color.FromRgba(c.Red, c.Green, c.Blue, c.Alpha);
     }
 
     static Size ToImageSharp(this AvaloniaSize size)

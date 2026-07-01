@@ -10,6 +10,8 @@ Little Big Mouse (LBM) is an open-source software designed to enhance the multi-
 If you find Little Big Mouse helpful, consider supporting the project with a donation. Your contribution helps us maintain and improve the software.
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-mgth-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mgth)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/G5X022D1RW)
+[![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/mgth/donate)
 
 ## Presentation Video
 

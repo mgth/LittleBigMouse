@@ -488,14 +488,63 @@ void MouseEngine::Reset()
 	_onMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
 }
 
+bool MouseEngine::IsFreelookActive() const
+{
+	// Signal 1: cursor hidden — game called ShowCursor(FALSE), show-count < 0
+	CURSORINFO ci{};
+	ci.cbSize = sizeof(CURSORINFO);
+	GetCursorInfo(&ci);
+	if (!(ci.flags & CURSOR_SHOWING)) return true;
+
+	// Signal 2: cursor clipped to a sub-virtual-desktop rect
+	// Skip this check when LBM itself set the clip (_oldClipRect not empty means
+	// LBM saved the original clip and is managing cursor confinement itself).
+	if (_oldClipRect.IsEmpty())
+	{
+		RECT clip;
+		GetClipCursor(&clip);
+		const int vsLeft   = GetSystemMetrics(SM_XVIRTUALSCREEN);
+		const int vsTop    = GetSystemMetrics(SM_YVIRTUALSCREEN);
+		const int vsRight  = vsLeft + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+		const int vsBottom = vsTop  + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+		if (clip.left > vsLeft || clip.top > vsTop ||
+		    clip.right < vsRight || clip.bottom < vsBottom)
+			return true;
+	}
+
+	return false;
+}
+
 void MouseEngine::OnMouseMove(MouseEventArg& e)
 {
-	//LOG_TRACE(e.Point);
-
-	if(_lock.try_lock())
+	if (_lock.try_lock())
 	{
-		if(_onMouseMoveFunc)
-			(this->*_onMouseMoveFunc)(e);
+		const bool freelook = IsFreelookActive();
+
+		if (freelook)
+		{
+			if (!_wasFreelook)
+			{
+				// Entering freelook: restore any clip LBM had set so the game
+				// gets a clean cursor environment.
+				ResetClip();
+				Reset();
+				_wasFreelook = true;
+				LOG_TRACE("<engine:freelook enter>");
+			}
+			e.Handled = false;
+		}
+		else
+		{
+			if (_wasFreelook)
+			{
+				// Leaving freelook: reinitialise position tracking.
+				_wasFreelook = false;
+				LOG_TRACE("<engine:freelook exit>");
+			}
+			if (_onMouseMoveFunc)
+				(this->*_onMouseMoveFunc)(e);
+		}
 
 		_lock.unlock();
 	}

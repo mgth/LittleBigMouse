@@ -14,100 +14,57 @@
 		<controls:LocationControlViewModelDesign/>
 	</Design.DataContext>
 
-	<UserControl.Styles>
-
-		<Style Selector="ListBox.RadioButtonListBox">
-			<Setter Property="BorderBrush" Value="Transparent"/>
-		</Style>
-
-		<Style Selector="ListBox.RadioButtonListBox ListBoxItem">
-			<Setter Property="Padding" Value="6,3,6,4" />
-			<Setter Property="BorderBrush" Value="Transparent" />
-
-			<Style Selector="^:selected">
-				<Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
-					<Setter Property="Background" Value="Transparent" />
-				</Style>
-			</Style>
-			<Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-				<Setter Property="Background" Value="Transparent" />
-			</Style>
-		</Style>
-
-		<Style Selector="Button.Command">
-			<Setter Property="MinWidth" Value="50"/>
-			<Setter Property="Margin" Value="5,0,0,0" />
-		</Style>
-
-		<Style Selector="Button.Command:disabled /template/ ContentPresenter">
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="Opacity" Value="0.25"/>
-			<Setter Property="OpacityMask" Value="Black"/>
-		</Style>
-		<Style Selector="StackPanel.Options">
-			<Setter Property="Orientation" Value="Vertical"/>
-			<Setter Property="Margin" Value="5,0,0,0"/>
-			<Setter Property="VerticalAlignment" Value="Top"/>
-		</Style>
-	</UserControl.Styles>
-
-	<Grid Margin="20,5">
+	<Grid Margin="14,0">
 		<StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Opacity="0.051" OpacityMask="Gray">
 			<icons:IconView
                 Foreground="Black"
-				IconMaxHeight="50"
+				IconMaxHeight="40"
                 Path="icon/lbm_logo"
             />
-			<Label FontSize="40" Foreground="{DynamicResource ThemeForegroundBrush}">Little Big Mouse</Label>
+			<Label FontSize="30" Foreground="{DynamicResource ThemeForegroundBrush}">Little Big Mouse</Label>
 		</StackPanel>
 
+		<StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
 
-		<!--<ScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled">-->
-		<!---->
-		<WrapPanel Margin="5" HorizontalAlignment="Right" Orientation="Horizontal">
-			<!--<StackPanel Orientation="Vertical" Margin="5,0,0,0" VerticalAlignment="Center">
-                    <CheckBox  Content="Home Cinema" IsChecked="{Binding Path=Config.HomeCinema, Mode=TwoWay}" Foreground="LightGray"/>
-                </StackPanel>-->
-			<StackPanel Orientation="Horizontal">
+			<Button Classes="ToolbarButton"
+				Click="ImportJSon_Click">
+				<ToolTip.Tip>Import configuration for debugging purpose</ToolTip.Tip>
+				<icons:IconView Height="22" Width="22" Path="Icon/Sys/LoadJson"/>
+			</Button>
 
-				<Button Classes="Command"
-					Click="ImportJSon_Click">
-					<ToolTip.Tip>Import configuration for debugging purpose</ToolTip.Tip>
-					<icons:IconView Height="30" Path="Icon/Sys/LoadJson"/>
-				</Button>
-				
-				<Button Classes="Command"
-					Click="ExportJSon_Click">
-					<ToolTip.Tip>Export configuration for debugging purpose</ToolTip.Tip>
-					<icons:IconView Height="30" Path="Icon/CopyConfig"/>
-				</Button>
+			<Button Classes="ToolbarButton"
+				Click="ExportJSon_Click">
+				<ToolTip.Tip>Export configuration for debugging purpose</ToolTip.Tip>
+				<icons:IconView Height="22" Width="22" Path="Icon/CopyConfig"/>
+			</Button>
 
-				<Button Classes="Command"
-					Command="{Binding SaveCommand}">
-					<ToolTip.Tip>Save</ToolTip.Tip>
-					<icons:IconView Height="30" Path="Icon/Save"/>
-				</Button>
+			<Border Classes="ToolbarSeparator"/>
 
-				<Button Classes="Command"
-					Command="{Binding StartCommand}">
-					<ToolTip.Tip>Apply/Start</ToolTip.Tip>
-					<icons:IconView Height="30" Path="Icon/Start"/>
-				</Button>
+			<Button Classes="ToolbarButton"
+				Command="{Binding SaveCommand}">
+				<ToolTip.Tip>Save</ToolTip.Tip>
+				<icons:IconView Height="22" Width="22" Path="Icon/Save"/>
+			</Button>
 
-				<Button Classes="Command"
-					Command="{Binding StopCommand}">
-					<ToolTip.Tip>Stop</ToolTip.Tip>
-					<icons:IconView Height="30" Path="Icon/Stop"/>
-				</Button>
+			<Button Classes="ToolbarButton"
+				Command="{Binding StartCommand}">
+				<ToolTip.Tip>Apply/Start</ToolTip.Tip>
+				<icons:IconView Height="22" Width="22" Path="Icon/Start"/>
+			</Button>
 
-				<Button Classes="Command"
-					Command="{Binding UndoCommand}">
-					<ToolTip.Tip>Undo</ToolTip.Tip>
-					<icons:IconView Height="30" Path="Icon/Undo"/>
-				</Button>
+			<Button Classes="ToolbarButton"
+				Command="{Binding StopCommand}">
+				<ToolTip.Tip>Stop</ToolTip.Tip>
+				<icons:IconView Height="22" Width="22" Path="Icon/Stop"/>
+			</Button>
 
-			</StackPanel>
-		</WrapPanel>
+			<Button Classes="ToolbarButton"
+				Command="{Binding UndoCommand}">
+				<ToolTip.Tip>Undo</ToolTip.Tip>
+				<icons:IconView Height="22" Width="22" Path="Icon/Undo"/>
+			</Button>
+
+		</StackPanel>
 
 	</Grid>
 </UserControl>

@@ -55,10 +55,10 @@
 		</SplitView>
 		
         <!--Controls for the layout-->
-		<Border 
+		<Border
 			Grid.Row="2"
 			Grid.Column="0"
-			Background="{DynamicResource HLab.Brushes.Header.Active.Background}">
+			Classes="Toolbar Bottom">
 			
 			<mvvm:ViewLocator
 				ViewClass="{x:Type plugins:IMonitorsLayoutControlViewClass}"

@@ -107,6 +107,9 @@
 		<Setter Property="BorderThickness" Value="0,0,0,1"/>
 		<Setter Property="Padding" Value="6,4"/>
 	</Style>
+	<Style Selector="Border.Toolbar.Bottom">
+		<Setter Property="BorderThickness" Value="0,1,0,0"/>
+	</Style>
 
 	<Style Selector="Border.ToolbarSeparator">
 		<Setter Property="Width" Value="1"/>
@@ -116,7 +119,7 @@
 		<Setter Property="VerticalAlignment" Value="Center"/>
 	</Style>
 
-	<Style Selector="ToggleButton.ToolbarButton">
+	<Style Selector="ToggleButton.ToolbarButton, Button.ToolbarButton">
 		<Setter Property="Background" Value="Transparent"/>
 		<Setter Property="BorderThickness" Value="0"/>
 		<Setter Property="CornerRadius" Value="8"/>
@@ -124,11 +127,17 @@
 		<Setter Property="Margin" Value="2,0"/>
 		<Setter Property="VerticalAlignment" Value="Center"/>
 	</Style>
-	<Style Selector="ToggleButton.ToolbarButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+	<Style Selector="ToggleButton.ToolbarButton:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.ToolbarButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Card.Background}"/>
 	</Style>
-	<Style Selector="ToggleButton.ToolbarButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+	<Style Selector="ToggleButton.ToolbarButton:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.ToolbarButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Card.Border}"/>
+	</Style>
+	<Style Selector="ToggleButton.ToolbarButton:disabled, Button.ToolbarButton:disabled">
+		<Setter Property="Opacity" Value="0.35"/>
+	</Style>
+	<Style Selector="ToggleButton.ToolbarButton:disabled /template/ ContentPresenter#PART_ContentPresenter, Button.ToolbarButton:disabled /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="Transparent"/>
 	</Style>
 	<Style Selector="ToggleButton.ToolbarButton:checked /template/ ContentPresenter#PART_ContentPresenter">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>

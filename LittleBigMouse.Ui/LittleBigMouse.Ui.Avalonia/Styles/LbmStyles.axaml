@@ -136,11 +136,9 @@
 	<Style Selector="ToggleButton.ToolbarButton:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.ToolbarButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Card.Border}"/>
 	</Style>
-	<Style Selector="ToggleButton.ToolbarButton:disabled, Button.ToolbarButton:disabled">
-		<Setter Property="Opacity" Value="0.35"/>
-	</Style>
 	<Style Selector="ToggleButton.ToolbarButton:disabled /template/ ContentPresenter#PART_ContentPresenter, Button.ToolbarButton:disabled /template/ ContentPresenter#PART_ContentPresenter">
 		<Setter Property="Background" Value="Transparent"/>
+		<Setter Property="Opacity" Value="0.35"/>
 	</Style>
 	<Style Selector="ToggleButton.ToolbarButton:checked /template/ ContentPresenter#PART_ContentPresenter">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>

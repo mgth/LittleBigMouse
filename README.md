@@ -3,6 +3,15 @@
 <p align="center">
     <img src="https://raw.githubusercontent.com/mgth/LittleBigMouse/master/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Assets/lbm.png" width="200" alt="Little Big Mouse Logo"/>
 </p>
+
+> [!IMPORTANT]
+> ## 🎉 5.3.0-beta.1 is out — first release in two years!
+> This beta fixes the most reported v5 problems: the cursor getting **stuck at screen edges** until Alt-Tab (plane lock), the mouse **escaping to another screen in fullscreen games**, and the app **silently failing to start**.
+>
+> **[⬇ Download 5.3.0-beta.1](https://github.com/mgth/LittleBigMouse/releases/tag/v5.3.0-beta.1)** — requires the [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+>
+> If one of these bugs hit you, please try the beta and [tell us how it goes](https://github.com/mgth/LittleBigMouse/issues) 🙏
+
 Little Big Mouse (LBM) is an open-source software designed to enhance the multi-monitor experience on Windows 10 and 11 by providing accurate mouse screen crossover location within multi-DPI monitors environments. This is particularly useful for setups involving a 4K monitor alongside a full HD monitor.
 
 ## Donations

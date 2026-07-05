@@ -126,6 +126,9 @@
 		<Setter Property="Padding" Value="9"/>
 		<Setter Property="Margin" Value="2,0"/>
 		<Setter Property="VerticalAlignment" Value="Center"/>
+		<!-- IconView maps black SVG strokes to the inherited foreground ;
+		     without an explicit brush monochrome icons stay black on dark. -->
+		<Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}"/>
 	</Style>
 	<Style Selector="ToggleButton.ToolbarButton:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.ToolbarButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Card.Background}"/>

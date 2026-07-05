@@ -46,8 +46,6 @@ public static class ZonesLayoutFactory
             }
         }
 
-        zones.Init();
-
         zones.MaxTravelDistance = layout.Options.MaxTravelDistance;
 
         zones.AdjustPointer = layout.Options.AdjustPointer;
@@ -59,6 +57,11 @@ public static class ZonesLayoutFactory
 
         zones.LoopX = layout.Options.LoopX;
         zones.LoopY = layout.Options.LoopY;
+
+        // Init() computes zone links via ComputeLinks(), which reads MaxTravelDistance:
+        // it must run after the options above are set, otherwise links are built with
+        // default values (cursor stuck at some edges, wrong travel distance).
+        zones.Init();
 
         return zones;
     }

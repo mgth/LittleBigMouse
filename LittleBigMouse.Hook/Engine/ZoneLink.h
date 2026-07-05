@@ -18,7 +18,7 @@ public:
 	long TargetToPixel;
 
 	double BorderResistance;
-	long BorderResistancePixel;
+	long BorderResistancePixel = 0;
 
 	//long SourceLengthPixel;
 	//long TargetLengthPixel;

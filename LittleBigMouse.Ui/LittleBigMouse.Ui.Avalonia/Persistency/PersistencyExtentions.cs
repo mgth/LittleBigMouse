@@ -242,6 +242,11 @@ public static class PersistencyExtensions
         @this.BorderResistance.Bottom =  key.GetOrSet(@"BorderResistance\Bottom", ()=> @this.BorderResistance.Bottom);
         @this.BorderResistance.Saved = true;
 
+        @this.Model.PhysicalSize.TopBorder = key.GetOrSet(@"Borders\Top", () => @this.Model.PhysicalSize.TopBorder);
+        @this.Model.PhysicalSize.RightBorder = key.GetOrSet(@"Borders\Right", () => @this.Model.PhysicalSize.RightBorder);
+        @this.Model.PhysicalSize.BottomBorder = key.GetOrSet(@"Borders\Bottom", () => @this.Model.PhysicalSize.BottomBorder);
+        @this.Model.PhysicalSize.LeftBorder = key.GetOrSet(@"Borders\Left", () => @this.Model.PhysicalSize.LeftBorder);
+
         @this.Saved = true;
 
         return @this;
@@ -270,6 +275,10 @@ public static class PersistencyExtensions
 
         @this.BorderResistance.Saved = true;
 
+        key.SetKey(@"Borders\Top", @this.Model.PhysicalSize.TopBorder);
+        key.SetKey(@"Borders\Right", @this.Model.PhysicalSize.RightBorder);
+        key.SetKey(@"Borders\Bottom", @this.Model.PhysicalSize.BottomBorder);
+        key.SetKey(@"Borders\Left", @this.Model.PhysicalSize.LeftBorder);
 
         foreach (var source in @this.Sources.Items)
         {
@@ -300,11 +309,6 @@ public static class PersistencyExtensions
         {
             if (key != null)
             {
-                @this.PhysicalSize.TopBorder = key.GetOrSet(@"Borders\Top", ()=>@this.PhysicalSize.TopBorder);
-                @this.PhysicalSize.RightBorder = key.GetOrSet(@"Borders\Right", ()=>@this.PhysicalSize.RightBorder);
-                @this.PhysicalSize.BottomBorder = key.GetOrSet(@"Borders\Bottom", ()=>@this.PhysicalSize.BottomBorder);
-                @this.PhysicalSize.LeftBorder = key.GetOrSet(@"Borders\Left", ()=>@this.PhysicalSize.LeftBorder);
-
                 @this.PhysicalSize.Height = key.GetOrSet(@"Size\Height", ()=>@this.PhysicalSize.Height);
                 @this.PhysicalSize.Width = key.GetOrSet(@"Size\Width", ()=>@this.PhysicalSize.Width);
 
@@ -330,11 +334,6 @@ public static class PersistencyExtensions
         using var key = @this.OpenMonitorRegKey(true);
 
         if (key == null) return;
-
-        key.SetKey(@"Borders\Top", @this.PhysicalSize.TopBorder.ToString(CultureInfo.InvariantCulture));
-        key.SetKey(@"Borders\Right", @this.PhysicalSize.RightBorder.ToString(CultureInfo.InvariantCulture));
-        key.SetKey(@"Borders\Bottom", @this.PhysicalSize.BottomBorder.ToString(CultureInfo.InvariantCulture));
-        key.SetKey(@"Borders\Left", @this.PhysicalSize.LeftBorder.ToString(CultureInfo.InvariantCulture));
 
         key.SetKey(@"Size\Height", @this.PhysicalSize.Height.ToString(CultureInfo.InvariantCulture));
         key.SetKey(@"Size\Width", @this.PhysicalSize.Width.ToString(CultureInfo.InvariantCulture));

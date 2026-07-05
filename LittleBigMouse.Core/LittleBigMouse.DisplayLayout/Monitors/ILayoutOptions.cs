@@ -27,6 +27,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool LoopX { get; set; } = false;
       public bool LoopY { get; set; } = false;
       public double MaxTravelDistance { get; set; } = 200;
+      public double FreelookCheckInterval { get; set; } = 100;
       public bool AdjustPointer { get; set; } = false;
       public bool AdjustSpeed { get; set; } = false;
       public string Algorithm { get; set; } = "Strait";
@@ -93,6 +94,12 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// Helps to prevent cursor to reach monitor too far
    /// </summary>
    double MaxTravelDistance { get; set; }
+
+   /// <summary>
+   /// Interval (ms) between freelook re-checks while a game holds the cursor
+   /// (hidden or clipped). 0 = re-check on every mouse event.
+   /// </summary>
+   double FreelookCheckInterval { get; set; }
 
    /// <summary>
    /// Adjust pointer size with display pixel to dip ratio

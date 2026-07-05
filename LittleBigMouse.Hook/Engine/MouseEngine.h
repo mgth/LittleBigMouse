@@ -56,6 +56,7 @@ class MouseEngine
 	long _borderResistancePixel = 0;
 
 	bool _wasFreelook = false;
+	ULONGLONG _lastFreelookCheck = 0;
 	bool IsFreelookActive() const;
 
 public:

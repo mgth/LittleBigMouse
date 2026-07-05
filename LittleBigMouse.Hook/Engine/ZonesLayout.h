@@ -23,6 +23,10 @@ class ZonesLayout
 public:
 	double MaxTravelDistanceSquared = pow(200.0,2.0);
 
+	// Interval (ms) between freelook re-checks while a game holds the cursor
+	// (hidden or clipped). 0 = re-check on every mouse event.
+	long FreelookCheckIntervalMs = 100;
+
 	bool AdjustPointer = false;
 	bool AdjustSpeed = false;
 

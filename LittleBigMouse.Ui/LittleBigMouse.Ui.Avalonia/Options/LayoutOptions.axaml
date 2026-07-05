@@ -176,6 +176,17 @@
 										ClipValueToMinMax="True"/>
 								</StackPanel>
 
+								<StackPanel Classes="Options">
+									<Label ToolTip.Tip="While a game captures the mouse (hidden or confined cursor), LBM pauses and re-checks the capture state at this interval. Lower values react faster, 0 checks on every mouse event.">Game detection interval (ms)</Label>
+
+									<NumericUpDown
+										Minimum="0"
+										Maximum="1000"
+										Increment="10"
+										Value="{Binding Model.FreelookCheckInterval, FallbackValue=100}"
+										ClipValueToMinMax="True"/>
+								</StackPanel>
+
 								<CheckBox
 									Content="Horizontal loop"
 									IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"

@@ -486,6 +486,9 @@ void MouseEngine::Reset()
 {
 	LOG_TRACE("<engine:Reset>");
 	_onMouseMoveFunc = &MouseEngine::OnMouseMoveExtFirst;
+	// The zone may not survive a layout reload; drop it so nothing
+	// dereferences a stale pointer before OnMouseMoveExtFirst reassigns it.
+	_oldZone = nullptr;
 }
 
 bool MouseEngine::IsFreelookActive() const
@@ -519,31 +522,65 @@ void MouseEngine::OnMouseMove(MouseEventArg& e)
 {
 	if (_lock.try_lock())
 	{
-		const bool freelook = IsFreelookActive();
+		// IsFreelookActive costs ~2µs (GetCursorInfo + GetClipCursor), too much to
+		// pay on every event of a high polling rate mouse. Freelook only matters
+		// when LBM is about to act, so gate the check:
+		// - steady state: only when the cursor touches the current zone border
+		//   (interior moves need pure arithmetic only);
+		// - while in freelook: re-check at the configured interval to detect exit.
+		bool checkFreelook;
 
-		if (freelook)
+		if (_wasFreelook)
 		{
-			if (!_wasFreelook)
-			{
-				// Entering freelook: restore any clip LBM had set so the game
-				// gets a clean cursor environment.
-				ResetClip();
-				Reset();
-				_wasFreelook = true;
-				LOG_TRACE("<engine:freelook enter>");
-			}
-			e.Handled = false;
+			checkFreelook = GetTickCount64() - _lastFreelookCheck
+				>= static_cast<ULONGLONG>(Layout.FreelookCheckIntervalMs);
+		}
+		else if (_onMouseMoveFunc == &MouseEngine::OnMouseMoveExtFirst || !_oldZone)
+		{
+			// Tracking not initialized yet: no zone to gate against.
+			checkFreelook = true;
 		}
 		else
 		{
-			if (_wasFreelook)
+			// Matches the widest acting conditions of both algorithms
+			// (Strait acts from x <= Left() / x >= Right()-1, Cross from !Contains).
+			const auto& bounds = _oldZone->PixelsBounds();
+			checkFreelook =
+				e.Point.X() <= bounds.Left() || e.Point.X() >= bounds.Right() - 1 ||
+				e.Point.Y() <= bounds.Top() || e.Point.Y() >= bounds.Bottom() - 1;
+		}
+
+		if (checkFreelook)
+		{
+			_lastFreelookCheck = GetTickCount64();
+			const bool freelook = IsFreelookActive();
+
+			if (freelook != _wasFreelook)
 			{
-				// Leaving freelook: reinitialise position tracking.
-				_wasFreelook = false;
-				LOG_TRACE("<engine:freelook exit>");
+				if (freelook)
+				{
+					// Entering freelook: restore any clip LBM had set so the game
+					// gets a clean cursor environment.
+					ResetClip();
+					Reset();
+					LOG_TRACE("<engine:freelook enter>");
+				}
+				else
+				{
+					// Leaving freelook: position tracking restarts at next event.
+					LOG_TRACE("<engine:freelook exit>");
+				}
+				_wasFreelook = freelook;
 			}
-			if (_onMouseMoveFunc)
-				(this->*_onMouseMoveFunc)(e);
+		}
+
+		if (_wasFreelook)
+		{
+			e.Handled = false;
+		}
+		else if (_onMouseMoveFunc)
+		{
+			(this->*_onMouseMoveFunc)(e);
 		}
 
 		_lock.unlock();

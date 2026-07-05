@@ -34,10 +34,7 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
                 return !string.IsNullOrWhiteSpace(p);
             }));
 
-        RemoveExcludedProcessCommand = ReactiveCommand.Create(
-            RemoveExcludedProcess,
-            this.WhenAnyValue(e => e.SelectedExcludedProcess)
-            .Select(s => !string.IsNullOrWhiteSpace(s)));
+        RemoveExcludedProcessCommand = ReactiveCommand.Create<string?>(RemoveExcludedProcess);
 
         _adjustPointerAllowed = this
             .WhenAnyValue(e => e.Model.IsUnaryRatio, (bool r) => r)
@@ -74,11 +71,12 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
 
     public ICommand RemoveExcludedProcessCommand { get; }
 
-    void RemoveExcludedProcess()
+    void RemoveExcludedProcess(string? process)
     {
-        if (SelectedExcludedProcess is null) return;
+        process ??= SelectedExcludedProcess;
+        if (string.IsNullOrWhiteSpace(process)) return;
         if (Model == null) return;
-        if (Model.ExcludedList.Contains(SelectedExcludedProcess)) Model.ExcludedList.Remove(SelectedExcludedProcess);
+        if (Model.ExcludedList.Contains(process)) Model.ExcludedList.Remove(process);
     }
 
     public ICommand AddExcludedProcessCommand { get; }

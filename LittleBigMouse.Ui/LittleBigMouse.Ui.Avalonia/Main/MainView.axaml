@@ -40,7 +40,7 @@
 
         <main:PluginsControlsView/>
 
-		<SplitView OpenPaneLength="500" Grid.Row="1" IsPaneOpen="{Binding OptionsIsVisible, Mode = TwoWay}"  PaneBackground="Transparent" >
+		<SplitView OpenPaneLength="440" Grid.Row="1" IsPaneOpen="{Binding OptionsIsVisible, Mode = TwoWay}"  PaneBackground="Transparent" >
 			<SplitView.Pane>
 		        <mvvm:ViewLocator Model="{Binding Options}" />
 			</SplitView.Pane>

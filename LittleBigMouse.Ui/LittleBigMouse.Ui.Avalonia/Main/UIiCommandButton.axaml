@@ -13,22 +13,20 @@
         <main:UiCommandDesign />
     </Design.DataContext>
 
-    <ToggleButton      
-        Command="{Binding Command}" 
+    <ToggleButton
+        Classes="ToolbarButton"
+        Command="{Binding Command}"
         CommandParameter="{Binding IsActive}"
         IsChecked="{Binding IsActive}"
         Foreground="{DynamicResource HLab.Brushes.Foreground}"
         >
 
-        <StackPanel>
-            <icons:IconView 
-                Height="40"
-                Width="40"
-                Margin="5"
-                Path="{Binding IconPath}"
-                ToolTip.Tip="{Binding ToolTipText}"
-                />
-        </StackPanel>
+        <icons:IconView
+            Height="22"
+            Width="22"
+            Path="{Binding IconPath}"
+            ToolTip.Tip="{Binding ToolTipText}"
+            />
 
   </ToggleButton>
 </UserControl>

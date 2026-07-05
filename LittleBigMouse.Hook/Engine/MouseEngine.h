@@ -55,6 +55,9 @@ class MouseEngine
 	double _borderResistance = 0;
 	long _borderResistancePixel = 0;
 
+	bool _wasFreelook = false;
+	bool IsFreelookActive() const;
+
 public:
 	SIGNAL<void(std::string&)> OnMessage;
 

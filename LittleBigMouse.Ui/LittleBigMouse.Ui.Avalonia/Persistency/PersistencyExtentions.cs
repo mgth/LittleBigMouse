@@ -17,6 +17,14 @@ public static class PersistencyExtensions
     const string ROOT_KEY = @"SOFTWARE\Mgth\LittleBigMouse";
 
     /// <summary>
+    /// True while options are being (re)loaded from the registry: live-save
+    /// subscriptions must not react to the setters fired by a load, in particular
+    /// because LoadAtStartup is read before StartElevated and re-scheduling the
+    /// startup task at that point would drop the elevation.
+    /// </summary>
+    public static bool IsLoading { get; private set; }
+
+    /// <summary>
     /// Full path of the excluded-processes list. It is a FILE in the app config folder;
     /// it must not be built with GetConfigPath, which would create a *directory* named
     /// "Excluded.txt" and break both the daemon launch and the exclusion feature.
@@ -51,6 +59,21 @@ public static class PersistencyExtensions
     public static void Load(this ILayoutOptions @this, RegistryKey? mainKey, RegistryKey? key)
     {
         if (mainKey == null) return;
+
+        var wasLoading = IsLoading;
+        IsLoading = true;
+        try
+        {
+            LoadOptions(@this, mainKey, key);
+        }
+        finally
+        {
+            IsLoading = wasLoading;
+        }
+    }
+
+    static void LoadOptions(ILayoutOptions @this, RegistryKey mainKey, RegistryKey? key)
+    {
 
         // Options to be loaded from the main key, was previously loaded from the layout key
         @this.DaemonPort = mainKey.GetOrSet("DaemonPort", () => 25196);
@@ -109,26 +132,35 @@ public static class PersistencyExtensions
     //==================//
     public static void Load(this MonitorsLayout @this)
     {
-        using var mainKey = OpenRootRegKey(true);
-        using var key = @this.OpenRegKey(true);
-
-        @this.Options.LoadAtStartup = @this.IsScheduled();
-
-        @this.Options.Elevated = IsProcessElevated();
-
-        @this.Options.Load(mainKey, key);
-
-        if (key != null)
+        var wasLoading = IsLoading;
+        IsLoading = true;
+        try
         {
-            foreach (var monitor in @this.PhysicalMonitors)
+            using var mainKey = OpenRootRegKey(true);
+            using var key = @this.OpenRegKey(true);
+
+            @this.Options.LoadAtStartup = @this.IsScheduled();
+
+            @this.Options.Elevated = IsProcessElevated();
+
+            @this.Options.Load(mainKey, key);
+
+            if (key != null)
             {
-                monitor.Model.Load();
-                monitor.Load();
+                foreach (var monitor in @this.PhysicalMonitors)
+                {
+                    monitor.Model.Load();
+                    monitor.Load();
+                }
             }
+
+            @this.Saved = true;
+            @this.UpdatePhysicalMonitors();
         }
-        
-        @this.Saved = true;
-        @this.UpdatePhysicalMonitors();
+        finally
+        {
+            IsLoading = wasLoading;
+        }
     }
 
     public static bool SaveEnabled(this IMonitorsLayout @this)
@@ -144,13 +176,21 @@ public static class PersistencyExtensions
     }
 
     /// <summary>
-    /// Persist the monitor-action-warning preference on its own: it is changed from the
-    /// warning dialog itself, where the user may never go through the regular save-button flow.
+    /// Persist the app-level options immediately. They take effect at the next app
+    /// start (or right away for the UI), never through the engine start flow, so
+    /// waiting for the save button would just lose them (#406).
     /// </summary>
-    public static void SaveShowMonitorActionWarning(this ILayoutOptions @this)
+    public static void SaveLive(this ILayoutOptions @this)
     {
         using var mainKey = OpenRootRegKey(true);
-        mainKey?.SetKey("ShowMonitorActionWarning", @this.ShowMonitorActionWarning);
+        if (mainKey == null) return;
+
+        mainKey.SetKey("AutoUpdate", @this.AutoUpdate);
+        mainKey.SetKey("StartMinimized", @this.StartMinimized);
+        mainKey.SetKey("StartElevated", @this.StartElevated);
+        mainKey.SetKey("DebugTools", @this.DebugTools);
+        mainKey.SetKey("Pinned", @this.Pinned);
+        mainKey.SetKey("ShowMonitorActionWarning", @this.ShowMonitorActionWarning);
     }
 
     public static void Save(this ILayoutOptions @this, RegistryKey? mainKey, RegistryKey? key)

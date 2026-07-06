@@ -21,7 +21,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool AutoUpdate
     {
         get => _autoUpdate;
-        set => SetUnsavedValue(ref _autoUpdate, value);
+        set => this.SetAndRaise(ref _autoUpdate, value);
     }
     bool _autoUpdate;
 
@@ -29,7 +29,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool LoadAtStartup
     {
         get => _loadAtStartup;
-        set => SetUnsavedValue(ref _loadAtStartup, value);
+        set => this.SetAndRaise(ref _loadAtStartup, value);
     }
     bool _loadAtStartup;
 
@@ -37,7 +37,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool StartMinimized
     {
         get => _startMinimized;
-        set =>  SetUnsavedValue(ref _startMinimized, value);
+        set =>  this.SetAndRaise(ref _startMinimized, value);
     }
     bool _startMinimized;
     
@@ -45,7 +45,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool StartElevated
     {
         get => _startElevated;
-        set =>  SetUnsavedValue(ref _startElevated, value);
+        set =>  this.SetAndRaise(ref _startElevated, value);
     }
     bool _startElevated;
 
@@ -61,7 +61,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool DebugTools
     {
         get => _debugTools;
-        set => SetUnsavedValue(ref _debugTools, value);
+        set => this.SetAndRaise(ref _debugTools, value);
     }
     bool _debugTools;
 
@@ -69,7 +69,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool ShowMonitorActionWarning
     {
         get => _showMonitorActionWarning;
-        set => SetUnsavedValue(ref _showMonitorActionWarning, value);
+        set => this.SetAndRaise(ref _showMonitorActionWarning, value);
     }
     bool _showMonitorActionWarning = true;
 
@@ -183,7 +183,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     public bool Pinned
     {
         get => _pinned;
-        set => SetUnsavedValue(ref _pinned, value);
+        set => this.SetAndRaise(ref _pinned, value);
     }
     bool _pinned;
 

@@ -23,6 +23,7 @@
 
 using System;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -76,8 +77,9 @@ public class MainService : ReactiveModel, IMainService
         IUserNotificationService notify,
         ISystemMonitorsService monitors,
         Func<MonitorsLayout> getNewMonitorLayout,
-        IProcessesCollector processesCollector, 
-        Func<ApplicationUpdaterViewModel> updaterLocator)
+        IProcessesCollector processesCollector,
+        Func<ApplicationUpdaterViewModel> updaterLocator,
+        ILayoutOptions options)
     {
         _notify = notify;
         _monitors = monitors;
@@ -88,6 +90,29 @@ public class MainService : ReactiveModel, IMainService
 
         _mvvmService = mvvmService;
         _mainViewModelLocator = mainViewModelLocator;
+
+        // App-level options never go through the engine start flow: persist them as
+        // soon as they change instead of waiting for the save button (#406). The
+        // IsLoading guard keeps registry loads from echoing back.
+        options.WhenAnyValue(
+                o => o.AutoUpdate,
+                o => o.StartMinimized,
+                o => o.StartElevated,
+                o => o.DebugTools,
+                o => o.Pinned,
+                o => o.ShowMonitorActionWarning)
+            .Skip(1)
+            .Where(_ => !PersistencyExtensions.IsLoading)
+            .Subscribe(_ => options.SaveLive())
+            .DisposeWith(this);
+
+        options.WhenAnyValue(
+                o => o.LoadAtStartup,
+                o => o.StartElevated)
+            .Skip(1)
+            .Where(_ => !PersistencyExtensions.IsLoading)
+            .Subscribe(_ => (MonitorsLayout as MonitorsLayout)?.UpdateSchedule())
+            .DisposeWith(this);
 
         // Relate service state with notify icon
         _littleBigMouseClientService.DaemonEventReceived += (o, a) => DaemonEventReceived(o, a);

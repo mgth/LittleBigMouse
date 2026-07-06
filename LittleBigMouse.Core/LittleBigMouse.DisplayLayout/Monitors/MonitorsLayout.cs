@@ -358,6 +358,14 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
       return ts.RootFolder.GetTasks(new Regex(ServiceName)).Any();
    }
 
+   /// <summary>
+   /// Align the startup scheduled task on the current options.
+   /// </summary>
+   public void UpdateSchedule()
+   {
+      if (Options.LoadAtStartup) Schedule(Options.StartElevated); else Unschedule();
+   }
+
    public bool Schedule(bool elevated)
    {
       Unschedule();

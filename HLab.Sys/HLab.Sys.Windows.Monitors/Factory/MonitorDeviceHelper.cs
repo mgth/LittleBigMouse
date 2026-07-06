@@ -135,11 +135,136 @@ public static class MonitorDeviceHelper
         @this.WorkArea = mi.WorkArea.ToRect();
     }
 
-    public static void AttachToDesktop(string deviceName, bool primary, Rect area, int orientation, bool apply = true)
+    //==============================================================================
+    // Attach / detach by monitor identity (CCD API).
+    //
+    // ChangeDisplaySettingsEx addresses an adapter *source* (\\.\DISPLAYn). Once a
+    // monitor is detached, Windows lists it as a binding candidate under EVERY
+    // inactive source: with several detached monitors they all report the same
+    // first source, and activating that source lets the driver bind whichever
+    // candidate it prefers — attaching HEC0030 would light up SAME035 (#404, #391).
+    // The CCD path array identifies the *target* (monitor) explicitly, so we
+    // (de)activate the source->target path of that exact monitor instead.
+    //==============================================================================
+
+    static (DisplayConfigPathInfo[] Paths, DisplayConfigModeInfo[] Modes)? QueryDisplayConfigPaths()
     {
+        uint nPath = 0, nMode = 0;
+        if (GetDisplayConfigBufferSizes(QDC_ALL_PATHS, ref nPath, ref nMode) != 0) return null;
+
+        var paths = new DisplayConfigPathInfo[nPath];
+        var modes = new DisplayConfigModeInfo[nMode];
+        if (QueryDisplayConfig(QDC_ALL_PATHS, ref nPath, paths, ref nMode, modes, 0) != 0) return null;
+
+        // QueryDisplayConfig may return fewer elements than allocated
+        if (nPath < paths.Length) Array.Resize(ref paths, (int)nPath);
+        if (nMode < modes.Length) Array.Resize(ref modes, (int)nMode);
+
+        return (paths, modes);
+    }
+
+    static string GetTargetDevicePath(Luid adapterId, uint targetId)
+    {
+        var name = new DisplayConfigTargetDeviceName
+        {
+            Type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+            Size = (uint)Marshal.SizeOf<DisplayConfigTargetDeviceName>(),
+            AdapterId = adapterId,
+            Id = targetId,
+        };
+        return DisplayConfigGetDeviceInfo(ref name) == 0 ? name.MonitorDevicePath : "";
+    }
+
+    static string GetSourceGdiName(Luid adapterId, uint sourceId)
+    {
+        var name = new DisplayConfigSourceDeviceName
+        {
+            Type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+            Size = (uint)Marshal.SizeOf<DisplayConfigSourceDeviceName>(),
+            AdapterId = adapterId,
+            Id = sourceId,
+        };
+        return DisplayConfigGetDeviceInfo(ref name) == 0 ? name.ViewGdiDeviceName : "";
+    }
+
+    static bool SourceInUse(DisplayConfigPathInfo[] paths, int idx)
+    {
+        var source = paths[idx].SourceInfo;
+        for (var j = 0; j < paths.Length; j++)
+        {
+            if (j == idx) continue;
+            if ((paths[j].Flags & DISPLAYCONFIG_PATH_ACTIVE) == 0) continue;
+            if (paths[j].SourceInfo.AdapterId.Equals(source.AdapterId)
+                && paths[j].SourceInfo.Id == source.Id) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Attach the monitor designated by its device interface path (\\?\DISPLAY#...)
+    /// to the desktop, then apply the requested position/resolution/orientation on
+    /// the source it got bound to.
+    /// </summary>
+    public static bool AttachToDesktop(string monitorDevicePath, bool primary, Rect area, int orientation, bool apply = true)
+    {
+        if (string.IsNullOrEmpty(monitorDevicePath)) return false;
+        if (QueryDisplayConfigPaths() is not { } cfg) return false;
+        var (paths, modes) = cfg;
+
+        var pathIdx = -1;
+        for (var i = 0; i < paths.Length; i++)
+        {
+            if (!paths[i].TargetInfo.TargetAvailable) continue;
+            if (!string.Equals(
+                    GetTargetDevicePath(paths[i].TargetInfo.AdapterId, paths[i].TargetInfo.Id),
+                    monitorDevicePath, StringComparison.OrdinalIgnoreCase)) continue;
+
+            // already active : no need to change the topology, just apply the mode
+            if ((paths[i].Flags & DISPLAYCONFIG_PATH_ACTIVE) != 0)
+            {
+                pathIdx = i;
+                break;
+            }
+
+            if (SourceInUse(paths, i)) continue;
+
+            pathIdx = i;
+            break;
+        }
+
+        if (pathIdx < 0)
+        {
+            Debug.WriteLine($"AttachToDesktop: no available path for {monitorDevicePath}");
+            return false;
+        }
+
+        if ((paths[pathIdx].Flags & DISPLAYCONFIG_PATH_ACTIVE) == 0)
+        {
+            paths[pathIdx].Flags |= DISPLAYCONFIG_PATH_ACTIVE;
+            paths[pathIdx].SourceInfo.ModeInfoIdx = DISPLAYCONFIG_PATH_MODE_IDX_INVALID;
+            paths[pathIdx].TargetInfo.ModeInfoIdx = DISPLAYCONFIG_PATH_MODE_IDX_INVALID;
+
+            var r = SetDisplayConfig((uint)paths.Length, paths, (uint)modes.Length, modes,
+                SetDisplayConfigFlags.Apply
+                | SetDisplayConfigFlags.UseSuppliedDisplayConfig
+                | SetDisplayConfigFlags.AllowChanges
+                | SetDisplayConfigFlags.SaveToDatabase);
+
+            if (r != 0)
+            {
+                Debug.WriteLine($"AttachToDesktop: SetDisplayConfig failed ({r}) for {monitorDevicePath}");
+                return false;
+            }
+        }
+
+        // The monitor is now bound to a known source : place it at the wanted
+        // position/mode (this part is the former ChangeDisplaySettingsEx attach).
+        var sourceName = GetSourceGdiName(paths[pathIdx].SourceInfo.AdapterId, paths[pathIdx].SourceInfo.Id);
+        if (string.IsNullOrEmpty(sourceName)) return false;
+
         var devMode = new DevMode()
         {
-            DeviceName = deviceName,
+            DeviceName = sourceName,
             Position = new WinDef.Point((int)area.X, (int)area.Y),
             PixelsWidth = (uint)area.Width,
             PixelsHeight = (uint)area.Height,
@@ -158,54 +283,90 @@ public static class MonitorDeviceHelper
 
         if (primary) flag |= ChangeDisplaySettingsFlags.SetPrimary;
 
-
-        var ch = ChangeDisplaySettingsEx(deviceName, ref devMode, 0, flag, 0);
+        var ch = ChangeDisplaySettingsEx(sourceName, ref devMode, 0, flag, 0);
 
         if (ch == DispChange.Successful && apply)
             ApplyDesktop();
+
+        return ch == DispChange.Successful;
     }
 
-    public static bool DetachFromDesktop(string deviceName, bool apply = true)
+    /// <summary>
+    /// Detach the monitor designated by its device interface path (\\?\DISPLAY#...)
+    /// from the desktop, by deactivating its active CCD path.
+    /// </summary>
+    public static bool DetachFromDesktop(string monitorDevicePath)
     {
+        if (string.IsNullOrEmpty(monitorDevicePath)) return false;
+        if (QueryDisplayConfigPaths() is not { } cfg) return false;
+        var (paths, modes) = cfg;
 
-        var devMode = new DevMode
+        var found = false;
+        for (var i = 0; i < paths.Length; i++)
         {
-            //DeviceName = "cdd", //= deviceName,
-            //PixelsHeight = 0,
-            //PixelsWidth = 0,
-            Fields = 0
-             | PixelsWidth
-             | PixelsHeight
-             | BitsPerPixel
-             | Position
-             | DisplayFrequency
-             | DisplayFlags
-        };
+            if ((paths[i].Flags & DISPLAYCONFIG_PATH_ACTIVE) == 0) continue;
+            if (!string.Equals(
+                    GetTargetDevicePath(paths[i].TargetInfo.AdapterId, paths[i].TargetInfo.Id),
+                    monitorDevicePath, StringComparison.OrdinalIgnoreCase)) continue;
 
-        //devMode.DeviceName = deviceName;
-        //devMode.PixelsHeight = 0;
-        //devMode.PixelsWidth = 0;
-
-        devMode.BitsPerPel = 32;
-
-        var ch = ChangeDisplaySettingsEx(
-            deviceName,
-            ref devMode,
-            0,
-            ChangeDisplaySettingsFlags.UpdateRegistry
-            | ChangeDisplaySettingsFlags.NoReset
-            , 0);
-
-        Debug.WriteLine($"DetachFromDesktop {deviceName} {ch}");
-
-        if (ch == DispChange.Successful && apply)
-        {
-            ApplyDesktop();
-            return true;
+            paths[i].Flags &= ~DISPLAYCONFIG_PATH_ACTIVE;
+            found = true;
+            break;
         }
 
-        return false;
+        if (!found)
+        {
+            Debug.WriteLine($"DetachFromDesktop: no active path for {monitorDevicePath}");
+            return false;
+        }
+
+        var r = SetDisplayConfig((uint)paths.Length, paths, (uint)modes.Length, modes,
+            SetDisplayConfigFlags.Apply
+            | SetDisplayConfigFlags.UseSuppliedDisplayConfig
+            | SetDisplayConfigFlags.AllowChanges
+            | SetDisplayConfigFlags.SaveToDatabase);
+
+        Debug.WriteLine($"DetachFromDesktop {monitorDevicePath} {r}");
+
+        return r == 0;
     }
+
+    // Former source-based implementation, kept for reference. It detached whatever
+    // monitor was bound to the given \\.\DISPLAYn source by applying an empty mode:
+    //
+    //public static bool DetachFromDesktop(string deviceName, bool apply = true)
+    //{
+    //    var devMode = new DevMode
+    //    {
+    //        Fields = 0
+    //         | PixelsWidth
+    //         | PixelsHeight
+    //         | BitsPerPixel
+    //         | Position
+    //         | DisplayFrequency
+    //         | DisplayFlags
+    //    };
+    //
+    //    devMode.BitsPerPel = 32;
+    //
+    //    var ch = ChangeDisplaySettingsEx(
+    //        deviceName,
+    //        ref devMode,
+    //        0,
+    //        ChangeDisplaySettingsFlags.UpdateRegistry
+    //        | ChangeDisplaySettingsFlags.NoReset
+    //        , 0);
+    //
+    //    Debug.WriteLine($"DetachFromDesktop {deviceName} {ch}");
+    //
+    //    if (ch == DispChange.Successful && apply)
+    //    {
+    //        ApplyDesktop();
+    //        return true;
+    //    }
+    //
+    //    return false;
+    //}
 
 
     public static void ApplyDesktop() => ChangeDisplaySettingsEx(null, 0, 0, 0, 0);

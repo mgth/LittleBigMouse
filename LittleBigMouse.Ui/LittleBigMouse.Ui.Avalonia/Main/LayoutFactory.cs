@@ -83,6 +83,8 @@ public static class LayoutFactory
 
     public static DisplaySource UpdateFrom(this DisplaySource source, MonitorDevice monitor)
     {
+        source.InterfacePath = monitor.InterfacePath;
+
         if(monitor.Connections.Count == 0) return source;
         var device = monitor.Connections[0];
 

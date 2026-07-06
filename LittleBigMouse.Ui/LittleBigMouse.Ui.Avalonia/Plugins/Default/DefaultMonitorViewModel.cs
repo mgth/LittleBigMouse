@@ -84,7 +84,7 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     {
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowDetachAsync)) return;
 
-        MonitorDeviceHelper.DetachFromDesktop(Model.ActiveSource.Source.DisplayName);
+        MonitorDeviceHelper.DetachFromDesktop(Model.ActiveSource.Source.InterfacePath);
     }
 
     async Task AttachToDesktopAsync(Window? owner)
@@ -92,7 +92,7 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowAttachAsync)) return;
 
         MonitorDeviceHelper.AttachToDesktop(
-            Model.ActiveSource.Source.DisplayName,
+            Model.ActiveSource.Source.InterfacePath,
             Model.ActiveSource.Source.Primary,
             Model.ActiveSource.Source.InPixel.Bounds,
             Model.ActiveSource.Source.Orientation

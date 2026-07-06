@@ -9,7 +9,7 @@ namespace HLab.Sys.Windows.Monitors.Factory;
 
 internal static class DeviceFactory
 {
-    public static MonitorDeviceConnection BuildMonitorDevice(DisplayDevice parent, WinGdi.DisplayDevice device)
+    public static MonitorDeviceConnection BuildMonitorDevice(DisplayDevice parent, WinGdi.DisplayDevice device, string interfacePath)
     {
 
         var monitors = parent.Parent.AllMonitorDevices().ToList();
@@ -23,12 +23,17 @@ internal static class DeviceFactory
             monitor = new MonitorDevice
             {
                 Id = device.DeviceID,
+                InterfacePath = interfacePath,
                 //MonitorDevice
                 Edid = edid,
                 PnpCode = MonitorDeviceHelper.GetPnpCodeFromId(device.DeviceID),
                 PhysicalId = MonitorDeviceHelper.GetPhysicalId(device.DeviceID, edid),
                 SourceId = MonitorDeviceHelper.GetSourceId(device.DeviceID, edid),
             };
+        }
+        else if (string.IsNullOrEmpty(monitor.InterfacePath))
+        {
+            monitor.InterfacePath = interfacePath;
         }
 
         var connection = new MonitorDeviceConnection
@@ -79,22 +84,30 @@ internal static class DeviceFactory
 
     public static DisplayDevice BuildDisplayDeviceAndChildren(
         DisplayDevice parent,
-        WinGdi.DisplayDevice dev
+        WinGdi.DisplayDevice dev,
+        string interfacePath = ""
         )
     {
-        var result = BuildDisplayDevice(parent, dev);
+        var result = BuildDisplayDevice(parent, dev, interfacePath);
 
         uint i = 0;
         var child = new WinGdi.DisplayDevice();
 
-        while (EnumDisplayDevices(result.DeviceName, i++, ref child, 0))
+        while (EnumDisplayDevices(result.DeviceName, i, ref child, 0))
         {
-            result.AddChild(BuildDisplayDeviceAndChildren(result, child));
+            // Same enumeration with EDD_GET_DEVICE_INTERFACE_NAME to capture the device
+            // interface path (\\?\DISPLAY#...), the identity the CCD API works with.
+            var childInterface = new WinGdi.DisplayDevice();
+            var childPath = EnumDisplayDevices(result.DeviceName, i, ref childInterface, EDD_GET_DEVICE_INTERFACE_NAME)
+                ? childInterface.DeviceID : "";
+
+            result.AddChild(BuildDisplayDeviceAndChildren(result, child, childPath));
+            i++;
         }
         return result;
     }
 
-    static DisplayDevice BuildDisplayDevice(DisplayDevice? parent, WinGdi.DisplayDevice device)
+    static DisplayDevice BuildDisplayDevice(DisplayDevice? parent, WinGdi.DisplayDevice device, string interfacePath)
     {
         if(device.DeviceID == "ROOT")
         {
@@ -120,7 +133,7 @@ internal static class DeviceFactory
             return BuildPhysicalAdapter(parent, device);
 
         //if(device.DeviceID.Split('\\')[0] == "MONITOR")
-            return BuildMonitorDevice(parent, device);
+            return BuildMonitorDevice(parent, device, interfacePath);
 
         throw new ArgumentException($"Unknown device type {device.DeviceName}");
 

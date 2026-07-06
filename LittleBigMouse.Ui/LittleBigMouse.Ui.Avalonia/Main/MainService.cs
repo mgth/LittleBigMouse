@@ -167,6 +167,19 @@ public class MainService : ReactiveModel, IMainService
     {
         _notify.Click += async (s, a) => await ShowControlAsync();
 
+        // When a second instance launches, it signals this event instead of doing nothing.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var evt = Program.ShowWindowEvent;
+                if (evt == null) return;
+                while (evt.WaitOne())
+                    await Dispatcher.UIThread.InvokeAsync(ShowControlAsync);
+            }
+            catch (ObjectDisposedException) { }
+        });
+
         await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
         await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);

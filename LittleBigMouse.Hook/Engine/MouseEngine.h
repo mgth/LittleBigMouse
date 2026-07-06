@@ -40,8 +40,8 @@ class MouseEngine
 	bool TryPassBorderPixel(const ZoneLink* zoneLink, long distance);
 
 	//Final move
-	void Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut);
-	void MoveInMm(MouseEventArg& e, const geo::Point<double>& pOutInMm, const Zone* zoneOut);
+	void Move(MouseEventArg& e, const geo::Point<long>& pOut, Zone* zoneOut);
+	void MoveInMm(MouseEventArg& e, const geo::Point<double>& pOutInMm, Zone* zoneOut);
 
 	//Final move, cancel leaving monitor
 	void NoZoneMatches(MouseEventArg& e);

@@ -25,11 +25,14 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
 using System;
 using System.Collections.Generic;
 using System.IO.Compression;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using Avalonia.Platform.Storage;
 using System.Diagnostics;
 
@@ -54,7 +57,7 @@ public partial class LocationControlView : UserControl
             var provider = TopLevel.GetTopLevel(this)?.StorageProvider;
             if (provider == null) return;
 
-            var folder = await provider.TryGetWellKnownFolderAsync(WellKnownFolder.Documents);
+            var folder = await TryGetDocumentsFolderAsync(provider);
 
             var files = await provider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
@@ -81,7 +84,7 @@ public partial class LocationControlView : UserControl
         }
         catch (Exception ex)
         {
-
+            await ShowErrorAsync("Import failed", ex);
         }
     }
 
@@ -100,32 +103,58 @@ public partial class LocationControlView : UserControl
                 data.Add(global::Avalonia.Input.DataTransferItem.CreateText(json));
                 await clipboard.SetDataAsync(data);
             }
-          
+        }
+        catch
+        {
+            // a clipboard failure should not prevent exporting to a file
+        }
+
+        try
+        {
             var provider = TopLevel.GetTopLevel(this)?.StorageProvider;
             if (provider == null) return;
 
-            var folder = await provider.TryGetWellKnownFolderAsync(WellKnownFolder.Documents);
+            var folder = await TryGetDocumentsFolderAsync(provider);
             const string filename = "LittleBigMouse.Export.gz";
 
-            var result = await provider.SaveFilePickerAsync(new FilePickerSaveOptions{ 
-                DefaultExtension = ".export.gz" , 
-                SuggestedFileName = filename, 
+            var result = await provider.SaveFilePickerAsync(new FilePickerSaveOptions{
+                DefaultExtension = ".export.gz" ,
+                SuggestedFileName = filename,
                 SuggestedStartLocation = folder
             });
 
             if (result == null) return;
-            
+
             var path =  result.TryGetLocalPath();
             if (path == null) return;
-            
+
             SaveConfig(json, path);
             OpenExplorerWithSelectedFile(path);
         }
         catch (Exception ex)
         {
-
+            await ShowErrorAsync("Export failed", ex);
         }
     }
+
+    static async Task<IStorageFolder?> TryGetDocumentsFolderAsync(IStorageProvider provider)
+    {
+        try
+        {
+            return await provider.TryGetWellKnownFolderAsync(WellKnownFolder.Documents);
+        }
+        catch
+        {
+            // Documents may point to an unavailable location (e.g. a removed disk),
+            // fall back to the picker's default location
+            return null;
+        }
+    }
+
+    static Task ShowErrorAsync(string caption, Exception ex)
+        => MessageBoxManager
+            .GetMessageBoxStandard(caption, ex.Message, ButtonEnum.Ok, Icon.Error, WindowStartupLocation.CenterOwner)
+            .ShowAsync();
 
     static void SaveConfig(string txt, string path)
     {

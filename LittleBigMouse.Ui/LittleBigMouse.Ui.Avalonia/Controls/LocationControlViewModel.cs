@@ -39,6 +39,7 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Persistency;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Zoning;
@@ -202,11 +203,13 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         return json;
     }
     
-    public JsonExport? ImportConfig(string json)
+    /// <summary>
+    /// Displays a layout rebuilt from an export, for debugging purpose:
+    /// allows inspecting another user's layout without the hardware.
+    /// </summary>
+    public void OpenVirtualLayout(string json)
     {
-        var export = JsonSerializer.Deserialize<JsonExport>(json);
-
-        return export;
+        _mainService.MonitorsLayout = VirtualLayoutFactory.FromJson(json);
     }
 
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }

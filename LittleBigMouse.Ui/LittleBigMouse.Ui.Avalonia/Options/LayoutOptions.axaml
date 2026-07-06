@@ -98,6 +98,14 @@
 						</StackPanel>
 					</Border>
 
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Debug}"
+						                     Header="Activate debug tools"
+						                     Description="Extra tools for troubleshooting, like viewing exported layouts">
+							<ToggleSwitch IsChecked="{Binding Model.DebugTools, FallbackValue=false, Mode=TwoWay}"/>
+						</controls:SettingRow>
+					</Border>
+
 					<TextBlock Classes="SectionHeader" Text="Mouse"/>
 
 					<Border Classes="SettingCard">

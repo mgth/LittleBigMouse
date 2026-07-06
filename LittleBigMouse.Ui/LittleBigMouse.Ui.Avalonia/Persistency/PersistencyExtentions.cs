@@ -62,6 +62,7 @@ public static class PersistencyExtensions
         @this.AutoUpdate = mainKey.GetOrSet("AutoUpdate", () => key.GetOrSet("AutoUpdate",() => false));
         @this.StartMinimized = mainKey.GetOrSet("StartMinimized", () => key.GetOrSet("StartMinimized",() => false));
         @this.StartElevated = mainKey.GetOrSet("StartElevated", () => key.GetOrSet("StartElevated",() => false));
+        @this.DebugTools = mainKey.GetOrSet("DebugTools", () => false);
 
         @this.ExcludedList.Clear();
 
@@ -149,6 +150,7 @@ public static class PersistencyExtensions
         mainKey.SetKey("AutoUpdate", @this.AutoUpdate);
         mainKey.SetKey("StartMinimized", @this.StartMinimized);
         mainKey.SetKey("StartElevated", @this.StartElevated);
+        mainKey.SetKey("DebugTools", @this.DebugTools);
 
         var file = ExcludedListPath();
 

@@ -50,7 +50,11 @@ public partial class LocationControlView : UserControl
         InitializeComponent();
     }
     
-    async void ImportJSon_Click(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// Loads an exported layout for on-screen inspection (debug tool):
+    /// the layout is only displayed, it never drives the mouse engine.
+    /// </summary>
+    async void OpenVirtualLayout_Click(object? sender, RoutedEventArgs e)
     {
         try
         {
@@ -62,55 +66,38 @@ public partial class LocationControlView : UserControl
             var files = await provider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 AllowMultiple = false,
-                FileTypeFilter = new FilePickerFileType[]{ new ("Config file")
+                FileTypeFilter = new FilePickerFileType[]{ new ("Layout export")
                 {
-                    Patterns = new[] { "*.json" },
-                    AppleUniformTypeIdentifiers = new[] { "public.json" },
-                    MimeTypes = new[] { "application/json" }
+                    Patterns = new[] { "*.json", "*.gz" },
+                    AppleUniformTypeIdentifiers = new[] { "public.json", "org.gnu.gnu-zip-archive" },
+                    MimeTypes = new[] { "application/json", "application/gzip" }
                 } },
                 SuggestedStartLocation = folder
             });
 
             if (files.Count < 1) return;
-            
+
             await using var stream = await files[0].OpenReadAsync();
-            using var streamReader = new StreamReader(stream);
-            var json = await streamReader.ReadToEndAsync();
-                
+            var json = await ReadConfigAsync(stream);
+
             if (DataContext is not LocationControlViewModel vm) return;
 
-            vm.ImportConfig(json);
-
+            vm.OpenVirtualLayout(json);
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Import failed", ex);
+            await ShowErrorAsync("Open virtual layout failed", ex);
         }
     }
 
-    async void ExportJSon_Click(object? sender, RoutedEventArgs e)
+    async void ExportLayout_Click(object? sender, RoutedEventArgs e)
     {
         if(DataContext is not LocationControlViewModel vm) return;
 
-        var json = vm.ExportConfig();
-
         try
         {
-            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            if (clipboard != null)
-            {
-                var data = new global::Avalonia.Input.DataTransfer();
-                data.Add(global::Avalonia.Input.DataTransferItem.CreateText(json));
-                await clipboard.SetDataAsync(data);
-            }
-        }
-        catch
-        {
-            // a clipboard failure should not prevent exporting to a file
-        }
+            var json = vm.ExportConfig();
 
-        try
-        {
             var provider = TopLevel.GetTopLevel(this)?.StorageProvider;
             if (provider == null) return;
 
@@ -135,6 +122,48 @@ public partial class LocationControlView : UserControl
         {
             await ShowErrorAsync("Export failed", ex);
         }
+    }
+
+    async void CopyLayout_Click(object? sender, RoutedEventArgs e)
+    {
+        if(DataContext is not LocationControlViewModel vm) return;
+
+        try
+        {
+            var json = vm.ExportConfig();
+
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard == null) return;
+
+            var data = new global::Avalonia.Input.DataTransfer();
+            data.Add(global::Avalonia.Input.DataTransferItem.CreateText(json));
+            await clipboard.SetDataAsync(data);
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync("Copy failed", ex);
+        }
+    }
+
+    /// <summary>
+    /// Reads an export as text, transparently decompressing gzip files
+    /// (the export file is gzipped, the clipboard export is plain json).
+    /// </summary>
+    static async Task<string> ReadConfigAsync(Stream stream)
+    {
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+
+        var bytes = memory.ToArray();
+
+        if (bytes.Length > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b)
+        {
+            using var gzip = new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            return await reader.ReadToEndAsync();
+        }
+
+        return Encoding.UTF8.GetString(bytes);
     }
 
     static async Task<IStorageFolder?> TryGetDocumentsFolderAsync(IStorageProvider provider)

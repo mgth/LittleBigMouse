@@ -42,6 +42,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool StartMinimized { get; set; } = false;
       public bool StartElevated { get; set; } = false;
       public bool Elevated { get; set; } = true;
+      public bool DebugTools { get; set; } = false;
       public int DaemonPort { get; set; } = 25196;
 
       public bool AdjustSpeedAllowed { get; } = false;
@@ -173,6 +174,11 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// Current elevated state
    /// </summary>
    bool Elevated { get; set; }
+
+   /// <summary>
+   /// Show debugging tools in the ui (virtual layout inspection...)
+   /// </summary>
+   bool DebugTools { get; set; }
 
    /// <summary>
    /// Daemon port for TCP communication

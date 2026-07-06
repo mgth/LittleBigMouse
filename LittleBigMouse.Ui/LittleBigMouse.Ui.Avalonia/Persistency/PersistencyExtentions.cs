@@ -63,7 +63,8 @@ public static class PersistencyExtensions
         @this.StartMinimized = mainKey.GetOrSet("StartMinimized", () => key.GetOrSet("StartMinimized",() => false));
         @this.StartElevated = mainKey.GetOrSet("StartElevated", () => key.GetOrSet("StartElevated",() => false));
         @this.DebugTools = mainKey.GetOrSet("DebugTools", () => false);
-        @this.ShowAttachDetachWarning = mainKey.GetOrSet("ShowAttachDetachWarning", () => true);
+        // "ShowAttachDetachWarning" is the former name of the option, read as fallback
+        @this.ShowMonitorActionWarning = mainKey.GetOrSet("ShowMonitorActionWarning", () => mainKey.GetOrSet("ShowAttachDetachWarning", () => true));
 
         @this.ExcludedList.Clear();
 
@@ -143,13 +144,13 @@ public static class PersistencyExtensions
     }
 
     /// <summary>
-    /// Persist the attach/detach-warning preference on its own: it is changed from the
+    /// Persist the monitor-action-warning preference on its own: it is changed from the
     /// warning dialog itself, where the user may never go through the regular save-button flow.
     /// </summary>
-    public static void SaveShowAttachDetachWarning(this ILayoutOptions @this)
+    public static void SaveShowMonitorActionWarning(this ILayoutOptions @this)
     {
         using var mainKey = OpenRootRegKey(true);
-        mainKey?.SetKey("ShowAttachDetachWarning", @this.ShowAttachDetachWarning);
+        mainKey?.SetKey("ShowMonitorActionWarning", @this.ShowMonitorActionWarning);
     }
 
     public static void Save(this ILayoutOptions @this, RegistryKey? mainKey, RegistryKey? key)
@@ -162,7 +163,7 @@ public static class PersistencyExtensions
         mainKey.SetKey("StartMinimized", @this.StartMinimized);
         mainKey.SetKey("StartElevated", @this.StartElevated);
         mainKey.SetKey("DebugTools", @this.DebugTools);
-        mainKey.SetKey("ShowAttachDetachWarning", @this.ShowAttachDetachWarning);
+        mainKey.SetKey("ShowMonitorActionWarning", @this.ShowMonitorActionWarning);
 
         var file = ExcludedListPath();
 

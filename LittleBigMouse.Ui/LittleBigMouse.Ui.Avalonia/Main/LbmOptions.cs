@@ -66,12 +66,12 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _debugTools;
 
     [DataMember]
-    public bool ShowAttachDetachWarning
+    public bool ShowMonitorActionWarning
     {
-        get => _showAttachDetachWarning;
-        set => SetUnsavedValue(ref _showAttachDetachWarning, value);
+        get => _showMonitorActionWarning;
+        set => SetUnsavedValue(ref _showMonitorActionWarning, value);
     }
-    bool _showAttachDetachWarning = true;
+    bool _showMonitorActionWarning = true;
 
     public int DaemonPort
     { 

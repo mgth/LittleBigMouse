@@ -123,8 +123,8 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
 
         if (confirmed && dontShowAgain)
         {
+            // persisted immediately by the live-save subscription in MainService
             options.ShowMonitorActionWarning = false;
-            options.SaveShowMonitorActionWarning();
         }
 
         return confirmed;

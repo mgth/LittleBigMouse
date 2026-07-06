@@ -37,7 +37,7 @@
 						          ToolTip.Tip="View a layout exported by another user, without the hardware. Display only: it cannot be loaded as your own layout."/>
 					</MenuFlyout>
 				</Button.Flyout>
-				<icons:IconView Height="22" Width="22" Path="Icon/CopyConfig"/>
+				<icons:IconView Height="22" Width="22" Path="Icon/LayoutExport"/>
 			</Button>
 
 			<Border Classes="ToolbarSeparator"/>

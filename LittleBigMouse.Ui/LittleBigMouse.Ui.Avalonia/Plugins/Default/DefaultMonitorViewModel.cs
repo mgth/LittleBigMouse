@@ -63,6 +63,12 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
         .ObserveOn(RxSchedulers.MainThreadScheduler));
 
         AttachCommand = ReactiveCommand.CreateFromTask<Window?>(AttachToDesktopAsync,this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxSchedulers.MainThreadScheduler));
+
+        MakePrimaryCommand = ReactiveCommand.Create(MakePrimary,this.WhenAnyValue(
+            e => e.Attached,
+            e => e.Primary,
+            (attached,primary) => attached && !primary)
+        .ObserveOn(RxSchedulers.MainThreadScheduler));
     }
 
     public bool Attached => _attached.Value;
@@ -79,6 +85,7 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
 
     public ICommand AttachCommand { get; }
     public ICommand DetachCommand { get; }
+    public ICommand MakePrimaryCommand { get; }
 
     async Task DetachFromDesktopAsync(Window? owner)
     {
@@ -97,6 +104,11 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
             Model.ActiveSource.Source.InPixel.Bounds,
             Model.ActiveSource.Source.Orientation
             );
+    }
+
+    void MakePrimary()
+    {
+        MonitorDeviceHelper.SetPrimary(Model.ActiveSource.Source.InterfacePath);
     }
 
     async Task<bool> ConfirmAsync(Window? owner, Func<Window?, Task<(bool Confirmed, bool DontShowAgain)>> showDialog)

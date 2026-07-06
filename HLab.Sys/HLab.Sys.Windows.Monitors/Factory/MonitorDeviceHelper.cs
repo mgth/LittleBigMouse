@@ -331,6 +331,127 @@ public static class MonitorDeviceHelper
         return r == 0;
     }
 
+    /// <summary>
+    /// Make the monitor designated by its device interface path (\\?\DISPLAY#...)
+    /// the primary display. Windows defines the primary as the display at (0,0):
+    /// every attached display is shifted accordingly, pending (NoReset), then the
+    /// whole layout is applied at once so intermediate overlaps never exist.
+    /// </summary>
+    public static bool SetPrimary(string monitorDevicePath)
+    {
+        if (string.IsNullOrEmpty(monitorDevicePath)) return false;
+        if (QueryDisplayConfigPaths() is not { } cfg) return false;
+        var (paths, _) = cfg;
+
+        string sourceName = null;
+        for (var i = 0; i < paths.Length; i++)
+        {
+            if ((paths[i].Flags & DISPLAYCONFIG_PATH_ACTIVE) == 0) continue;
+            if (!string.Equals(
+                    GetTargetDevicePath(paths[i].TargetInfo.AdapterId, paths[i].TargetInfo.Id),
+                    monitorDevicePath, StringComparison.OrdinalIgnoreCase)) continue;
+
+            sourceName = GetSourceGdiName(paths[i].SourceInfo.AdapterId, paths[i].SourceInfo.Id);
+            break;
+        }
+
+        if (string.IsNullOrEmpty(sourceName))
+        {
+            Debug.WriteLine($"SetPrimary: no active path for {monitorDevicePath}");
+            return false;
+        }
+
+        var mode = GetCurrentMode(sourceName);
+        if (mode == null) return false;
+
+        var offset = mode.Position;
+        if (offset.X == 0 && offset.Y == 0) return true; // already at origin, hence primary
+
+        // The new primary must be written FIRST, at (0,0) with SetPrimary: once
+        // another display has already been moved pending, the SetPrimary write
+        // gets refused by the driver (verified on AMD).
+        var ok = SetModePending(sourceName, mode, offset, true);
+
+        if (ok)
+        {
+            var device = new WinGdi.DisplayDevice();
+            uint n = 0;
+            while (EnumDisplayDevices(null, n++, ref device, 0))
+            {
+                if ((device.StateFlags & DisplayDeviceStateFlags.AttachedToDesktop) == 0) continue;
+                if (device.DeviceName == sourceName) continue;
+
+                var current = GetCurrentMode(device.DeviceName);
+                if (current == null) continue;
+
+                if (SetModePending(device.DeviceName, current, offset, false)) continue;
+
+                ok = false;
+                break;
+            }
+        }
+
+        if (!ok)
+        {
+            ResaveCurrentConfiguration();
+            return false;
+        }
+
+        ApplyDesktop();
+        return true;
+    }
+
+    /// <summary>
+    /// Write a display mode to the registry (NoReset), shifted by the given offset.
+    /// The full current mode is carried along with the new position: a position-only
+    /// DevMode gets refused by some drivers, and an aborted pending write leaves the
+    /// registry configuration inconsistent, failing every further UpdateRegistry call.
+    /// </summary>
+    static bool SetModePending(string deviceName, DisplayMode current, Point offset, bool primary)
+    {
+        var devMode = new DevMode
+        {
+            Position = new WinDef.Point(
+                (int)(current.Position.X - offset.X),
+                (int)(current.Position.Y - offset.Y)),
+            PixelsWidth = (uint)current.Pels.Width,
+            PixelsHeight = (uint)current.Pels.Height,
+            DisplayFrequency = (uint)current.DisplayFrequency,
+            BitsPerPel = 32,
+            Fields = Position |
+                     PixelsWidth |
+                     PixelsHeight |
+                     DisplayFrequency |
+                     BitsPerPixel
+        };
+
+        var flag = ChangeDisplaySettingsFlags.UpdateRegistry | ChangeDisplaySettingsFlags.NoReset;
+        if (primary) flag |= ChangeDisplaySettingsFlags.SetPrimary;
+
+        var ch = ChangeDisplaySettingsEx(deviceName, ref devMode, 0, flag, 0);
+        if (ch == DispChange.Successful) return true;
+
+        Debug.WriteLine($"SetModePending failed on {deviceName} ({ch})");
+        return false;
+    }
+
+    /// <summary>
+    /// Re-apply and re-save the current active configuration as-is. Rewrites a
+    /// coherent registry state when pending display writes were aborted halfway,
+    /// which would otherwise fail every further UpdateRegistry call.
+    /// </summary>
+    static void ResaveCurrentConfiguration()
+    {
+        if (QueryDisplayConfigPaths() is not { } cfg) return;
+        var (paths, modes) = cfg;
+
+        SetDisplayConfig((uint)paths.Length, paths, (uint)modes.Length, modes,
+            SetDisplayConfigFlags.Apply
+            | SetDisplayConfigFlags.UseSuppliedDisplayConfig
+            | SetDisplayConfigFlags.AllowChanges
+            | SetDisplayConfigFlags.SaveToDatabase);
+    }
+
     // Former source-based implementation, kept for reference. It detached whatever
     // monitor was bound to the given \\.\DISPLAYn source by applying an empty mode:
     //

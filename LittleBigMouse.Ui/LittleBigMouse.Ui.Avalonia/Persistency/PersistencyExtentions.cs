@@ -63,6 +63,7 @@ public static class PersistencyExtensions
         @this.StartMinimized = mainKey.GetOrSet("StartMinimized", () => key.GetOrSet("StartMinimized",() => false));
         @this.StartElevated = mainKey.GetOrSet("StartElevated", () => key.GetOrSet("StartElevated",() => false));
         @this.DebugTools = mainKey.GetOrSet("DebugTools", () => false);
+        @this.ShowAttachDetachWarning = mainKey.GetOrSet("ShowAttachDetachWarning", () => true);
 
         @this.ExcludedList.Clear();
 
@@ -141,6 +142,16 @@ public static class PersistencyExtensions
         return true;
     }
 
+    /// <summary>
+    /// Persist the attach/detach-warning preference on its own: it is changed from the
+    /// warning dialog itself, where the user may never go through the regular save-button flow.
+    /// </summary>
+    public static void SaveShowAttachDetachWarning(this ILayoutOptions @this)
+    {
+        using var mainKey = OpenRootRegKey(true);
+        mainKey?.SetKey("ShowAttachDetachWarning", @this.ShowAttachDetachWarning);
+    }
+
     public static void Save(this ILayoutOptions @this, RegistryKey? mainKey, RegistryKey? key)
     {
         if (mainKey == null) return;
@@ -151,6 +162,7 @@ public static class PersistencyExtensions
         mainKey.SetKey("StartMinimized", @this.StartMinimized);
         mainKey.SetKey("StartElevated", @this.StartElevated);
         mainKey.SetKey("DebugTools", @this.DebugTools);
+        mainKey.SetKey("ShowAttachDetachWarning", @this.ShowAttachDetachWarning);
 
         var file = ExcludedListPath();
 

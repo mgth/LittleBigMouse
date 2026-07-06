@@ -240,8 +240,8 @@
 		</StackPanel>
 
 		<StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom">
-			<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}">Attach</Button>
-			<Button IsVisible="{Binding DetachVisible}" Command="{Binding DetachCommand}">Detach</Button>
+			<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}" CommandParameter="{Binding $parent[Window]}">Attach</Button>
+			<Button IsVisible="{Binding DetachVisible}" Command="{Binding DetachCommand}" CommandParameter="{Binding $parent[Window]}">Detach</Button>
 			<Label IsVisible="{Binding Primary}">Primary</Label>
 		</StackPanel>
 

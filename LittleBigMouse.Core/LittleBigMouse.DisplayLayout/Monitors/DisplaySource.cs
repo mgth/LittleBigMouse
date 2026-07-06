@@ -33,15 +33,15 @@ public class DisplaySource : SavableReactiveModel
             e => e.InPixel.Width,
             e => e.InPixel.Height,
             (w, h) => $"{w}x{h}"
-        ).ToProperty(this, e => e.IdResolution);
+        ).ToProperty(this, e => e.IdResolution).DisposeWith(this);
 
         _winDpiX = this.WhenAnyValue(
             e => e.EffectiveDpi.X
-        ).ToProperty(this, e => e.WinDpiX);
+        ).ToProperty(this, e => e.WinDpiX).DisposeWith(this);
 
         _winDpiY = this.WhenAnyValue(
             e => e.EffectiveDpi.Y
-        ).ToProperty(this, e => e.WinDpiY);
+        ).ToProperty(this, e => e.WinDpiY).DisposeWith(this);
     }
 
     /// <summary>

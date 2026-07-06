@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LittleBigMouse.Ui.Avalonia.Controls.MonitorWarningDialog"
+        Title="Detach monitor"
+        Width="500"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Lbm.Brushes.Pane.Background}">
+
+	<StackPanel Margin="24,20" Spacing="14">
+
+		<StackPanel Orientation="Horizontal" Spacing="12">
+			<Path Data="{StaticResource Lbm.Icon.Warning}"
+			      Fill="#E0A030" Width="26" Height="26" Stretch="Uniform"
+			      VerticalAlignment="Center"/>
+			<TextBlock x:Name="HeadingText"
+			           Text="Detach this monitor from the desktop?"
+			           FontSize="16" FontWeight="SemiBold"
+			           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+			           VerticalAlignment="Center" TextWrapping="Wrap"/>
+		</StackPanel>
+
+		<TextBlock x:Name="BodyText" TextWrapping="Wrap" FontSize="13"
+		           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+		           Text="Windows will stop using this monitor: its screen will go black immediately. This change is kept after a restart, and reattaching it from LittleBigMouse does not always succeed."/>
+
+		<Border Background="{DynamicResource Lbm.Brushes.Card.Background}"
+		        BorderBrush="{DynamicResource Lbm.Brushes.Card.Border}"
+		        BorderThickness="1" CornerRadius="6" Padding="14,10">
+			<StackPanel Spacing="6">
+				<TextBlock x:Name="RecoveryTitle"
+				           Text="To get the monitor back with Windows:"
+				           FontSize="13" FontWeight="SemiBold"
+				           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"/>
+				<TextBlock TextWrapping="Wrap" FontSize="12"
+				           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
+				           Text="1. Right-click the desktop and choose Display settings (or open Settings &gt; System &gt; Display)."/>
+				<TextBlock TextWrapping="Wrap" FontSize="12"
+				           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
+				           Text="2. Select the detached monitor, then under Multiple displays choose 'Extend desktop to this display'. There you can also fix the resolution and refresh rate."/>
+				<TextBlock TextWrapping="Wrap" FontSize="12"
+				           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
+				           Text="3. If it is not listed, click 'Detect other display' there, or press Win+P and choose 'Extend'."/>
+			</StackPanel>
+		</Border>
+
+		<CheckBox x:Name="DontShowAgainCheckBox" FontSize="13"
+		          Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+		          Content="Don't show this warning again"/>
+
+		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+			<Button x:Name="CancelButton" IsDefault="True" IsCancel="True"
+			        MinWidth="90" HorizontalContentAlignment="Center"
+			        Click="OnCancelClick" Content="Cancel"/>
+			<Button x:Name="ConfirmButton"
+			        MinWidth="90" HorizontalContentAlignment="Center"
+			        Click="OnConfirmClick" Content="Detach"/>
+		</StackPanel>
+
+	</StackPanel>
+</Window>

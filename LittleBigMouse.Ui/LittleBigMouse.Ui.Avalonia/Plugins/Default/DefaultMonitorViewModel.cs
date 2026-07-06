@@ -21,11 +21,16 @@
 	  http://www.mgth.fr
 */
 
+using Avalonia.Controls;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.Monitors.Factory;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Ui.Avalonia.Controls;
+using LittleBigMouse.Ui.Avalonia.Persistency;
 using ReactiveUI;
+using System;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Default;
@@ -51,13 +56,13 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
             (attached, primary) => attached && !primary)
             .ToProperty(this, e => e.DetachVisible);
 
-        DetachCommand = ReactiveCommand.Create(DetachFromDesktop,this.WhenAnyValue(
-            e => e.Attached, 
+        DetachCommand = ReactiveCommand.CreateFromTask<Window?>(DetachFromDesktopAsync,this.WhenAnyValue(
+            e => e.Attached,
             e => e.Primary,
             (attached,primary) => attached && !primary)
         .ObserveOn(RxSchedulers.MainThreadScheduler));
 
-        AttachCommand = ReactiveCommand.Create(AttachToDesktop,this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxSchedulers.MainThreadScheduler));
+        AttachCommand = ReactiveCommand.CreateFromTask<Window?>(AttachToDesktopAsync,this.WhenAnyValue(e => e.Attached, e => !e).ObserveOn(RxSchedulers.MainThreadScheduler));
     }
 
     public bool Attached => _attached.Value;
@@ -75,19 +80,40 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     public ICommand AttachCommand { get; }
     public ICommand DetachCommand { get; }
 
-    void DetachFromDesktop()
+    async Task DetachFromDesktopAsync(Window? owner)
     {
+        if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowDetachAsync)) return;
+
         MonitorDeviceHelper.DetachFromDesktop(Model.ActiveSource.Source.DisplayName);
     }
 
-    void AttachToDesktop()
+    async Task AttachToDesktopAsync(Window? owner)
     {
+        if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowAttachAsync)) return;
+
         MonitorDeviceHelper.AttachToDesktop(
             Model.ActiveSource.Source.DisplayName,
             Model.ActiveSource.Source.Primary,
             Model.ActiveSource.Source.InPixel.Bounds,
             Model.ActiveSource.Source.Orientation
             );
+    }
+
+    async Task<bool> ConfirmAsync(Window? owner, Func<Window?, Task<(bool Confirmed, bool DontShowAgain)>> showDialog)
+    {
+        var options = Model.Layout.Options;
+
+        if (!options.ShowAttachDetachWarning) return true;
+
+        var (confirmed, dontShowAgain) = await showDialog(owner);
+
+        if (confirmed && dontShowAgain)
+        {
+            options.ShowAttachDetachWarning = false;
+            options.SaveShowAttachDetachWarning();
+        }
+
+        return confirmed;
     }
 
  }

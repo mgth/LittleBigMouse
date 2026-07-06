@@ -56,6 +56,7 @@
 			<StreamGeometry x:Key="Lbm.Icon.Excluded">M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4C10.1,4 8.4,4.6 7.1,5.7L18.3,16.9C19.3,15.5 20,13.8 20,12A8,8 0 0,0 12,4M5.7,7.1C4.6,8.4 4,10.1 4,12A8,8 0 0,0 12,20C13.9,20 15.6,19.4 16.9,18.3L5.7,7.1Z</StreamGeometry>
 			<StreamGeometry x:Key="Lbm.Icon.Trash">M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z</StreamGeometry>
 			<StreamGeometry x:Key="Lbm.Icon.Debug">M22.7,19L13.6,9.9C14.5,7.6 14,4.9 12.1,3C10.1,1 7.1,0.6 4.7,1.7L9,6L6,9L1.6,4.7C0.4,7.1 0.9,10.1 2.9,12.1C4.8,14 7.5,14.5 9.8,13.6L18.9,22.7C19.3,23.1 19.9,23.1 20.3,22.7L22.6,20.4C23.1,20 23.1,19.3 22.7,19Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Warning">M13,14H11V9H13M13,18H11V16H13M1,21H23L12,2L1,21Z</StreamGeometry>
 
 			<ControlTheme x:Key="{x:Type controls:SettingRow}" TargetType="controls:SettingRow">
 				<Setter Property="Padding" Value="14,10"/>

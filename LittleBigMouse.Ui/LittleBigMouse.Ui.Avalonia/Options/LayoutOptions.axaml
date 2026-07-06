@@ -208,6 +208,14 @@
 						</StackPanel>
 					</Border>
 
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Warning}"
+						                     Header="Warn before attaching or detaching a monitor"
+						                     Description="Ask for confirmation and show recovery steps before changing a monitor's desktop attachment">
+							<ToggleSwitch IsChecked="{Binding Model.ShowAttachDetachWarning, FallbackValue=true, Mode=TwoWay}"/>
+						</controls:SettingRow>
+					</Border>
+
 					<TextBlock Classes="SectionHeader" Text="Excluded processes"/>
 
 					<Border Classes="SettingCard">

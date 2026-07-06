@@ -800,8 +800,10 @@ public static class MonitorDeviceHelper
     /// desktop position, attach state (a detached monitor keeps its number),
     /// attach order and primary — unlike the GDI source number (\\.\DISPLAYn)
     /// which follows attach history.
-    /// Adapters are ranked by first appearance in the path array; only verified
-    /// on a single-GPU setup so far.
+    /// Adapters are ordered by LUID: verified with a dGPU + iGPU rig where the
+    /// iGPU monitor came first in the path array (that order is not stable
+    /// across queries), had the lowest target id, and was primary — Settings
+    /// still numbered it last, after the lower-LUID dGPU targets.
     /// </summary>
     static void UpdateMonitorNumbers(IEnumerable<MonitorDevice> monitors)
     {
@@ -810,17 +812,19 @@ public static class MonitorDeviceHelper
 
         if (QueryDisplayConfigPaths() is { } cfg)
         {
-            var adapters = new List<Luid>();
             var targets = new HashSet<(Luid Adapter, uint Id)>();
 
             foreach (var path in cfg.Paths)
             {
                 if (!path.TargetInfo.TargetAvailable) continue;
 
-                var adapter = path.TargetInfo.AdapterId;
-                if (!adapters.Contains(adapter)) adapters.Add(adapter);
-                targets.Add((adapter, path.TargetInfo.Id));
+                targets.Add((path.TargetInfo.AdapterId, path.TargetInfo.Id));
             }
+
+            var adapters = targets
+                .Select(t => t.Adapter)
+                .Distinct()
+                .OrderBy(a => a.HighPart).ThenBy(a => a.LowPart);
 
             foreach (var adapter in adapters)
             {

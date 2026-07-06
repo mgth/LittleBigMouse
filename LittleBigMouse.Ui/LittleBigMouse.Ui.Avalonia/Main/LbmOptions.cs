@@ -50,12 +50,20 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _startElevated;
 
     [DataMember]
-    public bool Elevated 
-    { 
-        get => _elevated; 
-        set => this.SetAndRaise(ref _elevated, value); 
+    public bool Elevated
+    {
+        get => _elevated;
+        set => this.SetAndRaise(ref _elevated, value);
     }
     bool _elevated = false;
+
+    [DataMember]
+    public bool DebugTools
+    {
+        get => _debugTools;
+        set => SetUnsavedValue(ref _debugTools, value);
+    }
+    bool _debugTools;
 
     public int DaemonPort
     { 

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="128"
+   height="128"
+   viewBox="0 0 128 128"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg">
+  <!-- layout motif: two offset monitors, outline only to stay discreet -->
+  <rect x="6" y="10" width="78" height="46" rx="7"
+        style="fill:none;stroke:#000000;stroke-width:7" />
+  <rect x="48" y="68" width="72" height="44" rx="7"
+        style="fill:none;stroke:#000000;stroke-width:7" />
+  <!-- small outgoing arrow, top right: the layout travels -->
+  <path d="M 94,48 114,28"
+        style="fill:none;stroke:#000000;stroke-width:7;stroke-linecap:round" />
+  <path d="M 102,24 h 16 v 16"
+        style="fill:none;stroke:#000000;stroke-width:7;stroke-linecap:round;stroke-linejoin:round" />
+</svg>

@@ -26,16 +26,18 @@
 
 		<StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
 
-			<Button Classes="ToolbarButton"
-				Click="ImportJSon_Click">
-				<ToolTip.Tip>Import configuration for debugging purpose</ToolTip.Tip>
-				<icons:IconView Height="22" Width="22" Path="Icon/Sys/LoadJson"/>
-			</Button>
-
-			<Button Classes="ToolbarButton"
-				Click="ExportJSon_Click">
-				<ToolTip.Tip>Export configuration for debugging purpose</ToolTip.Tip>
-				<icons:IconView Height="22" Width="22" Path="Icon/CopyConfig"/>
+			<Button Classes="ToolbarButton">
+				<ToolTip.Tip>Export layout</ToolTip.Tip>
+				<Button.Flyout>
+					<MenuFlyout Placement="TopEdgeAlignedLeft">
+						<MenuItem Header="Export layout..." Click="ExportLayout_Click"/>
+						<MenuItem Header="Copy layout" Click="CopyLayout_Click"/>
+						<MenuItem Header="Open virtual layout..." Click="OpenVirtualLayout_Click"
+						          IsVisible="{Binding Model.Options.DebugTools, FallbackValue=False}"
+						          ToolTip.Tip="View a layout exported by another user, without the hardware. Display only: it cannot be loaded as your own layout."/>
+					</MenuFlyout>
+				</Button.Flyout>
+				<icons:IconView Height="22" Width="22" Path="Icon/LayoutExport"/>
 			</Button>
 
 			<Border Classes="ToolbarSeparator"/>

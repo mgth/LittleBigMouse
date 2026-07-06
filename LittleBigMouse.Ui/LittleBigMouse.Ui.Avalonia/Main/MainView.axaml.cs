@@ -1,4 +1,4 @@
-﻿/*
+/*
   LittleBigMouse.Control.Core
   Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 

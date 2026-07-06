@@ -20,31 +20,42 @@
 
 	</Control.Resources>
 
-	<!--<main:ResizeGrid>-->
-
-    <!-- 
-	    Row 0 : Buttons
-		Row 1 : Screens view panel
-		Row 2 : 
-		Row 3 :
-	-->
-	<Grid RowDefinitions="Auto,*,Auto,Auto" ColumnDefinitions="*">
-        <Grid.Background>
+	<!-- DockPanel: docked bars are measured first so the center view can never
+	     push the bottom control bar out of the window (a star Grid row would
+	     grow to its content's min height and overflow). -->
+	<DockPanel>
+        <DockPanel.Background>
             <LinearGradientBrush StartPoint="0,0.4" EndPoint="1,0.6">
                 <GradientStop Offset="0" Color="{DynamicResource ThemeBackgroundColor}"/>
                 <GradientStop Offset="0.5" Color="#80808080"/>
                 <GradientStop Offset="0.53" Color="#80606060"/>
                 <GradientStop Offset="1" Color="#40000000"/>
             </LinearGradientBrush>
-        </Grid.Background>
+        </DockPanel.Background>
 
-        <main:PluginsControlsView/>
+        <main:PluginsControlsView DockPanel.Dock="Top"/>
 
-		<SplitView OpenPaneLength="500" Grid.Row="1" IsPaneOpen="{Binding OptionsIsVisible, Mode = TwoWay}"  PaneBackground="Transparent" >
+        <!--Controls for the layout.
+            ZIndex keeps the bar above the presenter view, whose monitor frames
+            can overflow the SplitView cell (the fill child of a DockPanel is
+            declared last, hence painted on top by default).-->
+		<Border
+			DockPanel.Dock="Bottom"
+			ZIndex="1"
+			Classes="Toolbar Bottom">
+
+			<mvvm:ViewLocator
+				ViewClass="{x:Type plugins:IMonitorsLayoutControlViewClass}"
+				ViewMode="{x:Type annotations:DefaultViewMode}"
+				Model="{Binding MainService.MonitorsLayout}"
+					/>
+		</Border>
+
+		<SplitView OpenPaneLength="440" IsPaneOpen="{Binding OptionsIsVisible, Mode = TwoWay}"  PaneBackground="Transparent" ClipToBounds="True" >
 			<SplitView.Pane>
 		        <mvvm:ViewLocator Model="{Binding Options}" />
 			</SplitView.Pane>
-			
+
             <!--Graphical view for the layout-->
 		    <mvvm:ViewLocator
                   ViewClass="{x:Type plugins:IMonitorsLayoutPresenterViewClass}"
@@ -53,19 +64,6 @@
                   Model="{Binding MainService.MonitorsLayout}"
             />
 		</SplitView>
-		
-        <!--Controls for the layout-->
-		<Border 
-			Grid.Row="2"
-			Grid.Column="0"
-			Background="{DynamicResource HLab.Brushes.Header.Active.Background}">
-			
-			<mvvm:ViewLocator
-				ViewClass="{x:Type plugins:IMonitorsLayoutControlViewClass}"
-				ViewMode="{x:Type annotations:DefaultViewMode}"
-				Model="{Binding MainService.MonitorsLayout}"
-					/>
-		</Border>
-	</Grid>
+	</DockPanel>
 
 </UserControl>

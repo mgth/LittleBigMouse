@@ -3,320 +3,268 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:options="clr-namespace:LittleBigMouse.Ui.Avalonia.Options"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
+             mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="900"
              x:Class="LittleBigMouse.Ui.Avalonia.Options.LayoutOptions"
              x:DataType="options:LbmOptionsViewModel"
-			 Background="Transparent"
-			 >
-	<UserControl.Styles>
+             Background="Transparent"
+             >
+	<Border Background="{DynamicResource Lbm.Brushes.Pane.Background}">
+		<Grid RowDefinitions="Auto,*">
 
-		<Style Selector="ListBox.RadioButtonListBox">
-			<Setter Property="BorderBrush" Value="Transparent"/>
-		</Style>
-
-		<Style Selector="ListBox.RadioButtonListBox ListBoxItem">
-			<Setter Property="Padding" Value="6,3,6,4" />
-			<Setter Property="BorderBrush" Value="Transparent" />
-
-			<Style Selector="^:selected">
-				<Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
-					<Setter Property="Background" Value="Transparent" />
-				</Style>
-			</Style>
-			<Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-				<Setter Property="Background" Value="Transparent" />
-			</Style>
-		</Style>
-
-		<Style Selector="Button.Command">
-			<Setter Property="MinWidth" Value="50"/>
-			<Setter Property="Margin" Value="5,0,0,0" />
-		</Style>
-
-		<Style Selector="Button.Command:disabled /template/ ContentPresenter">
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="Opacity" Value="0.25"/>
-			<Setter Property="OpacityMask" Value="Black"/>
-		</Style>
-		<Style Selector="StackPanel.Options">
-			<Setter Property="Orientation" Value="Vertical"/>
-			<Setter Property="Margin" Value="5,0,0,0"/>
-			<Setter Property="VerticalAlignment" Value="Top"/>
-		</Style>
-	</UserControl.Styles>
-
-	<ScrollViewer>
-		<Grid>
-			<Border Opacity="0.9" Background="{DynamicResource HLab.Brushes.Background}">
-
-				<StackPanel>
-
-					<Grid>
-						<Border
-							Margin="5,10" BorderThickness="2" BorderBrush="{DynamicResource HLab.Brushes.Foreground}" CornerRadius="5"
-							Padding="10">
-							<StackPanel>
-								<CheckBox
-									Content="Auto Check for update"
-									IsChecked="{Binding Path=Model.AutoUpdate, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Enable automatic background checks for updates available online."/>
-
-								<CheckBox
-									Content="Load at startup"
-									IsChecked="{Binding Path=Model.LoadAtStartup, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Enable execution at session startup."/>
-								
-								<CheckBox
-									Content="Start minimized"
-									IsChecked="{Binding Path=Model.StartMinimized, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Minimize to tray at startup."/>
-								
-								<CheckBox
-									Content="Start with elevated privileges"
-									IsChecked="{Binding Path=Model.StartElevated, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Start with elevated privileges."/>
-
-                                <CheckBox
-                                    Content="Elevated"
-                                    IsChecked="{Binding Path=Model.Elevated, FallbackValue=false, Mode=OneWay}"
-									IsEnabled="False"
-                                    ToolTip.Tip="Start with elevated privileges."/>
-								
-								<Label>Daemon Priority</Label>
-								<StackPanel Orientation="Horizontal">
-								<Label VerticalAlignment="Center">Hooked</Label>
-								<ComboBox
-									ItemsSource="{Binding PriorityList}"
-									SelectedItem="{Binding SelectedPriority}">
-
-									<ComboBox.ItemTemplate>
-										<DataTemplate>
-											<Border Background="Transparent">
-												<Label Classes="RadioButtonListBox"
-													   x:DataType="options:ListItem"
-													   Content="{Binding Caption}"
-													   Background="Transparent"
-													   VerticalAlignment="Center"
-													   ToolTip.Tip ="{Binding Description}"/>
-											</Border>
-										</DataTemplate>
-									</ComboBox.ItemTemplate>
-
-								</ComboBox>
-                                <Label VerticalAlignment="Center">Unhooked</Label>
-								<ComboBox
-									ItemsSource="{Binding PriorityList}"
-									SelectedItem="{Binding SelectedPriorityUnhooked}">
-
-									<ComboBox.ItemTemplate>
-										<DataTemplate>
-											<Border Background="Transparent">
-												<Label Classes="RadioButtonListBox"
-													   x:DataType="options:ListItem"
-													   Content="{Binding Caption}"
-													   Background="Transparent"
-													   VerticalAlignment="Center"
-													   ToolTip.Tip ="{Binding Description}"/>
-											</Border>
-										</DataTemplate>
-									</ComboBox.ItemTemplate>
-
-								</ComboBox>
-								</StackPanel>
-							</StackPanel>
-						</Border>
-						<Label
-							Background="{DynamicResource HLab.Brushes.Background}"
-							HorizontalAlignment="Left"
-							VerticalAlignment="Top"
-            >System</Label>
-					</Grid>
-
-
-
-					<Grid>
-						<Border
-							Margin="5,10" BorderThickness="2" BorderBrush="{DynamicResource HLab.Brushes.Foreground}" CornerRadius="5"
-							Padding="10">
-							<StackPanel>
-
-								<StackPanel Classes="Options">
-									<Label ToolTip.Tip="Choose the algorithm to handle screen transitions.">Algorithm</Label>
-
-									<ListBox Classes="RadioButtonListBox"
-											 Background="Transparent"
-											 ItemsSource="{Binding AlgorithmList}"
-											 SelectedItem="{Binding SelectedAlgorithm}">
-
-										<ListBox.ItemTemplate>
-											<DataTemplate>
-												<Border Background="Transparent">
-													<RadioButton Classes="RadioButtonListBox"
-																 x:DataType="options:ListItem"
-																 Content="{Binding Caption}"
-																 Background="Transparent"
-																 VerticalAlignment="Center"
-																 IsChecked="{Binding Path=IsSelected,RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}},Mode=TwoWay}"
-																 ToolTip.Tip ="{Binding Description}"/>
-												</Border>
-											</DataTemplate>
-										</ListBox.ItemTemplate>
-
-									</ListBox>
-								</StackPanel>
-
-
-								<StackPanel Classes="Options">
-									<Label ToolTip.Tip="Choose the algorithm to handle screen transitions.">Max travel distance</Label>
-
-									<NumericUpDown
-										Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}"
-										Increment="10"
-										Value="{Binding Model.MaxTravelDistance, FallbackValue=200}"
-										ClipValueToMinMax="True"/>
-								</StackPanel>
-
-								<StackPanel Classes="Options">
-									<Label ToolTip.Tip="While a game captures the mouse (hidden or confined cursor), LBM pauses and re-checks the capture state at this interval. Lower values react faster, 0 checks on every mouse event.">Game detection interval (ms)</Label>
-
-									<NumericUpDown
-										Minimum="0"
-										Maximum="1000"
-										Increment="10"
-										Value="{Binding Model.FreelookCheckInterval, FallbackValue=100}"
-										ClipValueToMinMax="True"/>
-								</StackPanel>
-
-								<CheckBox
-									Content="Horizontal loop"
-									IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
-									IsChecked="{Binding Path=Model.LoopX, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."/>
-								
-								<CheckBox
-									Content="Vertical loop"
-									IsEnabled="{Binding Path=Model.LoopAllowed, FallbackValue=false}"
-									IsChecked="{Binding Path=Model.LoopY, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Allow the cursor to return horizontally by crossing from the opposite side."/>
-
-								<CheckBox
-									Content="Adjust Speed"
-									IsEnabled="{Binding Path=AdjustSpeedAllowed, FallbackValue=false}"
-									IsChecked="{Binding Path=Model.AdjustSpeed, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Adjust the pointer speed when the system doesn't consider the screens ratio"/>
-
-								<CheckBox
-									Content="Adjust Pointer"
-									IsEnabled="{Binding Path=AdjustPointerAllowed, FallbackValue=false}"
-									IsChecked="{Binding Path=Model.AdjustPointer, Mode=TwoWay, FallbackValue=false}"
-									ToolTip.Tip="Adjust the pointer size when the system doesn't consider the screens ratio"/>
-
-							</StackPanel>
-						</Border>
-						<Label
-							Content="Mouse"
-							Background="{DynamicResource HLab.Brushes.Background}"
-							HorizontalAlignment="Left"
-							VerticalAlignment="Top"/>
-					</Grid>
-
-					<Grid>
-						<Border
-							Margin="5,10" BorderThickness="2" BorderBrush="{DynamicResource HLab.Brushes.Foreground}" CornerRadius="5"
-							Padding="10">
-							<StackPanel>
-								<CheckBox
-									Content="Allow overlaps"
-									IsChecked="{Binding Path=Model.AllowOverlaps, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Allow the screens to overlap."/>
-
-								<CheckBox
-									Content="Allow discontinuity"
-									IsChecked="{Binding Path=Model.AllowDiscontinuity, FallbackValue=false, Mode=TwoWay}"
-									ToolTip.Tip="Allow gaps between monitors."/>
-
-							</StackPanel>
-						</Border>
-						<Label
-							Content="Layout"
-							Background="{DynamicResource HLab.Brushes.Background}"
-							HorizontalAlignment="Left"
-							VerticalAlignment="Top"/>
-					</Grid>
-
-					<Grid>
-						<Border
-							Margin="5,10" 
-							BorderThickness="2" 
-							BorderBrush="{DynamicResource HLab.Brushes.Foreground}" 
-							CornerRadius="5"
-							Padding="10">
-
-							<StackPanel>
-								
-								<ListBox
-									ItemsSource="{Binding Model.ExcludedList}"
-									ToolTip.Tip="Those processes will deactivate LittleBigMouse on reaching first plane"
-									SelectedValue="{Binding SelectedExcludedProcess}"
-									>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="Transparent">
-                                                <TextBlock Text="{Binding }"
-                                                           Background="Transparent"
-                                                           VerticalAlignment="Center"
-                                                           ToolTip.Tip ="{Binding }"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-								</ListBox>
-								
-								<StackPanel Orientation="Horizontal">
-									<Button Command="{Binding RemoveExcludedProcessCommand}">Remove</Button>
-								</StackPanel>
-								
-								<Label>Match pattern : </Label>
-								<Grid ColumnDefinitions="*,Auto">
-									<TextBox Grid.Column="0" TextWrapping="Wrap" Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
-									<Button Grid.Column="1" Command="{Binding AddExcludedProcessCommand}">Exclude</Button>
-								</Grid>
-								<Label>Seen processes : </Label>
-								<ListBox
-									ItemsSource="{Binding SeenProcesses}"
-									ToolTip.Tip="Those processes will deactivate LittleBigMouse on reaching first plane"
-									SelectedValue="{Binding SelectedSeenProcess}"
-									>
-                                    <ListBox.Styles>
-                                        <Style Selector="Border.match">
-                                            <Setter Property="Background" Value="Green" />
-                                        </Style>
-                                    </ListBox.Styles>
-
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Classes.match="{Binding Match }">
-                                                <TextBlock
-													x:DataType="options:SeenProcessViewModel"
-													Text="{Binding Caption}"
-													VerticalAlignment="Center"
-													ToolTip.Tip ="{Binding Description}"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-									
-								</ListBox>
-							</StackPanel>
-						</Border>
-
-						<Label
-							Content="Excluded processes"
-							Background="{DynamicResource HLab.Brushes.Background}"
-							HorizontalAlignment="Left"
-							VerticalAlignment="Top"/>
-					</Grid>
-				</StackPanel>
+			<Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Lbm.Brushes.Card.Separator}" Padding="18,12">
+				<Grid ColumnDefinitions="*,Auto">
+					<TextBlock Text="Settings" FontSize="15" FontWeight="SemiBold"
+					           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+					           VerticalAlignment="Center"/>
+					<Border Grid.Column="1" Classes="Badge Success"
+					        IsVisible="{Binding Model.Elevated, FallbackValue=false}"
+					        ToolTip.Tip="LittleBigMouse is running with elevated privileges and can work over elevated apps.">
+						<StackPanel Orientation="Horizontal" Spacing="6">
+							<Path Data="{StaticResource Lbm.Icon.Shield}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center"/>
+							<TextBlock Text="Running elevated" VerticalAlignment="Center"/>
+						</StackPanel>
+					</Border>
+				</Grid>
 			</Border>
-		</Grid>
-	</ScrollViewer>
 
+			<ScrollViewer Grid.Row="1">
+				<StackPanel Margin="16,2,16,18">
+
+					<TextBlock Classes="SectionHeader" Text="General"/>
+
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Update}"
+						                     Header="Check for updates automatically"
+						                     Description="Look for new versions online in the background">
+							<ToggleSwitch IsChecked="{Binding Model.AutoUpdate, FallbackValue=false, Mode=TwoWay}"/>
+						</controls:SettingRow>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Startup}"
+							                     Header="Load at startup"
+							                     Description="Start LittleBigMouse when you sign in">
+								<ToggleSwitch IsChecked="{Binding Model.LoadAtStartup, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Classes="Sub"
+							                     Header="Start minimized to tray">
+								<ToggleSwitch IsChecked="{Binding Model.StartMinimized, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
+						</StackPanel>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"
+						                     Header="Start with elevated privileges"
+						                     Description="Needed to keep working over elevated apps">
+							<ToggleSwitch IsChecked="{Binding Model.StartElevated, FallbackValue=false, Mode=TwoWay}"/>
+						</controls:SettingRow>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Priority}"
+							                     Header="Daemon priority"
+							                     Description="Process priority of the mouse engine"/>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Classes="Sub" Header="While active (hooked)">
+								<ComboBox ItemsSource="{Binding PriorityList}"
+								          SelectedItem="{Binding SelectedPriority}">
+									<ComboBox.ItemTemplate>
+										<DataTemplate>
+											<TextBlock x:DataType="options:ListItem"
+											           Text="{Binding Caption}"
+											           ToolTip.Tip="{Binding Description}"/>
+										</DataTemplate>
+									</ComboBox.ItemTemplate>
+								</ComboBox>
+							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Classes="Sub" Header="While inactive (unhooked)">
+								<ComboBox ItemsSource="{Binding PriorityList}"
+								          SelectedItem="{Binding SelectedPriorityUnhooked}">
+									<ComboBox.ItemTemplate>
+										<DataTemplate>
+											<TextBlock x:DataType="options:ListItem"
+											           Text="{Binding Caption}"
+											           ToolTip.Tip="{Binding Description}"/>
+										</DataTemplate>
+									</ComboBox.ItemTemplate>
+								</ComboBox>
+							</controls:SettingRow>
+						</StackPanel>
+					</Border>
+
+					<TextBlock Classes="SectionHeader" Text="Mouse"/>
+
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Algorithm}"
+							                     Header="Crossing algorithm"
+							                     Description="How the cursor jumps between screens"/>
+							<ListBox Classes="ChoiceCards" Margin="14,0,6,12"
+							         ItemsSource="{Binding AlgorithmList}"
+							         SelectedItem="{Binding SelectedAlgorithm}">
+								<ListBox.ItemTemplate>
+									<DataTemplate>
+										<StackPanel x:DataType="options:ListItem" Spacing="2">
+											<TextBlock Text="{Binding Caption}" FontSize="13"
+											           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"/>
+											<TextBlock Text="{Binding Description}" FontSize="11"
+											           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
+											           TextWrapping="Wrap"/>
+										</StackPanel>
+									</DataTemplate>
+								</ListBox.ItemTemplate>
+							</ListBox>
+						</StackPanel>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Ruler}"
+						                     Header="Max travel distance"
+						                     Description="Maximum crossing jump, in pixels">
+							<NumericUpDown Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}"
+							               Increment="10"
+							               Value="{Binding Model.MaxTravelDistance, FallbackValue=200}"
+							               ClipValueToMinMax="True"/>
+						</controls:SettingRow>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Gamepad}"
+						                     Header="Game detection interval"
+						                     Description="Re-check mouse capture while gaming, in ms"
+						                     ToolTip.Tip="While a game captures the mouse (hidden or confined cursor), LBM pauses and re-checks the capture state at this interval. Lower values react faster, 0 checks on every mouse event.">
+							<NumericUpDown Minimum="0" Maximum="1000" Increment="10"
+							               Value="{Binding Model.FreelookCheckInterval, FallbackValue=100}"
+							               ClipValueToMinMax="True"/>
+						</controls:SettingRow>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.LoopH}"
+							                     Header="Horizontal loop"
+							                     Description="Re-enter from the opposite side"
+							                     IsEnabled="{Binding Model.LoopAllowed, FallbackValue=false}">
+								<ToggleSwitch IsChecked="{Binding Model.LoopX, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.LoopV}"
+							                     Header="Vertical loop"
+							                     IsEnabled="{Binding Model.LoopAllowed, FallbackValue=false}">
+								<ToggleSwitch IsChecked="{Binding Model.LoopY, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
+						</StackPanel>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Mouse}"
+							                     Header="Adjust pointer speed"
+							                     Description="Keep speed consistent across DPI"
+							                     IsEnabled="{Binding AdjustSpeedAllowed, FallbackValue=false}"
+							                     ToolTip.Tip="Adjust the pointer speed when the system doesn't consider the screens ratio.">
+								<ToggleSwitch IsChecked="{Binding Model.AdjustSpeed, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Pointer}"
+							                     Header="Adjust pointer size"
+							                     Description="Keep size consistent across DPI"
+							                     IsEnabled="{Binding AdjustPointerAllowed, FallbackValue=false}"
+							                     ToolTip.Tip="Adjust the pointer size when the system doesn't consider the screens ratio.">
+								<ToggleSwitch IsChecked="{Binding Model.AdjustPointer, Mode=TwoWay, FallbackValue=false}"/>
+							</controls:SettingRow>
+						</StackPanel>
+					</Border>
+
+					<TextBlock Classes="SectionHeader" Text="Layout"/>
+
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Overlap}"
+							                     Header="Allow overlaps"
+							                     Description="Screens may overlap in the layout">
+								<ToggleSwitch IsChecked="{Binding Model.AllowOverlaps, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Gap}"
+							                     Header="Allow discontinuity"
+							                     Description="Gaps between monitors are allowed">
+								<ToggleSwitch IsChecked="{Binding Model.AllowDiscontinuity, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
+						</StackPanel>
+					</Border>
+
+					<TextBlock Classes="SectionHeader" Text="Excluded processes"/>
+
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Excluded}"
+							                     Header="LBM pauses when these apps are focused"
+							                     Description="Add a process name or pattern"/>
+
+							<ListBox Classes="ProcessList"
+							         ItemsSource="{Binding Model.ExcludedList}"
+							         SelectedValue="{Binding SelectedExcludedProcess}">
+								<ListBox.ItemTemplate>
+									<DataTemplate>
+										<Grid ColumnDefinitions="*,Auto" Background="Transparent">
+											<TextBlock Text="{Binding}" VerticalAlignment="Center" FontSize="13"/>
+											<Button Grid.Column="1" Classes="IconButton"
+											        Command="{Binding $parent[ListBox].((options:LbmOptionsViewModel)DataContext).RemoveExcludedProcessCommand}"
+											        CommandParameter="{Binding}"
+											        ToolTip.Tip="Remove">
+												<Path Data="{StaticResource Lbm.Icon.Trash}" Width="14" Height="14" Stretch="Uniform"/>
+											</Button>
+										</Grid>
+									</DataTemplate>
+								</ListBox.ItemTemplate>
+							</ListBox>
+
+							<Grid ColumnDefinitions="*,Auto" Margin="14,6,14,12">
+								<TextBox Watermark="game.exe or pattern"
+								         Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
+								         FontSize="13"/>
+								<Button Grid.Column="1" Margin="8,0,0,0"
+								        Command="{Binding AddExcludedProcessCommand}">Exclude</Button>
+							</Grid>
+
+							<Border Classes="SettingSeparator"/>
+
+							<controls:SettingRow Classes="Sub"
+							                     Header="Seen processes"
+							                     Description="Click one to use it as pattern"/>
+							<ListBox Classes="ProcessList"
+							         ItemsSource="{Binding SeenProcesses}"
+							         SelectedValue="{Binding SelectedSeenProcess}"
+							         Margin="0,0,0,8">
+								<ListBox.ItemTemplate>
+									<DataTemplate>
+										<Border Classes.match="{Binding Match}" CornerRadius="4" Padding="4,1" HorizontalAlignment="Left">
+											<Border.Styles>
+												<Style Selector="Border.match">
+													<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>
+												</Style>
+											</Border.Styles>
+											<TextBlock x:DataType="options:SeenProcessViewModel"
+											           Text="{Binding Caption}"
+											           FontSize="13"
+											           VerticalAlignment="Center"
+											           ToolTip.Tip="{Binding Description}"/>
+										</Border>
+									</DataTemplate>
+								</ListBox.ItemTemplate>
+							</ListBox>
+						</StackPanel>
+					</Border>
+
+				</StackPanel>
+			</ScrollViewer>
+		</Grid>
+	</Border>
 </UserControl>

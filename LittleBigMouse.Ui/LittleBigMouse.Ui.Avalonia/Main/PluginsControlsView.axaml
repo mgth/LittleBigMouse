@@ -9,24 +9,18 @@
              x:Class="LittleBigMouse.Ui.Avalonia.Main.PluginsControlsView"
              x:DataType="main:MainViewModel"
              >
-	<Grid
-        Background="Transparent"
-        ClipToBounds="False"
-        HorizontalAlignment="Left"
-    >
+	<Border Classes="Toolbar" ClipToBounds="False">
 		<StackPanel Orientation="Horizontal">
-			
-            <ToggleButton IsChecked="{Binding  OptionsIsVisible}">
-                <icons:IconView Height="40"
-                                Width="40"
-                                Margin="5"
-                                Path="Icon/Options" 
-                                ToolTip.Tip="Options"/>
-            </ToggleButton>
 
-			
-			
-			<!--Background="{DynamicResource HLab.Brushes.Header.Active.Background}"-->
+			<ToggleButton Classes="ToolbarButton" IsChecked="{Binding  OptionsIsVisible}">
+				<icons:IconView Height="22"
+				                Width="22"
+				                Path="Icon/Options"
+				                ToolTip.Tip="Options"/>
+			</ToggleButton>
+
+			<Border Classes="ToolbarSeparator"/>
+
 			<ItemsControl
 				Foreground="{DynamicResource HLab.Brushes.Foreground}"
 				ItemsSource="{Binding Commands}"
@@ -45,18 +39,18 @@
 				</ItemsControl.ItemTemplate>
 
 			</ItemsControl>
-			
 
-			<ToggleButton IsChecked="{Binding ViewList}">
-                <icons:IconView Height="40"
-                                Width="40"
-                                Margin="5"
-                                Path="Icon/MonitorList" 
-                                ToolTip.Tip="Switch to list view"
-                />
-            </ToggleButton>
+			<Border Classes="ToolbarSeparator"/>
+
+			<ToggleButton Classes="ToolbarButton" IsChecked="{Binding ViewList}">
+				<icons:IconView Height="22"
+				                Width="22"
+				                Path="Icon/MonitorList"
+				                ToolTip.Tip="Switch to list view"
+				/>
+			</ToggleButton>
 		</StackPanel>
 
-	</Grid>
+	</Border>
 
 </UserControl>

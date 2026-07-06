@@ -2,16 +2,96 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
              x:Class="LittleBigMouse.Ui.Avalonia.App"
              RequestedThemeVariant="Default"
 			 x:DataType="main:TrayIconViewModel"
              >
 	<!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+
+	<!-- Lbm.* brushes live in Application.Resources (not in a Styles include) so that
+	     ThemeDictionaries variant switching notifies DynamicResource subscribers. -->
+	<Application.Resources>
+		<ResourceDictionary>
+
+			<ResourceDictionary.ThemeDictionaries>
+				<ResourceDictionary x:Key="{x:Static ThemeVariant.Dark}">
+					<SolidColorBrush x:Key="Lbm.Brushes.Pane.Background" Color="#FF17171C"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Card.Background" Color="#12FFFFFF"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Card.Border" Color="#1EFFFFFF"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Card.Separator" Color="#14FFFFFF"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Text.Primary" Color="#EDEDF0"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Text.Secondary" Color="#9EA0A8"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Background" Color="#1E3A26"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Foreground" Color="#7BD08A"/>
+				</ResourceDictionary>
+				<ResourceDictionary x:Key="{x:Static ThemeVariant.Light}">
+					<SolidColorBrush x:Key="Lbm.Brushes.Pane.Background" Color="#FFF2F2F5"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Card.Background" Color="#B3FFFFFF"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Card.Border" Color="#17000000"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Card.Separator" Color="#11000000"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Text.Primary" Color="#1B1B1F"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Text.Secondary" Color="#5F6368"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Background" Color="#E4F5E9"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Foreground" Color="#1B7F3B"/>
+				</ResourceDictionary>
+			</ResourceDictionary.ThemeDictionaries>
+
+			<SolidColorBrush x:Key="Lbm.Brushes.Accent" Color="{DynamicResource SystemAccentColor}"/>
+			<SolidColorBrush x:Key="Lbm.Brushes.Accent.Faint" Color="{DynamicResource SystemAccentColor}" Opacity="0.22"/>
+
+			<StreamGeometry x:Key="Lbm.Icon.Update">M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Startup">M8,5.14V19.14L19,12.14L8,5.14Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Shield">M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Priority">M17,17H7V7H17M21,11V9H19V7C19,5.89 18.1,5 17,5H15V3H13V5H11V3H9V5H7C5.89,5 5,5.89 5,7V9H3V11H5V13H3V15H5V17C5,18.1 5.89,19 7,19H9V21H11V19H13V21H15V19H17A2,2 0 0,0 19,17V15H21V13H19V11M13,13H11V11H13M15,9H9V15H15V9Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Algorithm">M21,9L17,5V8H10V10H17V13M7,11L3,15L7,19V16H14V14H7V11Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Ruler">M1.39,18.36L3.16,16.6L4.58,18L5.64,16.95L4.22,15.54L5.64,14.12L8.11,16.6L9.17,15.54L6.7,13.06L8.11,11.65L9.53,13.06L10.59,12L9.17,10.59L10.59,9.17L13.06,11.65L14.12,10.59L11.65,8.11L13.06,6.7L14.47,8.11L15.54,7.05L14.12,5.64L15.54,4.22L18,6.7L19.07,5.64L16.6,3.16L18.36,1.39L22.61,5.64L5.64,22.61L1.39,18.36Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Gamepad">M7.97,16L5,19C4.67,19.3 4.23,19.5 3.75,19.5A1.75,1.75 0 0,1 2,17.75V17.5L3,10.12C3.21,7.81 5.14,6 7.5,6H16.5C18.86,6 20.79,7.81 21,10.12L22,17.5V17.75A1.75,1.75 0 0,1 20.25,19.5C19.77,19.5 19.33,19.3 19,19L16.03,16H7.97M7,8V10H5V11H7V13H8V11H10V10H8V8H7M16.5,8A0.75,0.75 0 0,0 15.75,8.75A0.75,0.75 0 0,0 16.5,9.5A0.75,0.75 0 0,0 17.25,8.75A0.75,0.75 0 0,0 16.5,8M14.75,9.75A0.75,0.75 0 0,0 14,10.5A0.75,0.75 0 0,0 14.75,11.25A0.75,0.75 0 0,0 15.5,10.5A0.75,0.75 0 0,0 14.75,9.75M18.25,9.75A0.75,0.75 0 0,0 17.5,10.5A0.75,0.75 0 0,0 18.25,11.25A0.75,0.75 0 0,0 19,10.5A0.75,0.75 0 0,0 18.25,9.75M16.5,11.5A0.75,0.75 0 0,0 15.75,12.25A0.75,0.75 0 0,0 16.5,13A0.75,0.75 0 0,0 17.25,12.25A0.75,0.75 0 0,0 16.5,11.5Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.LoopH">M17,17H7V14L3,18L7,22V19H19V13H17M7,7H17V10L21,6L17,2V5H5V11H7V7Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.LoopV">M9,3L5,7H8V14H10V7H13M16,17V10H14V17H11L15,21L19,17H16Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Mouse">M11,1.07C7.05,1.56 4,4.92 4,9H11M4,15A8,8 0 0,0 12,23A8,8 0 0,0 20,15V11H4M13,1.07V9H20C20,4.92 16.94,1.56 13,1.07Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Pointer">M13.64,21.97C13.14,22.21 12.54,22 12.31,21.5L10.13,16.76L7.62,18.78C7.45,18.92 7.24,19 7,19A1,1 0 0,1 6,18V3A1,1 0 0,1 7,2C7.24,2 7.47,2.09 7.64,2.23L7.65,2.22L19.14,11.86C19.57,12.22 19.62,12.85 19.27,13.27C19.12,13.45 18.91,13.57 18.7,13.61L15.54,14.23L17.74,18.96C18,19.46 17.76,20.05 17.26,20.28L13.64,21.97Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Overlap">M22,16A2,2 0 0,1 20,18H8C6.89,18 6,17.1 6,16V4C6,2.89 6.89,2 8,2H20A2,2 0 0,1 22,4V16M16,20V22H4A2,2 0 0,1 2,20V7H4V20H16Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Gap">M18,16V13H15V22H13V2H15V11H18V8L22,12L18,16M2,12L6,16V13H9V22H11V2H9V11H6V8L2,12Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Excluded">M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4C10.1,4 8.4,4.6 7.1,5.7L18.3,16.9C19.3,15.5 20,13.8 20,12A8,8 0 0,0 12,4M5.7,7.1C4.6,8.4 4,10.1 4,12A8,8 0 0,0 12,20C13.9,20 15.6,19.4 16.9,18.3L5.7,7.1Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Trash">M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z</StreamGeometry>
+
+			<ControlTheme x:Key="{x:Type controls:SettingRow}" TargetType="controls:SettingRow">
+				<Setter Property="Padding" Value="14,10"/>
+				<Setter Property="HorizontalAlignment" Value="Stretch"/>
+				<Setter Property="Template">
+					<ControlTemplate>
+						<Grid ColumnDefinitions="Auto,*,Auto" Margin="{TemplateBinding Padding}">
+							<Path Data="{TemplateBinding Icon}"
+							      Fill="{DynamicResource Lbm.Brushes.Text.Secondary}"
+							      Width="18" Height="18" Stretch="Uniform"
+							      VerticalAlignment="Center"
+							      IsVisible="{TemplateBinding Icon, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+							<StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="1">
+								<TextBlock Text="{TemplateBinding Header}"
+								           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+								           FontSize="13" TextWrapping="Wrap"/>
+								<TextBlock Text="{TemplateBinding Description}"
+								           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
+								           FontSize="12" TextWrapping="Wrap"
+								           IsVisible="{TemplateBinding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+							</StackPanel>
+							<ContentPresenter Grid.Column="2"
+							                  Content="{TemplateBinding Content}"
+							                  ContentTemplate="{TemplateBinding ContentTemplate}"
+							                  VerticalAlignment="Center"/>
+						</Grid>
+					</ControlTemplate>
+				</Setter>
+			</ControlTheme>
+
+		</ResourceDictionary>
+	</Application.Resources>
+
 	<Application.Styles>
 		<FluentTheme DensityStyle="Normal"/>
 		<StyleInclude Source="avares://HLab.Base.Avalonia/Controls/DoubleBox.axaml" />
+		<StyleInclude Source="/Styles/LbmStyles.axaml" />
 	</Application.Styles>
-
-
 
 </Application>

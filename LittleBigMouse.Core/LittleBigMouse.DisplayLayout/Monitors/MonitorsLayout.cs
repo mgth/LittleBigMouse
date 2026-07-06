@@ -337,6 +337,21 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
       }
    }
 
+   /// <summary>
+   /// A new layout is built and the previous one disposed on every display change:
+   /// deterministically tear down the children so no subscription outlives its
+   /// generation (issue #412).
+   /// </summary>
+   public override void OnDispose()
+   {
+      _physicalMonitorsCache.Dispose();
+      _physicalSourcesCache.Dispose();
+      _physicalMonitorModelsCache.Dispose();
+
+      foreach (var monitor in _physicalMonitors) monitor.Dispose();
+      foreach (var source in _physicalSources) source.Dispose();
+   }
+
    public bool IsScheduled()
    {
       using var ts = new TaskService();

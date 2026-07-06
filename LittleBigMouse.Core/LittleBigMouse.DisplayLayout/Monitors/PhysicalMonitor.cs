@@ -80,6 +80,8 @@ public class PhysicalMonitor : SavableReactiveModel
         Layout = layout;
         Model = model;
 
+        Sources.DisposeWith(this);
+
         Sources.Connect()
             .AutoRefresh(e => e.Saved)
             .ToCollection()
@@ -90,7 +92,7 @@ public class PhysicalMonitor : SavableReactiveModel
             e => e.Model.PhysicalSize,
             e => e.ActiveSource.Source.Orientation,
             (physicalSize, orientation) => physicalSize.Rotate(orientation)
-        ).Log(this, "_physicalRotated").ToProperty(this, e => e.PhysicalRotated);
+        ).Log(this, "_physicalRotated").ToProperty(this, e => e.PhysicalRotated).DisposeWith(this);
 
         //RemainingPhysicalMonitors = Layout.PhysicalMonitors.Items.AsObservableChangeSet().Filter(s => !Equals(s, this)).AsObservableList();
 
@@ -100,19 +102,19 @@ public class PhysicalMonitor : SavableReactiveModel
             e => e.PhysicalRotated,
             e => e.DepthRatio,
             (physicalRotated, ratio) => physicalRotated.Scale(ratio).Locate()
-            ).Log(this, "_inMm").ToProperty(this, e => e.DepthProjection);
+            ).Log(this, "_inMm").ToProperty(this, e => e.DepthProjection).DisposeWith(this);
 
         _depthProjectionUnrotated = this.WhenAnyValue(
             e => e.Model.PhysicalSize,
             e => e.DepthRatio,
             (physicalSize, ratio) => physicalSize.Scale(ratio)
-            ).Log(this, "_inMmU").ToProperty(this, e => e.DepthProjectionUnrotated);
+            ).Log(this, "_inMmU").ToProperty(this, e => e.DepthProjectionUnrotated).DisposeWith(this);
 
         _diagonal = this.WhenAnyValue(
             e => e.DepthProjection.Height,
             e => e.DepthProjection.Width,
             (h, w) => Math.Sqrt(w * w + h * h)
-            ).Log(this, "_diagonal").ToProperty(this, e => e.Diagonal);
+            ).Log(this, "_diagonal").ToProperty(this, e => e.Diagonal).DisposeWith(this);
 
         this.UnsavedOn(
             e => e.Model, 

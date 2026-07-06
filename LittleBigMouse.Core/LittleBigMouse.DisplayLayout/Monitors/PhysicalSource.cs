@@ -14,7 +14,10 @@ public class PhysicalSource : SavableReactiveModel
     public PhysicalMonitor Monitor { get; }
     public DisplaySource Source { get; }
 
-    static readonly IDisplayRatio Inch = new DisplayRatioValue(25.4);
+    // One instance per source, NOT static: derived ratios (_inch.Multiply(...)) subscribe to
+    // their operands' PropertyChanged, and a static operand would root every PhysicalSource
+    // ever created into its subscriber list for the process lifetime (issue #412).
+    readonly IDisplayRatio _inch = new DisplayRatioValue(25.4);
 
     static double GetRealDpiAvg(double dpiX, double dpiY) => Math.Sqrt(Math.Pow(dpiX, 2.0) + Math.Pow(dpiY, 2.0)) / Math.Sqrt(2);
 
@@ -64,7 +67,7 @@ public class PhysicalSource : SavableReactiveModel
             e => e.Source.EffectiveDpi,
             e => e.Monitor.Layout,
             (px, dpi, layout) => px.ScaleDip(dpi, layout)
-        ).ToProperty(this, e => e.InDip);
+        ).ToProperty(this, e => e.InDip).DisposeWith(this);
 
         _realPitch = this.WhenAnyValue(
             e => e.Monitor.PhysicalRotated.Width,
@@ -72,24 +75,24 @@ public class PhysicalSource : SavableReactiveModel
             e => e.Source.InPixel.Width,
             e => e.Source.InPixel.Height,
             (pw, ph, w, h) => new DisplayRatioValue(pw / w, ph / h)
-        ).ToProperty(this, e => e.RealPitch);
+        ).ToProperty(this, e => e.RealPitch).DisposeWith(this);
 
         _pitch = this.WhenAnyValue(
             e => e.RealPitch,
             e => e.Monitor.DepthRatio,
             (p, r) => p.Multiply(r)
-        ).ToProperty(this, e => e.Pitch);
+        ).ToProperty(this, e => e.Pitch).DisposeWith(this);
 
         _realDpi = this.WhenAnyValue(
             e => e.RealPitch,
-            (pitch) => Inch.Multiply(pitch.Inverse())
-        ).ToProperty(this, e => e.RealDpi);
+            (pitch) => _inch.Multiply(pitch.Inverse())
+        ).ToProperty(this, e => e.RealDpi).DisposeWith(this);
 
         _realDpiAvg = this.WhenAnyValue(
             e => e.RealDpi.X,
             e => e.RealDpi.Y,
             GetRealDpiAvg
-        ).ToProperty(this, e => e.RealDpiAvg);
+        ).ToProperty(this, e => e.RealDpiAvg).DisposeWith(this);
 
         _dipToPixelRatio = this.WhenAnyValue(
             e => e.Monitor.Layout.DpiAwareness,
@@ -102,29 +105,29 @@ public class PhysicalSource : SavableReactiveModel
             e => e.Source.EffectiveDpi.X,
             e => e.Source.EffectiveDpi.Y,
             UpdateDipToPixelRatio
-        ).ToProperty(this, e => e.DipToPixelRatio);
+        ).ToProperty(this, e => e.DipToPixelRatio).DisposeWith(this);
 
         _mmToDipRatio = this.WhenAnyValue(
             e => e.Monitor.DepthRatio,
             e => e.PhysicalToPixelRatio,
             e => e.DipToPixelRatio,
             (phy, phy2px, dip2px) => phy2px.Multiply(dip2px.Inverse()).Multiply(phy)
-        ).ToProperty(this, e => e.MmToDipRatio);
+        ).ToProperty(this, e => e.MmToDipRatio).DisposeWith(this);
 
         _dpi = this.WhenAnyValue(
             e => e.Pitch,
-            (pitch) => Inch.Multiply(pitch.Inverse())
-        ).ToProperty(this, e => e.Dpi);
+            (pitch) => _inch.Multiply(pitch.Inverse())
+        ).ToProperty(this, e => e.Dpi).DisposeWith(this);
 
         _pixelToDipRatio = this.WhenAnyValue(
             e => e.DipToPixelRatio,
             (r) => r.Inverse()
-        ).ToProperty(this, e => e.PixelToDipRatio);
+        ).ToProperty(this, e => e.PixelToDipRatio).DisposeWith(this);
 
         _physicalToPixelRatio = this.WhenAnyValue(
             e => e.Pitch,
             (pitch) => pitch.Inverse()
-        ).ToProperty(this, e => e.PhysicalToPixelRatio);
+        ).ToProperty(this, e => e.PhysicalToPixelRatio).DisposeWith(this);
 
     }
 
@@ -217,4 +220,8 @@ public class PhysicalSource : SavableReactiveModel
     public IDisplayRatio PhysicalToPixelRatio => _physicalToPixelRatio?.Value;
     readonly ObservableAsPropertyHelper<IDisplayRatio> _physicalToPixelRatio;
 
+    public override void OnDispose()
+    {
+        Source.Dispose();
+    }
 }

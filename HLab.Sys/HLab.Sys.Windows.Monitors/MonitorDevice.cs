@@ -19,6 +19,12 @@ public class MonitorDevice : IEquatable<MonitorDevice>
    public Edid Edid { get; set; }
    public string MonitorNumber { get; set; } = "";
 
+   /// <summary>
+   /// Specialized display (VR headset like Windows Mixed Reality...): driven by a
+   /// dedicated runtime and hidden from the desktop by Windows.
+   /// </summary>
+   public bool IsSpecialized { get; set; }
+
    [XmlIgnore]
    public List<MonitorDeviceConnection> Connections = new();
 

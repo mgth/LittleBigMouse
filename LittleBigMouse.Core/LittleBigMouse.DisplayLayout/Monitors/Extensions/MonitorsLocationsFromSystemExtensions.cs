@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -8,6 +9,40 @@ public static class MonitorsLocationsFromSystemExtensions
 {
 
     static readonly object CompactLock = new();
+
+    /// <summary>
+    /// Re-anchor the physical layout so the primary monitor sits at (0,0) mm, the
+    /// same convention as pixel coordinates. Saved locations are anchored on the
+    /// primary that was active at save time: after a primary change they restore
+    /// the same relative geometry anchored elsewhere, which breaks the code relying
+    /// on the convention (dragging the primary translates every other monitor).
+    /// Pure translation: relative geometry is preserved, no compacting needed.
+    /// Must be called sequentially once the layout is complete and loaded — not in
+    /// reaction to PrimaryMonitor changes, which go through partially built states.
+    /// </summary>
+    public static void AnchorOnPrimary(this IMonitorsLayout layout)
+    {
+        var primary = layout.PrimaryMonitor;
+        if (primary == null) return;
+
+        var dx = primary.DepthProjection.X;
+        var dy = primary.DepthProjection.Y;
+
+        // already anchored: do not touch anything, so Saved states stay pristine
+        if (Math.Abs(dx) < 0.001 && Math.Abs(dy) < 0.001) return;
+
+        foreach (var monitor in layout.PhysicalMonitors)
+        {
+            var projection = monitor.DepthProjection;
+            using (projection.DelayChangeNotifications())
+            {
+                projection.X -= dx;
+                projection.Y -= dy;
+            }
+        }
+
+        layout.UpdatePhysicalMonitors();
+    }
 
     public static void SetSizesFromSystemConfiguration(this IMonitorsLayout layout, bool placeAll = true)
     {

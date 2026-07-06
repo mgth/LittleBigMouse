@@ -122,10 +122,16 @@ public class FrameMover : ReactiveObject, IFrameLocation
 
         if (_monitor.Sources.Items.Any(s => s.Source.Primary))
         {
+            // The primary stays anchored at (0,0): dragging it translates every other
+            // monitor the opposite way. Use the drag delta, not the absolute position,
+            // so this stays correct even if the primary is not exactly at (0,0).
+            var dx = X - _dragStartPosition.X;
+            var dy = Y - _dragStartPosition.Y;
+
             foreach (var monitor in _layout.PhysicalMonitors.Except([_monitor]))
             {
-                monitor.DepthProjection.X -= X;
-                monitor.DepthProjection.Y -= Y;
+                monitor.DepthProjection.X -= dx;
+                monitor.DepthProjection.Y -= dy;
             }
         }
         else

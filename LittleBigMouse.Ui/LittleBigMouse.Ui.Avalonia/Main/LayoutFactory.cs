@@ -72,6 +72,10 @@ public static class LayoutFactory
         //retrieve saved layout
         layout.Load();
 
+        // saved locations are anchored on the primary that was active at save time:
+        // re-anchor so the current primary sits at (0,0) mm, like in pixels
+        layout.AnchorOnPrimary();
+
         return layout;
     }
 

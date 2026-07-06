@@ -241,7 +241,14 @@
 
 		<StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom">
 			<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}" CommandParameter="{Binding $parent[Window]}">Attach</Button>
-			<Button IsVisible="{Binding DetachVisible}" Command="{Binding DetachCommand}" CommandParameter="{Binding $parent[Window]}">Detach</Button>
+			<DropDownButton IsVisible="{Binding DetachVisible}" Content="Actions">
+				<DropDownButton.Flyout>
+					<MenuFlyout>
+						<MenuItem Header="Detach" Command="{Binding DetachCommand}" CommandParameter="{Binding $parent[Window]}"/>
+						<MenuItem Header="Make primary" Command="{Binding MakePrimaryCommand}" CommandParameter="{Binding $parent[Window]}"/>
+					</MenuFlyout>
+				</DropDownButton.Flyout>
+			</DropDownButton>
 			<Label IsVisible="{Binding Primary}">Primary</Label>
 		</StackPanel>
 

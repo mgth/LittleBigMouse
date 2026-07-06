@@ -25,8 +25,11 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using HLab.Base.Avalonia;
@@ -56,6 +59,7 @@ public class MainService : ReactiveModel, IMainService
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
     readonly IProcessesCollector _processesCollector;
     readonly Func<ApplicationUpdaterViewModel> _updaterLocator;
+    readonly ILayoutOptions _options;
 
 
     Action<IMainPluginsViewModel>? _actions;
@@ -85,6 +89,7 @@ public class MainService : ReactiveModel, IMainService
         _processesCollector = processesCollector;
         _updaterLocator = updaterLocator;
         _littleBigMouseClientService = littleBigMouseClientService;
+        _options = options;
 
         _mvvmService = mvvmService;
         _mainViewModelLocator = mainViewModelLocator;
@@ -180,12 +185,19 @@ public class MainService : ReactiveModel, IMainService
                 executeOnlyOnce: false);
         }
 
+        // Apply / react to the "hide tray icon" option.
+        _options.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(ILayoutOptions.HideTrayIcon))
+                _ = SetTrayVisible(!_options.HideTrayIcon);
+        };
+
         await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
         await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
         {
-            MonitorsLayout.Options.Enabled = false; 
+            MonitorsLayout.Options.Enabled = false;
             MonitorsLayout.SaveEnabled();
             return _littleBigMouseClientService.StopAsync();
         });
@@ -195,6 +207,78 @@ public class MainService : ReactiveModel, IMainService
 
         _notify.Show();
 
+        // Apply initial visibility. Runs at Background(-2) priority, after the Default(0)-priority
+        // _trayIcon.Icon=value dispatch from SetIconAsync, so _iconAdded is already true here.
+        await SetTrayVisible(!_options.HideTrayIcon);
+
+    }
+
+    // P/Invoke — hide/show the tray icon via NIS_HIDDEN instead of NIM_DELETE.
+    // NIS_HIDDEN keeps _iconAdded=true inside Avalonia's TrayIconImpl, so subsequent
+    // SetIcon calls stay as NIM_MODIFY (which carries no NIF_STATE) and the hidden
+    // state is preserved without a NIM_ADD/NIM_DELETE flash.
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    static extern bool Shell_NotifyIcon(uint dwMessage, TrayStateData data);
+
+    // Matches Avalonia's internal NOTIFYICONDATA field layout exactly.
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    class TrayStateData
+    {
+        public int  cbSize;
+        public nint hWnd;
+        public int  uID;
+        public uint uFlags;
+        public int  uCallbackMessage;
+        public nint hIcon;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string szTip = "";
+        public int  dwState;
+        public int  dwStateMask;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string szInfo = "";
+        public int  uTimeoutOrVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]  public string szInfoTitle = "";
+        public int  dwInfoFlags;
+        public TrayStateData() => cbSize = Marshal.SizeOf<TrayStateData>();
+    }
+
+    // Reflects into Avalonia's TrayIconImpl to get the Win32 hWnd and icon uID.
+    static (nint hwnd, int id) GetTrayImplInfo(TrayIcon icon)
+    {
+        var impl = typeof(TrayIcon)
+            .GetField("_impl", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(icon);
+        if (impl == null) return (0, 0);
+        var t    = impl.GetType();
+        var id   = (int)(t.GetField("_uniqueId", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(impl) ?? 0);
+        var plat = t.Assembly.GetType("Avalonia.Win32.Win32Platform");
+        var inst = plat?.GetProperty("Instance", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)?.GetValue(null);
+        var hwnd = inst == null ? (nint)0 : (nint)(plat!
+            .GetProperty("Handle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            ?.GetValue(inst) ?? (nint)0);
+        return (hwnd, id);
+    }
+
+    static async Task SetTrayVisible(bool visible)
+    {
+        const uint NIM_MODIFY = 1, NIF_STATE = 8, NIS_HIDDEN = 1;
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var icons = TrayIcon.GetIcons(Application.Current!);
+            if (icons == null) return;
+            foreach (var icon in icons)
+            {
+                var (hwnd, id) = GetTrayImplInfo(icon);
+                if (hwnd != 0)
+                    Shell_NotifyIcon(NIM_MODIFY, new TrayStateData
+                    {
+                        hWnd = hwnd, uID = id, uFlags = NIF_STATE,
+                        dwState = visible ? 0 : (int)NIS_HIDDEN,
+                        dwStateMask = (int)NIS_HIDDEN
+                    });
+                // IsVisible=true is a no-op in the NIS_HIDDEN path (property already true),
+                // but recovers the icon if it was ever deleted via the IsVisible=false fallback.
+                if (visible) icon.IsVisible = true;
+            }
+        }, DispatcherPriority.Background);
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action)

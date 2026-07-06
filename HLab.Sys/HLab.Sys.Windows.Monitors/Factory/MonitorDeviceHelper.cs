@@ -700,7 +700,7 @@ public static class MonitorDeviceHelper
             last = monitor;
         }
 
-        ParseWindowsConfig(list);
+        UpdateMonitorNumbers(list);
 
         return root;
     }
@@ -793,121 +793,64 @@ public static class MonitorDeviceHelper
     }
 
 
-    static bool MatchConfig(string setId, IEnumerable<MonitorDevice> monitors)
+    /// <summary>
+    /// Assign each monitor the number Windows shows in Settings > System > Display.
+    /// That number is the rank of the monitor's CCD target (its physical GPU
+    /// connector) among all connected targets, sorted by target id. It ignores
+    /// desktop position, attach state (a detached monitor keeps its number),
+    /// attach order and primary — unlike the GDI source number (\\.\DISPLAYn)
+    /// which follows attach history.
+    /// Adapters are ordered by LUID: verified with a dGPU + iGPU rig where the
+    /// iGPU monitor came first in the path array (that order is not stable
+    /// across queries), had the lowest target id, and was primary — Settings
+    /// still numbered it last, after the lower-LUID dGPU targets.
+    /// </summary>
+    static void UpdateMonitorNumbers(IEnumerable<MonitorDevice> monitors)
     {
         var remaining = monitors.ToList();
-
-        var ids = setId.Split('^');
-        foreach (var id in ids)
-        {
-            var result = monitors.Where(m => m.SourceId == id).ToList();
-
-            if (result.Count == 0) return false;
-
-            foreach (var monitor in result)
-            {
-                remaining.Remove(monitor);
-            }
-        }
-        return !remaining.Any();
-    }
-
-    static RegistryKey? GetConnectivityKey(IEnumerable<MonitorDevice> monitors)
-    {
-        #pragma warning disable CA1416 // Valider la compatibilité de la plateforme
-        try
-        {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Connectivity");
-            if (key == null) return null;
-
-            var m = monitors.ToArray();
-
-            foreach (var configurationKeyName in key.GetSubKeyNames())
-            {
-                var configurationKey = key.OpenSubKey(configurationKeyName);
-                if (configurationKey?.GetValue("SetId") is string setId && MatchConfig(setId.Trim('\0'), m))
-                {
-                    return configurationKey;
-                }
-            }
-            return null;
-        }
-        catch (Exception e)
-        {
-            Debug.WriteLine(e);
-            return null;
-        }
-    }
-
-    static bool ParseSetId(RegistryKey key, string keyName, List<MonitorDevice> remaining, ref int number)
-    {
-        switch (remaining.Count)
-        {
-            case 0:
-                return true;
-            case 1:
-                remaining[0].MonitorNumber = $"{number++}";
-                return true;
-        }
-
-        var setId = key.GetValue(keyName) as string;
-        if (!string.IsNullOrEmpty(setId))
-        {
-            setId = setId.Trim('\0');
-            //displays are separated by +, clones are separated by *
-            foreach (var displayId in setId.Split('+'))
-            {
-                // all monitors in the same clone group have the same number
-                foreach (var monitorId in displayId.Split('*'))
-                {
-                    var monitors = remaining.Where(m => m.SourceId == monitorId).ToList();
-                    foreach (var monitor in monitors)
-                    {
-                        monitor.MonitorNumber = $"{number++}";
-                        remaining.Remove(monitor);
-                    }
-                }
-            }
-        }
-        switch (remaining.Count)
-        {
-            case 0:
-                return true;
-            case 1:
-                remaining[0].MonitorNumber = $"{number++}";
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /// <summary>
-    /// Try to guess monitor number from windows configuration
-    /// </summary>
-    /// <param name="monitors"></param>
-    /// <returns></returns>
-    static bool ParseWindowsConfig(IEnumerable<MonitorDevice> monitors)
-    {
         var number = 1;
 
-        var remaining = monitors.ToList();
-
-        using var key = GetConnectivityKey(remaining);
-        if (key is not null)
+        if (QueryDisplayConfigPaths() is { } cfg)
         {
-            if (ParseSetId(key, "Internal", remaining, ref number)) return true;
-            if (ParseSetId(key, "External", remaining, ref number)) return true;
-            if (ParseSetId(key, "eXtend", remaining, ref number)) return true;
-            if (ParseSetId(key, "Clone", remaining, ref number)) return true;
-            if (ParseSetId(key, "Recent", remaining, ref number)) return true;
+            var targets = new HashSet<(Luid Adapter, uint Id)>();
+
+            foreach (var path in cfg.Paths)
+            {
+                if (!path.TargetInfo.TargetAvailable) continue;
+
+                targets.Add((path.TargetInfo.AdapterId, path.TargetInfo.Id));
+            }
+
+            var adapters = targets
+                .Select(t => t.Adapter)
+                .Distinct()
+                .OrderBy(a => a.HighPart).ThenBy(a => a.LowPart);
+
+            foreach (var adapter in adapters)
+            {
+                foreach (var target in targets.Where(t => t.Adapter.Equals(adapter)).OrderBy(t => t.Id))
+                {
+                    // the number is consumed even when no device matches: Settings
+                    // numbers every connected target
+                    var n = number++;
+
+                    var devicePath = GetTargetDevicePath(target.Adapter, target.Id);
+                    if (string.IsNullOrEmpty(devicePath)) continue;
+
+                    var monitor = remaining.FirstOrDefault(m => m.InterfacePath == devicePath);
+                    if (monitor == null) continue;
+
+                    monitor.MonitorNumber = $"{n}";
+                    remaining.Remove(monitor);
+                }
+            }
         }
 
+        // monitors CCD could not account for (virtual or remote sessions)
         foreach (var monitor in remaining)
         {
             monitor.MonitorNumber = $"{number++}";
         }
-
-        return false;
     }
 
 }

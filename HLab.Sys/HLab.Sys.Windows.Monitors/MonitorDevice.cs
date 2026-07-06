@@ -10,6 +10,12 @@ public class MonitorDevice : IEquatable<MonitorDevice>
    public string PnpCode { get; init; } = "";
    public string PhysicalId { get; set; } = "";
    public string SourceId { get; set; } = "";
+
+   /// <summary>
+   /// Device interface path (\\?\DISPLAY#...) identifying this monitor for the
+   /// CCD API, independently of the adapter source it is (or was) bound to.
+   /// </summary>
+   public string InterfacePath { get; set; } = "";
    public Edid Edid { get; set; }
    public string MonitorNumber { get; set; } = "";
 

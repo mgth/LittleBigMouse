@@ -75,6 +75,13 @@ public class DisplaySource : SavableReactiveModel
     public string DisplayName { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
     /// <summary>
+    /// Monitor device interface path (\\?\DISPLAY#...) : identifies the monitor for
+    /// the CCD API regardless of the adapter source it is (or was) bound to.
+    /// </summary>
+    [DataMember]
+    public string InterfacePath { get; set => this.RaiseAndSetIfChanged(ref field, value); }
+
+    /// <summary>
     /// Source number in windows system
     /// </summary>
     [DataMember]

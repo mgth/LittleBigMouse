@@ -42,6 +42,23 @@ public partial class MonitorWarningDialog : Window
         return dialog.ShowAsync(owner);
     }
 
+    public static Task<(bool Confirmed, bool DontShowAgain)> ShowMakePrimaryAsync(Window? owner)
+    {
+        var dialog = new MonitorWarningDialog
+        {
+            Title = "Make primary monitor"
+        };
+        dialog.HeadingText.Text = "Make this monitor the primary display?";
+        dialog.BodyText.Text = "Windows anchors the desktop on the primary display: every monitor position changes, open windows may move, and the taskbar goes to the new primary. LittleBigMouse will re-anchor its layout accordingly.";
+        dialog.RecoveryTitle.Text = "To revert:";
+        dialog.Step1.Text = "Use 'Make primary' on the previous monitor, or in Settings > System > Display select it and check 'Make this my main display'.";
+        dialog.Step2.IsVisible = false;
+        dialog.Step3.IsVisible = false;
+        dialog.ConfirmButton.Content = "Make primary";
+
+        return dialog.ShowAsync(owner);
+    }
+
     /// <summary>
     /// Returns whether the user confirmed the action, and whether the warning
     /// should be hidden from now on (only honoured when confirmed).

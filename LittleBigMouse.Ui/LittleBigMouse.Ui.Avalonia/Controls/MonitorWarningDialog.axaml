@@ -34,13 +34,13 @@
 				           Text="To get the monitor back with Windows:"
 				           FontSize="13" FontWeight="SemiBold"
 				           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"/>
-				<TextBlock TextWrapping="Wrap" FontSize="12"
+				<TextBlock x:Name="Step1" TextWrapping="Wrap" FontSize="12"
 				           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
 				           Text="1. Right-click the desktop and choose Display settings (or open Settings &gt; System &gt; Display)."/>
-				<TextBlock TextWrapping="Wrap" FontSize="12"
+				<TextBlock x:Name="Step2" TextWrapping="Wrap" FontSize="12"
 				           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
 				           Text="2. Select the detached monitor, then under Multiple displays choose 'Extend desktop to this display'. There you can also fix the resolution and refresh rate."/>
-				<TextBlock TextWrapping="Wrap" FontSize="12"
+				<TextBlock x:Name="Step3" TextWrapping="Wrap" FontSize="12"
 				           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
 				           Text="3. If it is not listed, click 'Detect other display' there, or press Win+P and choose 'Extend'."/>
 			</StackPanel>

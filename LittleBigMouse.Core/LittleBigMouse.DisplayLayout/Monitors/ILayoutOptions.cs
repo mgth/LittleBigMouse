@@ -43,7 +43,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool StartElevated { get; set; } = false;
       public bool Elevated { get; set; } = true;
       public bool DebugTools { get; set; } = false;
-      public bool ShowAttachDetachWarning { get; set; } = true;
+      public bool ShowMonitorActionWarning { get; set; } = true;
       public int DaemonPort { get; set; } = 25196;
 
       public bool AdjustSpeedAllowed { get; } = false;
@@ -182,9 +182,10 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    bool DebugTools { get; set; }
 
    /// <summary>
-   /// Ask for confirmation before attaching a monitor to the desktop or detaching it
+   /// Ask for confirmation before monitor actions: attaching to the desktop,
+   /// detaching, or making a monitor the primary display
    /// </summary>
-   bool ShowAttachDetachWarning { get; set; }
+   bool ShowMonitorActionWarning { get; set; }
 
    /// <summary>
    /// Daemon port for TCP communication

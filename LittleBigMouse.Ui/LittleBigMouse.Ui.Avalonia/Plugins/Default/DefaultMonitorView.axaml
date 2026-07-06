@@ -245,7 +245,7 @@
 				<DropDownButton.Flyout>
 					<MenuFlyout>
 						<MenuItem Header="Detach" Command="{Binding DetachCommand}" CommandParameter="{Binding $parent[Window]}"/>
-						<MenuItem Header="Make primary" Command="{Binding MakePrimaryCommand}"/>
+						<MenuItem Header="Make primary" Command="{Binding MakePrimaryCommand}" CommandParameter="{Binding $parent[Window]}"/>
 					</MenuFlyout>
 				</DropDownButton.Flyout>
 			</DropDownButton>

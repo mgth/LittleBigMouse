@@ -163,18 +163,40 @@ public class ApplicationUpdaterViewModel : ViewModel, IApplicationUpdater
 
         client.DefaultRequestHeaders.Add("User-Agent", "LittleBigMouse");
         var r = await client.GetAsync("https://api.github.com/repos/Mgth/LittleBigMouse/releases");
-        var json = JsonNode.Parse(r.Content.ReadAsStringAsync().Result);
+        var json = JsonNode.Parse(await r.Content.ReadAsStringAsync());
 
-        var name = json[0]["name"].GetValue<string>();
+        if (json is not JsonArray releases) return;
 
-        Message = json[0]["body"].ToString();
-
-        Url = json[0]["assets"][0]["browser_download_url"].ToString();
-
-        if (Version.TryParse(name, out var onlineVersion))
+        // Pick the newest published, non-prerelease release that has a downloadable asset
+        // and a parseable version. Read the version from the release name (historically a
+        // bare "5.2.3.0") but fall back to the tag ("v5.3.0"), and tolerate a "v" prefix,
+        // so a non-numeric release title can no longer break updates (was showing "0.0").
+        foreach (var release in releases)
         {
+            if (release is null) continue;
+            if (release["draft"]?.GetValue<bool>() == true) continue;
+            if (release["prerelease"]?.GetValue<bool>() == true) continue;
+
+            if (release["assets"] is not JsonArray assets || assets.Count == 0) continue;
+
+            if (!TryParseVersion(release["name"]?.GetValue<string>(), out var onlineVersion)
+                && !TryParseVersion(release["tag_name"]?.GetValue<string>(), out onlineVersion))
+                continue;
+
             NewVersion = onlineVersion;
+            Message = release["body"]?.ToString() ?? "";
+            Url = assets[0]?["browser_download_url"]?.ToString() ?? "";
+            return;
         }
+    }
+
+    static bool TryParseVersion(string? text, out Version version)
+    {
+        version = new Version();
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        text = text.Trim();
+        if (text[0] is 'v' or 'V') text = text[1..];
+        return Version.TryParse(text, out version!);
     }
     
     public async Task CheckUpdateAsync(bool show)

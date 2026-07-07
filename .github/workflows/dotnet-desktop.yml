@@ -85,5 +85,9 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         draft: true
+        # Name the release with the bare numeric version (not the "v5.3.0" tag): the
+        # in-app updater parses the release name as a Version, and a "v" prefix or a
+        # word breaks it (shows "online version 0.0" and blocks the upgrade).
+        name: ${{ steps.ver.outputs.version }}
         files: LittleBigMouse.Setup\LittleBigMouse_*.exe
         generate_release_notes: true

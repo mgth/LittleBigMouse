@@ -13,6 +13,8 @@ AppVersion={#AppVer}
 DefaultDirName={commonpf}\LittleBigMouse
 DefaultGroupName=Little Big Mouse
 UninstallDisplayIcon={app}\LittleBigMouse.Ui.Avalonia.exe
+; Give the setup .exe the LBM icon (the NSIS installer used to, the Inno one didn't).
+SetupIconFile=..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Assets\lbm-logo.ico
 Compression=lzma2
 SolidCompression=yes
 OutputDir="."

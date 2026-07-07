@@ -12,10 +12,20 @@ on:
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
+    inputs:
+      hook_impl:
+        description: 'Hook daemon implementation to build and ship'
+        default: 'cpp'
+        type: choice
+        options: [ cpp, rust ]
 
 env:
+  # Which hook daemon to build/stage. Defaults to the C++ implementation so
+  # push/PR/tag builds are unchanged; the Rust port is opt-in via workflow_dispatch.
+  HOOK_IMPL: ${{ github.event.inputs.hook_impl || 'cpp' }}
   UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
   HOOK_PROJECT: LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj
+  HOOK_RUST_PROJECT: LittleBigMouse-Hook-Rust\Cargo.toml
   UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
 
 jobs:
@@ -54,10 +64,23 @@ jobs:
         dotnet build $env:UI_PROJECT @buildArgs
 
     - name: Build hook (C++, x64 Release)
+      if: env.HOOK_IMPL == 'cpp'
       run: msbuild $env:HOOK_PROJECT /m /p:Configuration=Release /p:Platform=x64
 
+    # windows-latest ships a stable Rust toolchain preinstalled, so no install step.
+    - name: Build hook (Rust, release)
+      if: env.HOOK_IMPL == 'rust'
+      run: cargo build --release --manifest-path $env:HOOK_RUST_PROJECT
+
     - name: Stage hook next to UI output
-      run: Copy-Item LittleBigMouse.Hook\bin\x64\Release\LittleBigMouse.Hook.exe $env:UI_OUTPUT\
+      # Cargo can't emit a target named with a '.', so the Rust binary is built as
+      # lbm-hook.exe and renamed to the contract name here.
+      run: |
+        if ($env:HOOK_IMPL -eq 'rust') {
+          Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
+        } else {
+          Copy-Item LittleBigMouse.Hook\bin\x64\Release\LittleBigMouse.Hook.exe $env:UI_OUTPUT\
+        }
 
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4
@@ -71,7 +94,7 @@ jobs:
     - name: Compile installer (InnoSetup)
       if: startsWith(github.ref, 'refs/tags/v')
       run: |
-        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=${{ steps.ver.outputs.version }}" LittleBigMouse.Setup\LittleBigMouse.iss
+        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=${{ steps.ver.outputs.version }}" "/DHookImpl=${{ env.HOOK_IMPL }}" LittleBigMouse.Setup\LittleBigMouse.iss
 
     - name: Upload installer artifact
       if: startsWith(github.ref, 'refs/tags/v')

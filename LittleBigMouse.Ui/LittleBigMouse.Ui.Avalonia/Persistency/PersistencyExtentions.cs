@@ -360,8 +360,16 @@ public static class PersistencyExtensions
                 @this.PhysicalSize.BottomBorder = key.GetOrSet(@"Borders\Bottom", ()=>@this.PhysicalSize.BottomBorder);
                 @this.PhysicalSize.LeftBorder = key.GetOrSet(@"Borders\Left", ()=>@this.PhysicalSize.LeftBorder);
 
-                @this.PhysicalSize.Height = key.GetOrSet(@"Size\Height", ()=>@this.PhysicalSize.Height);
-                @this.PhysicalSize.Width = key.GetOrSet(@"Size\Width", ()=>@this.PhysicalSize.Width);
+                // Versions predating the EDID-less size fallback persisted the bogus
+                // 0x0 GDI placeholder for virtual displays (#419): a stored
+                // non-positive size must not override the freshly computed one.
+                var height = key.GetOrSet(@"Size\Height", ()=>@this.PhysicalSize.Height);
+                if (height > 0) @this.PhysicalSize.Height = height;
+                else key.SetKey(@"Size\Height", @this.PhysicalSize.Height.ToString(CultureInfo.InvariantCulture));
+
+                var width = key.GetOrSet(@"Size\Width", ()=>@this.PhysicalSize.Width);
+                if (width > 0) @this.PhysicalSize.Width = width;
+                else key.SetKey(@"Size\Width", @this.PhysicalSize.Width.ToString(CultureInfo.InvariantCulture));
 
                 @this.PhysicalSize.Saved = true;
 

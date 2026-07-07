@@ -701,6 +701,7 @@ public static class MonitorDeviceHelper
         }
 
         UpdateMonitorNumbers(list);
+        UpdateSpecializedMonitors(list);
 
         return root;
     }
@@ -792,6 +793,43 @@ public static class MonitorDeviceHelper
         return (path, id);
     }
 
+
+    static bool IsSpecializedTarget(Luid adapterId, uint targetId)
+    {
+        var request = new DisplayConfigGetMonitorSpecialization
+        {
+            Type = DISPLAYCONFIG_DEVICE_INFO_GET_MONITOR_SPECIALIZATION,
+            Size = (uint)Marshal.SizeOf<DisplayConfigGetMonitorSpecialization>(),
+            AdapterId = adapterId,
+            Id = targetId,
+        };
+        // the query is unsupported before Windows 11: treat failures as not specialized
+        return DisplayConfigGetDeviceInfo(ref request) == 0 && request.IsSpecializationEnabled;
+    }
+
+    /// <summary>
+    /// Flag monitors bound to a specialized target (VR headsets like Windows Mixed
+    /// Reality): they are driven by a dedicated runtime and hidden from the desktop
+    /// by Windows, so they must not take part in the mouse layout (#364).
+    /// </summary>
+    static void UpdateSpecializedMonitors(IEnumerable<MonitorDevice> monitors)
+    {
+        if (QueryDisplayConfigPaths() is not { } cfg) return;
+
+        foreach (var path in cfg.Paths)
+        {
+            if (!path.TargetInfo.TargetAvailable) continue;
+            if (!IsSpecializedTarget(path.TargetInfo.AdapterId, path.TargetInfo.Id)) continue;
+
+            var devicePath = GetTargetDevicePath(path.TargetInfo.AdapterId, path.TargetInfo.Id);
+            if (string.IsNullOrEmpty(devicePath)) continue;
+
+            foreach (var monitor in monitors)
+            {
+                if (monitor.InterfacePath == devicePath) monitor.IsSpecialized = true;
+            }
+        }
+    }
 
     /// <summary>
     /// Assign each monitor the number Windows shows in Settings > System > Display.

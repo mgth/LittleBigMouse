@@ -27,6 +27,11 @@ public static class LayoutFactory
 
         foreach (var monitor in service.Root.AllMonitorDevices())
         {
+            // Specialized displays (VR headsets...) are hidden from the desktop by
+            // Windows: keep them out of the layout too, the cursor can never reach
+            // them and their zone would only trap it (#364)
+            if (monitor.IsSpecialized) continue;
+
             var source = layout.PhysicalSources.FirstOrDefault(s => s.DeviceId == monitor.Id);
 
             if (source != null)

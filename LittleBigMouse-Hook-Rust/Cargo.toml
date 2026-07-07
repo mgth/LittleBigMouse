@@ -20,6 +20,7 @@ path = "src/lib.rs"
 
 [dependencies]
 roxmltree = "0.20"
+slotmap = "1"
 
 [dependencies.windows]
 version = "0.58"

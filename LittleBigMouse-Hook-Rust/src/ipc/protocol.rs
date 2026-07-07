@@ -12,9 +12,8 @@ use roxmltree::{Document, Node};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Listen,
-    /// `Load` carries a `<Payload><ZonesLayout .../></Payload>`. Phase 0 only
-    /// recognizes the command; Phase 2 parses the layout into the arena.
-    Load,
+    /// The extracted `<ZonesLayout>...</ZonesLayout>` XML (empty if absent).
+    Load(String),
     LoadFromFile(String),
     Run,
     Stop,
@@ -55,7 +54,7 @@ fn command_from(node: Node) -> Option<Command> {
     let command = node.attribute("Command")?;
     Some(match command {
         "Listen" => Command::Listen,
-        "Load" => Command::Load,
+        "Load" => Command::Load(zones_layout_xml(node)),
         "LoadFromFile" => Command::LoadFromFile(payload_string(node)),
         "Run" => Command::Run,
         "Stop" => Command::Stop,
@@ -63,6 +62,16 @@ fn command_from(node: Node) -> Option<Command> {
         "Quit" => Command::Quit,
         other => Command::Unknown(other.to_string()),
     })
+}
+
+/// Slice out the `<Payload><ZonesLayout>...</ZonesLayout></Payload>` subtree's
+/// source XML so it can be parsed on its own. Returns "" if absent.
+fn zones_layout_xml(node: Node) -> String {
+    node.children()
+        .find(|c| c.has_tag_name("Payload"))
+        .and_then(|p| p.children().find(|c| c.has_tag_name("ZonesLayout")))
+        .map(|z| z.document().input_text()[z.range()].to_string())
+        .unwrap_or_default()
 }
 
 /// Read the `Payload` for `LoadFromFile`, whether serialized as an attribute
@@ -118,9 +127,12 @@ mod tests {
     }
 
     #[test]
-    fn parses_load_with_payload() {
+    fn parses_load_extracts_zones_layout_xml() {
         let msg = r#"<CommandMessage Command="Load"><Payload><ZonesLayout MaxTravelDistance="200"/></Payload></CommandMessage>"#;
-        assert_eq!(parse(msg), vec![Command::Load]);
+        assert_eq!(
+            parse(msg),
+            vec![Command::Load(r#"<ZonesLayout MaxTravelDistance="200"/>"#.to_string())]
+        );
     }
 
     #[test]
@@ -131,7 +143,11 @@ mod tests {
             r#"<CommandMessage Command="Run"/>"#,
             "</Messages>"
         );
-        assert_eq!(parse(msg), vec![Command::Load, Command::Run]);
+        // Load with no Payload -> empty ZonesLayout XML.
+        assert_eq!(
+            parse(msg),
+            vec![Command::Load(String::new()), Command::Run]
+        );
     }
 
     #[test]

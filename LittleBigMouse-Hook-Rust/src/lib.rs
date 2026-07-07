@@ -10,7 +10,11 @@
 //! mouse callback is still a pass-through (no zone engine yet — Phase 3).
 
 pub mod daemon;
+pub mod engine;
+pub mod geometry;
 pub mod hook;
 pub mod ipc;
 pub mod platform;
+pub mod priority;
 pub mod shared;
+pub mod zones;

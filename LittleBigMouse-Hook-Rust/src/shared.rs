@@ -5,10 +5,12 @@
 //! mouse-hook callback), so it lives in a `static OnceLock` rather than a
 //! `thread_local`.
 
-use std::sync::atomic::{AtomicBool, AtomicU32};
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8};
+use std::sync::{Mutex, OnceLock};
 
+use crate::engine::MouseEngine;
 use crate::ipc::server::ServerHandle;
+use crate::priority::Priority;
 
 pub struct Shared {
     /// The low-level mouse hook is currently installed (C++ `Hooker::Hooked`).
@@ -22,6 +24,14 @@ pub struct Shared {
     /// Thread id of the message pump, for `PostThreadMessageW`
     /// (C++ `Hooker::_currentThreadId`). Zero until the pump starts.
     pub pump_tid: AtomicU32,
+    /// Process priority while hooking / idle (C++ `Hooker::_priority` /
+    /// `_priorityUnhooked`), stored as `Priority as u8`. Set from the loaded
+    /// layout; read by the pump when (re)installing the hook.
+    pub priority: AtomicU8,
+    pub priority_unhooked: AtomicU8,
+    /// The traversal engine and its zone layout (C++ `MouseEngine`). Behind a
+    /// `Mutex` the callback will `try_lock` (Phase 3); `Load` locks it blocking.
+    pub engine: Mutex<MouseEngine>,
     /// The IPC server handle, published once the listener is up.
     pub server: OnceLock<ServerHandle>,
 }
@@ -33,6 +43,10 @@ impl Shared {
             want_hook: AtomicBool::new(false),
             paused: AtomicBool::new(false),
             pump_tid: AtomicU32::new(0),
+            // C++ Hooker defaults, until a layout overrides them.
+            priority: AtomicU8::new(Priority::Normal.as_u8()),
+            priority_unhooked: AtomicU8::new(Priority::Below.as_u8()),
+            engine: Mutex::new(MouseEngine::new()),
             server: OnceLock::new(),
         }
     }

@@ -11,6 +11,7 @@ use crate::hook;
 use crate::ipc::protocol::{self, Command};
 use crate::ipc::server::{ClientId, ServerHandle};
 use crate::shared::Shared;
+use crate::zones::ZonesLayout;
 
 /// Dispatch one received line.
 ///
@@ -52,8 +53,11 @@ pub fn receive_message(
             Command::State => {
                 send_state(server, Some(client_id), shared);
             }
-            Command::Load | Command::LoadFromFile(_) => {
-                // Phase 2: parse the `ZonesLayout` into the arena.
+            Command::Load(xml) => {
+                load_layout(shared, &xml);
+            }
+            Command::LoadFromFile(_) => {
+                // Phase 4: read the file under %ProgramData% and replay its lines.
             }
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
@@ -64,6 +68,29 @@ pub fn receive_message(
     }
 
     became_listening
+}
+
+/// C++ `LittleBigMouseDaemon::ReceiveLoadMessage`: stop hooking, parse the
+/// layout into the engine, and adopt its priorities for the next hook.
+fn load_layout(shared: &Shared, xml: &str) {
+    if shared.hooked.load(Ordering::SeqCst) {
+        hook::request_unhook(shared);
+    }
+    if let Some(layout) = ZonesLayout::from_xml(xml) {
+        let (zones, main) = (layout.zones.len(), layout.main_zones.len());
+        shared
+            .priority
+            .store(layout.priority.as_u8(), Ordering::SeqCst);
+        shared
+            .priority_unhooked
+            .store(layout.priority_unhooked.as_u8(), Ordering::SeqCst);
+        if let Ok(mut engine) = shared.engine.lock() {
+            engine.load(layout);
+        }
+        eprintln!("[LittleBigMouse.Hook] layout loaded: {zones} zones ({main} main)");
+    } else {
+        eprintln!("[LittleBigMouse.Hook] layout load FAILED to parse");
+    }
 }
 
 /// Report current state (C++ `SendState`): `Running` when hooked, else `Paused`

@@ -26,30 +26,18 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::ipc::protocol;
+use crate::priority::Priority;
 use crate::shared::Shared;
 
 /// Custom message that unwinds the pump so `run` re-reconciles the hooks
 /// (C++ `WM_BREAK_LOOP = WM_APP + 1`).
 const WM_BREAK_LOOP: u32 = WM_APP + 1;
 
-/// Process priority classes (C++ `Priority`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Priority {
-    Idle,
-    Below,
-    Normal,
-    Above,
-    High,
-    Realtime,
-}
-
 pub struct Hooker {
     mouse_hook: HHOOK,
     focus_hook: HWINEVENTHOOK,
     desktop_hook: HWINEVENTHOOK,
     hwnd: HWND,
-    priority: Priority,
-    priority_unhooked: Priority,
 }
 
 impl Default for Hooker {
@@ -65,9 +53,6 @@ impl Hooker {
             focus_hook: HWINEVENTHOOK::default(),
             desktop_hook: HWINEVENTHOOK::default(),
             hwnd: HWND::default(),
-            // C++ defaults: Normal when hooking, Below when idle.
-            priority: Priority::Normal,
-            priority_unhooked: Priority::Below,
         }
     }
 
@@ -89,10 +74,10 @@ impl Hooker {
     /// always install the focus/desktop/display hooks.
     fn do_hook(&mut self, shared: &Shared) {
         if shared.want_hook.load(Ordering::SeqCst) {
-            set_priority(self.priority);
+            set_priority(Priority::from_u8(shared.priority.load(Ordering::SeqCst)));
             self.hook_mouse(shared);
         } else {
-            set_priority(self.priority_unhooked);
+            set_priority(Priority::from_u8(shared.priority_unhooked.load(Ordering::SeqCst)));
         }
 
         self.hook_focus();
@@ -106,7 +91,7 @@ impl Hooker {
         self.unhook_focus();
         self.unhook_desktop();
         self.unhook_display();
-        set_priority(self.priority_unhooked);
+        set_priority(Priority::from_u8(shared.priority_unhooked.load(Ordering::SeqCst)));
     }
 
     /// C++ `Hooker::HookMouse`.

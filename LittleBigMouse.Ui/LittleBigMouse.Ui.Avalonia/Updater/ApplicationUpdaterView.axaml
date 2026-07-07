@@ -6,7 +6,7 @@
         xmlns:updater="clr-namespace:LittleBigMouse.Ui.Avalonia.Updater"
         mc:Ignorable="d" 
         Width="400"
-        Height="260"
+        MaxHeight="560"
         WindowStartupLocation="CenterScreen"
 		SizeToContent="Height"
         Title="Update Little Big Mouse"
@@ -15,28 +15,31 @@
         x:DataType="updater:ApplicationUpdaterViewModel"
         >
     <DockPanel Margin="10">
-        <TextBlock 
-            
-            DockPanel.Dock="Top" 
-            FontWeight="Bold" 
-            Text="{Binding Message,FallbackValue=New version available}"
-            TextWrapping="WrapWithOverflow"
-            />
-        
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
             <Label>Current Version :</Label>
             <Label Content="{Binding CurrentVersion}"/>
         </StackPanel>
-        
+
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
             <Label>Online version :</Label>
             <Label Content="{Binding NewVersion}"/>
         </StackPanel>
-            
-        <ProgressBar DockPanel.Dock="Top" Height="20" Value="{Binding Progress}" Maximum="100" Margin="20"/>
+
+        <!-- Buttons and progress stay pinned at the bottom, always visible. -->
         <StackPanel Height="40" DockPanel.Dock="Bottom" VerticalAlignment="Bottom" HorizontalAlignment="Right" Orientation="Horizontal">
             <Button FontWeight="Bold" IsDefault="True" Padding="5" Command="{Binding UpdateCommand}"> Update </Button>
             <Button Padding="5" Click="ButtonBase_OnClick"> Cancel </Button>
         </StackPanel>
+        <ProgressBar DockPanel.Dock="Bottom" Height="20" Value="{Binding Progress}" Maximum="100" Margin="20"/>
+
+        <!-- Changelog fills the middle and scrolls, so a long release body can no
+             longer grow the window past the screen and hide the buttons. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="300" Margin="0,0,0,8">
+            <TextBlock
+                FontWeight="Bold"
+                Text="{Binding Message,FallbackValue=New version available}"
+                TextWrapping="Wrap"
+                />
+        </ScrollViewer>
     </DockPanel>
 </Window>

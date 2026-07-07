@@ -6,6 +6,13 @@
   #define AppVer GetVersionNumbersString('..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\LittleBigMouse.Ui.Avalonia.exe')
 #endif
 
+; Which hook daemon was built (CI passes /DHookImpl=rust for the Rust port). The
+; hook exe is staged into the UI output either way and packaged by the UI *.exe
+; line below; the extra C++ bin source is only needed for the C++ build.
+#ifndef HookImpl
+  #define HookImpl "cpp"
+#endif
+
 [Setup]
 AppId={{C170D4ED-CDCC-4383-8907-B85461E643FF}
 AppName=Little Big Mouse
@@ -29,7 +36,9 @@ RestartApplications=no
 
 [Files]
 Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs
+#if HookImpl == "cpp"
 Source: "..\LittleBigMouse.Hook\bin\x64\Release\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs
+#endif
 Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs
 Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.xml"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs
 Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.json"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs

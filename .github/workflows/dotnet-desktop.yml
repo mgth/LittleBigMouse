@@ -36,8 +36,22 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
+    - name: Derive version from tag
+      id: ver
+      run: |
+        if ("${{ github.ref }}" -like "refs/tags/v*") {
+          $v = "${{ github.ref_name }}" -replace '^v',''
+        } else {
+          $v = ""
+        }
+        "version=$v" >> $env:GITHUB_OUTPUT
+        Write-Host "Release version: '$v'"
+
     - name: Build UI (net10, x64 Release)
-      run: dotnet build $env:UI_PROJECT -c Release -p:Platform=x64
+      run: |
+        $buildArgs = @('-c','Release','-p:Platform=x64')
+        if ("${{ steps.ver.outputs.version }}") { $buildArgs += "-p:Version=${{ steps.ver.outputs.version }}" }
+        dotnet build $env:UI_PROJECT @buildArgs
 
     - name: Build hook (C++, x64 Release)
       run: msbuild $env:HOOK_PROJECT /m /p:Configuration=Release /p:Platform=x64
@@ -57,7 +71,7 @@ jobs:
     - name: Compile installer (InnoSetup)
       if: startsWith(github.ref, 'refs/tags/v')
       run: |
-        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" LittleBigMouse.Setup\LittleBigMouse.iss
+        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=${{ steps.ver.outputs.version }}" LittleBigMouse.Setup\LittleBigMouse.iss
 
     - name: Upload installer artifact
       if: startsWith(github.ref, 'refs/tags/v')

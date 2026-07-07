@@ -131,6 +131,8 @@ impl Hooker {
             e.running = false;
             engine.on_mouse_move(&mut env, &mut e);
         }
+        // Safety net: never leave the cursor confined once we stop managing it.
+        crate::platform::cursor::release_clip();
 
         shared.hooked.store(false, Ordering::SeqCst);
         shared.broadcast(protocol::STOPPED);

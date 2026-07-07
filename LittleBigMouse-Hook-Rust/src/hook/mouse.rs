@@ -29,6 +29,10 @@ thread_local! {
 /// instrumentation (one relaxed increment) to observe the hook staying alive.
 pub static MOUSE_EVENTS: AtomicU64 = AtomicU64::new(0);
 
+/// Count of events the engine handled (i.e. repositioned the cursor across a
+/// border). Non-zero means the engine is actively managing crossings.
+pub static CROSSINGS: AtomicU64 = AtomicU64::new(0);
+
 /// # Safety
 /// Invoked by Windows as a `WH_MOUSE_LL` hook procedure; never call it directly.
 /// When `code >= 0`, `lparam` points to a valid `MSLLHOOKSTRUCT`, as guaranteed
@@ -76,5 +80,8 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     let mut env = Win32Cursor;
     let mut e = MouseEventArg::new(Point::new(loc.0, loc.1));
     engine.on_mouse_move(&mut env, &mut e);
+    if e.handled {
+        CROSSINGS.fetch_add(1, Ordering::Relaxed);
+    }
     e.handled
 }

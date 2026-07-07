@@ -53,9 +53,10 @@ fn main() {
         std::thread::spawn(move || loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
             eprintln!(
-                "[dbg] hooked={} mouse_events={}",
+                "[dbg] hooked={} mouse_events={} crossings={}",
                 shared.hooked.load(Ordering::SeqCst),
                 hook::mouse::MOUSE_EVENTS.load(Ordering::Relaxed),
+                hook::mouse::CROSSINGS.load(Ordering::Relaxed),
             );
         });
     }

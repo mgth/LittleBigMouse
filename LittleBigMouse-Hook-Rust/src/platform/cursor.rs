@@ -13,6 +13,14 @@ use windows::Win32::System::SystemInformation::GetTickCount64;
 use crate::engine::cursor::CursorEnv;
 use crate::geometry::{Point, Rect};
 
+/// Release any cursor confinement (`ClipCursor(NULL)`). Called on unhook so a
+/// stopped daemon never leaves the cursor clipped to a sub-region.
+pub fn release_clip() {
+    unsafe {
+        let _ = ClipCursor(None);
+    }
+}
+
 pub struct Win32Cursor;
 
 impl CursorEnv for Win32Cursor {

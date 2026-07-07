@@ -221,7 +221,11 @@ impl MouseEngine {
     ) {
         // Extract everything from the arena before we mutate resistance state.
         let links = self.side_links(zone, side);
-        let index = at_pixel_index(links, coord);
+        let Some(index) = at_pixel_index(links, coord) else {
+            // No links on this side (malformed layout): can't cross here.
+            self.no_zone_matches(env, e);
+            return;
+        };
         let link = &links[index];
         let target = link.target;
         let resistance_px = link.border_resistance_px;
@@ -408,7 +412,9 @@ impl MouseEngine {
                 let distance = Segment::new(p, trip.b()).size();
                 let pos = if use_y { p.y() } else { p.x() };
                 let links = self.side_links(zone, side);
-                let index = at_physical_index(links, pos);
+                let Some(index) = at_physical_index(links, pos) else {
+                    return false;
+                };
                 let key = ResistanceKey { zone, side, index };
                 let resistance = links[index].border_resistance;
                 return self.try_pass_border(env, key, resistance, distance);
@@ -684,5 +690,23 @@ mod tests {
         let ev = feed(&mut eng, &mut env, -100, 1000);
         assert!(!ev.handled);
         assert!(eng.old_zone.is_some());
+    }
+
+    #[test]
+    fn hot_reload_under_motion_never_panics() {
+        // The torture test: reload the layout repeatedly while feeding moves that
+        // wander across the Left/Right border. If a stale ZoneId were ever
+        // dereferenced, `arena[stale]` would panic — reaching the end proves the
+        // generational arena makes the C++ use-after-free unrepresentable.
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        for i in 0..3000i32 {
+            let x = -150 + (i.wrapping_mul(37) % 300);
+            let y = 200 + (i % 1600);
+            feed(&mut eng, &mut env, x, y);
+            if i % 11 == 0 {
+                eng.load(ZonesLayout::from_xml(FIXTURE).unwrap());
+            }
+        }
     }
 }

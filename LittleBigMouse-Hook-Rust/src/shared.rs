@@ -32,6 +32,9 @@ pub struct Shared {
     /// The traversal engine and its zone layout (C++ `MouseEngine`). Behind a
     /// `Mutex` the callback will `try_lock` (Phase 3); `Load` locks it blocking.
     pub engine: Mutex<MouseEngine>,
+    /// Foreground-process path substrings that pause the hook (C++
+    /// `LittleBigMouseDaemon::_excluded`), loaded from `Excluded.txt` on `Run`.
+    pub excluded: Mutex<Vec<String>>,
     /// The IPC server handle, published once the listener is up.
     pub server: OnceLock<ServerHandle>,
 }
@@ -47,6 +50,7 @@ impl Shared {
             priority: AtomicU8::new(Priority::Normal.as_u8()),
             priority_unhooked: AtomicU8::new(Priority::Below.as_u8()),
             engine: Mutex::new(MouseEngine::new()),
+            excluded: Mutex::new(Vec::new()),
             server: OnceLock::new(),
         }
     }
@@ -56,6 +60,18 @@ impl Shared {
         if let Some(server) = self.server.get() {
             server.broadcast(msg);
         }
+    }
+
+    /// C++ `LittleBigMouseDaemon::Excluded` — is `path` covered by an exclusion
+    /// entry (substring match, entries longer than one char)?
+    pub fn is_excluded(&self, path: &str) -> bool {
+        if path.is_empty() {
+            return false;
+        }
+        let excluded = self.excluded.lock().unwrap();
+        excluded
+            .iter()
+            .any(|line| line.len() > 1 && path.contains(line.as_str()))
     }
 }
 
@@ -67,3 +83,30 @@ impl Default for Shared {
 
 /// The single process-global instance, initialized in `main`.
 pub static SHARED: OnceLock<Shared> = OnceLock::new();
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_excluded_matches_substrings() {
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = vec![
+            r"\steamapps\".to_string(),
+            r"\Epic Games\".to_string(),
+            r"\Riot Games\".to_string(),
+        ];
+        assert!(shared.is_excluded(r"D:\SteamLibrary\steamapps\common\Game\game.exe"));
+        assert!(shared.is_excluded(r"C:\Program Files\Epic Games\Launcher\x.exe"));
+        assert!(!shared.is_excluded(r"C:\Windows\explorer.exe"));
+        assert!(!shared.is_excluded(""));
+    }
+
+    #[test]
+    fn single_char_entries_are_ignored() {
+        // C++ requires entries longer than one char (guards against a stray line).
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = vec![r"\".to_string()];
+        assert!(!shared.is_excluded(r"C:\anything\at\all.exe"));
+    }
+}

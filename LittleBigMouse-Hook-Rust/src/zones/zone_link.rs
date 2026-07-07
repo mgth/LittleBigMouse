@@ -68,22 +68,32 @@ impl ZoneLink {
 }
 
 /// C++ `ZoneLink::AtPhysical` — index of the first link covering physical
-/// position `pos`. Assumes a terminating catch-all link (`to == +inf`), which
-/// the layout always provides. Returns the index (rather than a reference) so
-/// the caller can identify the link for border-resistance tracking.
-pub fn at_physical_index(links: &[ZoneLink], pos: f64) -> usize {
+/// position `pos`. Returns the index (rather than a reference) so the caller can
+/// identify the link for border-resistance tracking.
+///
+/// Well-formed layouts terminate each side with a catch-all link (`to == +inf`),
+/// so the walk always stops. Unlike the C++ (which would walk off the list — a
+/// null deref on a link-less side), this clamps to the last link and returns
+/// `None` for an empty list, so a malformed layout can't crash the daemon.
+pub fn at_physical_index(links: &[ZoneLink], pos: f64) -> Option<usize> {
+    if links.is_empty() {
+        return None;
+    }
     let mut i = 0;
-    while pos >= links[i].to {
+    while i + 1 < links.len() && pos >= links[i].to {
         i += 1;
     }
-    i
+    Some(i)
 }
 
 /// C++ `ZoneLink::AtPixel` — index of the first link covering pixel position `pos`.
-pub fn at_pixel_index(links: &[ZoneLink], pos: i32) -> usize {
+pub fn at_pixel_index(links: &[ZoneLink], pos: i32) -> Option<usize> {
+    if links.is_empty() {
+        return None;
+    }
     let mut i = 0;
-    while pos >= links[i].source_to_px {
+    while i + 1 < links.len() && pos >= links[i].source_to_px {
         i += 1;
     }
-    i
+    Some(i)
 }

@@ -38,17 +38,12 @@ pub fn receive_message(
                 send_state(server, Some(client_id), shared);
                 became_listening = true;
             }
-            Command::Run => {
-                // Ask the pump to install the hook. The `Running` state is
-                // broadcast from the hook-install success path, not here
-                // (C++ `Hook` -> `OnHooked` -> `SendState`).
-                shared.paused.store(false, Ordering::SeqCst);
-                hook::request_hook(shared);
-            }
+            Command::Run => run(shared),
             Command::Stop => {
-                // The `Stopped` state is broadcast from the unhook path.
-                shared.paused.store(false, Ordering::SeqCst);
+                // C++ Stop: unhook and clear the pause flag. `Stopped` is
+                // broadcast from the unhook path.
                 hook::request_unhook(shared);
+                shared.paused.store(false, Ordering::SeqCst);
             }
             Command::State => {
                 send_state(server, Some(client_id), shared);
@@ -56,8 +51,8 @@ pub fn receive_message(
             Command::Load(xml) => {
                 load_layout(shared, &xml);
             }
-            Command::LoadFromFile(_) => {
-                // Phase 4: read the file under %ProgramData% and replay its lines.
+            Command::LoadFromFile(path) => {
+                load_from_file(shared, &path);
             }
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
@@ -93,6 +88,59 @@ fn load_layout(shared: &Shared, xml: &str) {
     }
 }
 
+/// C++ `Run` handling: load the exclusion list and install the hook, unless
+/// already hooked or paused by an excluded foreground app.
+fn run(shared: &Shared) {
+    if shared.hooked.load(Ordering::SeqCst) {
+        return;
+    }
+    load_excluded(shared);
+    if !shared.paused.load(Ordering::SeqCst) {
+        hook::request_hook(shared);
+    }
+}
+
+/// C++ `LoadExcluded`: read `Excluded.txt`, skipping blank lines and `:` comments.
+pub fn load_excluded(shared: &Shared) {
+    let mut list = Vec::new();
+    if let Some(path) = crate::platform::paths::lbm_data_file("Excluded.txt") {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            for line in content.lines() {
+                if line.is_empty() || line.starts_with(':') {
+                    continue;
+                }
+                list.push(line.to_string());
+            }
+        }
+    }
+    if let Ok(mut excluded) = shared.excluded.lock() {
+        *excluded = list;
+    }
+}
+
+/// C++ `LoadFromFile`: read `Current.xml` and replay its command lines
+/// (`Load` then `Run`) — the standalone/autostart path.
+pub fn load_from_file(shared: &Shared, path: &str) {
+    match std::fs::read_to_string(path) {
+        Ok(content) => replay(shared, &content),
+        Err(e) => eprintln!("[LittleBigMouse.Hook] standalone: cannot read {path}: {e}"),
+    }
+}
+
+/// Replay the `Load`/`Run` command lines from a serialized layout file. Runs
+/// without a socket client, so it only handles the commands the file contains.
+fn replay(shared: &Shared, content: &str) {
+    for line in content.lines() {
+        for command in protocol::parse(line) {
+            match command {
+                Command::Load(xml) => load_layout(shared, &xml),
+                Command::Run => run(shared),
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Report current state (C++ `SendState`): `Running` when hooked, else `Paused`
 /// when paused, else `Stopped`. `to = Some(id)` replies to one client; `None`
 /// broadcasts to all listening clients.
@@ -108,5 +156,32 @@ fn send_state(server: &ServerHandle, to: Option<ClientId>, shared: &Shared) {
     match to {
         Some(id) => server.send_to(id, msg),
         None => server.broadcast(msg),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A serialized Load command (as the UI writes to Current.xml) plus a Run,
+    // exactly the two lines the standalone path replays.
+    const LOAD_LINE: &str = concat!(
+        r#"<CommandMessage Command="Load"><Payload>"#,
+        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
+        r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout></Payload></CommandMessage>"#,
+    );
+
+    #[test]
+    fn replay_loads_layout_and_requests_hook() {
+        let shared = Shared::new();
+        let content = format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
+        replay(&shared, &content);
+
+        // Load populated the engine's layout...
+        assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
+        // ...and Run requested hooking (pump_tid is 0 in the test, so the posted
+        // WM_BREAK_LOOP is a no-op, but the desired state is set).
+        assert!(shared.want_hook.load(Ordering::SeqCst));
     }
 }

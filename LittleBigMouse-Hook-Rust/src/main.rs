@@ -15,7 +15,7 @@ use windows::Win32::UI::HiDpi::{
 };
 
 use littlebigmouse_hook::shared::{Shared, SHARED};
-use littlebigmouse_hook::{hook, ipc};
+use littlebigmouse_hook::{daemon, hook, ipc, platform};
 
 const DAEMON_PORT: u16 = 25196;
 
@@ -46,6 +46,23 @@ fn main() {
     let _ = shared.server.set(server);
 
     eprintln!("[LittleBigMouse.Hook] listening on 127.0.0.1:{port}");
+
+    // C++ Program.cpp: UI mode (wait for socket commands) when launched by the UI
+    // (parent path contains "LittleBigMouse"); otherwise standalone — load the
+    // last saved layout and start hooking. `LBM_HOOK_UI` forces UI mode for tests.
+    let ui_mode = std::env::var_os("LBM_HOOK_UI").is_some()
+        || platform::process::parent_process_path()
+            .map(|p| p.contains("LittleBigMouse"))
+            .unwrap_or(false);
+
+    if !ui_mode {
+        if let Some(path) = platform::paths::lbm_data_file("Current.xml") {
+            eprintln!("[LittleBigMouse.Hook] standalone mode: loading {}", path.display());
+            if let Some(path) = path.to_str() {
+                daemon::load_from_file(shared, path);
+            }
+        }
+    }
 
     // Optional debug heartbeat: prints the live mouse-event count so the hook can
     // be observed staying alive (and being called) under the timeout window.

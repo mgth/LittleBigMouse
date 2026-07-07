@@ -280,9 +280,20 @@ pub(crate) fn on_desktop_changed(shared: &Shared) {
     shared.broadcast(protocol::DESKTOP_CHANGED);
 }
 
-/// The foreground window changed (C++ `FocusChanged`). Phase 4 adds the
-/// exclusion-based pause/resume; for now this only notifies the UI.
+/// The foreground window changed (C++ `FocusChanged`): pause the hook while an
+/// excluded app (e.g. a game) is focused, resume when it loses focus.
 pub(crate) fn on_focus_changed(shared: &Shared, path: String) {
+    if shared.is_excluded(&path) {
+        if !shared.paused.load(Ordering::SeqCst) && shared.hooked.load(Ordering::SeqCst) {
+            request_unhook(shared);
+            shared.paused.store(true, Ordering::SeqCst);
+        }
+    } else if shared.paused.load(Ordering::SeqCst) {
+        if !shared.hooked.load(Ordering::SeqCst) {
+            request_hook(shared);
+        }
+        shared.paused.store(false, Ordering::SeqCst);
+    }
     shared.broadcast(&protocol::focus_changed(&path));
 }
 

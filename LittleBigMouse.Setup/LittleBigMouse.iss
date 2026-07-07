@@ -18,6 +18,12 @@ SolidCompression=yes
 OutputDir="."
 ArchitecturesInstallIn64BitMode=x64
 OutputBaseFilename=LittleBigMouse_{#AppVer}
+; Force-close the running app instead of asking the user: the Restart Manager's
+; polite WM_CLOSE is treated as "minimize to tray" by the UI and ignored by the
+; windowless hook, so the default (CloseApplications=yes) leaves files locked.
+; A hard taskkill in [Code] backs this up (see StopLittleBigMouse).
+CloseApplications=force
+RestartApplications=no
 
 [Files]
 Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs
@@ -46,8 +52,29 @@ Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse.Ui.Avalonia.ex
 [Run]
 Filename: {app}\LittleBigMouse.Ui.Avalonia.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
 
-;[UninstallRun]
-;Filename: "{cmd}"; Parameters: "/C ""taskkill /im LittleBigMouse.Ui.Avalonia.exe /f /t"
-;Filename: "{cmd}"; Parameters: "/C ""taskkill /im LittleBigMouse.Hook.exe /f /t"
-;Filename: "{app}\LittleBigMouse_Daemon.exe"; Parameters: "--unschedule --exit"
+[Code]
+procedure StopLittleBigMouse;
+var
+  ResultCode: Integer;
+begin
+  { Hard-kill every LittleBigMouse* process (UI loader, UI, and the elevated hook)
+    so their files unlock before we copy/remove them. The wildcard also covers the
+    old pre-5.3 daemon names. The installer runs elevated, so it can end the
+    elevated hook. Missing processes just make taskkill a no-op. }
+  Exec(ExpandConstant('{sys}\taskkill.exe'),
+       '/F /FI "IMAGENAME eq LittleBigMouse*"', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopLittleBigMouse;
+  Result := '';
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    StopLittleBigMouse;
+end;
 

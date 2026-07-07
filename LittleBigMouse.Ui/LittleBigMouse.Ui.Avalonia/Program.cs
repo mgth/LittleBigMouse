@@ -121,7 +121,12 @@ internal class Program
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
                 c.Export<LbmOptions>().As<ILayoutOptions>().Lifestyle.Singleton();
                 c.Export<ProcessesCollector>().As<IProcessesCollector>().Lifestyle.Singleton();
-                //c.Export<MonitorsLayout>().As<IMonitorsLayout>();
+
+                // A new layout is built on every display change and the previous one is
+                // disposed by MainService. Grace must NOT track these transients in its
+                // root disposal scope: it would keep every generation reachable until
+                // app shutdown (gigabytes after hours of display-event storms).
+                c.Export<MonitorsLayout>().ExternallyOwned();
 
                 c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
 

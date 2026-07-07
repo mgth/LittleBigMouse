@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
@@ -200,9 +201,37 @@ public class MainService : ReactiveModel, IMainService
 
     Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
 
+    /// <summary>
+    /// Rolling trace of daemon events: display-event storms (wake from sleep, HDR
+    /// flapping...) rebuild the layout every 5s for hours, and identifying the
+    /// looping event after the fact is otherwise impossible.
+    /// </summary>
+    static void TraceDaemonEvent(LittleBigMouseEvent evt)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Mgth", "LittleBigMouse");
+            Directory.CreateDirectory(dir);
+            var file = Path.Combine(dir, "daemon-events.log");
+
+            if (File.Exists(file) && new FileInfo(file).Length > 1_000_000)
+                File.WriteAllText(file, "");
+
+            File.AppendAllText(file, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {evt}\r\n");
+        }
+        catch
+        {
+            // tracing must never take the app down
+        }
+    }
+
     bool _justConnected = false;
     async Task DaemonEventReceived(object? sender, LittleBigMouseServiceEventArgs args)
     {
+        TraceDaemonEvent(args.Event);
+
         switch (args.Event)
         {
             case LittleBigMouseEvent.Running:

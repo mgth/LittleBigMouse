@@ -1,7 +1,26 @@
 [package]
-name = "LittleBigMouse-Hook-Rust"
+name = "littlebigmouse-hook"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "Little Big Mouse hook daemon (Rust port of LittleBigMouse.Hook)"
+license = "GPL-3.0-only"
+
+# The C# UI locates and launches the daemon strictly by the exe name
+# "LittleBigMouse.Hook.exe" (LittleBigMouseClientService.FindHookPath /
+# GetProcessesByName). Cargo cannot emit a target whose name contains '.', so the
+# binary is built as `lbm-hook.exe` and renamed to `LittleBigMouse.Hook.exe`
+# during staging/packaging (Phase 5 — the CI copy step already does this).
+[[bin]]
+name = "lbm-hook"
+path = "src/main.rs"
+
+[lib]
+name = "littlebigmouse_hook"
+path = "src/lib.rs"
 
 [dependencies]
-num-traits = "0.2"
+roxmltree = "0.20"
+
+[profile.release]
+lto = true
+codegen-units = 1

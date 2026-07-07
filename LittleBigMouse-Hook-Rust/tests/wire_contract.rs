@@ -1,9 +1,10 @@
-//! Pins the socket/XML wire contract the C# UI relies on.
+//! Pins the pump-independent parts of the socket/XML wire contract.
 //!
-//! Reproduces the UI's sequence: a persistent "Listen" connection that receives
-//! state broadcasts, plus short-lived per-command connections (`Run`, `Stop`) —
-//! exactly what `LittleBigMouseClientService` / `RemoteClientSocket` do. Lines
-//! are `\r\n`-terminated, as .NET `StreamWriter.WriteLine` emits.
+//! `Listen`/`State`/empty-line all reply with the current daemon state without
+//! needing the Win32 message pump, so they run as plain integration tests here.
+//! The `Run`/`Stop` state transitions now follow the *actual* hook install on
+//! the pump thread (Phase 1), so they can't be exercised in-process — they are
+//! verified by driving the real `lbm-hook.exe` end-to-end instead.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
@@ -11,89 +12,49 @@ use std::net::TcpStream;
 use littlebigmouse_hook::ipc;
 use littlebigmouse_hook::shared::Shared;
 
-/// Send one command on a short-lived connection and close it (the UI's
-/// `TrySendMessageAsync` pattern).
-fn send_command(port: u16, xml: &str) {
-    let mut conn = TcpStream::connect(("127.0.0.1", port)).expect("connect");
-    conn.write_all(xml.as_bytes()).expect("write");
-    conn.write_all(b"\r\n").expect("write newline");
-    // Drop closes the connection.
+/// Connect, send one `\r\n`-terminated line (as .NET `WriteLine` emits), and
+/// read one reply line.
+fn send_and_read(port: u16, xml: &str) -> String {
+    let conn = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    {
+        let mut w = conn.try_clone().unwrap();
+        w.write_all(xml.as_bytes()).unwrap();
+        w.write_all(b"\r\n").unwrap();
+    }
+    let mut reader = BufReader::new(conn);
+    let mut line = String::new();
+    reader.read_line(&mut line).expect("read reply");
+    line
 }
 
 #[test]
-fn listen_run_stop_roundtrip() {
+fn listen_replies_with_current_state() {
     // A fresh, leaked Shared keeps tests independent of the process-global static.
     let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
     let (_server, port) = ipc::server::start(shared, 0);
 
-    // Persistent "Listen" connection.
-    let listen = TcpStream::connect(("127.0.0.1", port)).expect("connect listen");
-    {
-        let mut w = listen.try_clone().unwrap();
-        w.write_all(br#"<CommandMessage Command="Listen" Payload=""/>"#)
-            .unwrap();
-        w.write_all(b"\r\n").unwrap();
-    }
-    let mut reader = BufReader::new(listen.try_clone().unwrap());
-
-    // On Listen the daemon replies with current state to this client: Stopped.
-    let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
+    let line = send_and_read(port, r#"<CommandMessage Command="Listen" Payload=""/>"#);
     assert!(
         line.contains("Stopped"),
         "initial state should be Stopped, got {line:?}"
     );
-
-    // Run on a separate connection -> Running broadcast on the listen socket.
-    send_command(port, r#"<CommandMessage Command="Run" Payload=""/>"#);
-    line.clear();
-    reader.read_line(&mut line).unwrap();
-    assert!(
-        line.contains("Running"),
-        "expected Running broadcast, got {line:?}"
-    );
-
-    // Stop -> Stopped broadcast.
-    send_command(port, r#"<CommandMessage Command="Stop" Payload=""/>"#);
-    line.clear();
-    reader.read_line(&mut line).unwrap();
-    assert!(
-        line.contains("Stopped"),
-        "expected Stopped broadcast, got {line:?}"
-    );
 }
 
 #[test]
-fn load_then_run_batched_on_one_connection() {
-    // The UI's StartAsync sends `Load\nRun\n` on a single connection.
+fn state_query_replies_stopped() {
     let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
     let (_server, port) = ipc::server::start(shared, 0);
 
-    let listen = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    {
-        let mut w = listen.try_clone().unwrap();
-        w.write_all(br#"<CommandMessage Command="Listen" Payload=""/>"#)
-            .unwrap();
-        w.write_all(b"\r\n").unwrap();
-    }
-    let mut reader = BufReader::new(listen.try_clone().unwrap());
-    let mut line = String::new();
-    reader.read_line(&mut line).unwrap(); // Stopped
+    let line = send_and_read(port, r#"<CommandMessage Command="State" Payload=""/>"#);
+    assert!(line.contains("Stopped"), "got {line:?}");
+}
 
-    // Batched Load + Run on one short-lived connection.
-    {
-        let mut conn = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        let batch = concat!(
-            "<CommandMessage Command=\"Load\"><Payload><ZonesLayout MaxTravelDistance=\"200\"/></Payload></CommandMessage>\r\n",
-            "<CommandMessage Command=\"Run\" Payload=\"\"/>\r\n"
-        );
-        conn.write_all(batch.as_bytes()).unwrap();
-    }
+#[test]
+fn empty_line_replies_state() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let (_server, port) = ipc::server::start(shared, 0);
 
-    line.clear();
-    reader.read_line(&mut line).unwrap();
-    assert!(
-        line.contains("Running"),
-        "batched Load+Run should end Running, got {line:?}"
-    );
+    // C++ ReceiveClientMessage: an empty message just re-reports state.
+    let line = send_and_read(port, "");
+    assert!(line.contains("Stopped"), "got {line:?}");
 }

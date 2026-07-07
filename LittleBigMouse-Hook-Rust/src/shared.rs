@@ -1,22 +1,27 @@
 //! Process-global shared state.
 //!
 //! Replaces the C++ `Hooker::_instance` static. It must be reachable from the
-//! IPC threads and — from Phase 1 — the message-pump thread and the low-level
-//! mouse-hook callback, so it lives in a `static OnceLock` rather than a
+//! IPC threads and the message-pump thread (and, from Phase 3, the low-level
+//! mouse-hook callback), so it lives in a `static OnceLock` rather than a
 //! `thread_local`.
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::OnceLock;
 
 use crate::ipc::server::ServerHandle;
 
 pub struct Shared {
-    /// Whether the low-level hook is currently installed (C++ `Hooker::Hooked`).
-    /// In Phase 0 this is a pure state flag toggled by `Run`/`Stop`.
+    /// The low-level mouse hook is currently installed (C++ `Hooker::Hooked`).
     pub hooked: AtomicBool,
-    /// Whether the daemon is paused by an excluded foreground window
+    /// Desired hooking state (C++ `Hooker::_hookMouse`); the pump reconciles the
+    /// actual hook to this on each `WM_BREAK_LOOP`.
+    pub want_hook: AtomicBool,
+    /// Paused by an excluded foreground window
     /// (C++ `LittleBigMouseDaemon::_paused`).
     pub paused: AtomicBool,
+    /// Thread id of the message pump, for `PostThreadMessageW`
+    /// (C++ `Hooker::_currentThreadId`). Zero until the pump starts.
+    pub pump_tid: AtomicU32,
     /// The IPC server handle, published once the listener is up.
     pub server: OnceLock<ServerHandle>,
 }
@@ -25,8 +30,17 @@ impl Shared {
     pub fn new() -> Self {
         Shared {
             hooked: AtomicBool::new(false),
+            want_hook: AtomicBool::new(false),
             paused: AtomicBool::new(false),
+            pump_tid: AtomicU32::new(0),
             server: OnceLock::new(),
+        }
+    }
+
+    /// Broadcast an event to all listening clients, if the server is up.
+    pub fn broadcast(&self, msg: &str) {
+        if let Some(server) = self.server.get() {
+            server.broadcast(msg);
         }
     }
 }

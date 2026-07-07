@@ -7,6 +7,7 @@
 
 use std::sync::atomic::Ordering;
 
+use crate::hook;
 use crate::ipc::protocol::{self, Command};
 use crate::ipc::server::{ClientId, ServerHandle};
 use crate::shared::Shared;
@@ -37,16 +38,16 @@ pub fn receive_message(
                 became_listening = true;
             }
             Command::Run => {
-                // Phase 0 stub: no hook yet. Phase 1 installs the low-level hook
-                // here and lets the `OnHooked` path broadcast the new state.
-                shared.hooked.store(true, Ordering::SeqCst);
+                // Ask the pump to install the hook. The `Running` state is
+                // broadcast from the hook-install success path, not here
+                // (C++ `Hook` -> `OnHooked` -> `SendState`).
                 shared.paused.store(false, Ordering::SeqCst);
-                send_state(server, None, shared);
+                hook::request_hook(shared);
             }
             Command::Stop => {
-                shared.hooked.store(false, Ordering::SeqCst);
+                // The `Stopped` state is broadcast from the unhook path.
                 shared.paused.store(false, Ordering::SeqCst);
-                send_state(server, None, shared);
+                hook::request_unhook(shared);
             }
             Command::State => {
                 send_state(server, Some(client_id), shared);
@@ -55,9 +56,8 @@ pub fn receive_message(
                 // Phase 2: parse the `ZonesLayout` into the arena.
             }
             Command::Quit => {
-                // Phase 1 posts WM_QUIT to the pump thread for a clean shutdown;
-                // with no pump yet, exit the process directly.
-                std::process::exit(0);
+                // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
+                hook::request_quit(shared);
             }
             Command::Unknown(_) => {}
         }

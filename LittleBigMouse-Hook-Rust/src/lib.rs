@@ -5,10 +5,12 @@
 //! messages — the language-agnostic contract that lets this Rust process replace
 //! the C++ one wholesale.
 //!
-//! Phase status: **Phase 0** implements the socket/XML boundary only (no Win32
-//! hooking yet). Later phases add the message pump, the low-level mouse hook, the
-//! zone engine, and the build/CI integration.
+//! Phase status: **Phase 1** — the socket/XML boundary (Phase 0) plus the Win32
+//! low-level mouse hook, the WinEvent/display hooks and the message pump. The
+//! mouse callback is still a pass-through (no zone engine yet — Phase 3).
 
 pub mod daemon;
+pub mod hook;
 pub mod ipc;
+pub mod platform;
 pub mod shared;

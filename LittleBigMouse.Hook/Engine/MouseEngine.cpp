@@ -247,7 +247,7 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 
 	if(Layout.LoopX)
 	{
-		const Zone* zoneOut = nullptr;
+		Zone* zoneOut = nullptr;
 		// we are moving left
 		if(trip.B().X() < trip.A().X())
 			zoneOut = FindTargetZone(nullptr, trip + geo::Point<double>(Layout.Width(),0), pOutInMm, minDistSquared);
@@ -270,7 +270,7 @@ void MouseEngine::OnMouseMoveCross(MouseEventArg& e)
 
 	if(Layout.LoopY)
 	{
-		const Zone* zoneOut = nullptr;
+		Zone* zoneOut = nullptr;
 
 		// we are moving top
 		if(trip.B().Y() < trip.A().Y())
@@ -441,18 +441,24 @@ void MouseEngine::OnMouseMoveStraight(MouseEventArg& e)
 	Move(e, pOut, zoneLinkOut->Target);
 }
 
-void MouseEngine::MoveInMm(MouseEventArg& e, const geo::Point<double>& pOutInMm, const Zone* zoneOut)
+void MouseEngine::MoveInMm(MouseEventArg& e, const geo::Point<double>& pOutInMm, Zone* zoneOut)
 {
 	const auto pOut = zoneOut->ToPixels(pOutInMm);
 
 	Move(e, pOut, zoneOut);
 }
 
-void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, const Zone* zoneOut)
+void MouseEngine::Move(MouseEventArg& e, const geo::Point<long>& pOut, Zone* zoneOut)
 {
 	const auto travel = _oldZone->TravelPixels(Layout.MainZones, zoneOut);
 
-	_oldZone = zoneOut->Main;
+	// Keep the zone the cursor actually entered: with duplicated displays several
+	// zones share the same pixel space but sit at different physical locations,
+	// and the exit must be computed from the physical monitor the cursor came in
+	// through (#83, #222). Folding onto Main here lost that memory. Loop copies
+	// never reach this point: their link targets are redirected to the real zone
+	// before serialization.
+	_oldZone = zoneOut;
 	_oldPoint = pOut;
 
 	const auto r = zoneOut->PixelsBounds();

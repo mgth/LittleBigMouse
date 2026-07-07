@@ -53,17 +53,25 @@ Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse.Ui.Avalonia.ex
 Filename: {app}\LittleBigMouse.Ui.Avalonia.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
 
 [Code]
-procedure StopLittleBigMouse;
+procedure KillImage(const ExeName: String);
 var
   ResultCode: Integer;
 begin
-  { Hard-kill every LittleBigMouse* process (UI loader, UI, and the elevated hook)
-    so their files unlock before we copy/remove them. The wildcard also covers the
-    old pre-5.3 daemon names. The installer runs elevated, so it can end the
-    elevated hook. Missing processes just make taskkill a no-op. }
-  Exec(ExpandConstant('{sys}\taskkill.exe'),
-       '/F /FI "IMAGENAME eq LittleBigMouse*"', '',
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM ' + ExeName, '',
        SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure StopLittleBigMouse;
+begin
+  { Hard-kill the running app (UI loader, UI, and the elevated hook) so their files
+    unlock before we copy/remove them. Kill by EXACT image name only: a wildcard like
+    "LittleBigMouse*" would also match the setup EXE itself (LittleBigMouse_<ver>.exe)
+    and the installer would terminate itself mid-install. The installer runs elevated,
+    so it can end the elevated hook. Missing processes just make taskkill a no-op. }
+  KillImage('LittleBigMouse.Ui.Loader.exe');
+  KillImage('LittleBigMouse.Ui.Avalonia.exe');
+  KillImage('LittleBigMouse.Hook.exe');
+  KillImage('LittleBigMouse_Daemon.exe');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

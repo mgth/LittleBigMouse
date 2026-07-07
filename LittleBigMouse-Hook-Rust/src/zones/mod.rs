@@ -8,6 +8,7 @@
 //! instead of dereferencing freed memory.
 
 pub mod layout;
+pub mod travel;
 pub mod xml;
 pub mod zone;
 pub mod zone_link;

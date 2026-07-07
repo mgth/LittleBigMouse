@@ -67,22 +67,23 @@ impl ZoneLink {
     }
 }
 
-/// C++ `ZoneLink::AtPhysical` — first link covering physical position `pos`.
-/// Assumes a terminating catch-all link (`to == +inf`), which the layout always
-/// provides.
-pub fn at_physical(links: &[ZoneLink], pos: f64) -> &ZoneLink {
+/// C++ `ZoneLink::AtPhysical` — index of the first link covering physical
+/// position `pos`. Assumes a terminating catch-all link (`to == +inf`), which
+/// the layout always provides. Returns the index (rather than a reference) so
+/// the caller can identify the link for border-resistance tracking.
+pub fn at_physical_index(links: &[ZoneLink], pos: f64) -> usize {
     let mut i = 0;
     while pos >= links[i].to {
         i += 1;
     }
-    &links[i]
+    i
 }
 
-/// C++ `ZoneLink::AtPixel` — first link covering pixel position `pos`.
-pub fn at_pixel(links: &[ZoneLink], pos: i32) -> &ZoneLink {
+/// C++ `ZoneLink::AtPixel` — index of the first link covering pixel position `pos`.
+pub fn at_pixel_index(links: &[ZoneLink], pos: i32) -> usize {
     let mut i = 0;
     while pos >= links[i].source_to_px {
         i += 1;
     }
-    &links[i]
+    i
 }

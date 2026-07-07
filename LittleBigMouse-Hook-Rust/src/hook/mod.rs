@@ -121,6 +121,17 @@ impl Hooker {
             let _ = UnhookWindowsHookEx(self.mouse_hook);
         }
         self.mouse_hook = HHOOK::default();
+
+        // C++ feeds a final `running = false` move so the engine restores any clip
+        // it set. Safe to block-lock here: the callback only runs while pumping,
+        // and we are between pump cycles.
+        if let Ok(mut engine) = shared.engine.lock() {
+            let mut env = crate::platform::cursor::Win32Cursor;
+            let mut e = crate::engine::event::MouseEventArg::new(crate::geometry::Point::default());
+            e.running = false;
+            engine.on_mouse_move(&mut env, &mut e);
+        }
+
         shared.hooked.store(false, Ordering::SeqCst);
         shared.broadcast(protocol::STOPPED);
     }

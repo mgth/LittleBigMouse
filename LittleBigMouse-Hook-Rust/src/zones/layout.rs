@@ -41,8 +41,7 @@ pub struct ZonesLayout {
 
     /// Travel-rect cache, keyed by `(source, target.main)`. Lifted out of `Zone`
     /// (unlike the C++ `Zone::_travels`) so `Move` can mutate it without
-    /// aliasing the arena. Populated lazily in Phase 3.
-    #[allow(dead_code)]
+    /// aliasing the arena.
     travels: HashMap<(ZoneId, ZoneId), Vec<Rect<i32>>>,
 }
 
@@ -214,6 +213,34 @@ impl ZonesLayout {
 
     pub fn height(&self) -> f64 {
         40.0 + self.bottom - self.top
+    }
+
+    /// C++ `Zone::TravelPixels` — the cached clip-rect path from `source` to
+    /// `target` (keyed, as in the C++, by the target's `Main` so clones share a
+    /// path). Computed lazily.
+    pub fn travel_pixels(&mut self, source: ZoneId, target: ZoneId) -> Vec<Rect<i32>> {
+        let target_main = self.arena[target].main;
+        let key = (source, target_main);
+        if let Some(cached) = self.travels.get(&key) {
+            return cached.clone();
+        }
+        let computed = self.compute_travel_pixels(source, target);
+        self.travels.insert(key, computed.clone());
+        computed
+    }
+
+    /// C++ `Zone::GetTravelPixels`.
+    fn compute_travel_pixels(&self, source: ZoneId, target: ZoneId) -> Vec<Rect<i32>> {
+        let bounds: Vec<Rect<i32>> = self
+            .main_zones
+            .iter()
+            .map(|&z| self.arena[z].pixels_bounds())
+            .collect();
+        super::travel::travel(
+            self.arena[source].pixels_bounds(),
+            self.arena[target].pixels_bounds(),
+            &bounds,
+        )
     }
 }
 

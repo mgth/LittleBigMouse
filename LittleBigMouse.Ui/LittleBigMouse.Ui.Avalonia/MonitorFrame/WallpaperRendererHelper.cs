@@ -252,7 +252,7 @@ public static class WallpaperRendererHelper
 
         return ctx
             .Resize(resize)
-            .Crop(target);
+            .CropClamped(target, resize);
     }
 
     static IImageProcessingContext SpanCenter(this IImageProcessingContext ctx, Rectangle target, Rectangle fullArea)
@@ -269,7 +269,17 @@ public static class WallpaperRendererHelper
 
         return ctx
             .Resize(resize)
-            .Crop(target);
+            .CropClamped(target, resize);
+    }
+
+    // Integer truncation in the ratio/resize math above (and in the source Rect -> pixel
+    // conversions) can leave the crop rectangle up to 1px past the resized image. ImageSharp
+    // then throws "Crop rectangle should be smaller than the source bounds", which surfaces on
+    // a background thread and takes down the whole UI (see issue #492). Clamp to the image
+    // bounds so the Span/Tile wallpaper modes can never crash on edge-case geometry.
+    static IImageProcessingContext CropClamped(this IImageProcessingContext ctx, Rectangle target, Size bounds)
+    {
+        return ctx.Crop(Rectangle.Intersect(target, new Rectangle(0, 0, bounds.Width, bounds.Height)));
     }
 
     public static void ImageSharpDebugStats()

@@ -269,12 +269,15 @@ public class MainService : ReactiveModel, IMainService
                 await _notify.SetIconAsync("icon/lbm_paused", 32);
                 break;
 
-            // Display is back: resume, reconcile the layout only if it actually changed while off
-            // (the idempotence guard), and re-hook the daemon once the config has settled.
+            // Display is back: reconcile the layout only if it actually changed while off (the
+            // idempotence guard), then keep re-hooking the daemon through the post-resume display
+            // re-enumeration storm. A single StartAsync loses a race — a late WM_DISPLAYCHANGE
+            // unhooks us ~1-2s after Resumed — and the engine stays stopped ("blue") until a manual
+            // Start. EnsureRunningAfterResumeAsync re-asserts Start until it sticks.
             case LittleBigMouseEvent.Resumed:
                 _suspended = false;
                 await DisplayChangedAsync();
-                if ((MonitorsLayout?.Options.Enabled) ?? false) await StartAsync();
+                await EnsureRunningAfterResumeAsync();
                 break;
 
             case LittleBigMouseEvent.FocusChanged:
@@ -356,6 +359,11 @@ public class MainService : ReactiveModel, IMainService
         if (signature == _lastBuiltSignature)
         {
             DcLog($"  UNCHANGED sig — skip rebuild gen={gen}");
+            // Skip the REBUILD, but still make sure the engine is hooked. The daemon unhooks itself
+            // over ANY display change (so the cursor is never confined while the desktop reshapes);
+            // when the config settles back to the same signature, nothing else would re-Start it, so
+            // the engine would stay stopped ("blue") until a manual Start. Re-hook without rebuilding.
+            await EnsureEngineHookedAsync("unchanged-settle");
             return;
         }
 
@@ -369,6 +377,94 @@ public class MainService : ReactiveModel, IMainService
             DcLog($"  StartAsync done (total {sw.ElapsedMilliseconds}ms since rebuild start)");
         }
     }
+
+    // The daemon reports Running only while its low-level mouse hook is actually installed, so its
+    // published State is the source of truth for "is the engine hooked right now".
+    bool EngineRunning => _littleBigMouseClientService.State == LittleBigMouseEvent.Running;
+
+    /// <summary>
+    /// Re-hook the daemon if the engine should be running but is not — WITHOUT rebuilding the layout.
+    /// Called from the idempotence guard when a display change settles to the already-built config:
+    /// the daemon unhooks itself over any display change, and when the config comes back identical
+    /// nothing else re-Starts it. Safe while an excluded app (a game) is focused — the daemon's Run
+    /// path no-ops when paused, so this can never force the hook on over an exclusion.
+    /// </summary>
+    async Task EnsureEngineHookedAsync(string reason)
+    {
+        if (_resumeWatchdogActive) return;                        // the resume watchdog owns reconciliation
+        if (_suspended) return;                                   // display off — nothing to do
+        if (!(MonitorsLayout?.Options.Enabled ?? false)) return;  // engine disabled by the user
+        if (EngineRunning) return;                                // already hooked
+        DcLog($"  reconcile ({reason}): enabled but {_littleBigMouseClientService.State} — StartAsync");
+        await StartAsync();
+    }
+
+    /// <summary>
+    /// Keep the engine hooked across the display re-enumeration storm that follows a wake from sleep.
+    /// The daemon emits Resumed as soon as the screen turns on, but Windows then re-enumerates the
+    /// GPU/monitors for several seconds, firing a burst of WM_DISPLAYCHANGE. One of those, processed
+    /// just after we re-install the hook, makes the daemon unhook itself again (a Stopped ~1-2s after
+    /// Resumed), and a single StartAsync loses that race — the engine stays stopped ("blue") until a
+    /// manual Start. Re-assert Start until it sticks (Running for a short quiet window), bounded so a
+    /// legitimately-paused engine (excluded app focused at wake) can't loop forever.
+    /// </summary>
+    async Task EnsureRunningAfterResumeAsync()
+    {
+        if (!(MonitorsLayout?.Options.Enabled ?? false)) return;
+
+        var myGen = Interlocked.Increment(ref _resumeGeneration);
+        _resumeWatchdogActive = true;
+        try
+        {
+            var restarts = 0;
+            var quiet = 0;
+            for (var i = 0; i < ResumeWatchdogMaxSteps; i++)
+            {
+                if (myGen != Volatile.Read(ref _resumeGeneration)) return; // a newer resume superseded us
+                if (_suspended) return;                                    // went back to sleep
+                if (!(MonitorsLayout?.Options.Enabled ?? false)) return;   // user disabled the engine
+
+                if (EngineRunning)
+                {
+                    if (++quiet >= ResumeWatchdogStableSteps)
+                    {
+                        DcLog($"  resume-watchdog: stable after {restarts} restart(s)");
+                        return;
+                    }
+                }
+                else if (restarts >= ResumeWatchdogMaxRestarts)
+                {
+                    DcLog($"  resume-watchdog: gave up after {restarts} restarts (paused/excluded?)");
+                    return;
+                }
+                else
+                {
+                    quiet = 0;
+                    restarts++;
+                    DcLog($"  resume-watchdog: {_littleBigMouseClientService.State} — StartAsync #{restarts}");
+                    await StartAsync();
+                }
+
+                await Task.Delay(ResumeWatchdogStepMs);
+            }
+            DcLog("  resume-watchdog: window closed");
+        }
+        finally
+        {
+            _resumeWatchdogActive = false;
+        }
+    }
+
+    const int ResumeWatchdogStepMs = 500;      // spacing between engine-state checks
+    const int ResumeWatchdogStableSteps = 3;   // consecutive Running checks that count as converged (~1.5s)
+    const int ResumeWatchdogMaxRestarts = 6;   // cap re-Starts so a paused/excluded engine can't loop forever
+    const int ResumeWatchdogMaxSteps = 60;     // hard stop (~30s) against a pathological flapping wake
+
+    // Guards the post-resume watchdog: a generation counter so a newer Resumed supersedes an older
+    // watchdog run, and a flag telling the idempotence-guard reconcile to stand aside while the
+    // watchdog is the active driver. Written on the daemon-event path — volatile is enough.
+    int _resumeGeneration;
+    volatile bool _resumeWatchdogActive;
 
     // Signature of the display configuration the current MonitorsLayout was built from. Lets
     // DisplayChangedAsync skip a rebuild when a display event settles to an already-built config.

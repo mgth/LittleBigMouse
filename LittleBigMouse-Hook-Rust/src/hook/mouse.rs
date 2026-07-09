@@ -72,9 +72,15 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     let Some(shared) = SHARED.get() else {
         return false;
     };
-    // Non-blocking: a contended lock (Load in progress) just passes the event on.
-    let Ok(mut engine) = shared.engine.try_lock() else {
-        return false;
+    // Non-blocking: a contended lock (Load in progress) just passes the event on. Recover from a
+    // POISONED lock instead of giving up forever: if `on_mouse_move` ever panics (e.g. a debug-build
+    // arithmetic overflow at extreme corner coordinates), the guard drops and poisons the mutex —
+    // and without recovery every later event would fail this lock and crossing would stay dead until
+    // a restart (exactly the "touch a corner -> no more crossing, only restart fixes it" bug).
+    let mut engine = match shared.engine.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return false,
     };
 
     let mut env = Win32Cursor;

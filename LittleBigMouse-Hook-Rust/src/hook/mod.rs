@@ -124,8 +124,9 @@ impl Hooker {
 
         // C++ feeds a final `running = false` move so the engine restores any clip
         // it set. Safe to block-lock here: the callback only runs while pumping,
-        // and we are between pump cycles.
-        if let Ok(mut engine) = shared.engine.lock() {
+        // and we are between pump cycles. Recover from a poisoned lock (prior panic under it).
+        {
+            let mut engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
             let mut env = crate::platform::cursor::Win32Cursor;
             let mut e = crate::engine::event::MouseEventArg::new(crate::geometry::Point::default());
             e.running = false;

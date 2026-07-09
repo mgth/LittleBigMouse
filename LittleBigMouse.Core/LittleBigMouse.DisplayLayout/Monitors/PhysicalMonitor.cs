@@ -86,7 +86,7 @@ public class PhysicalMonitor : SavableReactiveModel
             .Subscribe().DisposeWith(this);
 
         _physicalRotated = this.WhenAnyValue(
-            e => e.Model.PhysicalSize,
+            e => e.EffectivePhysicalSize,
             e => e.ActiveSource.Source.Orientation,
             (physicalSize, orientation) => physicalSize.Rotate(orientation)
         ).Log(this, "_physicalRotated").ToProperty(this, e => e.PhysicalRotated).DisposeWith(this);
@@ -102,7 +102,7 @@ public class PhysicalMonitor : SavableReactiveModel
             ).Log(this, "_inMm").ToProperty(this, e => e.DepthProjection).DisposeWith(this);
 
         _depthProjectionUnrotated = this.WhenAnyValue(
-            e => e.Model.PhysicalSize,
+            e => e.EffectivePhysicalSize,
             e => e.DepthRatio,
             (physicalSize, ratio) => physicalSize.Scale(ratio)
             ).Log(this, "_inMmU").ToProperty(this, e => e.DepthProjectionUnrotated).DisposeWith(this);
@@ -175,6 +175,15 @@ public class PhysicalMonitor : SavableReactiveModel
     /// Monitor model
     /// </summary>
     public PhysicalMonitorModel Model { get; }
+
+    /// <summary>
+    /// The physical size (with bezel borders) this monitor's geometry is built from — the whole
+    /// rotation / depth-projection / zones chain reads through here. Today it always returns the
+    /// shared per-model <see cref="PhysicalMonitorModel.PhysicalSize"/>, so behaviour is unchanged.
+    /// It exists as the single seam where a future "Border values: per monitor" option can substitute
+    /// a per-monitor border source, without touching any geometry consumer. See the border-values plan.
+    /// </summary>
+    public IDisplaySize EffectivePhysicalSize => Model.PhysicalSize;
 
     /// <summary>
     /// Dimensions with rotation applied

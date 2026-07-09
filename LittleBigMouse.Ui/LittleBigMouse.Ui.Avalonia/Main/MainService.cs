@@ -167,18 +167,18 @@ public class MainService : ReactiveModel, IMainService
     {
         _notify.Click += async (s, a) => await ShowControlAsync();
 
-        // When a second instance launches, it signals this event instead of doing nothing.
-        _ = Task.Run(async () =>
+        // When a second instance launches, it signals this event; show our window instead of doing
+        // nothing. RegisterWaitForSingleObject parks no thread of its own — a pool thread wakes only
+        // when the event is signalled (AutoReset, so each new launch fires the callback once).
+        if (Program.ShowWindowEvent is { } showWindowEvent)
         {
-            try
-            {
-                var evt = Program.ShowWindowEvent;
-                if (evt == null) return;
-                while (evt.WaitOne())
-                    await Dispatcher.UIThread.InvokeAsync(ShowControlAsync);
-            }
-            catch (ObjectDisposedException) { }
-        });
+            ThreadPool.RegisterWaitForSingleObject(
+                showWindowEvent,
+                (_, _) => Dispatcher.UIThread.Post(() => _ = ShowControlAsync()),
+                state: null,
+                millisecondsTimeOutInterval: Timeout.Infinite,
+                executeOnlyOnce: false);
+        }
 
         await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);

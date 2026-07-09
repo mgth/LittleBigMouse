@@ -54,6 +54,10 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
                 OnStateChanged(LittleBigMouseEvent.DisplayChanged);
             else if(args.Contains("DesktopChanged"))
                 OnStateChanged(LittleBigMouseEvent.DesktopChanged);
+            else if(args.Contains("Suspended"))
+                OnStateChanged(LittleBigMouseEvent.Suspended);
+            else if(args.Contains("Resumed"))
+                OnStateChanged(LittleBigMouseEvent.Resumed);
             else if(args.Contains("FocusChanged"))
             {
                 var payload = PayloadRegex().Match(args).Groups[1].Value;

@@ -79,9 +79,14 @@ fn load_layout(shared: &Shared, xml: &str) {
         shared
             .priority_unhooked
             .store(layout.priority_unhooked.as_u8(), Ordering::SeqCst);
-        if let Ok(mut engine) = shared.engine.lock() {
-            engine.load(layout);
-        }
+        // Recover from a poisoned lock (a prior panic under the lock): a fresh Load fully replaces
+        // the layout and resets tracking, so it is exactly the right place to shrug off the poison —
+        // this is what lets a Stop/Start (Load) heal crossing instead of staying broken.
+        shared
+            .engine
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .load(layout);
         eprintln!("[LittleBigMouse.Hook] layout loaded: {zones} zones ({main} main)");
     } else {
         eprintln!("[LittleBigMouse.Hook] layout load FAILED to parse");

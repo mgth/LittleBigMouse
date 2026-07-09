@@ -131,6 +131,11 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       var r = new Rect();
       foreach (var s in Model.Layout.PhysicalSources)
       {
+         // Windows spans the wallpaper over the currently ATTACHED monitors only. A detached
+         // source can linger in the layout with stale non-zero pixel bounds (EnumDisplaySettings
+         // still returns the registry mode), which would inflate the span bounding box. Skip it,
+         // as the rest of the layout code does (e.g. MonitorLocationViewModel, ZonesLayoutFactory).
+         if (!s.Source.AttachedToDesktop) continue;
          r = r.Union(s.Source.InPixel.Bounds.ToAvalonia());
       }
 
@@ -141,9 +146,11 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
    {
       Debug.Assert(Model?.ActiveSource?.Source != null);
 
-      if (string.IsNullOrWhiteSpace(path))
+      // A detached monitor shows no desktop wallpaper in Windows; don't render one on its frame
+      // (its pixel bounds may also be stale/non-zero, which would produce a bogus crop).
+      if (string.IsNullOrWhiteSpace(path) || !Model.ActiveSource.Source.AttachedToDesktop)
       {
-         Wallpaper = null;
+         ApplyWallpaper(null);
          return;
       }
 
@@ -155,13 +162,13 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
       if (r.Width < shrink || r.Height < shrink)
       {
-         Wallpaper = null;
+         ApplyWallpaper(null);
          return;
       }
 
       var monitor = new Rect(r.X / shrink, r.Y / shrink, r.Width / shrink, r.Height / shrink);
 
-      Wallpaper = style switch
+      var bitmap = style switch
       {
          WallpaperStyle.Fill => await WallpaperRendererHelper.GetWallpaperFillAsync(path, monitor.Size, shrink),
 
@@ -178,9 +185,22 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
          _ => throw new ArgumentOutOfRangeException()
       };
 
+      ApplyWallpaper(bitmap);
+
 #if DEBUG
       WallpaperRendererHelper.ImageSharpDebugStats();
 #endif
+   }
+
+   // The wallpaper renderers await ImageSharp I/O + Task.Run without capturing the UI context, so
+   // the continuation here can resume off the UI thread. Assigning the UI-bound Wallpaper property
+   // off-thread does not refresh the Image, so marshal the assignment back to the UI thread.
+   void ApplyWallpaper(IImage? bitmap)
+   {
+      if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+         Wallpaper = bitmap;
+      else
+         global::Avalonia.Threading.Dispatcher.UIThread.Post(() => Wallpaper = bitmap);
    }
 
 

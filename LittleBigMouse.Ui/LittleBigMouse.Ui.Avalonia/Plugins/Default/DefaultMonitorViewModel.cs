@@ -23,10 +23,10 @@
 
 using Avalonia.Controls;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Sys.Windows.Monitors.Factory;
+using LittleBigMouse.Plugins;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Controls;
-using LittleBigMouse.Ui.Avalonia.Persistency;
+using LittleBigMouse.Platform.Windows;
 using ReactiveUI;
 using System;
 using System.Reactive.Linq;
@@ -37,8 +37,17 @@ namespace LittleBigMouse.Ui.Avalonia.Plugins.Default;
 
 public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
 {
-    public DefaultMonitorViewModel()
+    // Nullable: the parameterless ctor exists only for XAML/design instantiation, where
+    // the attach/detach/primary commands are never invoked. At runtime the MVVM locator
+    // resolves the greedier (IDisplayController) ctor via the DI container.
+    readonly IDisplayController? _controller;
+
+    public DefaultMonitorViewModel() : this(null) { }
+
+    public DefaultMonitorViewModel(IDisplayController? controller)
     {
+        _controller = controller;
+
         _inches = this.WhenAnyValue(
                 e => e.Model.Diagonal,
                 selector: d => (d / 25.4).ToString("##.#") + "\"")
@@ -91,26 +100,21 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     {
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowDetachAsync)) return;
 
-        MonitorDeviceHelper.DetachFromDesktop(Model.ActiveSource.Source.InterfacePath);
+        _controller?.DetachFromDesktop(Model.ActiveSource.Source);
     }
 
     async Task AttachToDesktopAsync(Window? owner)
     {
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowAttachAsync)) return;
 
-        MonitorDeviceHelper.AttachToDesktop(
-            Model.ActiveSource.Source.InterfacePath,
-            Model.ActiveSource.Source.Primary,
-            Model.ActiveSource.Source.InPixel.Bounds,
-            Model.ActiveSource.Source.Orientation
-            );
+        _controller?.AttachToDesktop(Model.ActiveSource.Source);
     }
 
     async Task MakePrimaryAsync(Window? owner)
     {
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowMakePrimaryAsync)) return;
 
-        MonitorDeviceHelper.SetPrimary(Model.ActiveSource.Source.InterfacePath);
+        _controller?.SetPrimary(Model.ActiveSource.Source);
     }
 
     async Task<bool> ConfirmAsync(Window? owner, Func<Window?, Task<(bool Confirmed, bool DontShowAgain)>> showDialog)

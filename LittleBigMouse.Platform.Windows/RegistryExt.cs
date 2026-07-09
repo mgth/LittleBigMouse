@@ -1,4 +1,4 @@
-﻿/*
+/*
   LittleBigMouse.Screen.Config
   Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
@@ -26,7 +26,8 @@ using System.Globalization;
 
 using Microsoft.Win32;
 
-namespace LittleBigMouse.DisplayLayout;
+// Registry helpers for the Windows persistence layer.
+namespace LittleBigMouse.Platform.Windows;
 
 #pragma warning disable CA1416
 
@@ -51,15 +52,15 @@ public static class RegistryExt
         return r;
     }
 
-    public static bool GetOrSet(this RegistryKey key, string keyName, Func<bool> getter, Action ifLoaded = null) 
+    public static bool GetOrSet(this RegistryKey key, string keyName, Func<bool> getter, Action ifLoaded = null)
         => GetOrSet(key, keyName, () => getter() ? "1" : "0", ifLoaded) == "1";
 
-    public static double GetOrSet(this RegistryKey key, string keyName, Func<double> getter, Action ifLoaded = null) 
+    public static double GetOrSet(this RegistryKey key, string keyName, Func<double> getter, Action ifLoaded = null)
         => double.Parse(
             GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
             CultureInfo.InvariantCulture);
 
-    public static int GetOrSet(this RegistryKey key, string keyName, Func<int> getter, Action ifLoaded = null) 
+    public static int GetOrSet(this RegistryKey key, string keyName, Func<int> getter, Action ifLoaded = null)
         => int.Parse(
             GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
             CultureInfo.InvariantCulture);

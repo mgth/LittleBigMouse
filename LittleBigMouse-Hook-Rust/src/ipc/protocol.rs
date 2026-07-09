@@ -98,6 +98,8 @@ pub const SETTING_CHANGED: &str =
     "<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>\n";
 pub const DESKTOP_CHANGED: &str =
     "<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n";
+pub const SUSPENDED: &str = "<DaemonMessage><Event>Suspended</Event></DaemonMessage>\n";
+pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>\n";
 
 /// Build a `FocusChanged` event carrying the foreground process path.
 pub fn focus_changed(path: &str) -> String {

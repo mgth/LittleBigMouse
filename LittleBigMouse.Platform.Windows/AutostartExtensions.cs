@@ -1,0 +1,90 @@
+#nullable enable
+using System;
+using System.Linq;
+using System.Text.RegularExpressions;
+using LittleBigMouse.DisplayLayout.Monitors;
+using Microsoft.Win32.TaskScheduler;
+
+namespace LittleBigMouse.Platform.Windows;
+
+/// <summary>
+/// Windows autostart (Task Scheduler) for the layout. Lives in the Windows platform
+/// project — the model is platform-neutral; a Linux head provides its own autostart.
+/// Kept as extension methods on <see cref="IMonitorsLayout"/> so the existing call sites
+/// (registry persistence, MainService) are unchanged apart from the namespace.
+/// </summary>
+public static class AutostartExtensions
+{
+    static string ServiceName =>
+        "LittleBigMouse_" + System.Security.Principal.WindowsIdentity.GetCurrent().Name.Replace('\\', '_');
+
+    static string ApplicationExe =>
+        AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName + ".exe";
+
+    public static bool IsScheduled(this IMonitorsLayout layout)
+    {
+        using var ts = new TaskService();
+        return ts.RootFolder.GetTasks(new Regex(ServiceName)).Any();
+    }
+
+    /// <summary>
+    /// Align the startup scheduled task on the current options.
+    /// </summary>
+    public static void UpdateSchedule(this IMonitorsLayout layout)
+    {
+        if (layout.Options.LoadAtStartup) layout.Schedule(layout.Options.StartElevated); else layout.Unschedule();
+    }
+
+    public static bool Schedule(this IMonitorsLayout layout, bool elevated)
+    {
+        layout.Unschedule();
+
+        using var ts = new TaskService();
+
+        var td = ts.NewTask();
+        td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
+        td.Triggers.Add(
+            new LogonTrigger { UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name });
+
+        td.Actions.Add(
+            new ExecAction(ApplicationExe, "", AppDomain.CurrentDomain.BaseDirectory)
+        );
+
+        td.Principal.RunLevel = TaskRunLevel.Highest;
+        td.Settings.DisallowStartIfOnBatteries = false;
+        td.Settings.DisallowStartOnRemoteAppSession = true;
+        td.Settings.StopIfGoingOnBatteries = false;
+        td.Settings.ExecutionTimeLimit = TimeSpan.Zero;
+        try
+        {
+            ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        td.Principal.RunLevel = elevated ? TaskRunLevel.Highest : TaskRunLevel.LUA;
+        try
+        {
+            ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    public static void Unschedule(this IMonitorsLayout layout)
+    {
+        using var ts = new TaskService();
+        try
+        {
+            ts.RootFolder.DeleteTask(ServiceName, false);
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+}

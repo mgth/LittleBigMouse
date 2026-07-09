@@ -118,6 +118,14 @@ internal class Program
 
                 c.Export<SystemMonitorsService>().As<ISystemMonitorsService>().Lifestyle.Singleton();
 
+                // Platform seam: the UI builds its layout through ILayoutFactory and mutates
+                // topology through IDisplayController. The Windows implementations live in
+                // LittleBigMouse.Platform.Windows (a Linux head would register its own).
+                // SystemMonitorsService stays registered for the Windows-only (debug) VCP
+                // plugin until its own seam lands later.
+                c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
+                c.Export<LittleBigMouse.Platform.Windows.WindowsDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
+
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
                 c.Export<LbmOptions>().As<ILayoutOptions>().Lifestyle.Singleton();
                 c.Export<ProcessesCollector>().As<IProcessesCollector>().Lifestyle.Singleton();
@@ -138,8 +146,15 @@ internal class Program
 
                 parser.LoadModules();
 
-                parser.Add<IView>(t => c.Export(t).As(typeof(IView)));
-                parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)));
+                // Views and view-models are transient and IDisposable (ReactiveModel). Grace tracks
+                // every transient IDisposable it creates in its ROOT disposal scope and holds it until
+                // the app closes — so a new generation of monitor VMs on every display-change rebuild
+                // is retained forever (gigabytes under a display-event storm), even though HLab.Mvvm
+                // disposes them on DetachedFromLogicalTree. Their lifetime is owned by the view tree,
+                // NOT the container: mark them ExternallyOwned so Grace stops tracking them (same fix
+                // as MonitorsLayout above, #484 — this is the ViewModel follow-up).
+                parser.Add<IView>(t => c.Export(t).As(typeof(IView)).ExternallyOwned());
+                parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)).ExternallyOwned());
                 parser.Add<Bootloader>(t => c.Export(t).As(typeof(Bootloader)));
 
                 parser.Parse();

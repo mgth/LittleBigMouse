@@ -57,13 +57,17 @@ impl ZoneLink {
         }
     }
 
-    /// C++ `ZoneLink::ToTargetPixel`. Computed via `i64` intermediates to avoid
-    /// debug-mode overflow panics; on the finite links this is actually called
-    /// on, the result matches the C++ `long` arithmetic exactly.
+    /// C++ `ZoneLink::ToTargetPixel`. All arithmetic in `i64`: the catch-all links carry
+    /// `i32::MIN`/`i32::MAX` sentinel bounds, so even the *subtractions* (`target_to - target_from`,
+    /// `v - source_from`) overflow `i32` and panic in a debug build — casting the i32 *result* to
+    /// i64, as before, was too late. Operands are widened to i64 BEFORE subtracting.
     pub fn to_target_pixel(&self, v: i32) -> i32 {
-        let s_len = (self.source_to_px - self.source_from_px) as i64;
-        let t_len = (self.target_to_px - self.target_from_px) as i64;
-        (((v - self.source_from_px) as i64 * t_len / s_len) as i32) + self.target_from_px
+        let s_len = self.source_to_px as i64 - self.source_from_px as i64;
+        let t_len = self.target_to_px as i64 - self.target_from_px as i64;
+        if s_len == 0 {
+            return self.target_from_px;
+        }
+        ((v as i64 - self.source_from_px as i64) * t_len / s_len + self.target_from_px as i64) as i32
     }
 }
 

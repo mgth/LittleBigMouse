@@ -21,6 +21,10 @@ pub struct Shared {
     /// Paused by an excluded foreground window
     /// (C++ `LittleBigMouseDaemon::_paused`).
     pub paused: AtomicBool,
+    /// The desktop is not being displayed (screen off: sleep / session standby / lock-idle).
+    /// Set from the display-state power notification; deduplicates its repeated current-state
+    /// pushes (the listener window — and its registration — is recreated every hook/unhook cycle).
+    pub suspended: AtomicBool,
     /// Thread id of the message pump, for `PostThreadMessageW`
     /// (C++ `Hooker::_currentThreadId`). Zero until the pump starts.
     pub pump_tid: AtomicU32,
@@ -45,6 +49,7 @@ impl Shared {
             hooked: AtomicBool::new(false),
             want_hook: AtomicBool::new(false),
             paused: AtomicBool::new(false),
+            suspended: AtomicBool::new(false),
             pump_tid: AtomicU32::new(0),
             // C++ Hooker defaults, until a layout overrides them.
             priority: AtomicU8::new(Priority::Normal.as_u8()),

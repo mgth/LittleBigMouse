@@ -25,6 +25,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -33,13 +34,12 @@ using HLab.Base.ReactiveUI;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
-using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Options;
-using LittleBigMouse.Ui.Avalonia.Persistency;
+using LittleBigMouse.Platform.Windows;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
@@ -50,11 +50,10 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 public class MainService : ReactiveModel, IMainService
 {
     readonly IMvvmService _mvvmService;
-    readonly ISystemMonitorsService _monitors;
+    readonly ILayoutFactory _layoutFactory;
 
     readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
-    readonly Func<MonitorsLayout> _getNewMonitorLayout;
     readonly IProcessesCollector _processesCollector;
     readonly Func<ApplicationUpdaterViewModel> _updaterLocator;
 
@@ -76,15 +75,13 @@ public class MainService : ReactiveModel, IMainService
         IMvvmService mvvmService,
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
-        ISystemMonitorsService monitors,
-        Func<MonitorsLayout> getNewMonitorLayout,
+        ILayoutFactory layoutFactory,
         IProcessesCollector processesCollector,
         Func<ApplicationUpdaterViewModel> updaterLocator,
         ILayoutOptions options)
     {
         _notify = notify;
-        _monitors = monitors;
-        _getNewMonitorLayout = getNewMonitorLayout;
+        _layoutFactory = layoutFactory;
         _processesCollector = processesCollector;
         _updaterLocator = updaterLocator;
         _littleBigMouseClientService = littleBigMouseClientService;
@@ -117,19 +114,20 @@ public class MainService : ReactiveModel, IMainService
 
         // Relate service state with notify icon
         _littleBigMouseClientService.DaemonEventReceived += (o, a) => DaemonEventReceived(o, a);
+
+        // The platform watches the OS for wallpaper changes (Windows: a RegNotifyChangeKeyValue
+        // registry watcher) and raises WallpaperChanged. Refresh the wallpaper drawn behind each
+        // monitor in place.
+        _layoutFactory.WallpaperChanged += (_, _) => RefreshWallpaper();
     }
 
     public void UpdateLayout()
     {
         // TODO : move to plugin
-        if (_monitors is not SystemMonitorsService monitors) return;
-
-        monitors.UpdateDevices();
-
         var old = MonitorsLayout;
-        
-        MonitorsLayout = _getNewMonitorLayout().UpdateFrom(monitors);
-        
+
+        MonitorsLayout = _layoutFactory.Create();
+
         old?.Dispose();
     }
 
@@ -263,6 +261,25 @@ public class MainService : ReactiveModel, IMainService
                 await DisplayChangedAsync();
                 break;
 
+            // The daemon detected the display turning off (sleep / session standby / lock-idle) and
+            // already unhooked itself (so the cursor is never left confined without us). Just stop
+            // reacting to display events until it comes back — no rebuild while there is no desktop.
+            case LittleBigMouseEvent.Suspended:
+                _suspended = true;
+                await _notify.SetIconAsync("icon/lbm_paused", 32);
+                break;
+
+            // Display is back: reconcile the layout only if it actually changed while off (the
+            // idempotence guard), then keep re-hooking the daemon through the post-resume display
+            // re-enumeration storm. A single StartAsync loses a race — a late WM_DISPLAYCHANGE
+            // unhooks us ~1-2s after Resumed — and the engine stays stopped ("blue") until a manual
+            // Start. EnsureRunningAfterResumeAsync re-asserts Start until it sticks.
+            case LittleBigMouseEvent.Resumed:
+                _suspended = false;
+                await DisplayChangedAsync();
+                await EnsureRunningAfterResumeAsync();
+                break;
+
             case LittleBigMouseEvent.FocusChanged:
                 _processesCollector?.AddProcess(args.Payload);
                 break;
@@ -274,27 +291,171 @@ public class MainService : ReactiveModel, IMainService
         }
     }
 
-    bool _displayChangedTriggered = false;
-    readonly object _lockDisplayChanged = new();
+    // React to a display change (attach/detach, resolution, scaling, primary) once the OS has
+    // actually SETTLED, without a fixed delay. The daemon forwards a burst of
+    // WM_DISPLAYCHANGE/WM_SETTINGCHANGE per change, so we:
+    //   1. trailing-debounce the burst (a generation counter: only the latest event proceeds),
+    //   2. confirm the config has stopped changing (two identical DisplaySignature reads),
+    // then rebuild. Measured on real switches, the config reaches its final state within one
+    // ~80ms sample, so this reacts in a few hundred ms instead of the former fixed 5s.
+    const int DisplayDebounceMs = 300;      // quiet window absorbing the message burst
+    const int DisplayStabilityStepMs = 100; // spacing between settle re-checks
+    const int DisplayStabilityMaxSteps = 8; // ~1.1s cap so a flapping config can't hang the settle loop
+    int _displayChangeGeneration;
+
     async Task DisplayChangedAsync()
     {
-        lock (_lockDisplayChanged)
+        // Do nothing at all while the display is off: no debounce, no signature reads, no rebuild.
+        // The daemon's Resumed event reconciles once when the desktop is back.
+        if (_suspended) return;
+
+        var gen = Interlocked.Increment(ref _displayChangeGeneration);
+
+        // Trailing debounce: wait a short quiet window; if a newer event arrived meanwhile, bail
+        // and let that later call handle it (so a burst collapses to a single rebuild).
+        await Task.Delay(DisplayDebounceMs);
+        if (gen != Volatile.Read(ref _displayChangeGeneration)) return;
+
+        // Settle detection: rebuild only once the display config has stopped changing, i.e. two
+        // consecutive signatures match. Capped so a pathological flapping config can't hang here.
+        var signature = _layoutFactory.DisplaySignature();
+        for (var i = 0; i < DisplayStabilityMaxSteps; i++)
         {
-            if (_displayChangedTriggered) return;
-            _displayChangedTriggered = true;
+            await Task.Delay(DisplayStabilityStepMs);
+            if (gen != Volatile.Read(ref _displayChangeGeneration)) return;
+            var next = _layoutFactory.DisplaySignature();
+            if (next == signature) break;
+            signature = next;
         }
-        await Task.Delay(5000);
-        lock (_lockDisplayChanged)
+
+        // A Suspended event may have arrived during the debounce/settle (the display went off while
+        // this display-change was being handled): drop the rebuild — the daemon has unhooked and we
+        // wait for Resumed.
+        if (_suspended) return;
+
+        // Idempotence guard: the settle loop confirms the config STOPPED changing, but not that it
+        // actually DIFFERS from the generation we already built. A spurious WM_DISPLAYCHANGE (a
+        // monitor's DPMS power-save on/off — e.g. an HDR TV —, a mode re-apply, a stray broadcast)
+        // settles to the very same signature we last built. Rebuilding it drops a fresh, fully-wired
+        // MonitorsLayout generation that Avalonia's compositor/animation clock keeps alive (#412): a
+        // storm of identical events is what fills gigabytes. Skip when nothing changed.
+        if (signature == _lastBuiltSignature)
         {
-            _displayChangedTriggered = false;
+            // Skip the REBUILD, but still make sure the engine is hooked. The daemon unhooks itself
+            // over ANY display change (so the cursor is never confined while the desktop reshapes);
+            // when the config settles back to the same signature, nothing else would re-Start it, so
+            // the engine would stay stopped ("blue") until a manual Start. Re-hook without rebuilding.
+            await EnsureEngineHookedAsync();
+            return;
         }
+
         UpdateLayout();
-        if(MonitorsLayout.Options.Enabled)
-        {
+        _lastBuiltSignature = signature;
+        if (MonitorsLayout.Options.Enabled)
             await StartAsync();
+    }
+
+    // The daemon reports Running only while its low-level mouse hook is actually installed, so its
+    // published State is the source of truth for "is the engine hooked right now".
+    bool EngineRunning => _littleBigMouseClientService.State == LittleBigMouseEvent.Running;
+
+    /// <summary>
+    /// Re-hook the daemon if the engine should be running but is not — WITHOUT rebuilding the layout.
+    /// Called from the idempotence guard when a display change settles to the already-built config:
+    /// the daemon unhooks itself over any display change, and when the config comes back identical
+    /// nothing else re-Starts it. Safe while an excluded app (a game) is focused — the daemon's Run
+    /// path no-ops when paused, so this can never force the hook on over an exclusion.
+    /// </summary>
+    async Task EnsureEngineHookedAsync()
+    {
+        if (_resumeWatchdogActive) return;                        // the resume watchdog owns reconciliation
+        if (_suspended) return;                                   // display off — nothing to do
+        if (!(MonitorsLayout?.Options.Enabled ?? false)) return;  // engine disabled by the user
+        if (EngineRunning) return;                                // already hooked
+        await StartAsync();
+    }
+
+    /// <summary>
+    /// Keep the engine hooked across the display re-enumeration storm that follows a wake from sleep.
+    /// The daemon emits Resumed as soon as the screen turns on, but Windows then re-enumerates the
+    /// GPU/monitors for several seconds, firing a burst of WM_DISPLAYCHANGE. One of those, processed
+    /// just after we re-install the hook, makes the daemon unhook itself again (a Stopped ~1-2s after
+    /// Resumed), and a single StartAsync loses that race — the engine stays stopped ("blue") until a
+    /// manual Start. Re-assert Start until it sticks (Running for a short quiet window), bounded so a
+    /// legitimately-paused engine (excluded app focused at wake) can't loop forever.
+    /// </summary>
+    async Task EnsureRunningAfterResumeAsync()
+    {
+        if (!(MonitorsLayout?.Options.Enabled ?? false)) return;
+
+        var myGen = Interlocked.Increment(ref _resumeGeneration);
+        _resumeWatchdogActive = true;
+        try
+        {
+            var restarts = 0;
+            var quiet = 0;
+            for (var i = 0; i < ResumeWatchdogMaxSteps; i++)
+            {
+                if (myGen != Volatile.Read(ref _resumeGeneration)) return; // a newer resume superseded us
+                if (_suspended) return;                                    // went back to sleep
+                if (!(MonitorsLayout?.Options.Enabled ?? false)) return;   // user disabled the engine
+
+                if (EngineRunning)
+                {
+                    if (++quiet >= ResumeWatchdogStableSteps) return; // Running long enough — converged
+                }
+                else if (restarts >= ResumeWatchdogMaxRestarts)
+                {
+                    return; // gave up — the engine is legitimately paused (excluded app focused at wake)
+                }
+                else
+                {
+                    quiet = 0;
+                    restarts++;
+                    await StartAsync();
+                }
+
+                await Task.Delay(ResumeWatchdogStepMs);
+            }
+        }
+        finally
+        {
+            _resumeWatchdogActive = false;
         }
     }
 
+    const int ResumeWatchdogStepMs = 500;      // spacing between engine-state checks
+    const int ResumeWatchdogStableSteps = 3;   // consecutive Running checks that count as converged (~1.5s)
+    const int ResumeWatchdogMaxRestarts = 6;   // cap re-Starts so a paused/excluded engine can't loop forever
+    const int ResumeWatchdogMaxSteps = 60;     // hard stop (~30s) against a pathological flapping wake
 
+    // Guards the post-resume watchdog: a generation counter so a newer Resumed supersedes an older
+    // watchdog run, and a flag telling the idempotence-guard reconcile to stand aside while the
+    // watchdog is the active driver. Written on the daemon-event path — volatile is enough.
+    int _resumeGeneration;
+    volatile bool _resumeWatchdogActive;
+
+    // Signature of the display configuration the current MonitorsLayout was built from. Lets
+    // DisplayChangedAsync skip a rebuild when a display event settles to an already-built config.
+    string _lastBuiltSignature = "";
+
+    // Set while the display is off (daemon Suspended/Resumed events): DisplayChangedAsync
+    // short-circuits while set, so the UI does nothing while there is no desktop. Written on the
+    // daemon-event thread — volatile is enough (a single flag).
+    volatile bool _suspended;
+
+    /// <summary>
+    /// Refresh the wallpaper drawn behind each monitor after the registry watcher reports a change.
+    /// Runs the in-place read on the UI thread; <see cref="ILayoutFactory.UpdateWallpaper"/> gates on
+    /// a cheap signature, so the several registry writes Windows makes per change collapse to a
+    /// single actual refresh, and unchanged notifications cost almost nothing.
+    /// </summary>
+    void RefreshWallpaper()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (MonitorsLayout is MonitorsLayout layout) _layoutFactory.UpdateWallpaper(layout);
+        });
+    }
 
 }

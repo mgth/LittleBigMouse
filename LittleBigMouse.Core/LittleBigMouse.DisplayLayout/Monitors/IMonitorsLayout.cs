@@ -1,5 +1,4 @@
-﻿using HLab.Sys.Windows.API;
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using HLab.Geo;
 
@@ -44,13 +43,11 @@ public interface IMonitorsLayout : IDisposable
 
     string Id { get; set; }
 
-    WinDef.DpiAwareness DpiAwareness { get; }
+    DpiAwarenessKind DpiAwareness { get; }
     PhysicalMonitor PrimaryMonitor { get; }
 
     void Compact();
     void ForceCompact();
 
     void UpdatePhysicalMonitors();
-    bool Schedule(bool elevated);
-    void Unschedule();
 }

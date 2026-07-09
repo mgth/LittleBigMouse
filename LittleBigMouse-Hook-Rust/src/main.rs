@@ -9,15 +9,58 @@
 
 use std::sync::atomic::Ordering;
 
+use windows::Win32::Foundation::POINT;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
+use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use littlebigmouse_hook::shared::{Shared, SHARED};
 use littlebigmouse_hook::{daemon, hook, ipc, platform};
 
 const DAEMON_PORT: u16 = 25196;
+
+fn cursor_pos() -> (i32, i32) {
+    let mut p = POINT::default();
+    unsafe {
+        let _ = GetCursorPos(&mut p);
+    }
+    (p.x, p.y)
+}
+
+/// Recover from Windows silently dropping our low-level mouse hook.
+///
+/// A `WH_MOUSE_LL` callback that ever exceeds `LowLevelHooksTimeout` (~300 ms) is removed by the OS
+/// with no notification: the `HHOOK` stays non-null, `hooked` stays true, but the callback is never
+/// called again — crossing dies until a full restart (which is exactly what was observed: no
+/// `Stopped`, `moves` frozen while `hooked=true`). This watchdog notices the cursor moving while our
+/// hook counts nothing and forces a reinstall, so it heals on its own.
+fn run_watchdog(shared: &'static Shared) {
+    std::thread::spawn(move || {
+        let mut last_moves = hook::mouse::MOUSE_EVENTS.load(Ordering::Relaxed);
+        let mut last_pos = cursor_pos();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+
+            let moves = hook::mouse::MOUSE_EVENTS.load(Ordering::Relaxed);
+            let pos = cursor_pos();
+            let hooked = shared.hooked.load(Ordering::SeqCst);
+            let want = shared.want_hook.load(Ordering::SeqCst);
+
+            // We believe we are hooked and want to be, the mouse physically moved since the last
+            // check, yet our hook saw nothing: the OS silently dropped it (LowLevelHooksTimeout).
+            // Reinstall on the pump thread so crossing heals instead of staying dead until a restart.
+            if hooked && want && pos != last_pos && moves == last_moves {
+                eprintln!("[LittleBigMouse.Hook] watchdog: reinstalling silently-dropped mouse hook");
+                hook::request_hook(shared);
+            }
+
+            last_moves = moves;
+            last_pos = pos;
+        }
+    });
+}
 
 fn main() {
     // Must be the very first Win32 call: otherwise every coordinate we read is
@@ -77,6 +120,9 @@ fn main() {
             );
         });
     }
+
+    // Heal silent OS removal of the low-level mouse hook (see run_watchdog).
+    run_watchdog(shared);
 
     // Run the hook install/uninstall + message pump loop on this thread. Returns
     // when a `Quit` command posts WM_QUIT.

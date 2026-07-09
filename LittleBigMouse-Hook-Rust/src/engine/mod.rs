@@ -227,14 +227,16 @@ impl MouseEngine {
             return;
         };
         let link = &links[index];
-        let target = link.target;
         let resistance_px = link.border_resistance_px;
-        let to_target = link.to_target_pixel(coord);
 
-        let Some(target) = target else {
+        // Resolve the target BEFORE mapping the coordinate: the catch-all no-target link carries
+        // i32::MIN/MAX sentinel bounds, so mapping through it is both meaningless and (pre-fix) an
+        // overflow. A `None` target means the cursor hit an edge with no neighbour → confine.
+        let Some(target) = link.target else {
             self.no_zone_matches(env, e);
             return;
         };
+        let to_target = link.to_target_pixel(coord);
 
         let key = ResistanceKey { zone, side, index };
         if !self.try_pass_border_pixel(env, key, resistance_px, dist) {

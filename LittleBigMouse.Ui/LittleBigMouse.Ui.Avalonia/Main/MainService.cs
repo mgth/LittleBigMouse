@@ -300,55 +300,38 @@ public class MainService : ReactiveModel, IMainService
     // ~80ms sample, so this reacts in a few hundred ms instead of the former fixed 5s.
     const int DisplayDebounceMs = 300;      // quiet window absorbing the message burst
     const int DisplayStabilityStepMs = 100; // spacing between settle re-checks
-    const int DisplayStabilityMaxSteps = 40; // TEMP measurement cap (~4s); production value ~8
+    const int DisplayStabilityMaxSteps = 8; // ~1.1s cap so a flapping config can't hang the settle loop
     int _displayChangeGeneration;
-
-    // TEMP instrumentation (#displaychange-timing): writes C:\dev\lbm-dc.log so we can measure the
-    // real message-burst duration and config settle time on this machine, and size the cap. Remove
-    // after tuning.
-    static readonly object _dcLogLock = new();
-    static void DcLog(string m)
-    {
-        try { lock (_dcLogLock) System.IO.File.AppendAllText(@"C:\dev\lbm-dc.log", $"{DateTime.Now:HH:mm:ss.fff} {m}{Environment.NewLine}"); }
-        catch { /* diagnostic only */ }
-    }
 
     async Task DisplayChangedAsync()
     {
         // Do nothing at all while the display is off: no debounce, no signature reads, no rebuild.
         // The daemon's Resumed event reconciles once when the desktop is back.
-        if (_suspended) { DcLog("  suspended — ignore display event"); return; }
+        if (_suspended) return;
 
         var gen = Interlocked.Increment(ref _displayChangeGeneration);
-        DcLog($"event         gen={gen}");
 
         // Trailing debounce: wait a short quiet window; if a newer event arrived meanwhile, bail
         // and let that later call handle it (so a burst collapses to a single rebuild).
         await Task.Delay(DisplayDebounceMs);
-        if (gen != Volatile.Read(ref _displayChangeGeneration)) { DcLog($"  superseded  gen={gen} (debounce)"); return; }
-        DcLog($"  debounce ok gen={gen}");
+        if (gen != Volatile.Read(ref _displayChangeGeneration)) return;
 
         // Settle detection: rebuild only once the display config has stopped changing, i.e. two
         // consecutive signatures match. Capped so a pathological flapping config can't hang here.
         var signature = _layoutFactory.DisplaySignature();
-        var steps = 0;
-        var stable = false;
         for (var i = 0; i < DisplayStabilityMaxSteps; i++)
         {
             await Task.Delay(DisplayStabilityStepMs);
-            if (gen != Volatile.Read(ref _displayChangeGeneration)) { DcLog($"  superseded  gen={gen} (step {i})"); return; }
-            steps = i + 1;
+            if (gen != Volatile.Read(ref _displayChangeGeneration)) return;
             var next = _layoutFactory.DisplaySignature();
-            if (next == signature) { stable = true; DcLog($"  STABLE after {steps} steps (~{DisplayDebounceMs + steps * DisplayStabilityStepMs}ms) sig={signature}"); break; }
-            DcLog($"  step {steps}: changed -> {next}");
+            if (next == signature) break;
             signature = next;
         }
-        if (!stable) DcLog($"  CAP HIT after {steps} steps (~{DisplayDebounceMs + steps * DisplayStabilityStepMs}ms) — still changing, sig={signature}");
 
         // A Suspended event may have arrived during the debounce/settle (the display went off while
         // this display-change was being handled): drop the rebuild — the daemon has unhooked and we
         // wait for Resumed.
-        if (_suspended) { DcLog($"  suspended mid-settle — skip gen={gen}"); return; }
+        if (_suspended) return;
 
         // Idempotence guard: the settle loop confirms the config STOPPED changing, but not that it
         // actually DIFFERS from the generation we already built. A spurious WM_DISPLAYCHANGE (a
@@ -358,24 +341,18 @@ public class MainService : ReactiveModel, IMainService
         // storm of identical events is what fills gigabytes. Skip when nothing changed.
         if (signature == _lastBuiltSignature)
         {
-            DcLog($"  UNCHANGED sig — skip rebuild gen={gen}");
             // Skip the REBUILD, but still make sure the engine is hooked. The daemon unhooks itself
             // over ANY display change (so the cursor is never confined while the desktop reshapes);
             // when the config settles back to the same signature, nothing else would re-Start it, so
             // the engine would stay stopped ("blue") until a manual Start. Re-hook without rebuilding.
-            await EnsureEngineHookedAsync("unchanged-settle");
+            await EnsureEngineHookedAsync();
             return;
         }
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
         UpdateLayout();
         _lastBuiltSignature = signature;
-        DcLog($"  Create()+layout took {sw.ElapsedMilliseconds}ms");
         if (MonitorsLayout.Options.Enabled)
-        {
             await StartAsync();
-            DcLog($"  StartAsync done (total {sw.ElapsedMilliseconds}ms since rebuild start)");
-        }
     }
 
     // The daemon reports Running only while its low-level mouse hook is actually installed, so its
@@ -389,13 +366,12 @@ public class MainService : ReactiveModel, IMainService
     /// nothing else re-Starts it. Safe while an excluded app (a game) is focused — the daemon's Run
     /// path no-ops when paused, so this can never force the hook on over an exclusion.
     /// </summary>
-    async Task EnsureEngineHookedAsync(string reason)
+    async Task EnsureEngineHookedAsync()
     {
         if (_resumeWatchdogActive) return;                        // the resume watchdog owns reconciliation
         if (_suspended) return;                                   // display off — nothing to do
         if (!(MonitorsLayout?.Options.Enabled ?? false)) return;  // engine disabled by the user
         if (EngineRunning) return;                                // already hooked
-        DcLog($"  reconcile ({reason}): enabled but {_littleBigMouseClientService.State} — StartAsync");
         await StartAsync();
     }
 
@@ -426,28 +402,21 @@ public class MainService : ReactiveModel, IMainService
 
                 if (EngineRunning)
                 {
-                    if (++quiet >= ResumeWatchdogStableSteps)
-                    {
-                        DcLog($"  resume-watchdog: stable after {restarts} restart(s)");
-                        return;
-                    }
+                    if (++quiet >= ResumeWatchdogStableSteps) return; // Running long enough — converged
                 }
                 else if (restarts >= ResumeWatchdogMaxRestarts)
                 {
-                    DcLog($"  resume-watchdog: gave up after {restarts} restarts (paused/excluded?)");
-                    return;
+                    return; // gave up — the engine is legitimately paused (excluded app focused at wake)
                 }
                 else
                 {
                     quiet = 0;
                     restarts++;
-                    DcLog($"  resume-watchdog: {_littleBigMouseClientService.State} — StartAsync #{restarts}");
                     await StartAsync();
                 }
 
                 await Task.Delay(ResumeWatchdogStepMs);
             }
-            DcLog("  resume-watchdog: window closed");
         }
         finally
         {

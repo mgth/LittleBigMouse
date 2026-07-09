@@ -37,6 +37,10 @@ namespace LittleBigMouse.Ui.Avalonia;
 internal class Program
 {
     const string APP_GUID = "51B5711E-1A7F-436E-B3DD-B598901B3FD2";
+    const string SHOW_EVENT_NAME = APP_GUID + "_ShowWindow";
+
+    // Exposed so MainService can wait on it without a DI dependency on Program.
+    internal static EventWaitHandle? ShowWindowEvent;
 
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
@@ -48,15 +52,26 @@ internal class Program
 
         if (!mutex.WaitOne(TimeSpan.Zero, false))
         {
-            Debug.Print("there is already another instance running!");
+            // Signal the running instance to show its window, then exit.
+            try
+            {
+                using var handle = EventWaitHandle.OpenExisting(SHOW_EVENT_NAME);
+                handle.Set();
+            }
+            catch { }
             return;
         }
-        
+
         // TODO (Avalonia 12 / ReactiveUI 23): RxApp.DefaultExceptionHandler is now the read-only
         // RxState.DefaultExceptionHandler. To restore a custom handler, configure it through
         // RxAppBuilder.CreateReactiveUIBuilder().WithExceptionHandler(...).BuildApp().
 
+        using var showWindowEvent = new EventWaitHandle(false, EventResetMode.AutoReset, SHOW_EVENT_NAME);
+        ShowWindowEvent = showWindowEvent;
+
         BuildAvaloniaApp().Start(UIMain, args);
+
+        ShowWindowEvent = null;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

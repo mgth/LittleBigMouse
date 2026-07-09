@@ -53,6 +53,12 @@
 							                     Header="Start minimized to tray">
 								<ToggleSwitch IsChecked="{Binding Model.StartMinimized, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Classes="Sub"
+							                     Header="Hide tray icon"
+							                     Description="Reopen the window by launching LittleBigMouse again">
+								<ToggleSwitch IsChecked="{Binding Model.HideTrayIcon, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
 						</StackPanel>
 					</Border>
 

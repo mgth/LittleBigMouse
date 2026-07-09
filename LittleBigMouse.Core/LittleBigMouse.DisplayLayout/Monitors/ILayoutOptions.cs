@@ -42,6 +42,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool Pinned { get; set; } = false;
       public bool StartMinimized { get; set; } = false;
       public bool StartElevated { get; set; } = false;
+      public bool HideTrayIcon { get; set; } = false;
       public bool Elevated { get; set; } = true;
       public bool DebugTools { get; set; } = false;
       public bool ShowMonitorActionWarning { get; set; } = true;
@@ -177,6 +178,11 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// Start with elevated privileges
    /// </summary>
    bool StartElevated { get; set; }
+
+   /// <summary>
+   /// Hide the system tray icon
+   /// </summary>
+   bool HideTrayIcon { get; set; }
 
    /// <summary>
    /// Current elevated state

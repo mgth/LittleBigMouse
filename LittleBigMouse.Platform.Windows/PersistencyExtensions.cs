@@ -93,6 +93,7 @@ public static class PersistencyExtensions
         // "ShowAttachDetachWarning" is the former name of the option, read as fallback
         @this.ShowMonitorActionWarning = mainKey.GetOrSet("ShowMonitorActionWarning", () => mainKey.GetOrSet("ShowAttachDetachWarning", () => true));
         @this.BorderValues = mainKey.GetOrSet("BorderValues", () => "PerModel");
+        @this.HideTrayIcon = mainKey.GetOrSet("HideTrayIcon", () => false);
 
         @this.ExcludedList.Clear();
 
@@ -246,6 +247,7 @@ public static class PersistencyExtensions
         mainKey.SetKey("DebugTools", @this.DebugTools);
         mainKey.SetKey("ShowMonitorActionWarning", @this.ShowMonitorActionWarning);
         mainKey.SetKey("BorderValues", @this.BorderValues);
+        mainKey.SetKey("HideTrayIcon", @this.HideTrayIcon);
 
         var file = ExcludedListPath();
 

@@ -50,6 +50,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _startElevated;
 
     [DataMember]
+    public bool HideTrayIcon
+    {
+        get => _hideTrayIcon;
+        set => SetUnsavedValue(ref _hideTrayIcon, value);
+    }
+    bool _hideTrayIcon;
+
+    [DataMember]
     public bool Elevated
     {
         get => _elevated;

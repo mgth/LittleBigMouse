@@ -255,8 +255,8 @@
                 />
             
             <!-- Plugin content -->
-            <avalonia:ViewLocator 
-                Grid.Column="1" Grid.Row="1" 
+            <avalonia:ViewLocator
+                Grid.Column="1" Grid.Row="1"
                 ClipToBounds="False"
                 ViewClass="{x:Type plugins:IMonitorFrameContentViewClass}"
                 ViewMode="{Binding MonitorsPresenter.MainViewModel.ContentViewMode, FallbackValue={x:Type annotations:DefaultViewMode}}"

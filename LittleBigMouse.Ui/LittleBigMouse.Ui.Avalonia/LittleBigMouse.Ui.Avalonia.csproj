@@ -108,6 +108,7 @@
 		<ProjectReference Include="..\..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Core\LittleBigMouse.Plugins.csproj" />
 		<ProjectReference Include="..\..\LittleBigMouse.Ui.Loader\LittleBigMouse.Ui.Loader.csproj" />
 		<ProjectReference Include="..\LittleBigMouse.Ui.Core\LittleBigMouse.Ui.Core.csproj" />
+		<ProjectReference Include="..\..\LittleBigMouse.Platform.Windows\LittleBigMouse.Platform.Windows.csproj" />
 	</ItemGroup>
 
 

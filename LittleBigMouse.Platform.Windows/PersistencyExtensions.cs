@@ -1,16 +1,18 @@
-﻿using System;
+using System;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout;
 using Microsoft.Win32;
 using System.Globalization;
 using System.IO;
 using System.Security.Principal;
-using Avalonia;
 using LittleBigMouse.DisplayLayout.Dimensions;
 
 #pragma warning disable CA1416
 
-namespace LittleBigMouse.Ui.Avalonia.Persistency;
+// Windows persistence (registry). Lives in the Windows platform project — the model is
+// platform-neutral, and a Linux head persists to files. Namespace kept flat so the UI
+// callers only swap their `using` to LittleBigMouse.Platform.Windows.
+namespace LittleBigMouse.Platform.Windows;
 
 public static class PersistencyExtensions
 {
@@ -41,7 +43,7 @@ public static class PersistencyExtensions
         if (Directory.Exists(file)) Directory.Delete(file, true);
         return file;
     }
-    public static RegistryKey? OpenRegKey(this RegistryKey @this, string key, bool create = false) 
+    public static RegistryKey? OpenRegKey(this RegistryKey @this, string key, bool create = false)
         => create ? @this.CreateSubKey(key) : @this.OpenSubKey(key);
 
     public static RegistryKey? OpenRootRegKey(bool create = false)
@@ -278,7 +280,7 @@ public static class PersistencyExtensions
             source.Source.Load(key);
             if (source.Source.Id != active && @this.ActiveSource != null) continue;
 
-            @this.ActiveSource = source; 
+            @this.ActiveSource = source;
             key.SetKey("ActiveSource",source.Source.Id);
         }
 

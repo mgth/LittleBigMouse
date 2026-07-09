@@ -11,18 +11,14 @@
 
   <ItemGroup>
     <PackageReference Include="H.Pipes" Version="15.0.0" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="9.0.8" />
     <PackageReference Include="ReactiveUI" Version="23.2.28" />
-    <PackageReference Include="System.Management" Version="9.0.8" />
-    <PackageReference Include="TaskScheduler" Version="2.12.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\HLab.Core\HLab.Base.ReactiveUI\HLab.Base.ReactiveUI.csproj" />
+    <ProjectReference Include="..\..\HLab.Core\HLab.ColorTools\HLab.ColorTools.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Remote\HLab.Remote.csproj" />
-    <ProjectReference Include="..\..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
-    <ProjectReference Include="..\..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Zones\LittleBigMouse.Zoning.csproj" />
   </ItemGroup>
 

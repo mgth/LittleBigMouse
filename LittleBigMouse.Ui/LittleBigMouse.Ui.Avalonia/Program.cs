@@ -118,6 +118,14 @@ internal class Program
 
                 c.Export<SystemMonitorsService>().As<ISystemMonitorsService>().Lifestyle.Singleton();
 
+                // Platform seam: the UI builds its layout through ILayoutFactory and mutates
+                // topology through IDisplayController. The Windows implementations live in
+                // LittleBigMouse.Platform.Windows (a Linux head would register its own).
+                // SystemMonitorsService stays registered for the Windows-only (debug) VCP
+                // plugin until its own seam lands later.
+                c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
+                c.Export<LittleBigMouse.Platform.Windows.WindowsDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
+
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
                 c.Export<LbmOptions>().As<ILayoutOptions>().Lifestyle.Singleton();
                 c.Export<ProcessesCollector>().As<IProcessesCollector>().Lifestyle.Singleton();

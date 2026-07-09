@@ -1,31 +1,100 @@
-﻿#nullable enable
+#nullable enable
 using System;
 using System.Linq;
 using DynamicData;
-using Avalonia;
+using HLab.ColorTools;
 using HLab.Sys.Windows.API;
 using HLab.Sys.Windows.Monitors;
+using HLab.Sys.Windows.Monitors.Factory;
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
-using LittleBigMouse.Ui.Avalonia.Persistency;
-using Avalonia.Media;
-using HLab.ColorTools;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
+using LittleBigMouse.Plugins;
 
-namespace LittleBigMouse.Ui.Avalonia.Main;
+namespace LittleBigMouse.Platform.Windows;
 
-public static class LayoutFactory
+/// <summary>
+/// Windows implementation of <see cref="ILayoutFactory"/>: reads the Win32 monitor device
+/// tree and builds the neutral <see cref="MonitorsLayout"/> model directly — no
+/// intermediate data layer. This is the former UI <c>LayoutFactory</c>, moved to the
+/// Windows platform project and formalized behind the seam. A Linux factory builds the same
+/// model from RandR/DRM.
+/// </summary>
+public class WindowsLayoutFactory : ILayoutFactory, IDisposable
 {
-    /// <summary>
-    /// Update the layout from the monitors service
-    /// </summary>
-    /// <param name="layout"></param>
-    /// <param name="service"></param>
+    readonly ISystemMonitorsService _monitors;
+    readonly Func<MonitorsLayout> _newLayout;
+    readonly WindowsWallpaperWatcher _wallpaperWatcher;
+    string _lastWallpaperSignature = "";
+
+    public WindowsLayoutFactory(ISystemMonitorsService monitors, Func<MonitorsLayout> newLayout)
+    {
+        _monitors = monitors;
+        _newLayout = newLayout;
+
+        _wallpaperWatcher = new WindowsWallpaperWatcher();
+        _wallpaperWatcher.Changed += (_, _) => WallpaperChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public event EventHandler? WallpaperChanged;
+
+    public void Dispose() => _wallpaperWatcher.Dispose();
+
+    public MonitorsLayout Create()
+    {
+        // TEMP profiling (#displaychange-timing)
+        WindowsLayoutMapping.Prof("[Create] START");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        // Refresh the OS device tree (formerly MainService's UpdateDevices()).
+        if (_monitors is SystemMonitorsService concrete) concrete.UpdateDevices();
+        WindowsLayoutMapping.Prof($"[Create] UpdateDevices() {sw.ElapsedMilliseconds}ms"); sw.Restart();
+        var layout = _newLayout().UpdateFrom(_monitors);
+        WindowsLayoutMapping.Prof($"[Create] UpdateFrom() {sw.ElapsedMilliseconds}ms");
+        return layout;
+    }
+
+    /// <inheritdoc/>
+    public string DisplaySignature() => MonitorDeviceHelper.DisplaySignature();
+
+    public void UpdateWallpaper(MonitorsLayout layout)
+    {
+        // Cheap gate: compute a light signature (registry values + the transcoded-wallpaper file
+        // timestamp) and only read the OS wallpaper / device tree when it actually changed. This
+        // lets the UI poll this method frequently (while the config window is open) at near-zero
+        // cost, which is the reliable trigger — the daemon's WM_SETTINGCHANGE broadcast is missed
+        // intermittently (shared message pump), so it is only a best-effort fast path.
+        var signature = WindowsLayoutMapping.WallpaperSignature();
+        if (signature == _lastWallpaperSignature) return;
+        _lastWallpaperSignature = signature;
+
+        layout.UpdateWallpaper(_monitors);
+    }
+}
+
+/// <summary>
+/// Win32 → model mapping. Extension methods (hence a separate static class) reading the
+/// <see cref="MonitorDevice"/> tree straight into the reactive model.
+/// </summary>
+internal static class WindowsLayoutMapping
+{
+    // TEMP profiling (#displaychange-timing): writes phase timings to C:\dev\lbm-dc.log. Remove after tuning.
+    internal static void Prof(string m) { try { System.IO.File.AppendAllText(@"C:\dev\lbm-dc.log", $"{System.DateTime.Now:HH:mm:ss.fff} {m}{System.Environment.NewLine}"); } catch { } }
+
     public static MonitorsLayout UpdateFrom(this MonitorsLayout layout, ISystemMonitorsService service)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        // DPI awareness is process-scoped (the UI thread's manifested awareness), formerly
+        // computed in the MonitorsLayout constructor. Set it before building the sources.
+        layout.DpiAwareness = (DpiAwarenessKind)(int)WinUser.GetAwarenessFromDpiAwarenessContext(
+            WinUser.GetThreadDpiAwarenessContext());
 
-        foreach (var monitor in service.Root.AllMonitorDevices())
+        // First access to .Root triggers the (lazy, expensive) GetDisplayDevices enumeration.
+        // Hold a strong ref for the whole method so the WeakReference can't drop it mid-build.
+        var root = service.Root;
+        Prof($"  [UF] RootAccess(->GDD) {sw.ElapsedMilliseconds}ms"); sw.Restart();
+
+        foreach (var monitor in root.AllMonitorDevices())
         {
             // Specialized displays (VR headsets...) are hidden from the desktop by
             // Windows: keep them out of the layout too, the cursor can never reach
@@ -47,7 +116,7 @@ public static class LayoutFactory
             if (physicalMonitor == null)
             {
                 // first get the monitor model, it defines physical size
-                var model = layout.GetOrAddPhysicalMonitorModel(monitor.PnpCode,s => monitor.CreatePhysicalMonitorModel(s));
+                var model = layout.GetOrAddPhysicalMonitorModel(monitor.PnpCode, s => monitor.CreatePhysicalMonitorModel(s));
 
                 physicalMonitor = monitor.CreatePhysicalMonitor(id, layout, model);
 
@@ -67,23 +136,105 @@ public static class LayoutFactory
 
             layout.AddOrUpdatePhysicalSource(source);
         }
+        Prof($"  [UF] buildSources {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
-//        layout.Id = string.Join("+",layout.PhysicalMonitors.Select(m => $"{m.Id}_{m.Orientation}").OrderBy(s => s));
         layout.Id = string.Join("+",layout.PhysicalMonitors.Select(m => $"{m.Id}").OrderBy(s => s));
 
         // places monitors from windows configuration as best as possible
         layout.SetLocationsFromSystemConfiguration();
+        Prof($"  [UF] SetLocationsFromSystemConfiguration {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
-        //retrieve saved layout
+        //retrieve saved layout (Windows registry persistence, same project)
         layout.Load();
+        Prof($"  [UF] Load {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         // saved locations are anchored on the primary that was active at save time:
         // re-anchor so the current primary sits at (0,0) mm, like in pixels
         layout.AnchorOnPrimary();
+        Prof($"  [UF] AnchorOnPrimary {sw.ElapsedMilliseconds}ms");
 
         return layout;
     }
 
+    /// <summary>
+    /// Re-read the desktop wallpaper (only) into the sources of an already-built layout, in
+    /// place: geometry, DPI and monitor identity are left untouched, so any in-progress layout
+    /// edits are preserved. The reactive <see cref="DisplaySource"/> properties drive the repaint.
+    /// </summary>
+    public static void UpdateWallpaper(this MonitorsLayout layout, ISystemMonitorsService service)
+    {
+        var root = service.Root;
+        if (root is null) return;
+
+        // Re-read the live wallpaper (COM IDesktopWallpaper) into the cached Win32 adapters.
+        root.UpdateWallpaper();
+
+        // IDesktopWallpaper.GetWallpaper returns "" while Windows plays the wallpaper fade, so an
+        // image->image change would momentarily read empty. HKCU\Control Panel\Desktop\WallPaper
+        // holds the real current image path (empty for a solid color) and is written immediately,
+        // so use it as a fallback when the per-monitor COM path is still empty. Per-monitor
+        // wallpapers keep working via the COM path when present.
+        var registryPath = GetRegistryWallpaperPath();
+
+        foreach (var monitor in root.AllMonitorDevices())
+        {
+            if (monitor.IsSpecialized) continue;
+            layout.PhysicalSources
+                .FirstOrDefault(s => s.DeviceId == monitor.Id)
+                ?.Source.UpdateWallpaperFrom(monitor, registryPath);
+        }
+    }
+
+    /// <summary>
+    /// The current desktop wallpaper image path from HKCU\Control Panel\Desktop\WallPaper (empty
+    /// for a solid color). Written immediately on change, unlike IDesktopWallpaper.GetWallpaper
+    /// which returns "" during the wallpaper fade — a reliable fallback for a live change.
+    /// </summary>
+    static string GetRegistryWallpaperPath()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop");
+            return key?.GetValue("WallPaper") as string ?? "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    /// <summary>
+    /// A cheap fingerprint of the current desktop wallpaper state — registry values plus the
+    /// transcoded-wallpaper file timestamp (rewritten on every image change). Changes whenever the
+    /// image, fit or background color changes, so callers can poll it to detect a wallpaper change
+    /// without touching the display device tree or COM.
+    /// </summary>
+    public static string WallpaperSignature()
+    {
+        try
+        {
+            using var desktop = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop");
+            using var colors = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\Colors");
+
+            var wp = desktop?.GetValue("WallPaper") as string ?? "";
+            var style = desktop?.GetValue("WallpaperStyle")?.ToString() ?? "";
+            var tile = desktop?.GetValue("TileWallpaper")?.ToString() ?? "";
+            var background = colors?.GetValue("Background")?.ToString() ?? "";
+
+            var transcoded = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Microsoft", "Windows", "Themes", "TranscodedWallpaper");
+            var mtime = System.IO.File.Exists(transcoded)
+                ? System.IO.File.GetLastWriteTimeUtc(transcoded).Ticks
+                : 0L;
+
+            return $"{wp}|{style}|{tile}|{background}|{mtime}";
+        }
+        catch
+        {
+            return "";
+        }
+    }
 
     public static DisplaySource CreateDisplaySource(this MonitorDevice monitor)
     {
@@ -129,7 +280,35 @@ public static class LayoutFactory
         }
 
         (source.InterfaceName, source.InterfaceLogo) = device.Parent.InterfaceBrandNameAndLogo();
-        source.WallpaperPath = device.Parent.WallpaperPath;
+
+        source.UpdateWallpaperFrom(monitor);
+
+        source.SourceNumber = monitor.MonitorNumber;
+
+        return source;
+    }
+
+    /// <summary>
+    /// Copy only the wallpaper (path, style, background color) from the Win32 adapter into the
+    /// reactive model. Shared by the full <see cref="UpdateFrom(DisplaySource, MonitorDevice)"/>
+    /// mapping and the in-place wallpaper refresh (live wallpaper change, no layout rebuild).
+    /// <para>
+    /// When <paramref name="allowClear"/> is false, an empty freshly-read path is ignored and the
+    /// previous path kept — this is what stops the transient empty returned during the wallpaper
+    /// fade from blanking the monitor. Style and background color are always applied.
+    /// </para>
+    /// </summary>
+    public static DisplaySource UpdateWallpaperFrom(this DisplaySource source, MonitorDevice monitor, string? fallbackPath = null)
+    {
+        if (monitor.Connections.Count == 0) return source;
+        var device = monitor.Connections[0];
+        if (device.Parent == null) return source;
+
+        // Per-monitor COM path is empty during the wallpaper fade; fall back to the registry path
+        // (the real current image, written immediately) so a live change reflects at once.
+        var comPath = device.Parent.WallpaperPath;
+        source.WallpaperPath = !string.IsNullOrEmpty(comPath) ? comPath : (fallbackPath ?? comPath);
+
         source.WallpaperStyle = device.Parent.WallpaperPosition switch
         {
             DesktopWallpaperPosition.Fill => WallpaperStyle.Fill,
@@ -142,8 +321,6 @@ public static class LayoutFactory
 
         var color = device.Parent.Background;
         source.BackgroundColor = HLabColors.RGB<double>((byte)(color & 0xFF),(byte)((color >> 8) & 0xFF),(byte)((color >> 16) & 0xFF));
-
-        source.SourceNumber = monitor.MonitorNumber;
 
         return source;
     }
@@ -163,8 +340,6 @@ public static class LayoutFactory
             return @this;
         }
     }
-
-    public static Size Transpose(this Size size) => new(size.Height, size.Width);
 
     public static PhysicalMonitorModel SetSizeFrom(this PhysicalMonitorModel @this, MonitorDevice monitor)
     {
@@ -254,7 +429,6 @@ public static class LayoutFactory
         // reports "Generic PnP Monitor" and has a null Edid: keep the generic name then.
         if (name.ToLower() == "generic pnp monitor" && !string.IsNullOrEmpty(monitor.Edid?.Model))
             name = monitor.Edid.Model;
-        //        if (name.ToLower() == "generic pnp monitor") name = HtmlHelper.GetPnpName(@this.PnpCode);
 
         @this.PnpDeviceName = name;
 
@@ -306,5 +480,4 @@ public static class LayoutFactory
         }
         return (dev, "");
     }
-
 }

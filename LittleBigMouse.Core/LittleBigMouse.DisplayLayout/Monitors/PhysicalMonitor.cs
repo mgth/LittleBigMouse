@@ -29,9 +29,6 @@ using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using DynamicData;
 using HLab.Base.ReactiveUI;
-
-//using HLab.Sys.Windows.Monitors;
-
 using LittleBigMouse.DisplayLayout.Dimensions;
 using ReactiveUI;
 

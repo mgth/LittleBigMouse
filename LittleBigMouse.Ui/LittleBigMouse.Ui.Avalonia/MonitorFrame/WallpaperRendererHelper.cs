@@ -262,8 +262,12 @@ public static class WallpaperRendererHelper
         var ratio = Math.Max((double)fullArea.Width / (double)source.Width, (double)fullArea.Height / (double)source.Height);
         var resize = new Size((int)(ratio * source.Width),(int)(ratio * source.Height));
 
+        // Match how Windows "Span" actually crops the cover-scaled image over the virtual desktop.
+        // Measured against real Span output (grid wallpaper, screen capture): the horizontal
+        // overflow is centered, but the VERTICAL overflow is split 1/3 top : 2/3 bottom (not
+        // centered). Verified across image heights 1000..2400: visible band top = (H - fullArea.H)/3.
         var offsetX = (resize.Width - fullArea.Width) / 2;
-        var offsetY = (resize.Height - fullArea.Height) / 2;
+        var offsetY = (resize.Height - fullArea.Height) / 3;
 
         target.Offset(-fullArea.X + offsetX,-fullArea.Y + offsetY);
 

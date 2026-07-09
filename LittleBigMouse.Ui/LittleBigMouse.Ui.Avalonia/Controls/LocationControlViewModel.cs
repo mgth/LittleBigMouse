@@ -40,7 +40,7 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
-using LittleBigMouse.Ui.Avalonia.Persistency;
+using LittleBigMouse.Platform.Windows;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Zoning;
 using ReactiveUI;

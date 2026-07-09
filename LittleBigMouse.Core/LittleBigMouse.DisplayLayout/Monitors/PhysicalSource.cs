@@ -2,7 +2,6 @@
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using HLab.Base.ReactiveUI;
-using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using ReactiveUI;
 
@@ -22,7 +21,7 @@ public class PhysicalSource : SavableReactiveModel
     static double GetRealDpiAvg(double dpiX, double dpiY) => Math.Sqrt(Math.Pow(dpiX, 2.0) + Math.Pow(dpiY, 2.0)) / Math.Sqrt(2);
 
     /// <summary>
-    /// Calculate DPI ratio from <see cref="WinDef.DpiAwareness"/> and DPI values.
+    /// Calculate DPI ratio from <see cref="DpiAwarenessKind"/> and DPI values.
     /// </summary>
     /// <param name="aware"></param>
     /// <param name="dpiRealX"></param>
@@ -37,7 +36,7 @@ public class PhysicalSource : SavableReactiveModel
     /// <exception cref="ArgumentOutOfRangeException"></exception>
     /// 
     public static IDisplayRatio UpdateDipToPixelRatio(
-        WinDef.DpiAwareness aware,
+        DpiAwarenessKind aware,
         double dpiRealX, double dpiRealY,
         double dpiAngX, double dpiAngY,
         double srcDpiX, double srcDpiY,
@@ -45,11 +44,11 @@ public class PhysicalSource : SavableReactiveModel
     {
        return aware switch
        {
-          WinDef.DpiAwareness.Unaware => new DisplayRatioValue(Math.Round(dpiRealX / dpiAngX * 10) / 10,
+          DpiAwarenessKind.Unaware => new DisplayRatioValue(Math.Round(dpiRealX / dpiAngX * 10) / 10,
              Math.Round(dpiRealY / dpiAngY * 10) / 10),
           //return Math.Round((RealDpiY / DpiAwareAngularDpiY) * 20) / 20;
-          WinDef.DpiAwareness.SystemAware => new(srcDpiX / 96, srcDpiY / 96),
-          WinDef.DpiAwareness.PerMonitorAware or WinDef.DpiAwareness.Invalid => new (
+          DpiAwarenessKind.SystemAware => new(srcDpiX / 96, srcDpiY / 96),
+          DpiAwarenessKind.PerMonitorAware or DpiAwarenessKind.Invalid => new (
              dpiEffectiveX / 96, dpiEffectiveY / 96),
           _ => throw new ArgumentOutOfRangeException()
        };

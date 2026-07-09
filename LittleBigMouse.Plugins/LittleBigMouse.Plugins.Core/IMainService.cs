@@ -1,5 +1,4 @@
-﻿using HLab.Sys.Windows.Monitors;
-using LittleBigMouse.DisplayLayout.Monitors;
+﻿using LittleBigMouse.DisplayLayout.Monitors;
 
 namespace LittleBigMouse.Plugins;
 

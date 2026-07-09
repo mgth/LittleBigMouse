@@ -1,28 +1,24 @@
-﻿#nullable enable
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Management;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using System.Threading;
 using DynamicData;
 using DynamicData.Binding;
 using HLab.Base.ReactiveUI;
 using HLab.Geo;
-using HLab.Sys.Windows.API;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
-using Microsoft.Win32.TaskScheduler;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Monitors;
 
 /// <summary>
-/// 
+///
 /// </summary>
 [DataContract]
 public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
@@ -30,8 +26,6 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    public MonitorsLayout(ILayoutOptions options)
    {
       Options = options;
-
-      DpiAwareness = WinUser.GetAwarenessFromDpiAwarenessContext(WinUser.GetThreadDpiAwarenessContext());
 
       _physicalMonitorsCache.Connect()
           .StartWithEmpty()
@@ -96,7 +90,16 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    public ILayoutOptions Options { get; }
 
 
-   public WinDef.DpiAwareness DpiAwareness { get; }
+   /// <summary>
+   /// DPI awareness of the UI process. Process-scoped, supplied by the display snapshot
+   /// (see <see cref="DpiAwarenessKind"/>); the DIP-ratio bindings observe it, so it is a
+   /// reactive property set once by LayoutFactory before the sources are built.
+   /// </summary>
+   public DpiAwarenessKind DpiAwareness
+   {
+      get;
+      set => this.RaiseAndSetIfChanged(ref field, value);
+   } = DpiAwarenessKind.PerMonitorAware;
 
    [DataMember]
    public string Id
@@ -168,22 +171,6 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
 
    public string LayoutPath(bool create) => Options.GetConfigPath(Id, create);
 
-   public void EnumWmi()
-   {
-      const string namespacePath = "\\\\.\\ROOT\\WMI\\ms_409";
-      const string className = "WmiMonitorID";
-
-      //Create ManagementClass
-      var oClass = new ManagementClass(namespacePath + ":" + className);
-
-      //Get all instances of the class and enumerate them
-      foreach (var o in oClass.GetInstances().OfType<ManagementObject>())
-      {
-         //access a property of the Management object
-         Console.WriteLine("ManufacturerName : {0}", o["ManufacturerName"]);
-      }
-   }
-
    /// <summary>
    /// PhysicalMonitor on witch primary source get displayed.
    /// </summary>
@@ -211,7 +198,7 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    void ParsePhysicalMonitors(IEnumerable<PhysicalMonitor> monitors)
    {
       Options.MinimalMaxTravelDistance = Math.Ceiling(this.GetMinimalMaxTravelDistance());
-      
+
       using var it = monitors.GetEnumerator();
       if(!it.MoveNext()) return;
       var physicalBounds = it.Current.DepthProjection.OutsideBounds;
@@ -227,14 +214,14 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    readonly ObservableAsPropertyHelper<double> _x0;
 
    /// <summary>
-   /// 
+   ///
    /// </summary>
    public double Y0 => _y0.Value;
    readonly ObservableAsPropertyHelper<double> _y0;
 
 
    /// <summary>
-   /// Store window location betwin sessions 
+   /// Store window location betwin sessions
    /// </summary>
    [DataMember]
    public Rect ConfigLocation { get; set => SetUnsavedValue(ref field, value); }
@@ -251,7 +238,7 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    }
 
    /// <summary>
-   /// Remove all gaps between screens 
+   /// Remove all gaps between screens
    /// </summary>
    public void ForceCompact()
    {
@@ -324,10 +311,6 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
       }
    }
 
-   string ServiceName { get; } = "LittleBigMouse_" + System.Security.Principal.WindowsIdentity.GetCurrent().Name.Replace('\\', '_');
-
-   string ApplicationExe { get; } = AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName + ".exe";
-
    public static MonitorsLayout MonitorsLayoutDesign
    {
       get
@@ -351,78 +334,4 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
       foreach (var monitor in _physicalMonitors) monitor.Dispose();
       foreach (var source in _physicalSources) source.Dispose();
    }
-
-   public bool IsScheduled()
-   {
-      using var ts = new TaskService();
-      return ts.RootFolder.GetTasks(new Regex(ServiceName)).Any();
-   }
-
-   /// <summary>
-   /// Align the startup scheduled task on the current options.
-   /// </summary>
-   public void UpdateSchedule()
-   {
-      if (Options.LoadAtStartup) Schedule(Options.StartElevated); else Unschedule();
-   }
-
-   public bool Schedule(bool elevated)
-   {
-      Unschedule();
-
-      using var ts = new TaskService();
-
-      //ts.RootFolder.DeleteTask(ServiceName, false);
-
-      var td = ts.NewTask();
-      td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
-      td.Triggers.Add(
-          //new BootTrigger());
-          new LogonTrigger { UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name });
-
-      td.Actions.Add(
-          new ExecAction(ApplicationExe, "", AppDomain.CurrentDomain.BaseDirectory)
-      );
-
-      td.Principal.RunLevel = TaskRunLevel.Highest;
-      td.Settings.DisallowStartIfOnBatteries = false;
-      td.Settings.DisallowStartOnRemoteAppSession = true;
-      td.Settings.StopIfGoingOnBatteries = false;
-      td.Settings.ExecutionTimeLimit = TimeSpan.Zero;
-      try
-      {
-         ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
-         return true;
-      }
-      catch (UnauthorizedAccessException e)
-      {
-      }
-
-      td.Principal.RunLevel = elevated ? TaskRunLevel.Highest : TaskRunLevel.LUA;
-      try
-      {
-         ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
-         return true;
-      }
-      catch (UnauthorizedAccessException e)
-      {
-         return false;
-      }
-   }
-
-   public void Unschedule()
-   {
-      using var ts = new TaskService();
-      try
-      {
-         ts.RootFolder.DeleteTask(ServiceName, false);
-      }
-      catch (UnauthorizedAccessException)
-      {
-
-      }
-   }
-
-
-
 }

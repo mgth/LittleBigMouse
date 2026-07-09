@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <LangVersion>preview</LangVersion>
+    <Platforms>x64</Platforms>
+    <OutputType>Library</OutputType>
+    <Configurations>Debug;Release;ReleaseDebug</Configurations>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- TaskScheduler brings Microsoft.Win32.Registry transitively (registry persistence). -->
+    <PackageReference Include="TaskScheduler" Version="2.12.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Core\LittleBigMouse.Plugins.csproj" />
+    <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
+    <ProjectReference Include="..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
+    <ProjectReference Include="..\HLab.Core\HLab.ColorTools\HLab.ColorTools.csproj" />
+    <ProjectReference Include="..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
+  </ItemGroup>
+
+</Project>

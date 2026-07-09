@@ -250,6 +250,11 @@
 								        Command="{Binding AddExcludedProcessCommand}">Exclude</Button>
 							</Grid>
 
+							<Button HorizontalAlignment="Left" Margin="14,0,14,12"
+							        Command="{Binding AddDefaultsCommand}"
+							        Content="Add defaults"
+							        ToolTip.Tip="Add the built-in default exclusions (Epic, Steam, Riot, Xbox game folders) that aren't already in the list"/>
+
 							<Border Classes="SettingSeparator"/>
 
 							<controls:SettingRow Classes="Sub"

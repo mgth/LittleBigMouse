@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout;
 using Microsoft.Win32;
@@ -101,6 +103,8 @@ public static class PersistencyExtensions
             @this.ExcludedList.Add(line);
         }
 
+        MigrateExcludedDefaults(@this.ExcludedList, mainKey, file);
+
         if (key == null) return;
         // Options to be loaded from the layout key
         @this.AllowOverlaps = key.GetOrSet("AllowOverlaps", () => false);
@@ -119,6 +123,40 @@ public static class PersistencyExtensions
         @this.PriorityUnhooked = key.GetOrSet("PriorityUnhooked", () => "Below");
 
         @this.Saved = true;
+    }
+
+    /// <summary>
+    /// One-time top-up of the default exclusion list. When new default entries ship (e.g. Xbox game
+    /// folders, #494) they must reach users who already have an <c>Excluded.txt</c> — a fresh seed
+    /// only covers new installs. Runs once per <see cref="ExcludedProcessDefaults.Version"/> (tracked
+    /// in the registry) and only when the list still holds every previous default, so a customized
+    /// list — or a default the user deliberately removed later — is left untouched. Rewrites the file
+    /// too, since the daemon reads it, not this in-memory list.
+    /// </summary>
+    static void MigrateExcludedDefaults(ICollection<string> list, RegistryKey mainKey, string file)
+    {
+        var applied = mainKey.GetOrSet("ExcludedDefaultsVersion", () => 0);
+        if (applied >= ExcludedProcessDefaults.Version) return;
+
+        // Only top up a list that still holds all the previous defaults (i.e. the user kept them).
+        if (ExcludedProcessDefaults.LegacyV0.All(list.Contains))
+        {
+            var added = false;
+            foreach (var entry in ExcludedProcessDefaults.All)
+            {
+                if (list.Contains(entry)) continue;
+                list.Add(entry);
+                added = true;
+            }
+
+            if (added)
+            {
+                try { File.WriteAllLines(file, list); }
+                catch { /* best effort: the in-memory list is updated regardless */ }
+            }
+        }
+
+        mainKey.SetKey("ExcludedDefaultsVersion", ExcludedProcessDefaults.Version.ToString(CultureInfo.InvariantCulture));
     }
 
     static bool IsProcessElevated()

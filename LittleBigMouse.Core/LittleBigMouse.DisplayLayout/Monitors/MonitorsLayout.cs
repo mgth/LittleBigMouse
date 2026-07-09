@@ -127,16 +127,23 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    public PhysicalMonitorModel GetOrAddPhysicalMonitorModel(string id, Func<string, PhysicalMonitorModel> value)
    {
       PhysicalMonitorModel? result = null;
-      _physicalMonitorModelsCache.Lookup(id);
       _physicalMonitorModelsCache.Edit(u =>
       {
          var lookup = u.Lookup(id);
          if (lookup.HasValue)
          {
+            // Reuse the existing model: monitors sharing a PnpCode (identical make/model) must share
+            // ONE PhysicalMonitorModel, so model-level edits (physical size, borders, PnP name) apply
+            // to all of them and persist consistently. Recreating here defeated the cache — two
+            // identical monitors got separate instances, and one's stale Save overwrote the other's
+            // registry key, silently dropping the user's change.
             result = lookup.Value;
          }
-         result = value(id);
-         u.AddOrUpdate(result);
+         else
+         {
+            result = value(id);
+            u.AddOrUpdate(result);
+         }
       });
       if (result == null) throw new Exception("GetOrAddPhysicalMonitorModel failed");
       return result;

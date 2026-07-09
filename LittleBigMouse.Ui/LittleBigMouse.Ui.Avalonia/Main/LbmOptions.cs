@@ -222,6 +222,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     }
     string _algorithm = "Strait";
 
+    [DataMember]
+    public string BorderValues
+    {
+        get => _borderValues;
+        set => SetUnsavedValue(ref _borderValues, value);
+    }
+    string _borderValues = "PerModel";
+
     public ObservableCollection<string> ExcludedList { get; } = new();
 
     public string GetConfigPath(string layoutId, bool create)

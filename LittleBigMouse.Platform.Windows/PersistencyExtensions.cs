@@ -92,6 +92,7 @@ public static class PersistencyExtensions
         @this.DebugTools = mainKey.GetOrSet("DebugTools", () => false);
         // "ShowAttachDetachWarning" is the former name of the option, read as fallback
         @this.ShowMonitorActionWarning = mainKey.GetOrSet("ShowMonitorActionWarning", () => mainKey.GetOrSet("ShowAttachDetachWarning", () => true));
+        @this.BorderValues = mainKey.GetOrSet("BorderValues", () => "PerModel");
 
         @this.ExcludedList.Clear();
 
@@ -244,6 +245,7 @@ public static class PersistencyExtensions
         mainKey.SetKey("StartElevated", @this.StartElevated);
         mainKey.SetKey("DebugTools", @this.DebugTools);
         mainKey.SetKey("ShowMonitorActionWarning", @this.ShowMonitorActionWarning);
+        mainKey.SetKey("BorderValues", @this.BorderValues);
 
         var file = ExcludedListPath();
 
@@ -337,6 +339,17 @@ public static class PersistencyExtensions
         @this.BorderResistance.Bottom =  key.GetOrSet(@"BorderResistance\Bottom", ()=> @this.BorderResistance.Bottom);
         @this.BorderResistance.Saved = true;
 
+        // Per-monitor bezel borders — only in "PerMonitor" mode ("PerModel" keeps them on the shared
+        // model key). Defaults were seeded from the model at construction, so an absent key just keeps
+        // the model's values.
+        if (@this.Layout.Options.BorderValues == "PerMonitor")
+        {
+            @this.Borders.Left = key.GetOrSet(@"Borders\Left", () => @this.Model.PhysicalSize.LeftBorder);
+            @this.Borders.Top = key.GetOrSet(@"Borders\Top", () => @this.Model.PhysicalSize.TopBorder);
+            @this.Borders.Right = key.GetOrSet(@"Borders\Right", () => @this.Model.PhysicalSize.RightBorder);
+            @this.Borders.Bottom = key.GetOrSet(@"Borders\Bottom", () => @this.Model.PhysicalSize.BottomBorder);
+        }
+
         @this.Saved = true;
 
         return @this;
@@ -364,6 +377,14 @@ public static class PersistencyExtensions
         key.SetKey(@"BorderResistance\Bottom", @this.BorderResistance.Bottom);
 
         @this.BorderResistance.Saved = true;
+
+        if (@this.Layout.Options.BorderValues == "PerMonitor")
+        {
+            key.SetKey(@"Borders\Left", @this.Borders.Left);
+            key.SetKey(@"Borders\Top", @this.Borders.Top);
+            key.SetKey(@"Borders\Right", @this.Borders.Right);
+            key.SetKey(@"Borders\Bottom", @this.Borders.Bottom);
+        }
 
 
         foreach (var source in @this.Sources.Items)

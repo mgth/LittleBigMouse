@@ -209,6 +209,29 @@
 					</Border>
 
 					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Ruler}"
+							                     Header="Border values"
+							                     Description="Where each monitor's bezel borders are stored"/>
+							<ListBox Classes="ChoiceCards" Margin="14,0,6,12"
+							         ItemsSource="{Binding BorderValuesList}"
+							         SelectedItem="{Binding SelectedBorderValues}">
+								<ListBox.ItemTemplate>
+									<DataTemplate>
+										<StackPanel x:DataType="options:ListItem" Spacing="2">
+											<TextBlock Text="{Binding Caption}" FontSize="13"
+											           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"/>
+											<TextBlock Text="{Binding Description}" FontSize="11"
+											           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
+											           TextWrapping="Wrap"/>
+										</StackPanel>
+									</DataTemplate>
+								</ListBox.ItemTemplate>
+							</ListBox>
+						</StackPanel>
+					</Border>
+
+					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Warning}"
 						                     Header="Warn before monitor actions"
 						                     Description="Ask for confirmation before attaching, detaching or making a monitor primary">

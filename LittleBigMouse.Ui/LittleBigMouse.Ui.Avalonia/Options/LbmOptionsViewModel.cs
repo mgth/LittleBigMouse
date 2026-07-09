@@ -36,6 +36,8 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
 
         RemoveExcludedProcessCommand = ReactiveCommand.Create<string?>(RemoveExcludedProcess);
 
+        AddDefaultsCommand = ReactiveCommand.Create(AddDefaults);
+
         _adjustPointerAllowed = this
             .WhenAnyValue(e => e.Model.IsUnaryRatio, (bool r) => r)
             .Log(this, "_adjustPointerAllowed")
@@ -87,6 +89,18 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         if(Model.ExcludedList.Contains(p)) return ;
 
         Model.ExcludedList.Add(p);
+    }
+
+    // Top up the list with any built-in default exclusions (game launchers) not already present.
+    // Restores defaults a user pruned, and surfaces newly-added ones (e.g. Xbox games, #494).
+    public ICommand AddDefaultsCommand { get; }
+    void AddDefaults()
+    {
+        if (Model == null) return;
+        foreach (var entry in ExcludedProcessDefaults.All)
+        {
+            if (!Model.ExcludedList.Contains(entry)) Model.ExcludedList.Add(entry);
+        }
     }
 
     /// <summary>

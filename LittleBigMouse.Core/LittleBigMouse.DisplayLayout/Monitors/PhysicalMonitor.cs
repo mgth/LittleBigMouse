@@ -85,6 +85,43 @@ public class PhysicalMonitor : SavableReactiveModel
             .Do(ParseDisplaySources)
             .Subscribe().DisposeWith(this);
 
+        // Per-monitor border source, seeded from the model so "PerMonitor" starts matching "PerModel".
+        Borders = new DisplayBorders
+        {
+            Left = model.PhysicalSize.LeftBorder,
+            Top = model.PhysicalSize.TopBorder,
+            Right = model.PhysicalSize.RightBorder,
+            Bottom = model.PhysicalSize.BottomBorder,
+        };
+        _borderOverride = new DisplayBorderOverride(model.PhysicalSize, Borders);
+
+        // The size the geometry is built from: the shared per-model size, or — when "Border values"
+        // is "PerMonitor" — the same size with this monitor's own borders substituted. Reactive so a
+        // mode switch rewires rotation / projection / zones live.
+        _effectivePhysicalSize = this.WhenAnyValue(e => e.Layout.Options.BorderValues)
+            .Select(mode => mode == "PerMonitor" ? (IDisplaySize)_borderOverride : Model.PhysicalSize)
+            .ToProperty(this, e => e.EffectivePhysicalSize, initialValue: model.PhysicalSize)
+            .DisposeWith(this);
+
+        // Keep the per-monitor borders mirroring the model while NOT in per-monitor mode, so switching
+        // to "PerMonitor" starts from the current model borders (no visual jump). In per-monitor mode
+        // the mirror stops and Borders keeps its own loaded / user-edited values.
+        this.WhenAnyValue(
+                e => e.Layout.Options.BorderValues,
+                e => e.Model.PhysicalSize.LeftBorder,
+                e => e.Model.PhysicalSize.TopBorder,
+                e => e.Model.PhysicalSize.RightBorder,
+                e => e.Model.PhysicalSize.BottomBorder)
+            .Where(t => t.Item1 != "PerMonitor")
+            .Subscribe(_ =>
+            {
+                Borders.Left = Model.PhysicalSize.LeftBorder;
+                Borders.Top = Model.PhysicalSize.TopBorder;
+                Borders.Right = Model.PhysicalSize.RightBorder;
+                Borders.Bottom = Model.PhysicalSize.BottomBorder;
+            })
+            .DisposeWith(this);
+
         _physicalRotated = this.WhenAnyValue(
             e => e.EffectivePhysicalSize,
             e => e.ActiveSource.Source.Orientation,
@@ -183,7 +220,16 @@ public class PhysicalMonitor : SavableReactiveModel
     /// It exists as the single seam where a future "Border values: per monitor" option can substitute
     /// a per-monitor border source, without touching any geometry consumer. See the border-values plan.
     /// </summary>
-    public IDisplaySize EffectivePhysicalSize => Model.PhysicalSize;
+    public IDisplaySize EffectivePhysicalSize => _effectivePhysicalSize.Value;
+    readonly ObservableAsPropertyHelper<IDisplaySize> _effectivePhysicalSize;
+
+    /// <summary>
+    /// This monitor's own bezel borders, used to build the geometry only when "Border values" is
+    /// "PerMonitor". Seeded from the model at construction; loaded from / saved to the monitor's own
+    /// registry key. In "PerModel" mode the geometry ignores these and uses the shared model borders.
+    /// </summary>
+    public DisplayBorders Borders { get; }
+    readonly DisplayBorderOverride _borderOverride;
 
     /// <summary>
     /// Dimensions with rotation applied

@@ -53,6 +53,9 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         _selectedAlgorithm = this.WhenAnyValue(e => e.Model.Algorithm)
             .Select(a => AlgorithmList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedAlgorithm));
 
+        _selectedBorderValues = this.WhenAnyValue(e => e.Model.BorderValues)
+            .Select(a => BorderValuesList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedBorderValues));
+
         _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
             .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedPriority));
 
@@ -123,6 +126,12 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         new("Cross", "Corner crossing", "In direction-friendly manner, allows traversal through corners.")
     ];
 
+    public List<ListItem> BorderValuesList { get; } =
+    [
+        new("PerModel", "Per model", "Borders are shared by all monitors of the same make/model."),
+        new("PerMonitor", "Per monitor", "Each physical monitor keeps its own borders.")
+    ];
+
     public List<ListItem> PriorityList { get; } =
     [
         new("Idle", "Idle", ""),
@@ -143,6 +152,17 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         }
     }
     readonly ObservableAsPropertyHelper<ListItem?> _selectedAlgorithm;
+
+    public ListItem? SelectedBorderValues
+    {
+        get => _selectedBorderValues.Value;
+        set
+        {
+            if (Model == null) return;
+            Model.BorderValues = value?.Id ?? "PerModel";
+        }
+    }
+    readonly ObservableAsPropertyHelper<ListItem?> _selectedBorderValues;
 
     public ListItem? SelectedPriority
     {

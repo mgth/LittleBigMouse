@@ -31,6 +31,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool AdjustPointer { get; set; } = false;
       public bool AdjustSpeed { get; set; } = false;
       public string Algorithm { get; set; } = "Strait";
+      public string BorderValues { get; set; } = "PerModel";
       public string Priority { get; set; } = "Normal";
       public string PriorityUnhooked { get; set; } = "Below";
       public bool IsUnaryRatio { get; set; } = false;
@@ -119,6 +120,12 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// - CornerCrossing
    /// </summary>
    string Algorithm { get; set; }
+
+   /// <summary>
+   /// Where bezel borders are stored: "PerModel" (default — shared by all monitors of the same
+   /// make/model) or "PerMonitor" (each physical monitor keeps its own).
+   /// </summary>
+   string BorderValues { get; set; }
 
 
    /// <summary>

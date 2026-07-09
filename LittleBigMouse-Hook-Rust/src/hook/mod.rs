@@ -280,6 +280,35 @@ pub(crate) fn on_desktop_changed(shared: &Shared) {
     shared.broadcast(protocol::DESKTOP_CHANGED);
 }
 
+/// The desktop stopped being displayed (screen off: sleep, session standby, lock/idle). Like a
+/// display change, stop hooking — so the cursor is never left confined when the UI is absent —
+/// and tell the UI, which then gates its rebuilds until the display comes back. Deduplicated: the
+/// display-state notification re-pushes the current state every time the listener window (and its
+/// registration) is recreated, which happens on every hook/unhook cycle.
+pub(crate) fn on_suspend(shared: &Shared) {
+    if shared.suspended.swap(true, Ordering::SeqCst) {
+        return; // already suspended — ignore the repeated current-state push
+    }
+    if shared.hooked.load(Ordering::SeqCst) {
+        request_unhook(shared);
+    }
+    shared.broadcast(protocol::SUSPENDED);
+}
+
+/// The desktop is displayed again (wake / unlock / monitor on): tell the UI, which reconciles the
+/// layout and re-hooks us once the configuration is stable. We do NOT re-hook ourselves — the UI
+/// owns that (exactly like `on_display_changed`), so without a UI we stay safely unhooked.
+pub(crate) fn on_resume(shared: &Shared) {
+    if !shared.suspended.swap(false, Ordering::SeqCst) {
+        return; // was not suspended
+    }
+    // Never come back from sleep with the cursor still confined: if a clip lingered across the
+    // suspend (or Windows set one during the display transition), a leftover sub-virtual-screen clip
+    // makes the engine read "freelook" and stop crossing. Release it before the UI re-Starts us.
+    crate::platform::cursor::release_clip();
+    shared.broadcast(protocol::RESUMED);
+}
+
 /// The foreground window changed (C++ `FocusChanged`): pause the hook while an
 /// excluded app (e.g. a game) is focused, resume when it loses focus.
 pub(crate) fn on_focus_changed(shared: &Shared, path: String) {

@@ -35,6 +35,7 @@ features = [
     "Win32_System_LibraryLoader",
     "Win32_System_SystemInformation",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Power",
 ]
 
 [profile.release]

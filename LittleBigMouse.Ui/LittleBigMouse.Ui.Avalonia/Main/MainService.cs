@@ -25,6 +25,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -33,13 +34,12 @@ using HLab.Base.ReactiveUI;
 using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
-using HLab.Sys.Windows.Monitors;
 using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Options;
-using LittleBigMouse.Ui.Avalonia.Persistency;
+using LittleBigMouse.Platform.Windows;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Zoning;
@@ -50,11 +50,10 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 public class MainService : ReactiveModel, IMainService
 {
     readonly IMvvmService _mvvmService;
-    readonly ISystemMonitorsService _monitors;
+    readonly ILayoutFactory _layoutFactory;
 
     readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
-    readonly Func<MonitorsLayout> _getNewMonitorLayout;
     readonly IProcessesCollector _processesCollector;
     readonly Func<ApplicationUpdaterViewModel> _updaterLocator;
 
@@ -76,15 +75,13 @@ public class MainService : ReactiveModel, IMainService
         IMvvmService mvvmService,
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
-        ISystemMonitorsService monitors,
-        Func<MonitorsLayout> getNewMonitorLayout,
+        ILayoutFactory layoutFactory,
         IProcessesCollector processesCollector,
         Func<ApplicationUpdaterViewModel> updaterLocator,
         ILayoutOptions options)
     {
         _notify = notify;
-        _monitors = monitors;
-        _getNewMonitorLayout = getNewMonitorLayout;
+        _layoutFactory = layoutFactory;
         _processesCollector = processesCollector;
         _updaterLocator = updaterLocator;
         _littleBigMouseClientService = littleBigMouseClientService;
@@ -117,19 +114,20 @@ public class MainService : ReactiveModel, IMainService
 
         // Relate service state with notify icon
         _littleBigMouseClientService.DaemonEventReceived += (o, a) => DaemonEventReceived(o, a);
+
+        // The platform watches the OS for wallpaper changes (Windows: a RegNotifyChangeKeyValue
+        // registry watcher) and raises WallpaperChanged. Refresh the wallpaper drawn behind each
+        // monitor in place.
+        _layoutFactory.WallpaperChanged += (_, _) => RefreshWallpaper();
     }
 
     public void UpdateLayout()
     {
         // TODO : move to plugin
-        if (_monitors is not SystemMonitorsService monitors) return;
-
-        monitors.UpdateDevices();
-
         var old = MonitorsLayout;
-        
-        MonitorsLayout = _getNewMonitorLayout().UpdateFrom(monitors);
-        
+
+        MonitorsLayout = _layoutFactory.Create();
+
         old?.Dispose();
     }
 
@@ -263,6 +261,22 @@ public class MainService : ReactiveModel, IMainService
                 await DisplayChangedAsync();
                 break;
 
+            // The daemon detected the display turning off (sleep / session standby / lock-idle) and
+            // already unhooked itself (so the cursor is never left confined without us). Just stop
+            // reacting to display events until it comes back — no rebuild while there is no desktop.
+            case LittleBigMouseEvent.Suspended:
+                _suspended = true;
+                await _notify.SetIconAsync("icon/lbm_paused", 32);
+                break;
+
+            // Display is back: resume, reconcile the layout only if it actually changed while off
+            // (the idempotence guard), and re-hook the daemon once the config has settled.
+            case LittleBigMouseEvent.Resumed:
+                _suspended = false;
+                await DisplayChangedAsync();
+                if ((MonitorsLayout?.Options.Enabled) ?? false) await StartAsync();
+                break;
+
             case LittleBigMouseEvent.FocusChanged:
                 _processesCollector?.AddProcess(args.Payload);
                 break;
@@ -274,27 +288,109 @@ public class MainService : ReactiveModel, IMainService
         }
     }
 
-    bool _displayChangedTriggered = false;
-    readonly object _lockDisplayChanged = new();
+    // React to a display change (attach/detach, resolution, scaling, primary) once the OS has
+    // actually SETTLED, without a fixed delay. The daemon forwards a burst of
+    // WM_DISPLAYCHANGE/WM_SETTINGCHANGE per change, so we:
+    //   1. trailing-debounce the burst (a generation counter: only the latest event proceeds),
+    //   2. confirm the config has stopped changing (two identical DisplaySignature reads),
+    // then rebuild. Measured on real switches, the config reaches its final state within one
+    // ~80ms sample, so this reacts in a few hundred ms instead of the former fixed 5s.
+    const int DisplayDebounceMs = 300;      // quiet window absorbing the message burst
+    const int DisplayStabilityStepMs = 100; // spacing between settle re-checks
+    const int DisplayStabilityMaxSteps = 40; // TEMP measurement cap (~4s); production value ~8
+    int _displayChangeGeneration;
+
+    // TEMP instrumentation (#displaychange-timing): writes C:\dev\lbm-dc.log so we can measure the
+    // real message-burst duration and config settle time on this machine, and size the cap. Remove
+    // after tuning.
+    static readonly object _dcLogLock = new();
+    static void DcLog(string m)
+    {
+        try { lock (_dcLogLock) System.IO.File.AppendAllText(@"C:\dev\lbm-dc.log", $"{DateTime.Now:HH:mm:ss.fff} {m}{Environment.NewLine}"); }
+        catch { /* diagnostic only */ }
+    }
+
     async Task DisplayChangedAsync()
     {
-        lock (_lockDisplayChanged)
+        // Do nothing at all while the display is off: no debounce, no signature reads, no rebuild.
+        // The daemon's Resumed event reconciles once when the desktop is back.
+        if (_suspended) { DcLog("  suspended — ignore display event"); return; }
+
+        var gen = Interlocked.Increment(ref _displayChangeGeneration);
+        DcLog($"event         gen={gen}");
+
+        // Trailing debounce: wait a short quiet window; if a newer event arrived meanwhile, bail
+        // and let that later call handle it (so a burst collapses to a single rebuild).
+        await Task.Delay(DisplayDebounceMs);
+        if (gen != Volatile.Read(ref _displayChangeGeneration)) { DcLog($"  superseded  gen={gen} (debounce)"); return; }
+        DcLog($"  debounce ok gen={gen}");
+
+        // Settle detection: rebuild only once the display config has stopped changing, i.e. two
+        // consecutive signatures match. Capped so a pathological flapping config can't hang here.
+        var signature = _layoutFactory.DisplaySignature();
+        var steps = 0;
+        var stable = false;
+        for (var i = 0; i < DisplayStabilityMaxSteps; i++)
         {
-            if (_displayChangedTriggered) return;
-            _displayChangedTriggered = true;
+            await Task.Delay(DisplayStabilityStepMs);
+            if (gen != Volatile.Read(ref _displayChangeGeneration)) { DcLog($"  superseded  gen={gen} (step {i})"); return; }
+            steps = i + 1;
+            var next = _layoutFactory.DisplaySignature();
+            if (next == signature) { stable = true; DcLog($"  STABLE after {steps} steps (~{DisplayDebounceMs + steps * DisplayStabilityStepMs}ms) sig={signature}"); break; }
+            DcLog($"  step {steps}: changed -> {next}");
+            signature = next;
         }
-        await Task.Delay(5000);
-        lock (_lockDisplayChanged)
+        if (!stable) DcLog($"  CAP HIT after {steps} steps (~{DisplayDebounceMs + steps * DisplayStabilityStepMs}ms) — still changing, sig={signature}");
+
+        // A Suspended event may have arrived during the debounce/settle (the display went off while
+        // this display-change was being handled): drop the rebuild — the daemon has unhooked and we
+        // wait for Resumed.
+        if (_suspended) { DcLog($"  suspended mid-settle — skip gen={gen}"); return; }
+
+        // Idempotence guard: the settle loop confirms the config STOPPED changing, but not that it
+        // actually DIFFERS from the generation we already built. A spurious WM_DISPLAYCHANGE (a
+        // monitor's DPMS power-save on/off — e.g. an HDR TV —, a mode re-apply, a stray broadcast)
+        // settles to the very same signature we last built. Rebuilding it drops a fresh, fully-wired
+        // MonitorsLayout generation that Avalonia's compositor/animation clock keeps alive (#412): a
+        // storm of identical events is what fills gigabytes. Skip when nothing changed.
+        if (signature == _lastBuiltSignature)
         {
-            _displayChangedTriggered = false;
+            DcLog($"  UNCHANGED sig — skip rebuild gen={gen}");
+            return;
         }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         UpdateLayout();
-        if(MonitorsLayout.Options.Enabled)
+        _lastBuiltSignature = signature;
+        DcLog($"  Create()+layout took {sw.ElapsedMilliseconds}ms");
+        if (MonitorsLayout.Options.Enabled)
         {
             await StartAsync();
+            DcLog($"  StartAsync done (total {sw.ElapsedMilliseconds}ms since rebuild start)");
         }
     }
 
+    // Signature of the display configuration the current MonitorsLayout was built from. Lets
+    // DisplayChangedAsync skip a rebuild when a display event settles to an already-built config.
+    string _lastBuiltSignature = "";
 
+    // Set while the display is off (daemon Suspended/Resumed events): DisplayChangedAsync
+    // short-circuits while set, so the UI does nothing while there is no desktop. Written on the
+    // daemon-event thread — volatile is enough (a single flag).
+    volatile bool _suspended;
+
+    /// <summary>
+    /// Refresh the wallpaper drawn behind each monitor after the registry watcher reports a change.
+    /// Runs the in-place read on the UI thread; <see cref="ILayoutFactory.UpdateWallpaper"/> gates on
+    /// a cheap signature, so the several registry writes Windows makes per change collapse to a
+    /// single actual refresh, and unchanged notifications cost almost nothing.
+    /// </summary>
+    void RefreshWallpaper()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (MonitorsLayout is MonitorsLayout layout) _layoutFactory.UpdateWallpaper(layout);
+        });
+    }
 
 }

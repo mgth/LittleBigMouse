@@ -34,6 +34,10 @@ public enum LittleBigMouseEvent
     DesktopChanged,
     FocusChanged,
     Connected,
+    // The daemon detects the display turning off/on (sleep, session standby, lock/idle) and, like a
+    // display change, unhooks itself first so the cursor is never left confined without the UI.
+    Suspended,
+    Resumed,
 }
 public enum LittleBigMouseCommand
 {

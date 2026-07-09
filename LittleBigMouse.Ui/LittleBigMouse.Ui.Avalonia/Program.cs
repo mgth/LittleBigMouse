@@ -146,8 +146,15 @@ internal class Program
 
                 parser.LoadModules();
 
-                parser.Add<IView>(t => c.Export(t).As(typeof(IView)));
-                parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)));
+                // Views and view-models are transient and IDisposable (ReactiveModel). Grace tracks
+                // every transient IDisposable it creates in its ROOT disposal scope and holds it until
+                // the app closes — so a new generation of monitor VMs on every display-change rebuild
+                // is retained forever (gigabytes under a display-event storm), even though HLab.Mvvm
+                // disposes them on DetachedFromLogicalTree. Their lifetime is owned by the view tree,
+                // NOT the container: mark them ExternallyOwned so Grace stops tracking them (same fix
+                // as MonitorsLayout above, #484 — this is the ViewModel follow-up).
+                parser.Add<IView>(t => c.Export(t).As(typeof(IView)).ExternallyOwned());
+                parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)).ExternallyOwned());
                 parser.Add<Bootloader>(t => c.Export(t).As(typeof(Bootloader)));
 
                 parser.Parse();

@@ -190,6 +190,15 @@ internal class Program
 
             var cts = new CancellationTokenSource();
 
+            // An exception in a UI event handler or a posted job would otherwise unwind
+            // app.Run and silently kill the window (only ExceptionView remains). Log it
+            // and keep the dispatcher alive — a broken click must not take the app down.
+            global::Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, args) =>
+            {
+                Console.Error.WriteLine($"Unhandled UI exception: {args.Exception}");
+                args.Handled = true;
+            };
+
             var task = boot.BootAsync();
 
             // A bootloader failure would otherwise stay invisible until shutdown (the task is

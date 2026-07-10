@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using DynamicData;
@@ -43,21 +44,65 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
 
     public event EventHandler? DisplayChanged;
 
-    // Wallpaper preview is not implemented on Linux yet: the editor renders a flat background.
     public event EventHandler? WallpaperChanged;
 
-    public void UpdateWallpaper(MonitorsLayout layout) { }
+    /// <summary>
+    /// Re-read the plasma wallpapers into an already-built layout, in place. Screens
+    /// are matched by logical geometry: plasmashell's screenGeometry and our InPixel
+    /// bounds live in the same kscreen coordinate space.
+    /// </summary>
+    public void UpdateWallpaper(MonitorsLayout layout)
+    {
+        var entries = PlasmaWallpaper.Query();
+        if (entries.Count == 0) return;
+
+        foreach (var source in layout.PhysicalSources)
+        {
+            var bounds = source.Source.InPixel.Bounds;
+            var entry = entries.FirstOrDefault(e =>
+                Math.Abs(e.X - bounds.X) < 2 && Math.Abs(e.Y - bounds.Y) < 2);
+            if (entry == null) continue;
+
+            source.Source.WallpaperPath = entry.ImagePath;
+            // org.kde.image FillMode is a QML Image.fillMode value.
+            source.Source.WallpaperStyle = entry.FillMode switch
+            {
+                0 => WallpaperStyle.Stretch,
+                1 => WallpaperStyle.Fit,
+                3 or 4 or 5 => WallpaperStyle.Tile,
+                6 => WallpaperStyle.Center,
+                _ => WallpaperStyle.Fill,
+            };
+        }
+    }
 
     public void Dispose() => _pollTimer.Dispose();
 
     void PollPlugSignature()
     {
         var signature = DrmEdidReader.PlugSignature();
-        if (signature == _lastPlugSignature) return;
+        if (signature != _lastPlugSignature)
+        {
+            _lastPlugSignature = signature;
+            DisplayChanged?.Invoke(this, EventArgs.Empty);
+        }
 
-        _lastPlugSignature = signature;
-        DisplayChanged?.Invoke(this, EventArgs.Empty);
+        // Plasma rewrites its containment config when the wallpaper changes: a cheap
+        // mtime stat per tick is the Linux equivalent of the Windows registry watcher.
+        try
+        {
+            var stamp = File.GetLastWriteTimeUtc(PlasmaWallpaper.ConfigPath).Ticks;
+            if (_lastWallpaperStamp != 0 && stamp != _lastWallpaperStamp)
+                WallpaperChanged?.Invoke(this, EventArgs.Empty);
+            _lastWallpaperStamp = stamp;
+        }
+        catch
+        {
+            // no plasma config: nothing to watch
+        }
     }
+
+    long _lastWallpaperStamp;
 
     /// <summary>
     /// Raise <see cref="DisplayChanged"/> for a change the sysfs plug poll cannot see
@@ -96,6 +141,8 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
         layout.SetLocationsFromSystemConfiguration();
         _persistence.Load(layout);
         layout.AnchorOnPrimary();
+
+        UpdateWallpaper(layout);
 
         return layout;
     }

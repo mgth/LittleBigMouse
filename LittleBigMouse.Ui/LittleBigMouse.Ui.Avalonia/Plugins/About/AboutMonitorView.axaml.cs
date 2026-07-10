@@ -54,6 +54,10 @@ public partial class AboutMonitorView : UserControl, IView<MonitorAboutViewMode,
 
     void InputElement_OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        throw new System.NotImplementedException();
+        // UseShellExecute routes to the OS opener (ShellExecute / xdg-open).
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/mgth/LittleBigMouse")
+        {
+            UseShellExecute = true
+        });
     }
 }

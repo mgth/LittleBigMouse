@@ -59,6 +59,14 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
         DisplayChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Raise <see cref="DisplayChanged"/> for a change the sysfs plug poll cannot see
+    /// (primary/priority, enable/disable, position — the connectors don't move).
+    /// Called by <see cref="LinuxDisplayController"/> after a successful topology
+    /// command; MainService's settle/idempotence logic absorbs the async apply.
+    /// </summary>
+    public void NotifyDisplayChanged() => DisplayChanged?.Invoke(this, EventArgs.Empty);
+
     public MonitorsLayout Create()
     {
         var layout = _newLayout();

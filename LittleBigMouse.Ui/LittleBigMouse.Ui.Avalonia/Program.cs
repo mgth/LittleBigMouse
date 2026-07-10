@@ -134,7 +134,12 @@ internal class Program
                 }
                 else
                 {
-                    c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
+                    // The controller injects the concrete factory (NotifyDisplayChanged):
+                    // export it under both the seam interface and its own type.
+                    c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>()
+                        .As<LittleBigMouse.Plugins.ILayoutFactory>()
+                        .As<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>()
+                        .Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Linux.LinuxDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutPersistence>().As<LittleBigMouse.Plugins.ILayoutPersistence>().Lifestyle.Singleton();
                 }

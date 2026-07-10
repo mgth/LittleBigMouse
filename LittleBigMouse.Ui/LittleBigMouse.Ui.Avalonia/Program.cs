@@ -131,6 +131,7 @@ internal class Program
                     c.Export<LittleBigMouse.Platform.Windows.WindowsDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutPersistence>().As<LittleBigMouse.Plugins.ILayoutPersistence>().Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Windows.WindowsMonitorInfoService>().As<LittleBigMouse.Plugins.IMonitorInfoService>().Lifestyle.Singleton();
+                    c.Export<LittleBigMouse.Platform.Windows.WindowsWallpaperService>().As<LittleBigMouse.Plugins.IWallpaperService>().Lifestyle.Singleton();
                 }
                 else
                 {
@@ -143,6 +144,7 @@ internal class Program
                     c.Export<LittleBigMouse.Platform.Linux.LinuxDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutPersistence>().As<LittleBigMouse.Plugins.ILayoutPersistence>().Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Linux.LinuxMonitorInfoService>().As<LittleBigMouse.Plugins.IMonitorInfoService>().Lifestyle.Singleton();
+                    c.Export<LittleBigMouse.Platform.Linux.PlasmaWallpaperService>().As<LittleBigMouse.Plugins.IWallpaperService>().Lifestyle.Singleton();
                 }
 
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
@@ -165,6 +167,11 @@ internal class Program
                 // tree): Windows-only until it gets its own platform seam.
                 if (OperatingSystem.IsWindows())
                     parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
+                // Wallpaper drives the desktop through IWallpaperService (plasmashell
+                // scripting on Linux, IDesktopWallpaper COM on Windows); the plugin
+                // hides itself where IsSupported is false (GNOME, bare X11…).
+                parser.LoadDll("LittleBigMouse.Plugin.Wallpaper.Avalonia");
+                c.Export<LittleBigMouse.Plugin.Wallpaper.Avalonia.WallpaperManager>().Lifestyle.Singleton();
 
                 parser.LoadModules();
 

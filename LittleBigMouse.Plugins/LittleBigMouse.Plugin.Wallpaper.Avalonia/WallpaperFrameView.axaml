@@ -1,0 +1,73 @@
+<UserControl
+    x:Class="LittleBigMouse.Plugin.Wallpaper.Avalonia.WallpaperFrameView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:wallpaper="clr-namespace:LittleBigMouse.Plugin.Wallpaper.Avalonia"
+    mc:Ignorable="d"
+    d:DesignHeight="300" d:DesignWidth="400"
+    x:DataType="wallpaper:WallpaperFrameViewModel"
+    >
+
+	<Border
+		Background="{DynamicResource HLab.Brushes.Background}"
+		CornerRadius="8"
+		Padding="10"
+		HorizontalAlignment="Center"
+		VerticalAlignment="Center">
+
+		<StackPanel Spacing="8" MinWidth="160">
+
+			<StackPanel Orientation="Horizontal" Spacing="12">
+				<RadioButton Content="Per screen" IsChecked="{Binding IsPerScreenMode}" />
+				<RadioButton Content="Span" IsChecked="{Binding IsSpanMode}" />
+			</StackPanel>
+
+			<!-- Per-screen: image or solid color for this monitor -->
+			<StackPanel Spacing="6" IsVisible="{Binding IsPerScreenMode}">
+
+				<StackPanel Orientation="Horizontal" Spacing="12">
+					<RadioButton Content="Image" IsChecked="{Binding IsImageKind}" />
+					<RadioButton Content="Color" IsChecked="{Binding IsColorKind}" />
+				</StackPanel>
+
+				<StackPanel Spacing="6" IsVisible="{Binding IsImageKind}">
+					<Button
+						Content="{Binding ImageName}"
+						Click="OnPickImage"
+						HorizontalAlignment="Stretch" />
+					<ComboBox
+						ItemsSource="{Binding Styles}"
+						SelectedItem="{Binding SelectedStyle}"
+						HorizontalAlignment="Stretch" />
+				</StackPanel>
+
+				<StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsColorKind}">
+					<Border
+						Width="26" Height="26" CornerRadius="4"
+						BorderThickness="1"
+						BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
+						Background="{Binding ColorBrush}" />
+					<TextBox Text="{Binding ColorHex}" Width="90" />
+				</StackPanel>
+
+			</StackPanel>
+
+			<!-- Span: one image over the whole monitor set, sliced in physical space -->
+			<StackPanel Spacing="6" IsVisible="{Binding IsSpanMode}">
+				<Button
+					Content="{Binding SpanImageName}"
+					Click="OnPickSpanImage"
+					HorizontalAlignment="Stretch" />
+				<TextBlock
+					Text="One image across all screens, sliced to match the physical layout."
+					FontSize="10"
+					Opacity="0.7"
+					TextWrapping="Wrap"
+					MaxWidth="180" />
+			</StackPanel>
+
+		</StackPanel>
+	</Border>
+</UserControl>

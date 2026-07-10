@@ -33,35 +33,49 @@ public static class PlasmaWallpaper
         "out.push(g.x+\",\"+g.y+\",\"+g.width+\",\"+g.height+\"|\"+d.readConfig(\"FillMode\",2)+\"|\"+d.readConfig(\"Image\"));" +
         "}print(out.join(\"\\n\"));";
 
-    public static List<Entry> Query()
+    /// <summary>
+    /// Run a script in plasmashell and return what it print()ed, or null on any
+    /// failure (no plasmashell, DBus error, malformed reply).
+    /// </summary>
+    public static string? EvaluateScript(string script)
     {
-        var entries = new List<Entry>();
-
-        string? reply;
         try
         {
-            using var process = Process.Start(new ProcessStartInfo("busctl",
-                $"--user --json=short call org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell evaluateScript s \"{Script.Replace("\"", "\\\"")}\"")
+            var startInfo = new ProcessStartInfo("busctl")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false
-            });
-            if (process == null) return entries;
-            reply = process.StandardOutput.ReadToEnd();
+            };
+            foreach (var arg in (string[])
+                     ["--user", "--json=short", "call", "org.kde.plasmashell", "/PlasmaShell",
+                      "org.kde.PlasmaShell", "evaluateScript", "s", script])
+                startInfo.ArgumentList.Add(arg);
+
+            using var process = Process.Start(startInfo);
+            if (process == null) return null;
+            var reply = process.StandardOutput.ReadToEnd();
             process.WaitForExit(5000);
-            if (process.ExitCode != 0) return entries;
+            if (process.ExitCode != 0) return null;
+
+            using var doc = JsonDocument.Parse(reply);
+            return doc.RootElement.GetProperty("data")[0].GetString();
         }
         catch
         {
-            return entries;
+            return null;
         }
+    }
+
+    public static List<Entry> Query()
+    {
+        var entries = new List<Entry>();
+
+        var payload = EvaluateScript(Script);
+        if (payload == null) return entries;
 
         try
         {
-            using var doc = JsonDocument.Parse(reply);
-            var payload = doc.RootElement.GetProperty("data")[0].GetString() ?? "";
-
             foreach (var line in payload.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
                 var parts = line.Split('|', 3);

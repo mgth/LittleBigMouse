@@ -24,6 +24,7 @@
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Platform;
 using DynamicData.Binding;
 using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
@@ -100,7 +101,11 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
     }
     bool _ruler;
 
-    readonly List<RulerPanelView> _panels = new();
+    readonly List<RulerWindow> _panels = new();
+
+    // Ruler thickness in the layout's own pixel space (the mouse-coordinate
+    // space: physical pixels on Windows, compositor logical pixels on Linux).
+    const double RulerThickness = 100.0;
 
     public void UpdateRulers()
     {
@@ -117,20 +122,72 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
         foreach (var source in MonitorFrameViewModel.MonitorsPresenter.Model.PhysicalSources)
         {
             if(!source.Source.AttachedToDesktop) continue;
-            //var area = source.Source.Device.MonitorArea;
-            var s = source.Source.InPixel;
 
-            var panel = new RulerPanelView
-            {
-                Position = new PixelPoint((int)(s.Bounds.Left + s.Bounds.Width / 4), (int)(s.Bounds.Top + s.Bounds.Height / 4)),
-                Width = 10, //area.Width*1,//, //s.Bounds.Width/* - 20*/,
-                Height = 10, //area.Height*1,//, //s.Bounds.Height/* - 20*/,
-                DataContext = new RulerPanelViewModel(Model, source)
-            };
-            panel.Show();
-            panel.WindowState = WindowState.FullScreen;
-            _panels.Add(panel);
+            var layoutBounds = source.Source.InPixel.Bounds;
+            var viewModel = new RulerPanelViewModel(Model, source);
+
+            var top = new RulerWindow(viewModel.TopRuler);
+            var bottom = new RulerWindow(viewModel.BottomRuler);
+            var left = new RulerWindow(viewModel.LeftRuler);
+            var right = new RulerWindow(viewModel.RightRuler);
+
+            // The layout space and the windowing-system space may differ:
+            // KWin maps every XWayland output with a single global factor
+            // (the largest output scale), so the monitor's window-system
+            // geometry has to come from the matching Avalonia screen.
+            var screen = FindScreen(top.Screens, layoutBounds);
+            var bounds = screen?.Bounds ?? new PixelRect(
+                (int)layoutBounds.X, (int)layoutBounds.Y,
+                (int)layoutBounds.Width, (int)layoutBounds.Height);
+            var scaling = screen?.Scaling ?? source.Source.EffectiveDpi.Y / 96.0;
+
+            var thickness = RulerThickness * bounds.Width / layoutBounds.Width;
+
+            // Horizontal rulers first, vertical ones last so they end up on
+            // top in the corners, like in the former single-panel layout.
+            ShowRulerWindow(top, new PixelPoint(bounds.X, bounds.Y), bounds.Width, thickness, scaling);
+            ShowRulerWindow(bottom, new PixelPoint(bounds.X, (int)(bounds.Bottom - thickness)), bounds.Width, thickness, scaling);
+            ShowRulerWindow(left, new PixelPoint(bounds.X, bounds.Y), thickness, bounds.Height, scaling);
+            ShowRulerWindow(right, new PixelPoint((int)(bounds.Right - thickness), bounds.Y), thickness, bounds.Height, scaling);
         }
+    }
+
+    /// <summary>
+    /// Find the screen displaying a monitor from its layout-space bounds.
+    /// Both spaces share the same origin and a common scale factor, so the
+    /// right screen has matching proportions at the scaled position.
+    /// </summary>
+    static Screen? FindScreen(Screens screens, HLab.Geo.Rect layoutBounds)
+    {
+        Screen? best = null;
+        var bestOffset = double.MaxValue;
+
+        foreach (var screen in screens.All)
+        {
+            var bounds = screen.Bounds;
+            var kx = bounds.Width / layoutBounds.Width;
+            var ky = bounds.Height / layoutBounds.Height;
+
+            if (Math.Abs(kx - ky) > 0.01 * kx) continue;
+
+            var offset = Math.Abs(bounds.X - layoutBounds.X * kx)
+                         + Math.Abs(bounds.Y - layoutBounds.Y * ky);
+
+            // Allow a few layout-space pixels of rounding error.
+            if (offset > 5.0 * kx) continue;
+            if (offset >= bestOffset) continue;
+
+            bestOffset = offset;
+            best = screen;
+        }
+
+        return best;
+    }
+
+    void ShowRulerWindow(RulerWindow panel, PixelPoint position, double pixelWidth, double pixelHeight, double scaling)
+    {
+        panel.ShowAt(position, pixelWidth, pixelHeight, scaling);
+        _panels.Add(panel);
     }
 
     public double RatioX

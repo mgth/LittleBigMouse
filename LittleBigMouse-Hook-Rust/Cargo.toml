@@ -45,3 +45,10 @@ features = [
 lto = true
 codegen-units = 1
 strip = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13", features = ["xinput", "randr"] }
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "input_capture"] }
+reis = { version = "0.7", features = ["tokio"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "net", "sync"] }
+futures = "0.3"

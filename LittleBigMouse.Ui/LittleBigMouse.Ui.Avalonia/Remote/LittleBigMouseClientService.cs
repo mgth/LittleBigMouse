@@ -113,7 +113,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
     public void LaunchDaemon()
     {
-        var processes = Process.GetProcessesByName("LittleBigMouse.Hook");
+        var processes = Process.GetProcessesByName(HookProcessName);
         foreach (var process in processes)
         {
             if(process.HasExited) continue;
@@ -164,14 +164,17 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         }
     }
 
-    const string HookExeName = "LittleBigMouse.Hook.exe";
+    // Windows keeps the historical staging name; on Linux the Rust daemon runs
+    // under its cargo binary name.
+    static string HookExeName => OperatingSystem.IsWindows() ? "LittleBigMouse.Hook.exe" : "lbm-hook";
+    static string HookProcessName => OperatingSystem.IsWindows() ? "LittleBigMouse.Hook" : "lbm-hook";
 
     /// <summary>
-    /// Locate LittleBigMouse.Hook.exe without depending on the .NET target framework folder
+    /// Locate the hook daemon without depending on the .NET target framework folder
     /// (net8.0, net9.0, net10.0, ...). Deployed builds keep the hook next to the UI; in the dev
-    /// tree the C++ hook is built under LittleBigMouse.Hook\bin with its own platform/config
-    /// layout and no TFM subfolder, so we search that bin folder. Resistant to .NET version,
-    /// platform (AnyCPU/x64) and configuration (Debug/Release) changes.
+    /// tree the Windows C++ hook is built under LittleBigMouse.Hook\bin (own platform/config
+    /// layout, no TFM subfolder) and the Rust hook under LittleBigMouse-Hook-Rust/target.
+    /// Resistant to .NET version, platform (AnyCPU/x64) and configuration (Debug/Release) changes.
     /// </summary>
     static string? FindHookPath()
     {
@@ -181,21 +184,36 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         var sibling = Path.Combine(uiDir, HookExeName);
         if (File.Exists(sibling)) return sibling;
 
-        // 2. Dev tree: find the hook project's bin folder and search it.
+        // 2. Dev tree: find the hook build output and search it.
         try
         {
             var projectSegment = Path.Combine("LittleBigMouse.Ui", "LittleBigMouse.Ui.Avalonia");
             var i = uiDir.IndexOf(projectSegment, StringComparison.OrdinalIgnoreCase);
             if (i < 0) return null;
-
-            var hookBin = Path.Combine(uiDir[..i], "LittleBigMouse.Hook", "bin");
-            if (!Directory.Exists(hookBin)) return null;
+            var root = uiDir[..i];
 
             // Prefer the build matching the UI's current configuration.
-            var config = uiDir.Contains(@"\Debug\", StringComparison.OrdinalIgnoreCase) ? "Debug" : "Release";
+            var sep = Path.DirectorySeparatorChar;
+            var config = uiDir.Contains($"{sep}Debug{sep}", StringComparison.OrdinalIgnoreCase) ? "Debug" : "Release";
+
+            if (!OperatingSystem.IsWindows())
+            {
+                // Rust daemon: LittleBigMouse-Hook-Rust/target/{debug,release}/lbm-hook.
+                var target = Path.Combine(root, "LittleBigMouse-Hook-Rust", "target");
+                var candidates = new[]
+                {
+                    Path.Combine(target, config.ToLowerInvariant(), HookExeName),
+                    Path.Combine(target, "release", HookExeName),
+                    Path.Combine(target, "debug", HookExeName),
+                };
+                return candidates.FirstOrDefault(File.Exists);
+            }
+
+            var hookBin = Path.Combine(root, "LittleBigMouse.Hook", "bin");
+            if (!Directory.Exists(hookBin)) return null;
 
             return Directory.EnumerateFiles(hookBin, HookExeName, SearchOption.AllDirectories)
-                .OrderByDescending(p => p.Contains($@"\{config}\", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(p => p.Contains($"{sep}{config}{sep}", StringComparison.OrdinalIgnoreCase))
                 .FirstOrDefault();
         }
         catch

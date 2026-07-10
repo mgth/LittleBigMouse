@@ -68,6 +68,13 @@ public class LinuxLayoutPersistence : ILayoutPersistence
 
                 if (saved != null && saved.Monitors.TryGetValue(monitor.Id, out var m))
                     Apply(monitor, m, layout.Options.BorderValues == "PerMonitor");
+
+                // Mark the whole subtree saved even on a first run with no file yet
+                // (the registry path does the same through GetOrSet's write-back).
+                // The Saved propagation is TRANSITION-based (AutoRefresh/UnsavedOn):
+                // a child left unsaved here never notifies again on later edits, and
+                // the save button would never enable.
+                MarkSaved(monitor);
             }
 
             layout.Options.Saved = true;
@@ -152,10 +159,32 @@ public class LinuxLayoutPersistence : ILayoutPersistence
         if (dto.Width is > 0) model.PhysicalSize.Width = dto.Width.Value;
 
         model.PhysicalSize.FixedAspectRatio = fixedRatio;
-        model.PhysicalSize.Saved = true;
 
         if (!string.IsNullOrEmpty(dto.PnpName)) model.PnpDeviceName = dto.PnpName;
-        model.Saved = true;
+    }
+
+    /// <summary>
+    /// Flag the monitor and every savable child as saved. Runs after a load —
+    /// with or without stored data — so that the next edit produces a
+    /// true→false transition the reactive Saved chains can observe.
+    /// </summary>
+    static void MarkSaved(PhysicalMonitor monitor)
+    {
+        monitor.Model.PhysicalSize.Saved = true;
+        monitor.Model.Saved = true;
+
+        monitor.DepthProjection.Saved = true;
+        monitor.DepthRatio.Saved = true;
+        monitor.BorderResistance.Saved = true;
+
+        foreach (var source in monitor.Sources.Items)
+        {
+            source.Source.InPixel.Saved = true;
+            source.Source.Saved = true;
+            source.Saved = true;
+        }
+
+        monitor.Saved = true;
     }
 
     static void Apply(PhysicalMonitor monitor, MonitorDto dto, bool perMonitorBorders)
@@ -173,7 +202,6 @@ public class LinuxLayoutPersistence : ILayoutPersistence
                     new HLab.Geo.Size(s.PixelWidth ?? source.Source.InPixel.Width, s.PixelHeight ?? source.Source.InPixel.Height)));
                 source.Source.Orientation = s.Orientation ?? source.Source.Orientation;
             }
-            source.Source.Saved = true;
 
             if (dto.ActiveSource != null && source.Source.Id == dto.ActiveSource)
                 monitor.ActiveSource = source;
@@ -181,17 +209,14 @@ public class LinuxLayoutPersistence : ILayoutPersistence
 
         if (dto.XLocationInMm is { } x) { monitor.DepthProjection.X = x; monitor.Placed = true; }
         if (dto.YLocationInMm is { } y) { monitor.DepthProjection.Y = y; monitor.Placed = true; }
-        monitor.DepthProjection.Saved = true;
 
         monitor.DepthRatio.X = dto.PhysicalRatioX ?? monitor.DepthRatio.X;
         monitor.DepthRatio.Y = dto.PhysicalRatioY ?? monitor.DepthRatio.Y;
-        monitor.DepthRatio.Saved = true;
 
         monitor.BorderResistance.Left = dto.BorderResistance?.Left ?? monitor.BorderResistance.Left;
         monitor.BorderResistance.Top = dto.BorderResistance?.Top ?? monitor.BorderResistance.Top;
         monitor.BorderResistance.Right = dto.BorderResistance?.Right ?? monitor.BorderResistance.Right;
         monitor.BorderResistance.Bottom = dto.BorderResistance?.Bottom ?? monitor.BorderResistance.Bottom;
-        monitor.BorderResistance.Saved = true;
 
         // Per-monitor bezel borders — only in "PerMonitor" mode ("PerModel" keeps them on
         // the shared model entry).
@@ -202,8 +227,6 @@ public class LinuxLayoutPersistence : ILayoutPersistence
             monitor.Borders.Right = dto.Borders.Right ?? monitor.Borders.Right;
             monitor.Borders.Bottom = dto.Borders.Bottom ?? monitor.Borders.Bottom;
         }
-
-        monitor.Saved = true;
     }
 
     //==================//

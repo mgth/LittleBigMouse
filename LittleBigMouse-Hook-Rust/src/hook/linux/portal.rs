@@ -163,6 +163,8 @@ async fn run_async(shared: &'static Shared) -> bool {
                 let Some(activation) = activation else { return true };
                 let Some((x, y)) = activation.cursor_position() else { continue };
                 let position = Point::new(x as i32, y as i32);
+                eprintln!("[LittleBigMouse.Hook] portal: activated at ({},{}) barrier={:?}",
+                    position.x(), position.y(), activation.barrier_id());
                 capture = Some(Capture {
                     activation_id: activation.activation_id(),
                     origin: position,
@@ -218,10 +220,12 @@ async fn run_async(shared: &'static Shared) -> bool {
                             // The engine crossed: release the capture, placing the
                             // cursor at the computed target — this is the warp.
                             crate::hook::CROSSINGS.fetch_add(1, Ordering::Relaxed);
+                            eprintln!("[LittleBigMouse.Hook] portal: crossing -> release at ({},{})", target.x(), target.y());
                             let c = capture.take().unwrap();
                             release(&input_capture, &session, c.activation_id, Some(target)).await;
                             env.clip = None;
                         } else if !handled && retreated(shared, c.origin, env.virtual_pos) {
+                            eprintln!("[LittleBigMouse.Hook] portal: retreat -> release at ({},{})", env.virtual_pos.x(), env.virtual_pos.y());
                             // The user pulled back into the origin zone: hand the
                             // cursor back where the virtual position ended up.
                             let c = capture.take().unwrap();
@@ -261,6 +265,9 @@ async fn arm(
         eprintln!("[LittleBigMouse.Hook] portal: no barriers (layout empty?)");
     }
 
+    for b in &barriers {
+        eprintln!("[LittleBigMouse.Hook] portal: barrier {:?}", b);
+    }
     let failed = input_capture
         .set_pointer_barriers(session, &barriers, zones.zone_set(), Default::default())
         .await?
@@ -278,42 +285,41 @@ async fn arm(
     Ok(())
 }
 
-/// One barrier per zone-link edge segment: the exact ranges the engine can
-/// cross are the exact ranges the compositor must stop the cursor on.
+/// One barrier per zone edge that carries at least one crossable link,
+/// spanning the FULL edge: KWin's validator denies partial-edge segments
+/// (observed live: full-edge barriers accepted, link-range segments denied).
+/// The engine still decides per-position what actually crosses — an
+/// activation outside any link range just holds and releases on retreat.
+/// Twin edges of adjacent zones produce identical lines: dedup them.
 fn layout_barriers(layout: &crate::zones::ZonesLayout) -> Vec<Barrier> {
     let mut barriers = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     let mut next_id = 1u32;
 
     for &zone_id in &layout.main_zones {
         let zone = &layout.arena[zone_id];
         let bounds = zone.pixels_bounds();
 
-        let mut add = |position: BarrierPosition| {
-            if let Some(id) = BarrierID::new(next_id) {
-                barriers.push(Barrier::new(id, position));
-                next_id += 1;
-            }
-        };
+        // (has crossable links, x1, y1, x2, y2) — portal convention: left/top
+        // edge at the coordinate, right/bottom at one past the last pixel,
+        // inclusive endpoints along the edge.
+        let edges = [
+            (&zone.left, bounds.left(), bounds.top(), bounds.left(), bounds.bottom() - 1),
+            (&zone.right, bounds.right(), bounds.top(), bounds.right(), bounds.bottom() - 1),
+            (&zone.top, bounds.left(), bounds.top(), bounds.right() - 1, bounds.top()),
+            (&zone.bottom, bounds.left(), bounds.bottom(), bounds.right() - 1, bounds.bottom()),
+        ];
 
-        // Vertical edges: barrier x per the portal convention (left edge = left,
-        // right edge = one past the last pixel), segment clamped to the zone.
-        for (links, x) in [(&zone.left, bounds.left()), (&zone.right, bounds.right())] {
-            for link in links.iter().filter(|l| l.target.is_some()) {
-                let from = link.source_from_px.max(bounds.top());
-                let to = link.source_to_px.min(bounds.bottom() - 1);
-                if from < to {
-                    add(BarrierPosition::new(x, from, x, to));
-                }
+        for (links, x1, y1, x2, y2) in edges {
+            if !links.iter().any(|l| l.target.is_some()) {
+                continue;
             }
-        }
-        // Horizontal edges.
-        for (links, y) in [(&zone.top, bounds.top()), (&zone.bottom, bounds.bottom())] {
-            for link in links.iter().filter(|l| l.target.is_some()) {
-                let from = link.source_from_px.max(bounds.left());
-                let to = link.source_to_px.min(bounds.right() - 1);
-                if from < to {
-                    add(BarrierPosition::new(from, y, to, y));
-                }
+            if !seen.insert((x1, y1, x2, y2)) {
+                continue; // the twin edge of the adjacent zone already emitted it
+            }
+            if let Some(id) = BarrierID::new(next_id) {
+                barriers.push(Barrier::new(id, BarrierPosition::new(x1, y1, x2, y2)));
+                next_id += 1;
             }
         }
     }

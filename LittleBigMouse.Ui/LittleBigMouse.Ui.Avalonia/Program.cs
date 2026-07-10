@@ -17,7 +17,6 @@ using HLab.Mvvm;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.Avalonia;
 using HLab.Sys.Windows.Monitors;
-using HLab.Theme.Avalonia;
 using HLab.UserNotification;
 using HLab.UserNotification.Avalonia;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -185,8 +184,9 @@ internal class Program
 
             var boot = new Bootstrapper(() => container.Locate<IEnumerable<Bootloader>>());
 
-            var theme = new ThemeService(app.Resources);
-            theme.SetTheme(ThemeService.WindowsTheme.Auto);
+            // Theming is fully variant-based: RequestedThemeVariant="Default" (App.axaml)
+            // follows the OS on every platform and the HLab.* resources are merged as
+            // ThemeDictionaries — no manual ThemeService dictionary swap anymore.
 
             var cts = new CancellationTokenSource();
 

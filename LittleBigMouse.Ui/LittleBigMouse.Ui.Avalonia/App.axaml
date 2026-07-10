@@ -14,6 +14,12 @@
 	<Application.Resources>
 		<ResourceDictionary>
 
+			<!-- HLab.* theme resources, variant-aware (replaces the manual ThemeService
+			     dictionary swap — whole-app theming now follows ActualThemeVariant). -->
+			<ResourceDictionary.MergedDictionaries>
+				<ResourceInclude Source="avares://HLab.Theme.Avalonia/Themes/HLab.Theme.axaml"/>
+			</ResourceDictionary.MergedDictionaries>
+
 			<ResourceDictionary.ThemeDictionaries>
 				<ResourceDictionary x:Key="{x:Static ThemeVariant.Dark}">
 					<SolidColorBrush x:Key="Lbm.Brushes.Pane.Background" Color="#FF17171C"/>

@@ -45,6 +45,12 @@ public static class KScreenGapGuard
     {
         if (!IsWaylandKde) return false;
 
+        // Gaps only exist to make the portal backend's barriers pass the compositor
+        // validator. When the daemon can use the evdev/uinput router instead (the
+        // default: it grabs the mice and routes directly), gaps are pointless and
+        // even harmful (1px void columns + a re-layout flash on every Start). Skip.
+        if (EvdevLikelyActive()) return false;
+
         var enabled = monitors.Where(m => m.Enabled).ToList();
         var shifts = ComputeShifts(enabled);
         if (shifts.Count == 0) return false;
@@ -150,6 +156,40 @@ public static class KScreenGapGuard
 
     static bool Overlaps(int start1, int length1, int start2, int length2)
         => Math.Min(start1 + length1, start2 + length2) - Math.Max(start1, start2) > 0;
+
+    /// <summary>
+    /// The daemon will use the evdev/uinput router when it can write /dev/uinput and
+    /// read a physical input node (the `input` group or a udev rule). Mirror that check
+    /// so the UI knows whether the gap workaround is needed. Opening /dev/uinput for
+    /// write has no side effect until a device is actually created via ioctl.
+    /// </summary>
+    static bool EvdevLikelyActive()
+    {
+        try
+        {
+            using (new FileStream("/dev/uinput", FileMode.Open, FileAccess.Write)) { }
+        }
+        catch
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var node in Directory.EnumerateFiles("/dev/input", "event*"))
+            {
+                try
+                {
+                    using (new FileStream(node, FileMode.Open, FileAccess.Read)) { }
+                    return true;
+                }
+                catch { /* try the next node */ }
+            }
+        }
+        catch { /* no /dev/input */ }
+
+        return false;
+    }
 
     static List<GapEntry> LoadState()
     {

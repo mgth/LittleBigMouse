@@ -47,6 +47,10 @@ codegen-units = 1
 strip = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# Preferred Wayland (and X11) backend: grab the physical mice and re-inject a
+# corrected stream through a uinput virtual pointer — LBM is the sole router,
+# like the Windows hook. No portal, no capture notification, no round-trip.
+evdev = "0.13"
 x11rb = { version = "0.13", features = ["xinput", "randr"] }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "input_capture", "tracing"] }
 reis = { version = "0.7", features = ["tokio"] }

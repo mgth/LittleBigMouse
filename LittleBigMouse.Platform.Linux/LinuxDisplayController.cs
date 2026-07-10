@@ -20,6 +20,36 @@ public class LinuxDisplayController : IDisplayController
     public LinuxDisplayController(LinuxLayoutFactory factory)
     {
         _factory = factory;
+
+        // A previous run may have died while the topology was gapped for the engine
+        // (kill -9, power loss): put the outputs back before anything is built on top.
+        try
+        {
+            if (KScreenGapGuard.RecoverStale(factory.QueryMonitors()))
+                factory.NotifyDisplayChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Gap recovery failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Engine prologue/epilogue (see <see cref="KScreenGapGuard"/>): open 1px gaps at
+    /// shared edges so the daemon's barriers pass the compositor validator, and close
+    /// them once the engine stops. Any actual change goes through NotifyDisplayChanged
+    /// so MainService rebuilds and re-sends zones computed in the new coordinate space.
+    /// </summary>
+    public void PrepareForEngine()
+    {
+        if (KScreenGapGuard.Apply(_factory.QueryMonitors()))
+            _factory.NotifyDisplayChanged();
+    }
+
+    public void RestoreAfterEngine()
+    {
+        if (KScreenGapGuard.Restore(_factory.QueryMonitors()))
+            _factory.NotifyDisplayChanged();
     }
 
     static bool UseKScreen
@@ -52,7 +82,7 @@ public class LinuxDisplayController : IDisplayController
         return success;
     }
 
-    static bool Run(string command, string arguments)
+    internal static bool Run(string command, string arguments)
     {
         try
         {

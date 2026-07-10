@@ -18,4 +18,15 @@ public interface IDisplayController
 
     /// <summary>Detach the source's monitor from the desktop.</summary>
     bool DetachFromDesktop(DisplaySource source);
+
+    /// <summary>
+    /// Adjust the desktop topology so the crossing engine can take control, called right
+    /// before the engine starts. Windows needs nothing (no-op); Linux/KWin opens 1px
+    /// logical gaps between contiguous outputs so the daemon's pointer barriers pass the
+    /// compositor's validator (which only accepts barriers on outer edges).
+    /// </summary>
+    void PrepareForEngine() { }
+
+    /// <summary>Undo <see cref="PrepareForEngine"/> once the engine stops.</summary>
+    void RestoreAfterEngine() { }
 }

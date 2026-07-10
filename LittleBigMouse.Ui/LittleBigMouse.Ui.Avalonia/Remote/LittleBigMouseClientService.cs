@@ -32,8 +32,11 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         DaemonEventReceived?.Invoke(this, new (evt,payload));
     }
 
-    public LittleBigMouseClientService(ILayoutOptions options)
+    readonly IDisplayController _displayController;
+
+    public LittleBigMouseClientService(ILayoutOptions options, IDisplayController displayController)
     {
+        _displayController = displayController;
         _client = new("localhost", options.DaemonPort);
 
         _client.ConnectionFailed += (sender, args) =>
@@ -78,21 +81,40 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     public LittleBigMouseEvent State { get; private set; }
 
 
-    public Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
+    public async Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
     {
+        // Topology prologue (Linux/KWin: open 1px gaps so the daemon's barriers pass the
+        // compositor validator; Windows: no-op). If this actually moves outputs, the
+        // factory raises DisplayChanged and MainService rebuilds then re-sends zones
+        // computed in the gapped space — the Load below is transiently stale but the
+        // pipeline converges on its own. Subprocess work: keep it off the UI thread.
+        await Task.Run(_displayController.PrepareForEngine, token);
+
         var commands = new List<CommandMessage>()
         {
             new(LittleBigMouseCommand.Load, zonesLayout),
             new(LittleBigMouseCommand.Run)
         };
 
-        return SendMessagesAsync(commands, token);
+        await SendMessagesAsync(commands, token);
     }
 
 
-    public async Task StopAsync(CancellationToken token = default) => await SendAsync(token);
+    // The topology epilogue runs on explicit Stop/Quit only — NOT on a Dead daemon: the
+    // socket layer auto-relaunches the daemon and MainService auto-restarts the engine
+    // (Connected→Stopped→Start), so restoring there would fight the recovery. A daemon
+    // that stays dead is covered by RecoverStale at next startup.
+    public async Task StopAsync(CancellationToken token = default)
+    {
+        await SendAsync(token);
+        await Task.Run(_displayController.RestoreAfterEngine, token);
+    }
 
-    public async Task QuitAsync(CancellationToken token = default) => await SendAsync(token);
+    public async Task QuitAsync(CancellationToken token = default)
+    {
+        await SendAsync(token);
+        await Task.Run(_displayController.RestoreAfterEngine, token);
+    }
 
     readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
 

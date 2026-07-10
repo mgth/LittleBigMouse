@@ -169,17 +169,11 @@ public class MainService : ReactiveModel, IMainService
     {
         _notify.Click += async (s, a) => await ShowControlAsync();
 
-        // When a second instance launches, it signals this event; show our window instead of doing
-        // nothing. RegisterWaitForSingleObject parks no thread of its own — a pool thread wakes only
-        // when the event is signalled (AutoReset, so each new launch fires the callback once).
-        if (Program.ShowWindowEvent is { } showWindowEvent)
+        // When a second instance launches, it signals the single-instance guard; show our
+        // window instead of doing nothing. Raised on a background thread.
+        if (Program.SingleInstance is { } singleInstance)
         {
-            ThreadPool.RegisterWaitForSingleObject(
-                showWindowEvent,
-                (_, _) => Dispatcher.UIThread.Post(() => _ = ShowControlAsync()),
-                state: null,
-                millisecondsTimeOutInterval: Timeout.Infinite,
-                executeOnlyOnce: false);
+            singleInstance.ShowRequested += () => Dispatcher.UIThread.Post(() => _ = ShowControlAsync());
         }
 
         // Apply / react to the "hide tray icon" option. The notify service hides the tray icon

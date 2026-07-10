@@ -129,6 +129,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HLab.Theme.Avalonia", "HLab
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Platform.Windows", "LittleBigMouse.Platform.Windows\LittleBigMouse.Platform.Windows.csproj", "{AF5BF611-532C-46B3-AE36-86EF62DE3DAE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Platform.Linux", "LittleBigMouse.Platform.Linux\LittleBigMouse.Platform.Linux.csproj", "{2B8CE1BB-DB78-443E-8528-049379D5FD2E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LittleBigMouse.Core", "LittleBigMouse.Core", "{67C1648C-60F9-983A-F0CE-4DED081F4360}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LittleBigMouse.Plugins", "LittleBigMouse.Plugins", "{60F661FB-CF7A-A585-BA9C-7DA885772308}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LittleBigMouse.Plugins.Core", "LittleBigMouse.Plugins.Core", "{794C704D-B5FE-B468-AF03-66BE2B1A525D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -630,6 +638,18 @@ Global
 		{AF5BF611-532C-46B3-AE36-86EF62DE3DAE}.Release|Any CPU.Build.0 = Release|x64
 		{AF5BF611-532C-46B3-AE36-86EF62DE3DAE}.Release|x86.ActiveCfg = Release|x64
 		{AF5BF611-532C-46B3-AE36-86EF62DE3DAE}.Release|x86.Build.0 = Release|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Debug|x64.ActiveCfg = Debug|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Debug|x64.Build.0 = Debug|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Debug|Any CPU.Build.0 = Debug|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Debug|x86.ActiveCfg = Debug|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Debug|x86.Build.0 = Debug|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Release|x64.ActiveCfg = Release|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Release|x64.Build.0 = Release|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Release|Any CPU.ActiveCfg = Release|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Release|Any CPU.Build.0 = Release|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Release|x86.ActiveCfg = Release|x64
+		{2B8CE1BB-DB78-443E-8528-049379D5FD2E}.Release|x86.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -689,6 +709,7 @@ Global
 		{60294FC0-FE80-4828-8E31-7B82E93B80F3} = {F9285DF6-1EB8-4E3F-87AD-01F8AF60C2D9}
 		{3F80D2D8-3D67-C556-14A4-F34E6DDD36D0} = {F9285DF6-1EB8-4E3F-87AD-01F8AF60C2D9}
 		{AF5BF611-532C-46B3-AE36-86EF62DE3DAE} = {35F8E798-DD0B-4382-AE4E-860720712F58}
+		{794C704D-B5FE-B468-AF03-66BE2B1A525D} = {60F661FB-CF7A-A585-BA9C-7DA885772308}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2294431E-9ED9-4BB8-AEDA-305882A2919F}

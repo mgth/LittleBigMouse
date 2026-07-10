@@ -196,6 +196,10 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         if (Model == null) return "";
 
+        // _monitorsService.Root lazily triggers the Win32 device enumeration — Windows-only
+        // (the export's Devices section has no Linux equivalent yet).
+        if (!OperatingSystem.IsWindows()) return "";
+
         var export = new JsonExport(_monitorsService.Root, Model, Model?.ComputeZones());
 
         var json = JsonSerializer.Serialize(export, new JsonSerializerOptions{NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals});

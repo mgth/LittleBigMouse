@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reactive;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Logging;
@@ -36,11 +37,8 @@ namespace LittleBigMouse.Ui.Avalonia;
 
 internal class Program
 {
-    const string APP_GUID = "51B5711E-1A7F-436E-B3DD-B598901B3FD2";
-    const string SHOW_EVENT_NAME = APP_GUID + "_ShowWindow";
-
-    // Exposed so MainService can wait on it without a DI dependency on Program.
-    internal static EventWaitHandle? ShowWindowEvent;
+    // Exposed so MainService can subscribe to ShowRequested without a DI dependency on Program.
+    internal static SingleInstanceGuard? SingleInstance;
 
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
@@ -48,30 +46,19 @@ internal class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        using var mutex = new Mutex(true, APP_GUID);
-
-        if (!mutex.WaitOne(TimeSpan.Zero, false))
-        {
-            // Signal the running instance to show its window, then exit.
-            try
-            {
-                using var handle = EventWaitHandle.OpenExisting(SHOW_EVENT_NAME);
-                handle.Set();
-            }
-            catch { }
-            return;
-        }
+        // Null means another instance already runs (and was signaled to show its window).
+        using var instance = SingleInstanceGuard.TryAcquire();
+        if (instance == null) return;
 
         // TODO (Avalonia 12 / ReactiveUI 23): RxApp.DefaultExceptionHandler is now the read-only
         // RxState.DefaultExceptionHandler. To restore a custom handler, configure it through
         // RxAppBuilder.CreateReactiveUIBuilder().WithExceptionHandler(...).BuildApp().
 
-        using var showWindowEvent = new EventWaitHandle(false, EventResetMode.AutoReset, SHOW_EVENT_NAME);
-        ShowWindowEvent = showWindowEvent;
+        SingleInstance = instance;
 
         BuildAvaloniaApp().Start(UIMain, args);
 
-        ShowWindowEvent = null;
+        SingleInstance = null;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.
@@ -131,15 +118,24 @@ internal class Program
 
                 c.Export<MainService>().As<IMainService>().Lifestyle.Singleton();
 
+                // SystemMonitorsService stays registered on every OS: its constructor is inert
+                // (the Win32 enumeration is lazy behind .Root) and view-models inject it, so
+                // Grace must be able to resolve it even on Linux where .Root is never touched.
                 c.Export<SystemMonitorsService>().As<ISystemMonitorsService>().Lifestyle.Singleton();
 
                 // Platform seam: the UI builds its layout through ILayoutFactory and mutates
-                // topology through IDisplayController. The Windows implementations live in
-                // LittleBigMouse.Platform.Windows (a Linux head would register its own).
-                // SystemMonitorsService stays registered for the Windows-only (debug) VCP
-                // plugin until its own seam lands later.
-                c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
-                c.Export<LittleBigMouse.Platform.Windows.WindowsDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
+                // topology through IDisplayController. Implementations live in
+                // LittleBigMouse.Platform.Windows / LittleBigMouse.Platform.Linux.
+                if (OperatingSystem.IsWindows())
+                {
+                    c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
+                    c.Export<LittleBigMouse.Platform.Windows.WindowsDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
+                }
+                else
+                {
+                    c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
+                    c.Export<LittleBigMouse.Platform.Linux.LinuxDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
+                }
 
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
                 c.Export<LbmOptions>().As<ILayoutOptions>().Lifestyle.Singleton();
@@ -157,7 +153,10 @@ internal class Program
 
                 parser.LoadDll("LittleBigMouse.Ui.Core");
                 parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
-                parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
+                // VCP talks DDC/CI through Win32 (and its view-models walk the Win32 device
+                // tree): Windows-only until it gets its own platform seam.
+                if (OperatingSystem.IsWindows())
+                    parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
 
                 parser.LoadModules();
 
@@ -185,6 +184,13 @@ internal class Program
             var cts = new CancellationTokenSource();
 
             var task = boot.BootAsync();
+
+            // A bootloader failure would otherwise stay invisible until shutdown (the task is
+            // only awaited after app.Run returns) — leaving the app alive with no window and
+            // no tray icon, and nothing to diagnose it with.
+            task.ContinueWith(
+                t => Console.Error.WriteLine($"Boot failed: {t.Exception?.Flatten().InnerException}"),
+                TaskContinuationOptions.OnlyOnFaulted);
 
             try
             {

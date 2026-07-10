@@ -23,6 +23,10 @@ public static class AutostartExtensions
 
     public static bool IsScheduled(this IMonitorsLayout layout)
     {
+        // TEMP (Linux phase 1): Task Scheduler is Windows-only. Removed in phase 2 with the
+        // persistence seam (Linux autostart = systemd user unit or .desktop file).
+        if (!OperatingSystem.IsWindows()) return false;
+
         using var ts = new TaskService();
         return ts.RootFolder.GetTasks(new Regex(ServiceName)).Any();
     }
@@ -37,6 +41,9 @@ public static class AutostartExtensions
 
     public static bool Schedule(this IMonitorsLayout layout, bool elevated)
     {
+        // TEMP (Linux phase 1): see IsScheduled above.
+        if (!OperatingSystem.IsWindows()) return false;
+
         layout.Unschedule();
 
         using var ts = new TaskService();
@@ -78,6 +85,9 @@ public static class AutostartExtensions
 
     public static void Unschedule(this IMonitorsLayout layout)
     {
+        // TEMP (Linux phase 1): see IsScheduled above.
+        if (!OperatingSystem.IsWindows()) return;
+
         using var ts = new TaskService();
         try
         {

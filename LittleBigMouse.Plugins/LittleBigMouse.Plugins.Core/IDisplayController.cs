@@ -24,8 +24,10 @@ public interface IDisplayController
     /// before the engine starts. Windows needs nothing (no-op); Linux/KWin opens 1px
     /// logical gaps between contiguous outputs so the daemon's pointer barriers pass the
     /// compositor's validator (which only accepts barriers on outer edges).
+    /// Returns true when the topology actually changed — zones computed before the call
+    /// are then stale and must not be sent to the daemon.
     /// </summary>
-    void PrepareForEngine() { }
+    bool PrepareForEngine() => false;
 
     /// <summary>Undo <see cref="PrepareForEngine"/> once the engine stops.</summary>
     void RestoreAfterEngine() { }

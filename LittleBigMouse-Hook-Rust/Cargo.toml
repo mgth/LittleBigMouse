@@ -48,7 +48,10 @@ strip = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["xinput", "randr"] }
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "input_capture"] }
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "input_capture", "tracing"] }
 reis = { version = "0.7", features = ["tokio"] }
 tokio = { version = "1", features = ["rt", "macros", "time", "net", "sync"] }
 futures = "0.3"
+# Portal signal diagnostics: ashpd traces every InputCapture signal it receives
+# (and, crucially, bodies it fails to deserialize and silently drops).
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }

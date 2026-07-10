@@ -40,10 +40,11 @@ public class LinuxDisplayController : IDisplayController
     /// them once the engine stops. Any actual change goes through NotifyDisplayChanged
     /// so MainService rebuilds and re-sends zones computed in the new coordinate space.
     /// </summary>
-    public void PrepareForEngine()
+    public bool PrepareForEngine()
     {
-        if (KScreenGapGuard.Apply(_factory.QueryMonitors()))
-            _factory.NotifyDisplayChanged();
+        if (!KScreenGapGuard.Apply(_factory.QueryMonitors())) return false;
+        _factory.NotifyDisplayChanged();
+        return true;
     }
 
     public void RestoreAfterEngine()

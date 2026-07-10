@@ -56,6 +56,19 @@ pub fn run(shared: &'static Shared) -> bool {
 }
 
 async fn run_async(shared: &'static Shared) -> bool {
+    // ashpd's signal streams silently DROP any signal whose body fails to
+    // deserialize (`.deserialize().ok()`): a shape mismatch in Activated would
+    // leave a capture wedged with zero trace. With ashpd's `tracing` feature,
+    // every received signal is logged at info and every dropped body at warn —
+    // that difference is the whole diagnosis.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_env("LBM_TRACE")
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("ashpd=debug")),
+        )
+        .with_writer(std::io::stderr)
+        .try_init();
+
     eprintln!("[LittleBigMouse.Hook] portal: connecting...");
     let Ok(input_capture) = InputCapture::new().await else {
         eprintln!("[LittleBigMouse.Hook] portal: InputCapture portal unavailable");
@@ -100,10 +113,11 @@ async fn run_async(shared: &'static Shared) -> bool {
         return false;
     };
 
-    let (Ok(mut activated), Ok(mut deactivated), Ok(mut zones_changed)) = (
+    let (Ok(mut activated), Ok(mut deactivated), Ok(mut zones_changed), Ok(mut disabled)) = (
         input_capture.receive_activated().await,
         input_capture.receive_deactivated().await,
         input_capture.receive_zones_changed().await,
+        input_capture.receive_disabled().await,
     ) else {
         return false;
     };
@@ -113,6 +127,8 @@ async fn run_async(shared: &'static Shared) -> bool {
     let mut reconcile = tokio::time::interval(std::time::Duration::from_millis(100));
     let mut enabled = false;
     let mut capture: Option<Capture> = None;
+    // barrier_id -> pixel bounds of the zone whose edge carries it (see arm()).
+    let mut barrier_zones: std::collections::HashMap<u32, Rect<i32>> = Default::default();
     let mut env = PortalCursor {
         virtual_pos: Point::default(),
         clip: None,
@@ -131,7 +147,7 @@ async fn run_async(shared: &'static Shared) -> bool {
                 }
                 let want = shared.want_hook.load(Ordering::SeqCst);
                 if want && !enabled {
-                    match arm(&input_capture, &session, shared).await {
+                    match arm(&input_capture, &session, shared, &mut barrier_zones).await {
                         Ok(()) => {
                             enabled = true;
                             shared.hooked.store(true, Ordering::SeqCst);
@@ -161,10 +177,48 @@ async fn run_async(shared: &'static Shared) -> bool {
 
             activation = activated.next() => {
                 let Some(activation) = activation else { return true };
-                let Some((x, y)) = activation.cursor_position() else { continue };
-                let position = Point::new(x as i32, y as i32);
-                eprintln!("[LittleBigMouse.Hook] portal: activated at ({},{}) barrier={:?}",
-                    position.x(), position.y(), activation.barrier_id());
+                eprintln!("[LittleBigMouse.Hook] portal: activated id={:?} barrier={:?} pos={:?}",
+                    activation.activation_id(), activation.barrier_id(), activation.cursor_position());
+                let Some((x, y)) = activation.cursor_position() else {
+                    // Without the cursor position we can neither run the engine nor
+                    // emulate retreat — but a capture we never release wedges the
+                    // pointer (hidden cursor, clicks streamed to us and dropped).
+                    // Hand it straight back: a pass-through crossing, not a trap.
+                    eprintln!("[LittleBigMouse.Hook] portal: no cursor_position in activation, releasing capture");
+                    release(&input_capture, &session, activation.activation_id(), None).await;
+                    continue;
+                };
+                // The compositor reports the position the pointer WOULD have reached —
+                // already past the barrier line, possibly outside every zone (seen
+                // live: barrier on DP-2's left edge reported at x two pixels into a
+                // void column). The engine's crossing logic assumes Win32 semantics:
+                // the cursor is inside the source monitor when it reasons. Clamp the
+                // activation point back into the zone that owns the barrier (fall
+                // back to the nearest zone), so origin/retreat/crossing all resolve.
+                let mut position = Point::new(x as i32, y as i32);
+                let owner = match activation.barrier_id() {
+                    Some(ashpd::desktop::input_capture::ActivatedBarrier::Barrier(id)) =>
+                        barrier_zones.get(&u32::from(id)).copied(),
+                    _ => None,
+                };
+                let zone = owner.or_else(|| nearest_zone(shared, position));
+                match zone {
+                    Some(bounds) => {
+                        let clamped = clamp(&bounds, position);
+                        if clamped != position {
+                            eprintln!("[LittleBigMouse.Hook] portal: clamped activation ({},{}) -> ({},{})",
+                                position.x(), position.y(), clamped.x(), clamped.y());
+                        }
+                        position = clamped;
+                    }
+                    None => {
+                        // No zones at all (layout mismatch): never hold a capture the
+                        // engine cannot reason about — hand it back untouched.
+                        eprintln!("[LittleBigMouse.Hook] portal: activation outside any zone, releasing");
+                        release(&input_capture, &session, activation.activation_id(), None).await;
+                        continue;
+                    }
+                }
                 capture = Some(Capture {
                     activation_id: activation.activation_id(),
                     origin: position,
@@ -178,14 +232,35 @@ async fn run_async(shared: &'static Shared) -> bool {
             }
 
             _ = deactivated.next() => {
+                eprintln!("[LittleBigMouse.Hook] portal: deactivated (capture was {})",
+                    if capture.is_some() { "active" } else { "idle" });
                 capture = None;
                 env.clip = None;
+            }
+
+            _ = disabled.next() => {
+                // The compositor turned the whole session off (it does so on its own
+                // over some topology changes). Mirror its state: mark ourselves
+                // disarmed so the reconcile tick re-arms (barriers + Enable) as long
+                // as the engine is still wanted.
+                eprintln!("[LittleBigMouse.Hook] portal: disabled by compositor, will re-arm");
+                if let Some(c) = capture.take() {
+                    release(&input_capture, &session, c.activation_id, None).await;
+                }
+                env.clip = None;
+                enabled = false;
             }
 
             _ = zones_changed.next() => {
                 // Output topology changed: same semantics as WM_DISPLAYCHANGE —
                 // unhook (the UI recomputes and reloads the layout, then re-Starts us).
-                capture = None;
+                eprintln!("[LittleBigMouse.Hook] portal: zones changed");
+                if let Some(c) = capture.take() {
+                    // Never drop a live capture without releasing it: the pointer
+                    // would stay hidden with input streaming to us forever.
+                    release(&input_capture, &session, c.activation_id, None).await;
+                }
+                env.clip = None;
                 crate::hook::on_display_changed(shared);
             }
 
@@ -233,6 +308,20 @@ async fn run_async(shared: &'static Shared) -> bool {
                             env.clip = None;
                         }
                     }
+                    EiEvent::Button(button) => {
+                        // While captured, buttons stream to us and nowhere else. We
+                        // cannot forward them, so a press mid-crossing would be
+                        // swallowed. The user clicking means they are interacting,
+                        // not crossing: abort the attempt, give the input back.
+                        if button.state == reis::ei::button::ButtonState::Press {
+                            if let Some(c) = capture.take() {
+                                eprintln!("[LittleBigMouse.Hook] portal: click during capture -> release at ({},{})",
+                                    env.virtual_pos.x(), env.virtual_pos.y());
+                                release(&input_capture, &session, c.activation_id, Some(env.virtual_pos)).await;
+                                env.clip = None;
+                            }
+                        }
+                    }
                     EiEvent::Disconnected(_) => {
                         eprintln!("[LittleBigMouse.Hook] portal: ei disconnected");
                         return true;
@@ -250,16 +339,19 @@ struct Capture {
 }
 
 /// Recompute the barriers from the currently loaded layout and enable capture.
+/// `barrier_zones` is (re)filled with each barrier's owning-zone bounds, used to
+/// clamp activation positions back into the source zone.
 async fn arm(
     input_capture: &InputCapture,
     session: &Session<InputCapture>,
     shared: &Shared,
+    barrier_zones: &mut std::collections::HashMap<u32, Rect<i32>>,
 ) -> Result<(), ashpd::Error> {
     let zones = input_capture.zones(session, Default::default()).await?.response()?;
 
     let barriers = {
         let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
-        layout_barriers(&engine.layout)
+        layout_barriers(&engine.layout, barrier_zones)
     };
     if barriers.is_empty() {
         eprintln!("[LittleBigMouse.Hook] portal: no barriers (layout empty?)");
@@ -291,10 +383,14 @@ async fn arm(
 /// The engine still decides per-position what actually crosses — an
 /// activation outside any link range just holds and releases on retreat.
 /// Twin edges of adjacent zones produce identical lines: dedup them.
-fn layout_barriers(layout: &crate::zones::ZonesLayout) -> Vec<Barrier> {
+fn layout_barriers(
+    layout: &crate::zones::ZonesLayout,
+    barrier_zones: &mut std::collections::HashMap<u32, Rect<i32>>,
+) -> Vec<Barrier> {
     let mut barriers = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut next_id = 1u32;
+    barrier_zones.clear();
 
     for &zone_id in &layout.main_zones {
         let zone = &layout.arena[zone_id];
@@ -319,6 +415,7 @@ fn layout_barriers(layout: &crate::zones::ZonesLayout) -> Vec<Barrier> {
             }
             if let Some(id) = BarrierID::new(next_id) {
                 barriers.push(Barrier::new(id, BarrierPosition::new(x1, y1, x2, y2)));
+                barrier_zones.insert(next_id, bounds);
                 next_id += 1;
             }
         }
@@ -336,6 +433,23 @@ fn feed_engine(shared: &Shared, env: &mut PortalCursor, position: Point<i32>) ->
     let mut e = MouseEventArg::new(position);
     engine.on_mouse_move(env, &mut e);
     e.handled
+}
+
+/// The main zone whose bounds are closest to `position` (squared distance to the
+/// clamped point) — the fallback source zone when the compositor cannot tell us
+/// which barrier fired (UnknownBarrier: several barriers on the same line).
+fn nearest_zone(shared: &Shared, position: Point<i32>) -> Option<Rect<i32>> {
+    let engine = shared.engine.try_lock().ok()?;
+    engine
+        .layout
+        .main_zones
+        .iter()
+        .map(|&id| engine.layout.arena[id].pixels_bounds())
+        .min_by_key(|bounds| {
+            let c = clamp(bounds, position);
+            let (dx, dy) = ((c.x() - position.x()) as i64, (c.y() - position.y()) as i64);
+            dx * dx + dy * dy
+        })
 }
 
 /// The user moved back into the zone they hit the barrier from: more than a few

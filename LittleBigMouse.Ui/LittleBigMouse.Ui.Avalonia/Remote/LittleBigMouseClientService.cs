@@ -84,11 +84,15 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     public async Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
     {
         // Topology prologue (Linux/KWin: open 1px gaps so the daemon's barriers pass the
-        // compositor validator; Windows: no-op). If this actually moves outputs, the
-        // factory raises DisplayChanged and MainService rebuilds then re-sends zones
-        // computed in the gapped space — the Load below is transiently stale but the
-        // pipeline converges on its own. Subprocess work: keep it off the UI thread.
-        await Task.Run(_displayController.PrepareForEngine, token);
+        // compositor validator; Windows: no-op, returns false). When it actually moves
+        // outputs, the zones we were handed are stale by construction (computed in the
+        // pre-gap space) — sending them would race the fresh ones and could win, arming
+        // barriers in the wrong coordinate space. Drop this send: PrepareForEngine raised
+        // DisplayChanged, MainService rebuilds and re-enters here with zones computed in
+        // the gapped space (every start path runs with Options.Enabled set, which gates
+        // that re-entry). Subprocess work: keep it off the UI thread.
+        if (await Task.Run(_displayController.PrepareForEngine, token))
+            return;
 
         var commands = new List<CommandMessage>()
         {

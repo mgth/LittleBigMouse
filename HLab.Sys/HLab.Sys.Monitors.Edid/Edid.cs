@@ -24,7 +24,7 @@
 using System.Runtime.Serialization;
 using HLab.Geo;
 
-namespace HLab.Sys.Windows.Monitors;
+namespace HLab.Sys.Monitors;
 
 public interface IEdid
 {

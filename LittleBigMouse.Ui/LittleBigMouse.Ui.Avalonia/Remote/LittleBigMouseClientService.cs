@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using LittleBigMouse.Plugins;
 using System.Threading;
 using System.Threading.Tasks;
 using HLab.Remote;
@@ -99,8 +100,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
     void CreateExcludedFile()
     {
-        var path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var dir = Path.Combine(path,"Mgth","LittleBigMouse");
+        var dir = LbmPaths.DataDir;
         var file = Path.Combine(dir,"Excluded.txt");
         if(File.Exists(file)) return;
 
@@ -229,11 +229,11 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     {
         var xml = messages.Aggregate("", (current, command) => current + $"{command.Serialize()}\n");
 
-        var data = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-
-        var path = Path.Combine(
-            data,
-            @"Mgth\LittleBigMouse\Current.xml");
+        // The daemon reads this file back on startup: LbmPaths must match its side
+        // (%LOCALAPPDATA%\Mgth\LittleBigMouse on Windows, ~/.local/share/LittleBigMouse on
+        // Linux). The former literal @"Mgth\LittleBigMouse\Current.xml" produced a file
+        // NAMED with backslashes on Linux.
+        var path = Path.Combine(LbmPaths.DataDir, "Current.xml");
 
         if (!Directory.Exists(Path.GetDirectoryName(path)))
             Directory.CreateDirectory(Path.GetDirectoryName(path));

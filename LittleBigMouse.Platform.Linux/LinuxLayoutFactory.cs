@@ -1,9 +1,8 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text.RegularExpressions;
+using System.Threading;
 using DynamicData;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -13,169 +12,187 @@ using LittleBigMouse.Plugins;
 namespace LittleBigMouse.Platform.Linux;
 
 /// <summary>
-/// Linux implementation of <see cref="ILayoutFactory"/>. Phase 1: monitor discovery goes
-/// through <c>xrandr --query</c> (X11 or XWayland). Under a Wayland session XWayland reports
-/// synthetic outputs (XWAYLAND0…) with no connector identity, so EDID matching is impossible
-/// here — phase 2 replaces this source with kscreen-doctor/DRM-sysfs on KDE and keeps xrandr
-/// as the generic X11 fallback.
+/// Linux implementation of <see cref="ILayoutFactory"/>. Discovery goes through the best
+/// available <see cref="ILinuxMonitorSource"/> — KScreen on KDE (compositor's own logical
+/// geometry, per-output scale, priority), XRandR anywhere else — enriched with EDID identity
+/// and physical size read from /sys/class/drm. Since no daemon reports display changes on
+/// Linux yet, the factory polls the sysfs plug signature and raises
+/// <see cref="DisplayChanged"/> itself; MainService's settle/idempotence logic does the rest.
 /// </summary>
-public class LinuxLayoutFactory : ILayoutFactory
+public class LinuxLayoutFactory : ILayoutFactory, IDisposable
 {
-    readonly Func<MonitorsLayout> _newLayout;
+    static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
 
-    public LinuxLayoutFactory(Func<MonitorsLayout> newLayout)
+    readonly Func<MonitorsLayout> _newLayout;
+    readonly ILayoutPersistence _persistence;
+    readonly ILinuxMonitorSource? _source;
+    readonly Timer _pollTimer;
+    string _lastPlugSignature;
+
+    public LinuxLayoutFactory(Func<MonitorsLayout> newLayout, ILayoutPersistence persistence)
     {
         _newLayout = newLayout;
+        _persistence = persistence;
+
+        _source = new ILinuxMonitorSource[] { new KScreenMonitorSource(), new XRandRMonitorSource() }
+            .FirstOrDefault(s => s.IsAvailable());
+
+        _lastPlugSignature = DrmEdidReader.PlugSignature();
+        _pollTimer = new Timer(_ => PollPlugSignature(), null, PollInterval, PollInterval);
     }
+
+    public event EventHandler? DisplayChanged;
 
     // Wallpaper preview is not implemented on Linux yet: the editor renders a flat background.
     public event EventHandler? WallpaperChanged;
 
     public void UpdateWallpaper(MonitorsLayout layout) { }
 
+    public void Dispose() => _pollTimer.Dispose();
+
+    void PollPlugSignature()
+    {
+        var signature = DrmEdidReader.PlugSignature();
+        if (signature == _lastPlugSignature) return;
+
+        _lastPlugSignature = signature;
+        DisplayChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public MonitorsLayout Create()
     {
         var layout = _newLayout();
 
-        var outputs = XRandROutput.Query();
-        if (outputs.Count == 0)
+        var monitors = _source?.Query() ?? [];
+        if (monitors.Count == 0)
         {
-            // xrandr unavailable or no active output: still open the UI on a plausible
-            // single monitor rather than an empty editor.
-            outputs = [XRandROutput.Fallback()];
+            // No discovery available: still open the UI on a plausible single monitor
+            // rather than an empty editor.
+            monitors = [new LinuxMonitor
+            {
+                ConnectorName = "FALLBACK",
+                LogicalWidth = 1920, LogicalHeight = 1080,
+                PixelWidth = 1920, PixelHeight = 1080,
+                WidthMm = 527, HeightMm = 296,
+                Primary = true
+            }];
         }
 
-        foreach (var output in outputs)
-        {
-            var model = layout.GetOrAddPhysicalMonitorModel(output.Name, s =>
-            {
-                var m = new PhysicalMonitorModel(s) { PnpDeviceName = output.Name };
-                if (output is { WidthMm: > 0, HeightMm: > 0 })
-                {
-                    var fixedRatio = m.PhysicalSize.FixedAspectRatio;
-                    m.PhysicalSize.FixedAspectRatio = false;
-                    m.PhysicalSize.Width = output.WidthMm;
-                    m.PhysicalSize.Height = output.HeightMm;
-                    m.PhysicalSize.FixedAspectRatio = fixedRatio;
-                }
-                return m;
-            });
-
-            var monitor = new PhysicalMonitor(output.Name, layout, model)
-            {
-                DeviceId = output.Name,
-                SerialNumber = "N/A"
-            };
-
-            var source = new DisplaySource(output.Name)
-            {
-                InterfacePath = output.Name,
-                DeviceName = output.Name,
-                DisplayName = output.Name,
-                SourceName = output.Name,
-                SourceNumber = (outputs.IndexOf(output) + 1).ToString(),
-                Primary = output.Primary,
-                AttachedToDesktop = true,
-                Orientation = output.Orientation,
-                DisplayFrequency = 0
-            };
-            source.InPixel.Set(new HLab.Geo.Rect(
-                new HLab.Geo.Point(output.X, output.Y),
-                new HLab.Geo.Size(output.Width, output.Height)));
-
-            // xrandr has no DPI notion per output: derive it from pixels vs millimeters.
-            var dpiX = output.WidthMm > 0 ? output.Width * 25.4 / output.WidthMm : 96;
-            var dpiY = output.HeightMm > 0 ? output.Height * 25.4 / output.HeightMm : 96;
-            source.EffectiveDpi.Set(dpiX, dpiY);
-            source.RawDpi.Set(dpiX, dpiY);
-            source.DpiAwareAngularDpi.Set(dpiX, dpiY);
-
-            var physicalSource = new PhysicalSource(output.Name, monitor, source);
-            monitor.ActiveSource = physicalSource;
-            monitor.Sources.Add(physicalSource);
-
-            layout.AddOrUpdatePhysicalMonitor(monitor);
-            layout.AddOrUpdatePhysicalSource(physicalSource);
-        }
+        foreach (var monitor in monitors)
+            layout.AddMonitor(monitor);
 
         layout.Id = string.Join("+", layout.PhysicalMonitors.Select(m => $"{m.Id}").OrderBy(s => s));
 
+        // Same ordering as Windows: infer positions from the system topology, then let the
+        // saved layout override them, then re-anchor on the current primary.
         layout.SetLocationsFromSystemConfiguration();
+        _persistence.Load(layout);
         layout.AnchorOnPrimary();
 
         return layout;
     }
 
+    /// <inheritdoc/>
     public string DisplaySignature()
-        => string.Join("|", XRandROutput.Query()
-            .Select(o => $"{o.Name}[{o.X},{o.Y} {o.Width}x{o.Height}]{(o.Primary ? "*" : "")}d{o.WidthMm}x{o.HeightMm}"));
+        => _source == null
+            ? ""
+            : string.Join("|", _source.Query()
+                .OrderBy(m => m.ConnectorName, StringComparer.Ordinal)
+                .Select(m => $"{m.ConnectorName}[{m.LogicalX},{m.LogicalY} {m.PixelWidth}x{m.PixelHeight}@{m.Scale}]"
+                             + $"{(m.Primary ? "*" : "")}{(m.Enabled ? "" : "-")}d{m.WidthMm}x{m.HeightMm}"));
 }
 
-/// <summary>One active xrandr output (parsed from <c>xrandr --query</c>).</summary>
-public record XRandROutput(string Name, int X, int Y, int Width, int Height, int WidthMm, int HeightMm, bool Primary, int Orientation)
+/// <summary>
+/// <see cref="LinuxMonitor"/> → model mapping, the Linux counterpart of WindowsLayoutMapping.
+/// Identity comes from the EDID (PnP code, serial) so persistence keys survive replugging a
+/// monitor into another port; the connector name is the fallback for EDID-less outputs.
+/// The pixel space fed to the model is the compositor's logical space — the space the
+/// cursor actually moves in under Wayland, and plain pixels on native X11.
+/// </summary>
+public static class LinuxLayoutMapping
 {
-    // "DP-4 connected primary 3840x2160+0+0 left (normal left inverted right x axis y axis) 597mm x 336mm"
-    static readonly Regex Line = new(
-        @"^(?<name>\S+) connected(?<primary> primary)? (?<w>\d+)x(?<h>\d+)\+(?<x>-?\d+)\+(?<y>-?\d+)(?<rot> normal| left| inverted| right)?(?: \([^)]*\))?(?: (?<wmm>\d+)mm x (?<hmm>\d+)mm)?",
-        RegexOptions.Compiled);
-
-    public static XRandROutput Fallback() => new("FALLBACK", 0, 0, 1920, 1080, 527, 296, true, 0);
-
-    public static List<XRandROutput> Query()
+    public static void AddMonitor(this MonitorsLayout layout, LinuxMonitor monitor)
     {
-        string stdout;
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo("xrandr", "--query")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            });
-            if (process == null) return [];
-            stdout = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(5000);
-            if (process.ExitCode != 0) return [];
-        }
-        catch
-        {
-            return [];
-        }
+        var edid = monitor.Edid;
 
-        var outputs = new List<XRandROutput>();
-        foreach (var line in stdout.Split('\n'))
-        {
-            var match = Line.Match(line);
-            if (!match.Success) continue;
+        var pnpCode = !string.IsNullOrEmpty(edid?.ManufacturerCode)
+            ? $"{edid.ManufacturerCode}{edid.ProductCode}"
+            : monitor.ConnectorName;
 
-            var orientation = match.Groups["rot"].Value.Trim() switch
+        var monitorId = edid != null
+            ? $"{pnpCode}_{(string.IsNullOrEmpty(edid.SerialNumber) ? edid.Serial : edid.SerialNumber)}"
+            : monitor.ConnectorName;
+
+        // Two identical monitors can report the same serial: disambiguate by connector.
+        if (layout.PhysicalMonitors.Any(m => m.Id == monitorId))
+            monitorId = $"{monitorId}@{monitor.ConnectorName}";
+
+        var model = layout.GetOrAddPhysicalMonitorModel(pnpCode, s =>
+        {
+            var m = new PhysicalMonitorModel(s)
             {
-                "left" => 1,
-                "inverted" => 2,
-                "right" => 3,
-                _ => 0
+                PnpDeviceName = !string.IsNullOrEmpty(edid?.Model) ? edid.Model : monitor.ConnectorName
             };
 
-            outputs.Add(new XRandROutput(
-                match.Groups["name"].Value,
-                int.Parse(match.Groups["x"].Value),
-                int.Parse(match.Groups["y"].Value),
-                int.Parse(match.Groups["w"].Value),
-                int.Parse(match.Groups["h"].Value),
-                match.Groups["wmm"].Success ? int.Parse(match.Groups["wmm"].Value) : 0,
-                match.Groups["hmm"].Success ? int.Parse(match.Groups["hmm"].Value) : 0,
-                match.Groups["primary"].Success,
-                orientation));
-        }
+            var widthMm = edid is { PhysicalWidth: > 0 } ? edid.PhysicalWidth : monitor.WidthMm;
+            var heightMm = edid is { PhysicalHeight: > 0 } ? edid.PhysicalHeight : monitor.HeightMm;
+            if (monitor.Orientation % 2 != 0 && edid != null) (widthMm, heightMm) = (heightMm, widthMm);
 
-        // xrandr marks no output as primary under some compositors: pick the one at (0,0),
-        // the model needs a primary to anchor and place monitors.
-        if (outputs.Count > 0 && !outputs.Any(o => o.Primary))
+            if (widthMm > 0 && heightMm > 0)
+            {
+                var fixedRatio = m.PhysicalSize.FixedAspectRatio;
+                m.PhysicalSize.FixedAspectRatio = false;
+                m.PhysicalSize.Width = widthMm;
+                m.PhysicalSize.Height = heightMm;
+                m.PhysicalSize.FixedAspectRatio = fixedRatio;
+            }
+
+            if (!string.IsNullOrEmpty(edid?.ManufacturerCode))
+                m.Logo = $"icon/Pnp/{edid.ManufacturerCode}?icon/Pnp/LBM";
+
+            return m;
+        });
+
+        var physicalMonitor = new PhysicalMonitor(monitorId, layout, model)
         {
-            var first = outputs.FirstOrDefault(o => o is { X: 0, Y: 0 }) ?? outputs[0];
-            outputs[outputs.IndexOf(first)] = first with { Primary = true };
-        }
+            DeviceId = monitor.ConnectorName,
+            SerialNumber = edid?.SerialNumber is { Length: > 0 } sn ? sn : edid?.Serial ?? "N/A"
+        };
 
-        return outputs;
+        var source = new DisplaySource(monitorId)
+        {
+            InterfacePath = monitor.ConnectorName,
+            DeviceName = monitor.ConnectorName,
+            DisplayName = monitor.ConnectorName,
+            SourceName = $"{edid?.VideoInterface ?? "Unknown"}:{monitor.ConnectorName}",
+            SourceNumber = (layout.PhysicalMonitors.Count + 1).ToString(),
+            Primary = monitor.Primary,
+            AttachedToDesktop = monitor.Enabled,
+            Orientation = monitor.Orientation,
+            DisplayFrequency = monitor.Frequency
+        };
+        source.InPixel.Set(new HLab.Geo.Rect(
+            new HLab.Geo.Point(monitor.LogicalX, monitor.LogicalY),
+            new HLab.Geo.Size(monitor.LogicalWidth, monitor.LogicalHeight)));
+
+        // Effective DPI mirrors the Windows semantic (the OS scaling): 96 per scale unit.
+        // Raw DPI is the panel's real density, mode pixels against the EDID millimeters.
+        var effectiveDpi = 96.0 * monitor.Scale;
+        source.EffectiveDpi.Set(effectiveDpi, effectiveDpi);
+        source.DpiAwareAngularDpi.Set(effectiveDpi, effectiveDpi);
+
+        var widthForDpi = edid is { PhysicalWidth: > 0 } ? edid.PhysicalWidth : monitor.WidthMm;
+        var heightForDpi = edid is { PhysicalHeight: > 0 } ? edid.PhysicalHeight : monitor.HeightMm;
+        if (monitor.Orientation % 2 != 0 && edid != null) (widthForDpi, heightForDpi) = (heightForDpi, widthForDpi);
+        source.RawDpi.Set(
+            widthForDpi > 0 ? monitor.PixelWidth * 25.4 / widthForDpi : effectiveDpi,
+            heightForDpi > 0 ? monitor.PixelHeight * 25.4 / heightForDpi : effectiveDpi);
+
+        var physicalSource = new PhysicalSource(monitor.ConnectorName, physicalMonitor, source);
+        physicalMonitor.ActiveSource = physicalSource;
+        physicalMonitor.Sources.Add(physicalSource);
+
+        layout.AddOrUpdatePhysicalMonitor(physicalMonitor);
+        layout.AddOrUpdatePhysicalSource(physicalSource);
     }
 }

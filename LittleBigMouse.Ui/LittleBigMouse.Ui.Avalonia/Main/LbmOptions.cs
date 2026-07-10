@@ -242,8 +242,7 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
 
     public string GetConfigPath(string layoutId, bool create)
     {
-        var path = Path.Combine(Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData), "Mgth", "LittleBigMouse", layoutId);
+        var path = Path.Combine(LittleBigMouse.Plugins.LbmPaths.DataDir, layoutId);
 
         if (create) Directory.CreateDirectory(path);
 

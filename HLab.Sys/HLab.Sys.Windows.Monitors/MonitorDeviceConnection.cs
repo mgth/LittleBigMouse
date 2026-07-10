@@ -1,4 +1,5 @@
 ﻿using System;
+using HLab.Sys.Monitors;
 using System.Diagnostics;
 using System.Globalization;
 using System.Xml.Serialization;

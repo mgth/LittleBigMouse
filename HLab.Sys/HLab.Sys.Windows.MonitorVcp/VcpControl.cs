@@ -22,6 +22,7 @@
 */
 
 #nullable enable
+using HLab.Sys.Monitors;
 using System;
 using HLab.Sys.Windows.API.MonitorConfiguration;
 using ReactiveUI;

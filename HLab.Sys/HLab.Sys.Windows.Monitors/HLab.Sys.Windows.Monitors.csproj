@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HLab.Sys.Monitors.Edid\HLab.Sys.Monitors.Edid.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.ColorTools\HLab.ColorTools.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />

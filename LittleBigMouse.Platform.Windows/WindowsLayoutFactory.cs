@@ -1,4 +1,5 @@
 #nullable enable
+using HLab.Sys.Monitors;
 using System;
 using System.Linq;
 using DynamicData;
@@ -36,6 +37,10 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
         _wallpaperWatcher = new WindowsWallpaperWatcher();
         _wallpaperWatcher.Changed += (_, _) => WallpaperChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    // Never raised on Windows: display changes arrive through the daemon's DisplayChanged
+    // event (the daemon owns the unhook-on-change semantics there).
+    public event EventHandler? DisplayChanged { add { } remove { } }
 
     public event EventHandler? WallpaperChanged;
 

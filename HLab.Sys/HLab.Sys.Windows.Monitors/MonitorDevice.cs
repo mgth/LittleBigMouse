@@ -1,4 +1,5 @@
 ﻿using System;
+using HLab.Sys.Monitors;
 using System.Collections.Generic;
 using System.Xml.Serialization;
 

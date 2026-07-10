@@ -174,10 +174,6 @@ public static class PersistencyExtensions
     //==================//
     public static void Load(this MonitorsLayout @this)
     {
-        // TEMP (Linux phase 1): registry persistence is Windows-only. Removed in phase 2
-        // when these call sites move behind the ILayoutPersistence seam.
-        if (!OperatingSystem.IsWindows()) return;
-
         var wasLoading = IsLoading;
         IsLoading = true;
         try
@@ -211,9 +207,6 @@ public static class PersistencyExtensions
 
     public static bool SaveEnabled(this IMonitorsLayout @this)
     {
-        // TEMP (Linux phase 1): see Load above.
-        if (!OperatingSystem.IsWindows()) return false;
-
         using var k = @this.OpenRegKey(true);
         if (k == null) return false;
 
@@ -231,9 +224,6 @@ public static class PersistencyExtensions
     /// </summary>
     public static void SaveLive(this ILayoutOptions @this)
     {
-        // TEMP (Linux phase 1): see Load above.
-        if (!OperatingSystem.IsWindows()) return;
-
         using var mainKey = OpenRootRegKey(true);
         if (mainKey == null) return;
 
@@ -290,9 +280,6 @@ public static class PersistencyExtensions
 
     public static bool Save(this MonitorsLayout @this)
     {
-        // TEMP (Linux phase 1): see Load above.
-        if (!OperatingSystem.IsWindows()) return false;
-
         using var mainKey = OpenRootRegKey(true);
         using var key = @this.OpenRegKey(true);
 

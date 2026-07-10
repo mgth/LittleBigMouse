@@ -28,6 +28,7 @@
       "HLab.Core/HLab.Sys.Windows.API/HLab.Sys.Windows.API.csproj",
       "HLab.Core/HLab.UserNotification/HLab.UserNotification.csproj",
       "HLab.Sys/HLab.Sys.Argyll/HLab.Sys.Argyll.csproj",
+      "HLab.Sys/HLab.Sys.Monitors.Edid/HLab.Sys.Monitors.Edid.csproj",
       "HLab.Sys/HLab.Sys.Windows.Monitors/HLab.Sys.Windows.Monitors.csproj",
       "HLab.Sys/HLab.Sys.Windows.MonitorVcp.Avalonia/HLab.Sys.Windows.MonitorVcp.Avalonia.csproj",
       "HLab.Sys/HLab.Sys.Windows.MonitorVcp/HLab.Sys.Windows.MonitorVcp.csproj",

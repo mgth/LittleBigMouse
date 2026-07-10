@@ -51,6 +51,7 @@ public class MainService : ReactiveModel, IMainService
 {
     readonly IMvvmService _mvvmService;
     readonly ILayoutFactory _layoutFactory;
+    readonly ILayoutPersistence _layoutPersistence;
 
     readonly IUserNotificationService _notify;
     readonly ILittleBigMouseClientService _littleBigMouseClientService;
@@ -77,12 +78,14 @@ public class MainService : ReactiveModel, IMainService
         ILittleBigMouseClientService littleBigMouseClientService,
         IUserNotificationService notify,
         ILayoutFactory layoutFactory,
+        ILayoutPersistence layoutPersistence,
         IProcessesCollector processesCollector,
         Func<ApplicationUpdaterViewModel> updaterLocator,
         ILayoutOptions options)
     {
         _notify = notify;
         _layoutFactory = layoutFactory;
+        _layoutPersistence = layoutPersistence;
         _processesCollector = processesCollector;
         _updaterLocator = updaterLocator;
         _littleBigMouseClientService = littleBigMouseClientService;
@@ -102,15 +105,15 @@ public class MainService : ReactiveModel, IMainService
                 o => o.Pinned,
                 o => o.ShowMonitorActionWarning)
             .Skip(1)
-            .Where(_ => !PersistencyExtensions.IsLoading)
-            .Subscribe(_ => options.SaveLive())
+            .Where(_ => !layoutPersistence.IsLoading)
+            .Subscribe(_ => layoutPersistence.SaveLive(options))
             .DisposeWith(this);
 
         options.WhenAnyValue(
                 o => o.LoadAtStartup,
                 o => o.StartElevated)
             .Skip(1)
-            .Where(_ => !PersistencyExtensions.IsLoading)
+            .Where(_ => !layoutPersistence.IsLoading)
             .Subscribe(_ => (MonitorsLayout as MonitorsLayout)?.UpdateSchedule())
             .DisposeWith(this);
 
@@ -121,6 +124,10 @@ public class MainService : ReactiveModel, IMainService
         // registry watcher) and raises WallpaperChanged. Refresh the wallpaper drawn behind each
         // monitor in place.
         _layoutFactory.WallpaperChanged += (_, _) => RefreshWallpaper();
+
+        // Platforms without a daemon reporting display changes (Linux) detect them in the
+        // factory itself; same debounce/settle/idempotence path as the daemon event.
+        _layoutFactory.DisplayChanged += (_, _) => _ = DisplayChangedAsync();
     }
 
     public void UpdateLayout()
@@ -190,7 +197,7 @@ public class MainService : ReactiveModel, IMainService
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
         {
             MonitorsLayout.Options.Enabled = false;
-            MonitorsLayout.SaveEnabled();
+            _layoutPersistence.SaveEnabled(MonitorsLayout);
             return _littleBigMouseClientService.StopAsync();
         });
         await _notify.AddMenuAsync(-1, "Exit", "Icon/sys/Close", QuitAsync);
@@ -227,9 +234,7 @@ public class MainService : ReactiveModel, IMainService
     {
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Mgth", "LittleBigMouse");
+            var dir = LbmPaths.DataDir;
             Directory.CreateDirectory(dir);
             var file = Path.Combine(dir, "daemon-events.log");
 

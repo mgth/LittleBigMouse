@@ -23,6 +23,14 @@ public interface ILayoutFactory
     string DisplaySignature();
 
     /// <summary>
+    /// Raised when the platform detects a display configuration change on its own — used where
+    /// no daemon reports them (Linux: sysfs plug polling). May fire on a background thread.
+    /// The Windows implementation never raises it: display changes arrive through the daemon's
+    /// DisplayChanged event, which owns unhook/settle semantics there.
+    /// </summary>
+    event EventHandler? DisplayChanged;
+
+    /// <summary>
     /// Raised when the OS desktop wallpaper changes. May fire on a background thread — the handler
     /// must marshal to the UI thread before touching the model (e.g. via <see cref="UpdateWallpaper"/>).
     /// </summary>

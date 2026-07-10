@@ -130,11 +130,13 @@ internal class Program
                 {
                     c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Windows.WindowsDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
+                    c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutPersistence>().As<LittleBigMouse.Plugins.ILayoutPersistence>().Lifestyle.Singleton();
                 }
                 else
                 {
                     c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
                     c.Export<LittleBigMouse.Platform.Linux.LinuxDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
+                    c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutPersistence>().As<LittleBigMouse.Plugins.ILayoutPersistence>().Lifestyle.Singleton();
                 }
 
                 c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();

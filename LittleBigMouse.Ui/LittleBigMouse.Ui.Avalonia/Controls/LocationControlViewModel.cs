@@ -40,7 +40,6 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
-using LittleBigMouse.Platform.Windows;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Zoning;
 using ReactiveUI;
@@ -51,13 +50,15 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 {
     readonly ISystemMonitorsService _monitorsService;
     readonly IMainService _mainService;
+    readonly ILayoutPersistence _persistence;
 
     readonly ILittleBigMouseClientService _service;
 
-    public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService)
+    public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService, ILayoutPersistence persistence)
     {
         _service = service;
         _mainService = main;
+        _persistence = persistence;
 
         _monitorsService = monitorsService;
 
@@ -239,8 +240,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         if(Model == null) return;
 
-        Model.Options.Enabled = false; 
-        await Task.Run(() => Model.SaveEnabled());
+        Model.Options.Enabled = false;
+        await Task.Run(() => _persistence.SaveEnabled(Model));
         await _service.StopAsync();
     }
 
@@ -248,20 +249,20 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         Task.Run(() =>
         {
             if (!(Model?.Saved??true))
-                Model.Save();
+                _persistence.Save(Model);
         });
 
     Task SaveEnabledAsync() =>
         Task.Run(() =>
         {
-            Model?.SaveEnabled();
+            if (Model != null) _persistence.SaveEnabled(Model);
         });
 
     Task LoadAsync() =>
         Task.Run(() =>
         {
             if (!(Model?.Saved??true))
-                Model.Load();
+                _persistence.Load(Model);
         });
 
 

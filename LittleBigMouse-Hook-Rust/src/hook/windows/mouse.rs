@@ -9,13 +9,14 @@
 
 use std::cell::Cell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{CallNextHookEx, HHOOK, MSLLHOOKSTRUCT, WM_MOUSEMOVE};
 
 use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;
+use crate::hook::{CROSSINGS, MOUSE_EVENTS};
 use crate::platform::cursor::Win32Cursor;
 use crate::shared::SHARED;
 
@@ -24,14 +25,6 @@ thread_local! {
     /// runs on the pump thread.
     static PREV: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
 }
-
-/// Count of deduped mouse-move events the hook has processed. Lightweight
-/// instrumentation (one relaxed increment) to observe the hook staying alive.
-pub static MOUSE_EVENTS: AtomicU64 = AtomicU64::new(0);
-
-/// Count of events the engine handled (i.e. repositioned the cursor across a
-/// border). Non-zero means the engine is actively managing crossings.
-pub static CROSSINGS: AtomicU64 = AtomicU64::new(0);
 
 /// # Safety
 /// Invoked by Windows as a `WH_MOUSE_LL` hook procedure; never call it directly.

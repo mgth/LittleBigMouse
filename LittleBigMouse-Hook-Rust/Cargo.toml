@@ -22,7 +22,10 @@ path = "src/lib.rs"
 roxmltree = "0.20"
 slotmap = "1"
 
-[dependencies.windows]
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 features = [
     "Win32_Foundation",

@@ -78,6 +78,19 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
 
     public void Dispose() => _pollTimer.Dispose();
 
+    // Moving, scaling or toggling an output in the system settings never touches the
+    // sysfs connectors, so the plug poll can't see it. Both major desktops persist the
+    // applied output layout to a config file the moment it changes: KWin (Plasma 6) to
+    // kwinoutputconfig.json, GNOME/mutter to monitors.xml. A cheap mtime stat per tick
+    // is our display-change notification; spurious rewrites (the KWin file also stores
+    // brightness…) settle to an identical DisplaySignature and are absorbed by
+    // MainService's idempotence guard, like spurious WM_DISPLAYCHANGE on Windows.
+    static readonly string[] OutputConfigPaths =
+    [
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "kwinoutputconfig.json"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "monitors.xml"),
+    ];
+
     void PollPlugSignature()
     {
         var signature = DrmEdidReader.PlugSignature();
@@ -86,6 +99,18 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
             _lastPlugSignature = signature;
             DisplayChanged?.Invoke(this, EventArgs.Empty);
         }
+
+        // GetLastWriteTimeUtc doesn't throw on missing files (it returns a constant
+        // sentinel), so absent config files simply never fire.
+        var outputStamp = 0L;
+        foreach (var path in OutputConfigPaths)
+        {
+            var ticks = File.GetLastWriteTimeUtc(path).Ticks;
+            if (ticks > outputStamp) outputStamp = ticks;
+        }
+        if (_lastOutputConfigStamp != 0 && outputStamp != _lastOutputConfigStamp)
+            DisplayChanged?.Invoke(this, EventArgs.Empty);
+        _lastOutputConfigStamp = outputStamp;
 
         // Plasma rewrites its containment config when the wallpaper changes: a cheap
         // mtime stat per tick is the Linux equivalent of the Windows registry watcher.
@@ -103,6 +128,7 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
     }
 
     long _lastWallpaperStamp;
+    long _lastOutputConfigStamp;
 
     /// <summary>The active discovery backend name ("kscreen"/"xrandr"), for the Info view.</summary>
     public string? SourceName => _source?.Name;

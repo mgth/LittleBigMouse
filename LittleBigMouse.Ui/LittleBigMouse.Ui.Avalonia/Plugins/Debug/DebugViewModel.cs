@@ -27,7 +27,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
 using HLab.Mvvm.ReactiveUI;
-using HLab.Sys.Windows.Monitors;
+using LittleBigMouse.Plugins;
 using LittleBigMouse.DisplayLayout.Monitors;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;
@@ -50,11 +50,11 @@ public struct MonitorDebugListValue
 public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
 {
     int _row = 0;
-    readonly ISystemMonitorsService _monitors;
+    readonly IMonitorInfoService _info;
 
-    public MonitorDebugViewModel(ISystemMonitorsService monitors)
+    public MonitorDebugViewModel(IMonitorInfoService info)
     {
-        _monitors = monitors;
+        _info = info;
 
         Grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
         Grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -63,10 +63,8 @@ public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
 
     protected override PhysicalMonitor? OnModelChanging(PhysicalMonitor? oldModel, PhysicalMonitor? newModel)
     {
-        var device = _monitors.Root.AllChildren<MonitorDeviceConnection>()
-        .FirstOrDefault(d => d.Id == newModel?.DeviceId);
-
-        device?.DisplayValues(AddValue);
+        if (newModel != null)
+            _info.DisplayValues(newModel, AddValue);
 
         return base.OnModelChanging(oldModel, newModel);
     }

@@ -104,6 +104,12 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
 
     long _lastWallpaperStamp;
 
+    /// <summary>The active discovery backend name ("kscreen"/"xrandr"), for the Info view.</summary>
+    public string? SourceName => _source?.Name;
+
+    /// <summary>Fresh raw discovery data, for the Info view.</summary>
+    public IReadOnlyList<LinuxMonitor> QueryMonitors() => _source?.Query() ?? [];
+
     /// <summary>
     /// Raise <see cref="DisplayChanged"/> for a change the sysfs plug poll cannot see
     /// (primary/priority, enable/disable, position — the connectors don't move).

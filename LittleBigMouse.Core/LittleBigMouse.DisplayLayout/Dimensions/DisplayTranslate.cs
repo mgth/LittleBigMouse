@@ -47,16 +47,18 @@ public class DisplayTranslate : DisplayMove
 
     public Vector Translation { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
+    // Base Init() pipelines read these virtual getters from a pool thread and can win
+    // the race against this constructor: fall back to the pipeline's own formula.
     public override double X
     {
-        get => _x.Value;
+        get => _x?.Value ?? Source.X + Translation.X;
         set => Source.X = value - Translation.X;
     }
     readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
-        get => _y.Value;
+        get => _y?.Value ?? Source.Y + Translation.Y;
         set => Source.Y = value - Translation.Y;
     }
     readonly ObservableAsPropertyHelper<double> _y;

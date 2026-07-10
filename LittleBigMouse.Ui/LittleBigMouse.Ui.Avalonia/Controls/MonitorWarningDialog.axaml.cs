@@ -60,6 +60,31 @@ public partial class MonitorWarningDialog : Window
     }
 
     /// <summary>
+    /// Confirmation before pushing the LBM physical layout to the system display
+    /// configuration. <paramref name="offerScale"/> shows the scale checkbox (Wayland
+    /// only: Windows has no supported API to change per-monitor scaling).
+    /// </summary>
+    public static async Task<(bool Confirmed, bool AdjustScale)> ShowApplyLayoutAsync(Window? owner, bool offerScale)
+    {
+        var dialog = new MonitorWarningDialog
+        {
+            Title = "Apply layout to system"
+        };
+        dialog.HeadingText.Text = "Apply this layout to the system configuration?";
+        dialog.BodyText.Text = "Monitor positions will be recomputed from the physical layout and applied to the system immediately. The system cannot represent bezels or gaps: adjacent monitors become edge-to-edge, aligned on their physical crossing point.";
+        dialog.RecoveryTitle.Text = "If the result looks wrong:";
+        dialog.Step1.Text = "1. Rearrange the monitors in the system display settings, or use 'Place from windows config' to re-import the system layout into LittleBigMouse.";
+        dialog.Step2.IsVisible = false;
+        dialog.Step3.IsVisible = false;
+        dialog.DontShowAgainCheckBox.IsVisible = false;
+        dialog.ScaleCheckBox.IsVisible = offerScale;
+        dialog.ConfirmButton.Content = "Apply";
+
+        var (confirmed, _) = await dialog.ShowAsync(owner);
+        return (confirmed, confirmed && dialog.ScaleCheckBox.IsChecked == true);
+    }
+
+    /// <summary>
     /// Returns whether the user confirmed the action, and whether the warning
     /// should be hidden from now on (only honoured when confirmed).
     /// The app runs without an ApplicationLifetime, so the owner may be missing:

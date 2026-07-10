@@ -34,6 +34,7 @@
     <UserControl.ContextMenu>
         <ContextMenu>
             <MenuItem Header="Place from windows config" Command="{Binding MonitorsPresenter.ResetLocationsFromSystem}"/>
+            <MenuItem Header="Apply layout to system config" Command="{Binding MonitorsPresenter.ApplyLocationsToSystem}" CommandParameter="{Binding $parent[Window]}"/>
             <Separator />
             <MenuItem Header="Reset Size" Command="{Binding MonitorsPresenter.ResetSizesFromSystem}" Click="ResetSize_Click"/>
         </ContextMenu>

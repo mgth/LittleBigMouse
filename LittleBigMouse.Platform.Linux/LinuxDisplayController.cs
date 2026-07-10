@@ -1,6 +1,10 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Linq;
+using HLab.Geo;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 
@@ -71,6 +75,78 @@ public class LinuxDisplayController : IDisplayController
         => Notify(UseKScreen
             ? Run("kscreen-doctor", $"output.{source.InterfacePath}.disable")
             : Run("xrandr", $"--output {source.InterfacePath} --off"));
+
+    /// <summary>
+    /// One kscreen-doctor (or xrandr) invocation for the whole batch. Engine gaps are
+    /// closed first — Restore deletes the journal, so the old positions can never be
+    /// "restored" over the ones applied here; if the engine is running, the rebuild
+    /// triggered by Notify re-runs PrepareForEngine which re-journals and re-gaps the
+    /// new topology.
+    /// </summary>
+    public bool SetLocations(IReadOnlyList<(DisplaySource Source, Point Position, double? Scale)> locations)
+    {
+        if (locations.Count == 0) return true;
+
+        // kscreen refuses negative positions for enabled outputs, so the Windows-style
+        // primary-at-(0,0) anchor cannot be applied verbatim: translate the whole
+        // topology so its top-left corner is (0,0), wherever that puts the primary.
+        var dx = locations.Min(l => l.Position.X);
+        var dy = locations.Min(l => l.Position.Y);
+        var moved = locations
+            .Select(l => (l.Source, Position: new Point(l.Position.X - dx, l.Position.Y - dy), l.Scale))
+            .Where(l => l.Scale.HasValue || l.Position != l.Source.InPixel.Bounds.Location)
+            .ToList();
+
+        // Nothing to change: skip Restore too, an engine running with its gaps keeps them.
+        if (moved.Count == 0) return true;
+
+        KScreenGapGuard.Restore(_factory.QueryMonitors());
+
+        return Notify(UseKScreen
+            ? RunKScreen(string.Join(' ', moved.SelectMany(KScreenArgs)))
+            : Run("xrandr", string.Join(' ', moved.Select(l =>
+                $"--output {l.Source.InterfacePath} --pos {(int)l.Position.X}x{(int)l.Position.Y}"))));
+    }
+
+    /// <summary>
+    /// kscreen-doctor exits 0 even when the compositor rejects the config: the only
+    /// failure signal is "applying config failed!" on its output.
+    /// </summary>
+    static bool RunKScreen(string arguments)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo("kscreen-doctor", arguments)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            });
+            if (process == null) return false;
+
+            var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+            process.WaitForExit(10000);
+
+            if (process.ExitCode == 0 && !output.Contains("failed", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            Debug.WriteLine($"kscreen-doctor {arguments} failed: {output}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"kscreen-doctor {arguments} failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    static IEnumerable<string> KScreenArgs((DisplaySource Source, Point Position, double? Scale) l)
+    {
+        yield return $"output.{l.Source.InterfacePath}.position.{(int)l.Position.X},{(int)l.Position.Y}";
+        // xrandr has no fractional per-output scale: the option only exists on kscreen.
+        if (l.Scale is { } scale)
+            yield return $"output.{l.Source.InterfacePath}.scale.{scale.ToString(CultureInfo.InvariantCulture)}";
+    }
 
     /// <summary>
     /// A successful topology command must trigger the UI rebuild itself: primary,

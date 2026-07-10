@@ -1,4 +1,4 @@
-using Avalonia;
+using HLab.Geo;
 using LittleBigMouse.DisplayLayout.Dimensions;
 
 namespace LittleBigMouse.DisplayLayout.Tests

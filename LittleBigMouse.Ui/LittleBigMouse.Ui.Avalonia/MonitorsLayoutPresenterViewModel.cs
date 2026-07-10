@@ -22,6 +22,8 @@
 */
 
 using System;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
@@ -30,6 +32,7 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Ui.Avalonia.Controls;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;
 using ReactiveUI;
@@ -43,9 +46,24 @@ public class MonitorsLayoutPresenterViewModel
 {
     public IMainPluginsViewModel MainViewModel { get; }
 
+    // Nullable: only the greedy ctor is resolved by the DI container at runtime; the
+    // design-mode path never invokes the apply command (same pattern as DefaultMonitorViewModel).
+    readonly IDisplayController? _controller;
+    readonly ILayoutPersistence? _persistence;
+
     public MonitorsLayoutPresenterViewModel(IMainPluginsViewModel mainViewModel)
+        : this(mainViewModel, null, null)
+    {
+    }
+
+    public MonitorsLayoutPresenterViewModel(
+        IMainPluginsViewModel mainViewModel,
+        IDisplayController? controller,
+        ILayoutPersistence? persistence)
     {
         MainViewModel = mainViewModel;
+        _controller = controller;
+        _persistence = persistence;
 
         _width = this.WhenAnyValue(
                 e => e.Model.PhysicalBounds.Width,
@@ -61,6 +79,7 @@ public class MonitorsLayoutPresenterViewModel
 
         ResetLocationsFromSystem = ReactiveCommand.Create(() => Model?.SetLocationsFromSystemConfiguration());
         ResetSizesFromSystem = ReactiveCommand.Create(() => Model?.SetSizesFromSystemConfiguration());
+        ApplyLocationsToSystem = ReactiveCommand.CreateFromTask<Window?>(ApplyLocationsToSystemAsync);
 
         RefreshCommand = ReactiveCommand.Create(test);
     }
@@ -68,6 +87,34 @@ public class MonitorsLayoutPresenterViewModel
     void test()
     {
 
+    }
+
+    /// <summary>
+    /// Push the physical layout to the system display configuration (inverse of
+    /// <see cref="MonitorsLocationsFromSystemExtensions.SetLocationsFromSystemConfiguration"/>).
+    /// </summary>
+    async Task ApplyLocationsToSystemAsync(Window? owner)
+    {
+        if (Model is not MonitorsLayout layout || _controller is null) return;
+
+        var (confirmed, adjustScale) = await MonitorWarningDialog.ShowApplyLayoutAsync(
+            owner, offerScale: OperatingSystem.IsLinux());
+        if (!confirmed) return;
+
+        // No pre-filtering: the whole topology goes to the controller, which may need to
+        // translate it (kscreen refuses negative positions) before it can tell what
+        // actually changes.
+        var locations = layout.ComputePixelLocationsFromPhysical(adjustScale)
+            .Select(kv => (kv.Key, kv.Value.PixelBounds.Location, kv.Value.Scale))
+            .ToList();
+
+        if (locations.Count == 0) return;
+
+        // The system change triggers a rebuild that re-imports the system layout and then
+        // loads the saved one: the current physical layout survives only if saved first.
+        _persistence?.Save(layout);
+
+        _controller.SetLocations(locations);
     }
 
     public MonitorsLayoutPresenterViewModel():this(new MainViewModelDesign())
@@ -87,6 +134,7 @@ public class MonitorsLayoutPresenterViewModel
 
     public ICommand ResetLocationsFromSystem { get; }
     public ICommand ResetSizesFromSystem { get; }
+    public ICommand ApplyLocationsToSystem { get; }
     public ICommand RefreshCommand { get; }
 
     public void ConfigureMvvmContext(IMvvmContext ctx)

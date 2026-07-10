@@ -50,6 +50,10 @@
 		          Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
 		          Content="Don't show this warning again"/>
 
+		<CheckBox x:Name="ScaleCheckBox" FontSize="13" IsVisible="False"
+		          Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+		          Content="Also adjust display scales to match physical sizes"/>
+
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
 			<Button x:Name="CancelButton" IsDefault="True" IsCancel="True"
 			        MinWidth="90" HorizontalContentAlignment="Center"

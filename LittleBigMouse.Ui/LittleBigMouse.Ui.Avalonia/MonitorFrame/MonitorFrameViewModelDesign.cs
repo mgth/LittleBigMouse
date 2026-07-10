@@ -86,6 +86,7 @@ public class MonitorFrameViewModelDesign2 : MonitorFrameViewModel, IDesignViewMo
         public PhysicalMonitor? SelectedMonitor { get ; set ; }
         public ICommand ResetLocationsFromSystem { get; }
         public ICommand ResetSizesFromSystem { get; }
+        public ICommand ApplyLocationsToSystem { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
     }

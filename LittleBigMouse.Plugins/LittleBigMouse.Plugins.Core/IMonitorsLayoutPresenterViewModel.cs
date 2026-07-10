@@ -17,5 +17,6 @@ public interface IMonitorsLayoutPresenterViewModel : INotifyPropertyChanged
 
     public ICommand ResetLocationsFromSystem { get; }
     public ICommand ResetSizesFromSystem { get; }
+    public ICommand ApplyLocationsToSystem { get; }
 
 }

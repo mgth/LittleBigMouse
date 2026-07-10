@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using HLab.Geo;
 using LittleBigMouse.DisplayLayout.Monitors;
 
 namespace LittleBigMouse.Plugins;
@@ -31,4 +33,12 @@ public interface IDisplayController
 
     /// <summary>Undo <see cref="PrepareForEngine"/> once the engine stops.</summary>
     void RestoreAfterEngine() { }
+
+    /// <summary>
+    /// Apply new pixel positions (and optional per-output scales, where the platform
+    /// supports it) as one topology change: the whole batch is staged then committed,
+    /// so intermediate states never reach the OS. Positions are in the platform's
+    /// positioning space (logical pixels on Wayland, physical pixels on Windows).
+    /// </summary>
+    bool SetLocations(IReadOnlyList<(DisplaySource Source, Point Position, double? Scale)> locations) => false;
 }

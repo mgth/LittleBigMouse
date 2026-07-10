@@ -142,13 +142,13 @@ public class MainService : ReactiveModel, IMainService
 
     Window _mainWindow = null!;
 
-    public async Task ShowControlAsync()
+    public Task ShowControlAsync()
     {
         if (_mainWindow?.IsLoaded == true)
         {
             _mainWindow.WindowState = WindowState.Normal;
             _mainWindow.Activate();
-            return;
+            return Task.CompletedTask;
         }
 
         var viewModel = _mainViewModelLocator();
@@ -156,9 +156,9 @@ public class MainService : ReactiveModel, IMainService
 
         _actions?.Invoke(viewModel);
 
-        var view = await _mvvmService
+        var view = _mvvmService
             .MainContext
-            .GetViewAsync<DefaultViewMode>(viewModel, typeof(IDefaultViewClass));
+            .GetView<DefaultViewMode>(viewModel, typeof(IDefaultViewClass));
 
         _mainWindow = view?.AsWindow() ?? throw new Exception("No window found");
 
@@ -166,9 +166,7 @@ public class MainService : ReactiveModel, IMainService
 
         _mainWindow.Show();
 
-        // TODO : memory test
-        Dispatcher.UIThread.RunJobs();
-        GC.Collect();
+        return Task.CompletedTask;
     }
 
 

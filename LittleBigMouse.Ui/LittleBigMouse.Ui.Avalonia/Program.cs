@@ -8,7 +8,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Logging;
 using ReactiveUI.Avalonia;
-using Grace.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using HLab.Bugs.Avalonia;
 using HLab.Core;
 using HLab.Core.Annotations;
@@ -102,96 +102,99 @@ internal class Program
             Locator.CurrentMutable.RegisterConstant(new LoggingService { Level = LogLevel.Info }, typeof(ILogger));
 #endif
 
-            var container = new DependencyInjectionContainer();
-            container.Configure(c =>
+            var services = new ServiceCollection();
+
+            services.AddSingleton<IApplicationUpdater, ApplicationUpdaterViewModel>();
+            services.AddSingleton<IIconService, IconService>();
+            services.AddSingleton<ILocalizationService, LocalizationService>();
+            services.AddSingleton<IMvvmService, MvvmService>();
+            services.AddSingleton<IMessagesService, HLab.Core.MessageBus>();
+            services.AddSingleton<IUserNotificationService, UserNotificationServiceAvalonia>();
+
+            services.AddSingleton<IMainService, MainService>();
+
+            // The MVVM locator: registered services come from the container, anything
+            // else (views, view-models, MonitorsLayout…) is built by ActivatorUtilities.
+            // Instances created that way are transient and NOT tracked by the root
+            // disposal scope — the ExternallyOwned semantics this app relies on: a new
+            // generation of monitor VMs is built on every display-change rebuild and
+            // disposed by HLab.Mvvm on DetachedFromLogicalTree; tracking them in the
+            // container would retain every generation until shutdown (gigabytes after
+            // hours of display-event storms, #484).
+            services.AddSingleton<Func<Type, object>>(sp =>
+                t => sp.GetService(t) ?? ActivatorUtilities.CreateInstance(sp, t));
+
+            // MS.DI does not synthesize Func<T> factories like Grace did: the ones the
+            // app injects are registered explicitly.
+            services.AddSingleton<Func<MonitorsLayout>>(sp =>
+                () => ActivatorUtilities.CreateInstance<MonitorsLayout>(sp));
+            services.AddSingleton<Func<IMainPluginsViewModel>>(sp =>
+                () => sp.GetRequiredService<IMainPluginsViewModel>());
+            services.AddSingleton<Func<ApplicationUpdaterViewModel>>(sp =>
+                () => ActivatorUtilities.CreateInstance<ApplicationUpdaterViewModel>(sp));
+            services.AddSingleton<Func<VcpScreenViewModel, LittleBigMouse.Plugin.Vcp.Avalonia.Patterns.TestPatternButtonViewModel>>(sp =>
+                vm => ActivatorUtilities.CreateInstance<LittleBigMouse.Plugin.Vcp.Avalonia.Patterns.TestPatternButtonViewModel>(sp, vm));
+
+            // SystemMonitorsService stays registered on every OS: its constructor is inert
+            // (the Win32 enumeration is lazy behind .Root) and view-models inject it, so
+            // the container must be able to resolve it even on Linux where .Root is never touched.
+            services.AddSingleton<ISystemMonitorsService, SystemMonitorsService>();
+
+            // Platform seam: the UI builds its layout through ILayoutFactory and mutates
+            // topology through IDisplayController. Implementations live in
+            // LittleBigMouse.Platform.Windows / LittleBigMouse.Platform.Linux.
+            if (OperatingSystem.IsWindows())
             {
-                //c.ExportInstance(app.ApplicationLifetime);
+                services.AddSingleton<LittleBigMouse.Plugins.ILayoutFactory, LittleBigMouse.Platform.Windows.WindowsLayoutFactory>();
+                services.AddSingleton<LittleBigMouse.Plugins.IDisplayController, LittleBigMouse.Platform.Windows.WindowsDisplayController>();
+                services.AddSingleton<LittleBigMouse.Plugins.ILayoutPersistence, LittleBigMouse.Platform.Windows.WindowsLayoutPersistence>();
+                services.AddSingleton<LittleBigMouse.Plugins.IMonitorInfoService, LittleBigMouse.Platform.Windows.WindowsMonitorInfoService>();
+                services.AddSingleton<LittleBigMouse.Plugins.IWallpaperService, LittleBigMouse.Platform.Windows.WindowsWallpaperService>();
+            }
+            else
+            {
+                // The controller injects the concrete factory (NotifyDisplayChanged):
+                // register it under both the seam interface and its own type.
+                services.AddSingleton<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>();
+                services.AddSingleton<LittleBigMouse.Plugins.ILayoutFactory>(sp =>
+                    sp.GetRequiredService<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>());
+                services.AddSingleton<LittleBigMouse.Plugins.IDisplayController, LittleBigMouse.Platform.Linux.LinuxDisplayController>();
+                services.AddSingleton<LittleBigMouse.Plugins.ILayoutPersistence, LittleBigMouse.Platform.Linux.LinuxLayoutPersistence>();
+                services.AddSingleton<LittleBigMouse.Plugins.IMonitorInfoService, LittleBigMouse.Platform.Linux.LinuxMonitorInfoService>();
+                services.AddSingleton<LittleBigMouse.Plugins.IWallpaperService, LittleBigMouse.Platform.Linux.PlasmaWallpaperService>();
+            }
 
-                c.Export<ApplicationUpdaterViewModel>().As<IApplicationUpdater>().Lifestyle.Singleton();
-                c.Export<IconService>().As<IIconService>().Lifestyle.Singleton();
-                c.Export<LocalizationService>().As<ILocalizationService>().Lifestyle.Singleton();
-                c.Export<MvvmService>().As<IMvvmService>().Lifestyle.Singleton();
-                c.ExportInstance<Func<Type, object>>(t => container.Locate(t));
-                c.Export<HLab.Core.MessageBus>().As<IMessagesService>().Lifestyle.Singleton();
-                c.Export<UserNotificationServiceAvalonia>().As<IUserNotificationService>().Lifestyle.Singleton();
+            services.AddSingleton<ILittleBigMouseClientService, LittleBigMouseClientService>();
+            services.AddSingleton<ILayoutOptions, LbmOptions>();
+            services.AddSingleton<IProcessesCollector, ProcessesCollector>();
 
-                c.Export<MainService>().As<IMainService>().Lifestyle.Singleton();
+            services.AddSingleton<IMainPluginsViewModel, MainViewModel>();
 
-                // SystemMonitorsService stays registered on every OS: its constructor is inert
-                // (the Win32 enumeration is lazy behind .Root) and view-models inject it, so
-                // Grace must be able to resolve it even on Linux where .Root is never touched.
-                c.Export<SystemMonitorsService>().As<ISystemMonitorsService>().Lifestyle.Singleton();
+            var parser = new AssemblyParser();
 
-                // Platform seam: the UI builds its layout through ILayoutFactory and mutates
-                // topology through IDisplayController. Implementations live in
-                // LittleBigMouse.Platform.Windows / LittleBigMouse.Platform.Linux.
-                if (OperatingSystem.IsWindows())
-                {
-                    c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutFactory>().As<LittleBigMouse.Plugins.ILayoutFactory>().Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Windows.WindowsDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Windows.WindowsLayoutPersistence>().As<LittleBigMouse.Plugins.ILayoutPersistence>().Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Windows.WindowsMonitorInfoService>().As<LittleBigMouse.Plugins.IMonitorInfoService>().Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Windows.WindowsWallpaperService>().As<LittleBigMouse.Plugins.IWallpaperService>().Lifestyle.Singleton();
-                }
-                else
-                {
-                    // The controller injects the concrete factory (NotifyDisplayChanged):
-                    // export it under both the seam interface and its own type.
-                    c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>()
-                        .As<LittleBigMouse.Plugins.ILayoutFactory>()
-                        .As<LittleBigMouse.Platform.Linux.LinuxLayoutFactory>()
-                        .Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Linux.LinuxDisplayController>().As<LittleBigMouse.Plugins.IDisplayController>().Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Linux.LinuxLayoutPersistence>().As<LittleBigMouse.Plugins.ILayoutPersistence>().Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Linux.LinuxMonitorInfoService>().As<LittleBigMouse.Plugins.IMonitorInfoService>().Lifestyle.Singleton();
-                    c.Export<LittleBigMouse.Platform.Linux.PlasmaWallpaperService>().As<LittleBigMouse.Plugins.IWallpaperService>().Lifestyle.Singleton();
-                }
+            parser.LoadDll("LittleBigMouse.Ui.Core");
+            parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
+            // VCP talks DDC/CI through Win32 (and its view-models walk the Win32 device
+            // tree): Windows-only until it gets its own platform seam.
+            if (OperatingSystem.IsWindows())
+                parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
+            // Wallpaper drives the desktop through IWallpaperService (plasmashell
+            // scripting on Linux, IDesktopWallpaper COM on Windows); the plugin
+            // hides itself where IsSupported is false (GNOME, bare X11…).
+            parser.LoadDll("LittleBigMouse.Plugin.Wallpaper.Avalonia");
+            services.AddSingleton<LittleBigMouse.Plugin.Wallpaper.Avalonia.WallpaperManager>();
 
-                c.Export<LittleBigMouseClientService>().As<ILittleBigMouseClientService>().Lifestyle.Singleton();
-                c.Export<LbmOptions>().As<ILayoutOptions>().Lifestyle.Singleton();
-                c.Export<ProcessesCollector>().As<IProcessesCollector>().Lifestyle.Singleton();
+            parser.LoadModules();
 
-                // A new layout is built on every display change and the previous one is
-                // disposed by MainService. Grace must NOT track these transients in its
-                // root disposal scope: it would keep every generation reachable until
-                // app shutdown (gigabytes after hours of display-event storms).
-                c.Export<MonitorsLayout>().ExternallyOwned();
+            // Views and view-models are NOT registered: the MVVM locator builds them
+            // with ActivatorUtilities (see above). Only bootloaders need discovery.
+            parser.Add<Bootloader>(t => services.AddTransient(typeof(Bootloader), t));
 
-                c.Export<MainViewModel>().As<IMainPluginsViewModel>().Lifestyle.Singleton();
+            parser.Parse();
 
-                var parser = new AssemblyParser();
+            var container = services.BuildServiceProvider();
 
-                parser.LoadDll("LittleBigMouse.Ui.Core");
-                parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
-                // VCP talks DDC/CI through Win32 (and its view-models walk the Win32 device
-                // tree): Windows-only until it gets its own platform seam.
-                if (OperatingSystem.IsWindows())
-                    parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
-                // Wallpaper drives the desktop through IWallpaperService (plasmashell
-                // scripting on Linux, IDesktopWallpaper COM on Windows); the plugin
-                // hides itself where IsSupported is false (GNOME, bare X11…).
-                parser.LoadDll("LittleBigMouse.Plugin.Wallpaper.Avalonia");
-                c.Export<LittleBigMouse.Plugin.Wallpaper.Avalonia.WallpaperManager>().Lifestyle.Singleton();
-
-                parser.LoadModules();
-
-                // Views and view-models are transient and IDisposable (ReactiveModel). Grace tracks
-                // every transient IDisposable it creates in its ROOT disposal scope and holds it until
-                // the app closes — so a new generation of monitor VMs on every display-change rebuild
-                // is retained forever (gigabytes under a display-event storm), even though HLab.Mvvm
-                // disposes them on DetachedFromLogicalTree. Their lifetime is owned by the view tree,
-                // NOT the container: mark them ExternallyOwned so Grace stops tracking them (same fix
-                // as MonitorsLayout above, #484 — this is the ViewModel follow-up).
-                parser.Add<IView>(t => c.Export(t).As(typeof(IView)).ExternallyOwned());
-                parser.Add<IViewModel>(t => c.Export(t).As(typeof(IViewModel)).ExternallyOwned());
-                parser.Add<Bootloader>(t => c.Export(t).As(typeof(Bootloader)));
-
-                parser.Parse();
-            });
-
-
-
-            var boot = new Bootstrapper(() => container.Locate<IEnumerable<Bootloader>>());
+            var boot = new Bootstrapper(() => container.GetServices<Bootloader>());
 
             // Theming is fully variant-based: RequestedThemeVariant="Default" (App.axaml)
             // follows the OS on every platform and the HLab.* resources are merged as

@@ -110,10 +110,13 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
            selector: e => e != null)
            .ToProperty(this, e => e.DriveVisibility);
 
+      // hidden while the capabilities probe is still running: no point offering
+      // the forced activation before knowing what the monitor answered
       _anywayVisibility = this.WhenAnyValue(
            e => e.Vcp.Brightness,
            e => e.Vcp.Contrast,
-           (b, c) => b == null || c == null)
+           e => e.Vcp.Probing,
+           (b, c, probing) => !probing && (b == null || c == null))
            .ToProperty(this, e => e.AnywayVisibility);
 
 

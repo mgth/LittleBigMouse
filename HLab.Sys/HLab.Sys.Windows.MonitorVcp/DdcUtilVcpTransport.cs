@@ -26,8 +26,8 @@ public sealed partial class DdcUtilVcpTransport(int bus) : IVcpTransport
     const int CacheHitSleepMs = 40;
 
     // Negative cache for the capabilities probe: on an unreachable monitor
-    // ddcutil needs ~2s to give up, and VcpControl retries — without this the
-    // UI-thread caller would pay that twice per monitor.
+    // ddcutil needs ~2s to give up, and VcpControl's probe retries — without
+    // this each probe would pay that twice per monitor.
     static readonly TimeSpan CapsFailureTtl = TimeSpan.FromSeconds(10);
 
     readonly object _lock = new();

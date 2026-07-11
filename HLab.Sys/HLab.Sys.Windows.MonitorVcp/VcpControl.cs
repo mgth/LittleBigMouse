@@ -23,6 +23,9 @@
 
 #nullable enable
 using System;
+using System.Collections.Generic;
+using System.Reactive.Concurrency;
+using System.Threading.Tasks;
 using ReactiveUI;
 using OneOf;
 
@@ -59,42 +62,90 @@ public class VcpControl : ReactiveObject
       _transport = transport;
       _worker = worker;
 
-      var retry = 1;
-      while (retry-- >= 0)
+      Source = new MonitorLevel(worker, GetSource, SetSource);
+
+      // The capabilities probe is a full DDC transaction — seconds per monitor
+      // when the bus is slow or the monitor asleep. Run it off-thread; the
+      // levels pop in through their reactive properties when it lands.
+      Task.Run(Probe);
+   }
+
+   void Probe()
+   {
+      IReadOnlySet<byte>? codes = null;
+      try
       {
-         var codes = transport.GetSupportedCodes();
-         if (codes is null) continue;
-
-         if (codes.Contains((byte)VcpCode.Brightness))
-            Brightness = new MonitorLevel(worker, GetBrightness, SetBrightness);
-
-         if (codes.Contains((byte)VcpCode.Contrast))
-            Contrast = new MonitorLevel(worker, GetContrast, SetContrast);
-
-         if (codes.Contains((byte)VcpCode.RedGain)
-             && codes.Contains((byte)VcpCode.GreenGain)
-             && codes.Contains((byte)VcpCode.BlueGain))
-            Gain = new MonitorRgbLevel(worker, GetGain, SetGain);
-
-         if (codes.Contains((byte)VcpCode.RedDrive)
-             && codes.Contains((byte)VcpCode.GreenDrive)
-             && codes.Contains((byte)VcpCode.BlueDrive))
-            Drive = new MonitorRgbLevel(worker, GetDrive, SetDrive);
-
-         Source = new MonitorLevel(worker, GetSource, SetSource);
-
-         break;
+         var retry = 1;
+         while (retry-- >= 0 && (codes = _transport.GetSupportedCodes()) is null) { }
+      }
+      finally
+      {
+         RxSchedulers.MainThreadScheduler.Schedule(() => OnProbed(codes));
       }
    }
 
+   void OnProbed(IReadOnlySet<byte>? codes)
+   {
+      lock (_startLock)
+      {
+         if (codes is not null)
+         {
+            if (codes.Contains((byte)VcpCode.Brightness))
+               Brightness ??= NewLevel(GetBrightness, SetBrightness);
+
+            if (codes.Contains((byte)VcpCode.Contrast))
+               Contrast ??= NewLevel(GetContrast, SetContrast);
+
+            if (codes.Contains((byte)VcpCode.RedGain)
+                && codes.Contains((byte)VcpCode.GreenGain)
+                && codes.Contains((byte)VcpCode.BlueGain))
+               Gain ??= NewRgbLevel(GetGain, SetGain);
+
+            if (codes.Contains((byte)VcpCode.RedDrive)
+                && codes.Contains((byte)VcpCode.GreenDrive)
+                && codes.Contains((byte)VcpCode.BlueDrive))
+               Drive ??= NewRgbLevel(GetDrive, SetDrive);
+         }
+
+         Probing = false;
+      }
+   }
+
+   MonitorLevel NewLevel(VcpGetter getter, VcpSetter setter)
+   {
+      var level = new MonitorLevel(_worker, getter, setter);
+      return _started ? level.Start() : level;
+   }
+
+   MonitorRgbLevel NewRgbLevel(VcpGetter getter, VcpSetter setter)
+   {
+      var level = new MonitorRgbLevel(_worker, getter, setter);
+      return _started ? level.Start() : level;
+   }
+
+   readonly object _startLock = new();
+   bool _started;
+
    public VcpControl Start()
    {
-      _brightness?.Start();
-      _contrast?.Start();
-      _gain?.Start();
-      _drive?.Start();
+      lock (_startLock)
+      {
+         _started = true;
+         _brightness?.Start();
+         _contrast?.Start();
+         _gain?.Start();
+         _drive?.Start();
+      }
       return this;
    }
+
+   /// <summary>True while the background capabilities probe has not answered yet.</summary>
+   public bool Probing
+   {
+      get => _probing;
+      private set => this.RaiseAndSetIfChanged(ref _probing, value);
+   }
+   bool _probing = true;
 
    public bool AlternatePower => ManufacturerCode == "DEL";
 

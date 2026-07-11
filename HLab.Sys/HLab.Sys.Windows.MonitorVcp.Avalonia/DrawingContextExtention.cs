@@ -1,8 +1,11 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using HLab.ColorTools;
 using HLab.ColorTools.Avalonia;
 
@@ -33,44 +36,40 @@ public static class DrawingContextExtension
         }
     }
 
-    public static void DrawChessboard(this DrawingContext dc, Color colorA, Color colorB, Rect area, Size size)
+    /// <summary>
+    /// 50/50 checkerboard — the visual 50% luminance reference of the gamma
+    /// pattern. Built in DEVICE pixels (a DIP-space checker gets resampled
+    /// under fractional scaling and averages to a flat mid code value, which
+    /// reads as gamma 1.0). Cells are several pixels wide on purpose: under a
+    /// mixed-scale compositor the window buffer itself may be rescaled on some
+    /// screens (KWin maps XWayland at the largest output scale), and only a
+    /// coarse checker keeps mostly-pure black/white cells — the 50/50 area
+    /// ratio, hence the average light output, survives the resample.
+    /// </summary>
+    public static void DrawChessboard(this DrawingContext dc, Color colorA, Color colorB, Rect area, double scaling, int cell = 1)
     {
-        var brushA = new SolidColorBrush(colorA);
-        var brushB = new SolidColorBrush(colorB);
+        var pw = Math.Max(1, (int)Math.Round(area.Width * scaling));
+        var ph = Math.Max(1, (int)Math.Round(area.Height * scaling));
 
-        var brushC =
-            new DrawingBrush(
-                new GeometryDrawing
-                {
-                    Brush = brushB,
-                    Geometry = new GeometryGroup
-                    {
-                        Children =
-                        {
-                            new RectangleGeometry(new Rect(0, 0, 1, 1)),
-                            new RectangleGeometry(new Rect(
-                                1, 1,
-                                1, 1))
-                        }
-                    }
-                }
-            )
+        var ca = unchecked((int)0xFF000000 | (colorA.R << 16) | (colorA.G << 8) | colorA.B);
+        var cb = unchecked((int)0xFF000000 | (colorB.R << 16) | (colorB.G << 8) | colorB.B);
+
+        var bmp = new WriteableBitmap(new PixelSize(pw, ph), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
+        using (var fb = bmp.Lock())
+        {
+            var row = new int[pw];
+            for (var y = 0; y < ph; y++)
             {
+                for (var x = 0; x < pw; x++)
+                    row[x] = (((x / cell) ^ (y / cell)) & 1) == 0 ? ca : cb;
+                Marshal.Copy(row, 0, fb.Address + y * fb.RowBytes, pw);
+            }
+        }
 
-                TileMode = TileMode.Tile,
-                // TODO : check RelativeUnit  
-                DestinationRect = new RelativeRect(0, 0, 2 * size.Width / area.Width, 2 * size.Height / area.Height,RelativeUnit.Absolute),
-                AlignmentX = AlignmentX.Left,
-                AlignmentY = AlignmentY.Top
-
-            };
-
-
-        dc.DrawRectangle(brushA, null, area);
-
-        dc.DrawRectangle(brushC, null, area);
+        using (dc.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = BitmapInterpolationMode.None }))
+            dc.DrawImage(bmp, new Rect(0, 0, pw, ph), area);
     }
-    public static void DrawGamma(this DrawingContext dc, ColorRGB<double> colorA, ColorRGB<double> colorB, Rect area, Orientation orientation)
+    public static void DrawGamma(this DrawingContext dc, ColorRGB<double> colorA, ColorRGB<double> colorB, Rect area, Orientation orientation, double scaling = 1.0, int chessCell = 1)
     {
         const double startGamma = 1.15;
         const double endGamma = 3.05;
@@ -98,7 +97,7 @@ public static class DrawingContextExtension
 
         if (hz)
         {
-            dc.DrawChessboard(colorA.ToAvaloniaColor(), colorB.ToAvaloniaColor(), new Rect(area.X, d1, area.Width, Math.Abs(d2 - d1)),new Size(1,1));
+            dc.DrawChessboard(colorA.ToAvaloniaColor(), colorB.ToAvaloniaColor(), new Rect(area.X, d1, area.Width, Math.Abs(d2 - d1)), scaling, chessCell);
             dc.DrawLine(
                 new Pen(new SolidColorBrush(colorB.ToAvaloniaColor()), area.Height / 9.0), 
                 new Point(0, middle), 
@@ -106,7 +105,7 @@ public static class DrawingContextExtension
         }
         else
         {
-            dc.DrawChessboard(colorA.ToAvaloniaColor(), colorB.ToAvaloniaColor(), new Rect(d1, area.Y, Math.Abs(d2 - d1), area.Height),new Size(1,1));
+            dc.DrawChessboard(colorA.ToAvaloniaColor(), colorB.ToAvaloniaColor(), new Rect(d1, area.Y, Math.Abs(d2 - d1), area.Height), scaling, chessCell);
             dc.DrawLine(
                 new Pen(new SolidColorBrush(colorB.ToAvaloniaColor()), area.Width / 9.0), 
                 new Point(middle, 0), 

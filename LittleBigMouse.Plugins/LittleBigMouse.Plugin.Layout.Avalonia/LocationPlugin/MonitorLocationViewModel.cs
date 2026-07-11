@@ -31,6 +31,7 @@ using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.Rulers;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Avalonia;
 using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
@@ -135,7 +136,7 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
             // KWin maps every XWayland output with a single global factor
             // (the largest output scale), so the monitor's window-system
             // geometry has to come from the matching Avalonia screen.
-            var screen = FindScreen(top.Screens, layoutBounds);
+            var screen = ScreenFinder.FromLayoutBounds(top.Screens, layoutBounds);
             var bounds = screen?.Bounds ?? new PixelRect(
                 (int)layoutBounds.X, (int)layoutBounds.Y,
                 (int)layoutBounds.Width, (int)layoutBounds.Height);
@@ -150,38 +151,6 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
             ShowRulerWindow(left, new PixelPoint(bounds.X, bounds.Y), thickness, bounds.Height, scaling);
             ShowRulerWindow(right, new PixelPoint((int)(bounds.Right - thickness), bounds.Y), thickness, bounds.Height, scaling);
         }
-    }
-
-    /// <summary>
-    /// Find the screen displaying a monitor from its layout-space bounds.
-    /// Both spaces share the same origin and a common scale factor, so the
-    /// right screen has matching proportions at the scaled position.
-    /// </summary>
-    static Screen? FindScreen(Screens screens, HLab.Geo.Rect layoutBounds)
-    {
-        Screen? best = null;
-        var bestOffset = double.MaxValue;
-
-        foreach (var screen in screens.All)
-        {
-            var bounds = screen.Bounds;
-            var kx = bounds.Width / layoutBounds.Width;
-            var ky = bounds.Height / layoutBounds.Height;
-
-            if (Math.Abs(kx - ky) > 0.01 * kx) continue;
-
-            var offset = Math.Abs(bounds.X - layoutBounds.X * kx)
-                         + Math.Abs(bounds.Y - layoutBounds.Y * ky);
-
-            // Allow a few layout-space pixels of rounding error.
-            if (offset > 5.0 * kx) continue;
-            if (offset >= bestOffset) continue;
-
-            bestOffset = offset;
-            best = screen;
-        }
-
-        return best;
     }
 
     void ShowRulerWindow(RulerWindow panel, PixelPoint position, double pixelWidth, double pixelHeight, double scaling)

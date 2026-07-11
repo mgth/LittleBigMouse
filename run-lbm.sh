@@ -103,6 +103,12 @@ if [[ "$SKIP_DAEMON" -eq 0 ]]; then
     else
         warn "Rust daemon not found: $RUST_BIN (skipping staging)"
     fi
+    # lbm-pattern: native-Wayland test pattern viewer (VCP plugin helper).
+    PATTERN_BIN="$RUST_DIR/target/$RUST_PROFILE_DIR/lbm-pattern"
+    if [[ -f "$PATTERN_BIN" ]]; then
+        cp -f "$PATTERN_BIN" "$BIN_DIR/lbm-pattern"
+        note "$BIN_DIR/lbm-pattern"
+    fi
 fi
 
 # 5. launch (detached; logs to $LOG so the terminal stays free)

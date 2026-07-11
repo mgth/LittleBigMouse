@@ -22,6 +22,7 @@
 */
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Windows.Input;
 using Avalonia.Controls;
@@ -283,6 +284,23 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
    Color _colorB = Colors.Black;
 
    public Window? TestPatternPanel { get; set; } = null;
+
+   /// <summary>Native-Wayland pattern viewer (lbm-pattern helper), when one is showing.</summary>
+   public Process? NativePatternProcess { get; set; }
+   public TestPattern? NativeShownPattern { get; set; }
+
+   public void CloseNativePattern()
+   {
+      try
+      {
+         if (NativePatternProcess is { HasExited: false } process) process.Kill();
+      }
+      catch (Exception)
+      {
+      }
+      NativePatternProcess = null;
+      NativeShownPattern = null;
+   }
 
    public ObservableCollection<TestPatternButtonViewModel> TestPatterns { get; } = new();
 
@@ -722,6 +740,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
    public override void OnDispose()
    {
+      CloseNativePattern();
       VcpExpendMonitor.Stop();
    }
 }

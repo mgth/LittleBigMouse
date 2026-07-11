@@ -14,6 +14,13 @@ license = "GPL-3.0-only"
 name = "lbm-hook"
 path = "src/main.rs"
 
+# Native-Wayland fullscreen bitmap viewer: pixel-perfect test patterns on every
+# output (the Avalonia windows go through XWayland, which KWin rescales on any
+# screen whose scale differs from the global factor). Linux-only, stub elsewhere.
+[[bin]]
+name = "lbm-pattern"
+path = "src/bin/lbm-pattern.rs"
+
 [lib]
 name = "littlebigmouse_hook"
 path = "src/lib.rs"
@@ -62,3 +69,8 @@ futures = "0.3"
 # Portal signal diagnostics: ashpd traces every InputCapture signal it receives
 # (and, crucially, bodies it fails to deserialize and silently drops).
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+# lbm-pattern: bare Wayland client (wl_shm buffer + xdg_toplevel fullscreen +
+# wp_viewport so the native-resolution buffer maps 1:1 to the panel).
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client"] }
+png = "0.17"

@@ -79,11 +79,23 @@ public class TestPattern : Control
         };
     }
 
-    public Window Show(PixelPoint location)
-    {
-        var panel = Clone().GetWindow(location,1,1);
+    public Window Show(PixelPoint location) => Show(_ => location);
 
+    /// <summary>
+    /// The locate callback receives the window's Screens (available before the
+    /// window is shown) so the caller can aim at an actual screen — the app has
+    /// no lifetime MainWindow to borrow them from.
+    /// </summary>
+    public Window Show(Func<Screens, PixelPoint> locate)
+    {
+        var panel = Clone().GetWindow(default, 1, 1);
+
+        var location = locate(panel.Screens);
+
+        panel.Position = location;
         panel.Show();
+        // some window managers only honor the position once the window is mapped
+        panel.Position = location;
         panel.Topmost = true;
         panel.WindowState = WindowState.FullScreen;
 
@@ -161,8 +173,9 @@ public class TestPattern : Control
             TestPatternType.Grid => (dc, rect, colorA, colorB, orientation) 
                 => dc.DrawHomeCinemaPattern(rect),
 
-            TestPatternType.Gamma => (dc, rect, colorA, colorB, orientation) 
-                => dc.DrawGamma(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orientation),
+            TestPatternType.Gamma => (dc, rect, colorA, colorB, orientation)
+                => dc.DrawGamma(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orientation,
+                    (c.VisualRoot as TopLevel)?.RenderScaling ?? 1.0, c.ChessCell),
 
             _ => throw new ArgumentOutOfRangeException()
         };
@@ -170,6 +183,21 @@ public class TestPattern : Control
         c.InvalidateVisual();
     }).Register();
 
+
+    /// <summary>
+    /// Checker cell size in window-buffer pixels for the gamma pattern:
+    /// 1 when the buffer reaches the screen 1:1, larger when the compositor
+    /// rescales it (mixed-scale XWayland) so the cells survive the resample.
+    /// </summary>
+    public int ChessCell
+    {
+        get => (int)GetValue(ChessCellProperty);
+        set => SetValue(ChessCellProperty, value);
+    }
+    public static StyledProperty<int> ChessCellProperty = H.Property<int>().Default(1).OnChanged((c, e) =>
+    {
+        c.InvalidateVisual();
+    }).Register();
 
     public bool Rgb
     {

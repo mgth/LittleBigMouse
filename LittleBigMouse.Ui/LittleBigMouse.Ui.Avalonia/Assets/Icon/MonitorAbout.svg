@@ -1,282 +1,62 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Created with Inkscape (http://www.inkscape.org/) -->
-
 <svg
    width="128"
    height="128"
    viewBox="0 0 128 128"
    version="1.1"
-   id="svg5"
-   inkscape:version="1.3.1 (91b66b0783, 2023-11-16)"
-   sodipodi:docname="MonitorAbout.svg"
-   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-   xmlns:xlink="http://www.w3.org/1999/xlink"
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg">
-  <sodipodi:namedview
-     id="namedview7"
-     pagecolor="#505050"
-     bordercolor="#eeeeee"
-     borderopacity="1"
-     inkscape:pageshadow="0"
-     inkscape:pageopacity="0"
-     inkscape:pagecheckerboard="0"
-     inkscape:document-units="mm"
-     showgrid="true"
-     units="px"
-     inkscape:zoom="16.000001"
-     inkscape:cx="71.656247"
-     inkscape:cy="67.874997"
-     inkscape:window-width="3840"
-     inkscape:window-height="2054"
-     inkscape:window-x="1609"
-     inkscape:window-y="-11"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="layer1"
-     inkscape:blackoutopacity="0.0"
-     inkscape:showpageshadow="2"
-     inkscape:deskcolor="#505050">
-    <inkscape:grid
-       type="xygrid"
-       id="grid824"
-       dotted="false"
-       empspacing="4"
-       originx="0"
-       originy="0"
-       spacingy="1"
-       spacingx="1"
-       units="px"
-       visible="true" />
-  </sodipodi:namedview>
-  <defs
-     id="defs2">
-    <linearGradient
-       id="linearGradient2"
-       inkscape:collect="always">
-      <stop
-         style="stop-color:#75beff;stop-opacity:1;"
-         offset="0.39542145"
-         id="stop1" />
-      <stop
-         style="stop-color:#0078d7;stop-opacity:0;"
-         offset="1"
-         id="stop2" />
-    </linearGradient>
-    <filter
-       style="color-interpolation-filters:sRGB"
-       inkscape:label="Drop Shadow"
-       id="filter4878"
-       width="1.2768155"
-       height="1.1733481"
-       x="-0.10807094"
-       y="-0.071599944">
-      <feFlood
-         flood-opacity="0.498039"
-         flood-color="rgb(0,0,0)"
-         result="flood"
-         id="feFlood4880" />
-      <feComposite
-         in="flood"
-         in2="SourceGraphic"
-         operator="in"
-         result="composite1"
-         id="feComposite4882" />
-      <feGaussianBlur
-         in="composite1"
-         stdDeviation="10.6"
-         result="blur"
-         id="feGaussianBlur4884" />
-      <feOffset
-         dx="20"
-         dy="15"
-         result="offset"
-         id="feOffset4886" />
-      <feComposite
-         in="SourceGraphic"
-         in2="offset"
-         operator="over"
-         result="composite2"
-         id="feComposite4888" />
-    </filter>
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient15-7"
-       id="linearGradient16-1"
-       x1="40"
-       y1="280"
-       x2="345"
-       y2="280"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="translate(-366,-342)" />
-    <linearGradient
-       id="linearGradient15-7"
-       inkscape:collect="always">
-      <stop
-         style="stop-color:#74c6ff;stop-opacity:1;"
-         offset="0.39542145"
-         id="stop15" />
-      <stop
-         style="stop-color:#0078d7;stop-opacity:0;"
-         offset="1"
-         id="stop16-4" />
-    </linearGradient>
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient2"
-       id="linearGradient14"
-       x1="720"
-       y1="405"
-       x2="415"
-       y2="405"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="translate(-366,-342)" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient11"
-       id="linearGradient12"
-       x1="380"
-       y1="385"
-       x2="525"
-       y2="605"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="translate(-366,-342)" />
-    <linearGradient
-       id="linearGradient11"
-       inkscape:collect="always">
-      <stop
-         style="stop-color:#ffffff;stop-opacity:1;"
-         offset="0"
-         id="stop11" />
-      <stop
-         style="stop-color:#ffffff;stop-opacity:0;"
-         offset="1"
-         id="stop12" />
-    </linearGradient>
-  </defs>
-  <g
-     inkscape:label="Calque 1"
-     inkscape:groupmode="layer"
-     id="layer1">
-    <rect
-       style="fill:#0078d7;fill-opacity:1;stroke-width:2.79044;stroke-linecap:round;stroke-linejoin:round"
-       id="rect763"
-       width="112"
-       height="63"
-       x="8"
-       y="25" />
-    <g
-       id="g1"
-       transform="matrix(0.09615384,0,0,0.09615384,62.288462,52.73077)">
-      <rect
-         style="fill:#f2f2f2;fill-opacity:1;stroke:none;stroke-width:6.334;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
-         id="rect4698"
-         width="155.3539"
-         height="261.43964"
-         x="-75.497162"
-         y="-201.69958" />
-      <rect
-         style="fill:#000000;stroke-width:0.992644"
-         id="rect1"
-         width="385.37405"
-         height="320"
-         x="-366"
-         y="-222" />
-      <rect
-         style="fill:#000000;stroke-width:0.996329"
-         id="rect1-2"
-         width="385.37405"
-         height="322.38004"
-         x="8.6259766"
-         y="-24.380005" />
-      <rect
-         style="fill:url(#linearGradient16-1);fill-opacity:1;stroke-width:0.9454"
-         id="rect2-5"
-         width="305"
-         height="240"
-         x="-326"
-         y="-182" />
-      <rect
-         style="fill:url(#linearGradient14);fill-opacity:1;stroke-width:0.945399"
-         id="rect2-4"
-         width="305"
-         height="240"
-         x="49"
-         y="18" />
-      <rect
-         style="fill:#323232;stroke-width:1.0235;fill-opacity:1"
-         id="rect3"
-         width="360"
-         height="520"
-         x="-166"
-         y="-222"
-         ry="170" />
-      <rect
-         style="fill:url(#linearGradient12);stroke-width:0.842429"
-         id="rect3-1"
-         width="285"
-         height="445"
-         x="-126"
-         y="-182"
-         ry="132.98851" />
-      <rect
-         style="fill:#7b64d5;fill-opacity:1;stroke-width:50;stroke-dasharray:none"
-         id="rect5743"
-         width="65.39872"
-         height="119.17104"
-         x="-15.26889"
-         y="-108.98666"
-         ry="34.879322" />
-      <rect
-         style="fill:#323232;stroke-width:0.818766;fill-opacity:1"
-         id="rect5"
-         width="40.000008"
-         height="69.999992"
-         x="-6"
-         y="-189.22656"
-         ry="0" />
-      <rect
-         style="fill:#343434;stroke-width:0.929982;fill-opacity:1"
-         id="rect4"
-         width="120"
-         height="180"
-         x="-46"
-         y="-142"
-         ry="55.459461" />
-      <rect
-         style="fill:#00b200;fill-opacity:1;stroke-width:0.997779"
-         id="rect8"
-         width="80"
-         height="140"
-         x="-26"
-         y="-122"
-         ry="36.668201" />
-    </g>
-    <path
-       style="color:#000000;fill:#000000;stroke-width:4;stroke-linejoin:round;-inkscape-stroke:none"
-       d="m 8,17 c -4,0 -8,4 -8,8 v 67 c 0,4 4,8 8,8 h 112 c 4,0 8,-4 8,-8 V 25 c 0,-4 -4,-8 -8,-8 z m 2,8 h 108 c 1,0 2,1 2,2 v 59 c 0,1 -1,2 -2,2 H 10 C 9,88 8,87 8,86 V 27 c 0,-1 1,-2 2,-2 z"
-       id="rect1032"
-       sodipodi:nodetypes="ssssssssssssssssss" />
-    <rect
-       style="fill:#0078d7;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-       id="rect1032-2-8"
-       width="16"
-       height="3.9999998"
-       x="56"
-       y="92"
-       ry="0.49999997" />
-    <g
-       aria-label="?"
-       transform="matrix(1.1029176,0,0,0.90668605,0.03386097,0.59668738)"
-       id="text5593"
-       style="font-size:16.0566px;line-height:1.25;fill:#0078d7;stroke-width:0.401415" />
-    <rect
-       style="fill:#000000;stroke-width:6.19844;stroke-linecap:round;stroke-linejoin:round"
-       id="rect502"
-       width="40"
-       height="8"
-       x="44"
-       y="104"
-       ry="1" />
-  </g>
+   id="svgMonitorAbout"
+   xmlns="http://www.w3.org/2000/svg">
+  <!-- Monitor body from MonitorInfo.svg: full black swaps to the theme foreground. -->
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke-width:2.79044;stroke-linecap:round;stroke-linejoin:round"
+     width="112"
+     height="63"
+     x="8"
+     y="25" />
+  <path
+     style="color:#000000;fill:#000000;stroke-width:4;stroke-linejoin:round"
+     d="m 8,17 c -4,0 -8,4 -8,8 v 67 c 0,4 4,8 8,8 h 112 c 4,0 8,-4 8,-8 V 25 c 0,-4 -4,-8 -8,-8 z m 2,8 h 108 c 1,0 2,1 2,2 v 59 c 0,1 -1,2 -2,2 H 10 C 9,88 8,87 8,86 V 27 c 0,-1 1,-2 2,-2 z" />
+  <rect
+     style="fill:#0078d7;stroke:#000000;stroke-width:0;stroke-linejoin:round"
+     width="16"
+     height="4"
+     x="56"
+     y="92"
+     ry="0.5" />
+  <rect
+     style="fill:#000000;stroke-width:6.19844;stroke-linecap:round;stroke-linejoin:round"
+     width="40"
+     height="8"
+     x="44"
+     y="104"
+     ry="1" />
+  <!-- About glyph: LittleBigMouse logo (mouse crossing between two screens), white at 0.75 opacity. -->
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="32"
+     height="22"
+     x="20"
+     y="34"
+     ry="2" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="32"
+     height="22"
+     x="76"
+     y="58"
+     ry="2" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="16"
+     height="26"
+     x="57"
+     y="44"
+     ry="8" />
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round"
+     width="4"
+     height="8"
+     x="63"
+     y="49"
+     ry="2" />
 </svg>

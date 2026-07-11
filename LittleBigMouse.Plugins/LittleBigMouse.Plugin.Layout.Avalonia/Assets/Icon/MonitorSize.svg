@@ -4,7 +4,7 @@
    height="128"
    viewBox="0 0 128 128"
    version="1.1"
-   id="svgMonitor"
+   id="svgMonitorSize"
    xmlns="http://www.w3.org/2000/svg">
   <!-- Monitor body from MonitorInfo.svg: full black swaps to the theme foreground. -->
   <rect
@@ -30,4 +30,18 @@
      x="44"
      y="104"
      ry="1" />
+  <!-- Size glyph: horizontal resize arrows, white at 0.75 opacity over the screen. -->
+  <path
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linejoin:round;opacity:0.75"
+     d="M 80,86 116,58 80,28 Z" />
+  <path
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linejoin:round;opacity:0.75"
+     d="M 12,58 48,28 v 58 z" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="16"
+     height="20"
+     x="56"
+     y="48"
+     ry="2" />
 </svg>

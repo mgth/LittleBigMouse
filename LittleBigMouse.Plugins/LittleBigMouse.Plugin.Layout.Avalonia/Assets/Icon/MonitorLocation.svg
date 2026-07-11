@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="128"
+   height="128"
+   viewBox="0 0 128 128"
+   version="1.1"
+   id="svgMonitorLocation"
+   xmlns="http://www.w3.org/2000/svg">
+  <!-- Two monitors from the MonitorInfo.svg template at half scale: full black swaps to the theme foreground. -->
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round"
+     width="76"
+     height="36"
+     x="44"
+     y="68" />
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round"
+     width="76"
+     height="36"
+     x="8"
+     y="8" />
+  <path
+     style="color:#000000;fill:#000000;stroke-linejoin:round"
+     d="M 8,0 C 4,0 0,4 0,8 v 40 c 0,4 4,8 8,8 h 76 c 4,0 8,-4 8,-8 V 8 C 92,4 88,0 84,0 Z m 2,8 h 72 c 1.177188,0 2,0.8228122 2,2 v 32 c 0,1.177188 -0.822812,2 -2,2 H 10 C 8.8228122,44 8,43.177188 8,42 V 10 C 8,8.8228122 8.8228122,8 10,8 Z" />
+  <rect
+     style="fill:#0078d7;stroke:#000000;stroke-width:0;stroke-linejoin:round"
+     width="8"
+     height="4"
+     x="44"
+     y="48"
+     ry="1" />
+  <path
+     style="color:#000000;fill:#000000;stroke-linejoin:round"
+     d="m 44,60 c -4,0 -8,4 -8,8 v 40 c 0,4 4,8 8,8 h 76 c 4,0 8,-4 8,-8 V 68 c 0,-4 -4,-8 -8,-8 z m 2,8 h 72 c 1.17719,0 2,0.822812 2,2 v 32 c 0,1.17719 -0.82281,2 -2,2 H 46 c -1.177188,0 -2,-0.82281 -2,-2 V 70 c 0,-1.177188 0.822812,-2 2,-2 z" />
+  <rect
+     style="fill:#0078d7;stroke:#000000;stroke-width:0;stroke-linejoin:round"
+     width="8"
+     height="4"
+     x="80"
+     y="108"
+     ry="1" />
+  <path
+     style="fill:#0078d7;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:butt;stroke-linejoin:round"
+     d="M 96,40 124,26 96,12 Z" />
+  <path
+     style="fill:#0078d7;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:butt;stroke-linejoin:round"
+     d="M 32,100 4,86 32,72 Z" />
+  <rect
+     style="fill:#000000;stroke-width:1.38601;stroke-linecap:round;stroke-linejoin:round"
+     width="32"
+     height="8"
+     x="68"
+     y="120"
+     ry="1" />
+</svg>

@@ -4,7 +4,7 @@
    height="128"
    viewBox="0 0 128 128"
    version="1.1"
-   id="svgMonitor"
+   id="svgMonitorBorderResistance"
    xmlns="http://www.w3.org/2000/svg">
   <!-- Monitor body from MonitorInfo.svg: full black swaps to the theme foreground. -->
   <rect
@@ -30,4 +30,34 @@
      x="44"
      y="104"
      ry="1" />
+  <!-- Border resistance glyph: screen border bars, white at 0.75 opacity.
+       8px thick and inset from the frame so they stay readable at toolbar size. -->
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="80"
+     height="8"
+     x="24"
+     y="31"
+     ry="4" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="80"
+     height="8"
+     x="24"
+     y="74"
+     ry="4" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="8"
+     height="27"
+     x="14"
+     y="43"
+     ry="4" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="8"
+     height="27"
+     x="106"
+     y="43"
+     ry="4" />
 </svg>

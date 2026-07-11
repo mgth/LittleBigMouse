@@ -1,147 +1,103 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Created with Inkscape (http://www.inkscape.org/) -->
-
 <svg
-   width="32"
-   height="32"
-   viewBox="0 0 32 32"
+   width="128"
+   height="128"
+   viewBox="0 0 128 128"
    version="1.1"
-   id="svg5"
-   inkscape:version="1.4-dev (f7e9445, 2024-03-10, custom)"
-   sodipodi:docname="MonitorList.svg"
-   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg">
-  <sodipodi:namedview
-     id="namedview7"
-     pagecolor="#505050"
-     bordercolor="#eeeeee"
-     borderopacity="1"
-     inkscape:pageshadow="0"
-     inkscape:pageopacity="0"
-     inkscape:pagecheckerboard="0"
-     inkscape:document-units="mm"
-     showgrid="true"
-     units="px"
-     inkscape:zoom="26.744331"
-     inkscape:cx="-8.8243"
-     inkscape:cy="19.761197"
-     inkscape:window-width="3840"
-     inkscape:window-height="2054"
-     inkscape:window-x="2869"
-     inkscape:window-y="-11"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="layer1"
-     inkscape:blackoutopacity="0.0"
-     inkscape:showpageshadow="2"
-     inkscape:deskcolor="#d1d1d1">
-    <inkscape:grid
-       type="xygrid"
-       id="grid824"
-       originx="0"
-       originy="0"
-       spacingy="1"
-       spacingx="1"
-       units="px" />
-  </sodipodi:namedview>
-  <defs
-     id="defs2" />
-  <g
-     inkscape:label="Calque 1"
-     inkscape:groupmode="layer"
-     id="layer1">
-    <rect
-       style="fill:none;stroke:#000000;stroke-width:2.25;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-       id="rect1032"
-       width="21.75"
-       height="12"
-       x="9.125"
-       y="10.125"
-       ry="1.5" />
-    <rect
-       style="fill:#999999;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-       id="rect1032-2-8"
-       width="1.5"
-       height="0.75"
-       x="19.25"
-       y="21.75" />
-    <rect
-       style="fill:none;stroke:#000000;stroke-width:0.75;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-       id="rect1032-6"
-       width="7.25"
-       height="4"
-       x="0.375"
-       y="9.375"
-       ry="0.5" />
-    <rect
-       style="fill:none;stroke:#000000;stroke-width:0.75;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-       id="rect1"
-       width="7.25"
-       height="4"
-       x="0.375"
-       y="14.075"
-       ry="0.5" />
-    <rect
-       style="fill:none;stroke:#000000;stroke-width:0.75;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-       id="rect3"
-       width="7.25"
-       height="4"
-       x="0.375"
-       y="18.775"
-       ry="0.5" />
-    <g
-       id="g4">
-      <rect
-         style="fill:#999999;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-         id="rect1032-2-8-5"
-         width="4"
-         height="0.75"
-         x="2"
-         y="10.332" />
-      <rect
-         style="fill:#999999;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-         id="rect4"
-         width="4"
-         height="0.75"
-         x="2"
-         y="11.632" />
-    </g>
-    <g
-       id="g6"
-       transform="translate(0,4.7000002)">
-      <rect
-         style="fill:#999999;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-         id="rect5"
-         width="4"
-         height="0.75"
-         x="2"
-         y="10.332" />
-      <rect
-         style="fill:#999999;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-         id="rect6"
-         width="4"
-         height="0.75"
-         x="2"
-         y="11.632" />
-    </g>
-    <g
-       id="g8"
-       transform="translate(0,9.4000002)">
-      <rect
-         style="fill:#999999;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-         id="rect7"
-         width="4"
-         height="0.75"
-         x="2"
-         y="10.332" />
-      <rect
-         style="fill:#999999;stroke:#000000;stroke-width:0;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-         id="rect8"
-         width="4"
-         height="0.75"
-         x="2"
-         y="11.632" />
-    </g>
-  </g>
+   id="svgMonitorList"
+   xmlns="http://www.w3.org/2000/svg">
+  <!-- One monitor at a time, picked from the list on the left: the list stays outside
+       the monitor and the monitor has no stand (this mode does not mirror the layout).
+       Template colors from MonitorInfo.svg: full black swaps to the theme foreground. -->
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round"
+     width="76"
+     height="36"
+     x="40"
+     y="44" />
+  <path
+     style="color:#000000;fill:#000000;stroke-linejoin:round"
+     d="m 40,36 c -4,0 -8,4 -8,8 v 40 c 0,4 4,8 8,8 h 76 c 4,0 8,-4 8,-8 V 44 c 0,-4 -4,-8 -8,-8 z m 2,8 h 72 c 1.17719,0 2,0.822812 2,2 v 32 c 0,1.17719 -0.82281,2 -2,2 H 46 c -1.177188,0 -2,-0.82281 -2,-2 V 46 c 0,-1.177188 0.822812,-2 2,-2 z" />
+  <!-- The monitor list, outside the monitor. -->
+  <rect
+     style="fill:#000000;stroke:none;stroke-linecap:round;stroke-linejoin:round"
+     width="24"
+     height="16"
+     x="0"
+     y="30"
+     ry="3" />
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke:none"
+     width="20"
+     height="12"
+     x="2"
+     y="32" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;opacity:0.75"
+     width="12"
+     height="2"
+     x="5"
+     y="35"
+     ry="1" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;opacity:0.75"
+     width="12"
+     height="2"
+     x="5"
+     y="39"
+     ry="1" />
+  <rect
+     style="fill:#000000;stroke:none;stroke-linecap:round;stroke-linejoin:round"
+     width="24"
+     height="16"
+     x="0"
+     y="56"
+     ry="3" />
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke:none"
+     width="20"
+     height="12"
+     x="2"
+     y="58" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;opacity:0.75"
+     width="12"
+     height="2"
+     x="5"
+     y="61"
+     ry="1" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;opacity:0.75"
+     width="12"
+     height="2"
+     x="5"
+     y="65"
+     ry="1" />
+  <rect
+     style="fill:#000000;stroke:none;stroke-linecap:round;stroke-linejoin:round"
+     width="24"
+     height="16"
+     x="0"
+     y="82"
+     ry="3" />
+  <rect
+     style="fill:#0078d7;fill-opacity:1;stroke:none"
+     width="20"
+     height="12"
+     x="2"
+     y="84" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;opacity:0.75"
+     width="12"
+     height="2"
+     x="5"
+     y="87"
+     ry="1" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;opacity:0.75"
+     width="12"
+     height="2"
+     x="5"
+     y="91"
+     ry="1" />
 </svg>

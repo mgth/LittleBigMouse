@@ -4,7 +4,7 @@
    height="128"
    viewBox="0 0 128 128"
    version="1.1"
-   id="svgMonitor"
+   id="svgMonitorVCP"
    xmlns="http://www.w3.org/2000/svg">
   <!-- Monitor body from MonitorInfo.svg: full black swaps to the theme foreground. -->
   <rect
@@ -30,4 +30,26 @@
      x="44"
      y="104"
      ry="1" />
+  <!-- VCP glyph: control bars, white at 0.75 opacity over the screen. -->
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="16"
+     height="40"
+     x="32"
+     y="36"
+     ry="6" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="16"
+     height="40"
+     x="56"
+     y="36"
+     ry="6" />
+  <rect
+     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     width="16"
+     height="40"
+     x="80"
+     y="36"
+     ry="6" />
 </svg>

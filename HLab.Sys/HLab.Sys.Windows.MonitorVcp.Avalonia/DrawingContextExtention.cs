@@ -76,20 +76,34 @@ public static class DrawingContextExtension
 
         var hz = orientation == Orientation.Horizontal;
 
-        double _g(double value, double gg)
+        var length = hz ? area.Width : area.Height;
+
+        // The checkerboard averages to half the channel's light. On a display
+        // of gamma g, the uniform sRGB code emitting that same light is
+        // (channel/2)^(1/g): that exact code goes at the position labeled g.
+        // (The WPF original produced these numbers in scRGB — linear light —
+        // and WPF's linear-to-sRGB encode turned pow(·, 2.2/g) into the same
+        // codes; fed directly to Avalonia as sRGB they were wrong by a factor
+        // 2.2 in the exponent. And a two-point gradient can't be right anyway:
+        // the scale is linear in g while the code curve is not, so the strip
+        // is computed per position.)
+        Color CodeAt(double p)
         {
-            return Math.Pow(value, /*1.0f / */2.2 / gg);
+            var g = startGamma + (p / length) * (endGamma - startGamma);
+            return HLabColors.RGB(1.0,
+                Math.Pow(colorA.Red / 2.0, 1.0 / g),
+                Math.Pow(colorA.Green / 2.0, 1.0 / g),
+                Math.Pow(colorA.Blue / 2.0, 1.0 / g)).ToAvaloniaColor();
         }
 
-        var startColor =
-           HLabColors.RGB(1.0,  _g(colorA.Red / 2.0, startGamma),  _g(colorA.Green / 2.0, startGamma), _g(colorA.Blue / 2.0, startGamma));
-        var endColor = 
-           HLabColors.RGB(1.0, _g(colorA.Red/2.0, endGamma), _g(colorA.Green/2.0, endGamma), _g(colorA.Blue/2.0, endGamma));
-
-//            var startColor = Color.FromScRgb(f1.0,  _g(colorA.ScG/2.0f, startGamma), _g(colorA.ScB/2.0f, startGamma));
-//            var endColor = Color.FromScRgb(1.0f, _g(colorA.ScR/2.0f, endGamma), _g(colorA.ScG/2.0f, endGamma), _g(colorA.ScB/2.0f, endGamma));
-
-        dc.DrawGradient(startColor, endColor, area, orientation, 1.0);
+        for (var p = 0.0; p < length; p++)
+        {
+            var brush = new SolidColorBrush(CodeAt(p));
+            if (hz)
+                dc.DrawRectangle(brush, null, new Rect(area.X + p - 0.5, area.Y, 2.0, area.Height));
+            else
+                dc.DrawRectangle(brush, null, new Rect(area.X, area.Y + p - 0.5, area.Width, 2.0));
+        }
 
         double d1 = hz?(area.Y + area.Height / 3):(area.X + area.Width / 3);
         double d2 = d1 + (hz?area.Height:area.Width) / 3;
@@ -113,11 +127,7 @@ public static class DrawingContextExtension
         }
 
 
-        var gc = new GradientCalculator(startColor, endColor, 1.0);
-
-        var length = hz?area.Width:area.Height;
         var d = length;
-
 
         var start = hz ? area.Left : area.Top;
         var end = hz ? area.Right : area.Bottom;
@@ -133,7 +143,8 @@ public static class DrawingContextExtension
             if (Math.Abs(g - 1.8) < 0.1) thickness = 3.0;
             if (Math.Abs(g - 2.2) < 0.1) thickness = 3.0;
 
-            var c = gc.Get(d/length).ToAvaloniaColor();
+            // the tick shows the strip's own code over the checkerboard
+            var c = CodeAt(d - start);
 
             if(hz)
                 dc.DrawLine(new Pen(new SolidColorBrush(c), thickness), new Point(d, d1 ), new Point(d, d2 ));

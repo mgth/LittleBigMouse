@@ -139,8 +139,10 @@ public class TestPattern : Control
             TestPatternType.Solid => (dc, rect, colorA, colorB, orientation) 
                 => dc.DrawRectangle(new SolidColorBrush(colorA), null, rect),
 
-            TestPatternType.Gradient => (dc, rect, colorA, colorB, orientation) 
-                => dc.DrawGradient(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orientation, 1.0 / 2.2 /*2.124*/),
+            // gamma 1.0 = linear code ramp (0..255). The historical 1/2.2 compensated
+            // WPF's scRGB linear-to-sRGB encode; Avalonia colors ARE sRGB codes.
+            TestPatternType.Gradient => (dc, rect, colorA, colorB, orientation)
+                => dc.DrawGradient(colorA.ToColor<double>(), colorB.ToColor<double>(), rect, orientation, 1.0),
 
             TestPatternType.Circle => (dc, rect, colorA, colorB, orientation) 
                 => dc.RenderCircle(colorA, colorB, rect),

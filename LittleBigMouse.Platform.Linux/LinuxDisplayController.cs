@@ -100,11 +100,29 @@ public class LinuxDisplayController : IDisplayController
         // Nothing to change: skip Restore too, an engine running with its gaps keeps them.
         if (moved.Count == 0) return true;
 
-        KScreenGapGuard.Restore(_factory.QueryMonitors());
+        var monitorsBefore = _factory.QueryMonitors();
+        KScreenGapGuard.Restore(monitorsBefore);
 
         if (!UseKScreen)
             return Notify(Run("xrandr", string.Join(' ', moved.Select(l =>
                 $"--output {l.Source.InterfacePath} --pos {RoundI(l.Position.X)}x{RoundI(l.Position.Y)}"))));
+
+        // The logical sizes the solver assumed (round(native/scale), same rounding
+        // as the adapter) — the positions in `moved` are only consistent with THESE.
+        var before = monitorsBefore.Where(m => m.Enabled).ToDictionary(m => m.ConnectorName);
+        var placed = moved.Select(l =>
+        {
+            before.TryGetValue(l.Source.InterfacePath, out var b);
+            double predictedW = b?.LogicalWidth ?? l.Source.InPixel.Width;
+            double predictedH = b?.LogicalHeight ?? l.Source.InPixel.Height;
+            if (b is not null && l.Scale is { } s && Math.Abs(s - b.Scale) >= 1.0 / 240)
+            {
+                predictedW = Math.Round(b.PixelWidth / s);
+                predictedH = Math.Round(b.PixelHeight / s);
+            }
+            return new PlacedOutput(l.Source.InterfacePath,
+                l.Position.X, l.Position.Y, predictedW, predictedH, predictedW, predictedH);
+        }).ToList();
 
         // Scales go in their own pass, FIRST: a scale change resizes the output's
         // logical rect and lets the compositor re-shuffle its neighbours to its own
@@ -117,16 +135,32 @@ public class LinuxDisplayController : IDisplayController
         if (scales.Count > 0 && !RunKScreen(string.Join(' ', scales)))
             return false;
 
-        if (!RunKScreen(string.Join(' ', moved.Select(PositionArg))))
+        // The compositor's own rounding of native/scale is authoritative and can
+        // differ by a pixel from the prediction — enough to turn an intended edge
+        // contact into an overlap or a gap that faithful re-assertion would then
+        // preserve. Re-read the actual sizes and rebuild the contact chains.
+        if (scales.Count > 0)
+        {
+            var actual = _factory.QueryMonitors().Where(m => m.Enabled).ToDictionary(m => m.ConnectorName);
+            placed = placed.Select(p => actual.TryGetValue(p.Name, out var m)
+                    ? p with { ActualWidth = m.LogicalWidth, ActualHeight = m.LogicalHeight }
+                    : p)
+                .ToList();
+        }
+
+        var snapped = SnapToActualSizes(placed);
+
+        if (!RunKScreen(string.Join(' ', placed.Select(p =>
+                $"output.{p.Name}.position.{RoundI(snapped[p.Name].X)},{RoundI(snapped[p.Name].Y)}"))))
             return false;
 
         // Trust but verify: re-query and re-assert once if the compositor moved
         // anything away from the requested spot while settling the config. A 1px
         // drift here silently becomes an overlapping/gapped edge — the exact
         // topology corruption the mouse engine cannot paper over.
-        var expected = moved.ToDictionary(
-            l => l.Source.InterfacePath,
-            l => (X: RoundI(l.Position.X), Y: RoundI(l.Position.Y)));
+        var expected = placed.ToDictionary(
+            p => p.Name,
+            p => (X: RoundI(snapped[p.Name].X), Y: RoundI(snapped[p.Name].Y)));
         for (var attempt = 0; ; attempt++)
         {
             var live = _factory.QueryMonitors()
@@ -146,7 +180,98 @@ public class LinuxDisplayController : IDisplayController
             RunKScreen(string.Join(' ', drifted.Select(d => $"output.{d.Key}.position.{d.Value.X},{d.Value.Y}")));
         }
 
+        AuditOverlaps();
+
         return Notify(true);
+    }
+
+    /// <summary>
+    /// One output placed by the solver: intended position with the sizes the solver
+    /// believed in, plus the sizes the compositor actually settled on.
+    /// </summary>
+    public record PlacedOutput(
+        string Name,
+        double X, double Y,
+        double PredictedWidth, double PredictedHeight,
+        double ActualWidth, double ActualHeight);
+
+    /// <summary>
+    /// Rebuild the intended edge contacts with the actual output sizes: wherever the
+    /// solver meant two outputs to touch (edge-to-edge in its own predicted space),
+    /// chain them flush using the sizes the compositor really applied. Outputs
+    /// without a contact on an axis keep their intended coordinate.
+    /// </summary>
+    public static Dictionary<string, (double X, double Y)> SnapToActualSizes(IReadOnlyList<PlacedOutput> placed)
+    {
+        const double contactTolerance = 1.5;
+
+        // does the pair share an edge span on the perpendicular axis, in intended space?
+        static bool Overlap(double aLo, double aLength, double bLo, double bLength)
+            => Math.Min(aLo + aLength, bLo + bLength) - Math.Max(aLo, bLo) > 0.5;
+
+        var result = placed.ToDictionary(p => p.Name, p => (p.X, p.Y));
+
+        // A found contact REPLACES the intended coordinate (that closes gaps as
+        // well as overlaps); the max only arbitrates between several neighbours.
+        foreach (var item in placed.OrderBy(p => p.X).ThenBy(p => p.Y))
+        {
+            double? chained = null;
+            foreach (var prior in placed)
+            {
+                if (prior.Name == item.Name) continue;
+                if (!Overlap(prior.Y, prior.PredictedHeight, item.Y, item.PredictedHeight)) continue;
+                if (Math.Abs(prior.X + prior.PredictedWidth - item.X) > contactTolerance) continue;
+                var x = result[prior.Name].X + prior.ActualWidth;
+                chained = chained is null ? x : Math.Max(chained.Value, x);
+            }
+            result[item.Name] = (chained ?? item.X, result[item.Name].Y);
+        }
+
+        foreach (var item in placed.OrderBy(p => p.Y).ThenBy(p => p.X))
+        {
+            double? chained = null;
+            foreach (var prior in placed)
+            {
+                if (prior.Name == item.Name) continue;
+                if (!Overlap(prior.X, prior.PredictedWidth, item.X, item.PredictedWidth)) continue;
+                if (Math.Abs(prior.Y + prior.PredictedHeight - item.Y) > contactTolerance) continue;
+                var y = result[prior.Name].Y + prior.ActualHeight;
+                chained = chained is null ? y : Math.Max(chained.Value, y);
+            }
+            result[item.Name] = (result[item.Name].X, chained ?? item.Y);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Post-apply sanity check over EVERY enabled output — including ones this batch
+    /// never touched, which keep whatever stale position the compositor had for them
+    /// (observed live: a rarely-used output overlapping a neighbour by 1280px).
+    /// </summary>
+    void AuditOverlaps()
+    {
+        try
+        {
+            var live = _factory.QueryMonitors().Where(m => m.Enabled).ToList();
+            for (var i = 0; i < live.Count; i++)
+            for (var j = i + 1; j < live.Count; j++)
+            {
+                var a = live[i];
+                var b = live[j];
+                var w = Math.Min(a.LogicalX + a.LogicalWidth, b.LogicalX + b.LogicalWidth) - Math.Max(a.LogicalX, b.LogicalX);
+                var h = Math.Min(a.LogicalY + a.LogicalHeight, b.LogicalY + b.LogicalHeight) - Math.Max(a.LogicalY, b.LogicalY);
+                if (w > 0.5 && h > 0.5)
+                    Console.Error.WriteLine(
+                        $"SetLocations: outputs overlap after apply: {a.ConnectorName} " +
+                        $"({a.LogicalX},{a.LogicalY} {a.LogicalWidth}x{a.LogicalHeight}) / {b.ConnectorName} " +
+                        $"({b.LogicalX},{b.LogicalY} {b.LogicalWidth}x{b.LogicalHeight})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Overlap audit failed: {ex.Message}");
+        }
     }
 
     static int RoundI(double v) => (int)Math.Round(v);

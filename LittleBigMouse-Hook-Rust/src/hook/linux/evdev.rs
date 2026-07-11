@@ -264,16 +264,19 @@ impl Router {
             self.rem = (sx - dx as f64, sy - dy as f64);
 
             let old = self.env.virtual_pos;
-            let candidate = self.env.clamp(Point::new(
+            // Win32 parity: the LL hook sees the UNCLIPPED proposed point even while
+            // ClipCursor pins the cursor — the growing past-border distance is what
+            // drains border resistance. Only the committed position gets clamped.
+            let candidate = Point::new(
                 old.x().saturating_add(dx),
                 old.y().saturating_add(dy),
-            ));
+            );
 
             let mut engine = match shared.engine.try_lock() {
                 Ok(g) => g,
                 Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
                 Err(std::sync::TryLockError::WouldBlock) => {
-                    self.env.virtual_pos = candidate;
+                    self.env.virtual_pos = self.env.clamp(candidate);
                     self.emit_absolute(passthrough);
                     *acc = (0, 0);
                     return;
@@ -289,10 +292,14 @@ impl Router {
             crate::hook::MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
             if e.handled {
                 crate::hook::CROSSINGS.fetch_add(1, Ordering::Relaxed);
-                if self.debug {
-                    eprintln!("[LittleBigMouse.Hook] evdev: crossing ({},{}) -> ({},{})",
-                        candidate.x(), candidate.y(), self.env.virtual_pos.x(), self.env.virtual_pos.y());
-                }
+            }
+            if self.debug {
+                // Per-frame trace: raw delta, engine input, emitted position. The
+                // ground truth for any "the cursor was seen somewhere we never
+                // sent it" investigation (compare against what KWin displays).
+                eprintln!("[LittleBigMouse.Hook] evdev: frame d=({dx},{dy}) cand=({},{}) -> emit ({},{}){}",
+                    candidate.x(), candidate.y(), self.env.virtual_pos.x(), self.env.virtual_pos.y(),
+                    if e.handled { " CROSS" } else { "" });
             }
             *acc = (0, 0);
         }

@@ -179,29 +179,47 @@ impl MouseEngine {
         let bounds = self.layout.arena[old_zone].pixels_bounds();
 
         // C++ order: right, left, bottom, top — first matching border wins.
+        //
+        // Deliberate deviation from the C++ (`dist >= 0`): a crossing fires only
+        // once the candidate leaves the zone (`dist > 0`). The C++ threshold made
+        // the zone's own edge columns (left(), right()-1) trigger at distance 0 —
+        // but those columns are exactly where crossings LAND, so a landed cursor
+        // re-crossed backwards on the next event even for a purely tangential
+        // (vertical) move. Invisible between same-DPI monitors (the y remap is
+        // near identity), a violent ping-pong between mismatched ones.
         let right_dist = 1 + p_in.x() - bounds.right();
-        if right_dist >= 0 {
+        if right_dist > 0 {
             self.strait_cross(env, e, old_zone, Side::Right, p_in.y(), right_dist);
             return;
         }
         let left_dist = bounds.left() - p_in.x();
-        if left_dist >= 0 {
+        if left_dist > 0 {
             self.strait_cross(env, e, old_zone, Side::Left, p_in.y(), left_dist);
             return;
         }
         let bottom_dist = 1 + p_in.y() - bounds.bottom();
-        if bottom_dist >= 0 {
+        if bottom_dist > 0 {
             self.strait_cross(env, e, old_zone, Side::Bottom, p_in.x(), bottom_dist);
             return;
         }
         let top_dist = bounds.top() - p_in.y();
-        if top_dist >= 0 {
+        if top_dist > 0 {
             self.strait_cross(env, e, old_zone, Side::Top, p_in.x(), top_dist);
             return;
         }
 
-        // No border crossed: reset resistance link and pass the event through.
-        if self.current_resistance.is_some() {
+        // No border crossed: pass the event through. Re-arm the resistance only
+        // once the cursor actually leaves the edge columns: while a resisted push
+        // pins the cursor against the border, the tangential (y) frames land here
+        // as plain interior moves — with the `dist > 0` thresholds above there are
+        // no 0-distance "attempts" keeping the link alive anymore, so resetting
+        // unconditionally would restart a half-drained resistance every pixel.
+        if self.current_resistance.is_some()
+            && p_in.x() > bounds.left()
+            && p_in.x() < bounds.right() - 1
+            && p_in.y() > bounds.top()
+            && p_in.y() < bounds.bottom() - 1
+        {
             self.current_resistance = None;
         }
         self.old_point = p_in;
@@ -592,13 +610,15 @@ mod tests {
     }
 
     // "Left" (pixels -3840..0) is adjacent to "Right" (pixels 0..3840). Left's
-    // RightLinks map its right edge onto Right (id 1). Strait algorithm.
+    // RightLinks map its right edge onto Right (id 1) and Right's LeftLinks map
+    // back onto Left (id 0), like a real layout. Strait algorithm.
     const FIXTURE: &str = concat!(
         r#"<ZonesLayout Priority="Normal" PriorityUnhooked="Below" Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
         r#"<Zone Id="0" Name="Left"><PixelsBounds><Rect Left="-3840" Top="0" Width="3840" Height="2160"></Rect></PixelsBounds><PhysicalBounds><Rect Left="-567" Top="30.920075223319227" Width="527" Height="296"></Rect></PhysicalBounds>"#,
         r#"<RightLinks><ZoneLink From="0" To="393" SourceFromPixel="-225" SourceToPixel="2642" TargetFromPixel="0" TargetToPixel="2160" BorderResistance="0" TargetId="1"></ZoneLink>"#,
         r#"<ZoneLink From="393" To="1.7976931348623157E+308" SourceFromPixel="2642" SourceToPixel="2147483647" TargetFromPixel="-2147483648" TargetToPixel="2147483647" BorderResistance="0" TargetId="-1"></ZoneLink></RightLinks></Zone>"#,
-        r#"<Zone Id="1" Name="Right"><PixelsBounds><Rect Left="0" Top="0" Width="3840" Height="2160"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="698" Height="393"></Rect></PhysicalBounds></Zone>"#,
+        r#"<Zone Id="1" Name="Right"><PixelsBounds><Rect Left="0" Top="0" Width="3840" Height="2160"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="698" Height="393"></Rect></PhysicalBounds>"#,
+        r#"<LeftLinks><ZoneLink From="0" To="393" SourceFromPixel="0" SourceToPixel="2160" TargetFromPixel="-225" TargetToPixel="2642" BorderResistance="0" TargetId="0"></ZoneLink></LeftLinks></Zone>"#,
         r#"</MainZones></ZonesLayout>"#,
     );
 
@@ -665,6 +685,56 @@ mod tests {
         let ev = feed(&mut eng, &mut env, 0, 1000);
         assert!(ev.handled, "Ctrl should force the crossing despite resistance");
         assert_eq!(env.pos, Point::new(0, 922));
+    }
+
+    #[test]
+    fn landing_column_is_stable_under_tangential_motion() {
+        // Cross Left -> Right (lands on Right's first column, x=0), then move
+        // purely vertically: the pre-fix `dist >= 0` threshold fired Right's
+        // LeftLinks at distance 0 and ping-ponged the cursor straight back.
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -100, 1000); // init in Left
+        let ev = feed(&mut eng, &mut env, 0, 1000); // cross, land at (0, 922)
+        assert!(ev.handled);
+        assert_eq!(env.pos, Point::new(0, 922));
+
+        let ev = feed(&mut eng, &mut env, 0, 921); // tangential move on the edge column
+        assert!(!ev.handled, "vertical move on the landing column must not re-cross");
+        assert_eq!(env.pos, Point::new(0, 922), "cursor must not be warped");
+
+        let ev = feed(&mut eng, &mut env, -1, 921); // actually leaving: crosses back
+        assert!(ev.handled, "moving past the edge must still cross");
+        assert_eq!(env.pos.x(), -1, "landed on Left's last column");
+    }
+
+    #[test]
+    fn resistance_survives_tangential_frames_while_pinned() {
+        // Right's LeftLink gets a resistance of 2mm over 393mm/2160px -> 10px.
+        // While pinned against the border, pushes (dist=1) interleave with
+        // tangential y frames on the edge column; those frames must not re-arm
+        // the resistance or the border becomes impassable diagonally.
+        let xml = FIXTURE.replace(
+            r#"SourceFromPixel="0" SourceToPixel="2160" TargetFromPixel="-225" TargetToPixel="2642" BorderResistance="0""#,
+            r#"SourceFromPixel="0" SourceToPixel="2160" TargetFromPixel="-225" TargetToPixel="2642" BorderResistance="2""#,
+        );
+        let mut eng = MouseEngine::new();
+        eng.load(ZonesLayout::from_xml(&xml).unwrap());
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, 100, 1000); // init in Right
+
+        let mut crossed_at = None;
+        for i in 0..20 {
+            let ev = feed(&mut eng, &mut env, -1, 1000 - i); // push (dist=1)
+            if ev.handled {
+                crossed_at = Some(i);
+                break;
+            }
+            // Tangential frame on the pinned column: must not reset the drain.
+            let ev = feed(&mut eng, &mut env, 0, 1000 - i - 1);
+            assert!(!ev.handled);
+        }
+        assert_eq!(crossed_at, Some(9), "10px of resistance -> pass on the 10th push");
     }
 
     #[test]

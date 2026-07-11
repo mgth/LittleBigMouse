@@ -229,6 +229,19 @@ async fn run_async(shared: &'static Shared) -> bool {
                 (rem_x, rem_y) = (0.0, 0.0);
                 // Prime the engine at the barrier position.
                 feed_engine(shared, &mut env, position);
+                // The prime itself can cross (a 0-resistance link passes at dist=0).
+                // Honor it NOW: the compositor already shows the cursor past the
+                // barrier at its own (uncorrected) position, so deferring the warp
+                // to the next motion frame is the "correction one pixel too late".
+                if let Some(target) = env.pending_warp.take() {
+                    crate::hook::CROSSINGS.fetch_add(1, Ordering::Relaxed);
+                    eprintln!("[LittleBigMouse.Hook] portal: crossing on activation -> release at ({},{})",
+                        target.x(), target.y());
+                    if let Some(c) = capture.take() {
+                        release(&input_capture, &session, c.activation_id, Some(target)).await;
+                    }
+                    env.clip = None;
+                }
             }
 
             _ = deactivated.next() => {
@@ -282,14 +295,21 @@ async fn run_async(shared: &'static Shared) -> bool {
                         rem_x -= dx as f64;
                         rem_y -= dy as f64;
 
-                        let mut position = Point::new(env.virtual_pos.x() + dx, env.virtual_pos.y() + dy);
-                        if let Some(clip) = env.clip {
-                            position = clamp(&clip, position);
-                        }
+                        // Win32 parity: the LL hook sees the UNCLIPPED point (pinned
+                        // cursor + raw delta) while ClipCursor pins the real cursor.
+                        // Feeding a pre-clamped point makes the past-border distance
+                        // always 0, so border resistance never drains (total block).
+                        let position = Point::new(env.virtual_pos.x() + dx, env.virtual_pos.y() + dy);
                         env.virtual_pos = position;
 
                         crate::hook::MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
                         let handled = feed_engine(shared, &mut env, position);
+
+                        // Re-pin into the emulated clip: the next frame's delta must
+                        // apply from the border again, like a ClipCursor'd cursor.
+                        if let Some(clip) = env.clip {
+                            env.virtual_pos = clamp(&clip, env.virtual_pos);
+                        }
 
                         if let Some(target) = env.pending_warp.take() {
                             // The engine crossed: release the capture, placing the

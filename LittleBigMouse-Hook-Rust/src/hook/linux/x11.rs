@@ -119,15 +119,14 @@ pub fn run(shared: &'static Shared) {
             let pos = env.query_pointer();
 
             // Win32 ClipCursor semantics: the OS never lets the cursor leave the
-            // clip. X11 has no such rect, so enforce it before the engine looks.
-            let pos = match env.clip {
-                Some(clip) if !contains(&clip, pos) => {
-                    let clamped = clamp(&clip, pos);
-                    env.warp(clamped);
-                    clamped
+            // clip, so warp the REAL cursor back inside — but feed the engine the
+            // raw (unclipped) position, exactly like a Win32 LL hook: the growing
+            // past-border distance is what drains border resistance.
+            if let Some(clip) = env.clip {
+                if !contains(&clip, pos) {
+                    env.warp(clamp(&clip, pos));
                 }
-                _ => pos,
-            };
+            }
 
             let loc = (pos.x(), pos.y());
             if prev != Some(loc) {

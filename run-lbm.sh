@@ -63,11 +63,16 @@ step() { echo -e "\n${C}==> $*${N}"; }
 note() { echo -e "    ${D}$*${N}"; }
 warn() { echo -e "${Y}!!  $*${N}"; }
 
-# 1. stop running instance(s). The [l] in the pattern keeps pkill from matching
-#    its own command line. EVIOCGRAB releases on process exit, so this also frees
-#    any grabbed mice.
+# 1. stop running instance(s). The bracketed letter keeps pkill from matching its
+#    own command line. Two patterns: `dotnet …dll` launches and apphost launches
+#    (the script prefers the apphost — without the second pattern the old instance
+#    survives and the relaunch dies on the single-instance lock, showing the stale
+#    app). EVIOCGRAB releases on process exit, so this also frees any grabbed mice.
 step "Stopping running instance(s)"
-pkill -f "LittleBigMouse.Ui.Avalonia.dl[l]" 2>/dev/null && note "UI stopped" || note "no UI running"
+UI_STOPPED=0
+pkill -f "LittleBigMouse.Ui.Avalonia.dl[l]" 2>/dev/null && UI_STOPPED=1
+pkill -f "LittleBigMouse.Ui.Avaloni[a]$" 2>/dev/null && UI_STOPPED=1
+[[ "$UI_STOPPED" -eq 1 ]] && note "UI stopped" || note "no UI running"
 pkill -x lbm-hook 2>/dev/null && note "daemon stopped" || note "no daemon running"
 sleep 1
 

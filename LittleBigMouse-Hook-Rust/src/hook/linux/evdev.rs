@@ -77,6 +77,9 @@ pub fn run(shared: &'static Shared) -> bool {
     let mut hooked_since: Option<Instant> = None;
     let mut last_report = Instant::now();
     let mut last_events = 0u64;
+    // Where the previous Router left the cursor: the re-arm fallback when the
+    // compositor cannot be asked for the real position.
+    let mut resume_at: Option<Point<i32>> = None;
 
     eprintln!("[LittleBigMouse.Hook] evdev backend running (sens={sens})");
 
@@ -89,7 +92,7 @@ pub fn run(shared: &'static Shared) -> bool {
         let want = shared.want_hook.load(Ordering::SeqCst);
 
         if want && router.is_none() {
-            match Router::arm(shared, sens, debug) {
+            match Router::arm(shared, sens, debug, resume_at) {
                 Ok(r) => {
                     router = Some(r);
                     hooked_since = Some(Instant::now());
@@ -106,6 +109,7 @@ pub fn run(shared: &'static Shared) -> bool {
                 }
             }
         } else if !want && router.is_some() {
+            resume_at = router.as_ref().map(|r| r.env.virtual_pos);
             drop(router.take());
             hooked_since = None;
             shared.hooked.store(false, Ordering::SeqCst);
@@ -154,7 +158,7 @@ struct Router {
 }
 
 impl Router {
-    fn arm(shared: &Shared, sens: f64, debug: bool) -> std::io::Result<Router> {
+    fn arm(shared: &Shared, sens: f64, debug: bool, resume_at: Option<Point<i32>>) -> std::io::Result<Router> {
         let desktop = desktop_bounds(shared);
 
         let mut devices = Vec::new();
@@ -175,10 +179,27 @@ impl Router {
 
         let virt = build_virtual(desktop)?;
 
-        // Start at a sane, known point: the centre of the first main zone.
-        let start = first_zone_center(shared).unwrap_or_else(|| {
-            Point::new(desktop.left() + desktop.width() / 2, desktop.top() + desktop.height() / 2)
-        });
+        // Take over from where the cursor really is: ask the compositor (KWin
+        // scripting, logical coordinates — the zones' space), else where the
+        // previous arm left it. Only a first arm on a non-KDE compositor falls
+        // back to a neutral point (centre of the first main zone).
+        let (start, origin) = match kwin_cursor_pos() {
+            Some(p) => (p, "compositor"),
+            None => match resume_at {
+                Some(p) => (p, "previous position"),
+                None => (
+                    first_zone_center(shared).unwrap_or_else(|| {
+                        Point::new(desktop.left() + desktop.width() / 2, desktop.top() + desktop.height() / 2)
+                    }),
+                    "fallback",
+                ),
+            },
+        };
+        let start = Point::new(
+            start.x().clamp(desktop.left(), desktop.left() + desktop.width() - 1),
+            start.y().clamp(desktop.top(), desktop.top() + desktop.height() - 1),
+        );
+        eprintln!("[LittleBigMouse.Hook] evdev: starting at ({},{}) ({origin})", start.x(), start.y());
 
         let mut router = Router {
             devices,
@@ -382,6 +403,90 @@ fn desktop_bounds(shared: &Shared) -> Rect<i32> {
         b = b.max(z.bottom());
     }
     Rect::new(l, t, r - l, b - t)
+}
+
+/// Ask KWin for the real cursor position (logical coordinates, the same space
+/// as the zones) through its scripting API — the only channel an ordinary
+/// process has under Wayland, where no global pointer query exists. A one-shot
+/// script reports `workspace.cursorPos` back over DBus (as a string: KWin
+/// marshals JS numbers as doubles, which would not match an integer signature)
+/// and is unloaded again. Returns None on any failure (no session bus, not
+/// KWin, timeout): the caller falls back to a neutral position.
+pub fn kwin_cursor_pos() -> Option<Point<i32>> {
+    use tokio::sync::mpsc;
+
+    struct Probe {
+        tx: mpsc::Sender<(i32, i32)>,
+    }
+
+    #[zbus::interface(name = "org.littlebigmouse.CursorProbe")]
+    impl Probe {
+        fn report(&self, pos: String) {
+            if let Some((x, y)) = pos.split_once(',') {
+                if let (Ok(x), Ok(y)) = (x.trim().parse(), y.trim().parse()) {
+                    let _ = self.tx.try_send((x, y));
+                }
+            }
+        }
+    }
+
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
+    rt.block_on(async {
+        let (tx, mut rx) = mpsc::channel(1);
+        let service = format!("org.littlebigmouse.CursorProbe{}", std::process::id());
+        let conn = zbus::connection::Builder::session()
+            .ok()?
+            .name(service.as_str())
+            .ok()?
+            .serve_at("/", Probe { tx })
+            .ok()?
+            .build()
+            .await
+            .ok()?;
+
+        let plugin = format!("lbm-cursor-probe-{}", std::process::id());
+        let script_path = std::env::temp_dir().join(format!("{plugin}.js"));
+        std::fs::write(
+            &script_path,
+            format!(
+                // "Report": the zbus interface macro exposes rust methods under
+                // their PascalCase DBus names; callDBus swallows NoSuchMethod.
+                "callDBus(\"{service}\", \"/\", \"org.littlebigmouse.CursorProbe\", \"Report\", \
+                 workspace.cursorPos.x + \",\" + workspace.cursorPos.y);\n"
+            ),
+        )
+        .ok()?;
+
+        let scripting = zbus::Proxy::new(&conn, "org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting")
+            .await
+            .ok()?;
+        // A probe left over by a crashed run would make loadScript return -1.
+        let _ = scripting.call_method("unloadScript", &(plugin.as_str(),)).await;
+
+        let id: i32 = scripting
+            .call("loadScript", &(script_path.to_string_lossy().as_ref(), plugin.as_str()))
+            .await
+            .unwrap_or(-1);
+
+        let result = if id < 0 {
+            None
+        } else {
+            match zbus::Proxy::new(&conn, "org.kde.KWin", format!("/Scripting/Script{id}"), "org.kde.kwin.Script").await {
+                Ok(script) if script.call::<_, _, ()>("run", &()).await.is_ok() => {
+                    tokio::time::timeout(Duration::from_millis(700), rx.recv())
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|(x, y)| Point::new(x, y))
+                }
+                _ => None,
+            }
+        };
+
+        let _ = scripting.call_method("unloadScript", &(plugin.as_str(),)).await;
+        let _ = std::fs::remove_file(&script_path);
+        result
+    })
 }
 
 /// Centre of the first main zone, a guaranteed on-screen start point.

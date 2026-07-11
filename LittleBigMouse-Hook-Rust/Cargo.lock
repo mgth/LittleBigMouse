@@ -400,6 +400,7 @@ dependencies = [
  "tracing-subscriber",
  "windows",
  "x11rb",
+ "zbus",
 ]
 
 [[package]]

@@ -53,6 +53,9 @@ strip = true
 evdev = "0.13"
 x11rb = { version = "0.13", features = ["xinput", "randr"] }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "input_capture", "tracing"] }
+# Already in the tree through ashpd; used directly by the evdev backend to ask
+# KWin for the real cursor position (scripting API) when arming.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
 reis = { version = "0.7", features = ["tokio"] }
 tokio = { version = "1", features = ["rt", "macros", "time", "net", "sync"] }
 futures = "0.3"

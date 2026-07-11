@@ -46,7 +46,7 @@ public class LuminanceViewModel : ViewModel
 
         foreach (var monitor in Monitors.Root.AllMonitorDevices())
         {
-            var lut = monitor.ProbeLut(); 
+            var lut = monitor.Vcp().ProbeLut(); 
             lut.Load();
             l = Math.Max(l, lut.Luminance);
         }
@@ -67,7 +67,7 @@ public class LuminanceViewModel : ViewModel
                 this.RaiseAndSetIfChanged(ref _value, value);
                 foreach (var monitor in Monitors.Root.AllMonitorDevices())
                 {
-                    var lut = monitor.ProbeLut();
+                    var lut = monitor.Vcp().ProbeLut();
                     //lut.Load();
                     lut.Luminance = value;
                 }
@@ -87,7 +87,7 @@ public class LuminanceViewModel : ViewModel
 
             foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
-                var lut = monitor.ProbeLut();
+                var lut = monitor.Vcp().ProbeLut();
                 lut.Load();
                 max = Math.Max(max, lut.MaxLuminance);
             }
@@ -105,7 +105,7 @@ public class LuminanceViewModel : ViewModel
 
             foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
-                var lut = monitor.ProbeLut();
+                var lut = monitor.Vcp().ProbeLut();
                 lut.Load();
                 max = Math.Min(max, lut.MaxLuminance);
             }
@@ -124,7 +124,7 @@ public class LuminanceViewModel : ViewModel
 
             foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
-                var lut = monitor.ProbeLut();
+                var lut = monitor.Vcp().ProbeLut();
                 lut.Load();
                 min = Math.Min(min, lut.MinLuminance);
             }
@@ -141,7 +141,7 @@ public class LuminanceViewModel : ViewModel
 
             foreach (var monitor in Monitors.Root.AllMonitorDevices())
             {
-                var lut = monitor.ProbeLut();
+                var lut = monitor.Vcp().ProbeLut();
                 lut.Load();
                 min = Math.Max(min, lut.MinLuminance);
             }
@@ -162,7 +162,7 @@ public class LuminanceViewModel : ViewModel
             if (Monitors is not  null)
                 foreach (var monitor in Monitors.Root.AllMonitorDevices())
                 {
-                    var lut = monitor.ProbeLut();
+                    var lut = monitor.Vcp().ProbeLut();
                     lut.Load();
                     yield return lut.MinLuminance;
                     yield return lut.MaxLuminance;

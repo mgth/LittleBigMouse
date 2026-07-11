@@ -32,7 +32,6 @@ using System.Xml.Serialization;
 using DynamicData;
 using DynamicData.Binding;
 using HLab.Sys.Argyll;
-using HLab.Sys.Windows.Monitors;
 using ReactiveUI;
 
 namespace HLab.Sys.Windows.MonitorVcp;
@@ -40,8 +39,6 @@ namespace HLab.Sys.Windows.MonitorVcp;
 public class ProbeLut : ReactiveObject
 {
    //public ProbedColor DIlluminant { get; }
-
-   readonly MonitorDevice _monitor;
 
    readonly SourceList<Tune> _lut = new();
 
@@ -53,10 +50,9 @@ public class ProbeLut : ReactiveObject
    readonly ReadOnlyObservableCollection<Tune> _smoothLutCollection;
    public ReadOnlyObservableCollection<Tune> SmoothLut => _smoothLutCollection;
 
-   internal ProbeLut(MonitorDevice monitor)
+   internal ProbeLut(VcpControl vcp)
    {
-      _monitor = monitor;
-      Vcp = _monitor.Vcp();
+      Vcp = vcp;
 
       _luminance = this.WhenAnyValue(
           e => e.Vcp.Brightness.Value,
@@ -281,11 +277,17 @@ public class ProbeLut : ReactiveObject
 
    string GetConfigPath(bool create = false)
    {
-      var path = Path.Combine(
-          Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-          "Mgth", "LittleBigMouse"
-      );
-      path = Path.Combine(path, _monitor.Id);
+      // Windows keeps the historical Mgth store; Linux follows the port's
+      // convention: ~/.config/LittleBigMouse (no vendor segment).
+      var path = OperatingSystem.IsWindows()
+          ? Path.Combine(
+              Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+              "Mgth", "LittleBigMouse")
+          : Path.Combine(
+              Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+              "LittleBigMouse");
+
+      path = Path.Combine(path, Vcp.MonitorId);
       if (create) Directory.CreateDirectory(path);
 
       path = Path.Combine(path, "Luminance.xml");

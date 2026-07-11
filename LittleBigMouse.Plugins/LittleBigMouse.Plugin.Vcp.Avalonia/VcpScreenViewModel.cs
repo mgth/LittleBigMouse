@@ -30,7 +30,6 @@ using Avalonia.Media;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Argyll;
-using HLab.Sys.Windows.Monitors;
 using HLab.Sys.Windows.MonitorVcp;
 using HLab.Sys.Windows.MonitorVcp.Avalonia;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -50,14 +49,14 @@ public class VcpScreenViewModelDesign()
 
 public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 {
-   readonly ISystemMonitorsService _monitorsService;
+   readonly IVcpService? _vcpService;
 
    // TODO : use reactive ui for collections
    public VcpScreenViewModel(
        Func<VcpScreenViewModel, TestPatternButtonViewModel> getButtonPattern,
-       ISystemMonitorsService monitorsService)
+       IVcpService? vcpService)
    {
-      _monitorsService = monitorsService;
+      _vcpService = vcpService;
 
       TestPatterns.Add(getButtonPattern(this)
          .Set(TestPatternType.ContrastBoth)
@@ -87,7 +86,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       _vcp = this.WhenAnyValue(
               e => e.Model,
-              selector: e => e?.MonitorDevice(_monitorsService).Vcp().Start())
+              selector: e => e is null ? null : _vcpService?.GetControl(e)?.Start())
           .ToProperty(this, e => e.Vcp);
 
       _brightnessVisibility = this.WhenAnyValue(
@@ -124,7 +123,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
           e => e.Model,
           selector: e =>
           {
-             var lut =  e?.MonitorDevice(_monitorsService).ProbeLut();
+             var lut = e is null ? null : _vcpService?.GetControl(e)?.ProbeLut();
              lut?.Load();
              return lut;
           })
@@ -311,7 +310,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
          var max = Vcp.Gain.Red.Max;
          var min = Vcp.Gain.Red.Min;
 
-         var old = Model.MonitorDevice(_monitorsService).ProbeLut().Luminance;
+         var old = ProbeLut?.Luminance ?? 0;
          level.Value = 0;
 
          for (var i = max; i >= min; i--)
@@ -336,7 +335,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
             if (t.MinGain <= min) break;
          }
 
-         Model.MonitorDevice(_monitorsService).ProbeLut().Luminance = old;
+         if (ProbeLut is not null) ProbeLut.Luminance = old;
       }
       ).Start();
       return;

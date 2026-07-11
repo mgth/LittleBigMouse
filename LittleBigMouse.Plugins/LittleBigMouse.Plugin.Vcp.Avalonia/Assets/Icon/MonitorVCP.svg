@@ -30,23 +30,23 @@
      x="44"
      y="104"
      ry="1" />
-  <!-- VCP glyph: control bars, white at 0.75 opacity over the screen. -->
+  <!-- VCP glyph: RGB control bars (original icon colors) over the screen. -->
   <rect
-     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     style="fill:#ff0000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round"
      width="16"
      height="40"
      x="32"
      y="36"
      ry="6" />
   <rect
-     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     style="fill:#00d000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round"
      width="16"
      height="40"
      x="56"
      y="36"
      ry="6" />
   <rect
-     style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;opacity:0.75"
+     style="fill:#0000ff;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round"
      width="16"
      height="40"
      x="80"

@@ -33,11 +33,25 @@ public class ArgyllProbe : ReactiveObject
 {
    public ArgyllProbe()
    {
-      ConfigFromDipcalGUI();
+      TryConfigFromDispcalGUI();
    }
    public ArgyllProbe(bool autoconfig = true)
    {
-      if (autoconfig) ConfigFromDipcalGUI();
+      if (autoconfig) TryConfigFromDispcalGUI();
+   }
+
+   // A broken or exotic DisplayCAL config must not take down whoever
+   // instantiates the probe (the VCP view-model creates one per monitor panel):
+   // fall back to defaults.
+   void TryConfigFromDispcalGUI()
+   {
+      try
+      {
+         ConfigFromDipcalGUI();
+      }
+      catch (Exception)
+      {
+      }
    }
 
 

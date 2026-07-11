@@ -1,4 +1,4 @@
-﻿/*
+/*
   HLab.Windows.MonitorVcp
   Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
@@ -22,19 +22,11 @@
 */
 
 #nullable enable
-using HLab.Sys.Monitors;
 using System;
-using HLab.Sys.Windows.API.MonitorConfiguration;
 using ReactiveUI;
-
-using HLab.Sys.Windows.Monitors;
 using OneOf;
 
-using static HLab.Sys.Windows.API.ErrHandlingApi;
-using static HLab.Sys.Windows.API.MonitorConfiguration.HighLevelMonitorConfigurationApi;
 using static HLab.Sys.Windows.API.MonitorConfiguration.LowLevelMonitorConfiguration;
-using static HLab.Sys.Windows.API.MonitorConfiguration.PhysicalMonitorEnumerationApi;
-using System.Threading;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
@@ -49,53 +41,49 @@ public enum VcpComponent
 }
 
 
-
 public class VcpControl : ReactiveObject
 {
-   PhysicalMonitor[] _pPhysicalMonitorArray;
-
-   public MonitorDevice Monitor { get; }
+   readonly IVcpTransport _transport;
    readonly CommandWorker _worker;
-   public VcpControl(MonitorDevice monitor, CommandWorker worker)
+
+   /// <summary>Identity of the monitor this channel talks to (used for the LUT store).</summary>
+   public string MonitorId { get; }
+
+   /// <summary>EDID PnP manufacturer code ("DEL", "PHL"…), drives quirks like AlternatePower.</summary>
+   public string? ManufacturerCode { get; }
+
+   public VcpControl(string monitorId, string? manufacturerCode, IVcpTransport transport, CommandWorker worker)
    {
-      Monitor = monitor;
+      MonitorId = monitorId;
+      ManufacturerCode = manufacturerCode;
+      _transport = transport;
       _worker = worker;
 
-      var hMonitor = (monitor.Connections.Count > 0) ? monitor.Connections[0].Parent.HMonitor : IntPtr.Zero;
-      _pPhysicalMonitorArray = GetPhysicalMonitorsFromHMONITOR(hMonitor);
-
-
-
       var retry = 1;
-      while (retry > 0)
+      while (retry-- >= 0)
       {
-         if (HPhysical != IntPtr.Zero && GetMonitorCapabilities(HPhysical, out var capabilities, out var colorTemperatures))
-         {
-            if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.Brightness))
-               Brightness = new MonitorLevel(worker, GetBrightness, SetBrightness);
+         var codes = transport.GetSupportedCodes();
+         if (codes is null) continue;
 
-            if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.Contrast))
-               Contrast = new MonitorLevel(worker, GetContrast, SetContrast);
+         if (codes.Contains((byte)VcpCode.Brightness))
+            Brightness = new MonitorLevel(worker, GetBrightness, SetBrightness);
 
-            if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.RedGreenBlueGain))
-               Gain = new MonitorRgbLevel(worker, GetGain, SetGain);
+         if (codes.Contains((byte)VcpCode.Contrast))
+            Contrast = new MonitorLevel(worker, GetContrast, SetContrast);
 
-            if (capabilities.HasFlag(HighLevelMonitorConfigurationApi.MonitorCapabilities.RedGreenBlueDrive))
-               Drive = new MonitorRgbLevel(worker, GetDrive, SetDrive);
+         if (codes.Contains((byte)VcpCode.RedGain)
+             && codes.Contains((byte)VcpCode.GreenGain)
+             && codes.Contains((byte)VcpCode.BlueGain))
+            Gain = new MonitorRgbLevel(worker, GetGain, SetGain);
 
-            Source = new MonitorLevel(worker, GetSource, SetSource);
+         if (codes.Contains((byte)VcpCode.RedDrive)
+             && codes.Contains((byte)VcpCode.GreenDrive)
+             && codes.Contains((byte)VcpCode.BlueDrive))
+            Drive = new MonitorRgbLevel(worker, GetDrive, SetDrive);
 
-            //NativeMethods.MonitorCapabilities.MC_CAPS_COLOR_TEMPERATURE;
-            //NativeMethods.MonitorCapabilities.MC_CAPS_DEGAUSS;
-            //NativeMethods.MonitorCapabilities.MC_CAPS_DISPLAY_AREA_POSITION;
-            //NativeMethods.MonitorCapabilities.MC_CAPS_DISPLAY_AREA_SIZE;
-            //NativeMethods.MonitorCapabilities.MC_CAPS_MONITOR_TECHNOLOGY_TYPE;
-            //NativeMethods.MonitorCapabilities.MC_CAPS_RESTORE_FACTORY_COLOR_DEFAULTS;
-            //NativeMethods.MonitorCapabilities.MC_CAPS_RESTORE_FACTORY_DEFAULTS;
-            //NativeMethods.MonitorCapabilities.MC_RESTORE_FACTORY_DEFAULTS_ENABLES_MONITOR_SETTINGS;
-            retry = 0;
-         }
-         else retry--;
+         Source = new MonitorLevel(worker, GetSource, SetSource);
+
+         break;
       }
    }
 
@@ -108,17 +96,7 @@ public class VcpControl : ReactiveObject
       return this;
    }
 
-
-   nint HPhysical => _pPhysicalMonitorArray.Length > 0 ? _pPhysicalMonitorArray[0].hPhysicalMonitor : IntPtr.Zero;
-
-   ~VcpControl()
-   {
-      if (_pPhysicalMonitorArray is { Length: > 0 })
-         DestroyPhysicalMonitors((uint)_pPhysicalMonitorArray.Length, ref _pPhysicalMonitorArray);
-   }
-
-   public bool AlternatePower => Monitor.Edid?.ManufacturerCode == "DEL";
-
+   public bool AlternatePower => ManufacturerCode == "DEL";
 
    public bool Power
    {
@@ -129,16 +107,16 @@ public class VcpControl : ReactiveObject
          if (value)
          {
             if (AlternatePower)
-               SetVCPFeature(HPhysical, VcpCode.PowerAlternate, 0);
+               _transport.SetFeature(VcpCode.PowerAlternate, 0);
             else
-               SetVCPFeature(HPhysical, VcpCode.Power, 1);
+               _transport.SetFeature(VcpCode.Power, 1);
          }
          else
          {
             if (AlternatePower)
-               SetVCPFeature(HPhysical, VcpCode.PowerAlternate, 1);
+               _transport.SetFeature(VcpCode.PowerAlternate, 1);
             else
-               SetVCPFeature(HPhysical, VcpCode.Power, 4);
+               _transport.SetFeature(VcpCode.Power, 4);
          }
          this.RaiseAndSetIfChanged(ref _power, value);
 
@@ -194,78 +172,46 @@ public class VcpControl : ReactiveObject
    }
    MonitorRgbLevel? _drive = null;
 
-   OneOf<(uint value, uint min, uint max), int> GetFeature(VcpCode code)
+   static VcpCode GainCode(VcpComponent component) => component switch
    {
-      if (HPhysical == IntPtr.Zero) return 0;
+      VcpComponent.Red => VcpCode.RedGain,
+      VcpComponent.Green => VcpCode.GreenGain,
+      VcpComponent.Blue => VcpCode.BlueGain,
+      _ => throw new ArgumentOutOfRangeException(nameof(component), component, null)
+   };
 
-      var result = GetVCPFeatureAndVCPFeatureReply(HPhysical, code, out var pvct, out var value, out var max);
-      if (result) return (value, 0, max);
-      return GetLastError();
-   }
+   static VcpCode DriveCode(VcpComponent component) => component switch
+   {
+      VcpComponent.Red => VcpCode.RedDrive,
+      VcpComponent.Green => VcpCode.GreenDrive,
+      VcpComponent.Blue => VcpCode.BlueDrive,
+      _ => throw new ArgumentOutOfRangeException(nameof(component), component, null)
+   };
 
-   bool SetFeature(VcpCode code, uint value)
-      => HPhysical != IntPtr.Zero && SetVCPFeature(HPhysical,code, value);
-
-   OneOf<(uint value, uint min, uint max), int> GetSource(VcpComponent component = VcpComponent.None) => GetFeature(VcpCode.InputSource);
-   bool SetSource(uint value, VcpComponent component = VcpComponent.None) => SetFeature(VcpCode.InputSource, value);
+   OneOf<(uint value, uint min, uint max), int> GetSource(VcpComponent component = VcpComponent.None)
+      => _transport.GetFeature(VcpCode.InputSource);
+   bool SetSource(uint value, VcpComponent component = VcpComponent.None)
+      => _transport.SetFeature(VcpCode.InputSource, value);
 
    OneOf<(uint value, uint min, uint max), int> GetBrightness(VcpComponent component = VcpComponent.None)
-   {
-      if (HPhysical == IntPtr.Zero) return 0;
-
-      uint value = 0, min = 0, max = 0;
-      var result = GetMonitorBrightness(HPhysical, ref min, ref value, ref max);
-      if (result) return (value, min, max);
-      return GetLastError();
-   }
-
+      => _transport.GetFeature(VcpCode.Brightness);
    bool SetBrightness(uint value, VcpComponent component = VcpComponent.None)
-       => HPhysical != IntPtr.Zero && SetMonitorBrightness(HPhysical, value);
+      => _transport.SetFeature(VcpCode.Brightness, value);
 
    OneOf<(uint value, uint min, uint max), int> GetContrast(VcpComponent component = VcpComponent.None)
-   {
-      if (HPhysical == IntPtr.Zero) return 0;
-
-      uint value = 0, min = 0, max = 0;
-      if (GetMonitorContrast(HPhysical, ref min, ref value, ref max))
-      {
-         return (value, min, max);
-      };
-      return GetLastError();
-   }
-
+      => _transport.GetFeature(VcpCode.Contrast);
    bool SetContrast(uint value, VcpComponent component = VcpComponent.None)
-       => HPhysical != IntPtr.Zero && SetMonitorContrast(HPhysical, value);
+      => _transport.SetFeature(VcpCode.Contrast, value);
 
    OneOf<(uint value, uint min, uint max), int> GetGain(VcpComponent component)
-   {
-      if (HPhysical == IntPtr.Zero) return 0;
-
-      uint value = 0, min = 0, max = 0;
-      if (GetMonitorRedGreenOrBlueGain(HPhysical, (uint)component, ref min, ref value, ref max))
-      {
-         return (value, min, max);
-      }
-      return GetLastError();
-   }
-
+      => _transport.GetFeature(GainCode(component));
    bool SetGain(uint value, VcpComponent component = VcpComponent.None)
-       => HPhysical != IntPtr.Zero && SetMonitorRedGreenOrBlueGain(HPhysical, (uint)component, value);
+      => _transport.SetFeature(GainCode(component), value);
 
    OneOf<(uint value, uint min, uint max), int> GetDrive(VcpComponent component)
-   {
-      if (HPhysical == IntPtr.Zero) return 0;
-
-      uint value = 0, min = 0, max = 0;
-      if (GetMonitorRedGreenOrBlueDrive(HPhysical, (uint)component, ref min, ref value, ref max))
-      {
-         return (value, min, max);
-      }
-      return GetLastError();
-   }
-
+      => _transport.GetFeature(DriveCode(component));
    bool SetDrive(uint value, VcpComponent component)
-       => HPhysical != IntPtr.Zero && SetMonitorRedGreenOrBlueDrive(HPhysical, (uint)component, value);
+      => _transport.SetFeature(DriveCode(component), value);
 }
 
 public delegate OneOf<(uint value, uint min, uint max), int> VcpGetter(VcpComponent component = VcpComponent.None);

@@ -150,6 +150,7 @@ internal class Program
                 services.AddSingleton<LittleBigMouse.Plugins.ILayoutPersistence, LittleBigMouse.Platform.Windows.WindowsLayoutPersistence>();
                 services.AddSingleton<LittleBigMouse.Plugins.IMonitorInfoService, LittleBigMouse.Platform.Windows.WindowsMonitorInfoService>();
                 services.AddSingleton<LittleBigMouse.Plugins.IWallpaperService, LittleBigMouse.Platform.Windows.WindowsWallpaperService>();
+                services.AddSingleton<IVcpService, WindowsVcpService>();
             }
             else
             {
@@ -162,6 +163,7 @@ internal class Program
                 services.AddSingleton<LittleBigMouse.Plugins.ILayoutPersistence, LittleBigMouse.Platform.Linux.LinuxLayoutPersistence>();
                 services.AddSingleton<LittleBigMouse.Plugins.IMonitorInfoService, LittleBigMouse.Platform.Linux.LinuxMonitorInfoService>();
                 services.AddSingleton<LittleBigMouse.Plugins.IWallpaperService, LittleBigMouse.Platform.Linux.PlasmaWallpaperService>();
+                services.AddSingleton<IVcpService, DdcUtilVcpService>();
             }
 
             services.AddSingleton<ILittleBigMouseClientService, LittleBigMouseClientService>();
@@ -174,10 +176,9 @@ internal class Program
 
             parser.LoadDll("LittleBigMouse.Ui.Core");
             parser.LoadDll("LittleBigMouse.Plugin.Layout.Avalonia");
-            // VCP talks DDC/CI through Win32 (and its view-models walk the Win32 device
-            // tree): Windows-only until it gets its own platform seam.
-            if (OperatingSystem.IsWindows())
-                parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
+            // VCP goes through the IVcpService seam: dxva2 on Windows, ddcutil on
+            // Linux (monitors without a reachable DDC/CI channel just get no sliders).
+            parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
             // Wallpaper drives the desktop through IWallpaperService (plasmashell
             // scripting on Linux, IDesktopWallpaper COM on Windows); the plugin
             // hides itself where IsSupported is false (GNOME, bare X11…).

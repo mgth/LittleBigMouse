@@ -80,7 +80,7 @@ public class ProbeLut : ReactiveObject
       var sumY = 0.0;
       var sumXY = 0.0;
       var sumX2 = 0.0;
-      var n = _sortedLut.Count;
+      var n = 0;
 
       foreach (var tune in list)
       {
@@ -91,6 +91,7 @@ public class ProbeLut : ReactiveObject
          sumY += y;
          sumXY += x * y;
          sumX2 += x * x;
+         n++;
       }
 
       var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
@@ -101,53 +102,71 @@ public class ProbeLut : ReactiveObject
 
    public void GenerateSmoothedCurve()
    {
-      _smoothLut.Clear();
+      // Work on a snapshot of the source list: _sortedLut is rebound on the UI
+      // thread and lags behind when this runs from the measurement task.
+      var lut = _lut.Items.OrderBy(t => t.Brightness).ToList();
 
-      var(slopeY,interceptY) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Y);
-      var(slopeR,interceptR) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Red);
-      var(slopeG,interceptG) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Green);
-      var(slopeB,interceptB) = LinearRegression(_sortedLut, t => t.Brightness, t => t.Blue);
+      if (lut.Count < 2)
+      {
+         _smoothLut.Clear();
+         return;
+      }
 
-      var start = (int)_sortedLut.First().Brightness;
-      var end = (int)_sortedLut.Last().Brightness;
+      var(slopeY,interceptY) = LinearRegression(lut, t => t.Brightness, t => t.Y);
+      var(slopeR,interceptR) = LinearRegression(lut, t => t.Brightness, t => t.Red);
+      var(slopeG,interceptG) = LinearRegression(lut, t => t.Brightness, t => t.Green);
+      var(slopeB,interceptB) = LinearRegression(lut, t => t.Brightness, t => t.Blue);
 
+      var start = (int)lut.First().Brightness;
+      var end = (int)lut.Last().Brightness;
+
+      var smooth = new List<Tune>();
       for (var i=start; i<end; i++ )
       {
-         var tune = new Tune
+         smooth.Add(new Tune
          {
             Brightness = i,
-            Y = (uint)(slopeY * i + interceptY),
-            Red = (uint)(slopeR * i + interceptR),
-            Green = (uint)(slopeG * i + interceptG),
-            Blue = (uint)(slopeB * i + interceptB),
-         };
-         _smoothLut.Add(tune);
+            Y = (uint)Math.Max(0, slopeY * i + interceptY),
+            Red = (uint)Math.Max(0, slopeR * i + interceptR),
+            Green = (uint)Math.Max(0, slopeG * i + interceptG),
+            Blue = (uint)Math.Max(0, slopeB * i + interceptB),
+         });
       }
+
+      _smoothLut.Edit(l =>
+      {
+         l.Clear();
+         l.AddRange(smooth);
+      });
    }
 
    public VcpControl Vcp { get; }
 
    public bool RemoveBrightness(double brightness)
    {
-      var t = _sortedLut.FirstOrDefault(x => x.Brightness == brightness);
+      var t = _lut.Items.FirstOrDefault(x => x.Brightness == brightness);
       if (t == null) return false;
 
       _lut.Remove(t);
+      GenerateSmoothedCurve();
       return true;
    }
 
    public bool RemoveLowBrightness(double maxGain)
    {
-      var t = _sortedLut.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain == maxGain));
+      var t = _lut.Items.FirstOrDefault(x => (x.Brightness == 0 && x.MaxGain == maxGain));
       if (t == null) return false;
 
       _lut.Remove(t);
+      GenerateSmoothedCurve();
       return true;
    }
 
    public void Add(Tune tune)
    {
       _lut.Add(tune);
+      // keep the charted curve in step with every new measurement
+      GenerateSmoothedCurve();
    }
 
    public Tune FromLuminance(double luminance)

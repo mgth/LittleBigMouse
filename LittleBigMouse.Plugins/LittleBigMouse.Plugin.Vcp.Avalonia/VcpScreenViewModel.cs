@@ -215,15 +215,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                new Axis
                {
                   Name = "Brightness",
-                  NamePaint = new SolidColorPaint(SKColors.Black), 
+                  NamePaint = new SolidColorPaint(SKColors.Black),
 
-                  LabelsPaint = new SolidColorPaint(SKColors.Blue), 
+                  LabelsPaint = new SolidColorPaint(SKColors.Blue),
                   TextSize = 10,
 
                   SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) { StrokeThickness = 2 }  ,
-                  MaxLimit = lut?.Max(t => t.Brightness),
+                  // no MaxLimit: autoscale follows the points as they land
                   MinLimit = 0,
-                  
+
                },
             })
             .ToProperty(this, e => e.XAxes);
@@ -241,15 +241,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                   LabelsPaint = new SolidColorPaint(SKColors.Green), 
                   TextSize = 20,
 
-                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) 
-                  { 
-                     StrokeThickness = 2, 
-                     PathEffect = new DashEffect([3, 3]) 
+                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray)
+                  {
+                     StrokeThickness = 2,
+                     PathEffect = new DashEffect([3, 3])
                   }            ,
-                  MaxLimit = lut?.Max(t => t.Y),
+                  // no MaxLimit: autoscale follows the points as they land
                   MinLimit = 0,
 
-                  
+
                },
 
                new Axis
@@ -261,8 +261,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                   TextSize = 10,
 
                   SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) { StrokeThickness = 2 }  ,
-                  MaxLimit = Math.Max(lut?.Max(l => l.Red)??100,Math.Max(lut?.Max(l => l.Green)??100,lut?.Max(l => l.Blue)??100)) + 1 ,
-                  MinLimit = Math.Min(lut?.Min(l => l.Red)??100,Math.Max(lut?.Min(l => l.Green)??100,lut?.Min(l => l.Blue)??100)) - 1,
+                  // autoscale: fixed limits computed at bind time went stale
+                  // (and threw on an empty lut) once live measurements landed
                   Position = LiveChartsCore.Measure.AxisPosition.End
                }
 

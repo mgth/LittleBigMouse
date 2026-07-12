@@ -234,15 +234,25 @@ public class ArgyllProbe : ReactiveObject
          else ArgyllSendKey(p, "k");
       }
 
+      if (line.Contains("Calibration complete"))
+      {
+         Message = "Calibration done";
+      }
+
+      // Munki-style dial still in calibration position when a reading starts
+      if (line.Contains("measurement position"))
+      {
+         Message = "Set instrument sensor back to measure position";
+      }
+
+      // Routine menu of every spotread run, answered automatically: don't
+      // surface it as a message, it would mask the caller's progress report
+      // on every single reading.
       if (line.Contains("Place instrument"))
       {
          System.Threading.Thread.Sleep(300);
          p.StandardInput.Flush();
 
-         Message = "Place instrument in measure position";
-         //var result = MessageBox.Show("Place instrument in measure position", "Instrument",
-         //    MessageBoxButton.OKCancel, MessageBoxImage.Information);
-         //ArgyllSendKey(p, result == MessageBoxResult.OK ? "0" : "q");
          ArgyllSendKey(p, "0");
       }
 
@@ -303,6 +313,49 @@ public class ArgyllProbe : ReactiveObject
    }
 
    public static string ArgyllPath { get; set; }
+
+   static string ExeName => OperatingSystem.IsWindows() ? "spotread.exe" : "spotread";
+
+   /// <summary>
+   /// Full path of the spotread executable, or null when Argyll is not
+   /// available. DisplayCAL's argyll.dir wins when it holds a usable install
+   /// (the key points either at the bin directory or at the Argyll root);
+   /// otherwise the system PATH is searched — on Linux Argyll is typically a
+   /// distro package with no DisplayCAL entry at all.
+   /// </summary>
+   public static string SpotreadPath
+   {
+      get
+      {
+         if (!string.IsNullOrEmpty(ArgyllPath))
+         {
+            var candidate = Path.Combine(ArgyllPath, ExeName);
+            if (File.Exists(candidate)) return candidate;
+
+            candidate = Path.Combine(ArgyllPath, "bin", ExeName);
+            if (File.Exists(candidate)) return candidate;
+         }
+
+         var paths = Environment.GetEnvironmentVariable("PATH");
+         if (paths is null) return null;
+
+         foreach (var dir in paths.Split(Path.PathSeparator))
+         {
+            if (string.IsNullOrWhiteSpace(dir)) continue;
+            try
+            {
+               var candidate = Path.Combine(dir, ExeName);
+               if (File.Exists(candidate)) return candidate;
+            }
+            catch (Exception)
+            {
+               // unparsable PATH entry
+            }
+         }
+
+         return null;
+      }
+   }
 
    public int ColorTemp { get; set; } = 6500;
    public MeasurementMode Mode { get; set; } = MeasurementMode.Emissive;
@@ -418,7 +471,7 @@ public class ArgyllProbe : ReactiveObject
    }
 
 
-   public bool Installed => ArgyllPath != "";
+   public bool Installed => SpotreadPath is not null;
 
    public bool SpotRead()
    {
@@ -442,8 +495,11 @@ public class ArgyllProbe : ReactiveObject
 
    public void ExecSpotRead()
    {
-      var aProc = Process.GetProcessesByName("Spotread");
-      foreach (var t in aProc)
+      var exe = SpotreadPath;
+      if (exe is null) return;
+
+      foreach (var name in new[] { "spotread", "Spotread" })
+      foreach (var t in Process.GetProcessesByName(name))
       {
          try
          {
@@ -459,7 +515,7 @@ public class ArgyllProbe : ReactiveObject
       {
          StartInfo =
             {
-                FileName = Path.Combine(ArgyllPath, @"Spotread.exe"),
+                FileName = exe,
                 Arguments = SpotReadArgs,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

@@ -1,7 +1,6 @@
-﻿using System.ComponentModel;
+using System.Reactive.Linq;
 using Avalonia.Media;
-using HLab.ColorTools;
-using HLab.ColorTools.Avalonia;
+using Avalonia.Media.Immutable;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Windows.MonitorVcp;
 using ReactiveUI;
@@ -10,36 +9,57 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
 public class VcpSliderViewModel : ViewModel<MonitorLevel>
 {
+    static readonly Color RedColor = Color.FromRgb(0xE0, 0x52, 0x4E);
+    static readonly Color GreenColor = Color.FromRgb(0x55, 0xB9, 0x4F);
+    static readonly Color BlueColor = Color.FromRgb(0x4C, 0x8E, 0xDF);
+
+    // All brushes immutable: a mutable SolidColorBrush is thread-affine and the
+    // compositor rejects it when the binding update comes from the CommandWorker.
+    static readonly IBrush MovingBrush = new ImmutableSolidColorBrush(Color.FromArgb(0x50, 0xEF, 0x9F, 0x27));
+
+    static readonly IBrush RedTint = new ImmutableSolidColorBrush(RedColor, 0.30);
+    static readonly IBrush GreenTint = new ImmutableSolidColorBrush(GreenColor, 0.30);
+    static readonly IBrush BlueTint = new ImmutableSolidColorBrush(BlueColor, 0.30);
+
     public VcpSliderViewModel()
     {
-        _background = this.WhenAnyValue(
+        _channelColor = this.WhenAnyValue(
+            e => e.Model.Component,
+            selector: ColorFor)
+            .ToProperty(this, e => e.ChannelColor);
+
+        // Chip: channel tint at rest, amber while the DDC write is in flight.
+        // Moving flips on the CommandWorker thread: marshal before the view binds.
+        _chipBackground = this.WhenAnyValue(
             e => e.Model.Moving,
-            moving => moving ? Brushes.Orange : Brushes.LightGreen
-        ).ToProperty(this, e => e.Background);
-
-        _sliderBackground = this.WhenAnyValue(
             e => e.Model.Component,
-            c => GetBackground(GetColor(c))
-        ).ToProperty(this, e => e.SliderBackground);
-
-        _sliderForeground = this.WhenAnyValue(
-            e => e.Model.Component,
-            c => GetForeground(GetColor(c))
-        ).ToProperty(this, e => e.SliderForeground);
-
-        _sliderBorderBrush = this.WhenAnyValue(
-            e => e.Model.Component,
-            c => GetBorderBrush(GetColor(c))
-        ).ToProperty(this, e => e.SliderBorderBrush);
+            (moving, component) => moving ? MovingBrush : TintFor(component))
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .ToProperty(this, e => e.ChipBackground);
     }
 
-    public IBrush Background => _background.Value;
-    readonly ObservableAsPropertyHelper<IBrush> _background;
-    public IBrush SliderBackground => _sliderBackground.Value;
-    readonly ObservableAsPropertyHelper<IBrush> _sliderBackground;
-    public IBrush SliderForeground => _sliderForeground.Value;
-    readonly ObservableAsPropertyHelper<IBrush> _sliderForeground;
-    public IBrush SliderBorderBrush => _sliderBorderBrush.Value;
+    public static Color? ColorFor(VcpComponent component) => component switch
+    {
+        VcpComponent.Red => RedColor,
+        VcpComponent.Green => GreenColor,
+        VcpComponent.Blue => BlueColor,
+        _ => null
+    };
+
+    static IBrush TintFor(VcpComponent component) => component switch
+    {
+        VcpComponent.Red => RedTint,
+        VcpComponent.Green => GreenTint,
+        VcpComponent.Blue => BlueTint,
+        _ => Brushes.Transparent
+    };
+
+    /// <summary>Channel color for R/G/B gain and drive levels, null for neutral levels.</summary>
+    public Color? ChannelColor => _channelColor.Value;
+    readonly ObservableAsPropertyHelper<Color?> _channelColor;
+
+    public IBrush ChipBackground => _chipBackground.Value;
+    readonly ObservableAsPropertyHelper<IBrush> _chipBackground;
 
     public void Up()
     {
@@ -54,38 +74,4 @@ public class VcpSliderViewModel : ViewModel<MonitorLevel>
         if(Model.Value > Model.Min)
             Model.Value--;
     }
-
-    readonly ObservableAsPropertyHelper<IBrush> _sliderBorderBrush;
-
-    static Color GetColor(VcpComponent component) =>
-        component switch
-        {
-            VcpComponent.Red => Color.FromArgb(255, 255, 0, 0),
-            VcpComponent.Green => Color.FromArgb(255, 0, 255, 0),
-            VcpComponent.Blue => Color.FromArgb(255, 0, 0, 255),
-            VcpComponent.Brightness => Color.FromArgb(255, 255, 255, 255),
-            VcpComponent.Contrast => Color.FromArgb(255, 30, 30, 30),
-            VcpComponent.None => Color.FromArgb(255, 128, 128, 128),
-            _ => throw new ArgumentOutOfRangeException(nameof(Component), component, null)
-        };
-
-    //static Brush GetForeground(Color c) =>
-    //    new SolidColorBrush(
-    //        ColorDouble.FromArgb(c.A * 0.7, c.R* 0.8 , c.G* 0.8, c.B * 0.8).ToColor()
-    //    );
-    static Brush GetForeground(Color c) =>
-        new SolidColorBrush(
-            c.ToColor<double>().ToAvaloniaColor()
-        );
-
-    static Brush GetBackground(Color c) =>
-        new SolidColorBrush(
-//            c.ToColor<double>()
-            c.ToColor<double>().ToHSL().Darken(0.2).WithAlpha(0.6).ToAvaloniaColor()
-        );
-
-    static Brush GetBorderBrush(Color c) =>
-        new SolidColorBrush(
-           HLabColors.RGB(c.A * 0.9, c.R * 0.5+0.5, c.G * 0.5 + 0.5, c.B * 0.5 + 0.5).ToAvaloniaColor()
-        );
 }

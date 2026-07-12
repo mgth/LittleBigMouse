@@ -1,153 +1,202 @@
-﻿<UserControl x:Class="LittleBigMouse.Plugin.Vcp.Avalonia.VcpScreenView"
+<UserControl x:Class="LittleBigMouse.Plugin.Vcp.Avalonia.VcpScreenView"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vcp.Avalonia="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia"
              xmlns:mvvm.Avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
              xmlns:avalonia="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
-             mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="615.613" 
+             mc:Ignorable="d"
+             d:DesignHeight="500" d:DesignWidth="700"
              x:DataType="vcp.Avalonia:VcpScreenViewModel"
              >
     <Design.DataContext>
         <vcp.Avalonia:VcpScreenViewModelDesign />
     </Design.DataContext>
 
+    <UserControl.Styles>
+        <!-- Cards sit over the monitor frame's wallpaper preview: they need real
+             opacity to stay readable over an arbitrary photo, theme color under it -->
+        <Style Selector="Border.card">
+            <Setter Property="Background">
+                <SolidColorBrush Color="{DynamicResource HLab.Colors.Background}" Opacity="0.72"/>
+            </Setter>
+            <Setter Property="BorderBrush" Value="#30808080"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <!-- Fader cards flow side by side, mixing-desk style, and wrap when narrow -->
+        <Style Selector="Border.card.faders">
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
+        <Style Selector="TextBlock.cardTitle">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}"/>
+            <Setter Property="Opacity" Value="0.55"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <Style Selector="TextBlock.rowLabel">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}"/>
+            <Setter Property="Opacity" Value="0.85"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.faderLabel">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Foreground}"/>
+            <Setter Property="Opacity" Value="0.75"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Expander.flat">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+    </UserControl.Styles>
 
-    <Grid x:Name="Grid" ColumnDefinitions="Auto,*,Auto">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="10" MaxWidth="560" HorizontalAlignment="Left">
 
-        <ScrollViewer AllowAutoHide="True" HorizontalScrollBarVisibility="Auto">
-        <StackPanel Orientation="Horizontal"> 
+            <!-- Probe in progress -->
+            <Border Classes="card" IsVisible="{Binding ProbingVisibility}">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <ProgressBar IsIndeterminate="True" Width="140" Height="4" VerticalAlignment="Center"/>
+                    <TextBlock Classes="rowLabel" Text="Probing DDC/CI…"/>
+                </StackPanel>
+            </Border>
 
-            <LayoutTransformControl>
-                <LayoutTransformControl.LayoutTransform>
-                    <RotateTransform Angle="-90"/>
-                </LayoutTransformControl.LayoutTransform>
-                <Label Foreground="White" Content="Brightness" VerticalAlignment="Center" IsVisible="{Binding BrightnessVisibility}"/>
-            </LayoutTransformControl>
+            <WrapPanel Orientation="Horizontal">
 
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Brightness}"/>
+                <!-- Image -->
+                <Border Classes="card faders" IsVisible="{Binding ImageVisibility}">
+                    <StackPanel>
+                        <TextBlock Classes="cardTitle" Text="Image"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
 
-            <LayoutTransformControl>
-                <LayoutTransformControl.LayoutTransform>
-                    <RotateTransform Angle="-90"/>
-                </LayoutTransformControl.LayoutTransform>
-                <Label Foreground="White" Content="Contrast" VerticalAlignment="Center" IsVisible="{Binding ContrastVisibility}"/>
-            </LayoutTransformControl>
+                            <StackPanel IsVisible="{Binding BrightnessVisibility}">
+                                <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Brightness}"/>
+                                <TextBlock Classes="faderLabel" Text="Brightness"/>
+                            </StackPanel>
 
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Contrast}"/>
+                            <StackPanel IsVisible="{Binding ContrastVisibility}">
+                                <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Contrast}"/>
+                                <TextBlock Classes="faderLabel" Text="Contrast"/>
+                            </StackPanel>
 
-            <LayoutTransformControl>
-                <LayoutTransformControl.LayoutTransform>
-                    <RotateTransform Angle="-90"/>
-                </LayoutTransformControl.LayoutTransform>
-                <Label Foreground="White" Content="Gain" VerticalAlignment="Center" IsVisible="{Binding GainVisibility}"/>
-            </LayoutTransformControl>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
 
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Red}"/>
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Green}"/>
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Blue}"/>
+                <!-- White balance -->
+                <Border Classes="card faders" IsVisible="{Binding GainVisibility}">
+                    <StackPanel>
+                        <TextBlock Classes="cardTitle" Text="White balance — gain"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
 
-            <LayoutTransformControl>
-                <LayoutTransformControl.LayoutTransform>
-                    <RotateTransform Angle="-90"/>
-                </LayoutTransformControl.LayoutTransform>
-                <Label Foreground="White" Content="Drive" VerticalAlignment="Center" IsVisible="{Binding DriveVisibility}"/>
-            </LayoutTransformControl>
+                            <StackPanel>
+                                <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Red}"/>
+                                <TextBlock Classes="faderLabel" Text="Red"/>
+                            </StackPanel>
 
+                            <StackPanel>
+                                <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Green}"/>
+                                <TextBlock Classes="faderLabel" Text="Green"/>
+                            </StackPanel>
 
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Red}"/>
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Green}"/>
-            <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Blue}"/>
-			
-            <Rectangle Width="20"/>
-            <StackPanel VerticalAlignment="Center" Orientation="Vertical" IsVisible="{Binding AnywayVisibility}">
-                <Label Foreground="White">DDC/CI not available</Label>
-                <Button Command="{Binding AnywayCommand}">Try anyway</Button>
-            </StackPanel>
+                            <StackPanel>
+                                <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Gain.Blue}"/>
+                                <TextBlock Classes="faderLabel" Text="Blue"/>
+                            </StackPanel>
+
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </WrapPanel>
+
+            <!-- Advanced: drive + calibration -->
+            <Border Classes="card" IsVisible="{Binding AdvancedVisibility}">
+                <Expander Classes="flat">
+                    <Expander.Header>
+                        <TextBlock Classes="rowLabel" Text="Advanced — drive, calibration"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,8,0,0">
+
+                        <StackPanel IsVisible="{Binding DriveVisibility}">
+                            <TextBlock Classes="cardTitle" Text="Drive"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                <StackPanel>
+                                    <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Red}"/>
+                                    <TextBlock Classes="faderLabel" Text="Red"/>
+                                </StackPanel>
+
+                                <StackPanel>
+                                    <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Green}"/>
+                                    <TextBlock Classes="faderLabel" Text="Green"/>
+                                </StackPanel>
+
+                                <StackPanel>
+                                    <mvvm.Avalonia:ViewLocator Model="{Binding Vcp.Drive.Blue}"/>
+                                    <TextBlock Classes="faderLabel" Text="Blue"/>
+                                </StackPanel>
+
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding BrightnessVisibility}">
+                            <TextBlock Classes="cardTitle" Text="Calibration" Margin="0,8,0,6"/>
+
+                            <avalonia:CartesianChart x:Name="Curve"
+                                Height="220"
+                                Series="{Binding Series}"
+                                XAxes="{Binding XAxes}"
+                                YAxes="{Binding YAxes}"
+                                ZoomMode="Both"/>
+
+                            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                                <Button Content="Tune white point" Command="{Binding ProbeBrightnessCommand}"/>
+                                <TextBlock Classes="rowLabel" Text="{Binding ArgyllProbe.Message}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                    </StackPanel>
+                </Expander>
+            </Border>
+
+            <!-- No DDC channel -->
+            <Border Classes="card" IsVisible="{Binding AnywayVisibility}">
+                <StackPanel Spacing="8" HorizontalAlignment="Center" Margin="0,6">
+                    <TextBlock Classes="rowLabel" Text="DDC/CI not available on this monitor." HorizontalAlignment="Center"/>
+                    <Button Content="Try anyway" Command="{Binding AnywayCommand}" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Test patterns -->
+            <Border Classes="card">
+                <StackPanel>
+                    <TextBlock Classes="cardTitle" Text="Test patterns"/>
+                    <ItemsControl ItemsSource="{Binding TestPatterns}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <mvvm.Avalonia:ViewLocator Model="{Binding}" Margin="0,0,8,8"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
 
         </StackPanel>
-        </ScrollViewer>
-
-		<Grid RowDefinitions="*,Auto,Auto" Grid.Row="0" Grid.Column="1" >
-			
-            <avalonia:CartesianChart x:Name="Curve"
-                Series="{Binding Series}"
-                XAxes="{Binding XAxes}"
-                YAxes="{Binding YAxes}"
-				ZoomMode="Both">
-            </avalonia:CartesianChart>
-			
-            <Button
-				Grid.Row="1"
-				Command="{Binding ProbeBrightnessCommand}"
-				Content="Tune WP High"
-            />
-
-			<TextBlock Grid.Row="2" Text="{Binding ArgyllProbe.Message}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-			
-		</Grid>
-		
-        <ItemsControl Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" ItemsSource="{Binding TestPatterns}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <mvvm.Avalonia:ViewLocator Model="{Binding}"/>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-		
-        <!--<StackPanel  Grid.Column="1" Grid.Row="1" Orientation="Horizontal">
-            <Button             
-            Click="Probe_OnClick"
-                    Content="Probe"
-            />
-            <Button             
-            Click="Tune_OnClick"
-                    Content="Tune WP"
-            />
-            
-            <Button             
-            Click="ProbeLuminance_OnClick"
-                    Content="Tune WP High"
-            />
-            
-            <Button             
-            Click="ProbeLowLuminance_OnClick"
-                    Content="Tune WP Low"
-            />
-            
-           <Button             
-            Click="WakeUp_OnClick"
-                    Content="WakeUp"
-            />
-            <Button             
-            Click="Save_OnClick"
-                    Content="Save"
-            />
-        </StackPanel>-->
-
-        <!--<StackPanel Margin="30" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-            <Button                 
-                Width="50"  
-                Height="25" 
-                VerticalAlignment="Bottom" 
-                HorizontalAlignment="Right"
-                Click="ButtonOff_OnClick"
-                        Content="Off"
-                />
-            <TextBox x:Name="txtCode">D6</TextBox>
-            <TextBox x:Name="txtValue">1</TextBox>
-            <Button                 
-                Width="50"  
-                Height="25" 
-                VerticalAlignment="Bottom" 
-                HorizontalAlignment="Right"
-                Click="ButtonOn_OnClick"
-                        Content="On"
-                />
-
-        </StackPanel>-->
-    </Grid>
+    </ScrollViewer>
 </UserControl>

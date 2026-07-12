@@ -1,12 +1,12 @@
-﻿<UserControl x:Class="LittleBigMouse.Plugin.Vcp.Avalonia.VcpSlider"
+<UserControl x:Class="LittleBigMouse.Plugin.Vcp.Avalonia.VcpSlider"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:avalonia="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia"
              xmlns:controls="clr-namespace:HLab.Base.Avalonia.Controls;assembly=HLab.Base.Avalonia"
-             mc:Ignorable="d" 
-             d:DesignHeight="300"
+             mc:Ignorable="d"
+             d:DesignHeight="220"
              x:Name="UserControl"
              x:DataType="avalonia:VcpSliderViewModel"
              >
@@ -15,27 +15,28 @@
             <avalonia:VcpSliderViewModelDesign/>
         </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,8*,Auto,Auto">
+    <UserControl.Styles>
+        <!-- DoubleBox's template right-aligns its inner TextBox; the chip wants
+             the value centered -->
+        <Style Selector="controls|DoubleBox /template/ TextBox#PART_TextBox">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Styles>
 
+    <!-- One fader column: vertical slider, value chip underneath -->
+    <StackPanel Width="64">
 
-        <Border Grid.Row="1" Background="{Binding SliderBackground}"/>
-
-        <Slider 
-
-            Margin="-10,0,-10,0"
-
-            HorizontalAlignment="Center" 
-            Grid.Row="1" 
-            Orientation="Vertical" 
+        <Slider
+            x:Name="LevelSlider"
+            Height="120"
+            HorizontalAlignment="Center"
+            Orientation="Vertical"
 
             IsEnabled="{Binding Model.Enabled}"
 
-            Foreground="{Binding SliderForeground}"
-            Background="{Binding SliderBackground}"
-
-            SmallChange="1" 
+            SmallChange="1"
+            LargeChange="10"
             Value="{Binding Model.Value}"
-            LargeChange="10" 
             Minimum="{Binding Model.Min}"
             Maximum="{Binding Model.Max}"
 
@@ -43,54 +44,29 @@
             TickPlacement="None"
 
             PointerWheelChanged="OnPointerWheelChanged"
-
-            >
-            <Slider.Styles>
-                <Style Selector="Thumb">
-                    <Setter Property="Template">
-                        <ControlTemplate>
-                            <Grid>
-                                <Ellipse Width="12"
-                                         Height="12"
-                                         Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}" />
-                            </Grid>
-                        </ControlTemplate>
-
-                    </Setter>
-                </Style>
-            </Slider.Styles>
-
-        </Slider>
-
-        <Button  Grid.Row="0"
-                 HorizontalAlignment="Stretch" 
-                 HorizontalContentAlignment="Center"
-                 Command="{Binding Up}">
-            <Polygon Points="0 8 10 8 5 0" Stroke="Black" Fill="Black" />
-        </Button>
-
-        <Button Grid.Row="2"
-            HorizontalAlignment="Stretch" 
-            HorizontalContentAlignment="Center"
-            Command="{Binding Down}">
-            <Polygon Points="0 0 10 0 5 8" Stroke="Black" Fill="Black" />
-        </Button>
-
-        <controls:DoubleBox 
-            Grid.Row="3"
-            BorderThickness="0" 
-            Opacity="0.6" 
-            Foreground="#B0000000" 
-            Background="{Binding Background}"
-            Width="40" 
-            Height="25"
-            FontSize="11" 
-            FontWeight="Bold"
-            Decimals="0"
-            Value="{Binding Model.Value}"
-            PointerWheelChanged="OnPointerWheelChanged"
-            HorizontalAlignment="Stretch"
             />
 
-    </Grid>
+        <!-- Value chip: editable, wheel = ±1, amber while the DDC write is in flight -->
+        <Border Width="48" Height="26"
+                Margin="0,6,0,0"
+                HorizontalAlignment="Center"
+                CornerRadius="6"
+                BorderThickness="1"
+                BorderBrush="#30808080"
+                Background="{Binding ChipBackground}">
+            <controls:DoubleBox
+                BorderThickness="0"
+                Background="Transparent"
+                Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                FontSize="12"
+                Padding="0"
+                Decimals="0"
+                Value="{Binding Model.Value}"
+                PointerWheelChanged="OnPointerWheelChanged"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Stretch"
+                />
+        </Border>
+
+    </StackPanel>
 </UserControl>

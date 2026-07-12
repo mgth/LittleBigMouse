@@ -119,6 +119,25 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
            (b, c, probing) => !probing && (b == null || c == null))
            .ToProperty(this, e => e.AnywayVisibility);
 
+      _imageVisibility = this.WhenAnyValue(
+           e => e.Vcp.Brightness,
+           e => e.Vcp.Contrast,
+           (b, c) => b != null || c != null)
+           .ToProperty(this, e => e.ImageVisibility);
+
+      // the advanced section is only meaningful once the monitor answered
+      // with at least one adjustable level
+      _advancedVisibility = this.WhenAnyValue(
+           e => e.Vcp.Brightness,
+           e => e.Vcp.Contrast,
+           e => e.Vcp.Drive,
+           (b, c, d) => b != null || c != null || d != null)
+           .ToProperty(this, e => e.AdvancedVisibility);
+
+      _probingVisibility = this.WhenAnyValue(
+           e => e.Vcp.Probing)
+           .ToProperty(this, e => e.ProbingVisibility);
+
 
       AnywayCommand = ReactiveCommand.Create(() => Vcp?.ActivateAnyway());
       ProbeBrightnessCommand = ReactiveCommand.Create(ProbeBrightness);
@@ -266,6 +285,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
    public bool AnywayVisibility => _anywayVisibility.Value;
    readonly ObservableAsPropertyHelper<bool> _anywayVisibility;
 
+   public bool ImageVisibility => _imageVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _imageVisibility;
+
+   public bool AdvancedVisibility => _advancedVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _advancedVisibility;
+
+   public bool ProbingVisibility => _probingVisibility.Value;
+   readonly ObservableAsPropertyHelper<bool> _probingVisibility;
+
    public ICommand AnywayCommand { get; }
    public ICommand ProbeBrightnessCommand { get; }
 
@@ -362,6 +390,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       return;
    }
 
+   int _tuneRunning;
+
    void ProbeBrightness()
    {
       if (Vcp?.Brightness is null) return;
@@ -369,37 +399,56 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       var lut = ProbeLut;
       if (lut is null) return;
 
-      var probe = new ArgyllProbe();
+      // the panel's probe instance: its Message property is bound in the
+      // calibration section, so progress and errors are actually visible
+      var probe = ArgyllProbe;
       if (!probe.Installed)
       {
-         PleaseInstall();
+         probe.Message = "ArgyllCMS (spotread) not found — install argyllcms";
          return;
       }
 
+      if (Interlocked.Exchange(ref _tuneRunning, 1) == 1) return;
+
+      // the instrument needs several seconds to come up, then may ask for its
+      // calibration position: say so before spotread produces its first output
+      probe.Message = "Initializing instrument — calibration may be requested…";
+
       Task.Run(() =>
          {
-            var level = Vcp.Brightness;
-
-            for (var i = level.Min; i <= level.Max; i++)
+            try
             {
-               if(ProbeLut.SortedLut.Any(t => t.Brightness == i)) continue;
+               var level = Vcp.Brightness;
 
-               level.Value = i;
-
-               TuneWhitePoint();
-
-               var t = lut.Current;
-               if (probe.SpotRead())
+               for (var i = level.Min; i <= level.Max; i++)
                {
-                  t.Y = probe.ProbedColor.xyY.Y;
-                  t.x = probe.ProbedColor.xyY.x;
-                  t.y = probe.ProbedColor.xyY.y;
+                  if(ProbeLut.SortedLut.Any(t => t.Brightness == i)) continue;
+
+                  probe.Message = $"Measuring brightness {i} / {level.Max}…";
+
+                  level.Value = i;
+
+                  TuneWhitePoint();
+
+                  var t = lut.Current;
+                  if (probe.SpotRead())
+                  {
+                     t.Y = probe.ProbedColor.xyY.Y;
+                     t.x = probe.ProbedColor.xyY.x;
+                     t.y = probe.ProbedColor.xyY.y;
+                  }
+
+                  lut.RemoveBrightness(t.Brightness);
+                  lut.Add(t);
+
+                  ProbeLut?.Save();
                }
 
-               lut.RemoveBrightness(t.Brightness);
-               lut.Add(t);
-
-               ProbeLut?.Save();
+               probe.Message = "White point tuning done";
+            }
+            finally
+            {
+               Interlocked.Exchange(ref _tuneRunning, 0);
             }
          }
       );
@@ -706,7 +755,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       Thread.Sleep(500);
 
-      var probe = new ArgyllProbe(true);
+      // shared panel instance: spotread's prompts stay visible in the bound Message
+      var probe = ArgyllProbe;
       if (!probe.Installed)
       {
          PleaseInstall();

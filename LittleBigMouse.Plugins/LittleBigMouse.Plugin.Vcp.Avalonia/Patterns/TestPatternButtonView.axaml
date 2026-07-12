@@ -14,15 +14,20 @@
     </Design.DataContext>
 
     <Button
-        Command="{Binding TestPatternCommand}" 
-        CommandParameter="{Binding Path=Content, RelativeSource={RelativeSource Self}}">
-        <avalonia:TestPattern 
-            Height="28" Width="50"
-            PatternColorA="{Binding ColorA}"
-            PatternColorB="{Binding ColorB}"
-            PatternType="{Binding TestPatternType}"
-            Rgb ="{Binding Rgb}"
-            Orientation="{Binding Orientation}"
-            />
+        CornerRadius="8"
+        Padding="4"
+        Command="{Binding TestPatternCommand}"
+        CommandParameter="{Binding #PatternThumb}">
+        <Border CornerRadius="5" ClipToBounds="True">
+            <avalonia:TestPattern
+                x:Name="PatternThumb"
+                Height="28" Width="50"
+                PatternColorA="{Binding ColorA}"
+                PatternColorB="{Binding ColorB}"
+                PatternType="{Binding TestPatternType}"
+                Rgb ="{Binding Rgb}"
+                Orientation="{Binding Orientation}"
+                />
+        </Border>
     </Button>
 </UserControl>

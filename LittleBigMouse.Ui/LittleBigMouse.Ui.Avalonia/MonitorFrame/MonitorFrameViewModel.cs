@@ -5,6 +5,7 @@ using HLab.ColorTools;
 using HLab.Geo.Avalonia;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
+using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
@@ -23,7 +24,11 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       _rotated = this.WhenAnyValue(
           e => e.MonitorsPresenter.VisualRatio,
           e => e.Model.DepthProjection,
-          (ratio, mm) => mm.ScaleWithLocation(ratio)
+          e => e.Model.Borders.Left,
+          e => e.Model.Borders.Top,
+          e => e.Model.Borders.Right,
+          e => e.Model.Borders.Bottom,
+          (ratio, mm, _l, _t, _r, _b) => mm?.ScaleWithLocation(ratio)
       ).Log(this, "_rotated").ToProperty(this, e => e.Rotated);
 
       _rotation = this.WhenAnyValue(
@@ -87,7 +92,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
           e => e.MonitorsPresenter.VisualRatio,
           e => e.Model.DepthProjectionUnrotated,
           e => e.Model.ActiveSource.Source.Orientation,
-          (ratio, mmu, o) => mmu.ScaleWithLocation(ratio)
+          (ratio, mmu, _) => mmu.ScaleWithLocation(ratio)
       ).Log(this, "_unrotated").ToProperty(this, e => e.Unrotated);
 
       var cmd = ReactiveCommand.CreateFromTask<(string, WallpaperStyle, ColorRGB<double>)>(p => SetWallpaper(p.Item1, p.Item2, p.Item3));

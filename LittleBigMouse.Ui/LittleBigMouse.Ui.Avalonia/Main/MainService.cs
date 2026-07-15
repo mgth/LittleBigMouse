@@ -200,12 +200,14 @@ public class MainService : ReactiveModel, IMainService
         });
         await _notify.AddMenuAsync(-1, "Exit", "Icon/sys/Close", QuitAsync);
 
+        // Apply the initial "hide tray icon" preference BEFORE loading the icon bitmap.
+        // SetIconAsync queues a dispatcher lambda that checks _visible; if Visible=false
+        // is already set here, the lambda returns early and NIM_ADD never fires.
+        _notify.Visible = !_options.HideTrayIcon;
+
         await _notify.SetIconAsync("Icon/lbm_off",128);
 
         _notify.Show();
-
-        // Apply the initial "hide tray icon" preference.
-        _notify.Visible = !_options.HideTrayIcon;
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action)

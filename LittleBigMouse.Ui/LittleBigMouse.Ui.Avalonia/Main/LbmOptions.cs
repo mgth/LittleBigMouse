@@ -74,6 +74,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _debugTools;
 
     [DataMember]
+    public bool ExperimentalFeatures
+    {
+        get => _experimentalFeatures;
+        set => SetUnsavedValue(ref _experimentalFeatures, value);
+    }
+    bool _experimentalFeatures;
+
+    [DataMember]
     public bool ShowMonitorActionWarning
     {
         get => _showMonitorActionWarning;

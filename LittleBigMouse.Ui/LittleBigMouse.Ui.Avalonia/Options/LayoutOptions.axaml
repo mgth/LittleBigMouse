@@ -112,6 +112,14 @@
 						</controls:SettingRow>
 					</Border>
 
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Experimental}"
+						                     Header="Enable experimental features"
+						                     Description="Argyll color calibration and smart-TV remote test tools in the VCP panel">
+							<ToggleSwitch IsChecked="{Binding Model.ExperimentalFeatures, FallbackValue=false, Mode=TwoWay}"/>
+						</controls:SettingRow>
+					</Border>
+
 					<TextBlock Classes="SectionHeader" Text="Mouse"/>
 
 					<Border Classes="SettingCard">

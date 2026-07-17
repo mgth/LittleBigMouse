@@ -45,6 +45,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool HideTrayIcon { get; set; } = false;
       public bool Elevated { get; set; } = true;
       public bool DebugTools { get; set; } = false;
+      public bool ExperimentalFeatures { get; set; } = false;
       public bool ShowMonitorActionWarning { get; set; } = true;
       public int DaemonPort { get; set; } = 25196;
 
@@ -193,6 +194,12 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// Show debugging tools in the ui (virtual layout inspection...)
    /// </summary>
    bool DebugTools { get; set; }
+
+   /// <summary>
+   /// Show experimental features: Argyll color calibration and the
+   /// smart-TV remote test tools of the VCP panel
+   /// </summary>
+   bool ExperimentalFeatures { get; set; }
 
    /// <summary>
    /// Ask for confirmation before monitor actions: attaching to the desktop,

@@ -14,4 +14,9 @@ public interface IVcpService
 {
     /// <summary>Null when the monitor has no reachable DDC/CI channel.</summary>
     VcpControl? GetControl(PhysicalMonitor monitor);
+
+    /// <summary>Resolve the physical channel without blocking the UI thread.</summary>
+    Task<VcpControl?> GetControlAsync(
+        PhysicalMonitor monitor,
+        CancellationToken cancellationToken = default);
 }

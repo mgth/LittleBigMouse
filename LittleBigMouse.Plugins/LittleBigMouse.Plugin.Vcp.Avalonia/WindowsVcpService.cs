@@ -10,4 +10,9 @@ public class WindowsVcpService(ISystemMonitorsService monitorsService) : IVcpSer
 {
     public VcpControl? GetControl(PhysicalMonitor monitor)
         => monitor.MonitorDevice(monitorsService)?.Vcp();
+
+    public Task<VcpControl?> GetControlAsync(
+        PhysicalMonitor monitor,
+        CancellationToken cancellationToken = default)
+        => Task.Run(() => GetControl(monitor), cancellationToken);
 }

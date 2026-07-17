@@ -82,18 +82,24 @@ public abstract class ProbedColor
         };
     }
 
+    /// <summary>Measured/reference Lab pair for a ΔE computation.</summary>
+    (ProbedColorLab lab, ProbedColorLab refLab) LabPair(ProbedColor referenceColor)
+    {
+        if (referenceColor != null) return (Lab, referenceColor.Lab);
+
+        // Probe readings are absolute (Y in cd/m²) while the target illuminant
+        // is normalized to Y=1: rescale to the illuminant luminance first, or
+        // a/b come out inflated by Y^(1/3) and the ΔE tracks the backlight
+        // level (and its drift between runs) instead of the chromaticity error.
+        var lab = ToLuminance(Illuminant.XYZ.Y).Lab;
+        var refLab = Illuminant.Lab;
+        refLab.L = lab.L;
+        return (lab, refLab);
+    }
+
     public double DeltaE(ProbedColor referenceColor = null)
     {
-        ProbedColorLab refLab;
-        var lab = Lab;
-
-        if (referenceColor == null)
-        {
-            refLab = Illuminant.Lab;
-            refLab.L = lab.L;
-        }
-        else refLab = referenceColor.Lab;
-
+        var (lab, refLab) = LabPair(referenceColor);
 
         var result =
             (lab.L - refLab.L)*(lab.L - refLab.L)
@@ -105,16 +111,7 @@ public abstract class ProbedColor
 
     public double DeltaE00(ProbedColor referenceColor = null)
     {
-        ProbedColorLab refLab;
-        var lab = Lab;
-        //lab.L = 1;
-
-        if (referenceColor == null)
-        {
-            refLab = Illuminant.Lab;
-            refLab.L = lab.L;
-        }
-        else refLab = referenceColor.Lab;
+        var (lab, refLab) = LabPair(referenceColor);
 
         var Rad = Math.PI/180;
         var Rad180 = Math.PI;
@@ -180,7 +177,7 @@ public abstract class ProbedColor
         var Sc = 1 + 0.045*avgCp;
         var Sh = 1 + 0.015*avgCp*T;
 
-        var dO = (30.0*Rad)*Math.Exp(-Math.Pow(avgHp - 275.0*Rad, 2));
+        var dO = (30.0*Rad)*Math.Exp(-Math.Pow((avgHp - 275.0*Rad)/(25.0*Rad), 2));
 
         var avgCp7 = Math.Pow(avgCp, 7);
 
@@ -198,7 +195,7 @@ public abstract class ProbedColor
             Math.Pow(dLp/(Kl*Sl), 2)
             + Math.Pow(dCp/(Kc*Sc), 2)
             + Math.Pow(dHp/(Kh*Sh), 2)
-            + Rt*(dCp/(Kc*Sc))*(dHp/Kh*Sh);
+            + Rt*(dCp/(Kc*Sc))*(dHp/(Kh*Sh));
 
         return Math.Sqrt(de);
     }

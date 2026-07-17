@@ -4,6 +4,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vcp.Avalonia="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia"
+             xmlns:samsung="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen"
+             xmlns:hisense="clr-namespace:LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa"
              xmlns:mvvm.Avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
              xmlns:avalonia="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
              mc:Ignorable="d"
@@ -13,6 +15,24 @@
     <Design.DataContext>
         <vcp.Avalonia:VcpScreenViewModelDesign />
     </Design.DataContext>
+
+    <UserControl.Resources>
+        <!-- Compact 24 px remote-control glyphs. Keeping them local makes the VCP
+             plugin independent from the host application's icon dictionary. -->
+        <StreamGeometry x:Key="Samsung.Icon.Wifi">M12,21L9.2,18.2C10.75,16.65 13.25,16.65 14.8,18.2L12,21M5.35,14.35L7.45,16.45C9.96,13.94 14.04,13.94 16.55,16.45L18.65,14.35C14.98,10.68 9.02,10.68 5.35,14.35M1.1,10.1L3.2,12.2C8.06,7.34 15.94,7.34 20.8,12.2L22.9,10.1C16.88,4.08 7.12,4.08 1.1,10.1Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Power">M13,3H11V13H13V3M17.83,5.17L16.41,6.59C18,7.86 19,9.81 19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12C5,9.81 6,7.86 7.59,6.59L6.17,5.17C4.21,6.81 3,9.26 3,12A9,9 0 0,0 12,21A9,9 0 0,0 21,12C21,9.26 19.79,6.81 17.83,5.17Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Home">M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Settings">M12,15.5A3.5,3.5 0 1,1 12,8.5A3.5,3.5 0 0,1 12,15.5M19.43,12.98C19.47,12.66 19.5,12.34 19.5,12C19.5,11.66 19.47,11.32 19.42,11L21.54,9.35L19.54,5.89L17.04,6.9C16.5,6.5 15.91,6.15 15.27,5.9L14.89,3.25H10.89L10.5,5.9C9.87,6.16 9.27,6.5 8.74,6.91L6.24,5.9L4.24,9.36L6.36,11C6.31,11.32 6.28,11.66 6.28,12C6.28,12.34 6.31,12.66 6.36,12.98L4.24,14.64L6.24,18.1L8.74,17.08C9.27,17.5 9.87,17.84 10.5,18.1L10.89,20.75H14.89L15.27,18.1C15.91,17.85 16.5,17.5 17.04,17.09L19.54,18.1L21.54,14.64L19.43,12.98Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Source">M19,3H5C3.9,3 3,3.9 3,5V9H5V5H19V19H5V15H3V19C3,20.1 3.9,21 5,21H19C20.1,21 21,20.1 21,19V5C21,3.9 20.1,3 19,3M10,7L8.59,8.41L11.17,11H3V13H11.17L8.59,15.59L10,17L15,12L10,7Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Back">M20,11H7.83L13.42,5.41L12,4L4,12L12,20L13.41,18.59L7.83,13H20V11Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Search">M9.5,3A6.5,6.5 0 1,0 13.56,14.56L19,20L20.5,18.5L15.06,13.06A6.5,6.5 0 0,0 9.5,3M9.5,5A4.5,4.5 0 1,1 5,9.5A4.5,4.5 0 0,1 9.5,5Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Link">M10.59,13.41A2,2 0 0,0 13.41,13.41L17.41,9.41A2,2 0 0,0 14.59,6.59L13.17,8L11.76,6.59L13.17,5.17A4,4 0 0,1 18.83,10.83L14.83,14.83A4,4 0 0,1 9.17,14.83L8.46,14.12L9.88,12.71L10.59,13.41M13.41,10.59A2,2 0 0,0 10.59,10.59L6.59,14.59A2,2 0 0,0 9.41,17.41L10.83,16L12.24,17.41L10.83,18.83A4,4 0 0,1 5.17,13.17L9.17,9.17A4,4 0 0,1 14.83,9.17L15.54,9.88L14.12,11.29L13.41,10.59Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Play">M8,5V19L19,12L8,5Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Up">M7,15L12,10L17,15H7Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Down">M7,9L12,14L17,9H7Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Left">M15,7L10,12L15,17V7Z</StreamGeometry>
+        <StreamGeometry x:Key="Samsung.Icon.Right">M9,7L14,12L9,17V7Z</StreamGeometry>
+    </UserControl.Resources>
 
     <UserControl.Styles>
         <!-- Cards sit over the monitor frame's wallpaper preview: they need real
@@ -56,18 +76,663 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+        <Style Selector="Border.remoteShell">
+            <Setter Property="Width" Value="254"/>
+            <Setter Property="Background" Value="#E719191D"/>
+            <Setter Property="BorderBrush" Value="#38FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="30"/>
+            <Setter Property="Padding" Value="18,14"/>
+            <Setter Property="BoxShadow" Value="0 8 24 0 #48000000"/>
+        </Style>
+        <Style Selector="Border.remoteShell:focus">
+            <Setter Property="BorderBrush" Value="#B36ADE9B"/>
+            <Setter Property="BoxShadow" Value="0 0 0 2 #496ADE9B, 0 8 24 0 #48000000"/>
+        </Style>
+        <Style Selector="Border.remoteShell:focus-within">
+            <Setter Property="BorderBrush" Value="#B36ADE9B"/>
+            <Setter Property="BoxShadow" Value="0 0 0 2 #496ADE9B, 0 8 24 0 #48000000"/>
+        </Style>
+        <Style Selector="TextBlock.keyboardHint">
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="#AEB0B8"/>
+            <Setter Property="FontSize" Value="9"/>
+        </Style>
+        <Style Selector="Button.remoteButton TextBlock.remoteGlyph">
+            <Setter Property="Foreground" Value="#F4F4F6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.remoteShell:focus-within TextBlock.keyboardHint">
+            <Setter Property="Opacity" Value="0.65"/>
+        </Style>
+        <Style Selector="Border.remoteInfo">
+            <Setter Property="Background" Value="#0D808080"/>
+            <Setter Property="BorderBrush" Value="#20808080"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="12"/>
+        </Style>
+        <Style Selector="Button.remoteButton">
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="22"/>
+            <Setter Property="Background" Value="#18FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#25FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.remoteButton:pointerover">
+            <Setter Property="Background" Value="#32FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#55FFFFFF"/>
+        </Style>
+        <Style Selector="Button.remoteButton:pressed">
+            <Setter Property="Background" Value="#48FFFFFF"/>
+        </Style>
+        <Style Selector="Button.remoteButton.power">
+            <Setter Property="Background" Value="#4AD9364A"/>
+            <Setter Property="BorderBrush" Value="#8CFF6374"/>
+        </Style>
+        <Style Selector="Button.remoteButton.wake">
+            <Setter Property="Background" Value="#3A2FAE67"/>
+            <Setter Property="BorderBrush" Value="#786ADE9B"/>
+        </Style>
+        <Style Selector="Button.remoteButton Path">
+            <Setter Property="Fill" Value="#F4F4F6"/>
+            <Setter Property="Width" Value="19"/>
+            <Setter Property="Height" Value="19"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+        </Style>
+        <Style Selector="Button.dpad">
+            <Setter Property="Width" Value="58"/>
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Background" Value="#13FFFFFF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.dpad:pointerover">
+            <Setter Property="Background" Value="#32FFFFFF"/>
+        </Style>
+        <Style Selector="Button.dpad Path">
+            <Setter Property="Fill" Value="#F4F4F6"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+        </Style>
+        <Style Selector="Button.dpad.ok">
+            <Setter Property="Width" Value="54"/>
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="MinWidth" Value="54"/>
+            <Setter Property="MinHeight" Value="54"/>
+            <Setter Property="MaxWidth" Value="54"/>
+            <Setter Property="MaxHeight" Value="54"/>
+            <Setter Property="CornerRadius" Value="27"/>
+            <Setter Property="Background" Value="#E6F0F0F2"/>
+            <Setter Property="Foreground" Value="#202024"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.compactAction">
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style Selector="Button.compactAction Path">
+            <Setter Property="Fill" Value="{DynamicResource HLab.Brushes.Foreground}"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Stretch" Value="Uniform"/>
         </Style>
     </UserControl.Styles>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="10" MaxWidth="560" HorizontalAlignment="Left">
+        <StackPanel Margin="10">
 
             <!-- Probe in progress -->
             <Border Classes="card" IsVisible="{Binding ProbingVisibility}">
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <ProgressBar IsIndeterminate="True" Width="140" Height="4" VerticalAlignment="Center"/>
                     <TextBlock Classes="rowLabel" Text="Probing DDC/CI…"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Samsung smart monitors expose a Tizen remote over the LAN even when
+                 DDC/CI is absent. The daily controls mirror a physical remote while
+                 pairing and macros remain secondary. -->
+            <Border Classes="card" IsVisible="{Binding Samsung.IsVisible}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
+                        <Border Width="30" Height="30" CornerRadius="15" Background="#242FAE67">
+                            <Path Data="{StaticResource Samsung.Icon.Wifi}" Fill="#66D89A"
+                                  Width="17" Height="17" Stretch="Uniform"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center">
+                            <TextBlock Classes="rowLabel" FontWeight="SemiBold" Text="{Binding Samsung.DeviceName}"/>
+                            <TextBlock Classes="cardTitle" Margin="0" Text="Samsung Tizen · local network remote"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border IsVisible="{Binding Samsung.Paired}" CornerRadius="10" Padding="8,3"
+                                    Background="#2438B870" BorderBrush="#526ADE9B" BorderThickness="1">
+                                <TextBlock Text="CONNECTED" FontSize="9" FontWeight="SemiBold" Foreground="#72D99C"/>
+                            </Border>
+                            <Button Classes="compactAction" Width="34" Height="30" Padding="7"
+                                    IsVisible="{Binding Samsung.Paired}"
+                                    Command="{Binding Samsung.ToggleSetupCommand}"
+                                    ToolTip.Tip="Connection and macro settings">
+                                <Path Data="{StaticResource Samsung.Icon.Settings}"/>
+                            </Button>
+                            <ProgressBar IsIndeterminate="True" Width="62" Height="3"
+                                         IsVisible="{Binding Samsung.Busy}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <StackPanel Width="350" Margin="0,0,16,0" Spacing="9" VerticalAlignment="Top"
+                                    IsVisible="{Binding Samsung.ShowSetup}">
+                            <Border Classes="remoteInfo">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="cardTitle" Margin="0" Text="NETWORK ADDRESS"/>
+                                    <TextBox MinHeight="34" FontSize="11" HorizontalAlignment="Stretch"
+                                             PlaceholderText="Monitor IPv4 address"
+                                             Text="{Binding Samsung.IpAddress, Mode=TwoWay}"
+                                             IsEnabled="{Binding !Samsung.Busy}"/>
+
+                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                                        <Button Classes="compactAction" HorizontalAlignment="Stretch"
+                                                Command="{Binding Samsung.DiscoverCommand}"
+                                                IsEnabled="{Binding !Samsung.Busy}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                                <Path Data="{StaticResource Samsung.Icon.Search}"/>
+                                                <TextBlock Text="Discover" FontSize="11" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="1" Classes="compactAction" HorizontalAlignment="Stretch"
+                                                Command="{Binding Samsung.PairCommand}"
+                                                IsEnabled="{Binding !Samsung.Busy}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                                <Path Data="{StaticResource Samsung.Icon.Link}"/>
+                                                <TextBlock Text="Pair" FontSize="11" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+
+                                    <ComboBox ItemsSource="{Binding Samsung.DiscoveredDevices}"
+                                              SelectedItem="{Binding Samsung.SelectedDevice, Mode=TwoWay}"
+                                              IsVisible="{Binding Samsung.HasDiscoveredDevices}"
+                                              IsEnabled="{Binding !Samsung.Busy}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate DataType="samsung:SamsungTizenDevice">
+                                                <TextBlock Text="{Binding Label}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                        <TextBlock Classes="cardTitle" Margin="0" Text="WI-FI MAC" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" MinHeight="28" FontSize="11"
+                                                 PlaceholderText="Detected automatically"
+                                                 Text="{Binding Samsung.MacAddress, Mode=TwoWay}"
+                                                 IsEnabled="{Binding !Samsung.Busy}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="remoteInfo">
+                                <Expander Classes="flat" Header="Picture macro · experimental">
+                                    <StackPanel Margin="0,8,0,0" Spacing="7">
+                                        <TextBox FontSize="11" PlaceholderText="KEY_MENU,700,KEY_DOWN,KEY_ENTER"
+                                                 Text="{Binding Samsung.PictureMacro, Mode=TwoWay}"
+                                                 IsEnabled="{Binding !Samsung.Busy}"/>
+                                        <Button Classes="compactAction" HorizontalAlignment="Left"
+                                                Command="{Binding Samsung.RunMacroCommand}"
+                                                IsEnabled="{Binding !Samsung.Busy}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Path Data="{StaticResource Samsung.Icon.Play}"/>
+                                                <TextBlock Text="Run macro" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Expander>
+                            </Border>
+
+                            <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.48" TextWrapping="Wrap"
+                                       Text="Picture settings are driven by remote-key macros; Tizen does not expose readable VCP values."/>
+                        </StackPanel>
+
+                        <Border x:Name="SamsungRemote" Classes="remoteShell" Focusable="True">
+                            <StackPanel Spacing="13">
+                                <Grid ColumnDefinitions="*,Auto,*">
+                                    <Button Classes="remoteButton wake" HorizontalAlignment="Left"
+                                            Command="{Binding Samsung.PowerOnCommand}"
+                                            IsEnabled="{Binding !Samsung.Busy}"
+                                            ToolTip.Tip="Wake monitor">
+                                        <Path Data="{StaticResource Samsung.Icon.Power}"/>
+                                    </Button>
+                                    <TextBlock Grid.Column="1" Text="REMOTE" FontSize="9" LetterSpacing="2"
+                                               Foreground="#8E8E96" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="2" Classes="remoteButton power" HorizontalAlignment="Right"
+                                            Command="{Binding Samsung.PowerOffCommand}"
+                                            IsEnabled="{Binding !Samsung.Busy}"
+                                            ToolTip.Tip="Power off">
+                                        <Path Data="{StaticResource Samsung.Icon.Power}"/>
+                                    </Button>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="9">
+                                    <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_HOME"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Home">
+                                        <Path Data="{StaticResource Samsung.Icon.Home}"/>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_MENU"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Settings">
+                                        <Path Data="{StaticResource Samsung.Icon.Settings}"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_SOURCE"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Source">
+                                        <Path Data="{StaticResource Samsung.Icon.Source}"/>
+                                    </Button>
+                                </Grid>
+
+                                <Border Background="#0DFFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1"
+                                        CornerRadius="54" Padding="7">
+                                    <Grid RowDefinitions="50,54,50" ColumnDefinitions="58,54,58"
+                                          RowSpacing="2" ColumnSpacing="2" HorizontalAlignment="Center">
+                                        <Button Grid.Row="0" Grid.Column="1" Classes="dpad"
+                                                Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_UP"
+                                                IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Up">
+                                            <Path Data="{StaticResource Samsung.Icon.Up}"/>
+                                        </Button>
+                                        <Button Grid.Row="1" Grid.Column="0" Classes="dpad"
+                                                Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_LEFT"
+                                                IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Left">
+                                            <Path Data="{StaticResource Samsung.Icon.Left}"/>
+                                        </Button>
+                                        <Button Grid.Row="1" Grid.Column="1" Classes="dpad ok"
+                                                Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_ENTER"
+                                                IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Select">
+                                            <TextBlock Text="OK" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="#202024" TextWrapping="NoWrap"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Row="1" Grid.Column="2" Classes="dpad"
+                                                Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_RIGHT"
+                                                IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Right">
+                                            <Path Data="{StaticResource Samsung.Icon.Right}"/>
+                                        </Button>
+                                        <Button Grid.Row="2" Grid.Column="1" Classes="dpad"
+                                                Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_DOWN"
+                                                IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Down">
+                                            <Path Data="{StaticResource Samsung.Icon.Down}"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+
+                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="9">
+                                    <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_VOLDOWN"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Volume down">
+                                        <TextBlock Classes="remoteGlyph" Text="−" FontSize="22"/>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_MUTE"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Mute">
+                                        <TextBlock Classes="remoteGlyph" Text="MUTE" FontSize="8"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_VOLUP"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Volume up">
+                                        <TextBlock Classes="remoteGlyph" Text="+" FontSize="20"/>
+                                    </Button>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
+                                    <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_REWIND"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Rewind">
+                                        <TextBlock Classes="remoteGlyph" Text="◀◀" FontSize="9"/>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_PLAYPAUSE"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Play or pause">
+                                        <TextBlock Classes="remoteGlyph" Text="▶Ⅱ" FontSize="10"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_STOP"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Stop">
+                                        <TextBlock Classes="remoteGlyph" Text="■" FontSize="11"/>
+                                    </Button>
+                                    <Button Grid.Column="3" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_FF"
+                                            IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Fast forward">
+                                        <TextBlock Classes="remoteGlyph" Text="▶▶" FontSize="9"/>
+                                    </Button>
+                                </Grid>
+
+                                <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                        Command="{Binding Samsung.RemoteKeyCommand}" CommandParameter="KEY_RETURN"
+                                        IsEnabled="{Binding !Samsung.Busy}" ToolTip.Tip="Back">
+                                    <Path Data="{StaticResource Samsung.Icon.Back}"/>
+                                </Button>
+                                <TextBlock Classes="keyboardHint" Text="Keyboard · arrows  Enter  Esc"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+
+                    <TextBlock Classes="rowLabel" FontSize="11" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" TextAlignment="Center"
+                               Text="{Binding Samsung.Status}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" IsVisible="{Binding Hisense.IsVisible}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
+                        <Border Width="30" Height="30" CornerRadius="15" Background="#242FAE67"><Path Data="{StaticResource Samsung.Icon.Wifi}" Fill="#66D89A" Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Classes="rowLabel" FontWeight="SemiBold" Text="Hisense VIDAA"/><TextBlock Classes="cardTitle" Margin="0" Text="Local network remote"/></StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"><Border IsVisible="{Binding Hisense.Paired}" CornerRadius="10" Padding="8,3" Background="#2438B870" BorderBrush="#526ADE9B" BorderThickness="1"><TextBlock Text="CONNECTED" FontSize="9" FontWeight="SemiBold" Foreground="#72D99C"/></Border><Button Classes="compactAction" Width="34" Height="30" Padding="7" IsVisible="{Binding Hisense.Paired}" Command="{Binding Hisense.ToggleSetupCommand}"><Path Data="{StaticResource Samsung.Icon.Settings}"/></Button></StackPanel>
+                    </Grid>
+                    <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <StackPanel Width="350" Margin="0,0,16,0" Spacing="9" IsVisible="{Binding Hisense.ShowSetup}">
+                            <Border Classes="remoteInfo">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="cardTitle" Margin="0" Text="NETWORK ADDRESS"/>
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                        <TextBox MinHeight="34" PlaceholderText="Projector IPv4 address" Text="{Binding Hisense.IpAddress, Mode=TwoWay}"/>
+                                        <Button Grid.Column="1" Classes="compactAction" Command="{Binding Hisense.DiscoverCommand}" IsEnabled="{Binding !Hisense.Busy}" Content="Discover"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                        <TextBlock Classes="cardTitle" Margin="0" Text="CONTROLLER MAC" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" MinHeight="28" IsReadOnly="True" PlaceholderText="Detected from the route" Text="{Binding Hisense.ControllerMacAddress}"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                        <TextBlock Classes="cardTitle" Margin="0" Text="PROJECTOR MAC" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" MinHeight="28" PlaceholderText="Optional · Wake-on-LAN only" Text="{Binding Hisense.MacAddress, Mode=TwoWay}"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                        <TextBlock Classes="cardTitle" Margin="0" Text="VIDAA CERTIFICATE" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" MinHeight="28" PlaceholderText="~/.config/LittleBigMouse/vidaa-client.p12" Text="{Binding Hisense.CertificatePath, Mode=TwoWay}"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                                        <Button Classes="compactAction" Command="{Binding Hisense.SaveCommand}" IsEnabled="{Binding !Hisense.Busy}" Content="Save address"/>
+                                        <Button Grid.Column="1" Classes="compactAction" Command="{Binding Hisense.RequestPinCommand}" IsEnabled="{Binding !Hisense.Busy}" Content="Request PIN"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                        <TextBox Text="{Binding Hisense.Pin, Mode=TwoWay}" PlaceholderText="PIN shown on projector"/>
+                                        <Button Grid.Column="1" Classes="compactAction" Command="{Binding Hisense.PairCommand}" IsEnabled="{Binding !Hisense.Busy}" Content="Pair"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.55" TextWrapping="Wrap" Text="Select Request PIN: the projector will display the VIDAA app pairing code. SupportView, HomeKit and ConnectLife PINs are not compatible."/>
+                            <!-- Hisense protocol exploration: gated by the experimental option -->
+                            <Border Classes="remoteInfo" IsVisible="{Binding ExperimentalEnabled}">
+                                <Expander Classes="flat" Header="Remote key macro · experimental">
+                                    <StackPanel Margin="0,8,0,0" Spacing="7">
+                                        <TextBox FontSize="11"
+                                                 PlaceholderText="KEY_BRIGHTNESSUP,700,KEY_BRIGHTNESSDOWN"
+                                                 Text="{Binding Hisense.KeyMacro, Mode=TwoWay}"
+                                                 IsEnabled="{Binding !Hisense.Busy}"/>
+                                        <Button Classes="compactAction" HorizontalAlignment="Left"
+                                                Command="{Binding Hisense.RunMacroCommand}"
+                                                IsEnabled="{Binding !Hisense.Busy}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Path Data="{StaticResource Samsung.Icon.Play}"/>
+                                                <TextBlock Text="Run macro" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.55" TextWrapping="Wrap"
+                                                   Text="Try raw KEY_* names. A number after a key sets its delay in milliseconds."/>
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.55" TextWrapping="Wrap"
+                                                   Text="Brightness candidates: KEY_BRIGHTNESSUP, KEY_BRIGHTNESSDOWN, KEY_BRIGHTNESS_CYCLE, KEY_BRIGHTNESS."/>
+                                    </StackPanel>
+                                </Expander>
+                            </Border>
+                            <Border Classes="remoteInfo" IsVisible="{Binding ExperimentalEnabled}">
+                                <Expander Classes="flat" Header="Laser level · experimental">
+                                    <StackPanel Margin="0,8,0,0" Spacing="7">
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.65" TextWrapping="Wrap"
+                                                   Text="The slider sends its 0–10 value as a raw numeric payload to this platform_service action."/>
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                            <TextBox MinHeight="34" FontSize="11"
+                                                     PlaceholderText="changelaserluminance"
+                                                     Text="{Binding Hisense.LaserAction, Mode=TwoWay}"
+                                                     IsEnabled="{Binding !Hisense.Busy}"/>
+                                            <Button Grid.Column="1" Classes="compactAction"
+                                                    Command="{Binding Hisense.SendLaserTestCommand}"
+                                                    IsEnabled="{Binding Hisense.Paired}"
+                                                    Content="Send value"/>
+                                        </Grid>
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.5" TextWrapping="Wrap"
+                                                   Text="Candidates: changelaserluminance, changelaserbrightness, changeluminance, changebacklight, setlaserlevel, setlaserbrightness."/>
+                                    </StackPanel>
+                                </Expander>
+                            </Border>
+                            <Border Classes="remoteInfo" IsVisible="{Binding ExperimentalEnabled}">
+                                <Expander Classes="flat" Header="Picture setting · experimental">
+                                    <StackPanel Margin="0,8,0,0" Spacing="7">
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.65" TextWrapping="Wrap"
+                                                   Text="Ask the projector for its own menu catalogue before trying an ID. A named laser setting is selected automatically below."/>
+                                        <Button Classes="compactAction" HorizontalAlignment="Stretch"
+                                                Command="{Binding Hisense.GetPictureSettingsCommand}"
+                                                IsEnabled="{Binding Hisense.Paired}"
+                                                Content="Read VIDAA picture settings"/>
+                                        <TextBox MinHeight="160" MaxHeight="320" FontSize="11"
+                                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                                 IsReadOnly="True"
+                                                 Text="{Binding Hisense.PictureSettingsCatalog}"/>
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Classes="cardTitle" Margin="0" Text="MENU ID"/>
+                                                <NumericUpDown MinWidth="130" MinHeight="36" FontSize="13"
+                                                               HorizontalAlignment="Stretch"
+                                                               Minimum="1" Maximum="999" Increment="1" FormatString="0"
+                                                               Value="{Binding Hisense.PictureMenuId, Mode=TwoWay}"
+                                                               IsEnabled="{Binding !Hisense.Busy}"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock Classes="cardTitle" Margin="0" Text="VALUE"/>
+                                                <NumericUpDown MinWidth="130" MinHeight="36" FontSize="13"
+                                                               HorizontalAlignment="Stretch"
+                                                               Minimum="-1000" Maximum="1000" Increment="1" FormatString="0"
+                                                               Value="{Binding Hisense.PictureMenuValue, Mode=TwoWay}"
+                                                               IsEnabled="{Binding !Hisense.Busy}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Button Classes="compactAction" HorizontalAlignment="Stretch"
+                                                Command="{Binding Hisense.SetPictureSettingCommand}"
+                                                IsEnabled="{Binding !Hisense.Busy}" Content="Send picture setting"/>
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.5" TextWrapping="Wrap"
+                                                   Text="Known IDs: 4 picture mode, 6 contrast, 7 software brightness. Avoid 50: it resets picture settings on some models."/>
+                                    </StackPanel>
+                                </Expander>
+                            </Border>
+                            <Border Classes="remoteInfo" IsVisible="{Binding ExperimentalEnabled}">
+                                <Expander Classes="flat" Header="MQTT learn · picture settings">
+                                    <StackPanel Margin="0,8,0,0" Spacing="7">
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.65" TextWrapping="Wrap"
+                                                   Text="Start the continuous listener, then send picture settings or use the physical remote. Newest messages appear immediately at the top."/>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Button Classes="compactAction"
+                                                    Command="{Binding Hisense.CaptureTrafficCommand}"
+                                                    Content="{Binding Hisense.TrafficButtonText}"/>
+                                            <Button Classes="compactAction"
+                                                    Command="{Binding Hisense.ClearTrafficCommand}"
+                                                    Content="Clear"/>
+                                        </StackPanel>
+                                        <TextBox MinHeight="120" MaxHeight="260" FontSize="10"
+                                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                                 IsReadOnly="True"
+                                                 Text="{Binding Hisense.CapturedTraffic}"/>
+                                        <TextBlock Classes="rowLabel" FontSize="10" Opacity="0.5" TextWrapping="Wrap"
+                                                   Text="Look for platform_service/data/picturesetting and its menu_id. Retained snapshots, duplicates, pairing messages and tokens are filtered and never saved."/>
+                                    </StackPanel>
+                                </Expander>
+                            </Border>
+                        </StackPanel>
+                        <Border x:Name="HisenseRemote" Classes="remoteShell" Focusable="True">
+                            <StackPanel Spacing="13">
+                                <Grid ColumnDefinitions="*,Auto,*">
+                                    <Button Classes="remoteButton wake" HorizontalAlignment="Left"
+                                            Command="{Binding Hisense.PowerOnCommand}" IsEnabled="{Binding !Hisense.Busy}"
+                                            ToolTip.Tip="Wake projector">
+                                        <Path Data="{StaticResource Samsung.Icon.Power}"/>
+                                    </Button>
+                                    <TextBlock Grid.Column="1" Text="REMOTE" FontSize="9" LetterSpacing="2"
+                                               Foreground="#8E8E96" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="2" Classes="remoteButton power" HorizontalAlignment="Right"
+                                            Command="{Binding Hisense.PowerOffCommand}" IsEnabled="{Binding !Hisense.Busy}"
+                                            ToolTip.Tip="Power off">
+                                        <Path Data="{StaticResource Samsung.Icon.Power}"/>
+                                    </Button>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="9">
+                                    <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_HOME"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Home">
+                                        <Path Data="{StaticResource Samsung.Icon.Home}"/>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_MENU"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Settings">
+                                        <Path Data="{StaticResource Samsung.Icon.Settings}"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_SOURCE"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Source">
+                                        <Path Data="{StaticResource Samsung.Icon.Source}"/>
+                                    </Button>
+                                </Grid>
+                                <Border Background="#0DFFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1"
+                                        CornerRadius="54" Padding="7">
+                                    <Grid RowDefinitions="50,54,50" ColumnDefinitions="58,54,58"
+                                          RowSpacing="2" ColumnSpacing="2" HorizontalAlignment="Center">
+                                        <Button Grid.Row="0" Grid.Column="1" Classes="dpad"
+                                                Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_UP"
+                                                IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Up">
+                                            <Path Data="{StaticResource Samsung.Icon.Up}"/>
+                                        </Button>
+                                        <Button Grid.Row="1" Grid.Column="0" Classes="dpad"
+                                                Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_LEFT"
+                                                IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Left">
+                                            <Path Data="{StaticResource Samsung.Icon.Left}"/>
+                                        </Button>
+                                        <Button Grid.Row="1" Grid.Column="1" Classes="dpad ok"
+                                                Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_OK"
+                                                IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Select">
+                                            <TextBlock Text="OK" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="#202024" TextWrapping="NoWrap"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Row="1" Grid.Column="2" Classes="dpad"
+                                                Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_RIGHT"
+                                                IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Right">
+                                            <Path Data="{StaticResource Samsung.Icon.Right}"/>
+                                        </Button>
+                                        <Button Grid.Row="2" Grid.Column="1" Classes="dpad"
+                                                Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_DOWN"
+                                                IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Down">
+                                            <Path Data="{StaticResource Samsung.Icon.Down}"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="9">
+                                    <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_VOLDOWN"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Volume down">
+                                        <TextBlock Classes="remoteGlyph" Text="−" FontSize="22"/>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_MUTE"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Mute">
+                                        <TextBlock Classes="remoteGlyph" Text="MUTE" FontSize="8"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_VOLUP"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Volume up">
+                                        <TextBlock Classes="remoteGlyph" Text="+" FontSize="20"/>
+                                    </Button>
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <TextBlock Text="VOL" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="#8E8E96" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100"
+                                            SmallChange="1" LargeChange="10" TickFrequency="10"
+                                            Value="{Binding Hisense.Volume, Mode=TwoWay}"
+                                            IsEnabled="{Binding Hisense.Paired}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Absolute volume · 0–100"/>
+                                    <Border Grid.Column="2" MinWidth="34" Height="25" Padding="6,0"
+                                            CornerRadius="7" BorderThickness="1"
+                                            BorderBrush="#30808080" Background="#14FFFFFF">
+                                        <TextBlock Text="{Binding Hisense.Volume, StringFormat={}{0:0}}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
+                                      IsVisible="{Binding ExperimentalEnabled}">
+                                    <TextBlock Text="LASER" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="#8E8E96" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="10"
+                                            SmallChange="1" LargeChange="2" TickFrequency="1"
+                                            Value="{Binding Hisense.LaserLevel, Mode=TwoWay}"
+                                            IsEnabled="{Binding Hisense.Paired}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Experimental laser level · 0–10"/>
+                                    <Border Grid.Column="2" MinWidth="34" Height="25" Padding="6,0"
+                                            CornerRadius="7" BorderThickness="1"
+                                            BorderBrush="#30808080" Background="#14FFFFFF">
+                                        <TextBlock Text="{Binding Hisense.LaserLevel, StringFormat={}{0:0}}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
+                                    <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_REWIND"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Rewind">
+                                        <TextBlock Classes="remoteGlyph" Text="◀◀" FontSize="9"/>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_PLAYPAUSE"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Play or pause">
+                                        <TextBlock Classes="remoteGlyph" Text="▶Ⅱ" FontSize="10"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_STOP"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Stop">
+                                        <TextBlock Classes="remoteGlyph" Text="■" FontSize="11"/>
+                                    </Button>
+                                    <Button Grid.Column="3" Classes="remoteButton" HorizontalAlignment="Center"
+                                            Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_FF"
+                                            IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Fast forward">
+                                        <TextBlock Classes="remoteGlyph" Text="▶▶" FontSize="9"/>
+                                    </Button>
+                                </Grid>
+                                <Button Classes="remoteButton" HorizontalAlignment="Center"
+                                        Command="{Binding Hisense.KeyCommand}" CommandParameter="KEY_BACK"
+                                        IsEnabled="{Binding !Hisense.Busy}" ToolTip.Tip="Back">
+                                    <Path Data="{StaticResource Samsung.Icon.Back}"/>
+                                </Button>
+                                <TextBlock Classes="keyboardHint" Text="Keyboard · arrows  Enter  Esc"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+                    <TextBlock Classes="rowLabel" Text="{Binding Hisense.Status}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
 
@@ -150,8 +815,57 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <StackPanel IsVisible="{Binding BrightnessVisibility}">
+                        <!-- Argyll calibration is experimental: hidden unless enabled in the options -->
+                        <StackPanel IsVisible="{Binding CalibrationVisibility}">
                             <TextBlock Classes="cardTitle" Text="Calibration" Margin="0,8,0,6"/>
+
+                            <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,0,0,4">
+                                <StackPanel>
+                                    <TextBlock Classes="faderLabel" HorizontalAlignment="Left" Margin="0,0,0,2" Text="White point (K)"/>
+                                    <NumericUpDown Width="130" FontSize="12"
+                                                   Minimum="2500" Maximum="10000" Increment="100"
+                                                   FormatString="0"
+                                                   Value="{Binding ArgyllProbe.ColorTemp, Mode=TwoWay}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="faderLabel" HorizontalAlignment="Left" Margin="0,0,0,2" Text="Observer"/>
+                                    <ComboBox MinWidth="170" FontSize="12"
+                                              ItemsSource="{Binding Observers}"
+                                              SelectedValue="{Binding ArgyllProbe.Observer, Mode=TwoWay}"
+                                              SelectedValueBinding="{Binding Value, DataType=vcp.Avalonia:ObserverChoice}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate DataType="vcp.Avalonia:ObserverChoice">
+                                                <TextBlock Text="{Binding Label}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="faderLabel" HorizontalAlignment="Left" Margin="0,0,0,2" Text="Speed"/>
+                                    <ComboBox MinWidth="110" FontSize="12"
+                                              ItemsSource="{Binding Speeds}"
+                                              SelectedItem="{Binding SelectedSpeed, Mode=TwoWay}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate DataType="vcp.Avalonia:SpeedChoice">
+                                                <TextBlock Text="{Binding Label}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Bottom">
+                                    <CheckBox FontSize="12" MinHeight="24"
+                                              IsChecked="{Binding UseCustomSettings, Mode=TwoWay}"
+                                              Content="Monitor-specific settings"/>
+                                    <CheckBox FontSize="12" MinHeight="24"
+                                              IsChecked="{Binding TestPairs, Mode=TwoWay}"
+                                              Content="Test channel pairs"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock FontFamily="monospace" FontSize="11" Opacity="0.5"
+                                       Foreground="{DynamicResource HLab.Brushes.Foreground}"
+                                       Margin="0,0,0,6"
+                                       Text="{Binding SpotreadCommand}"/>
 
                             <avalonia:CartesianChart x:Name="Curve"
                                 Height="220"
@@ -160,8 +874,40 @@
                                 YAxes="{Binding YAxes}"
                                 ZoomMode="Both"/>
 
-                            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
-                                <Button Content="Tune white point" Command="{Binding ProbeBrightnessCommand}"/>
+                            <TextBlock Classes="rowLabel" FontSize="12" Margin="0,6,0,0"
+                                       Text="{Binding LastMeasure}"/>
+
+                            <!-- rolling tuning telemetry, newest read on top -->
+                            <ItemsControl ItemsSource="{Binding ProbeLog}" Margin="0,4,0,0"
+                                          IsVisible="{Binding ProbeVisible}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vcp.Avalonia:ProbeLogEntry">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
+                                            <StackPanel Orientation="Horizontal" Spacing="1" Width="26" VerticalAlignment="Center">
+                                                <TextBlock FontSize="11" FontWeight="Bold" Foreground="#E0524E" Text="R" IsVisible="{Binding R}"/>
+                                                <TextBlock FontSize="11" FontWeight="Bold" Foreground="#55B94F" Text="G" IsVisible="{Binding G}"/>
+                                                <TextBlock FontSize="11" FontWeight="Bold" Foreground="#4C8EDF" Text="B" IsVisible="{Binding B}"/>
+                                            </StackPanel>
+                                            <TextBlock Classes="rowLabel" FontSize="11" Width="12" Text="{Binding Arrow}"/>
+                                            <TextBlock Classes="rowLabel" FontSize="11" Width="140" Text="{Binding Delta}"/>
+                                            <TextBlock FontSize="11" FontWeight="Bold" VerticalAlignment="Center"
+                                                       Foreground="{Binding VerdictBrush}"
+                                                       Text="{Binding Verdict}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                                <Button Content="Tune white point" FontSize="12" Padding="10,4"
+                                        Command="{Binding ProbeBrightnessCommand}"
+                                        IsVisible="{Binding !TuneRunning}"/>
+                                <Button Content="Stop" FontSize="12" Padding="10,4"
+                                        Command="{Binding StopTuneCommand}"
+                                        IsVisible="{Binding TuneRunning}"/>
+                                <Button Content="Clear data" FontSize="12" Padding="10,4"
+                                        Command="{Binding ClearLutCommand}"
+                                        IsVisible="{Binding !TuneRunning}"/>
                                 <TextBlock Classes="rowLabel" Text="{Binding ArgyllProbe.Message}"/>
                             </StackPanel>
                         </StackPanel>

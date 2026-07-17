@@ -169,6 +169,12 @@ public class ProbeLut : ReactiveObject
       GenerateSmoothedCurve();
    }
 
+   public void Clear()
+   {
+      _lut.Clear();
+      GenerateSmoothedCurve();
+   }
+
    public Tune FromLuminance(double luminance)
    {
       if (_sortedLut.Count == 0) return Current;

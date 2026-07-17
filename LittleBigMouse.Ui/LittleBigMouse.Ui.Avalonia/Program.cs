@@ -22,6 +22,8 @@ using HLab.UserNotification.Avalonia;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.Plugin.Vcp.Avalonia;
+using LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
+using LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
@@ -165,6 +167,13 @@ internal class Program
                 services.AddSingleton<LittleBigMouse.Plugins.IWallpaperService, LittleBigMouse.Platform.Linux.PlasmaWallpaperService>();
                 services.AddSingleton<IVcpService, DdcUtilVcpService>();
             }
+
+            // Samsung smart monitors (notably the Odyssey G80SD) expose a local
+            // Tizen remote-control channel even when they provide no DDC/CI VCP.
+            services.AddSingleton<SamsungTizenSettingsStore>();
+            services.AddSingleton<ISamsungTizenService, SamsungTizenService>();
+            services.AddSingleton<HisenseVidaaSettingsStore>();
+            services.AddSingleton<IHisenseVidaaService, HisenseVidaaService>();
 
             services.AddSingleton<ILittleBigMouseClientService, LittleBigMouseClientService>();
             services.AddSingleton<ILayoutOptions, LbmOptions>();

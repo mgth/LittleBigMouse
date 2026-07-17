@@ -25,6 +25,10 @@ public class Tune
     [XmlAttribute]
     public DateTime Date;
 
+    /// <summary>ΔE00 against the target illuminant after white point tuning; 0 on entries predating the field.</summary>
+    [XmlAttribute]
+    public double DeltaE;
+
     public double MaxGain => new[]{Red, Green, Blue}.Max();
     public double MinGain => new[] { Red, Green, Blue }.Min();
 }

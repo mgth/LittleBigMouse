@@ -25,6 +25,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Xml.Serialization;
 
 namespace HLab.Sys.Argyll;
@@ -78,10 +79,18 @@ public class ArgyllProbe : ReactiveObject
 
    private static void ArgyllSendKey(Process p, String key)
    {
-      //System.Threading.Thread.Sleep(300);
-      p.StandardInput.Flush();
-      p.StandardInput.Write(key);
-      p.StandardInput.Flush();
+      // spotread may die between emitting a line and this reply (wrong sensor
+      // position, USB hiccup): a write to the dead pipe must not take the app
+      // down with it — this runs on a thread-pool thread, past any UI handler.
+      try
+      {
+         p.StandardInput.Flush();
+         p.StandardInput.Write(key);
+         p.StandardInput.Flush();
+      }
+      catch (Exception)
+      {
+      }
    }
 
    private bool _calibrating = false;
@@ -155,6 +164,20 @@ public class ArgyllProbe : ReactiveObject
    public ObservableCollection<double> WaveLength { get; set; } = new ObservableCollection<double> { 0 };
    private void ArgyllOutputHandler(object sendingProcess, DataReceivedEventArgs outLine)
    {
+      // Thread-pool callback: any escaping exception is fatal for the whole
+      // app, so parse defensively and log instead of throwing.
+      try
+      {
+         ArgyllOutputHandlerCore(sendingProcess, outLine);
+      }
+      catch (Exception ex)
+      {
+         Console.Error.WriteLine($"ArgyllProbe: failed to handle spotread output: {ex.Message}");
+      }
+   }
+
+   void ArgyllOutputHandlerCore(object sendingProcess, DataReceivedEventArgs outLine)
+   {
       System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-US");
 
       var line = outLine.Data;
@@ -222,38 +245,50 @@ public class ArgyllProbe : ReactiveObject
       {
          if (!_calibrating)
          {
-            // TODO
-            //var result = MessageBox.Show("Place instrument in calibration position", "Instrument",
-            //    MessageBoxButton.OKCancel, MessageBoxImage.Information);
-            //ArgyllSendKey(p, result == MessageBoxResult.OK ? "k" : "q");
-
             Message = "Place instrument in calibration position";
-
             _calibrating = true;
          }
-         else ArgyllSendKey(p, "k");
+
+         // Acknowledge every prompt, first included: the instrument's position
+         // sensor gates the calibration anyway (wrong position → the prompt
+         // comes back), while an unanswered prompt can wait forever.
+         // NEVER send 'k' here: any key answers a prompt, but a stray 'k'
+         // landing on the main menu starts a whole new calibration.
+         Thread.Sleep(300);
+         ArgyllSendKey(p, " ");
       }
 
-      if (line.Contains("Calibration complete"))
+      if (line.Contains("Calibration complete") || line.Contains("Calibration failed"))
       {
-         Message = "Calibration done";
+         // Leaving _calibrating set would keep the keepalive keys flowing;
+         // queued during the calibration measurement (spotread reads no input
+         // while measuring), they would each trigger another calibration once
+         // back at the menu.
+         _calibrating = false;
+         Message = line.Contains("failed") ? "Calibration failed" : "Calibration done";
       }
 
-      // Munki-style dial still in calibration position when a reading starts
-      if (line.Contains("measurement position"))
+      // Readings refused until the dial reaches the right notch: spotread says
+      // "Spot read failed due to the sensor being in the wrong position
+      //  (Sensor should be in surface position)" and the auto-answered menu
+      // retries — without this message the loop looks like a silent hang.
+      if (line.Contains("wrong position") || line.Contains("Sensor should be") || line.Contains("measurement position"))
       {
-         Message = "Set instrument sensor back to measure position";
+         Message = _calibrating
+            ? "Sensor in wrong position — set it to the calibration position"
+            : "Sensor in wrong position — set it to the measure (surface) position";
       }
 
-      // Routine menu of every spotread run, answered automatically: don't
-      // surface it as a message, it would mask the caller's progress report
-      // on every single reading.
-      if (line.Contains("Place instrument"))
+      // Main menu displayed: the session is ready for a command. Readings are
+      // triggered explicitly by SpotRead, never auto-answered here.
+      // The actual "Hit ESC or Q…" prompt CANNOT be the trigger: it has no
+      // trailing newline, so it only reaches this line-based handler once the
+      // next output completes it — after a reading. Key on the last
+      // newline-terminated line of the menu instead.
+      if (line.Contains("'k' to do a calibration"))
       {
-         System.Threading.Thread.Sleep(300);
-         p.StandardInput.Flush();
-
-         ArgyllSendKey(p, "0");
+         Interlocked.Increment(ref _menuSeq);
+         _ready.Set();
       }
 
       if (line.Contains("Result is XYZ:"))
@@ -272,6 +307,7 @@ public class ArgyllProbe : ReactiveObject
          }
 
          _calibrating = false;
+         _result.Set();
          //if (line.Contains("D50 Lab:"))
          //{
          //    pos = line.IndexOf("D50 Lab:", StringComparison.Ordinal);
@@ -357,14 +393,46 @@ public class ArgyllProbe : ReactiveObject
       }
    }
 
-   public int ColorTemp { get; set; } = 6500;
+   /// <summary>Target white point in kelvin — the D(T) illuminant the tuning aims at, not a spotread argument.</summary>
+   public double ColorTemp
+   {
+      get => _colorTemp;
+      set => this.RaiseAndSetIfChanged(ref _colorTemp, value);
+   }
+   double _colorTemp = 6500;
+
    public MeasurementMode Mode { get; set; } = MeasurementMode.Emissive;
    public bool HighResolution { get; set; } = true;
-   public bool Adaptive { get; set; } = true;
+
+   /// <summary>Command-line parameter: changing it restarts the session on the next reading.</summary>
+   public bool Adaptive
+   {
+      get => _adaptive;
+      set
+      {
+         if (_adaptive == value) return;
+         _adaptive = value;
+         InvalidateSession();
+      }
+   }
+   bool _adaptive = true;
+
    public bool ReadSpectrum { get; set; } = false;
    public bool ReadCri { get; set; } = false;
 
-   private ObserverEnum Observer { get; set; } = ObserverEnum.CIE_1931_2;
+   public ObserverEnum Observer
+   {
+      get => _observer;
+      set
+      {
+         if (_observer == value) return;
+         this.RaiseAndSetIfChanged(ref _observer, value);
+         this.RaisePropertyChanged(nameof(SpotReadArgs));
+         // observer lives on the command line: restart the session lazily
+         InvalidateSession();
+      }
+   }
+   ObserverEnum _observer = ObserverEnum.CIE_1931_2;
 
    public static void PathFromDispcalGUI()
    {
@@ -448,7 +516,8 @@ public class ArgyllProbe : ReactiveObject
 
          if (!Adaptive) s += " -Y A";
 
-         s += " -O";
+         // no -O (single reading then exit): the process is kept alive as a
+         // session, one launch pays the USB enumeration for many readings
 
          s += " -Q";
 
@@ -459,8 +528,10 @@ public class ArgyllProbe : ReactiveObject
             ObserverEnum.SB_1955_2 => " 1955_2",
             ObserverEnum.Shaw => " shaw",
             ObserverEnum.JV_1978_2 => " 1978_2",
-            ObserverEnum.CIE_2012_2 => " 2012_2",
-            ObserverEnum.CIE_2012_10 => " 2012_10",
+            // Argyll 3.5 renamed the cone-fundamental observers to the CIE
+            // 170-2:2015 nomenclature; older versions only accept 2012_*
+            ObserverEnum.CIE_2012_2 => Uses2015ObserverNames ? " 2015_2" : " 2012_2",
+            ObserverEnum.CIE_2012_10 => Uses2015ObserverNames ? " 2015_10" : " 2012_10",
             _ => throw new ArgumentOutOfRangeException()
          };
 
@@ -473,16 +544,260 @@ public class ArgyllProbe : ReactiveObject
 
    public bool Installed => SpotreadPath is not null;
 
+   static bool? _uses2015ObserverNames;
+
+   /// <summary>
+   /// Argyll 3.5 renamed the -Q observers 2012_* to 2015_* and rejects the old
+   /// spelling with a usage dump. Probed once from the usage text (spotread -?
+   /// answers instantly, unlike a real run which enumerates instruments first).
+   /// </summary>
+   static bool Uses2015ObserverNames
+   {
+      get
+      {
+         if (_uses2015ObserverNames is { } known) return known;
+
+         var result = false;
+         try
+         {
+            var exe = SpotreadPath;
+            if (exe is not null)
+            {
+               using var p = Process.Start(new ProcessStartInfo(exe, "-?")
+               {
+                  UseShellExecute = false,
+                  RedirectStandardOutput = true,
+                  RedirectStandardError = true,
+                  CreateNoWindow = true,
+               });
+               if (p is not null)
+               {
+                  var text = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+                  if (!p.WaitForExit(5000)) p.Kill(entireProcessTree: true);
+                  result = text.Contains("2015_2");
+               }
+            }
+         }
+         catch (Exception)
+         {
+         }
+
+         _uses2015ObserverNames = result;
+         return result;
+      }
+   }
+
+   volatile bool _abort;
+   volatile Process _current;
+
+   /// <summary>True from Abort() until ResetAbort(): pending reads bail out.</summary>
+   public bool Aborted => _abort;
+
+   public void ResetAbort() => _abort = false;
+
+   /// <summary>
+   /// Stop the current spotread run (kills the process — also the way out of
+   /// the auto-answered wrong-sensor-position retry loop) and make subsequent
+   /// SpotRead calls return false until ResetAbort().
+   /// </summary>
+   public void Abort()
+   {
+      _abort = true;
+
+      var p = _current;
+      try
+      {
+         if (p is { HasExited: false }) p.Kill(entireProcessTree: true);
+      }
+      catch (Exception)
+      {
+      }
+   }
+
+   // --- persistent spotread session ------------------------------------------
+   // One spotread process serves many readings. Spawning one per reading paid
+   // the full instrument enumeration every launch — 20s+ on machines where a
+   // USB hub answers descriptor reads slowly — while a reading itself takes
+   // well under a second.
+
+   readonly ManualResetEventSlim _ready = new(false);   // main menu prompt seen
+   readonly ManualResetEventSlim _result = new(false);  // XYZ line received
+   int _menuSeq;
+
+   static readonly bool PerfTrace =
+      Environment.GetEnvironmentVariable("LBM_PERF") is "1" or "true" or "yes";
+
+   /// <summary>Kill the running session — used when a command-line parameter
+   /// (observer, adaptive) changes; the next reading restarts it.</summary>
+   public void InvalidateSession()
+   {
+      var p = _current;
+      try
+      {
+         if (p is { HasExited: false }) p.Kill(entireProcessTree: true);
+      }
+      catch (Exception)
+      {
+      }
+   }
+
+   bool EnsureSession()
+   {
+      var p = _current;
+      if (p is { HasExited: false }) return true;
+
+      var exe = SpotreadPath;
+      if (exe is null) return false;
+
+      foreach (var name in new[] { "spotread", "Spotread" })
+      foreach (var stray in Process.GetProcessesByName(name))
+      {
+         try
+         {
+            stray.Kill();
+            if (!stray.HasExited) stray.WaitForExit();
+         }
+         catch (Exception) { }
+      }
+
+      _ready.Reset();
+      _result.Reset();
+      _calibrating = false;
+
+      var sw = PerfTrace ? Stopwatch.StartNew() : null;
+
+      p = new Process
+      {
+         StartInfo =
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                CreateNoWindow = true
+            }
+      };
+
+      if (OperatingSystem.IsWindows())
+      {
+         p.StartInfo.FileName = exe;
+         p.StartInfo.Arguments = SpotReadArgs;
+         try
+         {
+            p.StartInfo.EnvironmentVariables.Add("ARGYLL_NOT_INTERACTIVE", "yes");
+         }
+         catch
+         {
+         }
+      }
+      else
+      {
+         // Argyll 3.5+ dumps its usage and exits when ARGYLL_NOT_INTERACTIVE
+         // is set (3.3 honored it): run spotread behind a pty via script(1)
+         // instead — it then behaves interactively, streams line by line and
+         // reads our keys raw.
+         p.StartInfo.FileName = "script";
+         p.StartInfo.ArgumentList.Add("-qefc");
+         p.StartInfo.ArgumentList.Add($"{exe}{SpotReadArgs}");
+         p.StartInfo.ArgumentList.Add("/dev/null");
+      }
+
+      p.ErrorDataReceived += ArgyllOutputHandler;
+      p.OutputDataReceived += ArgyllOutputHandler;
+
+      p.Start();
+      _current = p;
+      p.BeginErrorReadLine();
+      p.BeginOutputReadLine();
+
+      // instrument enumeration and init, possibly a user-assisted calibration:
+      // no fixed timeout, just abort- and death-aware waiting
+      while (!_ready.Wait(1000))
+      {
+         if (_abort || p.HasExited)
+         {
+            if (sw is not null)
+               Console.Error.WriteLine(
+                  $"PERF {DateTime.Now:HH:mm:ss.fff} spotread session failed after {sw.ElapsedMilliseconds} ms");
+            return false;
+         }
+
+         // pending calibration: keep poking the sensor check — spotread only
+         // re-tests the dial position on an input event, so an unanswered
+         // prompt waits forever if the user rotates without pressing anything.
+         // A space, not 'k': keys queued while the calibration measures are
+         // drained at the menu, where 'k' would start another calibration.
+         if (_calibrating) ArgyllSendKey(p, " ");
+      }
+
+      if (sw is not null)
+         Console.Error.WriteLine(
+            $"PERF {DateTime.Now:HH:mm:ss.fff} spotread session ready = {sw.ElapsedMilliseconds} ms");
+
+      return true;
+   }
+
    public bool SpotRead()
    {
       if (!Installed) return false;
 
-      do
-      {
-         ExecSpotRead();
-      } while (_calibrating);
+      var sw = PerfTrace ? Stopwatch.StartNew() : null;
 
-      return true;
+      while (!_abort)
+      {
+         if (!EnsureSession()) return false;
+
+         _result.Reset();
+         var menuSeq = Volatile.Read(ref _menuSeq);
+         ArgyllSendKey(_current, "0");
+
+         var waited = 0;
+         var deadAir = 0;
+         while (!_abort)
+         {
+            if (_result.Wait(500))
+            {
+               if (sw is not null)
+                  Console.Error.WriteLine(
+                     $"PERF {DateTime.Now:HH:mm:ss.fff} spotread reading = {sw.ElapsedMilliseconds} ms");
+               return true;
+            }
+
+            var running = _current;
+            if (running is null || running.HasExited) break; // session died: restart it
+
+            // a calibration interposed itself before our reading: poke the
+            // sensor check, spotread only re-tests the dial on input events
+            // (space: harmless at the menu, 'k' there would recalibrate)
+            waited++;
+            if (_calibrating)
+            {
+               deadAir = 0; // waiting on the user, not on spotread
+               if (waited % 4 == 0) ArgyllSendKey(running, " ");
+            }
+            // dead air with no calibration in progress: the state machine got
+            // desynchronized (a prompt was consumed by a queued key, output we
+            // don't recognize…) — a respawn costs one enumeration, an infinite
+            // hang costs the whole run. Threshold above the slowest legitimate
+            // reading (adaptive mode on dark patches takes tens of seconds).
+            else if (++deadAir >= 120 && Volatile.Read(ref _menuSeq) == menuSeq)
+            {
+               InvalidateSession();
+               break;
+            }
+
+            if (Volatile.Read(ref _menuSeq) != menuSeq)
+            {
+               // the menu came back without a result: reading refused (sensor
+               // in the wrong position, transient instrument error) — pace the
+               // retry, the wrong-position message is already displayed
+               Thread.Sleep(1000);
+               break;
+            }
+         }
+      }
+
+      return false;
    }
 
    public ProbedColor ProbedColor => new ProbedColorXYZ
@@ -492,58 +807,6 @@ public class ArgyllProbe : ReactiveObject
       Y = _xyz[1],
       Z = _xyz[2]
    };
-
-   public void ExecSpotRead()
-   {
-      var exe = SpotreadPath;
-      if (exe is null) return;
-
-      foreach (var name in new[] { "spotread", "Spotread" })
-      foreach (var t in Process.GetProcessesByName(name))
-      {
-         try
-         {
-            t.Kill();
-            if (!t.HasExited)
-               t.WaitForExit();
-
-         }
-         catch (Exception) { }
-      }
-
-      var p = new Process
-      {
-         StartInfo =
-            {
-                FileName = exe,
-                Arguments = SpotReadArgs,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
-                CreateNoWindow = true
-            }
-      };
-
-      //                p.StartInfo.Arguments = "-N -O -Y A";
-
-      try
-      {
-         p.StartInfo.EnvironmentVariables.Add("ARGYLL_NOT_INTERACTIVE", "yes");
-      }
-      catch
-      {
-      }
-
-      p.ErrorDataReceived += ArgyllOutputHandler;
-      p.OutputDataReceived += ArgyllOutputHandler;
-
-      p.Start();
-      p.BeginErrorReadLine();
-      p.BeginOutputReadLine();
-
-      if (!p.HasExited) p.WaitForExit();
-   }
 
    //TODO
 

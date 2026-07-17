@@ -37,6 +37,14 @@ public partial class VcpScreenView : UserControl, IView<MonitorVcpViewMode, VcpS
     public VcpScreenView()
     {
         InitializeComponent();
+        RemoteKeyboard.Attach(
+            SamsungRemote,
+            RemoteKeyboardProfile.Samsung,
+            () => ViewModel?.Samsung.RemoteKeyCommand);
+        RemoteKeyboard.Attach(
+            HisenseRemote,
+            RemoteKeyboardProfile.Hisense,
+            () => ViewModel?.Hisense.KeyCommand);
     }
 
     new VcpScreenViewModel ViewModel => DataContext as VcpScreenViewModel;

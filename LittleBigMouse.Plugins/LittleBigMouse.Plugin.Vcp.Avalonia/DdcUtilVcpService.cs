@@ -22,6 +22,8 @@ public partial class DdcUtilVcpService : IVcpService
 
     readonly object _lock = new();
     readonly Dictionary<string, VcpControl> _controls = [];
+    List<DdcDisplay>? _detectedDisplays;
+    DateTime _detectedAt;
 
     public VcpControl? GetControl(PhysicalMonitor monitor)
     {
@@ -29,8 +31,15 @@ public partial class DdcUtilVcpService : IVcpService
         {
             if (_controls.TryGetValue(monitor.Id, out var cached)) return cached;
 
-            // scan every call: it is cheap and follows hot-plug
-            var display = Find(Detect(), monitor);
+            // A view-model is created for every monitor in the same activation
+            // wave. Share one short-lived DRM snapshot instead of rereading all
+            // connectors and EDIDs once per monitor.
+            if (_detectedDisplays is null || DateTime.UtcNow - _detectedAt > TimeSpan.FromSeconds(2))
+            {
+                _detectedDisplays = Detect();
+                _detectedAt = DateTime.UtcNow;
+            }
+            var display = Find(_detectedDisplays, monitor);
             if (display is null) return null;
 
             var control = new VcpControl(monitor.Id, display.Manufacturer,
@@ -40,6 +49,11 @@ public partial class DdcUtilVcpService : IVcpService
             return control;
         }
     }
+
+    public Task<VcpControl?> GetControlAsync(
+        PhysicalMonitor monitor,
+        CancellationToken cancellationToken = default)
+        => Task.Run(() => GetControl(monitor), cancellationToken);
 
     static DdcDisplay? Find(List<DdcDisplay> displays, PhysicalMonitor monitor)
     {

@@ -105,7 +105,21 @@ public sealed partial class DdcUtilVcpTransport(int bus) : IVcpTransport
                && uint.TryParse(token[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
     }
 
+    static readonly bool PerfTrace =
+        Environment.GetEnvironmentVariable("LBM_PERF") is "1" or "true" or "yes";
+
     static (bool ok, string stdout) Run(string args)
+    {
+        if (!PerfTrace) return RunCore(args);
+
+        var sw = Stopwatch.StartNew();
+        var result = RunCore(args);
+        Console.Error.WriteLine(
+            $"PERF {DateTime.Now:HH:mm:ss.fff} ddcutil {args} = {sw.ElapsedMilliseconds} ms ok={result.ok}");
+        return result;
+    }
+
+    static (bool ok, string stdout) RunCore(string args)
     {
         try
         {

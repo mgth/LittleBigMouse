@@ -866,7 +866,19 @@ public static class MonitorDeviceHelper
 
             foreach (var monitor in monitors)
             {
-                if (monitor.InterfacePath == devicePath) monitor.IsSpecialized = true;
+                if (monitor.InterfacePath != devicePath) continue;
+
+                // Windows removes specialized displays from desktop composition, so a
+                // monitor EnumDisplayMonitors still accounts for (its adapter carries
+                // an HMONITOR, set earlier in GetDisplayDevices) is part of the desktop
+                // no matter what the query said. Some systems report specialization
+                // enabled on regular active monitors, which hid every real display and
+                // left only the detached virtual one (#506) — believe the desktop, not
+                // the query. Hidden displays like the WMR headset of #364 have no
+                // HMONITOR and still get flagged.
+                if (monitor.Connections.Any(c => c.Parent.HMonitor != 0)) continue;
+
+                monitor.IsSpecialized = true;
             }
         }
     }

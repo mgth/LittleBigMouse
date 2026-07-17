@@ -162,6 +162,10 @@ public class MainService : ReactiveModel, IMainService
 
         _mainWindow = view?.AsWindow() ?? throw new Exception("No window found");
 
+        // AsWindow() creates a bare DefaultWindow with no size: restore the last
+        // session's geometry (or a sensible default) and save it back on close.
+        MainWindowGeometry.Attach(_mainWindow);
+
         _mainWindow.Closed += (s, a) => _mainWindow = null!;
 
         _mainWindow.Show();

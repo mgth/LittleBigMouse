@@ -26,6 +26,9 @@ pub struct ZonesLayout {
 
     pub max_travel_distance_squared: f64,
     pub freelook_check_interval_ms: i64,
+    /// Freelook detection can misfire (apps hiding or confining the cursor
+    /// without being games, #502): the UI exposes an off switch.
+    pub freelook_enabled: bool,
     pub adjust_pointer: bool,
     pub adjust_speed: bool,
     pub algorithm: Algorithm,
@@ -54,6 +57,7 @@ impl Default for ZonesLayout {
             // C++ ZonesLayout member initializers.
             max_travel_distance_squared: 200.0 * 200.0,
             freelook_check_interval_ms: 100,
+            freelook_enabled: true,
             adjust_pointer: false,
             adjust_speed: false,
             algorithm: Algorithm::Strait,
@@ -90,6 +94,7 @@ impl ZonesLayout {
         layout.max_travel_distance_squared = max_travel * max_travel;
         // Missing (older UI) -> 0 -> re-check every event (pre-throttle behavior).
         layout.freelook_check_interval_ms = get_i32(el, "FreelookCheckInterval") as i64;
+        layout.freelook_enabled = get_bool(el, "FreelookEnabled", true);
         layout.adjust_pointer = get_bool(el, "AdjustPointer", false);
         layout.adjust_speed = get_bool(el, "AdjustSpeed", false);
         layout.loop_x = get_bool(el, "LoopX", false);

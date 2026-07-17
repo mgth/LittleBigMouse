@@ -499,11 +499,14 @@ void MouseEngine::Reset()
 
 bool MouseEngine::IsFreelookActive() const
 {
-	// Signal 1: cursor hidden — game called ShowCursor(FALSE), show-count < 0
+	// Signal 1: cursor hidden — game called ShowCursor(FALSE), show-count < 0.
+	// Fail-open on both signals: a failed query must not read as freelook, it
+	// would pause remapping for good (#502). CURSOR_SUPPRESSED (flag set after
+	// touch or pen input) is not a game hiding the cursor either: only a
+	// successful query reporting no flag at all counts as hidden.
 	CURSORINFO ci{};
 	ci.cbSize = sizeof(CURSORINFO);
-	GetCursorInfo(&ci);
-	if (!(ci.flags & CURSOR_SHOWING)) return true;
+	if (GetCursorInfo(&ci) && ci.flags == 0) return true;
 
 	// Signal 2: cursor clipped to a sub-virtual-desktop rect
 	// Skip this check when LBM itself set the clip (_oldClipRect not empty means
@@ -511,7 +514,7 @@ bool MouseEngine::IsFreelookActive() const
 	if (_oldClipRect.IsEmpty())
 	{
 		RECT clip;
-		GetClipCursor(&clip);
+		if (!GetClipCursor(&clip)) return false;
 		const int vsLeft   = GetSystemMetrics(SM_XVIRTUALSCREEN);
 		const int vsTop    = GetSystemMetrics(SM_YVIRTUALSCREEN);
 		const int vsRight  = vsLeft + GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -536,7 +539,13 @@ void MouseEngine::OnMouseMove(MouseEventArg& e)
 		// - while in freelook: re-check at the configured interval to detect exit.
 		bool checkFreelook;
 
-		if (_wasFreelook)
+		if (!Layout.FreelookEnabled)
+		{
+			// detection switched off (#502): resume immediately if it had fired
+			checkFreelook = false;
+			_wasFreelook = false;
+		}
+		else if (_wasFreelook)
 		{
 			checkFreelook = GetTickCount64() - _lastFreelookCheck
 				>= static_cast<ULONGLONG>(Layout.FreelookCheckIntervalMs);

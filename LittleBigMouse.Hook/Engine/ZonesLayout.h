@@ -27,6 +27,10 @@ public:
 	// (hidden or clipped). 0 = re-check on every mouse event.
 	long FreelookCheckIntervalMs = 100;
 
+	// Freelook detection can misfire (apps hiding or confining the cursor
+	// without being games, #502): the UI exposes an off switch.
+	bool FreelookEnabled = true;
+
 	bool AdjustPointer = false;
 	bool AdjustSpeed = false;
 

@@ -114,6 +114,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
         o.Algorithm = dto.Algorithm ?? o.Algorithm;
         o.MaxTravelDistance = dto.MaxTravelDistance ?? o.MaxTravelDistance;
         o.FreelookCheckInterval = dto.FreelookCheckInterval ?? o.FreelookCheckInterval;
+        o.FreelookEnabled = dto.FreelookEnabled ?? o.FreelookEnabled;
         o.LoopX = dto.LoopX ?? o.LoopX;
         o.LoopY = dto.LoopY ?? o.LoopY;
         o.Enabled = dto.Enabled ?? o.Enabled;
@@ -248,6 +249,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
                 Algorithm = layout.Options.Algorithm,
                 MaxTravelDistance = layout.Options.MaxTravelDistance,
                 FreelookCheckInterval = layout.Options.FreelookCheckInterval,
+                FreelookEnabled = layout.Options.FreelookEnabled,
                 LoopX = layout.Options.LoopX,
                 LoopY = layout.Options.LoopY,
                 Enabled = layout.Options.Enabled,
@@ -439,6 +441,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
         public string? Algorithm { get; set; }
         public double? MaxTravelDistance { get; set; }
         public double? FreelookCheckInterval { get; set; }
+        public bool? FreelookEnabled { get; set; }
         public bool? LoopX { get; set; }
         public bool? LoopY { get; set; }
         public bool? Enabled { get; set; }

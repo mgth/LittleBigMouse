@@ -28,6 +28,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool LoopY { get; set; } = false;
       public double MaxTravelDistance { get; set; } = 200;
       public double FreelookCheckInterval { get; set; } = 100;
+      public bool FreelookEnabled { get; set; } = true;
       public bool AdjustPointer { get; set; } = false;
       public bool AdjustSpeed { get; set; } = false;
       public string Algorithm { get; set; } = "Strait";
@@ -105,6 +106,13 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// (hidden or clipped). 0 = re-check on every mouse event.
    /// </summary>
    double FreelookCheckInterval { get; set; }
+
+   /// <summary>
+   /// Pause mouse crossing while a game captures the cursor (hidden or clipped).
+   /// Off = escape hatch when the detection misfires: some apps hide or confine
+   /// the cursor without being games, freezing LBM entirely (#502).
+   /// </summary>
+   bool FreelookEnabled { get; set; }
 
    /// <summary>
    /// Adjust pointer size with display pixel to dip ratio

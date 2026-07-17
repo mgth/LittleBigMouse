@@ -15,6 +15,7 @@ namespace LittleBigMouse.Zoning
         public string Algorithm { get; set; } = "strait";
         public double MaxTravelDistance { get; set; } = 200.0;
         public double FreelookCheckInterval { get; set; } = 100.0;
+        public bool FreelookEnabled { get; set; } = true;
 
         public Zone FromPixel(Point pixel) => MainZones.FirstOrDefault(zone => zone.ContainsPixel(pixel));
         public Zone FromPhysical(Point physical) => Zones.FirstOrDefault(zone => zone.ContainsMm(physical));
@@ -50,6 +51,7 @@ namespace LittleBigMouse.Zoning
                 e => e.Algorithm,
                 e => e.MaxTravelDistance,
                 e => e.FreelookCheckInterval,
+                e => e.FreelookEnabled,
                 e => e.MainZones);
         }
     }

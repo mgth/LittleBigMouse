@@ -90,6 +90,7 @@ void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 	MaxTravelDistanceSquared = pow(XmlHelper::GetDouble(layoutElement,"MaxTravelDistance"),2);
 	// Missing attribute (older UI) -> 0 -> re-check every event, the pre-throttle behavior.
 	FreelookCheckIntervalMs = XmlHelper::GetLong(layoutElement,"FreelookCheckInterval");
+	FreelookEnabled = XmlHelper::GetBool(layoutElement,"FreelookEnabled",true);
 	AdjustPointer = XmlHelper::GetBool(layoutElement,"AdjustPointer");
 	AdjustSpeed = XmlHelper::GetBool(layoutElement,"AdjustSpeed");
 	LoopX = XmlHelper::GetBool(layoutElement,"LoopX");

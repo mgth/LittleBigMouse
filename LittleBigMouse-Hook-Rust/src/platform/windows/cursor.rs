@@ -5,7 +5,7 @@ use windows::Win32::Foundation::{POINT, RECT};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL};
 use windows::Win32::UI::WindowsAndMessaging::{
     ClipCursor, GetClipCursor, GetCursorInfo, GetCursorPos, GetSystemMetrics, SetCursorPos,
-    CURSORINFO, CURSOR_SHOWING, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+    CURSORINFO, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
     SM_YVIRTUALSCREEN,
 };
 use windows::Win32::System::SystemInformation::GetTickCount64;
@@ -67,16 +67,19 @@ impl CursorEnv for Win32Cursor {
             cbSize: std::mem::size_of::<CURSORINFO>() as u32,
             ..Default::default()
         };
-        unsafe {
-            let _ = GetCursorInfo(&mut ci);
-        }
-        (ci.flags.0 & CURSOR_SHOWING.0) == 0
+        // Fail-open: a failed query must not read as "hidden", it would pause
+        // remapping for good (#502). CURSOR_SUPPRESSED (touch or pen input) is
+        // not a game hiding the cursor either: only a successful query
+        // reporting no flag at all counts as hidden.
+        unsafe { GetCursorInfo(&mut ci) }.is_ok() && ci.flags.0 == 0
     }
 
     fn clip_is_subrect_of_virtual_screen(&self) -> bool {
         let mut clip = RECT::default();
         unsafe {
-            let _ = GetClipCursor(&mut clip);
+            if GetClipCursor(&mut clip).is_err() {
+                return false;
+            }
             let vs_left = GetSystemMetrics(SM_XVIRTUALSCREEN);
             let vs_top = GetSystemMetrics(SM_YVIRTUALSCREEN);
             let vs_right = vs_left + GetSystemMetrics(SM_CXVIRTUALSCREEN);

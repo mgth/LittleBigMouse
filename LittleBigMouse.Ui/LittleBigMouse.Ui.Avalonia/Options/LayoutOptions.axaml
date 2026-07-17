@@ -157,14 +157,24 @@
 					</Border>
 
 					<Border Classes="SettingCard">
-						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Gamepad}"
-						                     Header="Game detection interval"
-						                     Description="Re-check mouse capture while gaming, in ms"
-						                     ToolTip.Tip="While a game captures the mouse (hidden or confined cursor), LBM pauses and re-checks the capture state at this interval. Lower values react faster, 0 checks on every mouse event.">
-							<NumericUpDown Minimum="0" Maximum="1000" Increment="10"
-							               Value="{Binding Model.FreelookCheckInterval, FallbackValue=100}"
-							               ClipValueToMinMax="True"/>
-						</controls:SettingRow>
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Gamepad}"
+							                     Header="Pause in games"
+							                     Description="Pause crossing while a game captures the mouse"
+							                     ToolTip.Tip="While a game captures the mouse (hidden or confined cursor), LBM pauses so the game gets clean relative input. Turn off if LBM wrongly stays paused: some apps hide or confine the cursor without being games.">
+								<ToggleSwitch IsChecked="{Binding Model.FreelookEnabled, FallbackValue=true, Mode=TwoWay}"/>
+							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Classes="Sub"
+							                     Header="Detection interval"
+							                     Description="Re-check mouse capture while gaming, in ms"
+							                     ToolTip.Tip="Lower values react faster, 0 checks on every mouse event."
+							                     IsEnabled="{Binding Model.FreelookEnabled, FallbackValue=true}">
+								<NumericUpDown Minimum="0" Maximum="1000" Increment="10"
+								               Value="{Binding Model.FreelookCheckInterval, FallbackValue=100}"
+								               ClipValueToMinMax="True"/>
+							</controls:SettingRow>
+						</StackPanel>
 					</Border>
 
 					<Border Classes="SettingCard">

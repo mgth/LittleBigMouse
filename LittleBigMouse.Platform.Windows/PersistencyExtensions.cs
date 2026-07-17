@@ -115,6 +115,7 @@ public static class PersistencyExtensions
         @this.Algorithm = key.GetOrSet("Algorithm", () => "Strait");
         @this.MaxTravelDistance = key.GetOrSet("MaxTravelDistance", () => 200.0);
         @this.FreelookCheckInterval = key.GetOrSet("FreelookCheckInterval", () => 100.0);
+        @this.FreelookEnabled = key.GetOrSet("FreelookEnabled", () => true);
         @this.LoopX = key.GetOrSet("LoopX", () => false);
         @this.LoopY = key.GetOrSet("LoopY", () => false);
 
@@ -266,6 +267,7 @@ public static class PersistencyExtensions
         key.SetKey("Algorithm", @this.Algorithm);
         key.SetKey("MaxTravelDistance", @this.MaxTravelDistance);
         key.SetKey("FreelookCheckInterval", @this.FreelookCheckInterval);
+        key.SetKey("FreelookEnabled", @this.FreelookEnabled);
         key.SetKey("LoopX", @this.LoopX);
         key.SetKey("LoopY", @this.LoopY);
 

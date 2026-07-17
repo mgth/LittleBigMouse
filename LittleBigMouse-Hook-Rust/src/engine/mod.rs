@@ -93,7 +93,11 @@ impl MouseEngine {
     // --- entry: freelook gate + dispatch (C++ MouseEngine::OnMouseMove) -------
 
     pub fn on_mouse_move<E: CursorEnv>(&mut self, env: &mut E, e: &mut MouseEventArg) {
-        let check_freelook = if self.was_freelook {
+        let check_freelook = if !self.layout.freelook_enabled {
+            // detection switched off (#502): resume immediately if it had fired
+            self.was_freelook = false;
+            false
+        } else if self.was_freelook {
             env.tick_count().wrapping_sub(self.last_freelook_check)
                 >= self.layout.freelook_check_interval_ms as u64
         } else if self.mode == Mode::ExtFirst || self.old_zone.is_none() {

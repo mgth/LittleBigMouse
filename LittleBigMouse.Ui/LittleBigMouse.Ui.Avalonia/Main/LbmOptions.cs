@@ -188,6 +188,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     double _freelookCheckInterval = 100.0;
 
     [DataMember]
+    public bool FreelookEnabled
+    {
+        get => _freelookEnabled;
+        set => SetUnsavedValue(ref _freelookEnabled, value);
+    }
+    bool _freelookEnabled = true;
+
+    [DataMember]
     public double MinimalMaxTravelDistance
     {
         get => _minimalMaxTravelDistance;

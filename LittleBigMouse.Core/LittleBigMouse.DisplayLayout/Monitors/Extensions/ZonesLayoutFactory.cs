@@ -53,6 +53,7 @@ public static class ZonesLayoutFactory
 
         zones.MaxTravelDistance = layout.Options.MaxTravelDistance;
         zones.FreelookCheckInterval = layout.Options.FreelookCheckInterval;
+        zones.FreelookEnabled = layout.Options.FreelookEnabled;
 
         zones.AdjustPointer = layout.Options.AdjustPointer;
         zones.AdjustSpeed = layout.Options.AdjustSpeed;

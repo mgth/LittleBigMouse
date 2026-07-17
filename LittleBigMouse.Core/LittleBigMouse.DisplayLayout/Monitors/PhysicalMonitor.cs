@@ -190,6 +190,18 @@ public class PhysicalMonitor : SavableReactiveModel
     }
 
     /// <summary>
+    /// Keep this monitor out of the mouse layout: it stays attached to the desktop
+    /// but gets no zone, so the cursor treats it as a wall. For displays that are
+    /// not really monitors — water-cooling pump LCDs, sensor panels… (#504)
+    /// </summary>
+    [DataMember]
+    public bool ExcludedFromLayout
+    {
+       get;
+       set => this.SetUnsavedValue(ref field, value);
+    }
+
+    /// <summary>
     /// Serial number from EDID
     /// </summary>
     [DataMember]

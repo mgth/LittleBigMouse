@@ -10,6 +10,11 @@ public static class ZonesLayoutFactory
         var zones = new ZonesLayout();
         foreach (var source in layout.PhysicalSources)
         {
+            // Excluded monitors (pump LCDs, sensor panels…) get no zone: the cursor
+            // treats them as a wall (#504). Never exclude the primary though — with
+            // no zone under the cursor's home monitor the engine would go inert.
+            if (source.Monitor.ExcludedFromLayout && !source.Source.Primary) continue;
+
             if (source == source.Monitor.ActiveSource && source.Source.AttachedToDesktop)
                 zones.Zones.Add(new Zone(
                     source.Monitor.BorderResistance,

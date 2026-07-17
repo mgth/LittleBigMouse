@@ -218,6 +218,8 @@ public class LinuxLayoutPersistence : ILayoutPersistence
         monitor.BorderResistance.Right = dto.BorderResistance?.Right ?? monitor.BorderResistance.Right;
         monitor.BorderResistance.Bottom = dto.BorderResistance?.Bottom ?? monitor.BorderResistance.Bottom;
 
+        monitor.ExcludedFromLayout = dto.ExcludedFromLayout ?? monitor.ExcludedFromLayout;
+
         // Per-monitor bezel borders — only in "PerMonitor" mode ("PerModel" keeps them on
         // the shared model entry).
         if (perMonitorBorders && dto.Borders != null)
@@ -311,6 +313,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
                 : null,
             ActiveSource = monitor.ActiveSource.Source.Id,
             SerialNumber = monitor.SerialNumber,
+            ExcludedFromLayout = monitor.ExcludedFromLayout,
             Sources = monitor.Sources.Items
                 .Where(s => s.Source.AttachedToDesktop)
                 .ToDictionary(s => s.Source.Id, s => new SourceDto
@@ -455,6 +458,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
         public BordersDto? Borders { get; set; }
         public string? ActiveSource { get; set; }
         public string? SerialNumber { get; set; }
+        public bool? ExcludedFromLayout { get; set; }
         public Dictionary<string, SourceDto>? Sources { get; set; }
     }
 

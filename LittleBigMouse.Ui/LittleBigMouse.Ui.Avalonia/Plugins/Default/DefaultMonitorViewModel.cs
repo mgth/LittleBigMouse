@@ -78,6 +78,13 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
             e => e.Primary,
             (attached,primary) => attached && !primary)
         .ObserveOn(RxSchedulers.MainThreadScheduler));
+
+        _excluded = this.WhenAnyValue(e => e.Model.ExcludedFromLayout)
+            .ToProperty(this, e => e.Excluded);
+
+        // pure model toggle (no OS action): applied with the layout on save
+        ToggleExcludedCommand = ReactiveCommand.Create(
+            () => { Model.ExcludedFromLayout = !Model.ExcludedFromLayout; });
     }
 
     public bool Attached => _attached.Value;
@@ -92,9 +99,14 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     public string Inches => _inches.Value;
     readonly ObservableAsPropertyHelper<string> _inches;
 
+    /// <summary>Monitor kept out of the mouse layout (no zone, cursor-proof) (#504).</summary>
+    public bool Excluded => _excluded.Value;
+    readonly ObservableAsPropertyHelper<bool> _excluded;
+
     public ICommand AttachCommand { get; }
     public ICommand DetachCommand { get; }
     public ICommand MakePrimaryCommand { get; }
+    public ICommand ToggleExcludedCommand { get; }
 
     async Task DetachFromDesktopAsync(Window? owner)
     {

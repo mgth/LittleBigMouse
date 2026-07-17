@@ -246,10 +246,15 @@
 					<MenuFlyout>
 						<MenuItem Header="Detach" Command="{Binding DetachCommand}" CommandParameter="{Binding $parent[Window]}"/>
 						<MenuItem Header="Make primary" Command="{Binding MakePrimaryCommand}" CommandParameter="{Binding $parent[Window]}"/>
+						<MenuItem Header="Exclude from mouse layout"
+						          ToolTip.Tip="The monitor stays on the desktop but the cursor can never travel onto it — for displays that are not really monitors (pump LCDs, sensor panels…)"
+						          ToggleType="CheckBox" IsChecked="{Binding Excluded}"
+						          Command="{Binding ToggleExcludedCommand}"/>
 					</MenuFlyout>
 				</DropDownButton.Flyout>
 			</DropDownButton>
 			<Label IsVisible="{Binding Primary}">Primary</Label>
+			<Label IsVisible="{Binding Excluded}" Opacity="0.7">Mouse excluded</Label>
 		</StackPanel>
 
 	</Grid>

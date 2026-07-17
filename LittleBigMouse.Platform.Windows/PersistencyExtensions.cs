@@ -341,6 +341,8 @@ public static class PersistencyExtensions
         @this.BorderResistance.Bottom =  key.GetOrSet(@"BorderResistance\Bottom", ()=> @this.BorderResistance.Bottom);
         @this.BorderResistance.Saved = true;
 
+        @this.ExcludedFromLayout = key.GetOrSet("ExcludedFromLayout", () => @this.ExcludedFromLayout);
+
         // Per-monitor bezel borders — only in "PerMonitor" mode ("PerModel" keeps them on the shared
         // model key). Defaults were seeded from the model at construction, so an absent key just keeps
         // the model's values.
@@ -396,6 +398,7 @@ public static class PersistencyExtensions
 
         key.SetKey("ActiveSource", @this.ActiveSource.Source.Id);
         key.SetKey("SerialNumber", @this.SerialNumber);
+        key.SetKey("ExcludedFromLayout", @this.ExcludedFromLayout);
 
         @this.Saved = true;
     }

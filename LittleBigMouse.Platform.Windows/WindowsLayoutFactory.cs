@@ -26,13 +26,15 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
 {
     readonly ISystemMonitorsService _monitors;
     readonly Func<MonitorsLayout> _newLayout;
+    readonly ILayoutPersistence _persistence;
     readonly WindowsWallpaperWatcher _wallpaperWatcher;
     string _lastWallpaperSignature = "";
 
-    public WindowsLayoutFactory(ISystemMonitorsService monitors, Func<MonitorsLayout> newLayout)
+    public WindowsLayoutFactory(ISystemMonitorsService monitors, Func<MonitorsLayout> newLayout, ILayoutPersistence persistence)
     {
         _monitors = monitors;
         _newLayout = newLayout;
+        _persistence = persistence;
 
         _wallpaperWatcher = new WindowsWallpaperWatcher();
         _wallpaperWatcher.Changed += (_, _) => WallpaperChanged?.Invoke(this, EventArgs.Empty);
@@ -54,7 +56,7 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
         // Refresh the OS device tree (formerly MainService's UpdateDevices()).
         if (_monitors is SystemMonitorsService concrete) concrete.UpdateDevices();
         WindowsLayoutMapping.Prof($"[Create] UpdateDevices() {sw.ElapsedMilliseconds}ms"); sw.Restart();
-        var layout = _newLayout().UpdateFrom(_monitors);
+        var layout = _newLayout().UpdateFrom(_monitors, _persistence);
         WindowsLayoutMapping.Prof($"[Create] UpdateFrom() {sw.ElapsedMilliseconds}ms");
         return layout;
     }
@@ -86,7 +88,7 @@ internal static class WindowsLayoutMapping
     // TEMP profiling (#displaychange-timing): writes phase timings to C:\dev\lbm-dc.log. Remove after tuning.
     internal static void Prof(string m) { try { System.IO.File.AppendAllText(@"C:\dev\lbm-dc.log", $"{System.DateTime.Now:HH:mm:ss.fff} {m}{System.Environment.NewLine}"); } catch { } }
 
-    public static MonitorsLayout UpdateFrom(this MonitorsLayout layout, ISystemMonitorsService service)
+    public static MonitorsLayout UpdateFrom(this MonitorsLayout layout, ISystemMonitorsService service, ILayoutPersistence persistence)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         // DPI awareness is process-scoped (the UI thread's manifested awareness), formerly
@@ -149,8 +151,8 @@ internal static class WindowsLayoutMapping
         layout.SetLocationsFromSystemConfiguration();
         Prof($"  [UF] SetLocationsFromSystemConfiguration {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
-        //retrieve saved layout (Windows registry persistence, same project)
-        layout.Load();
+        //retrieve saved layout (registry, via the shared persistence engine)
+        persistence.Load(layout);
         Prof($"  [UF] Load {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         // saved locations are anchored on the primary that was active at save time:

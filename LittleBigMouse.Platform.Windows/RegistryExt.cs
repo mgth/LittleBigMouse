@@ -70,19 +70,34 @@ public static class RegistryExt
     /// value stays absent (used to detect whether a monitor owns per-monitor data).
     /// </summary>
     public static double? TryGet(this RegistryKey key, string keyName)
+        => key.TryGetString(keyName) is string s
+           && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
+            ? v
+            : null;
+
+    /// <summary>Read a stored string without seeding the store; null when absent.</summary>
+    public static string TryGetString(this RegistryKey key, string keyName)
     {
         var i = keyName.LastIndexOf('\\');
         if (i >= 0)
         {
             using var sub = key.OpenSubKey(keyName[..i]);
-            return sub?.TryGet(keyName[(i + 1)..]);
+            return sub?.TryGetString(keyName[(i + 1)..]);
         }
 
-        return key.GetValue(keyName) is string s
-               && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
+        return key.GetValue(keyName) as string;
+    }
+
+    /// <summary>Read a stored bool ("1"/"0") without seeding the store; null when absent.</summary>
+    public static bool? TryGetBool(this RegistryKey key, string keyName)
+        => key.TryGetString(keyName) is string s ? s == "1" : null;
+
+    /// <summary>Read a stored int without seeding the store; null when absent.</summary>
+    public static int? TryGetInt(this RegistryKey key, string keyName)
+        => key.TryGetString(keyName) is string s
+           && int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)
             ? v
             : null;
-    }
 
     static (RegistryKey, string) ParseKeyName(this RegistryKey key, string keyName)
     {
@@ -113,5 +128,11 @@ public static class RegistryExt
     {
         (key, keyName) = key.ParseKeyName(keyName);
         key.SetValue(keyName, value ? "1" : "0", RegistryValueKind.String);
+    }
+
+    public static void SetKey(this RegistryKey key, string keyName, int value)
+    {
+        (key, keyName) = key.ParseKeyName(keyName);
+        key.SetValue(keyName, value.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
     }
 }

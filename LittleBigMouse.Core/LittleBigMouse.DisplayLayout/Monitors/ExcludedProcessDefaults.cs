@@ -6,7 +6,7 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 /// Canonical default exclusion list: game-launcher install-path fragments whose windows LBM should
 /// leave alone (matched as substrings against the foreground process path by the daemon). Single
 /// source of truth shared by the seed file (<c>CreateExcludedFile</c>), the one-time top-up
-/// migration (<c>PersistencyExtensions</c>) and the "Add defaults" button (<c>LbmOptionsViewModel</c>).
+/// migration (<c>LayoutPersistence</c>) and the "Add defaults" button (<c>LbmOptionsViewModel</c>).
 /// </summary>
 public static class ExcludedProcessDefaults
 {

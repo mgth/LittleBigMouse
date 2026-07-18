@@ -57,7 +57,11 @@ public static class AutostartExtensions
             new ExecAction(ApplicationExe, "", AppDomain.CurrentDomain.BaseDirectory)
         );
 
-        td.Principal.RunLevel = TaskRunLevel.Highest;
+        // Respect the requested level. The historical (2015) version tried Highest
+        // FIRST regardless of the option — back then running as admin was the whole
+        // point — so an elevated app kept re-registering an elevated task even with
+        // StartElevated off, and the elevation self-perpetuated across restarts.
+        td.Principal.RunLevel = elevated ? TaskRunLevel.Highest : TaskRunLevel.LUA;
         td.Settings.DisallowStartIfOnBatteries = false;
         td.Settings.DisallowStartOnRemoteAppSession = true;
         td.Settings.StopIfGoingOnBatteries = false;
@@ -71,7 +75,11 @@ public static class AutostartExtensions
         {
         }
 
-        td.Principal.RunLevel = elevated ? TaskRunLevel.Highest : TaskRunLevel.LUA;
+        if (!elevated) return false;
+
+        // Elevation requested but not allowed to register an elevated task:
+        // degrade to a non-elevated autostart rather than none at all.
+        td.Principal.RunLevel = TaskRunLevel.LUA;
         try
         {
             ts.RootFolder.RegisterTaskDefinition(ServiceName, td);

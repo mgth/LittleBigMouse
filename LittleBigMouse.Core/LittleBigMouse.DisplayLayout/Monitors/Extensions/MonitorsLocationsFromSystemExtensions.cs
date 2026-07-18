@@ -76,11 +76,17 @@ public static class MonitorsLocationsFromSystemExtensions
 
                 var placedScreen = todo.Dequeue();
 
-                foreach (var screenToPlace in unplacedScreens)
+                foreach (var screenToPlace in unplacedScreens.ToList())
                 {
                     if (screenToPlace == placedScreen) continue;
 
-                    var somethingDone = false;
+                    // Only a real pixel-space edge adjacency PLACES a monitor. The
+                    // alignment equalities below (same X/Y/Right/Bottom) are hints:
+                    // applying them must not consume the monitor, or a monitor whose
+                    // only adjacency is with a later-placed neighbour never gets its
+                    // adjacency rule tested (e.g. P|S|H side by side: H aligned on P
+                    // by Y equality used to be swallowed before S could claim it).
+                    var adjacent = false;
 
                     //     __
                     //  __| A
@@ -89,14 +95,14 @@ public static class MonitorsLocationsFromSystemExtensions
                     if (screenToPlace.ActiveSource.Source.InPixel.Bounds.X == placedScreen.ActiveSource.Source.InPixel.Bounds.Right)
                     {
                         screenToPlace.DepthProjection.X = placedScreen.DepthProjection.OutsideBounds.Right + screenToPlace.DepthProjection.LeftBorder;
-                        somethingDone = true;
+                        adjacent = true;
                     }
                     //B |___|_
                     //A  |    |
                     if (screenToPlace.ActiveSource.Source.InPixel.Bounds.Y == placedScreen.ActiveSource.Source.InPixel.Bounds.Bottom)
                     {
                         screenToPlace.DepthProjection.Y = placedScreen.DepthProjection.OutsideBounds.Bottom + screenToPlace.DepthProjection.TopBorder;
-                        somethingDone = true;
+                        adjacent = true;
                     }
 
                     //     __
@@ -107,7 +113,7 @@ public static class MonitorsLocationsFromSystemExtensions
                     {
                         screenToPlace.DepthProjection.X = placedScreen.DepthProjection.OutsideBounds.Left -
                             screenToPlace.DepthProjection.OutsideBounds.Width + screenToPlace.DepthProjection.LeftBorder;
-                        somethingDone = true;
+                        adjacent = true;
                     }
 
                     //A |___|_
@@ -117,7 +123,7 @@ public static class MonitorsLocationsFromSystemExtensions
                     {
                         screenToPlace.DepthProjection.Y = placedScreen.DepthProjection.OutsideBounds.Top -
                             screenToPlace.DepthProjection.OutsideBounds.Height + screenToPlace.DepthProjection.TopBorder;
-                        somethingDone = true;
+                        adjacent = true;
                     }
 
 
@@ -130,7 +136,6 @@ public static class MonitorsLocationsFromSystemExtensions
                     if (screenToPlace.ActiveSource.Source.InPixel.Bounds.X == placedScreen.ActiveSource.Source.InPixel.Bounds.X)
                     {
                         screenToPlace.DepthProjection.X = placedScreen.DepthProjection.X;
-                        somethingDone = true;
                     }
 
                     //  ___   ___
@@ -138,7 +143,6 @@ public static class MonitorsLocationsFromSystemExtensions
                     if (screenToPlace.ActiveSource.Source.InPixel.Bounds.Y == placedScreen.ActiveSource.Source.InPixel.Bounds.Y)
                     {
                         screenToPlace.DepthProjection.Y = placedScreen.DepthProjection.Y;
-                        somethingDone = true;
                     }
 
                     // __
@@ -150,7 +154,6 @@ public static class MonitorsLocationsFromSystemExtensions
                     if (screenToPlace.ActiveSource.Source.InPixel.Bounds.Right == placedScreen.ActiveSource.Source.InPixel.Bounds.Right)
                     {
                         screenToPlace.DepthProjection.X = placedScreen.DepthProjection.Bounds.Right - screenToPlace.DepthProjection.Bounds.Width;
-                        somethingDone = true;
                     }
 
                     //|___||___|
@@ -158,15 +161,19 @@ public static class MonitorsLocationsFromSystemExtensions
                     {
                         screenToPlace.DepthProjection.Y = placedScreen.DepthProjection.Bounds.Bottom -
                                                screenToPlace.DepthProjection.Bounds.Height;
-                        somethingDone = true;
                     }
-                    if (somethingDone)
+                    if (adjacent)
                     {
+                        unplacedScreens.Remove(screenToPlace);
                         layout.ForceCompact();
                         todo.Enqueue(screenToPlace);
                     }
                 }
             }
+
+            // Monitors with no pixel adjacency to any placed monitor keep their
+            // alignment hints (or 0,0); one final compact snaps them into contact.
+            layout.ForceCompact();
         }
 
         layout.UpdatePhysicalMonitors();

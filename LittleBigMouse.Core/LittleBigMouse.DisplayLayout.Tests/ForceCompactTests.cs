@@ -2,6 +2,7 @@ using DynamicData;
 using HLab.Geo;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 
 namespace LittleBigMouse.DisplayLayout.Tests;
 
@@ -15,7 +16,8 @@ namespace LittleBigMouse.DisplayLayout.Tests;
 public class ForceCompactTests
 {
     static PhysicalMonitor AddMonitor(MonitorsLayout layout, string id, string pnp,
-        double width, double height, double x, double y, bool primary = false)
+        double width, double height, double x, double y, bool primary = false,
+        double pixelX = 0, double pixelY = 0, double pixelWidth = 1000, double pixelHeight = 1000)
     {
         var model = new PhysicalMonitorModel(pnp);
         model.PhysicalSize.Width = width;
@@ -27,7 +29,7 @@ public class ForceCompactTests
 
         var monitor = new PhysicalMonitor(id, layout, model);
         var source = new DisplaySource($"{id}-src") { AttachedToDesktop = true, Primary = primary };
-        source.InPixel.Set(new Rect(new Point(0, 0), new Size(1000, 1000)));
+        source.InPixel.Set(new Rect(new Point(pixelX, pixelY), new Size(pixelWidth, pixelHeight)));
 
         var physicalSource = new PhysicalSource($"{id}-dev", monitor, source);
         monitor.ActiveSource = physicalSource;
@@ -136,6 +138,36 @@ public class ForceCompactTests
         var d1 = s.Distance(p).ToArray().Select(Math.Abs).Min();
         var d2 = s.Distance(tv.DepthProjection.OutsideBounds).ToArray().Select(Math.Abs).Min();
         Assert.True(d1 < 0.01 || d2 < 0.01, $"lost all contacts (to primary: {d1}, to tv: {d2})");
+    }
+
+    /// <summary>
+    /// Fresh-install auto-placement: three 4K monitors side by side in PIXEL space
+    /// whose physical widths differ wildly (two 32" and a TV). The monitor whose
+    /// only pixel adjacency is with the MIDDLE one must end up beside it: the
+    /// alignment equalities (same pixel Y/Bottom against the primary) are hints and
+    /// must not consume it before its real neighbour is placed.
+    /// </summary>
+    [Fact]
+    public void SystemPlacement_SideBySidePixels_StaysSideBySideInMm()
+    {
+        var layout = new MonitorsLayout(new ILayoutOptions.Design());
+
+        // Collection order puts the TV first, like the real HEC/PHL/SAME layout.
+        var tv = AddMonitor(layout, "TV", "TV_0001", 1650, 920, 0, 0,
+            pixelX: 7680, pixelWidth: 3840, pixelHeight: 2160);
+        var primary = AddMonitor(layout, "P", "PHL0001", 700, 400, 0, 0, primary: true,
+            pixelX: 0, pixelWidth: 3840, pixelHeight: 2160);
+        var middle = AddMonitor(layout, "S", "SAM0001", 700, 400, 0, 0,
+            pixelX: 3840, pixelWidth: 3840, pixelHeight: 2160);
+
+        layout.UpdatePhysicalMonitors();
+        layout.SetLocationsFromSystemConfiguration();
+
+        // P | S | H side by side, bottom-aligned like their pixel bounds.
+        Assert.Equal(700, middle.DepthProjection.X, 2);
+        Assert.Equal(1400, tv.DepthProjection.X, 2);
+        Assert.Equal(400, middle.DepthProjection.Bounds.Bottom, 2);
+        Assert.Equal(400, tv.DepthProjection.Bounds.Bottom, 2);
     }
 
     [Fact]

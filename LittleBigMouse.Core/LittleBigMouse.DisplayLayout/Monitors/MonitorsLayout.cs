@@ -245,37 +245,189 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    }
 
    /// <summary>
-   /// Remove all gaps between screens
+   /// Remove all gaps between screens.
+   /// Two phases: first resolve overlaps monitor by monitor (any random start
+   /// position becomes a valid spread), then pull each connected cluster of
+   /// touching monitors as a RIGID group toward the primary's cluster, nearest
+   /// first. Moving clusters — not individual monitors — preserves the relative
+   /// arrangement: after a primary drag the whole translated group comes back
+   /// as one block instead of each monitor grabbing the first free edge.
    /// </summary>
    public void ForceCompact()
    {
       // we cannot compact until primary monitor is placed
       if (PrimaryMonitor == null) return;
 
-      // Primary monitor is always at 0,0
-      List<PhysicalMonitor> done = [PrimaryMonitor];
+      var monitors = PhysicalMonitors.ToList();
+      if (monitors.Count < 2) return;
 
-      // Enqueue all other monitors to be placed
-      var todo = this
-          .PhysicalMonitors.Except(done)
-          .OrderBy(monitor => monitor
-              .DepthProjection.OutsideBounds.DistanceToTouch(PrimaryMonitor.DepthProjection.OutsideBounds)
-              .DistanceHV()
-          ).ToList();
+      if (!Options.AllowOverlaps) ResolveOverlaps(monitors);
 
-      while (todo.Any())
+      // Primary monitor is always at 0,0: its cluster anchors everything.
+      var clusters = BuildClusters(monitors);
+      var anchored = clusters.First(c => c.Contains(PrimaryMonitor));
+      var todo = clusters.Where(c => !ReferenceEquals(c, anchored)).ToList();
+
+      while (todo.Count > 0)
       {
-         var monitor = todo.First();
+         var cluster = todo
+             .OrderBy(c => PairDistanceToTouch(c, anchored).DistanceHV())
+             .First();
+         todo.Remove(cluster);
 
-         monitor.PlaceAuto(done, Options.AllowDiscontinuity, Options.AllowOverlaps);
-         done.Add(monitor);
+         if (!Options.AllowDiscontinuity)
+         {
+            var distance = PairDistanceToTouch(cluster, anchored);
+            var min = distance.MinPositive();
 
-         todo = [.. todo.Except([monitor]).OrderBy(s => s
-                .DepthProjection.OutsideBounds.DistanceToTouch(done.Select(m => m.DepthProjection.OutsideBounds) )
-                .DistanceHV()
-                )];
+            double dx = 0, dy = 0;
+            if (min > 0 && !double.IsInfinity(min))
+            {
+               // Single-axis touch, same edge choice as the historical PlaceAuto.
+               if (distance.Left > 0 && distance.Left <= min) dx = -distance.Left;
+               else if (distance.Top > 0 && distance.Top <= min) dy = -distance.Top;
+               else if (distance.Right > 0 && distance.Right <= min) dx = distance.Right;
+               else if (distance.Bottom > 0 && distance.Bottom <= min) dy = distance.Bottom;
+            }
+            else if (double.IsInfinity(min))
+            {
+               // Diagonal-only reachability: close both gaps to a corner contact.
+               var raw = PairDistance(cluster, anchored);
+               if (raw.Left > 0) dx = -raw.Left;
+               else if (raw.Right > 0) dx = raw.Right;
+               if (raw.Top > 0) dy = -raw.Top;
+               else if (raw.Bottom > 0) dy = raw.Bottom;
+            }
+
+            if (dx != 0 || dy != 0)
+            {
+               foreach (var monitor in cluster)
+               {
+                  var projection = monitor.DepthProjection;
+                  using (projection.DelayChangeNotifications())
+                  {
+                     projection.X += dx;
+                     projection.Y += dy;
+                  }
+               }
+            }
+         }
+
+         anchored.AddRange(cluster);
       }
    }
+
+   /// <summary>
+   /// Push overlapping monitors apart. The primary never moves. Out of the four
+   /// ways to leave an overlap, take the shortest push that does not land on yet
+   /// another monitor (a blind least-penetration push can bounce between two
+   /// neighbours forever); fall back to the shortest push when every direction is
+   /// occupied, and iterate until stable.
+   /// </summary>
+   void ResolveOverlaps(List<PhysicalMonitor> monitors)
+   {
+      for (var pass = 0; pass < monitors.Count + 4; pass++)
+      {
+         var moved = false;
+         foreach (var monitor in monitors)
+         {
+            if (ReferenceEquals(monitor, PrimaryMonitor)) continue;
+
+            var others = monitors.Where(m => !ReferenceEquals(m, monitor)).ToList();
+            var overlapped = others.FirstOrDefault(o => Overlap(monitor.DepthProjection.OutsideBounds, o.DepthProjection.OutsideBounds));
+            if (overlapped == null) continue;
+
+            var d = monitor.DepthProjection.OutsideBounds
+                .Distance(overlapped.DepthProjection.OutsideBounds);
+
+            // Right, left, below, above — as (dx, dy) displacements.
+            var candidates = new[]
+                {
+                   (dx: -d.Left, dy: 0.0),
+                   (dx: d.Right, dy: 0.0),
+                   (dx: 0.0, dy: -d.Top),
+                   (dx: 0.0, dy: d.Bottom)
+                }
+                .OrderBy(c => Math.Abs(c.dx) + Math.Abs(c.dy))
+                .ToList();
+
+            var free = candidates.Where(c =>
+            {
+               var bounds = monitor.DepthProjection.OutsideBounds;
+               var pushed = new Rect(new Point(bounds.X + c.dx, bounds.Y + c.dy), bounds.Size);
+               return !others.Any(o => Overlap(pushed, o.DepthProjection.OutsideBounds));
+            }).ToList();
+
+            var (dx, dy) = free.Count > 0 ? free[0] : candidates[0];
+
+            var projection = monitor.DepthProjection;
+            using (projection.DelayChangeNotifications())
+            {
+               projection.X += dx;
+               projection.Y += dy;
+            }
+            moved = true;
+         }
+         if (!moved) return;
+      }
+   }
+
+   static bool Overlap(Rect a, Rect b)
+   {
+      var d = a.Distance(b);
+      return Math.Max(d.Left, d.Right) < -ContactEpsilon
+          && Math.Max(d.Top, d.Bottom) < -ContactEpsilon;
+   }
+
+   // Contacts are computed values: allow rounding noise when deciding whether
+   // two monitors touch (or overlap, when overlaps are permitted).
+   const double ContactEpsilon = 0.5;
+
+   static bool AreConnected(PhysicalMonitor a, PhysicalMonitor b)
+   {
+      var d = a.DepthProjection.OutsideBounds.Distance(b.DepthProjection.OutsideBounds);
+      return Math.Max(d.Left, d.Right) <= ContactEpsilon
+          && Math.Max(d.Top, d.Bottom) <= ContactEpsilon;
+   }
+
+   static List<List<PhysicalMonitor>> BuildClusters(List<PhysicalMonitor> monitors)
+   {
+      var clusters = new List<List<PhysicalMonitor>>();
+      var remaining = new List<PhysicalMonitor>(monitors);
+
+      while (remaining.Count > 0)
+      {
+         var cluster = new List<PhysicalMonitor> { remaining[0] };
+         remaining.RemoveAt(0);
+
+         var grown = true;
+         while (grown)
+         {
+            grown = false;
+            for (var i = remaining.Count - 1; i >= 0; i--)
+            {
+               if (!cluster.Any(m => AreConnected(m, remaining[i]))) continue;
+               cluster.Add(remaining[i]);
+               remaining.RemoveAt(i);
+               grown = true;
+            }
+         }
+         clusters.Add(cluster);
+      }
+      return clusters;
+   }
+
+   static Thickness PairDistanceToTouch(List<PhysicalMonitor> cluster, List<PhysicalMonitor> anchored)
+      => cluster
+          .Select(m => m.DepthProjection.OutsideBounds
+              .DistanceToTouch(anchored.Select(a => a.DepthProjection.OutsideBounds)))
+          .Aggregate(MonitorExtensions.Infinity, (acc, d) => acc.Min(d));
+
+   static Thickness PairDistance(List<PhysicalMonitor> cluster, List<PhysicalMonitor> anchored)
+      => cluster
+          .Select(m => m.DepthProjection.OutsideBounds
+              .Distance(anchored.Select(a => a.DepthProjection.OutsideBounds)))
+          .Aggregate(new Thickness(double.MaxValue), (acc, d) => acc.Min(d));
 
    /// <summary>
    /// Maximum effective Horizontal DPI of all screens

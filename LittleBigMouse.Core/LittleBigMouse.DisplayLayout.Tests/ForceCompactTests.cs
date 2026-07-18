@@ -74,6 +74,70 @@ public class ForceCompactTests
         Assert.Equal(-294, tv.DepthProjection.Y, 2);
     }
 
+    /// <summary>
+    /// A monitor stacked on top of the TV must stay aligned with it through a
+    /// primary drag: both belong to the same touching cluster and travel as one
+    /// block. The per-monitor greedy left it shifted sideways ("still touching"
+    /// vertically, so it was never pulled back).
+    /// </summary>
+    [Fact]
+    public void PrimaryDrag_StackedClusterComesBackAsOneBlock()
+    {
+        var layout = new MonitorsLayout(new ILayoutOptions.Design());
+
+        var primary = AddMonitor(layout, "P", "PHL0001", 700, 400, 0, 0, primary: true);
+        // TV touching the primary's right side, stacked monitor on top of the TV.
+        var tv = AddMonitor(layout, "TV", "TV_0001", 1650, 920, 754, -300);
+        var stacked = AddMonitor(layout, "S", "SAM0001", 700, 400, 954, -700);
+
+        layout.UpdatePhysicalMonitors();
+        layout.ForceCompact();
+
+        // The {TV, stacked} cluster slides back 54 as one rigid block.
+        Assert.Equal(700, tv.DepthProjection.X, 2);
+        Assert.Equal(-300, tv.DepthProjection.Y, 2);
+        Assert.Equal(900, stacked.DepthProjection.X, 2);
+        Assert.Equal(-700, stacked.DepthProjection.Y, 2);
+    }
+
+    /// <summary>
+    /// Compact must also work from arbitrary positions: two monitors overlapping
+    /// each other while both border-to-border with the TV. The overlap is resolved
+    /// (primary never moves) without tearing the existing contacts apart.
+    /// </summary>
+    [Fact]
+    public void OverlappingMonitors_GetSpreadApart_PrimaryStays()
+    {
+        var layout = new MonitorsLayout(new ILayoutOptions.Design());
+
+        var tv = AddMonitor(layout, "TV", "TV_0001", 1650, 920, 0, 0);
+        // Both under the TV, touching its bottom edge, overlapping each other.
+        var primary = AddMonitor(layout, "P", "PHL0001", 700, 400, 100, 920, primary: true);
+        var overlapping = AddMonitor(layout, "S", "SAM0001", 700, 400, 400, 920);
+
+        layout.UpdatePhysicalMonitors();
+        layout.ForceCompact();
+
+        // Primary untouched.
+        Assert.Equal(100, primary.DepthProjection.X, 2);
+        Assert.Equal(920, primary.DepthProjection.Y, 2);
+        // TV untouched: still in contact with the primary.
+        Assert.Equal(0, tv.DepthProjection.X, 2);
+        Assert.Equal(0, tv.DepthProjection.Y, 2);
+
+        // The overlap is gone…
+        var p = primary.DepthProjection.OutsideBounds;
+        var s = overlapping.DepthProjection.OutsideBounds;
+        var overlapX = Math.Min(p.Right, s.Right) - Math.Max(p.Left, s.Left);
+        var overlapY = Math.Min(p.Bottom, s.Bottom) - Math.Max(p.Top, s.Top);
+        Assert.False(overlapX > 0.01 && overlapY > 0.01, $"still overlapping: {overlapX}x{overlapY}");
+
+        // …and the freed monitor is still in contact with the rest, not teleported.
+        var d1 = s.Distance(p).ToArray().Select(Math.Abs).Min();
+        var d2 = s.Distance(tv.DepthProjection.OutsideBounds).ToArray().Select(Math.Abs).Min();
+        Assert.True(d1 < 0.01 || d2 < 0.01, $"lost all contacts (to primary: {d1}, to tv: {d2})");
+    }
+
     [Fact]
     public void DistanceHV_FiniteAxisWins_OverInfiniteAxis()
     {

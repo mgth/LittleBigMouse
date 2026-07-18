@@ -185,10 +185,22 @@ public class PhysicalMonitor : SavableReactiveModel
             .Where(_ => !BordersCustomized)
             .Subscribe(_ =>
             {
-                Borders.Left = Model.PhysicalSize.LeftBorder;
-                Borders.Top = Model.PhysicalSize.TopBorder;
-                Borders.Right = Model.PhysicalSize.RightBorder;
-                Borders.Bottom = Model.PhysicalSize.BottomBorder;
+                // Flag the copy so the customization detector below ignores it: a
+                // mirror write is never a user edit. Without this, the first model
+                // border applied while the mode is already PerMonitor (e.g. during
+                // Load) marks the monitor customized and cuts the mirror mid-copy.
+                _mirroringModelBorders = true;
+                try
+                {
+                    Borders.Left = Model.PhysicalSize.LeftBorder;
+                    Borders.Top = Model.PhysicalSize.TopBorder;
+                    Borders.Right = Model.PhysicalSize.RightBorder;
+                    Borders.Bottom = Model.PhysicalSize.BottomBorder;
+                }
+                finally
+                {
+                    _mirroringModelBorders = false;
+                }
             })
             .DisposeWith(this);
 
@@ -206,11 +218,16 @@ public class PhysicalMonitor : SavableReactiveModel
             .Skip(1)
             .Subscribe(_ =>
             {
-                if (Layout.Options.BorderValues == "PerMonitor") BordersCustomized = true;
+                if (!_mirroringModelBorders && Layout.Options.BorderValues == "PerMonitor")
+                    BordersCustomized = true;
                 Saved = false;
             })
             .DisposeWith(this);
     }
+
+    // True while the mirror above copies model borders into Borders, so the
+    // customization detector can tell mirror writes from user edits.
+    bool _mirroringModelBorders;
 
     void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)
     {

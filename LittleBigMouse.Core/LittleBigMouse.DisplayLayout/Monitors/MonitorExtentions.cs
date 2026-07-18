@@ -107,6 +107,13 @@ public static class MonitorExtensions
         var x = distance.Left >= 0 ? distance.Left : distance.Right >= 0 ? distance.Right : Math.Max(distance.Left, distance.Right);
         var y = distance.Top >= 0 ? distance.Top : distance.Bottom >= 0 ? distance.Bottom : Math.Max(distance.Top, distance.Bottom);
 
+        // DistanceToTouch marks an axis with no possible touch as infinite: use the
+        // finite axis alone. Folding the infinity into Vector.Length would return
+        // infinity for every reachable monitor, making ordering by distance
+        // degenerate to collection order (the #450 scramble).
+        if (double.IsPositiveInfinity(x)) return y;
+        if (double.IsPositiveInfinity(y)) return x;
+
         var v = new Vector(x,y);
 
         if (v is { X: >= 0, Y: >= 0 }) return v.Length;

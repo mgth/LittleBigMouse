@@ -104,8 +104,9 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
 
     readonly List<RulerWindow> _panels = new();
 
-    // Ruler thickness in the layout's own pixel space (the mouse-coordinate
-    // space: physical pixels on Windows, compositor logical pixels on Linux).
+    // Ruler thickness in DIPs, like the 100-DIP bands of the former fullscreen
+    // panel grid: the ruler drawing works in DIPs, so a thickness in any other
+    // unit clips the 10cm graduations and their digits on scaled monitors.
     const double RulerThickness = 100.0;
 
     public void UpdateRulers()
@@ -142,7 +143,7 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
                 (int)layoutBounds.Width, (int)layoutBounds.Height);
             var scaling = screen?.Scaling ?? source.Source.EffectiveDpi.Y / 96.0;
 
-            var thickness = RulerThickness * bounds.Width / layoutBounds.Width;
+            var thickness = RulerThickness * scaling;
 
             // Horizontal rulers first, vertical ones last so they end up on
             // top in the corners, like in the former single-panel layout.

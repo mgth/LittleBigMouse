@@ -202,6 +202,7 @@ public class MainService : ReactiveModel, IMainService
             _layoutPersistence.SaveEnabled(MonitorsLayout);
             return _littleBigMouseClientService.StopAsync();
         });
+        await _notify.AddMenuAsync(-1, "Refresh", "Icon/Refresh", RefreshAsync);
         await _notify.AddMenuAsync(-1, "Exit", "Icon/sys/Close", QuitAsync);
 
         // Apply the initial "hide tray icon" preference BEFORE loading the icon bitmap.
@@ -228,6 +229,22 @@ public class MainService : ReactiveModel, IMainService
     }
 
     Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
+
+    /// <summary>
+    /// Tray-menu escape hatch: force a layout rebuild when the automatic display-change
+    /// detection missed one (#443). Deliberately bypasses the idempotence guard, then
+    /// realigns the built signature so the next display event doesn't rebuild again.
+    /// </summary>
+    async Task RefreshAsync()
+    {
+        // display off: nothing to rebuild against, the daemon's Resumed event reconciles
+        if (_suspended) return;
+
+        UpdateLayout();
+        _lastBuiltSignature = _layoutFactory.DisplaySignature();
+        if (MonitorsLayout.Options.Enabled)
+            await StartAsync();
+    }
 
     /// <summary>
     /// Rolling trace of daemon events: display-event storms (wake from sleep, HDR

@@ -166,7 +166,7 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
         foreach (var monitor in monitors)
             layout.AddMonitor(monitor);
 
-        layout.Id = string.Join("+", layout.PhysicalMonitors.Select(m => $"{m.Id}").OrderBy(s => s));
+        layout.Id = layout.ComputeId();
 
         // Same ordering as Windows: infer positions from the system topology, then let the
         // saved layout override them, then re-anchor on the current primary.

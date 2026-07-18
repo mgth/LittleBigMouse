@@ -145,7 +145,7 @@ internal static class WindowsLayoutMapping
         }
         Prof($"  [UF] buildSources {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
-        layout.Id = string.Join("+",layout.PhysicalMonitors.Select(m => $"{m.Id}").OrderBy(s => s));
+        layout.Id = layout.ComputeId();
 
         // places monitors from windows configuration as best as possible
         layout.SetLocationsFromSystemConfiguration();

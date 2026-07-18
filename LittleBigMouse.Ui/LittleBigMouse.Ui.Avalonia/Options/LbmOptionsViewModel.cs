@@ -11,6 +11,7 @@ using HLab.Base.Avalonia.Extensions;
 using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using ReactiveUI;
 
@@ -18,8 +19,15 @@ namespace LittleBigMouse.Ui.Avalonia.Options;
 
 public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
 {
-    public LbmOptionsViewModel(IProcessesCollector collector)
+    public LbmOptionsViewModel(IProcessesCollector collector, IMainService mainService)
     {
+        // Turning a permission OFF must fix the current layout right away, not
+        // wait for the next monitor move: compact resolves the existing overlaps
+        // (AllowOverlaps) or closes the existing gaps (AllowDiscontinuity).
+        // Only a true→false TRANSITION compacts — loading a layout does not.
+        CompactWhenTurnedOff(e => e.Model.AllowOverlaps, mainService);
+        CompactWhenTurnedOff(e => e.Model.AllowDiscontinuity, mainService);
+
         AddExcludedProcessCommand = ReactiveCommand.Create(
             AddExcludedProcess, 
             this.WhenAnyValue(
@@ -71,6 +79,23 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             .Transform(p => new SeenProcessViewModel(p,p, this))
             .Bind(out _seenProcesses)
             .Subscribe()
+            .DisposeWith(this);
+    }
+
+    void CompactWhenTurnedOff(
+        System.Linq.Expressions.Expression<Func<LbmOptionsViewModel, bool>> option,
+        IMainService mainService)
+    {
+        this.WhenAnyValue(option)
+            .DistinctUntilChanged()
+            .Buffer(2, 1)
+            .Where(w => w.Count == 2 && w[0] && !w[1])
+            .Subscribe(_ =>
+            {
+                if (mainService.MonitorsLayout is not { } layout) return;
+                layout.Compact();
+                layout.UpdatePhysicalMonitors();
+            })
             .DisposeWith(this);
     }
 

@@ -23,12 +23,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Reactive.Concurrency;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using DynamicData;
 using HLab.Base.ReactiveUI;
+using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using ReactiveUI;
 
@@ -95,54 +98,66 @@ public class PhysicalMonitor : SavableReactiveModel
         };
         _borderOverride = new DisplayBorderOverride(model.PhysicalSize, Borders);
 
+        // Observe BorderValues directly via ILayoutOptions.PropertyChanged — WhenAnyValue through
+        // IMonitorsLayout (which declares no INotifyPropertyChanged) loses the innermost subscription.
+        var borderValuesObs = Observable
+            .FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                h => Layout.Options.PropertyChanged += h,
+                h => Layout.Options.PropertyChanged -= h)
+            .Where(e => e.EventArgs.PropertyName == nameof(ILayoutOptions.BorderValues))
+            .Select(_ => Layout.Options.BorderValues)
+            .StartWith(Layout.Options.BorderValues)
+            .DistinctUntilChanged();
+
         // The size the geometry is built from: the shared per-model size, or — when "Border values"
         // is "PerMonitor" — the same size with this monitor's own borders substituted. Reactive so a
         // mode switch rewires rotation / projection / zones live.
-        _effectivePhysicalSize = this.WhenAnyValue(e => e.Layout.Options.BorderValues)
+        // Shared, replayed stream — Replay(1) ensures _physicalRotated and _depthProjectionUnrotated
+        // receive the current value when they subscribe, without missing the StartWith emission that
+        // already fired for _effectivePhysicalSize. Direct subscription also avoids the
+        // WhenAnyValue(e => e.EffectivePhysicalSize) OAPH-PropertyChanged round-trip that breaks
+        // in Avalonia's synchronous reentrancy model (mode-change event → OAPH fires → inner
+        // PropertyChanged → WhenAnyValue chain stops).
+        var effectiveSizeObs = borderValuesObs
             .Select(mode => mode == "PerMonitor" ? (IDisplaySize)_borderOverride : Model.PhysicalSize)
-            .ToProperty(this, e => e.EffectivePhysicalSize, initialValue: model.PhysicalSize)
+            .Replay(1)
+            .RefCount();
+
+        _effectivePhysicalSize = effectiveSizeObs
+            .ToProperty(this, e => e.EffectivePhysicalSize, initialValue: model.PhysicalSize, scheduler: Scheduler.Immediate)
             .DisposeWith(this);
 
-        // Keep the per-monitor borders mirroring the model while NOT in per-monitor mode, so switching
-        // to "PerMonitor" starts from the current model borders (no visual jump). In per-monitor mode
-        // the mirror stops and Borders keeps its own loaded / user-edited values.
-        this.WhenAnyValue(
-                e => e.Layout.Options.BorderValues,
-                e => e.Model.PhysicalSize.LeftBorder,
-                e => e.Model.PhysicalSize.TopBorder,
-                e => e.Model.PhysicalSize.RightBorder,
-                e => e.Model.PhysicalSize.BottomBorder)
-            .Where(t => t.Item1 != "PerMonitor")
-            .Subscribe(_ =>
-            {
-                Borders.Left = Model.PhysicalSize.LeftBorder;
-                Borders.Top = Model.PhysicalSize.TopBorder;
-                Borders.Right = Model.PhysicalSize.RightBorder;
-                Borders.Bottom = Model.PhysicalSize.BottomBorder;
-            })
-            .DisposeWith(this);
 
-        _physicalRotated = this.WhenAnyValue(
-            e => e.EffectivePhysicalSize,
-            e => e.ActiveSource.Source.Orientation,
-            (physicalSize, orientation) => physicalSize.Rotate(orientation)
-        ).Log(this, "_physicalRotated").ToProperty(this, e => e.PhysicalRotated).DisposeWith(this);
+        effectiveSizeObs
+            .CombineLatest(
+                this.WhenAnyValue(e => e.ActiveSource.Source.Orientation),
+                (physicalSize, orientation) => physicalSize.Rotate(orientation)
+            )
+            .Subscribe(r => PhysicalRotated = r)
+            .DisposeWith(this);
 
         //RemainingPhysicalMonitors = Layout.PhysicalMonitors.Items.AsObservableChangeSet().Filter(s => !Equals(s, this)).AsObservableList();
 
         DepthRatio = new DisplayRatioValue(1.0, 1.0);
 
-        _depthProjection = this.WhenAnyValue(
-            e => e.PhysicalRotated,
-            e => e.DepthRatio,
-            (physicalRotated, ratio) => physicalRotated.Scale(ratio).Locate()
-            ).Log(this, "_inMm").ToProperty(this, e => e.DepthProjection).DisposeWith(this);
+        // Use Subscribe + ReferenceEquals setter instead of ToProperty to bypass
+        // DistinctUntilChanged(EqualityComparer<IDisplaySize>.Default), which would suppress
+        // the PerModel→PerMonitor switch when both DPs have identical values (borders not yet loaded).
+        effectiveSizeObs
+            .CombineLatest(
+                this.WhenAnyValue(e => e.ActiveSource.Source.Orientation),
+                this.WhenAnyValue(e => e.DepthRatio),
+                (physicalSize, orientation, ratio) => (IDisplaySize)physicalSize.Rotate(orientation).Scale(ratio).Locate()
+            )
+            .Log(this, "_inMm")
+            .Subscribe(dp => DepthProjection = dp)
+            .DisposeWith(this);
 
-        _depthProjectionUnrotated = this.WhenAnyValue(
-            e => e.EffectivePhysicalSize,
-            e => e.DepthRatio,
-            (physicalSize, ratio) => physicalSize.Scale(ratio)
-            ).Log(this, "_inMmU").ToProperty(this, e => e.DepthProjectionUnrotated).DisposeWith(this);
+        _depthProjectionUnrotated = effectiveSizeObs
+            .CombineLatest(
+                this.WhenAnyValue(e => e.DepthRatio),
+                (physicalSize, ratio) => physicalSize.Scale(ratio)
+            ).Log(this, "_inMmU").ToProperty(this, e => e.DepthProjectionUnrotated, scheduler: Scheduler.Immediate).DisposeWith(this);
 
         _diagonal = this.WhenAnyValue(
             e => e.DepthProjection.Height,
@@ -151,11 +166,24 @@ public class PhysicalMonitor : SavableReactiveModel
             ).Log(this, "_diagonal").ToProperty(this, e => e.Diagonal).DisposeWith(this);
 
         this.UnsavedOn(
-            e => e.Model, 
-            e => e.DepthProjection, 
-            e => e.DepthRatio, 
+            e => e.Model,
+            e => e.DepthProjection,
+            e => e.DepthRatio,
             e => e.BorderResistance
         );
+
+        // DisplayBorders is not ISavable so UnsavedOn cannot track it.
+        // Skip(1) drops the initial combined emission at subscription time.
+        // Load() resets Saved=true at its end, so loading does not leave a dirty flag.
+        this.WhenAnyValue(
+                e => e.Borders.Left,
+                e => e.Borders.Top,
+                e => e.Borders.Right,
+                e => e.Borders.Bottom,
+                (l, t, r, b) => (l, t, r, b))
+            .Skip(1)
+            .Subscribe(_ => Saved = false)
+            .DisposeWith(this);
     }
 
     void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)
@@ -246,8 +274,17 @@ public class PhysicalMonitor : SavableReactiveModel
     /// <summary>
     /// Dimensions with rotation applied
     /// </summary>
-    [DataMember] public IDisplaySize PhysicalRotated => _physicalRotated.Value;
-    readonly ObservableAsPropertyHelper<IDisplaySize> _physicalRotated;
+    [DataMember] public IDisplaySize PhysicalRotated
+    {
+        get;
+        private set
+        {
+            if (ReferenceEquals(field, value)) return;
+            this.RaisePropertyChanging();
+            field = value;
+            this.RaisePropertyChanged();
+        }
+    }
 
 
     // Mm
@@ -256,8 +293,24 @@ public class PhysicalMonitor : SavableReactiveModel
     /// Dimensions with depth ratio applied to deal with monitor distance
     /// </summary>
     [DataMember]
-    public IDisplaySize DepthProjection => _depthProjection.Value;
-    readonly ObservableAsPropertyHelper<IDisplaySize> _depthProjection;
+    public IDisplaySize DepthProjection
+    {
+        get;
+        private set
+        {
+            if (ReferenceEquals(field, value)) return;
+            // Carry the layout-computed position forward so monitors don't collapse to 0,0
+            // when a mode switch replaces the DP object with a fresh one.
+            if (field is not null && value is not null)
+            {
+                value.X = field.X;
+                value.Y = field.Y;
+            }
+            this.RaisePropertyChanging();
+            field = value;
+            this.RaisePropertyChanged();
+        }
+    }
 
     /// <summary>
     /// Dimensions with depth ratio applied but without rotation

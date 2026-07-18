@@ -345,16 +345,13 @@ public static class PersistencyExtensions
 
         @this.ExcludedFromLayout = key.GetOrSet("ExcludedFromLayout", () => @this.ExcludedFromLayout);
 
-        // Per-monitor bezel borders — only in "PerMonitor" mode ("PerModel" keeps them on the shared
-        // model key). Defaults were seeded from the model at construction, so an absent key just keeps
-        // the model's values.
-        if (@this.Layout.Options.BorderValues == "PerMonitor")
-        {
-            @this.Borders.Left = key.GetOrSet(@"Borders\Left", () => @this.Model.PhysicalSize.LeftBorder);
-            @this.Borders.Top = key.GetOrSet(@"Borders\Top", () => @this.Model.PhysicalSize.TopBorder);
-            @this.Borders.Right = key.GetOrSet(@"Borders\Right", () => @this.Model.PhysicalSize.RightBorder);
-            @this.Borders.Bottom = key.GetOrSet(@"Borders\Bottom", () => @this.Model.PhysicalSize.BottomBorder);
-        }
+        // Always load per-monitor bezel borders regardless of current mode, so switching to
+        // PerMonitor is live (no restart required). Defaults fall back to the model values via
+        // GetOrSet, so a first-time run seeds the registry with the shared model values.
+        @this.Borders.Left = key.GetOrSet(@"Borders\Left", () => @this.Model.PhysicalSize.LeftBorder);
+        @this.Borders.Top = key.GetOrSet(@"Borders\Top", () => @this.Model.PhysicalSize.TopBorder);
+        @this.Borders.Right = key.GetOrSet(@"Borders\Right", () => @this.Model.PhysicalSize.RightBorder);
+        @this.Borders.Bottom = key.GetOrSet(@"Borders\Bottom", () => @this.Model.PhysicalSize.BottomBorder);
 
         @this.Saved = true;
 
@@ -384,13 +381,11 @@ public static class PersistencyExtensions
 
         @this.BorderResistance.Saved = true;
 
-        if (@this.Layout.Options.BorderValues == "PerMonitor")
-        {
-            key.SetKey(@"Borders\Left", @this.Borders.Left);
-            key.SetKey(@"Borders\Top", @this.Borders.Top);
-            key.SetKey(@"Borders\Right", @this.Borders.Right);
-            key.SetKey(@"Borders\Bottom", @this.Borders.Bottom);
-        }
+        // Always persist per-monitor borders so they survive a Save() while in PerModel mode.
+        key.SetKey(@"Borders\Left", @this.Borders.Left);
+        key.SetKey(@"Borders\Top", @this.Borders.Top);
+        key.SetKey(@"Borders\Right", @this.Borders.Right);
+        key.SetKey(@"Borders\Bottom", @this.Borders.Bottom);
 
 
         foreach (var source in @this.Sources.Items)

@@ -22,6 +22,7 @@
 */
 
 
+using LittleBigMouse.DisplayLayout;
 using ReactiveUI;
 using System.Reactive.Concurrency;
 
@@ -48,8 +49,8 @@ public class DisplayScale : DisplaySize
             .ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);
 
         _leftBorder = this.WhenAnyValue(
-            e => e.Source.LeftBorder, 
-            e => e.Ratio.X, 
+            e => e.Source.LeftBorder,
+            e => e.Ratio.X,
             (width, r) => width * r)
             .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
 

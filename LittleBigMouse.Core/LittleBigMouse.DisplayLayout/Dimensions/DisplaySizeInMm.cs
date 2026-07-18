@@ -77,7 +77,7 @@ public class DisplaySizeInMm : DisplaySize
 
     public override double Y { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
-    public override double TopBorder { get; set => SetUnsavedValue(ref field, Math.Max(value, 0.0));} = 20.0;
+    public override double TopBorder { get; set => SetUnsavedValue(ref field, Math.Max(value, 0.0)); } = 20.0;
 
     public override double RightBorder { get; set => SetUnsavedValue(ref field, Math.Max(value, 0.0)); } = 20.0;
 

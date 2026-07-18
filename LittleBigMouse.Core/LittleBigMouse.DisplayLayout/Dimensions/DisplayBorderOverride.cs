@@ -1,4 +1,5 @@
 using System.Reactive.Concurrency;
+using LittleBigMouse.DisplayLayout;
 using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
@@ -22,10 +23,17 @@ public class DisplayBorderOverride : DisplaySize
         _width = this.WhenAnyValue(e => e.Source.Width).ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);
         _height = this.WhenAnyValue(e => e.Source.Height).ToProperty(this, e => e.Height, scheduler: Scheduler.Immediate);
 
-        _leftBorder = this.WhenAnyValue(e => e.BorderSource.Left).ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
-        _topBorder = this.WhenAnyValue(e => e.BorderSource.Top).ToProperty(this, e => e.TopBorder, scheduler: Scheduler.Immediate);
-        _rightBorder = this.WhenAnyValue(e => e.BorderSource.Right).ToProperty(this, e => e.RightBorder, scheduler: Scheduler.Immediate);
-        _bottomBorder = this.WhenAnyValue(e => e.BorderSource.Bottom).ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
+        // Subscribe directly to the captured borderSource instead of going through
+        // this.WhenAnyValue(e => e.BorderSource.*), which requires ReactiveUI to resolve
+        // a get-only property chain and may silently drop inner-property subscriptions.
+        _leftBorder = borderSource.WhenAnyValue(e => e.Left)
+            .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
+        _topBorder = borderSource.WhenAnyValue(e => e.Top)
+            .ToProperty(this, e => e.TopBorder, scheduler: Scheduler.Immediate);
+        _rightBorder = borderSource.WhenAnyValue(e => e.Right)
+            .ToProperty(this, e => e.RightBorder, scheduler: Scheduler.Immediate);
+        _bottomBorder = borderSource.WhenAnyValue(e => e.Bottom)
+            .ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
 
         base.Init();
     }

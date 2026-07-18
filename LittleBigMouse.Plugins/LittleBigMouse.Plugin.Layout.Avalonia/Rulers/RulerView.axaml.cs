@@ -58,12 +58,7 @@ public partial class RulerView : UserControl, IView<RulerViewModel>
 
             var offset = newPoint.Y - _oldPoint.Y;
 
-            var old = ViewModel.DrawOn.Monitor.DepthProjection.Y;
-
             ViewModel.DrawOn.Monitor.DepthProjection.Y = _dragStartPoint.Value.Y - offset * pitch;
-
-            if (ViewModel.DrawOn.Source.Primary && Math.Abs(ViewModel.DrawOn.Monitor.DepthProjection.Y - old) < double.Epsilon) 
-                _oldPoint += new Vector(0,offset) ;
         }
         else
         {
@@ -71,13 +66,7 @@ public partial class RulerView : UserControl, IView<RulerViewModel>
 
             var offset = newPoint.X - _oldPoint.X;
 
-            var old = ViewModel.DrawOn.Monitor.DepthProjection.X;
-
-
             ViewModel.DrawOn.Monitor.DepthProjection.X = _dragStartPoint.Value.X - offset * pitch;
-
-            if (ViewModel.DrawOn.Source.Primary && Math.Abs(ViewModel.DrawOn.Monitor.DepthProjection.X - old) < double.Epsilon) 
-                _oldPoint += new Vector(offset, 0);
         }
     }
 

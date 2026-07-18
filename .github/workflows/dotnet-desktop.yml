@@ -1,4 +1,5 @@
-# Build LittleBigMouse: managed UI (net10 / Avalonia) + native C++ hook (x64).
+# Build LittleBigMouse: managed UI (net10 / Avalonia) + native hook daemon (x64,
+# Rust by default, C++ as opt-out).
 # - Push / PR on master: build everything, upload a portable artifact.
 # - Tag v*: additionally compile the InnoSetup installer and attach it to a
 #   draft GitHub release for manual review before publishing.
@@ -15,14 +16,15 @@ on:
     inputs:
       hook_impl:
         description: 'Hook daemon implementation to build and ship'
-        default: 'cpp'
+        default: 'rust'
         type: choice
-        options: [ cpp, rust ]
+        options: [ rust, cpp ]
 
 env:
-  # Which hook daemon to build/stage. Defaults to the C++ implementation so
-  # push/PR/tag builds are unchanged; the Rust port is opt-in via workflow_dispatch.
-  HOOK_IMPL: ${{ github.event.inputs.hook_impl || 'cpp' }}
+  # Which hook daemon to build/stage. The Rust port is the default on every
+  # build; the C++ implementation stays available as an opt-out via
+  # workflow_dispatch while it remains in the tree.
+  HOOK_IMPL: ${{ github.event.inputs.hook_impl || 'rust' }}
   UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
   HOOK_PROJECT: LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj
   HOOK_RUST_PROJECT: LittleBigMouse-Hook-Rust\Cargo.toml

@@ -139,8 +139,8 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
     public void LaunchDaemon()
     {
-        var processes = Process.GetProcessesByName(HookProcessName);
-        foreach (var process in processes)
+        foreach (var name in HookProcessNames)
+        foreach (var process in Process.GetProcessesByName(name))
         {
             if(process.HasExited) continue;
             Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
@@ -190,16 +190,20 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         }
     }
 
-    // Windows keeps the historical staging name; on Linux the Rust daemon runs
-    // under its cargo binary name.
+    // Deployed Windows builds keep the historical staging name (CI renames the Rust
+    // binary to it); a dev-tree Rust daemon runs under its cargo binary name on
+    // every platform.
     static string HookExeName => OperatingSystem.IsWindows() ? "LittleBigMouse.Hook.exe" : "lbm-hook";
-    static string HookProcessName => OperatingSystem.IsWindows() ? "LittleBigMouse.Hook" : "lbm-hook";
+    static string[] HookProcessNames => OperatingSystem.IsWindows()
+        ? ["LittleBigMouse.Hook", "lbm-hook"]
+        : ["lbm-hook"];
 
     /// <summary>
     /// Locate the hook daemon without depending on the .NET target framework folder
-    /// (net8.0, net9.0, net10.0, ...). Deployed builds keep the hook next to the UI; in the dev
-    /// tree the Windows C++ hook is built under LittleBigMouse.Hook\bin (own platform/config
-    /// layout, no TFM subfolder) and the Rust hook under LittleBigMouse-Hook-Rust/target.
+    /// (net8.0, net9.0, net10.0, ...). Deployed builds keep the hook next to the UI; in the
+    /// dev tree the Rust hook (the default on every platform) is built under
+    /// LittleBigMouse-Hook-Rust/target, and the Windows C++ hook (opt-out) under
+    /// LittleBigMouse.Hook\bin (own platform/config layout, no TFM subfolder).
     /// Resistant to .NET version, platform (AnyCPU/x64) and configuration (Debug/Release) changes.
     /// </summary>
     static string? FindHookPath()
@@ -222,19 +226,19 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
             var sep = Path.DirectorySeparatorChar;
             var config = uiDir.Contains($"{sep}Debug{sep}", StringComparison.OrdinalIgnoreCase) ? "Debug" : "Release";
 
-            if (!OperatingSystem.IsWindows())
-            {
-                // Rust daemon: LittleBigMouse-Hook-Rust/target/{debug,release}/lbm-hook.
-                var target = Path.Combine(root, "LittleBigMouse-Hook-Rust", "target");
-                var candidates = new[]
+            // Rust daemon first: LittleBigMouse-Hook-Rust/target/{debug,release}/lbm-hook[.exe].
+            var rustExe = OperatingSystem.IsWindows() ? "lbm-hook.exe" : "lbm-hook";
+            var target = Path.Combine(root, "LittleBigMouse-Hook-Rust", "target");
+            var rust = new[]
                 {
-                    Path.Combine(target, config.ToLowerInvariant(), HookExeName),
-                    Path.Combine(target, "release", HookExeName),
-                    Path.Combine(target, "debug", HookExeName),
-                };
-                return candidates.FirstOrDefault(File.Exists);
-            }
+                    Path.Combine(target, config.ToLowerInvariant(), rustExe),
+                    Path.Combine(target, "release", rustExe),
+                    Path.Combine(target, "debug", rustExe),
+                }
+                .FirstOrDefault(File.Exists);
+            if (rust is not null || !OperatingSystem.IsWindows()) return rust;
 
+            // C++ hook fallback (Windows opt-out builds).
             var hookBin = Path.Combine(root, "LittleBigMouse.Hook", "bin");
             if (!Directory.Exists(hookBin)) return null;
 

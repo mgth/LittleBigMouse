@@ -6,11 +6,11 @@
   #define AppVer GetVersionNumbersString('..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\LittleBigMouse.Ui.Avalonia.exe')
 #endif
 
-; Which hook daemon was built (CI passes /DHookImpl=rust for the Rust port). The
+; Which hook daemon was built (CI passes /DHookImpl, rust being the default). The
 ; hook exe is staged into the UI output either way and packaged by the UI *.exe
-; line below; the extra C++ bin source is only needed for the C++ build.
+; line below; the extra C++ bin source is only needed for the C++ opt-out build.
 #ifndef HookImpl
-  #define HookImpl "cpp"
+  #define HookImpl "rust"
 #endif
 
 [Setup]

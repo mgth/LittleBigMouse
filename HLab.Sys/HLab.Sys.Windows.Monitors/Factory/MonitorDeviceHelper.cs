@@ -662,20 +662,10 @@ public static class MonitorDeviceHelper
         return string.Join("|", parts);
     }
 
-    // TEMP profiling (#displaychange-timing): writes phase timings to C:\dev\lbm-dc.log. Remove after tuning.
-    static int _gddCount;
-    static void Prof(string m) { try { System.IO.File.AppendAllText(@"C:\dev\lbm-dc.log", $"{DateTime.Now:HH:mm:ss.fff} {m}{Environment.NewLine}"); } catch { } }
-
     public static DisplayDevice GetDisplayDevices()
     {
-        var gdd = ++_gddCount;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        var swAll = System.Diagnostics.Stopwatch.StartNew();
-        Prof($"    [GDD#{gdd}] START");
-
         var root = DeviceFactory.BuildDisplayDeviceAndChildren(null, new WinGdi.DisplayDevice()
         { DeviceID = "ROOT", DeviceName = null });
-        Prof($"    [GDD#{gdd}] BuildDisplayDeviceAndChildren {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         var hdc = 0;//GetDCEx(0, 0, DeviceContextValues.Window);
 
@@ -705,13 +695,10 @@ public static class MonitorDeviceHelper
 
                 return true; // Continue
             }, 0);
-        Prof($"    [GDD#{gdd}] EnumDisplayMonitors+GetMonitorInfo+UpdateDpi {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         //ReleaseDC(0, hdc);
 
         root.UpdateWallpaper();
-        Prof($"    [GDD#{gdd}] UpdateWallpaper(COM) {sw.ElapsedMilliseconds}ms"); sw.Restart();
-
 
         var list = root.AllMonitorDevices().ToList();
 
@@ -740,8 +727,6 @@ public static class MonitorDeviceHelper
 
         UpdateMonitorNumbers(list);
         UpdateSpecializedMonitors(list);
-        Prof($"    [GDD#{gdd}] post(sourceId dedup + numbers + specialized) {sw.ElapsedMilliseconds}ms");
-        Prof($"    [GDD#{gdd}] TOTAL {swAll.ElapsedMilliseconds}ms");
 
         return root;
     }

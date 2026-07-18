@@ -50,15 +50,9 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
 
     public MonitorsLayout Create()
     {
-        // TEMP profiling (#displaychange-timing)
-        WindowsLayoutMapping.Prof("[Create] START");
-        var sw = System.Diagnostics.Stopwatch.StartNew();
         // Refresh the OS device tree (formerly MainService's UpdateDevices()).
         if (_monitors is SystemMonitorsService concrete) concrete.UpdateDevices();
-        WindowsLayoutMapping.Prof($"[Create] UpdateDevices() {sw.ElapsedMilliseconds}ms"); sw.Restart();
-        var layout = _newLayout().UpdateFrom(_monitors, _persistence);
-        WindowsLayoutMapping.Prof($"[Create] UpdateFrom() {sw.ElapsedMilliseconds}ms");
-        return layout;
+        return _newLayout().UpdateFrom(_monitors, _persistence);
     }
 
     /// <inheritdoc/>
@@ -85,12 +79,8 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
 /// </summary>
 internal static class WindowsLayoutMapping
 {
-    // TEMP profiling (#displaychange-timing): writes phase timings to C:\dev\lbm-dc.log. Remove after tuning.
-    internal static void Prof(string m) { try { System.IO.File.AppendAllText(@"C:\dev\lbm-dc.log", $"{System.DateTime.Now:HH:mm:ss.fff} {m}{System.Environment.NewLine}"); } catch { } }
-
     public static MonitorsLayout UpdateFrom(this MonitorsLayout layout, ISystemMonitorsService service, ILayoutPersistence persistence)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
         // DPI awareness is process-scoped (the UI thread's manifested awareness), formerly
         // computed in the MonitorsLayout constructor. Set it before building the sources.
         layout.DpiAwareness = (DpiAwarenessKind)(int)WinUser.GetAwarenessFromDpiAwarenessContext(
@@ -99,7 +89,6 @@ internal static class WindowsLayoutMapping
         // First access to .Root triggers the (lazy, expensive) GetDisplayDevices enumeration.
         // Hold a strong ref for the whole method so the WeakReference can't drop it mid-build.
         var root = service.Root;
-        Prof($"  [UF] RootAccess(->GDD) {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         foreach (var monitor in root.AllMonitorDevices())
         {
@@ -143,13 +132,10 @@ internal static class WindowsLayoutMapping
 
             layout.AddOrUpdatePhysicalSource(source);
         }
-        Prof($"  [UF] buildSources {sw.ElapsedMilliseconds}ms"); sw.Restart();
-
         layout.Id = layout.ComputeId();
 
         //retrieve saved layout (registry, via the shared persistence engine)
         persistence.Load(layout);
-        Prof($"  [UF] Load {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         // Place the monitors the stored layout did not cover (new or never-saved config)
         // from the windows configuration. AFTER Load, so the placement runs on the fully
@@ -157,12 +143,10 @@ internal static class WindowsLayoutMapping
         // "place from windows" button does; running it before Load placed with default
         // models and the first appearance of a config differed from the button result.
         layout.SetLocationsFromSystemConfiguration(placeAll: false);
-        Prof($"  [UF] SetLocationsFromSystemConfiguration {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         // saved locations are anchored on the primary that was active at save time:
         // re-anchor so the current primary sits at (0,0) mm, like in pixels
         layout.AnchorOnPrimary();
-        Prof($"  [UF] AnchorOnPrimary {sw.ElapsedMilliseconds}ms");
 
         return layout;
     }

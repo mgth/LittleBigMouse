@@ -23,8 +23,6 @@
 
 using Avalonia;
 using HLab.Mvvm.ReactiveUI;
-using LittleBigMouse.DisplayLayout;
-using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
 

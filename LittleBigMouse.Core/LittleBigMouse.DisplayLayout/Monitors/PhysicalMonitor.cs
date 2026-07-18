@@ -172,9 +172,31 @@ public class PhysicalMonitor : SavableReactiveModel
             e => e.BorderResistance
         );
 
+        // Keep the per-monitor borders following the shared model values until this
+        // monitor owns some (loaded from the store, or edited in PerMonitor mode):
+        // the first switch to PerMonitor must start from the monitor's CURRENT model
+        // borders, not from a seed frozen at an earlier launch. Once customized the
+        // mirror stops for good and the stored values win.
+        this.WhenAnyValue(
+                e => e.Model.PhysicalSize.LeftBorder,
+                e => e.Model.PhysicalSize.TopBorder,
+                e => e.Model.PhysicalSize.RightBorder,
+                e => e.Model.PhysicalSize.BottomBorder)
+            .Where(_ => !BordersCustomized)
+            .Subscribe(_ =>
+            {
+                Borders.Left = Model.PhysicalSize.LeftBorder;
+                Borders.Top = Model.PhysicalSize.TopBorder;
+                Borders.Right = Model.PhysicalSize.RightBorder;
+                Borders.Bottom = Model.PhysicalSize.BottomBorder;
+            })
+            .DisposeWith(this);
+
         // DisplayBorders is not ISavable so UnsavedOn cannot track it.
         // Skip(1) drops the initial combined emission at subscription time.
         // Load() resets Saved=true at its end, so loading does not leave a dirty flag.
+        // A change landing while in PerMonitor mode is a user edit of this monitor's
+        // own borders: from then on the monitor keeps them (mirror above stops).
         this.WhenAnyValue(
                 e => e.Borders.Left,
                 e => e.Borders.Top,
@@ -182,7 +204,11 @@ public class PhysicalMonitor : SavableReactiveModel
                 e => e.Borders.Bottom,
                 (l, t, r, b) => (l, t, r, b))
             .Skip(1)
-            .Subscribe(_ => Saved = false)
+            .Subscribe(_ =>
+            {
+                if (Layout.Options.BorderValues == "PerMonitor") BordersCustomized = true;
+                Saved = false;
+            })
             .DisposeWith(this);
     }
 
@@ -270,6 +296,17 @@ public class PhysicalMonitor : SavableReactiveModel
     /// </summary>
     public DisplayBorders Borders { get; }
     readonly DisplayBorderOverride _borderOverride;
+
+    /// <summary>
+    /// True once this monitor owns its bezel borders (persisted values were loaded,
+    /// or a border was edited in "PerMonitor" mode). Until then <see cref="Borders"/>
+    /// mirrors the shared model values, and nothing per-monitor is persisted.
+    /// </summary>
+    public bool BordersCustomized
+    {
+       get;
+       set => this.RaiseAndSetIfChanged(ref field, value);
+    }
 
     /// <summary>
     /// Dimensions with rotation applied

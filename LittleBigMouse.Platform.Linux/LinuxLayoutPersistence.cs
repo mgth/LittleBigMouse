@@ -67,7 +67,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
                     Apply(monitor.Model, model);
 
                 if (saved != null && saved.Monitors.TryGetValue(monitor.Id, out var m))
-                    Apply(monitor, m, layout.Options.BorderValues == "PerMonitor");
+                    Apply(monitor, m);
 
                 // Mark the whole subtree saved even on a first run with no file yet
                 // (the registry path does the same through GetOrSet's write-back).
@@ -188,7 +188,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
         monitor.Saved = true;
     }
 
-    static void Apply(PhysicalMonitor monitor, MonitorDto dto, bool perMonitorBorders)
+    static void Apply(PhysicalMonitor monitor, MonitorDto dto)
     {
         foreach (var source in monitor.Sources.Items)
         {
@@ -221,14 +221,18 @@ public class LinuxLayoutPersistence : ILayoutPersistence
 
         monitor.ExcludedFromLayout = dto.ExcludedFromLayout ?? monitor.ExcludedFromLayout;
 
-        // Per-monitor bezel borders — only in "PerMonitor" mode ("PerModel" keeps them on
-        // the shared model entry).
-        if (perMonitorBorders && dto.Borders != null)
+        // Per-monitor bezel borders load whatever the current mode is, so switching to
+        // PerMonitor is live (no restart required). Stored values only exist once the
+        // user edited them in PerMonitor mode: until then Borders keep mirroring the
+        // live model values, so the FIRST switch starts from the monitor's current
+        // PerModel borders.
+        if (dto.Borders != null)
         {
             monitor.Borders.Left = dto.Borders.Left ?? monitor.Borders.Left;
             monitor.Borders.Top = dto.Borders.Top ?? monitor.Borders.Top;
             monitor.Borders.Right = dto.Borders.Right ?? monitor.Borders.Right;
             monitor.Borders.Bottom = dto.Borders.Bottom ?? monitor.Borders.Bottom;
+            monitor.BordersCustomized = true;
         }
     }
 
@@ -258,7 +262,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
                 Priority = layout.Options.Priority,
                 PriorityUnhooked = layout.Options.PriorityUnhooked
             },
-            Monitors = layout.PhysicalMonitors.ToDictionary(m => m.Id, m => ToDto(m, layout.Options.BorderValues == "PerMonitor"))
+            Monitors = layout.PhysicalMonitors.ToDictionary(m => m.Id, ToDto)
         };
         WriteJson(LayoutPath(layout), dto);
 
@@ -289,7 +293,7 @@ public class LinuxLayoutPersistence : ILayoutPersistence
         return true;
     }
 
-    static MonitorDto ToDto(PhysicalMonitor monitor, bool perMonitorBorders)
+    static MonitorDto ToDto(PhysicalMonitor monitor)
     {
         var dto = new MonitorDto
         {
@@ -304,7 +308,10 @@ public class LinuxLayoutPersistence : ILayoutPersistence
                 Right = monitor.BorderResistance.Right,
                 Bottom = monitor.BorderResistance.Bottom
             },
-            Borders = perMonitorBorders
+            // Stored whatever the current mode is (they must survive a Save() made in
+            // PerModel mode), but only once the monitor owns them: uncustomized
+            // monitors keep mirroring the model and store nothing.
+            Borders = monitor.BordersCustomized
                 ? new BordersDto
                 {
                     Left = monitor.Borders.Left,

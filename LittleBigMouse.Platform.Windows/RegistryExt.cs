@@ -65,6 +65,25 @@ public static class RegistryExt
             GetOrSet(key, keyName, () => getter().ToString(CultureInfo.InvariantCulture), ifLoaded ),
             CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// Read a stored double without seeding the store: unlike GetOrSet, an absent
+    /// value stays absent (used to detect whether a monitor owns per-monitor data).
+    /// </summary>
+    public static double? TryGet(this RegistryKey key, string keyName)
+    {
+        var i = keyName.LastIndexOf('\\');
+        if (i >= 0)
+        {
+            using var sub = key.OpenSubKey(keyName[..i]);
+            return sub?.TryGet(keyName[(i + 1)..]);
+        }
+
+        return key.GetValue(keyName) is string s
+               && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
+            ? v
+            : null;
+    }
+
     static (RegistryKey, string) ParseKeyName(this RegistryKey key, string keyName)
     {
         var i = keyName.LastIndexOf('\\');

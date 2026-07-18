@@ -168,10 +168,12 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
 
         layout.Id = layout.ComputeId();
 
-        // Same ordering as Windows: infer positions from the system topology, then let the
-        // saved layout override them, then re-anchor on the current primary.
-        layout.SetLocationsFromSystemConfiguration();
+        // Same ordering as Windows: load the saved layout first, then place only the
+        // monitors it did not cover from the system topology (so placement runs on the
+        // fully loaded state, like the "place from windows" button), then re-anchor on
+        // the current primary.
         _persistence.Load(layout);
+        layout.SetLocationsFromSystemConfiguration(placeAll: false);
         layout.AnchorOnPrimary();
 
         UpdateWallpaper(layout);

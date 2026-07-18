@@ -147,13 +147,17 @@ internal static class WindowsLayoutMapping
 
         layout.Id = layout.ComputeId();
 
-        // places monitors from windows configuration as best as possible
-        layout.SetLocationsFromSystemConfiguration();
-        Prof($"  [UF] SetLocationsFromSystemConfiguration {sw.ElapsedMilliseconds}ms"); sw.Restart();
-
         //retrieve saved layout (registry, via the shared persistence engine)
         persistence.Load(layout);
         Prof($"  [UF] Load {sw.ElapsedMilliseconds}ms"); sw.Restart();
+
+        // Place the monitors the stored layout did not cover (new or never-saved config)
+        // from the windows configuration. AFTER Load, so the placement runs on the fully
+        // loaded state (stored model sizes, borders, neighbor positions) — exactly what the
+        // "place from windows" button does; running it before Load placed with default
+        // models and the first appearance of a config differed from the button result.
+        layout.SetLocationsFromSystemConfiguration(placeAll: false);
+        Prof($"  [UF] SetLocationsFromSystemConfiguration {sw.ElapsedMilliseconds}ms"); sw.Restart();
 
         // saved locations are anchored on the primary that was active at save time:
         // re-anchor so the current primary sits at (0,0) mm, like in pixels
@@ -248,6 +252,28 @@ internal static class WindowsLayoutMapping
         return new DisplaySource(monitor.SourceId).UpdateFrom(monitor);
     }
 
+    /// <summary>
+    /// DEVMODE's orientation — unless the driver rotated below Windows (e.g. NVIDIA panel
+    /// rotation) and left it at Default while the pixel mode is already transposed (#507).
+    /// The panel's EDID aspect cannot rotate: when it contradicts the pixel aspect the
+    /// display is effectively rotated, so report 90° and let the physical geometry
+    /// transpose. Square or invalid sizes (EDID-less virtual displays report 0x0, #419)
+    /// decide nothing.
+    /// </summary>
+    static int InferOrientation(DisplayMode mode, Edid? edid)
+    {
+        if (mode.DisplayOrientation != 0) return mode.DisplayOrientation;
+
+        if (edid == null) return 0;
+        if (mode.Pels.Width == mode.Pels.Height) return 0;
+        if (edid.PhysicalWidth <= 0 || edid.PhysicalHeight <= 0
+            || edid.PhysicalWidth == edid.PhysicalHeight) return 0;
+
+        var pixelPortrait = mode.Pels.Height > mode.Pels.Width;
+        var panelPortrait = edid.PhysicalHeight > edid.PhysicalWidth;
+        return pixelPortrait == panelPortrait ? 0 : 1;
+    }
+
     public static DisplaySource UpdateFrom(this DisplaySource source, MonitorDevice monitor)
     {
         source.InterfacePath = monitor.InterfacePath;
@@ -278,7 +304,7 @@ internal static class WindowsLayoutMapping
                 mode.Position,
                 mode.Pels));
 
-            source.Orientation = mode.DisplayOrientation;
+            source.Orientation = InferOrientation(mode, monitor.Edid);
         }
         else
         {
@@ -369,14 +395,25 @@ internal static class WindowsLayoutMapping
     }
 
     /// <summary>
-    /// Physical size of the panel in millimeters, in the current display orientation.
-    /// Windows GDI (HORZSIZE/VERTSIZE) is used when it is consistent with the resolution
-    /// aspect ratio. A display without EDID (virtual, DisplayLink, RDP, spacedesk...) reports
-    /// a bogus square placeholder (e.g. 1000x1000): we then fall back to the EDID size, and
-    /// finally to an estimate derived from the resolution and the DPI (HORZRES / LOGPIXELSX).
+    /// Intrinsic physical size of the panel in millimeters — NEVER transposed to the current
+    /// orientation. The model is shared by every monitor of the same PnP model whatever its
+    /// rotation, and the DepthProjection/PhysicalRotated chain applies the rotation
+    /// downstream: an oriented size here gets transposed twice, so a portrait display was
+    /// placed with a landscape-looking geometry (#507).
+    /// Windows GDI (HORZSIZE/VERTSIZE) stays the primary numeric source (TV EDIDs commonly
+    /// lie about their size, and existing stored models were built from GDI), but it is
+    /// normalized to the intrinsic orientation: drivers disagree on whether it follows the
+    /// rotation, so both orientations are tested against an intrinsic aspect reference —
+    /// the EDID aspect when present (an EDID never rotates, even when the rotation is done
+    /// below Windows by the driver), the DEVMODE-unrotated resolution otherwise. A display
+    /// without EDID (virtual, DisplayLink, RDP, spacedesk...) reports a bogus square
+    /// placeholder (e.g. 1000x1000) that fails both tests: fall back to the EDID size, then
+    /// to an estimate derived from the resolution and the DPI (HORZRES / LOGPIXELSX).
     /// </summary>
     static (double Width, double Height) GetPhysicalSizeInMm(MonitorDevice monitor)
     {
+        var edid = monitor.Edid is { PhysicalWidth: > 0, PhysicalHeight: > 0 } e ? monitor.Edid : null;
+
         var display = monitor.Connections[0].Parent;
 
         if (display?.CurrentMode != null)
@@ -384,31 +421,35 @@ internal static class WindowsLayoutMapping
             var caps = display.Capabilities;
             var rotated = display.CurrentMode.DisplayOrientation % 2 != 0;
 
-            // GDI physical size, oriented like the current resolution.
-            var gdiW = rotated ? caps.Size.Height : caps.Size.Width;
-            var gdiH = rotated ? caps.Size.Width : caps.Size.Height;
+            // Intrinsic (panel) resolution: HORZRES/VERTRES follow the current mode.
+            var resW = rotated ? caps.Resolution.Height : caps.Resolution.Width;
+            var resH = rotated ? caps.Resolution.Width : caps.Resolution.Height;
 
-            if (IsAspectConsistent(gdiW, gdiH, caps.Resolution.Width, caps.Resolution.Height))
-                return (gdiW, gdiH);
+            // Intrinsic aspect reference (only the ASPECT is used, so mm vs px is fine).
+            var (refW, refH) = edid != null ? (edid.PhysicalWidth, edid.PhysicalHeight) : (resW, resH);
+
+            // GDI physical size, normalized to the intrinsic orientation.
+            if (IsAspectConsistent(caps.Size.Width, caps.Size.Height, refW, refH))
+                return (caps.Size.Width, caps.Size.Height);
+            if (IsAspectConsistent(caps.Size.Height, caps.Size.Width, refW, refH))
+                return (caps.Size.Height, caps.Size.Width);
 
             // GDI size unreliable (EDID-less display): prefer the EDID size when available.
-            if (monitor.Edid is { PhysicalWidth: > 0, PhysicalHeight: > 0 } edid)
-                return rotated
-                    ? (edid.PhysicalHeight, edid.PhysicalWidth)
-                    : (edid.PhysicalWidth, edid.PhysicalHeight);
+            if (edid != null)
+                return (edid.PhysicalWidth, edid.PhysicalHeight);
 
             // Otherwise estimate from the resolution and the DPI: inches = pixels / dpi.
-            if (caps.LogPixels.Width > 0 && caps.LogPixels.Height > 0)
-                return (
-                    caps.Resolution.Width / caps.LogPixels.Width * 25.4,
-                    caps.Resolution.Height / caps.LogPixels.Height * 25.4);
+            var dpiW = rotated ? caps.LogPixels.Height : caps.LogPixels.Width;
+            var dpiH = rotated ? caps.LogPixels.Width : caps.LogPixels.Height;
+            if (dpiW > 0 && dpiH > 0)
+                return (resW / dpiW * 25.4, resH / dpiH * 25.4);
 
-            return (gdiW, gdiH); // nothing better than the GDI value
+            return (caps.Size.Width, caps.Size.Height); // nothing better than the GDI value
         }
 
         // Detached / no current mode: rely on EDID if present.
-        if (monitor.Edid is { PhysicalWidth: > 0, PhysicalHeight: > 0 } e)
-            return (e.PhysicalWidth, e.PhysicalHeight);
+        if (edid != null)
+            return (edid.PhysicalWidth, edid.PhysicalHeight);
 
         return (0, 0);
     }

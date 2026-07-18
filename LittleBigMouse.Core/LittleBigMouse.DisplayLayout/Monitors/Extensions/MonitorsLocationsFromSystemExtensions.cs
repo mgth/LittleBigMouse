@@ -63,6 +63,10 @@ public static class MonitorsLocationsFromSystemExtensions
             // List all display not positioned
             var unplacedScreens = placeAll ? layout.PhysicalMonitors.ToList() : layout.PhysicalMonitors.Where(s => !s.Placed).ToList();
 
+            // Nothing to place: leave the layout untouched — the final compact would
+            // otherwise reshape a layout the user deliberately saved.
+            if (unplacedScreens.Count == 0) return;
+
             // start with primary display
             Queue<PhysicalMonitor> todo = new();
             todo.Enqueue(layout.PrimaryMonitor);

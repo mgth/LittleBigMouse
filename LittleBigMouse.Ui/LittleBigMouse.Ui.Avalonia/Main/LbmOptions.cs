@@ -82,6 +82,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _experimentalFeatures;
 
     [DataMember]
+    public bool VcpControl
+    {
+        get => _vcpControl;
+        set => this.SetAndRaise(ref _vcpControl, value);
+    }
+    bool _vcpControl;
+
+    [DataMember]
     public bool ShowMonitorActionWarning
     {
         get => _showMonitorActionWarning;

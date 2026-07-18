@@ -47,6 +47,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool Elevated { get; set; } = true;
       public bool DebugTools { get; set; } = false;
       public bool ExperimentalFeatures { get; set; } = false;
+      public bool VcpControl { get; set; } = false;
       public bool ShowMonitorActionWarning { get; set; } = true;
       public int DaemonPort { get; set; } = 25196;
 
@@ -208,6 +209,13 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// smart-TV remote test tools of the VCP panel
    /// </summary>
    bool ExperimentalFeatures { get; set; }
+
+   /// <summary>
+   /// Show the VCP monitor-control panel (DDC/CI brightness, contrast, inputs,
+   /// smart-TV remotes). Off by default: it talks to the monitors over DDC and
+   /// most users only need the mouse-crossing features.
+   /// </summary>
+   bool VcpControl { get; set; }
 
    /// <summary>
    /// Ask for confirmation before monitor actions: attaching to the desktop,

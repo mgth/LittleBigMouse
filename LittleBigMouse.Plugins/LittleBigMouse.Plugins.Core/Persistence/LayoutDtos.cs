@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System.Collections.Generic;
 
 namespace LittleBigMouse.Plugins.Persistence;
@@ -19,6 +19,7 @@ public class GlobalOptionsDto
     public string? Priority { get; set; }
     public string? PriorityUnhooked { get; set; }
     public bool? HomeCinema { get; set; }
+    public bool? VcpControl { get; set; }
     public bool? Pinned { get; set; }
     public bool? AutoUpdate { get; set; }
     public bool? StartMinimized { get; set; }

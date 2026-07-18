@@ -105,18 +105,28 @@
 					</Border>
 
 					<Border Classes="SettingCard">
-						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Debug}"
-						                     Header="Activate debug tools"
-						                     Description="Extra tools for troubleshooting, like viewing exported layouts">
-							<ToggleSwitch IsChecked="{Binding Model.DebugTools, FallbackValue=false, Mode=TwoWay}"/>
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Vcp}"
+						                     Header="Enable VCP monitor control"
+						                     Description="Brightness, contrast, inputs and smart-TV remotes over DDC/CI (adds a panel per monitor)">
+							<ToggleSwitch IsChecked="{Binding Model.VcpControl, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
 
-					<Border Classes="SettingCard">
+					<!-- Sub-option of VCP control: only meaningful inside the VCP panel. -->
+					<Border Classes="SettingCard" Margin="24,0,0,0"
+					        IsVisible="{Binding Model.VcpControl, FallbackValue=false}">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Experimental}"
 						                     Header="Enable experimental features"
 						                     Description="Argyll color calibration and smart-TV remote test tools in the VCP panel">
 							<ToggleSwitch IsChecked="{Binding Model.ExperimentalFeatures, FallbackValue=false, Mode=TwoWay}"/>
+						</controls:SettingRow>
+					</Border>
+
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Debug}"
+						                     Header="Activate debug tools"
+						                     Description="Extra tools for troubleshooting, like viewing exported layouts">
+							<ToggleSwitch IsChecked="{Binding Model.DebugTools, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
 

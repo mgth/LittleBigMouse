@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System.Collections.Generic;
 using LittleBigMouse.Plugins.Persistence;
 using Microsoft.Win32;
@@ -61,6 +61,7 @@ public class RegistryLayoutStore : ILayoutStore
         StartMinimized = root.TryGetBool("StartMinimized") ?? layoutKey?.TryGetBool("StartMinimized"),
         StartElevated = root.TryGetBool("StartElevated") ?? layoutKey?.TryGetBool("StartElevated"),
         DebugTools = root.TryGetBool("DebugTools"),
+        VcpControl = root.TryGetBool("VcpControl"),
         // "ShowAttachDetachWarning" is the former name of the option, read as fallback.
         ShowMonitorActionWarning = root.TryGetBool("ShowMonitorActionWarning") ?? root.TryGetBool("ShowAttachDetachWarning"),
         BorderValues = root.TryGetString("BorderValues"),
@@ -191,6 +192,7 @@ public class RegistryLayoutStore : ILayoutStore
         Set(root, "StartMinimized", o.StartMinimized);
         Set(root, "StartElevated", o.StartElevated);
         Set(root, "DebugTools", o.DebugTools);
+        Set(root, "VcpControl", o.VcpControl);
         Set(root, "ShowMonitorActionWarning", o.ShowMonitorActionWarning);
         Set(root, "BorderValues", o.BorderValues);
         Set(root, "HideTrayIcon", o.HideTrayIcon);

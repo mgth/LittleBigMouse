@@ -18,6 +18,7 @@
         Command="{Binding Command}"
         CommandParameter="{Binding IsActive}"
         IsChecked="{Binding IsActive}"
+        IsVisible="{Binding IsVisible}"
         Foreground="{DynamicResource HLab.Brushes.Foreground}"
         >
 

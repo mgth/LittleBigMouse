@@ -102,6 +102,7 @@ public class MainService : ReactiveModel, IMainService
                 o => o.StartMinimized,
                 o => o.StartElevated,
                 o => o.DebugTools,
+                o => o.VcpControl,
                 o => o.Pinned,
                 o => o.ShowMonitorActionWarning)
             .Skip(1)

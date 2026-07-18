@@ -24,14 +24,16 @@
 using Avalonia;
 using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
+using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
+using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
 internal class MonitorVcpViewMode : ViewMode { }
 
-public class VcpPlugin(IMainService mainService) : Bootloader
+public class VcpPlugin(IMainService mainService, ILayoutOptions options) : Bootloader
 {
     public override Task<BootState> LoadAsync()
     {
@@ -39,7 +41,9 @@ public class VcpPlugin(IMainService mainService) : Bootloader
             c.AddViewModeButton<MonitorVcpViewMode>(
                 "vcp",
                 "Icon/MonitorVcp",
-                "Vcp control")
+                "Vcp control",
+                // Off by default: the panel only shows for users who opted in.
+                options.WhenAnyValue(o => o.VcpControl))
         );
         return Task.FromResult(BootState.Completed);
     }

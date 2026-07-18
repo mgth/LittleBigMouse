@@ -9,6 +9,7 @@ public class UiCommand : ReactiveObject, IUiCommand
     string _toolTipText = "";
     ICommand? _command = null;
     bool _isActive = false;
+    bool _isVisible = true;
 
     public UiCommand(string id)
     {
@@ -21,6 +22,12 @@ public class UiCommand : ReactiveObject, IUiCommand
     {
         get => _isActive;
         set => this.RaiseAndSetIfChanged(ref _isActive, value);
+    }
+
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set => this.RaiseAndSetIfChanged(ref _isVisible, value);
     }
 
     public string IconPath

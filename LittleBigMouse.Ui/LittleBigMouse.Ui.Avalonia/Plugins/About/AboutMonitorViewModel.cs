@@ -21,6 +21,7 @@
 	  http://www.mgth.fr
 */
 
+using System;
 using System.Reflection;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -28,5 +29,17 @@ using LittleBigMouse.DisplayLayout.Monitors;
 namespace LittleBigMouse.Ui.Avalonia.Plugins.About;
 public class AboutMonitorViewModel : ViewModel<PhysicalMonitor>
 {
-    public string Version => Assembly.GetEntryAssembly().GetName().Version.ToString() ?? "";
+    public string Version
+    {
+        get
+        {
+            var assembly = Assembly.GetEntryAssembly();
+            var info = assembly?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (string.IsNullOrEmpty(info)) return assembly?.GetName().Version?.ToString() ?? "";
+
+            // SourceLink appends "+<full commit sha>" — show it as a short hash.
+            var parts = info.Split('+', 2);
+            return parts.Length == 1 ? info : $"{parts[0]} ({parts[1][..Math.Min(7, parts[1].Length)]})";
+        }
+    }
 }

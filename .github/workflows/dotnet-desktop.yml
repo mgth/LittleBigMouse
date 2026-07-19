@@ -116,3 +116,7 @@ jobs:
         name: ${{ steps.ver.outputs.version }}
         files: LittleBigMouse.Setup\LittleBigMouse_*.exe
         generate_release_notes: true
+        # Default sponsor footer for the draft (shows above the generated notes;
+        # keep it when hand-editing the release body).
+        body: |
+          💜 If Little Big Mouse is useful to you, consider [sponsoring the project](https://github.com/sponsors/mgth).

@@ -47,6 +47,8 @@ internal class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        StartupLog.RedirectConsoleWhenDetached();
+
         // Null means another instance already runs (and was signaled to show its window).
         using var instance = SingleInstanceGuard.TryAcquire();
         if (instance == null) return;
@@ -57,7 +59,16 @@ internal class Program
 
         SingleInstance = instance;
 
-        BuildAvaloniaApp().Start(UIMain, args);
+        try
+        {
+            BuildAvaloniaApp().Start(UIMain, args);
+        }
+        catch (Exception ex)
+        {
+            // Avalonia platform init happens before UIMain's own handler exists.
+            Console.Error.WriteLine($"Fatal: {ex}");
+            throw;
+        }
 
         SingleInstance = null;
     }
@@ -249,6 +260,7 @@ internal class Program
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"Fatal startup exception: {ex}");
             var view = new ExceptionView
             {
                 Exception = ex,

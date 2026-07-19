@@ -47,6 +47,37 @@ Check the very nice video from Touble Chute (a very big thanks to him):
 4. Follow the installation progress and complete the installation.
 5. Access the program from the Start Menu.
 
+## Linux (experimental)
+
+The Linux port works, but is still experimental and currently builds from source only.
+Mouse routing uses an evdev/uinput backend — it grabs the physical mice and drives a
+virtual pointer, exactly like the Windows hook — with Wayland-portal and X11 fallbacks.
+It is developed and tested on KDE Plasma 6 (Wayland); feedback from other desktops is
+very welcome on the [issues](https://github.com/mgth/LittleBigMouse/issues) page.
+
+### Prerequisites
+
+- The **.NET 10 SDK** (the runtime alone is not enough to build) and the **Rust
+  toolchain** (`cargo`):
+  - Arch / CachyOS: `sudo pacman -S dotnet-sdk rust`
+  - other distros: [.NET SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and [rustup](https://rustup.rs)
+- Access to `/dev/input` and `/dev/uinput` for the evdev backend: add yourself to the
+  `input` group (`sudo usermod -aG input $USER`), then **log out and back in** — without
+  it the daemon silently falls back to the portal/X11 backend.
+
+### Build and run
+
+```bash
+git clone --recursive https://github.com/mgth/LittleBigMouse.git
+cd LittleBigMouse
+./run-lbm.sh
+```
+
+`run-lbm.sh` builds the hook daemon (cargo) and the UI (dotnet), stages everything and
+relaunches the app. UI and daemon logs land in `/tmp/lbm-ui.log`. If you cloned without
+`--recursive`, run `git submodule update --init --recursive` first — the HLab projects
+are submodules.
+
 ## Usage
 
 Documentation : https://github.com/mgth/LittleBigMouse/wiki

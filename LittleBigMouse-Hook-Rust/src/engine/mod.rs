@@ -285,8 +285,19 @@ impl MouseEngine {
         }
         let old_zone = self.old_zone.unwrap();
 
-        if self.layout.arena[old_zone].pixels_bounds().contains(e.point) {
-            if self.current_resistance.is_some() {
+        let bounds = self.layout.arena[old_zone].pixels_bounds();
+        if bounds.contains(e.point) {
+            // Same guard as Straight (see on_mouse_move_straight): while a
+            // resisted push pins the cursor against the border, tangential and
+            // zero-dx frames land here on the edge columns — resetting there
+            // re-armed a half-drained resistance every frame and turned any
+            // resisted border into a wall ("adhesion" feel in Cross mode).
+            if self.current_resistance.is_some()
+                && e.point.x() > bounds.left()
+                && e.point.x() < bounds.right() - 1
+                && e.point.y() > bounds.top()
+                && e.point.y() < bounds.bottom() - 1
+            {
                 self.current_resistance = None;
             }
             self.old_point = e.point;
@@ -739,6 +750,40 @@ mod tests {
             assert!(!ev.handled);
         }
         assert_eq!(crossed_at, Some(9), "10px of resistance -> pass on the 10th push");
+    }
+
+    #[test]
+    fn cross_mode_resistance_survives_tangential_frames_while_pinned() {
+        // Cross-mode twin of resistance_survives_tangential_frames_while_pinned:
+        // the interior fast-path used to reset the drain on EVERY contained
+        // frame — the pinned edge column is contained, so tangential/zero-dx
+        // frames re-armed the resistance and a resisted border became a wall.
+        let xml = FIXTURE
+            .replace(r#"Algorithm="Strait""#, r#"Algorithm="Cross""#)
+            .replace(
+                r#"SourceFromPixel="0" SourceToPixel="2160" TargetFromPixel="-225" TargetToPixel="2642" BorderResistance="0""#,
+                r#"SourceFromPixel="0" SourceToPixel="2160" TargetFromPixel="-225" TargetToPixel="2642" BorderResistance="3""#,
+            );
+        let mut eng = MouseEngine::new();
+        eng.load(ZonesLayout::from_xml(&xml).unwrap());
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, 100, 1000); // init in Right
+
+        // Right is 698mm/3840px: a 1px overshoot drains ~0.09mm per push, so
+        // 3mm of resistance passes after a few dozen pushes — but only if the
+        // interleaved tangential frames don't reset the drain.
+        let mut crossed = None;
+        for i in 0..100 {
+            let ev = feed(&mut eng, &mut env, -1, 1000 - i); // push 1px past the border
+            if ev.handled {
+                crossed = Some(i);
+                break;
+            }
+            let ev = feed(&mut eng, &mut env, 0, 1000 - i - 1); // tangential, contained
+            assert!(!ev.handled);
+        }
+        assert!(crossed.is_some(), "the drain must survive tangential frames and eventually pass");
+        assert!(crossed.unwrap() > 0, "resistance must actually resist the first push");
     }
 
     #[test]

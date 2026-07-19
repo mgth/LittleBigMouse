@@ -20,6 +20,28 @@
 //! device does not declare — the kernel silently drops undeclared codes, so
 //! without it those keys vanish while LBM runs.
 //!
+//! # RULE — nothing potentially blocking on the routing thread
+//!
+//! From the first `EVIOCGRAB` the physical mice deliver ONLY to this process:
+//! any stall in the pump freezes the user's pointer system-wide. Concretely:
+//! - no device enumeration inline (~10 ms PER /dev/input node on some
+//!   machines — audio jack-detection nodes; ~210 ms per full scan, measured by
+//!   `examples/enum_bench.rs`) — enumeration lives on the scanner thread, the
+//!   pump only drains its channel and grabs (a cheap ioctl);
+//! - no blocking locks — the engine is accessed with `try_lock` (a contended
+//!   frame emits raw / keeps cached bounds for one cycle);
+//! - no synchronous IPC/DBus — the KWin cursor probe runs at arm time, BEFORE
+//!   the grabs;
+//! - no unbounded writes — state broadcasts go to sockets with a write
+//!   timeout (ipc/server.rs); stderr must stay a file/journal, never an
+//!   undrained pipe (the C# spawns the daemon with inherited handles — keep
+//!   it that way);
+//! - the only permitted wait is the bounded 100 ms `poll()` (and the
+//!   equivalent sleep when no device is left).
+//!
+//! Audited 2026-07-19. The same rule applies to the other platform pumps
+//! (hook/windows LL-hook callback, hook/linux/x11).
+//!
 //! Safety: a grab is released when its fd closes, so even `kill -9` frees the
 //! mice. We additionally ungrab on unhook, on quit, and on drop; `LBM_EVDEV_
 //! AUTORELEASE_SECS` force-unhooks after N seconds for cautious first runs.
@@ -224,10 +246,27 @@ struct Router {
 
 impl Router {
     fn arm(shared: &Shared, sens: f64, debug: bool, resume_at: Option<Point<i32>>) -> std::io::Result<Router> {
-        let desktop = desktop_bounds(shared);
+        let desktop = desktop_bounds_blocking(shared);
+
+        // Everything slow happens BEFORE the first grab: from EVIOCGRAB on, the
+        // user's mice are captured but not routed yet, so this window must stay
+        // minimal (see the module's routing-thread rule). The compositor probe
+        // (DBus, ~700ms worst case) and the enumerations (~10ms per /dev/input
+        // node) therefore run first; the cursor may drift a few px between the
+        // probe and the grab, which is harmless for a start point.
+        let probed = kwin_cursor_pos();
+        let mice = enumerate_mice();
+        let mut keyboards = Vec::new();
+        for (path, mut dev) in enumerate_keyboards() {
+            if dev.set_nonblocking(true).is_ok() {
+                keyboards.push((path, dev));
+            }
+        }
+        let virt = build_virtual(desktop)?;
+        let virt_kbd = build_virtual_keyboard()?;
 
         let mut devices = Vec::new();
-        for (path, mut dev) in enumerate_mice() {
+        for (path, mut dev) in mice {
             dev.set_nonblocking(true)?;
             match dev.grab() {
                 Ok(()) => {
@@ -241,24 +280,14 @@ impl Router {
         if devices.is_empty() {
             return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no grabbable mouse"));
         }
-
-        let mut keyboards = Vec::new();
-        for (path, mut dev) in enumerate_keyboards() {
-            if dev.set_nonblocking(true).is_ok() {
-                keyboards.push((path, dev));
-            }
-        }
         eprintln!("[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override",
             keyboards.len());
-
-        let virt = build_virtual(desktop)?;
-        let virt_kbd = build_virtual_keyboard()?;
 
         // Take over from where the cursor really is: ask the compositor (KWin
         // scripting, logical coordinates — the zones' space), else where the
         // previous arm left it. Only a first arm on a non-KDE compositor falls
         // back to a neutral point (centre of the first main zone).
-        let (start, origin) = match kwin_cursor_pos() {
+        let (start, origin) = match probed {
             Some(p) => (p, "compositor"),
             None => match resume_at {
                 Some(p) => (p, "previous position"),
@@ -329,13 +358,16 @@ impl Router {
     fn pump(&mut self, shared: &'static Shared) {
         // The desktop can change under us (a Load with a new layout). Rebuild the
         // absolute device to the new size so the 1:1 mapping stays exact.
-        let current = desktop_bounds(shared);
-        if current != self.env.desktop {
-            if let Ok(v) = build_virtual(current) {
-                self.virt = v;
-                self.env.desktop = current;
-                self.env.virtual_pos = self.env.clamp(self.env.virtual_pos);
-                self.emit_absolute(&mut Vec::new());
+        // try_desktop_bounds: never block on the engine lock here (module rule);
+        // on contention the cached bounds serve one more cycle.
+        if let Some(current) = try_desktop_bounds(shared) {
+            if current != self.env.desktop {
+                if let Ok(v) = build_virtual(current) {
+                    self.virt = v;
+                    self.env.desktop = current;
+                    self.env.virtual_pos = self.env.clamp(self.env.virtual_pos);
+                    self.emit_absolute(&mut Vec::new());
+                }
             }
         }
 
@@ -628,8 +660,25 @@ fn build_virtual_keyboard() -> std::io::Result<VirtualDevice> {
 
 /// The union of the layout's main zones — the compositor's logical pixel space
 /// (kscreen coordinates), so the ABS mapping and the crossing geometry agree.
-fn desktop_bounds(shared: &Shared) -> Rect<i32> {
+/// Arm-time variant: routing has not started, a blocking lock is fine here.
+fn desktop_bounds_blocking(shared: &Shared) -> Rect<i32> {
     let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
+    bounds_of(&engine)
+}
+
+/// Pump-side variant — routing-thread rule: never block. On contention (an IPC
+/// Load swapping the layout under the lock) returns None and the caller keeps
+/// its cached bounds for one cycle.
+fn try_desktop_bounds(shared: &Shared) -> Option<Rect<i32>> {
+    let engine = match shared.engine.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return None,
+    };
+    Some(bounds_of(&engine))
+}
+
+fn bounds_of(engine: &crate::engine::MouseEngine) -> Rect<i32> {
     let mut it = engine.layout.main_zones.iter().map(|&id| engine.layout.arena[id].pixels_bounds());
     let Some(first) = it.next() else {
         return Rect::new(0, 0, 1920, 1080);

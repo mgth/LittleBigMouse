@@ -30,6 +30,13 @@ pub struct ClientHandle {
 
 impl ClientHandle {
     fn new(id: ClientId, writer: TcpStream) -> Self {
+        // State broadcasts (RUNNING/STOPPED, focus events…) are written from the
+        // ROUTING thread, which must never block unboundedly (see the rule in
+        // hook/linux/evdev.rs): a client that stopped reading with a full socket
+        // buffer would otherwise freeze the pointer with the mice still grabbed.
+        // The timeout bounds that worst case; the failed send gets the client
+        // pruned by broadcast().
+        let _ = writer.set_write_timeout(Some(std::time::Duration::from_millis(500)));
         ClientHandle {
             id,
             writer: Mutex::new(writer),

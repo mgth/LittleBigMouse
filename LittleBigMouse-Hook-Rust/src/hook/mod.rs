@@ -6,6 +6,11 @@
 //! (`on_display_changed`, `on_focus_changed`, ...) hold the platform-neutral
 //! daemon semantics (unhook + broadcast) and are called by each backend's
 //! callbacks.
+//!
+//! RULE: nothing potentially blocking on a routing thread — the pump loops and
+//! the callbacks they invoke (including the `on_*` here, which broadcast to
+//! sockets) run while the user's input is captured; any stall freezes the
+//! pointer. Full rule and audit notes: hook/linux/evdev.rs module doc.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

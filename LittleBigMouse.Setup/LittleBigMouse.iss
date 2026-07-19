@@ -64,6 +64,96 @@ Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse.Ui.Avalonia.ex
 Filename: {app}\LittleBigMouse.Ui.Avalonia.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
 
 [Code]
+var
+  DotNetDownloadPage: TDownloadWizardPage;
+  DotNetInstallAttempted: Boolean;
+
+{ The app ships framework-dependent: it needs the .NET 10 Runtime (x64), which a
+  freshly (re)installed Windows does not have (#510) — and a missing runtime means
+  the exe just shows an apphost dialog, or nothing at all. Detect the standard
+  install location; when missing, pull the runtime from the official aka.ms
+  channel link and install it silently before the files are copied. If the
+  download or the install fails, the app files are still installed and the user
+  is pointed at the manual download page. }
+function DotNet10RuntimeInstalled: Boolean;
+var
+  FindRec: TFindRec;
+begin
+  { 32-bit Windows can't run the x64 build anyway; don't try to fix it here. }
+  if not IsWin64 then begin
+    Result := True;
+    Exit;
+  end;
+  Result := False;
+  if FindFirst(ExpandConstant('{commonpf64}\dotnet\shared\Microsoft.NETCore.App\10.*'), FindRec) then begin
+    try
+      repeat
+        if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then begin
+          Result := True;
+          Break;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+function RunDotNetRuntimeInstaller: Boolean;
+var
+  ResultCode: Integer;
+begin
+  { 3010 = success, reboot required. }
+  Result := Exec(ExpandConstant('{tmp}\dotnet-runtime-win-x64.exe'),
+                 '/install /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode)
+            and ((ResultCode = 0) or (ResultCode = 3010));
+  if not Result then
+    Log('dotnet runtime installer exit code: ' + IntToStr(ResultCode));
+end;
+
+function InstallDotNetRuntime: Boolean;
+begin
+  Result := False;
+  DotNetInstallAttempted := True;
+  DotNetDownloadPage.Clear;
+  DotNetDownloadPage.Add('https://aka.ms/dotnet/10.0/dotnet-runtime-win-x64.exe',
+                         'dotnet-runtime-win-x64.exe', '');
+  DotNetDownloadPage.Show;
+  try
+    try
+      DotNetDownloadPage.Download;
+    except
+      if DotNetDownloadPage.AbortedByUser then
+        Log('.NET runtime download aborted by user.')
+      else
+        Log('.NET runtime download failed: ' + GetExceptionMessage);
+      Exit;
+    end;
+    Result := RunDotNetRuntimeInstaller;
+  finally
+    DotNetDownloadPage.Hide;
+  end;
+end;
+
+procedure InitializeWizard;
+begin
+  DotNetDownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing),
+                                           SetupMessage(msgPreparingDesc), nil);
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if (CurPageID = wpReady) and not DotNet10RuntimeInstalled then begin
+    if not InstallDotNetRuntime then
+      SuppressibleMsgBox(
+        'Setup could not install the .NET 10 Runtime (x64), which Little Big Mouse requires.'#13#10 +
+        'The application will be installed but will not start until you install the runtime from:'#13#10 +
+        'https://dotnet.microsoft.com/download/dotnet/10.0',
+        mbError, MB_OK, IDOK);
+  end;
+end;
+
 procedure KillImage(const ExeName: String);
 var
   ResultCode: Integer;
@@ -88,6 +178,19 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   StopLittleBigMouse;
+  { Silent installs never reach NextButtonClick: give the runtime one headless
+    attempt here (no progress UI). Skipped when the interactive path already
+    tried, whatever its outcome — no point failing twice. }
+  if not DotNetInstallAttempted and not DotNet10RuntimeInstalled then begin
+    DotNetInstallAttempted := True;
+    try
+      DownloadTemporaryFile('https://aka.ms/dotnet/10.0/dotnet-runtime-win-x64.exe',
+                            'dotnet-runtime-win-x64.exe', '', nil);
+      RunDotNetRuntimeInstaller;
+    except
+      Log('.NET runtime download failed: ' + GetExceptionMessage);
+    end;
+  end;
   Result := '';
 end;
 

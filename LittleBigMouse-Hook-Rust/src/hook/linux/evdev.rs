@@ -33,7 +33,8 @@
 //! exclusion — reported inert, same as the other Linux backends.
 
 use std::os::fd::AsRawFd;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use evdev::{
@@ -61,7 +62,18 @@ const BTN_RANGE: std::ops::RangeInclusive<u16> = 0x100..=0x15f;
 const BTN_TRIGGER_HAPPY_RANGE: std::ops::RangeInclusive<u16> = 0x2c0..=0x2e7;
 
 /// Cadence of the hot-plug rescan (matches the C# side's 2 s sysfs poll).
+///
+/// The enumeration itself runs on a dedicated scanner thread: opening and
+/// querying every /dev/input node takes ~200 ms on some machines (nodes that
+/// block on open), and doing that inline in the pump froze the cursor at every
+/// rescan — a periodic "sticky mouse" felt in both algorithms.
 const RESCAN_EVERY: Duration = Duration::from_secs(2);
+
+/// One background enumeration pass, handed to the pump over a channel.
+struct ScanResult {
+    mice: Vec<(std::path::PathBuf, Device)>,
+    keyboards: Vec<(std::path::PathBuf, Device)>,
+}
 
 /// True when we can create the uinput device and there is at least one mouse to
 /// grab. Gates the backend so a permission-less box falls back to portal/X11.
@@ -194,8 +206,9 @@ struct Router {
     devices: Vec<(std::path::PathBuf, Device)>,
     /// Observed (non-grabbed) keyboards feeding the ctrl-override state.
     keyboards: Vec<(std::path::PathBuf, Device)>,
-    /// Last hot-plug rescan.
-    last_scan: Instant,
+    /// Hot-plug scans arriving from the scanner thread.
+    scan_rx: mpsc::Receiver<ScanResult>,
+    scan_stop: Arc<AtomicBool>,
     virt: VirtualDevice,
     /// Keyboard usages coming from grabbed mice (combined receiver nodes, onboard
     /// macros) are re-emitted here — the pointer device does not declare them, and
@@ -263,10 +276,30 @@ impl Router {
         );
         eprintln!("[LittleBigMouse.Hook] evdev: starting at ({},{}) ({origin})", start.x(), start.y());
 
+        // The scanner thread owns the expensive enumeration; the pump only
+        // drains its channel. It exits on the stop flag or once the Router
+        // (receiver) is gone.
+        let (scan_tx, scan_rx) = mpsc::channel();
+        let scan_stop = Arc::new(AtomicBool::new(false));
+        {
+            let stop = scan_stop.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(RESCAN_EVERY);
+                if stop.load(Ordering::Relaxed) {
+                    return;
+                }
+                let scan = ScanResult { mice: enumerate_mice(), keyboards: enumerate_keyboards() };
+                if scan_tx.send(scan).is_err() {
+                    return;
+                }
+            });
+        }
+
         let mut router = Router {
             devices,
             keyboards,
-            last_scan: Instant::now(),
+            scan_rx,
+            scan_stop,
             virt,
             virt_kbd,
             env: EvdevCursor {
@@ -408,39 +441,38 @@ impl Router {
         }
     }
 
-    /// Every 2 s: pick up hot-plugged devices. A mouse appearing mid-run would
-    /// otherwise drive the cursor directly, next to the engine; a new keyboard
-    /// would not feed the ctrl-override.
+    /// Drain the scanner thread's results and pick up hot-plugged devices. A
+    /// mouse appearing mid-run would otherwise drive the cursor directly, next
+    /// to the engine; a new keyboard would not feed the ctrl-override. Grabbing
+    /// is a cheap ioctl — the expensive enumeration happened off-thread.
     fn rescan(&mut self) {
-        if self.last_scan.elapsed() < RESCAN_EVERY {
-            return;
-        }
-        self.last_scan = Instant::now();
-        for (path, mut dev) in enumerate_mice() {
-            if self.devices.iter().any(|(p, _)| *p == path) {
-                continue;
-            }
-            if dev.set_nonblocking(true).is_err() {
-                continue;
-            }
-            match dev.grab() {
-                Ok(()) => {
-                    eprintln!("[LittleBigMouse.Hook] evdev: grabbed {} ({:?}, hot-plug)",
-                        dev.name().unwrap_or("?"), path);
-                    self.devices.push((path, dev));
+        while let Ok(scan) = self.scan_rx.try_recv() {
+            for (path, mut dev) in scan.mice {
+                if self.devices.iter().any(|(p, _)| *p == path) {
+                    continue;
                 }
-                // Retried every rescan; only worth the noise when debugging.
-                Err(e) if self.debug =>
-                    eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
-                Err(_) => {}
+                if dev.set_nonblocking(true).is_err() {
+                    continue;
+                }
+                match dev.grab() {
+                    Ok(()) => {
+                        eprintln!("[LittleBigMouse.Hook] evdev: grabbed {} ({:?}, hot-plug)",
+                            dev.name().unwrap_or("?"), path);
+                        self.devices.push((path, dev));
+                    }
+                    // Retried every rescan; only worth the noise when debugging.
+                    Err(e) if self.debug =>
+                        eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
+                    Err(_) => {}
+                }
             }
-        }
-        for (path, mut dev) in enumerate_keyboards() {
-            if self.keyboards.iter().any(|(p, _)| *p == path) {
-                continue;
-            }
-            if dev.set_nonblocking(true).is_ok() {
-                self.keyboards.push((path, dev));
+            for (path, mut dev) in scan.keyboards {
+                if self.keyboards.iter().any(|(p, _)| *p == path) {
+                    continue;
+                }
+                if dev.set_nonblocking(true).is_ok() {
+                    self.keyboards.push((path, dev));
+                }
             }
         }
     }
@@ -528,10 +560,12 @@ impl Router {
 
 impl Drop for Router {
     fn drop(&mut self) {
+        self.scan_stop.store(true, Ordering::Relaxed);
         for (_, d) in &mut self.devices {
             let _ = d.ungrab();
         }
-        // Keyboards were never grabbed; closing their fds is enough.
+        // Keyboards were never grabbed; closing their fds is enough. The scanner
+        // thread exits on the flag (or on its next send, once scan_rx is gone).
     }
 }
 

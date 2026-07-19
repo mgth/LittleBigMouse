@@ -94,11 +94,16 @@ fn load_layout(shared: &Shared, xml: &str) {
 }
 
 /// C++ `Run` handling: load the exclusion list and install the hook, unless
-/// already hooked or paused by an excluded foreground app.
+/// paused by an excluded foreground app.
+///
+/// `want_hook` is desired state — always express it. The C++ early-returned
+/// while `hooked` was still true, but a preceding Load just requested an ASYNC
+/// unhook, so Load+Run over a running engine raced into a stopped one: the UI
+/// play button "applied" an options change by killing the engine, and only a
+/// second click restarted it. Re-asserting the flag makes the swap seamless
+/// (the router never observes the transient false) or at worst a quick
+/// re-arm — both correct.
 fn run(shared: &Shared) {
-    if shared.hooked.load(Ordering::SeqCst) {
-        return;
-    }
     load_excluded(shared);
     if !shared.paused.load(Ordering::SeqCst) {
         hook::request_hook(shared);
@@ -188,5 +193,22 @@ mod tests {
         // ...and Run requested hooking (pump_tid is 0 in the test, so the posted
         // WM_BREAK_LOOP is a no-op, but the desired state is set).
         assert!(shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn load_run_over_a_hooked_engine_still_requests_hook() {
+        // Load requests an ASYNC unhook; with the old `hooked` early-return in
+        // run(), the Run right behind it was a silent no-op (the hook thread
+        // had not processed the unhook yet) and the engine ended up stopped —
+        // the UI play button needed a second click to apply an options change.
+        let shared = Shared::new();
+        shared.hooked.store(true, Ordering::SeqCst);
+        let content = format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
+        replay(&shared, &content);
+
+        assert!(
+            shared.want_hook.load(Ordering::SeqCst),
+            "Run must express the desired state even while the previous hook is still up"
+        );
     }
 }

@@ -24,8 +24,13 @@
 //! mice. We additionally ungrab on unhook, on quit, and on drop; `LBM_EVDEV_
 //! AUTORELEASE_SECS` force-unhooks after N seconds for cautious first runs.
 //!
-//! Not mapped yet: ctrl-override (needs reading a grabbed keyboard) and
-//! focus-based exclusion — reported inert, same as the other Linux backends.
+//! Ctrl-override reads the modifier from keyboards WITHOUT grabbing them (evdev
+//! nodes are multi-reader; the compositor keeps them), plus the ctrl usages of
+//! the grabbed combined nodes. Hot-plug is handled by a periodic rescan (new
+//! mice would otherwise drive the cursor directly, next to the engine) and by
+//! purging dead nodes — a removed device reports POLLERR forever and would
+//! otherwise turn the pump into a busy loop. Not mapped: focus-based
+//! exclusion — reported inert, same as the other Linux backends.
 
 use std::os::fd::AsRawFd;
 use std::sync::atomic::Ordering;
@@ -55,6 +60,9 @@ const BTN_RANGE: std::ops::RangeInclusive<u16> = 0x100..=0x15f;
 /// BTN_TRIGGER_HAPPY block — joystick buttons, not keyboard usages.
 const BTN_TRIGGER_HAPPY_RANGE: std::ops::RangeInclusive<u16> = 0x2c0..=0x2e7;
 
+/// Cadence of the hot-plug rescan (matches the C# side's 2 s sysfs poll).
+const RESCAN_EVERY: Duration = Duration::from_secs(2);
+
 /// True when we can create the uinput device and there is at least one mouse to
 /// grab. Gates the backend so a permission-less box falls back to portal/X11.
 pub fn available() -> bool {
@@ -73,6 +81,25 @@ fn enumerate_mice() -> Vec<(std::path::PathBuf, Device)> {
                     .map(|a| a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y))
                     .unwrap_or(false)
                 && d.supported_keys().map(|k| k.contains(KeyCode::BTN_LEFT)).unwrap_or(false)
+        })
+        .collect()
+}
+
+/// Keyboards observed (never grabbed) for the ctrl-override: any node declaring
+/// KEY_LEFTCTRL that is neither a routed mouse (grabbed — its ctrl usages come
+/// through the grabbed stream) nor one of our own virtual devices.
+fn enumerate_keyboards() -> Vec<(std::path::PathBuf, Device)> {
+    let is_mouse = |d: &Device| {
+        d.supported_relative_axes()
+            .map(|a| a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y))
+            .unwrap_or(false)
+            && d.supported_keys().map(|k| k.contains(KeyCode::BTN_LEFT)).unwrap_or(false)
+    };
+    evdev::enumerate()
+        .filter(|(_, d)| {
+            d.name().map(|n| !n.contains("LittleBigMouse virtual")).unwrap_or(true)
+                && d.supported_keys().map(|k| k.contains(KeyCode::KEY_LEFTCTRL)).unwrap_or(false)
+                && !is_mouse(d)
         })
         .collect()
 }
@@ -164,7 +191,11 @@ pub fn run(shared: &'static Shared) -> bool {
 
 /// The grabbed devices, the virtual pointer + keyboard, and the authoritative cursor.
 struct Router {
-    devices: Vec<Device>,
+    devices: Vec<(std::path::PathBuf, Device)>,
+    /// Observed (non-grabbed) keyboards feeding the ctrl-override state.
+    keyboards: Vec<(std::path::PathBuf, Device)>,
+    /// Last hot-plug rescan.
+    last_scan: Instant,
     virt: VirtualDevice,
     /// Keyboard usages coming from grabbed mice (combined receiver nodes, onboard
     /// macros) are re-emitted here — the pointer device does not declare them, and
@@ -189,7 +220,7 @@ impl Router {
                 Ok(()) => {
                     eprintln!("[LittleBigMouse.Hook] evdev: grabbed {} ({:?})",
                         dev.name().unwrap_or("?"), path);
-                    devices.push(dev);
+                    devices.push((path, dev));
                 }
                 Err(e) => eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
             }
@@ -197,6 +228,15 @@ impl Router {
         if devices.is_empty() {
             return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no grabbable mouse"));
         }
+
+        let mut keyboards = Vec::new();
+        for (path, mut dev) in enumerate_keyboards() {
+            if dev.set_nonblocking(true).is_ok() {
+                keyboards.push((path, dev));
+            }
+        }
+        eprintln!("[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override",
+            keyboards.len());
 
         let virt = build_virtual(desktop)?;
         let virt_kbd = build_virtual_keyboard()?;
@@ -225,9 +265,18 @@ impl Router {
 
         let mut router = Router {
             devices,
+            keyboards,
+            last_scan: Instant::now(),
             virt,
             virt_kbd,
-            env: EvdevCursor { virtual_pos: start, clip: None, desktop, started: Instant::now() },
+            env: EvdevCursor {
+                virtual_pos: start,
+                clip: None,
+                desktop,
+                started: Instant::now(),
+                ctrl_left: false,
+                ctrl_right: false,
+            },
             sens,
             debug,
             rem: (0.0, 0.0),
@@ -257,25 +306,53 @@ impl Router {
             }
         }
 
+        self.rescan();
+
+        let n_mice = self.devices.len();
         let mut fds: Vec<libc::pollfd> = self
             .devices
             .iter()
-            .map(|d| libc::pollfd { fd: d.as_raw_fd(), events: libc::POLLIN, revents: 0 })
+            .map(|(_, d)| d.as_raw_fd())
+            .chain(self.keyboards.iter().map(|(_, d)| d.as_raw_fd()))
+            .map(|fd| libc::pollfd { fd, events: libc::POLLIN, revents: 0 })
             .collect();
+        if fds.is_empty() {
+            // Every device vanished: keep the cadence (poll(0 fds) returns
+            // immediately) and let the rescan pick devices back up.
+            std::thread::sleep(Duration::from_millis(100));
+            return;
+        }
         unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 100); }
 
         let mut acc = (0i64, 0i64);
         let mut passthrough: Vec<InputEvent> = Vec::new();
         let mut kbd: Vec<InputEvent> = Vec::new();
+        // A removed node reports POLLERR/POLLHUP forever: it must leave the set,
+        // or poll() returns instantly and the pump becomes a busy loop.
+        let mut dead: Vec<usize> = Vec::new();
 
         for (i, pfd) in fds.iter().enumerate() {
+            if pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+                dead.push(i);
+                continue;
+            }
             if pfd.revents & libc::POLLIN == 0 {
                 continue;
             }
-            let events: Vec<InputEvent> = match self.devices[i].fetch_events() {
+            if i >= n_mice {
+                self.track_ctrl_from_keyboard(i - n_mice);
+                continue;
+            }
+            let events: Vec<InputEvent> = match self.devices[i].1.fetch_events() {
                 Ok(it) => it.collect(),
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(_) => continue,
+                Err(_) => {
+                    // Dropping the Device closes the fd, which also releases the
+                    // grab — if the node was actually alive the compositor gets
+                    // it back rather than the user losing the mouse.
+                    dead.push(i);
+                    continue;
+                }
             };
             for ev in events {
                 match ev.event_type() {
@@ -291,7 +368,11 @@ impl Router {
                         if BTN_RANGE.contains(&ev.code())
                             || BTN_TRIGGER_HAPPY_RANGE.contains(&ev.code()) =>
                         passthrough.push(ev),
-                    EventType::KEY => kbd.push(ev),
+                    EventType::KEY => {
+                        // Combined receiver nodes carry the modifier too.
+                        self.env.track_ctrl(ev.code(), ev.value());
+                        kbd.push(ev);
+                    }
                     // MSC_SCAN scancodes stay with the pointer frame: losing the
                     // scancode of a routed key is inconsequential.
                     EventType::MISC => passthrough.push(ev),
@@ -301,6 +382,66 @@ impl Router {
         }
         if acc != (0, 0) || !passthrough.is_empty() || !kbd.is_empty() {
             self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd);
+        }
+
+        for i in dead.into_iter().rev() {
+            let (path, kind) = if i >= n_mice {
+                (self.keyboards.remove(i - n_mice).0, "keyboard")
+            } else {
+                (self.devices.remove(i).0, "device")
+            };
+            eprintln!("[LittleBigMouse.Hook] evdev: {kind} gone {path:?}");
+        }
+    }
+
+    /// Drain a (non-grabbed) keyboard, keeping only the ctrl state: the
+    /// compositor still owns these devices, we just observe the modifier.
+    fn track_ctrl_from_keyboard(&mut self, k: usize) {
+        let events: Vec<InputEvent> = match self.keyboards[k].1.fetch_events() {
+            Ok(it) => it.collect(),
+            Err(_) => return, // dead nodes are purged via POLLERR next cycle
+        };
+        for ev in events {
+            if ev.event_type() == EventType::KEY {
+                self.env.track_ctrl(ev.code(), ev.value());
+            }
+        }
+    }
+
+    /// Every 2 s: pick up hot-plugged devices. A mouse appearing mid-run would
+    /// otherwise drive the cursor directly, next to the engine; a new keyboard
+    /// would not feed the ctrl-override.
+    fn rescan(&mut self) {
+        if self.last_scan.elapsed() < RESCAN_EVERY {
+            return;
+        }
+        self.last_scan = Instant::now();
+        for (path, mut dev) in enumerate_mice() {
+            if self.devices.iter().any(|(p, _)| *p == path) {
+                continue;
+            }
+            if dev.set_nonblocking(true).is_err() {
+                continue;
+            }
+            match dev.grab() {
+                Ok(()) => {
+                    eprintln!("[LittleBigMouse.Hook] evdev: grabbed {} ({:?}, hot-plug)",
+                        dev.name().unwrap_or("?"), path);
+                    self.devices.push((path, dev));
+                }
+                // Retried every rescan; only worth the noise when debugging.
+                Err(e) if self.debug =>
+                    eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
+                Err(_) => {}
+            }
+        }
+        for (path, mut dev) in enumerate_keyboards() {
+            if self.keyboards.iter().any(|(p, _)| *p == path) {
+                continue;
+            }
+            if dev.set_nonblocking(true).is_ok() {
+                self.keyboards.push((path, dev));
+            }
         }
     }
 
@@ -351,9 +492,10 @@ impl Router {
                 // Per-frame trace: raw delta, engine input, emitted position. The
                 // ground truth for any "the cursor was seen somewhere we never
                 // sent it" investigation (compare against what KWin displays).
-                eprintln!("[LittleBigMouse.Hook] evdev: frame d=({dx},{dy}) cand=({},{}) -> emit ({},{}){}",
+                eprintln!("[LittleBigMouse.Hook] evdev: frame d=({dx},{dy}) cand=({},{}) -> emit ({},{}){}{}",
                     candidate.x(), candidate.y(), self.env.virtual_pos.x(), self.env.virtual_pos.y(),
-                    if e.handled { " CROSS" } else { "" });
+                    if e.handled { " CROSS" } else { "" },
+                    if self.env.ctrl_down() { " ctrl" } else { "" });
             }
             *acc = (0, 0);
         }
@@ -386,9 +528,10 @@ impl Router {
 
 impl Drop for Router {
     fn drop(&mut self) {
-        for d in &mut self.devices {
+        for (_, d) in &mut self.devices {
             let _ = d.ungrab();
         }
+        // Keyboards were never grabbed; closing their fds is enough.
     }
 }
 
@@ -567,9 +710,22 @@ struct EvdevCursor {
     clip: Option<Rect<i32>>,
     desktop: Rect<i32>,
     started: Instant,
+    /// Modifier state fed by the observed keyboards and the grabbed combined
+    /// nodes; left/right tracked apart so releasing one keeps the other held.
+    ctrl_left: bool,
+    ctrl_right: bool,
 }
 
 impl EvdevCursor {
+    fn track_ctrl(&mut self, code: u16, value: i32) {
+        // value: 1 press, 2 autorepeat, 0 release.
+        if code == KeyCode::KEY_LEFTCTRL.0 {
+            self.ctrl_left = value != 0;
+        } else if code == KeyCode::KEY_RIGHTCTRL.0 {
+            self.ctrl_right = value != 0;
+        }
+    }
+
     fn clamp(&self, p: Point<i32>) -> Point<i32> {
         let r = self.clip.unwrap_or(self.desktop);
         Point::new(
@@ -602,7 +758,7 @@ impl CursorEnv for EvdevCursor {
     }
 
     fn ctrl_down(&self) -> bool {
-        false // needs reading a grabbed keyboard; documented Windows/X11-only
+        self.ctrl_left || self.ctrl_right
     }
 
     fn cursor_hidden(&self) -> bool {

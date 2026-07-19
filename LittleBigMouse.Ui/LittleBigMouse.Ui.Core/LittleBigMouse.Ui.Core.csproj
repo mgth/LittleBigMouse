@@ -6,7 +6,6 @@
     <Nullable>enable</Nullable>
     <Platforms>x64</Platforms>
     <LangVersion>preview</LangVersion>
-	<Version>5.3.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

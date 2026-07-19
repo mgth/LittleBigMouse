@@ -7,7 +7,6 @@
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
     <Nullable>enable</Nullable>
-    <Version>1.0.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

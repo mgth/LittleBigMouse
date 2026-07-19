@@ -6,7 +6,6 @@
     <Platforms>x64</Platforms>
     <OutputType>Library</OutputType>
     <Configurations>Debug;Release;ReleaseDebug</Configurations>
-	<Version>5.3.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

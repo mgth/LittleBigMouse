@@ -1,0 +1,14 @@
+<Project>
+  <!-- Single source of truth for the LittleBigMouse version (the LBM csproj
+       files must NOT declare <Version> themselves).
+       Overridden by -p:Version on the command line:
+       - CI passes the tag-derived version on release builds (dotnet-desktop.yml);
+       - run-lbm.sh / run-lbm.ps1 pass a git-describe-derived dev version
+         (e.g. 5.4.1.12 = 12 commits after v5.4.1) so the About window
+         distinguishes dev builds from releases.
+       HLab submodules keep their own <Version> (a csproj property wins over
+       this file). Bump this value when tagging a release. -->
+  <PropertyGroup>
+    <Version>5.4.1</Version>
+  </PropertyGroup>
+</Project>

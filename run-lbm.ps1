@@ -48,6 +48,17 @@ $rustDir    = Join-Path $root 'LittleBigMouse-Hook-Rust'
 $rustExe    = Join-Path $rustDir 'target\debug\lbm-hook.exe'
 $stagedHook = Join-Path $binDir 'LittleBigMouse.Hook.exe'
 
+# Dev version stamp: v5.4.1 + 12 commits -> 5.4.1.12, so the About window tells
+# dev builds apart from releases. Empty (Directory.Build.props version applies)
+# when git or the tags are unavailable.
+$version = ''
+try {
+    $described = & git -C $root describe --tags --long --match 'v*' 2>$null
+    if ($LASTEXITCODE -eq 0 -and $described -match '^v(.+)-(\d+)-g[0-9a-f]+$') {
+        $version = '{0}.{1}' -f $Matches[1], $Matches[2]
+    }
+} catch { }
+
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 
@@ -79,8 +90,10 @@ try {
     #    is launched and staged from. Passing -p:Platform=x64 diverts output to bin\x64\... which
     #    is never launched, so the freshly built code would silently never run.
     if (-not $NoBuild) {
-        Step ("Building UI  ({0} AnyCPU)" -f $Config)
-        & dotnet build $uiProj -c $Config --nologo -v m
+        Step ("Building UI  ({0} AnyCPU{1})" -f $Config, $(if ($version) { ", v$version" } else { '' }))
+        $buildArgs = @($uiProj, '-c', $Config, '--nologo', '-v', 'm')
+        if ($version) { $buildArgs += "-p:Version=$version" }
+        & dotnet build @buildArgs
         if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }
     }
 

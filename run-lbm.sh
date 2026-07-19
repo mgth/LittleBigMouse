@@ -56,6 +56,12 @@ RUST_BIN="$RUST_DIR/target/$RUST_PROFILE_DIR/lbm-hook"
 STAGED_HOOK="$BIN_DIR/lbm-hook"
 LOG="${TMPDIR:-/tmp}/lbm-ui.log"
 
+# Dev version stamp: v5.4.1 + 12 commits -> 5.4.1.12, so the About window tells
+# dev builds apart from releases. Empty (Directory.Build.props version applies)
+# when git or the tags are unavailable.
+VERSION="$(git -C "$ROOT" describe --tags --long --match 'v*' 2>/dev/null \
+    | sed -E 's/^v//; s/-([0-9]+)-g[0-9a-f]+$/.\1/')"
+
 # Colours (skipped when not a TTY).
 if [[ -t 1 ]]; then C='\033[36m'; D='\033[90m'; Y='\033[33m'; G='\033[32m'; R='\033[31m'; N='\033[0m'
 else C=''; D=''; Y=''; G=''; R=''; N=''; fi
@@ -90,8 +96,10 @@ fi
 
 # 3. build the UI
 if [[ "$NO_BUILD" -eq 0 ]]; then
-    step "Building UI  ($CONFIG)"
-    dotnet build "$UI_PROJ" -c "$CONFIG" --nologo -v m || { echo -e "${R}dotnet build failed${N}"; exit 1; }
+    step "Building UI  ($CONFIG${VERSION:+, v$VERSION})"
+    BUILD_ARGS=("$UI_PROJ" -c "$CONFIG" --nologo -v m)
+    [[ -n "$VERSION" ]] && BUILD_ARGS+=("-p:Version=$VERSION")
+    dotnet build "${BUILD_ARGS[@]}" || { echo -e "${R}dotnet build failed${N}"; exit 1; }
 fi
 
 # 4. stage the daemon next to the UI (FindHookPath checks the sibling first).

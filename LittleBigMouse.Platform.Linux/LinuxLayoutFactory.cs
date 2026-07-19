@@ -223,9 +223,17 @@ public static class LinuxLayoutMapping
                 PnpDeviceName = !string.IsNullOrEmpty(edid?.Model) ? edid.Model : monitor.ConnectorName
             };
 
-            var widthMm = edid is { PhysicalWidth: > 0 } ? edid.PhysicalWidth : monitor.WidthMm;
-            var heightMm = edid is { PhysicalHeight: > 0 } ? edid.PhysicalHeight : monitor.HeightMm;
-            if (monitor.Orientation % 2 != 0 && edid != null) (widthMm, heightMm) = (heightMm, widthMm);
+            // Model.PhysicalSize is the panel's INTRINSIC size — the PhysicalRotated /
+            // DepthProjection chain applies the rotation downstream, so an oriented size
+            // here gets transposed twice and a portrait display is drawn landscape
+            // (#511, the Linux twin of #507). The EDID never rotates; the source-reported
+            // millimeters follow the current orientation (both KScreen and xrandr swap
+            // them) and must be un-rotated back to intrinsic.
+            var (widthMm, heightMm) = edid is { PhysicalWidth: > 0, PhysicalHeight: > 0 }
+                ? (edid.PhysicalWidth, edid.PhysicalHeight)
+                : monitor.Orientation % 2 != 0
+                    ? (monitor.HeightMm, monitor.WidthMm)
+                    : (monitor.WidthMm, monitor.HeightMm);
 
             if (widthMm > 0 && heightMm > 0)
             {
@@ -270,6 +278,9 @@ public static class LinuxLayoutMapping
         source.EffectiveDpi.Set(effectiveDpi, effectiveDpi);
         source.DpiAwareAngularDpi.Set(effectiveDpi, effectiveDpi);
 
+        // Unlike Model.PhysicalSize above, RawDpi wants ORIENTED millimeters: PixelWidth/
+        // PixelHeight follow the rotation, so the intrinsic EDID size must be swapped to
+        // match them per axis (the source-reported fallback is already oriented).
         var widthForDpi = edid is { PhysicalWidth: > 0 } ? edid.PhysicalWidth : monitor.WidthMm;
         var heightForDpi = edid is { PhysicalHeight: > 0 } ? edid.PhysicalHeight : monitor.HeightMm;
         if (monitor.Orientation % 2 != 0 && edid != null) (widthForDpi, heightForDpi) = (heightForDpi, widthForDpi);

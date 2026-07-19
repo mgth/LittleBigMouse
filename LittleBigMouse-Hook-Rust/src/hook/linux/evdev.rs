@@ -14,6 +14,12 @@
 //! per-device acceleration and desync from the engine's zone geometry, putting
 //! "walls" in the middle of screens.)
 //!
+//! A second uinput device, the virtual keyboard, re-emits the keyboard usages of
+//! grabbed mice: wireless receivers (Logitech Lightspeed…) expose one combined
+//! kbd+mouse node, and its onboard macro buttons emit KEY_* codes the pointer
+//! device does not declare — the kernel silently drops undeclared codes, so
+//! without it those keys vanish while LBM runs.
+//!
 //! Safety: a grab is released when its fd closes, so even `kill -9` frees the
 //! mice. We additionally ungrab on unhook, on quit, and on drop; `LBM_EVDEV_
 //! AUTORELEASE_SECS` force-unhooks after N seconds for cautious first runs.
@@ -38,6 +44,16 @@ use crate::ipc::protocol;
 use crate::shared::Shared;
 
 const VIRTUAL_NAME: &str = "LittleBigMouse virtual pointer";
+const VIRTUAL_KBD_NAME: &str = "LittleBigMouse virtual keyboard";
+
+/// EV_KEY code ranges of mouse buttons. Everything else on a grabbed mouse is a
+/// keyboard usage: wireless receivers (Logitech Lightspeed…) expose one combined
+/// kbd+mouse node, and onboard macro buttons emit KEY_ESC/KEY_TAB/… on it. The
+/// kernel silently drops events whose (type, code) is not declared on a uinput
+/// device, so those keys must go to a virtual device that declares them.
+const BTN_RANGE: std::ops::RangeInclusive<u16> = 0x100..=0x15f;
+/// BTN_TRIGGER_HAPPY block — joystick buttons, not keyboard usages.
+const BTN_TRIGGER_HAPPY_RANGE: std::ops::RangeInclusive<u16> = 0x2c0..=0x2e7;
 
 /// True when we can create the uinput device and there is at least one mouse to
 /// grab. Gates the backend so a permission-less box falls back to portal/X11.
@@ -146,10 +162,15 @@ pub fn run(shared: &'static Shared) -> bool {
     }
 }
 
-/// The grabbed devices, the virtual pointer, and the authoritative cursor.
+/// The grabbed devices, the virtual pointer + keyboard, and the authoritative cursor.
 struct Router {
     devices: Vec<Device>,
     virt: VirtualDevice,
+    /// Keyboard usages coming from grabbed mice (combined receiver nodes, onboard
+    /// macros) are re-emitted here — the pointer device does not declare them, and
+    /// mixing a full keyboard into an ABS pointer risks a libinput/KWin
+    /// reclassification of the pointer.
+    virt_kbd: VirtualDevice,
     env: EvdevCursor,
     sens: f64,
     debug: bool,
@@ -178,6 +199,7 @@ impl Router {
         }
 
         let virt = build_virtual(desktop)?;
+        let virt_kbd = build_virtual_keyboard()?;
 
         // Take over from where the cursor really is: ask the compositor (KWin
         // scripting, logical coordinates — the zones' space), else where the
@@ -204,6 +226,7 @@ impl Router {
         let mut router = Router {
             devices,
             virt,
+            virt_kbd,
             env: EvdevCursor { virtual_pos: start, clip: None, desktop, started: Instant::now() },
             sens,
             debug,
@@ -243,6 +266,7 @@ impl Router {
 
         let mut acc = (0i64, 0i64);
         let mut passthrough: Vec<InputEvent> = Vec::new();
+        let mut kbd: Vec<InputEvent> = Vec::new();
 
         for (i, pfd) in fds.iter().enumerate() {
             if pfd.revents & libc::POLLIN == 0 {
@@ -255,26 +279,35 @@ impl Router {
             };
             for ev in events {
                 match ev.event_type() {
-                    EventType::SYNCHRONIZATION => self.flush_frame(shared, &mut acc, &mut passthrough),
+                    EventType::SYNCHRONIZATION => self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd),
                     EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_X.0 => acc.0 += ev.value() as i64,
                     EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_Y.0 => acc.1 += ev.value() as i64,
                     // Wheels and any other relative axis: pass through verbatim.
                     EventType::RELATIVE => passthrough.push(ev),
-                    // Buttons, and the MSC_SCAN that precedes them.
-                    EventType::KEY | EventType::MISC => passthrough.push(ev),
+                    // Buttons stay with the pointer; every other EV_KEY code is a
+                    // keyboard usage (onboard macros on combined receiver nodes)
+                    // and goes to the virtual keyboard, which declares it.
+                    EventType::KEY
+                        if BTN_RANGE.contains(&ev.code())
+                            || BTN_TRIGGER_HAPPY_RANGE.contains(&ev.code()) =>
+                        passthrough.push(ev),
+                    EventType::KEY => kbd.push(ev),
+                    // MSC_SCAN scancodes stay with the pointer frame: losing the
+                    // scancode of a routed key is inconsequential.
+                    EventType::MISC => passthrough.push(ev),
                     _ => {}
                 }
             }
         }
-        if acc != (0, 0) || !passthrough.is_empty() {
-            self.flush_frame(shared, &mut acc, &mut passthrough);
+        if acc != (0, 0) || !passthrough.is_empty() || !kbd.is_empty() {
+            self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd);
         }
     }
 
     /// Run the engine over the accumulated motion and place the cursor at the
     /// resulting absolute position, forwarding buttons/wheels in the same frame.
-    fn flush_frame(&mut self, shared: &Shared, acc: &mut (i64, i64), passthrough: &mut Vec<InputEvent>) {
-        if *acc == (0, 0) && passthrough.is_empty() {
+    fn flush_frame(&mut self, shared: &Shared, acc: &mut (i64, i64), passthrough: &mut Vec<InputEvent>, kbd: &mut Vec<InputEvent>) {
+        if *acc == (0, 0) && passthrough.is_empty() && kbd.is_empty() {
             return;
         }
 
@@ -326,6 +359,14 @@ impl Router {
         }
 
         self.emit_absolute(passthrough);
+
+        // Keyboard usages get their own atomic frame on the virtual keyboard
+        // (emit appends the SYN_REPORT), mirroring the per-device framing of the
+        // pointer batch above.
+        if !kbd.is_empty() {
+            let _ = self.virt_kbd.emit(kbd);
+            kbd.clear();
+        }
     }
 
     /// Emit the current absolute position plus any pending buttons/wheels as one
@@ -384,6 +425,27 @@ fn build_virtual(desktop: Rect<i32>) -> std::io::Result<VirtualDevice> {
         .with_relative_axes(&wheels)?
         .with_absolute_axis(&ax)?
         .with_absolute_axis(&ay)?
+        .build()
+}
+
+/// A full-range virtual keyboard for the keyboard usages of grabbed mice.
+/// Declaring (almost) every KEY_* code up front means the device never has to
+/// be rebuilt to match a given mouse's capabilities. EV_REP is deliberately
+/// absent: key repeat belongs to the compositor/xkb, as with a real keyboard.
+fn build_virtual_keyboard() -> std::io::Result<VirtualDevice> {
+    let mut keys = AttributeSet::<KeyCode>::new();
+    // 0x2ff = KEY_MAX; skip the mouse/joystick button blocks routed to the pointer.
+    for code in 1..=0x2ffu16 {
+        if BTN_RANGE.contains(&code) || BTN_TRIGGER_HAPPY_RANGE.contains(&code) {
+            continue;
+        }
+        keys.insert(KeyCode::new(code));
+    }
+
+    VirtualDeviceBuilder::new()?
+        .name(VIRTUAL_KBD_NAME)
+        .input_id(InputId::new(BusType::BUS_VIRTUAL, 0x4c42, 0x4d56, 1))
+        .with_keys(&keys)?
         .build()
 }
 

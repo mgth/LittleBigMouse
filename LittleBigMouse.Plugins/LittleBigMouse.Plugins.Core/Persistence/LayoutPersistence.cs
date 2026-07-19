@@ -158,12 +158,54 @@ public abstract class LayoutPersistence : ILayoutPersistence
         // Versions predating the EDID-less size fallback persisted the bogus 0x0 GDI
         // placeholder for virtual displays (#419): a stored non-positive size must not
         // override the freshly computed one.
-        if (dto.Height is > 0) model.PhysicalSize.Height = dto.Height.Value;
-        if (dto.Width is > 0) model.PhysicalSize.Width = dto.Width.Value;
+        if (dto is { Height: > 0, Width: > 0 })
+        {
+            // Migration of pre-5.4.1 oriented stored sizes (#507) — see NormalizeStoredSize.
+            var (w, h) = NormalizeStoredSize(
+                model.PhysicalSize.Width, model.PhysicalSize.Height,
+                dto.Width.Value, dto.Height.Value);
+            model.PhysicalSize.Width = w;
+            model.PhysicalSize.Height = h;
+        }
+        else
+        {
+            if (dto.Height is > 0) model.PhysicalSize.Height = dto.Height.Value;
+            if (dto.Width is > 0) model.PhysicalSize.Width = dto.Width.Value;
+        }
 
         model.PhysicalSize.FixedAspectRatio = fixedRatio;
 
         if (!string.IsNullOrEmpty(dto.PnpName)) model.PnpDeviceName = dto.PnpName;
+    }
+
+    /// <summary>
+    /// Migration of pre-5.4.1 stored model sizes (#507). The model used to persist the
+    /// size ORIENTED to the display's rotation at save time; since 5.4.1 it stores the
+    /// intrinsic panel size and the projection chain applies the rotation downstream. A
+    /// stored portrait-oriented size read as intrinsic gets the rotation applied twice:
+    /// the monitor that was portrait at save time renders with the orientation inverted
+    /// after the upgrade — flipping the display in Windows shows exactly the opposite in
+    /// LBM. The freshly computed model size is intrinsic by construction: when the stored
+    /// orientation contradicts it, transpose the stored value — the portrait/landscape
+    /// signal is robust to user-customized magnitudes (edits keep the panel aspect via
+    /// FixedAspectRatio), which are preserved. Square or invalid sizes decide nothing.
+    /// Once the layout is saved again the store holds the intrinsic size and this is a
+    /// permanent no-op.
+    /// </summary>
+    public static (double Width, double Height) NormalizeStoredSize(
+        double intrinsicWidth, double intrinsicHeight,
+        double storedWidth, double storedHeight)
+    {
+        if (intrinsicWidth <= 0 || intrinsicHeight <= 0
+            || intrinsicWidth == intrinsicHeight || storedWidth == storedHeight)
+            return (storedWidth, storedHeight);
+
+        var intrinsicPortrait = intrinsicHeight > intrinsicWidth;
+        var storedPortrait = storedHeight > storedWidth;
+
+        return storedPortrait == intrinsicPortrait
+            ? (storedWidth, storedHeight)
+            : (storedHeight, storedWidth);
     }
 
     static void Apply(PhysicalMonitor monitor, MonitorDto dto)

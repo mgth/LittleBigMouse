@@ -388,4 +388,54 @@ public class LayoutPersistenceTests
         Assert.Equal(ExcludedProcessDefaults.Version, store.GlobalOptions?.ExcludedDefaultsVersion);
         Assert.Contains(@"\my\game\", File.ReadAllLines(excluded));
     }
+
+    [Fact]
+    public void Load_TransposesPre541OrientedStoredSize()
+    {
+        // Pre-5.4.1 the model persisted the size ORIENTED to the rotation at save time:
+        // a monitor portrait at save time stored a transposed size. Read as intrinsic
+        // (5.4.1 semantics) it gets the rotation applied twice — the #507 follow-up where
+        // the previously-portrait monitor renders inverted after the upgrade. The stored
+        // value must be transposed back, keeping its (possibly user-customized) magnitudes.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+
+        var layout = NewLayout(out var monitor, out _); // fresh intrinsic model: 600x340
+        NewPersistence(store).Load(layout);
+
+        Assert.Equal(598, monitor.Model.PhysicalSize.Width);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void Load_KeepsStoredSizeWhenOrientationMatches()
+    {
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 598, Height = 338 };
+
+        var layout = NewLayout(out var monitor, out _); // fresh intrinsic model: 600x340
+        NewPersistence(store).Load(layout);
+
+        Assert.Equal(598, monitor.Model.PhysicalSize.Width);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Height);
+    }
+
+    [Theory]
+    // Square intrinsic or stored size: orientation is undecidable, keep as stored.
+    [InlineData(500, 500, 340, 600, 340, 600)]
+    [InlineData(600, 340, 500, 500, 500, 500)]
+    // Invalid intrinsic reference (EDID-less placeholder): keep as stored.
+    [InlineData(0, 0, 340, 600, 340, 600)]
+    // Contradicting orientation: transpose, magnitudes preserved.
+    [InlineData(600, 340, 340, 600, 600, 340)]
+    // Intrinsically-portrait panel, stored landscape (saved while rotated): transpose too.
+    [InlineData(340, 600, 600, 340, 340, 600)]
+    public void NormalizeStoredSize_Cases(
+        double intrinsicW, double intrinsicH, double storedW, double storedH,
+        double expectedW, double expectedH)
+    {
+        var (w, h) = LayoutPersistence.NormalizeStoredSize(intrinsicW, intrinsicH, storedW, storedH);
+        Assert.Equal(expectedW, w);
+        Assert.Equal(expectedH, h);
+    }
 }

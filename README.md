@@ -5,12 +5,12 @@
 </p>
 
 > [!IMPORTANT]
-> ## 🎉 5.3.0-beta.1 is out — first release in two years!
-> This beta fixes the most reported v5 problems: the cursor getting **stuck at screen edges** until Alt-Tab (plane lock), the mouse **escaping to another screen in fullscreen games**, and the app **silently failing to start**.
+> ## 🎉 5.4.1 is out!
+> Screen **rotation** works again, after being broken since the v5 rewrite (#507): portrait monitors are drawn portrait, every orientation keeps its own saved layout, and driver-side rotations are detected. On top of the 5.4.0 base: the mouse engine now runs on a **memory-safe Rust daemon**, sleep/resume hardening, Xbox / Game Pass games excluded by default, per-model or per-monitor border settings, and tray icon fixes.
 >
-> **[⬇ Download 5.3.0-beta.1](https://github.com/mgth/LittleBigMouse/releases/tag/v5.3.0-beta.1)** — requires the [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+> **[⬇ Download 5.4.1](https://github.com/mgth/LittleBigMouse/releases/tag/v5.4.1)** — requires the [.NET 10 Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 >
-> If one of these bugs hit you, please try the beta and [tell us how it goes](https://github.com/mgth/LittleBigMouse/issues) 🙏
+> Something not working? [Tell us](https://github.com/mgth/LittleBigMouse/issues) 🙏
 
 Little Big Mouse (LBM) is an open-source software designed to enhance the multi-monitor experience on Windows 10 and 11 by providing accurate mouse screen crossover location within multi-DPI monitors environments. This is particularly useful for setups involving a 4K monitor alongside a full HD monitor.
 

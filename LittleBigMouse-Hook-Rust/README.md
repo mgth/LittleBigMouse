@@ -4,9 +4,10 @@ A memory-safe Rust rewrite of the native C++ `LittleBigMouse.Hook` daemon: the
 separate process that installs the low-level Windows mouse hook and repositions
 the cursor across multi-DPI monitors.
 
-The daemon is language-agnostic behind its contract with the C# UI — a loopback
-TCP socket (port **25196**) exchanging `\n`-delimited XML — so this process is a
-drop-in replacement for the C++ one.
+The daemon is language-agnostic behind its contract with the C# UI: authenticated
+local IPC exchanges length-prefixed UTF-8 XML, so this process is a drop-in
+replacement for the C++ one. Windows uses a named pipe restricted to the current
+user and logon session; Linux uses a Unix-domain socket with mode `0600`.
 
 ## Why Rust
 
@@ -23,7 +24,7 @@ zones, geometry and IPC are 100% safe.
 
 | Module | Ports the C++ |
 |---|---|
-| `ipc/` | `Remote/` — TCP server, `\n` framing, `CommandMessage`/`DaemonMessage` |
+| `ipc/` | `Remote/` — bounded local IPC, length framing, `CommandMessage`/`DaemonMessage` |
 | `hook/` | `Hook/Hooker*` — `WH_MOUSE_LL`, WinEvents, display window, message pump |
 | `geometry/` | `Geometry/*.h` — `Point`/`Rect`/`Line`/`Segment` over a `Coord` trait |
 | `zones/` | `Engine/Zone`,`ZoneLink`,`ZonesLayout` on the arena |
@@ -52,8 +53,7 @@ and must be renamed to **`LittleBigMouse.Hook.exe`** (the name the UI's
 
 | Variable | Effect |
 |---|---|
-| `LBM_HOOK_PORT` | Listen on a non-default port for isolated development tests |
-| `LBM_HOOK_UI` | Force UI mode (wait for socket commands) instead of parent-process detection — used by test scripts |
+| `LBM_HOOK_UI` | Force UI mode (wait for IPC commands) instead of parent-process detection — used by test scripts |
 | `LBM_HOOK_DEBUG` | Print a stderr heartbeat: `hooked` / `mouse_events` / `crossings` |
 
 ## Shipped implementation

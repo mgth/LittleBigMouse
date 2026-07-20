@@ -67,7 +67,7 @@ pub fn receive_message(
 
 /// C++ `LittleBigMouseDaemon::ReceiveLoadMessage`: stop hooking, parse the
 /// layout into the engine, and adopt its priorities for the next hook.
-fn load_layout(shared: &Shared, xml: &str) {
+fn load_layout(shared: &Shared, xml: &str) -> bool {
     hook::set_enabled(shared, false);
     if let Some(layout) = ZonesLayout::from_xml(xml) {
         let (zones, main) = (layout.zones.len(), layout.main_zones.len());
@@ -86,8 +86,10 @@ fn load_layout(shared: &Shared, xml: &str) {
             .unwrap_or_else(|p| p.into_inner())
             .load(layout);
         eprintln!("[LittleBigMouse.Hook] layout loaded: {zones} zones ({main} main)");
+        true
     } else {
         eprintln!("[LittleBigMouse.Hook] layout load FAILED to parse");
+        false
     }
 }
 
@@ -132,24 +134,42 @@ pub fn load_excluded(shared: &Shared) {
 /// C++ `LoadFromFile`: read `Current.xml` and replay its command lines
 /// (`Load` then `Run`) — the standalone/autostart path.
 pub fn load_from_file(shared: &Shared, path: &str) {
-    match std::fs::read_to_string(path) {
-        Ok(content) => replay(shared, &content),
-        Err(e) => eprintln!("[LittleBigMouse.Hook] standalone: cannot read {path}: {e}"),
+    let primary_ok = std::fs::read_to_string(path)
+        .map(|content| replay(shared, &content))
+        .unwrap_or(false);
+    if primary_ok {
+        return;
+    }
+
+    let backup = format!("{path}.bak");
+    match std::fs::read_to_string(&backup) {
+        Ok(content) if replay(shared, &content) => {
+            eprintln!("[LittleBigMouse.Hook] recovered startup configuration from {backup}")
+        }
+        Ok(_) => eprintln!("[LittleBigMouse.Hook] startup configuration and backup are invalid"),
+        Err(error) => eprintln!(
+            "[LittleBigMouse.Hook] cannot recover startup configuration from {path} or {backup}: {error}"
+        ),
     }
 }
 
 /// Replay the `Load`/`Run` command lines from a serialized layout file. Runs
 /// without a socket client, so it only handles the commands the file contains.
-fn replay(shared: &Shared, content: &str) {
-    for line in content.lines() {
-        for command in protocol::parse(line) {
-            match command {
-                Command::Load(xml) => load_layout(shared, &xml),
-                Command::Run => run(shared),
-                _ => {}
+fn replay(shared: &Shared, content: &str) -> bool {
+    let commands: Vec<_> = content.lines().flat_map(protocol::parse).collect();
+    let mut loaded = false;
+    let mut ran = false;
+    for command in commands {
+        match command {
+            Command::Load(xml) => loaded = load_layout(shared, &xml),
+            Command::Run if loaded => {
+                run(shared);
+                ran = true;
             }
+            _ => {}
         }
     }
+    loaded && ran
 }
 
 /// Report current state (C++ `SendState`): `Running` when hooked, else `Paused`
@@ -225,5 +245,26 @@ mod tests {
 
         shared.enabled.store(true, Ordering::SeqCst);
         assert_eq!(state_message(&shared), protocol::PAUSED);
+    }
+
+    #[test]
+    fn corrupt_primary_recovers_last_good_backup() {
+        let shared = Shared::new();
+        let id = format!("{}-{:?}", std::process::id(), std::thread::current().id());
+        let path = std::env::temp_dir().join(format!("lbm-current-{id}.xml"));
+        let backup = format!("{}.bak", path.display());
+        std::fs::write(&path, "<truncated").unwrap();
+        std::fs::write(
+            &backup,
+            format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n"),
+        )
+        .unwrap();
+
+        load_from_file(&shared, path.to_str().unwrap());
+
+        assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
+        assert!(shared.want_hook.load(Ordering::SeqCst));
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(backup);
     }
 }

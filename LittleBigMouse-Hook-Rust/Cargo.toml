@@ -28,6 +28,7 @@ path = "src/lib.rs"
 [dependencies]
 roxmltree = "0.20"
 slotmap = "1"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -43,6 +44,10 @@ features = [
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_Threading",
+    "Win32_System_Pipes",
+    "Win32_System_RemoteDesktop",
+    "Win32_Security",
+    "Win32_Security_Authorization",
     "Win32_System_LibraryLoader",
     "Win32_System_SystemInformation",
     "Win32_System_Diagnostics_ToolHelp",
@@ -65,7 +70,6 @@ ashpd = { version = "0.13", default-features = false, features = ["tokio", "inpu
 # KWin for the real cursor position (scripting API) when arming.
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 reis = { version = "0.7", features = ["tokio"] }
-tokio = { version = "1", features = ["rt", "macros", "time", "net", "sync"] }
 futures = "0.3"
 # Portal signal diagnostics: ashpd traces every InputCapture signal it receives
 # (and, crucially, bodies it fails to deserialize and silently drops).

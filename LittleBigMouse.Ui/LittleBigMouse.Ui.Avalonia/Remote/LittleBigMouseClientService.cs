@@ -5,21 +5,20 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using LittleBigMouse.Plugins;
 using System.Threading;
 using System.Threading.Tasks;
-using HLab.Remote;
+using System.Xml;
+using Avalonia.Threading;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.Ui.Avalonia.Remote;
 
-public partial class LittleBigMouseClientService : ILittleBigMouseClientService
+public class LittleBigMouseClientService : ILittleBigMouseClientService, IDisposable
 {
     public event EventHandler<LittleBigMouseServiceEventArgs>? DaemonEventReceived;
-    //NamedPipeClientStream _client;
-    readonly RemoteClientSocket _client;
+    readonly LocalIpcClient _client;
 
 
 
@@ -37,7 +36,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     public LittleBigMouseClientService(ILayoutOptions options, IDisplayController displayController)
     {
         _displayController = displayController;
-        _client = new("localhost", options.DaemonPort);
+        _client = new LocalIpcClient();
 
         _client.ConnectionFailed += (sender, args) =>
         {
@@ -47,32 +46,14 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
         _client.MessageReceived += (sender, args) =>
         {
-            //TODO : message interpretation too lazy
-            if(args.Contains("Stopped"))
-                OnStateChanged(LittleBigMouseEvent.Stopped);
-            else if(args.Contains("Running"))
-                OnStateChanged(LittleBigMouseEvent.Running);
-            else if(args.Contains("Dead"))
-                OnStateChanged(LittleBigMouseEvent.Dead);
-            else if(args.Contains("DisplayChanged"))
-                OnStateChanged(LittleBigMouseEvent.DisplayChanged);
-            else if(args.Contains("DesktopChanged"))
-                OnStateChanged(LittleBigMouseEvent.DesktopChanged);
-            else if(args.Contains("Suspended"))
-                OnStateChanged(LittleBigMouseEvent.Suspended);
-            else if(args.Contains("Resumed"))
-                OnStateChanged(LittleBigMouseEvent.Resumed);
-            else if(args.Contains("FocusChanged"))
-            {
-                var payload = PayloadRegex().Match(args).Groups[1].Value;
-                OnStateChanged(LittleBigMouseEvent.FocusChanged,payload);
-            }
+            if (!DaemonMessage.TryParse(args, out var message)) return;
+            Dispatcher.UIThread.Post(() => OnStateChanged(message.Event, message.Payload));
         };
 
         _client.Connected += (sender, args) =>
         {
             Debug.WriteLine($"Connected");
-            OnStateChanged(LittleBigMouseEvent.Connected);
+            Dispatcher.UIThread.Post(() => OnStateChanged(LittleBigMouseEvent.Connected));
         };
 
         _client.Listen();
@@ -120,8 +101,6 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         await Task.Run(_displayController.RestoreAfterEngine, token);
     }
 
-    readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
-
     Process? _daemonProcess;
 
     void CreateExcludedFile()
@@ -143,6 +122,8 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         foreach (var process in Process.GetProcessesByName(name))
         {
             if(process.HasExited) continue;
+            if (OperatingSystem.IsWindows()
+                && process.SessionId != Process.GetCurrentProcess().SessionId) continue;
             Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
             return;
         }
@@ -260,12 +241,15 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     Task SendMessageAsync(CommandMessage message, int timeout,
         CancellationToken token = default)
     {
-        return SendMessagesAsync([message], token);
+        return SendMessagesAsync([message], token, timeout);
     }
 
-    async Task SendMessagesAsync(IEnumerable<CommandMessage> messages, CancellationToken token = default)
+    async Task SendMessagesAsync(IEnumerable<CommandMessage> messages,
+        CancellationToken token = default, int timeout = 5000)
     {
-        var xml = messages.Aggregate("", (current, command) => current + $"{command.Serialize()}\n");
+        var commands = messages.ToList();
+        var recoveryXml = string.Join("\n", commands.Select(command => command.Serialize())) + "\n";
+        var wireXml = $"<Messages>{string.Concat(commands.Select(command => command.Serialize()))}</Messages>";
 
         // The daemon reads this file back on startup: LbmPaths must match its side
         // (%LOCALAPPDATA%\Mgth\LittleBigMouse on Windows, ~/.local/share/LittleBigMouse on
@@ -273,22 +257,30 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         // NAMED with backslashes on Linux.
         var path = Path.Combine(LbmPaths.DataDir, "Current.xml");
 
-        if (!Directory.Exists(Path.GetDirectoryName(path)))
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-
-        try
+        Exception? persistenceFailure = null;
+        if (commands.Any(command => command.Command == LittleBigMouseCommand.Load))
         {
-            await using var outputFile = new StreamWriter(path, false);
-            await outputFile.WriteAsync(xml);
+            try
+            {
+                await AtomicRecoveryFile.WriteAsync(path, recoveryXml, token);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or XmlException)
+            {
+                persistenceFailure = error;
+            }
         }
-        catch { }
 
-
-        //byte[] messageBytes = Encoding.UTF8.GetBytes(xml);
-
-        await _client.SendMessageAsync(xml, token); //.StandardInput.WriteAsync(xml);
+        await _client.SendMessageAsync(wireXml, TimeSpan.FromMilliseconds(timeout), token);
+        if (persistenceFailure is not null)
+            throw new InvalidOperationException(
+                "The live configuration was applied, but crash-recovery settings could not be saved.",
+                persistenceFailure);
     }
 
-    [GeneratedRegex("<Payload>(.*)</Payload>")]
-    private static partial Regex PayloadRegex();
+    public void Dispose()
+    {
+        _client.Dispose();
+        _daemonProcess?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

@@ -100,7 +100,19 @@ pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>
 
 /// Build a `FocusChanged` event carrying the foreground process path.
 pub fn focus_changed(path: &str) -> String {
-    format!("<DaemonMessage><Event>FocusChanged</Event><Payload>{path}</Payload></DaemonMessage>\n")
+    format!(
+        "<DaemonMessage><Event>FocusChanged</Event><Payload>{}</Payload></DaemonMessage>\n",
+        escape_xml(path)
+    )
+}
+
+fn escape_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 #[cfg(test)]
@@ -152,5 +164,16 @@ mod tests {
     fn blank_and_malformed_yield_nothing() {
         assert!(parse("   ").is_empty());
         assert!(parse("not xml <<<").is_empty());
+    }
+
+    #[test]
+    fn focus_payload_is_well_formed_xml() {
+        let message = focus_changed(r#"C:\A&B\<game>.exe"#);
+        let document = Document::parse(&message).unwrap();
+        let payload = document
+            .descendants()
+            .find(|node| node.has_tag_name("Payload"))
+            .unwrap();
+        assert_eq!(payload.text(), Some(r#"C:\A&B\<game>.exe"#));
     }
 }

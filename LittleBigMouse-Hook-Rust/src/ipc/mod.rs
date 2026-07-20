@@ -1,10 +1,8 @@
 //! Inter-process communication with the C# UI.
 //!
-//! Port of the C++ `Remote/` layer: a loopback TCP server (port 25196) speaking
-//! `\n`-delimited XML. `protocol` handles message (de)serialization, `server`
-//! owns the listener and the client registry, and `client` runs one reader per
-//! connection.
+//! Windows uses a current-session named pipe with a user/SYSTEM DACL; Linux uses
+//! a 0600 Unix-domain socket. Both carry bounded length-prefixed UTF-8 XML.
 
-pub mod client;
+pub mod framing;
 pub mod protocol;
 pub mod server;

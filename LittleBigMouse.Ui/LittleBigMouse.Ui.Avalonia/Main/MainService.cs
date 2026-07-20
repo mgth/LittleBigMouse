@@ -22,11 +22,13 @@
 */
 
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Channels;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using HLab.Base.Avalonia;
@@ -49,6 +51,9 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 
 public class MainService : ReactiveModel, IMainService
 {
+    readonly Channel<(object? Sender, LittleBigMouseServiceEventArgs Args)> _daemonEvents =
+        Channel.CreateUnbounded<(object?, LittleBigMouseServiceEventArgs)>(
+            new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     readonly IMvvmService _mvvmService;
     readonly ILayoutFactory _layoutFactory;
     readonly ILayoutPersistence _layoutPersistence;
@@ -119,7 +124,9 @@ public class MainService : ReactiveModel, IMainService
             .DisposeWith(this);
 
         // Relate service state with notify icon
-        _littleBigMouseClientService.DaemonEventReceived += (o, a) => DaemonEventReceived(o, a);
+        _littleBigMouseClientService.DaemonEventReceived += (sender, args) =>
+            _daemonEvents.Writer.TryWrite((sender, args));
+        _ = ProcessDaemonEventsAsync();
 
         // The platform watches the OS for wallpaper changes (Windows: a RegNotifyChangeKeyValue
         // registry watcher) and raises WallpaperChanged. Refresh the wallpaper drawn behind each
@@ -272,6 +279,37 @@ public class MainService : ReactiveModel, IMainService
     }
 
     bool _justConnected = false;
+    async Task ProcessDaemonEventsAsync()
+    {
+        await foreach (var item in _daemonEvents.Reader.ReadAllAsync())
+        {
+            var completion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    await DaemonEventReceived(item.Sender, item.Args);
+                    completion.SetResult();
+                }
+                catch (Exception error)
+                {
+                    completion.SetException(error);
+                }
+            });
+            try
+            {
+                await completion.Task;
+            }
+            catch (Exception error)
+            {
+                // One failed notification must not permanently stop delivery of
+                // every later daemon event.
+                Debug.WriteLine($"Daemon event handler failed: {error}");
+            }
+        }
+    }
+
     async Task DaemonEventReceived(object? sender, LittleBigMouseServiceEventArgs args)
     {
         TraceDaemonEvent(args.Event);

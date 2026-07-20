@@ -20,12 +20,16 @@ use crate::shared::Shared;
 #[cfg(windows)]
 pub mod windows;
 #[cfg(windows)]
-pub use windows::{register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog};
+pub use windows::{
+    register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
+};
 
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "linux")]
-pub use linux::{register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog};
+pub use linux::{
+    register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
+};
 
 /// Count of deduped mouse-move events the active backend has processed.
 /// Lightweight instrumentation (one relaxed increment) to observe the hook

@@ -28,8 +28,8 @@ impl<T: Coord> Segment<T> {
         if self.a.x() == self.b.x() {
             return Line::vertical(self.a.x());
         }
-        let slope =
-            (self.a.y().to_f64() - self.b.y().to_f64()) / (self.a.x().to_f64() - self.b.x().to_f64());
+        let slope = (self.a.y().to_f64() - self.b.y().to_f64())
+            / (self.a.x().to_f64() - self.b.x().to_f64());
         let origin = T::from_f64(self.a.y().to_f64() - slope * self.a.x().to_f64());
         Line::new(slope, origin)
     }

@@ -18,7 +18,7 @@ pub fn run(id: ClientId, mut stream: TcpStream, server: ServerHandle, shared: &'
 
     loop {
         let n = match stream.read(&mut buf) {
-            Ok(0) => break,   // peer closed the connection
+            Ok(0) => break, // peer closed the connection
             Ok(n) => n,
             Err(_) => break,
         };

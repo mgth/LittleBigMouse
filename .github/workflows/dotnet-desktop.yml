@@ -1,10 +1,7 @@
-# Build LittleBigMouse: managed UI (net10 / Avalonia) + native hook daemon (x64,
-# Rust by default, C++ as opt-out).
-# - Push / PR on master: build everything, upload a portable artifact.
-# - Tag v*: additionally compile the InnoSetup installer and attach it to a
-#   draft GitHub release for manual review before publishing.
+# Validate Windows and Linux before producing portable or installer artifacts.
+# Tag builds create a draft release only after both platform jobs pass.
 
-name: Build
+name: Build and test
 
 on:
   push:
@@ -15,15 +12,15 @@ on:
   workflow_dispatch:
     inputs:
       hook_impl:
-        description: 'Hook daemon implementation to build and ship'
-        default: 'rust'
+        description: "Hook daemon implementation to build and ship"
+        default: "rust"
         type: choice
         options: [ rust, cpp ]
 
+permissions:
+  contents: read
+
 env:
-  # Which hook daemon to build/stage. The Rust port is the default on every
-  # build; the C++ implementation stays available as an opt-out via
-  # workflow_dispatch while it remains in the tree.
   HOOK_IMPL: ${{ github.event.inputs.hook_impl || 'rust' }}
   UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
   HOOK_PROJECT: LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj
@@ -31,52 +28,95 @@ env:
   UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
 
 jobs:
-  build:
+  windows:
+    name: Windows ${{ matrix.configuration }}
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [ Debug, Release ]
 
     steps:
-    - name: Checkout (with submodules)
-      uses: actions/checkout@v4
+    - name: Checkout with submodules
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
 
     - name: Install .NET SDK
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
       with:
         dotnet-version: 10.0.x
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
+    - name: Setup MSBuild for the legacy opt-out hook
+      if: matrix.configuration == 'Release' && env.HOOK_IMPL == 'cpp'
+      uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
     - name: Derive version from tag
       id: ver
+      shell: pwsh
       run: |
         if ("${{ github.ref }}" -like "refs/tags/v*") {
-          $v = "${{ github.ref_name }}" -replace '^v',''
+          $version = "${{ github.ref_name }}" -replace '^v', ''
         } else {
-          $v = ""
+          $version = ""
         }
-        "version=$v" >> $env:GITHUB_OUTPUT
-        Write-Host "Release version: '$v'"
+        "version=$version" >> $env:GITHUB_OUTPUT
 
-    - name: Build UI (net10, x64 Release)
+    - name: Build UI
+      shell: pwsh
       run: |
-        $buildArgs = @('-c','Release','-p:Platform=x64')
-        if ("${{ steps.ver.outputs.version }}") { $buildArgs += "-p:Version=${{ steps.ver.outputs.version }}" }
+        $buildArgs = @('-c', '${{ matrix.configuration }}', '-p:Platform=x64')
+        if ("${{ steps.ver.outputs.version }}") {
+          $buildArgs += '-p:Version=${{ steps.ver.outputs.version }}'
+        }
         dotnet build $env:UI_PROJECT @buildArgs
 
-    - name: Build hook (C++, x64 Release)
-      if: env.HOOK_IMPL == 'cpp'
-      run: msbuild $env:HOOK_PROJECT /m /p:Configuration=Release /p:Platform=x64
+    - name: Test display layout
+      run: >-
+        dotnet test
+        LittleBigMouse.Core\LittleBigMouse.DisplayLayout.Tests\LittleBigMouse.DisplayLayout.Tests.csproj
+        -c ${{ matrix.configuration }} -p:Platform=x64
 
-    # windows-latest ships a stable Rust toolchain preinstalled, so no install step.
-    - name: Build hook (Rust, release)
-      if: env.HOOK_IMPL == 'rust'
+    - name: Test VCP and smart-TV protocols
+      run: >-
+        dotnet test
+        LittleBigMouse.Plugins\LittleBigMouse.Plugin.Vcp.Avalonia.Tests\LittleBigMouse.Plugin.Vcp.Avalonia.Tests.csproj
+        -c ${{ matrix.configuration }} -p:Platform=x64
+
+    - name: Check NuGet vulnerabilities
+      if: matrix.configuration == 'Release'
+      run: dotnet list $env:UI_PROJECT package --vulnerable --include-transitive
+
+    - name: Check Rust formatting
+      if: matrix.configuration == 'Release'
+      run: cargo fmt --all --manifest-path $env:HOOK_RUST_PROJECT -- --check
+
+    - name: Test all Rust targets
+      if: matrix.configuration == 'Release'
+      run: cargo test --all-targets --manifest-path $env:HOOK_RUST_PROJECT
+
+    - name: Lint all Rust targets
+      if: matrix.configuration == 'Release'
+      run: cargo clippy --all-targets --manifest-path $env:HOOK_RUST_PROJECT -- -D warnings
+
+    - name: Audit Rust dependencies
+      if: matrix.configuration == 'Release'
+      shell: pwsh
+      run: |
+        cargo install cargo-audit --locked --version 0.22.2
+        cargo audit --file LittleBigMouse-Hook-Rust\Cargo.lock
+
+    - name: Build Rust hook
+      if: matrix.configuration == 'Release'
       run: cargo build --release --manifest-path $env:HOOK_RUST_PROJECT
 
-    - name: Stage hook next to UI output
-      # Cargo can't emit a target named with a '.', so the Rust binary is built as
-      # lbm-hook.exe and renamed to the contract name here.
+    - name: Build legacy C++ hook
+      if: matrix.configuration == 'Release' && env.HOOK_IMPL == 'cpp'
+      run: msbuild $env:HOOK_PROJECT /m /p:Configuration=Release /p:Platform=x64
+
+    - name: Stage selected hook
+      if: matrix.configuration == 'Release'
+      shell: pwsh
       run: |
         if ($env:HOOK_IMPL -eq 'rust') {
           Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
@@ -85,7 +125,8 @@ jobs:
         }
 
     - name: Upload portable artifact
-      uses: actions/upload-artifact@v4
+      if: matrix.configuration == 'Release'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: LittleBigMouse-portable
         path: |
@@ -93,30 +134,67 @@ jobs:
           !${{ env.UI_OUTPUT }}\runtimes\linux*\**
           !${{ env.UI_OUTPUT }}\runtimes\osx*\**
 
-    - name: Compile installer (InnoSetup)
-      if: startsWith(github.ref, 'refs/tags/v')
-      run: |
-        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=${{ steps.ver.outputs.version }}" "/DHookImpl=${{ env.HOOK_IMPL }}" LittleBigMouse.Setup\LittleBigMouse.iss
+    - name: Compile installer
+      if: matrix.configuration == 'Release' && startsWith(github.ref, 'refs/tags/v')
+      shell: pwsh
+      run: >-
+        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+        "/DAppVer=${{ steps.ver.outputs.version }}"
+        "/DHookImpl=${{ env.HOOK_IMPL }}"
+        LittleBigMouse.Setup\LittleBigMouse.iss
 
     - name: Upload installer artifact
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: actions/upload-artifact@v4
+      if: matrix.configuration == 'Release' && startsWith(github.ref, 'refs/tags/v')
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: LittleBigMouse-installer
         path: LittleBigMouse.Setup\LittleBigMouse_*.exe
 
+  rust-linux:
+    name: Rust Linux
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: recursive
+
+    - name: Install native build prerequisites
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes libwayland-dev libxkbcommon-dev
+
+    - name: Check formatting
+      run: cargo fmt --all --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml -- --check
+
+    - name: Test all targets
+      run: cargo test --all-targets --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml
+
+    - name: Lint all targets
+      run: cargo clippy --all-targets --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml -- -D warnings
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ windows, rust-linux ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download installer
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      with:
+        name: LittleBigMouse-installer
+        path: release
+
     - name: Create draft release
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         draft: true
-        # Name the release with the bare numeric version (not the "v5.3.0" tag): the
-        # in-app updater parses the release name as a Version, and a "v" prefix or a
-        # word breaks it (shows "online version 0.0" and blocks the upgrade).
-        name: ${{ steps.ver.outputs.version }}
-        files: LittleBigMouse.Setup\LittleBigMouse_*.exe
+        name: ${{ github.ref_name }}
+        files: release/LittleBigMouse_*.exe
         generate_release_notes: true
-        # Default sponsor footer for the draft (shows above the generated notes;
-        # keep it when hand-editing the release body).
         body: |
-          💜 If Little Big Mouse is useful to you, consider [sponsoring the project](https://github.com/sponsors/mgth).
+          If Little Big Mouse is useful to you, consider [sponsoring the project](https://github.com/sponsors/mgth).

@@ -156,7 +156,10 @@ mod linux {
         // wl_output v4 delivers the connector name; bind them all.
         for global in globals.contents().clone_list() {
             if global.interface == "wl_output" {
-                let output: WlOutput = globals.registry().bind(global.name, 4.min(global.version), &qh, ());
+                let output: WlOutput =
+                    globals
+                        .registry()
+                        .bind(global.name, 4.min(global.version), &qh, ());
                 state.outputs.push((output, OutputInfo::default()));
             }
         }
@@ -232,9 +235,7 @@ mod linux {
     }
 
     fn memfd(size: usize) -> std::io::Result<OwnedFd> {
-        let fd = unsafe {
-            libc::memfd_create(c"lbm-pattern".as_ptr(), libc::MFD_CLOEXEC)
-        };
+        let fd = unsafe { libc::memfd_create(c"lbm-pattern".as_ptr(), libc::MFD_CLOEXEC) };
         if fd < 0 {
             return Err(std::io::Error::last_os_error());
         }
@@ -262,7 +263,10 @@ mod linux {
 
         match info.color_type {
             png::ColorType::Rgba => {
-                for (dst, src) in out.chunks_exact_mut(4).zip(buf[..w * h * 4].chunks_exact(4)) {
+                for (dst, src) in out
+                    .chunks_exact_mut(4)
+                    .zip(buf[..w * h * 4].chunks_exact(4))
+                {
                     dst[0] = src[2];
                     dst[1] = src[1];
                     dst[2] = src[0];
@@ -270,7 +274,10 @@ mod linux {
                 }
             }
             png::ColorType::Rgb => {
-                for (dst, src) in out.chunks_exact_mut(4).zip(buf[..w * h * 3].chunks_exact(3)) {
+                for (dst, src) in out
+                    .chunks_exact_mut(4)
+                    .zip(buf[..w * h * 3].chunks_exact(3))
+                {
                     dst[0] = src[2];
                     dst[1] = src[1];
                     dst[2] = src[0];
@@ -319,7 +326,12 @@ mod linux {
             };
             match event {
                 wl_output::Event::Name { name } => info.name = Some(name),
-                wl_output::Event::Mode { flags, width, height, .. } => {
+                wl_output::Event::Mode {
+                    flags,
+                    width,
+                    height,
+                    ..
+                } => {
                     if let WEnum::Value(flags) = flags {
                         if flags.contains(wl_output::Mode::Current) {
                             info.current_mode = Some((width, height));
@@ -393,7 +405,10 @@ mod linux {
             _: &Connection,
             qh: &QueueHandle<Self>,
         ) {
-            if let wl_seat::Event::Capabilities { capabilities: WEnum::Value(caps) } = event {
+            if let wl_seat::Event::Capabilities {
+                capabilities: WEnum::Value(caps),
+            } = event
+            {
                 if caps.contains(wl_seat::Capability::Pointer) {
                     seat.get_pointer(qh, ());
                 }
@@ -414,7 +429,10 @@ mod linux {
             _: &QueueHandle<Self>,
         ) {
             match event {
-                wl_pointer::Event::Button { state: WEnum::Value(wl_pointer::ButtonState::Pressed), .. } => {
+                wl_pointer::Event::Button {
+                    state: WEnum::Value(wl_pointer::ButtonState::Pressed),
+                    ..
+                } => {
                     state.exit = true;
                 }
                 wl_pointer::Event::Enter { serial, .. } => {
@@ -435,7 +453,11 @@ mod linux {
             _: &Connection,
             _: &QueueHandle<Self>,
         ) {
-            if let wl_keyboard::Event::Key { state: WEnum::Value(wl_keyboard::KeyState::Pressed), .. } = event {
+            if let wl_keyboard::Event::Key {
+                state: WEnum::Value(wl_keyboard::KeyState::Pressed),
+                ..
+            } = event
+            {
                 state.exit = true;
             }
         }

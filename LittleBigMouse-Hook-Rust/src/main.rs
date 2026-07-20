@@ -44,7 +44,10 @@ fn main() {
 
     if !ui_mode {
         if let Some(path) = platform::paths::lbm_data_file("Current.xml") {
-            eprintln!("[LittleBigMouse.Hook] standalone mode: loading {}", path.display());
+            eprintln!(
+                "[LittleBigMouse.Hook] standalone mode: loading {}",
+                path.display()
+            );
             if let Some(path) = path.to_str() {
                 daemon::load_from_file(shared, path);
             }

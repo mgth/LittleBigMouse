@@ -74,3 +74,9 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client"] }
 png = "0.17"
+
+# wayland-scanner 0.31.10 still declares quick-xml 0.39, which is affected by
+# RUSTSEC-2026-0194 and RUSTSEC-2026-0195. This upstream commit is the minimal
+# dependency-only fix while a patched crates.io release is pending.
+[patch.crates-io]
+wayland-scanner = { git = "https://github.com/Smithay/wayland-rs", rev = "d07c4f91f28b42e5a485823ffd9d8d5a210b1053" }

@@ -92,12 +92,9 @@ fn payload_string(node: Node) -> String {
 pub const RUNNING: &str = "<DaemonMessage><Event>Running</Event></DaemonMessage>\n";
 pub const STOPPED: &str = "<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n";
 pub const PAUSED: &str = "<DaemonMessage><Event>Paused</Event></DaemonMessage>\n";
-pub const DISPLAY_CHANGED: &str =
-    "<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>\n";
-pub const SETTING_CHANGED: &str =
-    "<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>\n";
-pub const DESKTOP_CHANGED: &str =
-    "<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n";
+pub const DISPLAY_CHANGED: &str = "<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>\n";
+pub const SETTING_CHANGED: &str = "<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>\n";
+pub const DESKTOP_CHANGED: &str = "<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n";
 pub const SUSPENDED: &str = "<DaemonMessage><Event>Suspended</Event></DaemonMessage>\n";
 pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>\n";
 
@@ -133,7 +130,9 @@ mod tests {
         let msg = r#"<CommandMessage Command="Load"><Payload><ZonesLayout MaxTravelDistance="200"/></Payload></CommandMessage>"#;
         assert_eq!(
             parse(msg),
-            vec![Command::Load(r#"<ZonesLayout MaxTravelDistance="200"/>"#.to_string())]
+            vec![Command::Load(
+                r#"<ZonesLayout MaxTravelDistance="200"/>"#.to_string()
+            )]
         );
     }
 
@@ -146,10 +145,7 @@ mod tests {
             "</Messages>"
         );
         // Load with no Payload -> empty ZonesLayout XML.
-        assert_eq!(
-            parse(msg),
-            vec![Command::Load(String::new()), Command::Run]
-        );
+        assert_eq!(parse(msg), vec![Command::Load(String::new()), Command::Run]);
     }
 
     #[test]

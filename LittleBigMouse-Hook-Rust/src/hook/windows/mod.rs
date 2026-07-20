@@ -76,7 +76,9 @@ pub fn spawn_watchdog(shared: &'static Shared) {
             // check, yet our hook saw nothing: the OS silently dropped it (LowLevelHooksTimeout).
             // Reinstall on the pump thread so crossing heals instead of staying dead until a restart.
             if hooked && want && pos != last_pos && moves == last_moves {
-                eprintln!("[LittleBigMouse.Hook] watchdog: reinstalling silently-dropped mouse hook");
+                eprintln!(
+                    "[LittleBigMouse.Hook] watchdog: reinstalling silently-dropped mouse hook"
+                );
                 request_hook(shared);
             }
 
@@ -125,7 +127,9 @@ impl Hooker {
     /// always install the focus/desktop/display hooks.
     fn do_hook(&mut self, shared: &Shared) {
         if shared.want_hook.load(Ordering::SeqCst) {
-            platform::set_process_priority(Priority::from_u8(shared.priority.load(Ordering::SeqCst)));
+            platform::set_process_priority(Priority::from_u8(
+                shared.priority.load(Ordering::SeqCst),
+            ));
             self.hook_mouse(shared);
         } else {
             platform::set_process_priority(Priority::from_u8(
@@ -152,7 +156,12 @@ impl Hooker {
     /// C++ `Hooker::HookMouse`.
     fn hook_mouse(&mut self, shared: &Shared) {
         match unsafe {
-            SetWindowsHookExW(WH_MOUSE_LL, Some(mouse::mouse_proc), HINSTANCE::default(), 0)
+            SetWindowsHookExW(
+                WH_MOUSE_LL,
+                Some(mouse::mouse_proc),
+                HINSTANCE::default(),
+                0,
+            )
         } {
             Ok(h) => {
                 self.mouse_hook = h;

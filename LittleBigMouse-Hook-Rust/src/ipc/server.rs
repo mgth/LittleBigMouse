@@ -150,7 +150,9 @@ pub fn start(shared: &'static Shared, port: u16) -> (ServerHandle, u16) {
 
             // The write half lives in the registry; the read half stays with the
             // reader thread. Both are clones of the same socket.
-            let Ok(writer) = stream.try_clone() else { continue };
+            let Ok(writer) = stream.try_clone() else {
+                continue;
+            };
             accept_handle.insert(Arc::new(ClientHandle::new(id, writer)));
 
             let server = accept_handle.clone();

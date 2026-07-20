@@ -12,7 +12,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{CallNextHookEx, HHOOK, MSLLHOOKSTRUCT, WM_MOUSEMOVE};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, HHOOK, MSLLHOOKSTRUCT, WM_MOUSEMOVE,
+};
 
 use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;

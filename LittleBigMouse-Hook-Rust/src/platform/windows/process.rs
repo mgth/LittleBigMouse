@@ -63,7 +63,12 @@ fn exe_path_from_pid(pid: u32) -> Option<String> {
     let mut buf = [0u16; MAX_PATH as usize];
     let mut size = buf.len() as u32;
     let result = unsafe {
-        QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut size)
+        QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_WIN32,
+            PWSTR(buf.as_mut_ptr()),
+            &mut size,
+        )
     };
     unsafe {
         let _ = CloseHandle(handle);

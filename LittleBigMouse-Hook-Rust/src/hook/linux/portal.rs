@@ -45,7 +45,10 @@ pub fn available() -> bool {
 /// all (no portal service, no InputCapture support) so the caller can fall back
 /// to the X11 backend.
 pub fn run(shared: &'static Shared) -> bool {
-    let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("[LittleBigMouse.Hook] portal: no tokio runtime: {e}");
@@ -92,7 +95,10 @@ async fn run_async(shared: &'static Shared) -> bool {
 
     eprintln!("[LittleBigMouse.Hook] portal: session ok, connecting eis...");
     // ei stream: the channel the captured motions arrive on.
-    let Ok(fd) = input_capture.connect_to_eis(&session, Default::default()).await else {
+    let Ok(fd) = input_capture
+        .connect_to_eis(&session, Default::default())
+        .await
+    else {
         eprintln!("[LittleBigMouse.Hook] portal: ConnectToEIS failed");
         return false;
     };
@@ -367,7 +373,10 @@ async fn arm(
     shared: &Shared,
     barrier_zones: &mut std::collections::HashMap<u32, Rect<i32>>,
 ) -> Result<(), ashpd::Error> {
-    let zones = input_capture.zones(session, Default::default()).await?.response()?;
+    let zones = input_capture
+        .zones(session, Default::default())
+        .await?
+        .response()?;
 
     let barriers = {
         let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
@@ -420,10 +429,34 @@ fn layout_barriers(
         // edge at the coordinate, right/bottom at one past the last pixel,
         // inclusive endpoints along the edge.
         let edges = [
-            (&zone.left, bounds.left(), bounds.top(), bounds.left(), bounds.bottom() - 1),
-            (&zone.right, bounds.right(), bounds.top(), bounds.right(), bounds.bottom() - 1),
-            (&zone.top, bounds.left(), bounds.top(), bounds.right() - 1, bounds.top()),
-            (&zone.bottom, bounds.left(), bounds.bottom(), bounds.right() - 1, bounds.bottom()),
+            (
+                &zone.left,
+                bounds.left(),
+                bounds.top(),
+                bounds.left(),
+                bounds.bottom() - 1,
+            ),
+            (
+                &zone.right,
+                bounds.right(),
+                bounds.top(),
+                bounds.right(),
+                bounds.bottom() - 1,
+            ),
+            (
+                &zone.top,
+                bounds.left(),
+                bounds.top(),
+                bounds.right() - 1,
+                bounds.top(),
+            ),
+            (
+                &zone.bottom,
+                bounds.left(),
+                bounds.bottom(),
+                bounds.right() - 1,
+                bounds.bottom(),
+            ),
         ];
 
         for (links, x1, y1, x2, y2) in edges {

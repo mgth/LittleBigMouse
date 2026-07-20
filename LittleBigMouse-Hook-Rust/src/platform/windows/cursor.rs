@@ -2,13 +2,12 @@
 //! the freelook signals from `MouseEngine::IsFreelookActive`.
 
 use windows::Win32::Foundation::{POINT, RECT};
+use windows::Win32::System::SystemInformation::GetTickCount64;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL};
 use windows::Win32::UI::WindowsAndMessaging::{
     ClipCursor, GetClipCursor, GetCursorInfo, GetCursorPos, GetSystemMetrics, SetCursorPos,
-    CURSORINFO, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-    SM_YVIRTUALSCREEN,
+    CURSORINFO, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
-use windows::Win32::System::SystemInformation::GetTickCount64;
 
 use crate::engine::cursor::CursorEnv;
 use crate::geometry::{Point, Rect};
@@ -84,7 +83,10 @@ impl CursorEnv for Win32Cursor {
             let vs_top = GetSystemMetrics(SM_YVIRTUALSCREEN);
             let vs_right = vs_left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
             let vs_bottom = vs_top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            clip.left > vs_left || clip.top > vs_top || clip.right < vs_right || clip.bottom < vs_bottom
+            clip.left > vs_left
+                || clip.top > vs_top
+                || clip.right < vs_right
+                || clip.bottom < vs_bottom
         }
     }
 

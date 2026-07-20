@@ -100,14 +100,16 @@ impl MouseEngine {
         } else if self.was_freelook {
             env.tick_count().wrapping_sub(self.last_freelook_check)
                 >= self.layout.freelook_check_interval_ms as u64
-        } else if self.mode == Mode::ExtFirst || self.old_zone.is_none() {
+        } else if self.mode == Mode::ExtFirst {
             true
-        } else {
-            let bounds = self.layout.arena[self.old_zone.unwrap()].pixels_bounds();
+        } else if let Some(old_zone) = self.old_zone {
+            let bounds = self.layout.arena[old_zone].pixels_bounds();
             e.point.x() <= bounds.left()
                 || e.point.x() >= bounds.right() - 1
                 || e.point.y() <= bounds.top()
                 || e.point.y() >= bounds.bottom() - 1
+        } else {
+            true
         };
 
         if check_freelook {
@@ -436,10 +438,26 @@ impl MouseEngine {
         let mut p = Point::default();
 
         let borders = [
-            (Side::Left, Segment::new(bounds.top_left(), bounds.bottom_left()), true),
-            (Side::Right, Segment::new(bounds.top_right(), bounds.bottom_right()), true),
-            (Side::Top, Segment::new(bounds.top_left(), bounds.top_right()), false),
-            (Side::Bottom, Segment::new(bounds.bottom_left(), bounds.bottom_right()), false),
+            (
+                Side::Left,
+                Segment::new(bounds.top_left(), bounds.bottom_left()),
+                true,
+            ),
+            (
+                Side::Right,
+                Segment::new(bounds.top_right(), bounds.bottom_right()),
+                true,
+            ),
+            (
+                Side::Top,
+                Segment::new(bounds.top_left(), bounds.top_right()),
+                false,
+            ),
+            (
+                Side::Bottom,
+                Segment::new(bounds.bottom_left(), bounds.bottom_right()),
+                false,
+            ),
         ];
 
         for (side, border, use_y) in borders {
@@ -655,7 +673,10 @@ mod tests {
         let mut env = FakeCursor::new();
         let ev = feed(&mut eng, &mut env, -100, 1000);
         assert!(!ev.handled);
-        assert_eq!(eng.old_zone, eng.layout.containing_pixel(Point::new(-100, 1000)));
+        assert_eq!(
+            eng.old_zone,
+            eng.layout.containing_pixel(Point::new(-100, 1000))
+        );
     }
 
     #[test]
@@ -673,7 +694,7 @@ mod tests {
         let mut eng = engine();
         let mut env = FakeCursor::new();
         feed(&mut eng, &mut env, -100, 1000); // init in Left
-        // Move to Left's right edge (x=0): crosses into Right, y remapped by DPI.
+                                              // Move to Left's right edge (x=0): crosses into Right, y remapped by DPI.
         let ev = feed(&mut eng, &mut env, 0, 1000);
         assert!(ev.handled, "crossing must be handled");
         // to_target_pixel(1000) = (1000-(-225))*2160/(2642+225) = 922
@@ -691,14 +712,20 @@ mod tests {
     #[test]
     fn ctrl_bypasses_border_resistance() {
         // Give the border some resistance and confirm Ctrl punches straight through.
-        let xml = FIXTURE.replace(r#"BorderResistance="0" TargetId="1""#, r#"BorderResistance="500" TargetId="1""#);
+        let xml = FIXTURE.replace(
+            r#"BorderResistance="0" TargetId="1""#,
+            r#"BorderResistance="500" TargetId="1""#,
+        );
         let mut eng = MouseEngine::new();
         eng.load(ZonesLayout::from_xml(&xml).unwrap());
         let mut env = FakeCursor::new();
         env.ctrl = true;
         feed(&mut eng, &mut env, -100, 1000);
         let ev = feed(&mut eng, &mut env, 0, 1000);
-        assert!(ev.handled, "Ctrl should force the crossing despite resistance");
+        assert!(
+            ev.handled,
+            "Ctrl should force the crossing despite resistance"
+        );
         assert_eq!(env.pos, Point::new(0, 922));
     }
 
@@ -715,7 +742,10 @@ mod tests {
         assert_eq!(env.pos, Point::new(0, 922));
 
         let ev = feed(&mut eng, &mut env, 0, 921); // tangential move on the edge column
-        assert!(!ev.handled, "vertical move on the landing column must not re-cross");
+        assert!(
+            !ev.handled,
+            "vertical move on the landing column must not re-cross"
+        );
         assert_eq!(env.pos, Point::new(0, 922), "cursor must not be warped");
 
         let ev = feed(&mut eng, &mut env, -1, 921); // actually leaving: crosses back
@@ -749,7 +779,11 @@ mod tests {
             let ev = feed(&mut eng, &mut env, 0, 1000 - i - 1);
             assert!(!ev.handled);
         }
-        assert_eq!(crossed_at, Some(9), "10px of resistance -> pass on the 10th push");
+        assert_eq!(
+            crossed_at,
+            Some(9),
+            "10px of resistance -> pass on the 10th push"
+        );
     }
 
     #[test]
@@ -782,8 +816,14 @@ mod tests {
             let ev = feed(&mut eng, &mut env, 0, 1000 - i - 1); // tangential, contained
             assert!(!ev.handled);
         }
-        assert!(crossed.is_some(), "the drain must survive tangential frames and eventually pass");
-        assert!(crossed.unwrap() > 0, "resistance must actually resist the first push");
+        assert!(
+            crossed.is_some(),
+            "the drain must survive tangential frames and eventually pass"
+        );
+        assert!(
+            crossed.unwrap() > 0,
+            "resistance must actually resist the first push"
+        );
     }
 
     #[test]
@@ -804,7 +844,7 @@ mod tests {
         let mut eng = engine();
         let mut env = FakeCursor::new();
         feed(&mut eng, &mut env, -100, 1000); // old_zone points into the first arena
-        // Reload: the old arena is dropped; old_zone must not be dereferenced.
+                                              // Reload: the old arena is dropped; old_zone must not be dereferenced.
         eng.load(ZonesLayout::from_xml(FIXTURE).unwrap());
         assert_eq!(eng.old_zone, None);
         // A fresh event re-initializes cleanly (no panic on a stale ZoneId).

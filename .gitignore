@@ -200,3 +200,4 @@ LittleBigMouse/Control.Loader/setup/*.exe
 # Cargo puts Rust binaries under src/bin/ — do not let the .NET bin/ rule eat them.
 !LittleBigMouse-Hook-Rust/src/bin/
 !LittleBigMouse-Hook-Rust/src/bin/**
+artifacts/

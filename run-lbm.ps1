@@ -3,11 +3,8 @@
 
   Stops any running instance, builds the Rust hook daemon + the Avalonia UI,
   stages the daemon next to the UI (lbm-hook.exe -> LittleBigMouse.Hook.exe),
-  and relaunches the app elevated (the app manifest is requireAdministrator).
-
-  The script self-elevates with a SINGLE UAC prompt: the real work runs in the
-  elevated console window, which stays open at the end so you can read the build
-  output (or any error).
+  and relaunches the app at normal user integrity. If the in-app "Elevate the
+  mouse engine" option is enabled, only the Rust hook requests UAC elevation.
 
   Usage (from anywhere):
     powershell -ExecutionPolicy Bypass -File C:\dev\LittleBigMouse\run-lbm.ps1
@@ -27,17 +24,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-
-# --- self-elevate (single UAC prompt) -----------------------------------------
-$principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",'-Config',$Config)
-    if ($NoBuild)    { $argList += '-NoBuild' }
-    if ($SkipDaemon) { $argList += '-SkipDaemon' }
-    if ($NoLaunch)   { $argList += '-NoLaunch' }
-    Start-Process powershell -Verb RunAs -ArgumentList $argList
-    return
-}
 
 # --- paths --------------------------------------------------------------------
 $root       = $PSScriptRoot
@@ -63,11 +49,12 @@ function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 
 try {
-    # 1. stop running instance(s) (needs elevation — we are elevated here)
+    # 1. stop running same-integrity development instances
     $procs = Get-Process -Name 'LittleBigMouse.Ui.Avalonia','LittleBigMouse.Hook' -ErrorAction SilentlyContinue
     if ($procs) {
         Step ("Stopping running instance(s): {0}" -f ($procs.Id -join ', '))
-        $procs | Stop-Process -Force
+        try { $procs | Stop-Process -Force }
+        catch { Write-Host "!!  An elevated engine must be stopped from the app first." -ForegroundColor Yellow }
         Start-Sleep -Seconds 1
     }
 
@@ -107,10 +94,10 @@ try {
         else { Write-Host "!!  Rust daemon not found: $rustExe (skipping staging)" -ForegroundColor Yellow }
     }
 
-    # 5. launch (already elevated -> the child inherits, no second UAC prompt)
+    # 5. launch the UI at normal user integrity
     if (-not $NoLaunch) {
         if (-not (Test-Path $uiExe)) { throw "UI exe not found: $uiExe" }
-        Step 'Launching LittleBigMouse (elevated)'
+        Step 'Launching LittleBigMouse'
         Start-Process $uiExe
     }
 

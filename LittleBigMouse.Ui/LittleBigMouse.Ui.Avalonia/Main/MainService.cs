@@ -116,8 +116,7 @@ public class MainService : ReactiveModel, IMainService
             .DisposeWith(this);
 
         options.WhenAnyValue(
-                o => o.LoadAtStartup,
-                o => o.StartElevated)
+                o => o.LoadAtStartup)
             .Skip(1)
             .Where(_ => !layoutPersistence.IsLoading)
             .Subscribe(_ => (MonitorsLayout as MonitorsLayout)?.UpdateSchedule())

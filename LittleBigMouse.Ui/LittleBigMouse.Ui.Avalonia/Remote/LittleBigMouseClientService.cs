@@ -32,10 +32,12 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
     }
 
     readonly IDisplayController _displayController;
+    readonly ILayoutOptions _options;
 
     public LittleBigMouseClientService(ILayoutOptions options, IDisplayController displayController)
     {
         _displayController = displayController;
+        _options = options;
         _client = new LocalIpcClient();
 
         _client.ConnectionFailed += (sender, args) =>
@@ -141,21 +143,11 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
 
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = path,
-
-                //RedirectStandardOutput = true,
-                //RedirectStandardError = true,
-
-                #if DEBUG
-                UseShellExecute = true,
-                #else
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                #endif
-
-            };
+            // The UI always remains at the user's integrity level. Elevation is
+            // narrowly scoped to the mouse engine when the user explicitly asks
+            // for transitions over elevated applications.
+            var startInfo = DaemonLaunchPolicy.Create(path,
+                OperatingSystem.IsWindows() && _options.StartElevated);
 
             var process = new Process { StartInfo = startInfo};
 

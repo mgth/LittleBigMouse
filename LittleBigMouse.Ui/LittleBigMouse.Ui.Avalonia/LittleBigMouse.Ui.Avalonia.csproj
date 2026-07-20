@@ -105,7 +105,6 @@
 		<ProjectReference Include="..\..\LittleBigMouse.Plugins\LittleBigMouse.Plugin.Wallpaper.Avalonia\LittleBigMouse.Plugin.Wallpaper.Avalonia.csproj" />
 		<ProjectReference Include="..\..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Avalonia\LittleBigMouse.Plugins.Avalonia.csproj" />
 		<ProjectReference Include="..\..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Core\LittleBigMouse.Plugins.csproj" />
-		<ProjectReference Include="..\..\LittleBigMouse.Ui.Loader\LittleBigMouse.Ui.Loader.csproj" />
 		<ProjectReference Include="..\LittleBigMouse.Ui.Core\LittleBigMouse.Ui.Core.csproj" />
 		<ProjectReference Include="..\..\LittleBigMouse.Platform.Windows\LittleBigMouse.Platform.Windows.csproj" />
 		<ProjectReference Include="..\..\LittleBigMouse.Platform.Linux\LittleBigMouse.Platform.Linux.csproj" />

@@ -92,6 +92,8 @@ Little Big Mouse provides a single-window interface with three main sections:
 
 If you encounter any issues or have suggestions for improvements, please open an issue on our [Issues](https://github.com/mgth/LittleBigMouse/issues) page. We appreciate your feedback and are always looking to improve the tool.
 
+Little Big Mouse does not collect analytics or telemetry. See the [privacy policy](PRIVACY.md) for the limited network features and local data handling. Release signing and verification are documented in [SIGNING.md](SIGNING.md).
+
 **We Welcome Contributions**: Your help is invaluable! Whether it's reporting bugs, suggesting new features, or submitting pull requests, we encourage you to get involved. Your contributions can make a significant difference in the development and improvement of Little Big Mouse. **First time?** Check out [This guide](https://github.com/firstcontributions/first-contributions) to get started.
 
 ## Acknowledgements
@@ -99,5 +101,6 @@ If you encounter any issues or have suggestions for improvements, please open an
 - **HLab Project**: Little Big Mouse depends on the HLab project for its functionality. Check out the [HLab](https://github.com/mgth/HLab.Core) and [HLab.Avalonia](https://github.com/mgth/HLab.Avalonia) repositories for more information.
 - **MouseKeyboardActivityMonitor**: Inspired by the [MouseKeyboardActivityMonitor](https://github.com/gmamaladze/globalmousekeyhook) project.
 - **Task Scheduler Managed Wrapper**: Utilizes the [Task Scheduler Managed Wrapper](https://github.com/dahall/TaskScheduler) for scheduling tasks.
+- **SignPath Foundation**: Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
 
 Thank you for using Little Big Mouse!

@@ -93,6 +93,12 @@ impl MouseEngine {
     // --- entry: freelook gate + dispatch (C++ MouseEngine::OnMouseMove) -------
 
     pub fn on_mouse_move<E: CursorEnv>(&mut self, env: &mut E, e: &mut MouseEventArg) {
+        if self.should_resync_external_move(env, e) {
+            self.resync_external_move(env, e.point);
+            e.handled = false;
+            return;
+        }
+
         let check_freelook = if !self.layout.freelook_enabled {
             // detection switched off (#502): resume immediately if it had fired
             self.was_freelook = false;
@@ -134,6 +140,62 @@ impl MouseEngine {
                 Mode::Cross => self.on_mouse_move_cross(env, e),
             }
         }
+    }
+
+    /// Programmatic placements are authoritative. Windows marks SendInput-style
+    /// moves as injected, but SetCursorPos arrives with flags=0; for that case a
+    /// large jump whose hook point agrees with GetCursorPos and lands well inside
+    /// another zone is treated as a discontinuity. Ordinary linked crossings
+    /// land in a narrow edge envelope and continue through the mapping logic.
+    fn should_resync_external_move(&self, env: &impl CursorEnv, e: &MouseEventArg) -> bool {
+        if self.mode == Mode::ExtFirst {
+            return false;
+        }
+        if e.injected {
+            return true;
+        }
+        if env.get_mouse_location() != e.point {
+            return false;
+        }
+
+        let Some(old_zone) = self.old_zone else {
+            return false;
+        };
+        let Some(target_zone) = self.layout.containing_pixel(e.point) else {
+            return false;
+        };
+        if target_zone == old_zone {
+            return false;
+        }
+
+        let dx = (e.point.x() as i64 - self.old_point.x() as i64).abs();
+        let dy = (e.point.y() as i64 - self.old_point.y() as i64).abs();
+        if dx.max(dy) < 256 {
+            return false;
+        }
+
+        let bounds = self.layout.arena[target_zone].pixels_bounds();
+        let margin_x = 32.min((bounds.width().saturating_sub(1) / 4).max(1));
+        let margin_y = 32.min((bounds.height().saturating_sub(1) / 4).max(1));
+        e.point.x() >= bounds.left() + margin_x
+            && e.point.x() < bounds.right() - margin_x
+            && e.point.y() >= bounds.top() + margin_y
+            && e.point.y() < bounds.bottom() - margin_y
+    }
+
+    fn resync_external_move(&mut self, env: &mut impl CursorEnv, point: Point<i32>) {
+        self.reset_clip(env);
+        self.current_resistance = None;
+        self.old_point = point;
+        self.old_zone = self.layout.containing_pixel(point);
+        self.mode = if self.old_zone.is_some() {
+            match self.layout.algorithm {
+                Algorithm::Strait => Mode::Straight,
+                Algorithm::CornerCrossing => Mode::Cross,
+            }
+        } else {
+            Mode::ExtFirst
+        };
     }
 
     fn is_freelook_active(&self, env: &impl CursorEnv) -> bool {
@@ -707,6 +769,39 @@ mod tests {
             .find(|&&z| eng.layout.arena[z].name == "Right")
             .unwrap();
         assert_eq!(eng.old_zone, Some(right));
+    }
+
+    #[test]
+    fn programmatic_jump_into_another_zone_is_not_remapped_to_its_edge() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -1000, 1000);
+
+        // SetCursorPos-style jump: the absolute hook point and GetCursorPos agree
+        // on a destination deep inside another monitor.
+        env.pos = Point::new(1000, 1000);
+        let ev = feed(&mut eng, &mut env, 1000, 1000);
+
+        assert!(!ev.handled, "the requested destination must pass through");
+        assert_eq!(env.pos, Point::new(1000, 1000));
+        assert_eq!(eng.old_point, Point::new(1000, 1000));
+        assert_eq!(eng.old_zone, eng.layout.containing_pixel(env.pos));
+    }
+
+    #[test]
+    fn injected_move_resynchronizes_even_near_a_linked_edge() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -10, 1000);
+
+        env.pos = Point::new(10, 1000);
+        let mut ev = MouseEventArg::new(env.pos);
+        ev.injected = true;
+        eng.on_mouse_move(&mut env, &mut ev);
+
+        assert!(!ev.handled);
+        assert_eq!(eng.old_point, Point::new(10, 1000));
+        assert_eq!(eng.old_zone, eng.layout.containing_pixel(env.pos));
     }
 
     #[test]

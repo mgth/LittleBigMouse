@@ -42,8 +42,8 @@ pub fn receive_message(
             Command::Stop => {
                 // C++ Stop: unhook and clear the pause flag. `Stopped` is
                 // broadcast from the unhook path.
-                hook::request_unhook(shared);
                 shared.paused.store(false, Ordering::SeqCst);
+                hook::set_enabled(shared, false);
             }
             Command::State => {
                 send_state(server, Some(client_id), shared);
@@ -68,9 +68,7 @@ pub fn receive_message(
 /// C++ `LittleBigMouseDaemon::ReceiveLoadMessage`: stop hooking, parse the
 /// layout into the engine, and adopt its priorities for the next hook.
 fn load_layout(shared: &Shared, xml: &str) {
-    if shared.hooked.load(Ordering::SeqCst) {
-        hook::request_unhook(shared);
-    }
+    hook::set_enabled(shared, false);
     if let Some(layout) = ZonesLayout::from_xml(xml) {
         let (zones, main) = (layout.zones.len(), layout.main_zones.len());
         shared
@@ -105,9 +103,12 @@ fn load_layout(shared: &Shared, xml: &str) {
 /// re-arm — both correct.
 fn run(shared: &Shared) {
     load_excluded(shared);
-    if !shared.paused.load(Ordering::SeqCst) {
-        hook::request_hook(shared);
-    }
+    let foreground = crate::platform::process::foreground_process_path();
+    let excluded = foreground
+        .as_deref()
+        .is_some_and(|path| shared.is_excluded(path));
+    shared.paused.store(excluded, Ordering::SeqCst);
+    hook::set_enabled(shared, true);
 }
 
 /// C++ `LoadExcluded`: read `Excluded.txt`, skipping blank lines and `:` comments.
@@ -155,17 +156,21 @@ fn replay(shared: &Shared, content: &str) {
 /// when paused, else `Stopped`. `to = Some(id)` replies to one client; `None`
 /// broadcasts to all listening clients.
 fn send_state(server: &ServerHandle, to: Option<ClientId>, shared: &Shared) {
-    let msg = if shared.hooked.load(Ordering::SeqCst) {
-        protocol::RUNNING
-    } else if shared.paused.load(Ordering::SeqCst) {
-        protocol::PAUSED
-    } else {
-        protocol::STOPPED
-    };
+    let msg = state_message(shared);
 
     match to {
         Some(id) => server.send_to(id, msg),
         None => server.broadcast(msg),
+    }
+}
+
+fn state_message(shared: &Shared) -> &'static str {
+    if shared.hooked.load(Ordering::SeqCst) {
+        protocol::RUNNING
+    } else if shared.enabled.load(Ordering::SeqCst) && shared.paused.load(Ordering::SeqCst) {
+        protocol::PAUSED
+    } else {
+        protocol::STOPPED
     }
 }
 
@@ -210,5 +215,15 @@ mod tests {
             shared.want_hook.load(Ordering::SeqCst),
             "Run must express the desired state even while the previous hook is still up"
         );
+    }
+
+    #[test]
+    fn disabled_engine_reports_stopped_even_if_foreground_is_excluded() {
+        let shared = Shared::new();
+        shared.paused.store(true, Ordering::SeqCst);
+        assert_eq!(state_message(&shared), protocol::STOPPED);
+
+        shared.enabled.store(true, Ordering::SeqCst);
+        assert_eq!(state_message(&shared), protocol::PAUSED);
     }
 }

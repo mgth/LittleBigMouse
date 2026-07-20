@@ -17,8 +17,8 @@ use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetCursorPos, GetMessageW, PostThreadMessageW, SetWindowsHookExW,
-    TranslateMessage, UnhookWindowsHookEx, EVENT_OBJECT_FOCUS, EVENT_SYSTEM_DESKTOPSWITCH, HHOOK,
-    MSG, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_QUIT,
+    TranslateMessage, UnhookWindowsHookEx, EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_FOREGROUND,
+    HHOOK, MSG, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_QUIT,
 };
 
 use crate::ipc::protocol;
@@ -206,10 +206,10 @@ impl Hooker {
     fn hook_focus(&mut self) {
         self.focus_hook = unsafe {
             SetWinEventHook(
-                EVENT_OBJECT_FOCUS,
-                EVENT_OBJECT_FOCUS,
+                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_FOREGROUND,
                 HMODULE::default(),
-                Some(win_events::focus_proc),
+                Some(win_events::foreground_proc),
                 0,
                 0,
                 WINEVENT_OUTOFCONTEXT,

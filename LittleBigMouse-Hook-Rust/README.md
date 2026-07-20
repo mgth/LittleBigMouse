@@ -46,19 +46,18 @@ cargo clippy --all-targets
 Cargo rejects a target named with a `.`, so the binary builds as **`lbm-hook.exe`**
 and must be renamed to **`LittleBigMouse.Hook.exe`** (the name the UI's
 `FindHookPath` / `GetProcessesByName` and the installer expect) when staging.
-`stage.ps1` does this; CI does it in the "Stage hook" step when `HOOK_IMPL=rust`.
+`stage.ps1` and CI both do this when staging the portable application.
 
 ## Environment overrides
 
 | Variable | Effect |
 |---|---|
-| `LBM_HOOK_PORT` | Listen on a non-default port (side-by-side testing next to a running C++ daemon; the port is irrelevant to the global hook itself) |
+| `LBM_HOOK_PORT` | Listen on a non-default port for isolated development tests |
 | `LBM_HOOK_UI` | Force UI mode (wait for socket commands) instead of parent-process detection — used by test scripts |
 | `LBM_HOOK_DEBUG` | Print a stderr heartbeat: `hooked` / `mouse_events` / `crossings` |
 
-## CI coexistence
+## Shipped implementation
 
-`.github/workflows/dotnet-desktop.yml` builds the C++ hook by default
-(`HOOK_IMPL=cpp`). A manual `workflow_dispatch` with `hook_impl=rust` builds and
-ships this daemon instead. The C++ project stays in the solution until the Rust
-port reaches full parity.
+The memory-safe Rust daemon is the only hook built, staged, and packaged. The
+legacy C++ source remains as historical porting reference but is not part of the
+solution or any distributable path.

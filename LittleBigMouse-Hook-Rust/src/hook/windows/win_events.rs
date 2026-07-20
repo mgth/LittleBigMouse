@@ -1,10 +1,9 @@
-//! WinEvent callbacks — port of `Hooker::WindowChangeHook` / `DesktopChangeHook`.
+//! Foreground and desktop WinEvent callbacks.
 //!
-//! Registered `WINEVENT_OUTOFCONTEXT`, so the system posts them to the pump
-//! thread's queue and they run during `DispatchMessage` — never re-entrant with
-//! `do_hook`/`do_unhook`.
+//! `WINEVENT_OUTOFCONTEXT` posts callbacks to the pump thread, so these never
+//! re-enter hook installation/removal.
 
-use std::cell::Cell;
+use std::cell::RefCell;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::HWINEVENTHOOK;
@@ -12,17 +11,17 @@ use windows::Win32::UI::Accessibility::HWINEVENTHOOK;
 use crate::shared::SHARED;
 
 thread_local! {
-    /// C++ `static lastHwnd` — dedups repeated focus events for the same window.
-    static LAST_HWND: Cell<isize> = const { Cell::new(0) };
+    /// Deduplicate only identical foreground process identities. Control-focus
+    /// churn within an application is irrelevant to process exclusions.
+    static LAST_PATH: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
 /// # Safety
-/// Invoked by Windows as a `WINEVENTPROC` for `EVENT_OBJECT_FOCUS`; never call
-/// it directly.
-pub unsafe extern "system" fn focus_proc(
+/// Invoked by Windows for `EVENT_SYSTEM_FOREGROUND`; never call directly.
+pub unsafe extern "system" fn foreground_proc(
     _hook: HWINEVENTHOOK,
     _event: u32,
-    hwnd: HWND,
+    _hwnd: HWND,
     _id_object: i32,
     _id_child: i32,
     _thread: u32,
@@ -30,31 +29,30 @@ pub unsafe extern "system" fn focus_proc(
 ) {
     crate::hook::guard(|| {
         let Some(shared) = SHARED.get() else { return };
-
-        let key = hwnd.0 as isize;
-        let changed = LAST_HWND.with(|last| {
-            if last.get() != key {
-                last.set(key);
-                true
-            } else {
-                false
-            }
-        });
-        if !changed {
+        let Some(path) = crate::platform::process::foreground_process_path() else {
+            return;
+        };
+        if path.is_empty() {
             return;
         }
 
-        if let Some(path) = crate::platform::process::exe_path_from_window(hwnd) {
-            if !path.is_empty() {
-                crate::hook::on_focus_changed(shared, path);
+        let duplicate = LAST_PATH.with(|last| {
+            let mut last = last.borrow_mut();
+            let same = crate::platform::process::path_contains(&last, &path)
+                && crate::platform::process::path_contains(&path, &last);
+            if !same {
+                *last = path.clone();
             }
+            same
+        });
+        if !duplicate {
+            crate::hook::on_focus_changed(shared, path);
         }
     });
 }
 
 /// # Safety
-/// Invoked by Windows as a `WINEVENTPROC` for `EVENT_SYSTEM_DESKTOPSWITCH`;
-/// never call it directly.
+/// Invoked by Windows for `EVENT_SYSTEM_DESKTOPSWITCH`; never call directly.
 pub unsafe extern "system" fn desktop_proc(
     _hook: HWINEVENTHOOK,
     _event: u32,

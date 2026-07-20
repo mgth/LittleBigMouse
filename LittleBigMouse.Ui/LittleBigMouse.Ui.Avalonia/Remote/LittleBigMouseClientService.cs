@@ -201,9 +201,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     /// <summary>
     /// Locate the hook daemon without depending on the .NET target framework folder
     /// (net8.0, net9.0, net10.0, ...). Deployed builds keep the hook next to the UI; in the
-    /// dev tree the Rust hook (the default on every platform) is built under
-    /// LittleBigMouse-Hook-Rust/target, and the Windows C++ hook (opt-out) under
-    /// LittleBigMouse.Hook\bin (own platform/config layout, no TFM subfolder).
+    /// dev tree the Rust hook is built under LittleBigMouse-Hook-Rust/target.
     /// Resistant to .NET version, platform (AnyCPU/x64) and configuration (Debug/Release) changes.
     /// </summary>
     static string? FindHookPath()
@@ -236,15 +234,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
                     Path.Combine(target, "debug", rustExe),
                 }
                 .FirstOrDefault(File.Exists);
-            if (rust is not null || !OperatingSystem.IsWindows()) return rust;
-
-            // C++ hook fallback (Windows opt-out builds).
-            var hookBin = Path.Combine(root, "LittleBigMouse.Hook", "bin");
-            if (!Directory.Exists(hookBin)) return null;
-
-            return Directory.EnumerateFiles(hookBin, HookExeName, SearchOption.AllDirectories)
-                .OrderByDescending(p => p.Contains($"{sep}{config}{sep}", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault();
+            return rust;
         }
         catch
         {

@@ -71,6 +71,12 @@ jobs:
         LittleBigMouse.Plugins\LittleBigMouse.Plugin.Vcp.Avalonia.Tests\LittleBigMouse.Plugin.Vcp.Avalonia.Tests.csproj
         -c ${{ matrix.configuration }} -p:Platform=x64
 
+    - name: Test UI lifecycle
+      run: >-
+        dotnet test
+        LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia.Tests\LittleBigMouse.Ui.Avalonia.Tests.csproj
+        -c ${{ matrix.configuration }} -p:Platform=x64
+
     - name: Check NuGet vulnerabilities
       if: matrix.configuration == 'Release'
       run: dotnet list LittleBigMouse.sln package --vulnerable --include-transitive

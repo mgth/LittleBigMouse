@@ -150,6 +150,7 @@ public class SamsungTizenProtocolTests
             var loaded = new SamsungTizenSettingsStore(path).Get("SAM123");
             Assert.NotNull(loaded);
             Assert.Equal("secret", loaded.Token);
+            Assert.DoesNotContain("secret", File.ReadAllText(path), StringComparison.Ordinal);
         }
         finally
         {

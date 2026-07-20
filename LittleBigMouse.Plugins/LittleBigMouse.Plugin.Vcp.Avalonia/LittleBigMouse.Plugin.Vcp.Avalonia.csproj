@@ -23,6 +23,7 @@
 	  <!-- 2.1.0-dev line targets Avalonia 12 (2.0.x stable is built against Avalonia 11:
 	       CartesianChart dies on the removed Gestures.PinchEvent field at XAML load). -->
 	  <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.1.0-dev-798" />
+	  <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

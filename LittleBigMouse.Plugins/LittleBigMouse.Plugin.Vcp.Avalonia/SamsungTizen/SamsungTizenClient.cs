@@ -5,14 +5,21 @@ using System.Text;
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 
 /// <summary>One serialized local remote-control channel to a Samsung Tizen display.</summary>
-public sealed class SamsungTizenClient(string ipAddress, string token = "") : IAsyncDisposable
+public sealed class SamsungTizenClient(
+    string ipAddress,
+    string token = "",
+    string expectedCertificateFingerprint = "",
+    bool allowNewCertificate = false) : IAsyncDisposable
 {
     readonly SemaphoreSlim _gate = new(1, 1);
     ClientWebSocket? _socket;
     string _token = token;
+    readonly DeviceCertificatePin _certificatePin = new(
+        expectedCertificateFingerprint, allowNewCertificate);
 
     public string Token => _token;
     public bool Connected => _socket?.State == WebSocketState.Open;
+    public string ServerCertificateFingerprint => _certificatePin.ObservedFingerprint;
 
     public async Task<string> ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -60,10 +67,7 @@ public sealed class SamsungTizenClient(string ipAddress, string token = "") : IA
         var socket = new ClientWebSocket();
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
 
-        // Samsung uses a device-generated certificate. Restricting the connection to the
-        // explicitly selected IPv4 address prevents this exception from becoming a general
-        // trust policy for the application.
-        socket.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        socket.Options.RemoteCertificateValidationCallback = _certificatePin.Validate;
         _socket = socket;
 
         try

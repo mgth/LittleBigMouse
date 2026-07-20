@@ -37,6 +37,15 @@ public sealed class HisenseVidaaService : IHisenseVidaaService, IAsyncDisposable
     {
         if (!IPAddress.TryParse(ip.Trim(), out var address) || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) throw new ArgumentException("Enter a valid IPv4 address.");
         var c=_store.Get(id) ?? new HisenseVidaaConfiguration { MonitorId=id };
+        if (!c.IpAddress.Equals(ip.Trim(), StringComparison.Ordinal))
+        {
+            c.ServerCertificateFingerprint = "";
+            c.ClientId = "";
+            c.MqttUsername = "";
+            c.AccessToken = "";
+            c.RefreshToken = "";
+            c.LegacyAuthorized = false;
+        }
         c.IpAddress=ip.Trim(); c.MacAddress=mac.Trim(); c.DeviceUuid=uuid.Trim();
         c.ClientCertificatePath = VidaaCertificate.Resolve(certificatePath);
         if (string.IsNullOrWhiteSpace(c.ClientCertificatePassword)) c.ClientCertificatePassword = VidaaCertificate.DefaultPassword;

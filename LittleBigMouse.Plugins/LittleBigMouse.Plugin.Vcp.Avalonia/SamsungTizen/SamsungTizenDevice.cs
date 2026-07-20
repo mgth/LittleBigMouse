@@ -27,6 +27,7 @@ public sealed class SamsungTizenConfiguration
     public string IpAddress { get; set; } = "";
     public string MacAddress { get; set; } = "";
     public string Token { get; set; } = "";
+    public string ServerCertificateFingerprint { get; set; } = "";
     public string DeviceId { get; set; } = "";
     public string Name { get; set; } = "Samsung display";
     public string ModelName { get; set; } = "";

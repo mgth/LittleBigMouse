@@ -30,6 +30,17 @@ fn endpoint() -> String {
     }
 }
 
+#[test]
+fn server_can_start_from_synchronous_main_without_an_existing_tokio_reactor() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+
+    let result = std::panic::catch_unwind(|| server::start_with_endpoint(shared, endpoint));
+
+    assert!(result.is_ok(), "local IPC construction must not panic");
+    assert!(result.unwrap().is_ok(), "local IPC endpoint must bind");
+}
+
 #[cfg(windows)]
 async fn connect(endpoint: &str) -> Box<dyn TestStream> {
     use tokio::net::windows::named_pipe::ClientOptions;

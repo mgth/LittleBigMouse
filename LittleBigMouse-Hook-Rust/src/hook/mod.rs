@@ -84,7 +84,6 @@ pub(crate) fn on_resume(shared: &Shared) {
     // suspend (or the OS set one during the display transition), a leftover sub-virtual-screen clip
     // makes the engine read "freelook" and stop crossing. Release it before the UI re-Starts us.
     crate::platform::cursor::release_clip();
-    reconcile_hook(shared);
     shared.broadcast(protocol::RESUMED);
 }
 
@@ -154,5 +153,24 @@ mod tests {
 
         assert!(!shared.paused.load(Ordering::SeqCst));
         assert!(shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn resume_waits_for_the_ui_to_reload_the_display_layout() {
+        let shared = Shared::new();
+        shared.enabled.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+        shared.hooked.store(true, Ordering::SeqCst);
+
+        on_suspend(&shared);
+        shared.hooked.store(false, Ordering::SeqCst);
+        on_resume(&shared);
+
+        assert!(!shared.suspended.load(Ordering::SeqCst));
+        assert!(shared.enabled.load(Ordering::SeqCst));
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "the UI must reload/revalidate the topology before re-hooking"
+        );
     }
 }

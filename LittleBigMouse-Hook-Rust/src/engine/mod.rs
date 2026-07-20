@@ -168,6 +168,22 @@ impl MouseEngine {
             return false;
         }
 
+        // A genuine physical transition may arrive far inside the destination
+        // on the next low-level-hook frame (high pointer velocity and mixed-DPI
+        // desktop coordinates both do this). If tracking was already at a source
+        // edge, preserve the normal LBM link mapping instead of mistaking that
+        // large frame for SetCursorPos.
+        let old_bounds = self.layout.arena[old_zone].pixels_bounds();
+        const SOURCE_EDGE_ENVELOPE_PX: i32 = 64;
+        if old_bounds.contains(self.old_point)
+            && (self.old_point.x() - old_bounds.left() <= SOURCE_EDGE_ENVELOPE_PX
+                || old_bounds.right() - 1 - self.old_point.x() <= SOURCE_EDGE_ENVELOPE_PX
+                || self.old_point.y() - old_bounds.top() <= SOURCE_EDGE_ENVELOPE_PX
+                || old_bounds.bottom() - 1 - self.old_point.y() <= SOURCE_EDGE_ENVELOPE_PX)
+        {
+            return false;
+        }
+
         let dx = (e.point.x() as i64 - self.old_point.x() as i64).abs();
         let dy = (e.point.y() as i64 - self.old_point.y() as i64).abs();
         if dx.max(dy) < 256 {
@@ -786,6 +802,26 @@ mod tests {
         assert_eq!(env.pos, Point::new(1000, 1000));
         assert_eq!(eng.old_point, Point::new(1000, 1000));
         assert_eq!(eng.old_zone, eng.layout.containing_pixel(env.pos));
+    }
+
+    #[test]
+    fn large_physical_crossing_from_source_edge_still_uses_lbm_mapping() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -1, 1000);
+
+        // Windows can report the next physical frame well inside the adjacent
+        // desktop at high velocity or across mixed-DPI coordinate spaces. The
+        // previous point at the source edge proves this is an ordinary crossing,
+        // not a teleport from the source interior.
+        env.pos = Point::new(1000, 1000);
+        let ev = feed(&mut eng, &mut env, 1000, 1000);
+
+        assert!(
+            ev.handled,
+            "LBM must map a crossing that began at the source edge"
+        );
+        assert_eq!(env.pos, Point::new(0, 922));
     }
 
     #[test]

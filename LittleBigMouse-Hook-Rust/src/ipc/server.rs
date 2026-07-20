@@ -134,12 +134,12 @@ pub fn start_with_endpoint(
     shared: &'static Shared,
     endpoint: String,
 ) -> io::Result<(ServerHandle, String)> {
-    let acceptor = transport::Acceptor::bind(&endpoint)?;
     let (command_tx, command_rx) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
     let handle = ServerHandle::new(command_tx);
     let worker_handle = handle.clone();
     let accept_handle = handle.clone();
     let diagnostic = endpoint.clone();
+    let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
 
     std::thread::Builder::new()
         .name("lbm-local-ipc".to_string())
@@ -150,10 +150,25 @@ pub fn start_with_endpoint(
                 .build()
                 .expect("local IPC runtime");
             runtime.block_on(async move {
+                // Tokio's Windows named-pipe constructor requires an active
+                // reactor. Production starts IPC from synchronous main(), so
+                // bind inside the runtime rather than before spawning it.
+                let acceptor = match transport::Acceptor::bind(&endpoint) {
+                    Ok(acceptor) => acceptor,
+                    Err(error) => {
+                        let _ = ready_tx.send(Err(error));
+                        return;
+                    }
+                };
+                let _ = ready_tx.send(Ok(()));
                 tokio::spawn(command_worker(command_rx, worker_handle, shared));
                 acceptor.run(accept_handle, shared).await;
             });
         })?;
+
+    ready_rx
+        .recv()
+        .map_err(|_| io::Error::other("local IPC thread exited before binding its endpoint"))??;
 
     Ok((handle, diagnostic))
 }

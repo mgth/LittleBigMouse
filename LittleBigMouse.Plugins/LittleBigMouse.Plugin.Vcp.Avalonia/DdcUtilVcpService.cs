@@ -29,7 +29,9 @@ public partial class DdcUtilVcpService : IVcpService
     {
         lock (_lock)
         {
-            if (_controls.TryGetValue(monitor.Id, out var cached)) return cached;
+            if (_controls.TryGetValue(monitor.Id, out var cached) && !cached.IsDisposed)
+                return cached;
+            _controls.Remove(monitor.Id);
 
             // A view-model is created for every monitor in the same activation
             // wave. Share one short-lived DRM snapshot instead of rereading all

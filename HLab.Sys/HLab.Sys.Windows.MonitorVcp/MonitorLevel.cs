@@ -40,17 +40,27 @@ public interface IWorkProvider
 }
 
 public class MonitorLevel(
-   CommandWorker parser,
+   CommandWorker worker,
    VcpGetter getter, VcpSetter setter,
    VcpComponent component = VcpComponent.None)
-   : ReactiveObject, IWorkProvider
+   : ReactiveObject, IWorkProvider, IDisposable
 {
+    int _queued;
+    int _disposed;
+
     public VcpComponent Component { get; } = component;
 
     public MonitorLevel Start()
     {
-        parser.Enqueue(this);
+        RequestWork();
         return this;
+    }
+
+    void RequestWork()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        if (Interlocked.CompareExchange(ref _queued, 1, 0) == 0)
+            worker.Enqueue(this);
     }
 
     public void SetToMax() { Value = Max; }
@@ -78,6 +88,9 @@ public class MonitorLevel(
 
     void IWorkProvider.DoWork()
     {
+        Interlocked.Exchange(ref _queued, 0);
+        if (Volatile.Read(ref _disposed) != 0) return;
+
         // First get current value
         getter(Component).Switch((v =>
             {
@@ -98,6 +111,7 @@ public class MonitorLevel(
                     if (setter(Value, Component))
                     {
                         _retryWrite = MAX_RETRY;
+                        RequestWork();
                     }
                     else if (_retryWrite-- <= 0)
                     {
@@ -108,12 +122,13 @@ public class MonitorLevel(
                     {
                         // if failed, wait a bit
                         Thread.Sleep(100);
+                        RequestWork();
                     }
                     return;
                 }
 
                 // if not moving, set local value to remote one
-                Value = v.value;
+                this.RaiseAndSetIfChanged(ref _value, v.value, nameof(Value));
                 Moving = false;
             }), 
             error =>
@@ -125,10 +140,9 @@ public class MonitorLevel(
                 else
                 {
                     Thread.Sleep(100);
+                    RequestWork();
                 }
             });
-
-         parser.Enqueue(this);
     }
 
     uint _value;
@@ -144,6 +158,7 @@ public class MonitorLevel(
                 this.RaiseAndSetIfChanged(ref _value, value);
                 Moving = true;
             }
+            RequestWork();
         }
     }
 
@@ -160,5 +175,11 @@ public class MonitorLevel(
         private set => this.RaiseAndSetIfChanged(ref _max, value);
     }
     uint _max;
+
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _disposed, 1);
+        GC.SuppressFinalize(this);
+    }
 
 }

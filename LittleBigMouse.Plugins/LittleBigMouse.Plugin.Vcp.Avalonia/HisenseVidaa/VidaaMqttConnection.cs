@@ -22,6 +22,7 @@ internal sealed class VidaaMqttConnection : IAsyncDisposable
 
     public event Action<string, byte[], bool>? MessageReceived;
     public bool Connected => _connected;
+    public string ServerCertificateFingerprint { get; private set; } = "";
 
     public async Task ConnectAsync(
         string host,
@@ -31,16 +32,20 @@ internal sealed class VidaaMqttConnection : IAsyncDisposable
         string password,
         string certificatePath,
         string certificatePassword,
+        string expectedCertificateFingerprint,
+        bool allowNewCertificate,
         CancellationToken cancellationToken)
     {
         await DisposeConnectionAsync().ConfigureAwait(false);
         _tcpClient = new TcpClient(AddressFamily.InterNetwork);
         await _tcpClient.ConnectAsync(host, port, cancellationToken).ConfigureAwait(false);
 
+        var certificatePin = new DeviceCertificatePin(
+            expectedCertificateFingerprint, allowNewCertificate);
         var ssl = new SslStream(
             _tcpClient.GetStream(),
             leaveInnerStreamOpen: false,
-            (_, _, _, _) => true);
+            certificatePin.Validate);
         var certificates = new X509CertificateCollection();
         if (!string.IsNullOrWhiteSpace(certificatePath))
         {
@@ -69,6 +74,8 @@ internal sealed class VidaaMqttConnection : IAsyncDisposable
             throw new AuthenticationException(
                 "VIDAA rejected TLS. Select the PKCS#12 client certificate extracted from the official app.", e);
         }
+
+        ServerCertificateFingerprint = certificatePin.ObservedFingerprint;
 
         _stream = ssl;
         await WritePacketAsync(BuildConnectPacket(clientId, username, password), cancellationToken)

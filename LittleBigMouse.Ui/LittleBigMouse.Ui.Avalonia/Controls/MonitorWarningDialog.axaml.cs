@@ -84,6 +84,24 @@ public partial class MonitorWarningDialog : Window
         return (confirmed, confirmed && dialog.ScaleCheckBox.IsChecked == true);
     }
 
+    public static async Task ShowFailureAsync(Window? owner, string action)
+    {
+        var dialog = new MonitorWarningDialog
+        {
+            Title = "Display change failed"
+        };
+        dialog.HeadingText.Text = $"Windows could not {action}.";
+        dialog.BodyText.Text = "LittleBigMouse stopped the operation and restored the last known desktop configuration. No partial monitor layout was intentionally applied.";
+        dialog.RecoveryTitle.Text = "What to do next:";
+        dialog.Step1.Text = "Open Settings > System > Display and confirm that every monitor is connected and using a supported mode, then try again.";
+        dialog.Step2.IsVisible = false;
+        dialog.Step3.IsVisible = false;
+        dialog.DontShowAgainCheckBox.IsVisible = false;
+        dialog.CancelButton.IsVisible = false;
+        dialog.ConfirmButton.Content = "OK";
+        await dialog.ShowAsync(owner);
+    }
+
     /// <summary>
     /// Returns whether the user confirmed the action, and whether the warning
     /// should be hidden from now on (only honoured when confirmed).

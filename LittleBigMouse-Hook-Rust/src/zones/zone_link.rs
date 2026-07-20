@@ -42,7 +42,8 @@ impl ZoneLink {
             // i64 like to_target_pixel: catch-all links carry i32::MIN/MAX sentinel
             // bounds, so the i32 subtraction overflows once a resistance is set.
             border_resistance_px = ((border_resistance / (to - from))
-                * (source_to_px as i64 - source_from_px as i64) as f64) as i32;
+                * (source_to_px as i64 - source_from_px as i64) as f64)
+                as i32;
         }
 
         ZoneLink {
@@ -69,7 +70,8 @@ impl ZoneLink {
         if s_len == 0 {
             return self.target_from_px;
         }
-        ((v as i64 - self.source_from_px as i64) * t_len / s_len + self.target_from_px as i64) as i32
+        ((v as i64 - self.source_from_px as i64) * t_len / s_len + self.target_from_px as i64)
+            as i32
     }
 }
 

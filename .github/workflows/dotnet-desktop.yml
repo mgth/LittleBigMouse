@@ -1,10 +1,7 @@
-# Build LittleBigMouse: managed UI (net10 / Avalonia) + native hook daemon (x64,
-# Rust by default, C++ as opt-out).
-# - Push / PR on master: build everything, upload a portable artifact.
-# - Tag v*: additionally compile the InnoSetup installer and attach it to a
-#   draft GitHub release for manual review before publishing.
+# Validate every platform before producing artifacts. Tag builds are signed by
+# SignPath Foundation, verified, attested, and only then attached to a draft release.
 
-name: Build
+name: Build and test
 
 on:
   push:
@@ -13,110 +10,325 @@ on:
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
-    inputs:
-      hook_impl:
-        description: 'Hook daemon implementation to build and ship'
-        default: 'rust'
-        type: choice
-        options: [ rust, cpp ]
+
+permissions:
+  contents: read
 
 env:
-  # Which hook daemon to build/stage. The Rust port is the default on every
-  # build; the C++ implementation stays available as an opt-out via
-  # workflow_dispatch while it remains in the tree.
-  HOOK_IMPL: ${{ github.event.inputs.hook_impl || 'rust' }}
   UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
-  HOOK_PROJECT: LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj
   HOOK_RUST_PROJECT: LittleBigMouse-Hook-Rust\Cargo.toml
-  UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
+  PUBLISH_OUTPUT: artifacts\publish\win-x64
 
 jobs:
-  build:
+  windows:
+    name: Windows ${{ matrix.configuration }}
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [ Debug, Release ]
 
     steps:
-    - name: Checkout (with submodules)
-      uses: actions/checkout@v4
+    - name: Checkout with submodules
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
 
     - name: Install .NET SDK
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
       with:
         dotnet-version: 10.0.x
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-
     - name: Derive version from tag
       id: ver
+      shell: pwsh
       run: |
         if ("${{ github.ref }}" -like "refs/tags/v*") {
-          $v = "${{ github.ref_name }}" -replace '^v',''
+          $version = "${{ github.ref_name }}" -replace '^v', ''
         } else {
-          $v = ""
+          $version = ""
         }
-        "version=$v" >> $env:GITHUB_OUTPUT
-        Write-Host "Release version: '$v'"
+        "version=$version" >> $env:GITHUB_OUTPUT
 
-    - name: Build UI (net10, x64 Release)
+    - name: Build UI
+      shell: pwsh
       run: |
-        $buildArgs = @('-c','Release','-p:Platform=x64')
-        if ("${{ steps.ver.outputs.version }}") { $buildArgs += "-p:Version=${{ steps.ver.outputs.version }}" }
+        $buildArgs = @('-c', '${{ matrix.configuration }}', '-p:Platform=x64')
+        if ("${{ steps.ver.outputs.version }}") {
+          $buildArgs += '-p:Version=${{ steps.ver.outputs.version }}'
+        }
         dotnet build $env:UI_PROJECT @buildArgs
 
-    - name: Build hook (C++, x64 Release)
-      if: env.HOOK_IMPL == 'cpp'
-      run: msbuild $env:HOOK_PROJECT /m /p:Configuration=Release /p:Platform=x64
+    - name: Test display layout
+      run: >-
+        dotnet test
+        LittleBigMouse.Core\LittleBigMouse.DisplayLayout.Tests\LittleBigMouse.DisplayLayout.Tests.csproj
+        -c ${{ matrix.configuration }} -p:Platform=x64
 
-    # windows-latest ships a stable Rust toolchain preinstalled, so no install step.
-    - name: Build hook (Rust, release)
-      if: env.HOOK_IMPL == 'rust'
+    - name: Test VCP and smart-TV protocols
+      run: >-
+        dotnet test
+        LittleBigMouse.Plugins\LittleBigMouse.Plugin.Vcp.Avalonia.Tests\LittleBigMouse.Plugin.Vcp.Avalonia.Tests.csproj
+        -c ${{ matrix.configuration }} -p:Platform=x64
+
+    - name: Test UI lifecycle and updater security
+      run: >-
+        dotnet test
+        LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia.Tests\LittleBigMouse.Ui.Avalonia.Tests.csproj
+        -c ${{ matrix.configuration }} -p:Platform=x64
+
+    - name: Check NuGet vulnerabilities
+      if: matrix.configuration == 'Release'
+      run: dotnet list LittleBigMouse.sln package --vulnerable --include-transitive
+
+    - name: Check Rust formatting
+      if: matrix.configuration == 'Release'
+      run: cargo fmt --all --manifest-path $env:HOOK_RUST_PROJECT -- --check
+
+    - name: Test all Rust targets
+      if: matrix.configuration == 'Release'
+      run: cargo test --all-targets --manifest-path $env:HOOK_RUST_PROJECT
+
+    - name: Lint all Rust targets
+      if: matrix.configuration == 'Release'
+      run: cargo clippy --all-targets --manifest-path $env:HOOK_RUST_PROJECT -- -D warnings
+
+    - name: Audit Rust dependencies
+      if: matrix.configuration == 'Release'
+      shell: pwsh
+      run: |
+        cargo install cargo-audit --locked --version 0.22.2
+        cargo audit --file LittleBigMouse-Hook-Rust\Cargo.lock
+
+    - name: Build Rust hook
+      if: matrix.configuration == 'Release'
       run: cargo build --release --manifest-path $env:HOOK_RUST_PROJECT
 
-    - name: Stage hook next to UI output
-      # Cargo can't emit a target named with a '.', so the Rust binary is built as
-      # lbm-hook.exe and renamed to the contract name here.
+    - name: Publish self-contained Windows x64 application
+      if: matrix.configuration == 'Release'
+      shell: pwsh
       run: |
-        if ($env:HOOK_IMPL -eq 'rust') {
-          Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
-        } else {
-          Copy-Item LittleBigMouse.Hook\bin\x64\Release\LittleBigMouse.Hook.exe $env:UI_OUTPUT\
+        $publishArgs = @(
+          $env:UI_PROJECT, '-c', 'Release', '-p:Platform=x64',
+          '-f', 'net10.0', '-r', 'win-x64', '--self-contained', 'true',
+          '-p:PublishSingleFile=false', '-p:PublishTrimmed=false',
+          '-o', $env:PUBLISH_OUTPUT
+        )
+        if ("${{ steps.ver.outputs.version }}") {
+          $publishArgs += '-p:Version=${{ steps.ver.outputs.version }}'
         }
+        dotnet publish @publishArgs
+        Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe `
+          (Join-Path $env:PUBLISH_OUTPUT 'LittleBigMouse.Hook.exe')
 
-    - name: Upload portable artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: LittleBigMouse-portable
-        path: |
-          ${{ env.UI_OUTPUT }}
-          !${{ env.UI_OUTPUT }}\runtimes\linux*\**
-          !${{ env.UI_OUTPUT }}\runtimes\osx*\**
-
-    - name: Compile installer (InnoSetup)
-      if: startsWith(github.ref, 'refs/tags/v')
+    - name: Verify least-privilege self-contained package
+      if: matrix.configuration == 'Release'
+      shell: pwsh
       run: |
-        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=${{ steps.ver.outputs.version }}" "/DHookImpl=${{ env.HOOK_IMPL }}" LittleBigMouse.Setup\LittleBigMouse.iss
+        $exe = Join-Path $env:PUBLISH_OUTPUT 'LittleBigMouse.Ui.Avalonia.exe'
+        foreach ($required in @($exe, (Join-Path $env:PUBLISH_OUTPUT 'coreclr.dll'),
+            (Join-Path $env:PUBLISH_OUTPUT 'hostfxr.dll'),
+            (Join-Path $env:PUBLISH_OUTPUT 'LittleBigMouse.Hook.exe'))) {
+          if (-not (Test-Path -LiteralPath $required)) { throw "Missing packaged file: $required" }
+        }
+        [xml]$manifest = Get-Content LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\app.manifest
+        $level = $manifest.assembly.trustInfo.security.requestedPrivileges.requestedExecutionLevel.level
+        if ($level -ne 'asInvoker') { throw "UI manifest level is $level, expected asInvoker" }
 
-    - name: Upload installer artifact
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: actions/upload-artifact@v4
+    - name: Upload unsigned CI portable
+      if: matrix.configuration == 'Release' && !startsWith(github.ref, 'refs/tags/v')
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
-        name: LittleBigMouse-installer
-        path: LittleBigMouse.Setup\LittleBigMouse_*.exe
+        name: LittleBigMouse-portable-unsigned-ci
+        path: ${{ env.PUBLISH_OUTPUT }}
+        retention-days: 7
 
-    - name: Create draft release
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v2
+    - name: Upload application for release signing
+      if: matrix.configuration == 'Release' && startsWith(github.ref, 'refs/tags/v')
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: LittleBigMouse-unsigned-win-x64
+        path: ${{ env.PUBLISH_OUTPUT }}
+        retention-days: 2
+
+  rust-linux:
+    name: Rust Linux
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: recursive
+
+    - name: Install native build prerequisites
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes libwayland-dev libxkbcommon-dev
+
+    - name: Check formatting
+      run: cargo fmt --all --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml -- --check
+
+    - name: Test all targets
+      run: cargo test --all-targets --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml
+
+    - name: Lint all targets
+      run: cargo clippy --all-targets --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml -- -D warnings
+
+  release:
+    name: Sign and draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ windows, rust-linux ]
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    steps:
+    - name: Checkout signed source revision
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: recursive
+
+    - name: Install .NET SDK
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Download validated unsigned application
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      with:
+        name: LittleBigMouse-unsigned-win-x64
+        path: artifacts/unsigned-app
+
+    - name: Upload application signing input
+      id: upload-unsigned-app
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: LittleBigMouse-signing-input-${{ github.run_id }}
+        path: artifacts/unsigned-app
+        retention-days: 2
+
+    - name: Sign application binaries with SignPath Foundation
+      uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
+      with:
+        api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+        organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+        signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        artifact-configuration-slug: ${{ vars.SIGNPATH_APPLICATION_ARTIFACT_CONFIGURATION_SLUG }}
+        github-artifact-id: ${{ steps.upload-unsigned-app.outputs.artifact-id }}
+        wait-for-completion: true
+        output-artifact-directory: artifacts/signed-app
+        parameters: |
+          version: ${{ toJSON(github.ref_name) }}
+
+    - name: Verify signed application publishers
+      shell: pwsh
+      run: |
+        $ui = Get-ChildItem artifacts/signed-app -Recurse -Filter LittleBigMouse.Ui.Avalonia.exe |
+          Select-Object -First 1
+        if (-not $ui) { throw 'Signed application was not returned by SignPath' }
+        $signedAppDir = $ui.Directory.FullName
+        $targets = @($ui.FullName, (Join-Path $signedAppDir 'LittleBigMouse.Hook.exe'))
+        foreach ($target in $targets) {
+          if (-not (Test-Path -LiteralPath $target)) { throw "Missing signed binary: $target" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $target
+          if ($signature.Status -ne 'Valid') { throw "$target signature: $($signature.StatusMessage)" }
+          if ($signature.SignerCertificate.GetNameInfo('SimpleName', $false) -ne 'SignPath Foundation') {
+            throw "$target has unexpected publisher $($signature.SignerCertificate.Subject)"
+          }
+        }
+        "SIGNED_APP_DIR=$signedAppDir" >> $env:GITHUB_ENV
+
+    - name: Compile installer from signed self-contained files
+      shell: pwsh
+      run: |
+        $version = '${{ github.ref_name }}' -replace '^v', ''
+        $publish = (Resolve-Path $env:SIGNED_APP_DIR).Path
+        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+          "/DAppVer=$version" "/DPublishDir=$publish" `
+          LittleBigMouse.Setup\LittleBigMouse.iss
+
+    - name: Upload installer signing input
+      id: upload-unsigned-installer
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: LittleBigMouse-installer-signing-input-${{ github.run_id }}
+        path: LittleBigMouse.Setup/LittleBigMouse_*.exe
+        retention-days: 2
+
+    - name: Sign installer with SignPath Foundation
+      uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
+      with:
+        api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+        organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+        signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        artifact-configuration-slug: ${{ vars.SIGNPATH_INSTALLER_ARTIFACT_CONFIGURATION_SLUG }}
+        github-artifact-id: ${{ steps.upload-unsigned-installer.outputs.artifact-id }}
+        wait-for-completion: true
+        output-artifact-directory: artifacts/signed-installer
+        parameters: |
+          version: ${{ toJSON(github.ref_name) }}
+
+    - name: Verify installer and assemble release bundle
+      shell: pwsh
+      run: |
+        $version = '${{ github.ref_name }}' -replace '^v', ''
+        $installer = Get-ChildItem artifacts/signed-installer -Recurse -Filter "LittleBigMouse_$version.exe" | Select-Object -First 1
+        if (-not $installer) { throw 'Signed installer was not returned by SignPath' }
+        $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+        if ($signature.Status -ne 'Valid') { throw "Installer signature: $($signature.StatusMessage)" }
+        if ($signature.SignerCertificate.GetNameInfo('SimpleName', $false) -ne 'SignPath Foundation') {
+          throw "Unexpected installer publisher $($signature.SignerCertificate.Subject)"
+        }
+        New-Item artifacts/release -ItemType Directory -Force | Out-Null
+        Copy-Item $installer.FullName "artifacts/release/LittleBigMouse_$version.exe"
+        Compress-Archive -Path "$env:SIGNED_APP_DIR/*" `
+          -DestinationPath "artifacts/release/LittleBigMouse_${version}_win-x64.zip"
+
+    - name: Generate CycloneDX SBOM
+      shell: pwsh
+      run: |
+        $version = '${{ github.ref_name }}' -replace '^v', ''
+        dotnet tool install CycloneDX --version 6.2.0 --tool-path artifacts/tools
+        artifacts/tools/dotnet-CycloneDX.exe LittleBigMouse.sln `
+          -o artifacts/release -fn "LittleBigMouse_${version}.cdx.json" `
+          -F Json -t -sv "$version" -sn LittleBigMouse
+
+    - name: Generate SHA-256 checksums
+      shell: pwsh
+      run: |
+        Get-ChildItem artifacts/release -File | Sort-Object Name | ForEach-Object {
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
+          "$hash  $($_.Name)"
+        } | Set-Content artifacts/release/SHA256SUMS.txt -Encoding ascii
+
+    - name: Attest release provenance
+      uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+      with:
+        subject-path: artifacts/release/*
+
+    - name: Upload final signed release bundle
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: LittleBigMouse-signed-release-${{ github.ref_name }}
+        path: artifacts/release
+        retention-days: 30
+
+    - name: Create draft release from verified artifacts
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         draft: true
-        # Name the release with the bare numeric version (not the "v5.3.0" tag): the
-        # in-app updater parses the release name as a Version, and a "v" prefix or a
-        # word breaks it (shows "online version 0.0" and blocks the upgrade).
-        name: ${{ steps.ver.outputs.version }}
-        files: LittleBigMouse.Setup\LittleBigMouse_*.exe
+        name: ${{ github.ref_name }}
+        files: artifacts/release/*
         generate_release_notes: true
-        # Default sponsor footer for the draft (shows above the generated notes;
-        # keep it when hand-editing the release body).
         body: |
-          💜 If Little Big Mouse is useful to you, consider [sponsoring the project](https://github.com/sponsors/mgth).
+          Windows binaries and the installer are Authenticode-signed by SignPath Foundation.
+          Verify provenance with `gh attestation verify --repo ${{ github.repository }} <file>`.
+
+          Free code signing provided by SignPath.io, certificate by SignPath Foundation.

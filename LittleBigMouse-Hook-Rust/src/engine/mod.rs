@@ -93,6 +93,12 @@ impl MouseEngine {
     // --- entry: freelook gate + dispatch (C++ MouseEngine::OnMouseMove) -------
 
     pub fn on_mouse_move<E: CursorEnv>(&mut self, env: &mut E, e: &mut MouseEventArg) {
+        if self.should_resync_external_move(env, e) {
+            self.resync_external_move(env, e.point);
+            e.handled = false;
+            return;
+        }
+
         let check_freelook = if !self.layout.freelook_enabled {
             // detection switched off (#502): resume immediately if it had fired
             self.was_freelook = false;
@@ -100,14 +106,16 @@ impl MouseEngine {
         } else if self.was_freelook {
             env.tick_count().wrapping_sub(self.last_freelook_check)
                 >= self.layout.freelook_check_interval_ms as u64
-        } else if self.mode == Mode::ExtFirst || self.old_zone.is_none() {
+        } else if self.mode == Mode::ExtFirst {
             true
-        } else {
-            let bounds = self.layout.arena[self.old_zone.unwrap()].pixels_bounds();
+        } else if let Some(old_zone) = self.old_zone {
+            let bounds = self.layout.arena[old_zone].pixels_bounds();
             e.point.x() <= bounds.left()
                 || e.point.x() >= bounds.right() - 1
                 || e.point.y() <= bounds.top()
                 || e.point.y() >= bounds.bottom() - 1
+        } else {
+            true
         };
 
         if check_freelook {
@@ -132,6 +140,78 @@ impl MouseEngine {
                 Mode::Cross => self.on_mouse_move_cross(env, e),
             }
         }
+    }
+
+    /// Programmatic placements are authoritative. Windows marks SendInput-style
+    /// moves as injected, but SetCursorPos arrives with flags=0; for that case a
+    /// large jump whose hook point agrees with GetCursorPos and lands well inside
+    /// another zone is treated as a discontinuity. Ordinary linked crossings
+    /// land in a narrow edge envelope and continue through the mapping logic.
+    fn should_resync_external_move(&self, env: &impl CursorEnv, e: &MouseEventArg) -> bool {
+        if self.mode == Mode::ExtFirst {
+            return false;
+        }
+        if e.injected {
+            return true;
+        }
+        if env.get_mouse_location() != e.point {
+            return false;
+        }
+
+        let Some(old_zone) = self.old_zone else {
+            return false;
+        };
+        let Some(target_zone) = self.layout.containing_pixel(e.point) else {
+            return false;
+        };
+        if target_zone == old_zone {
+            return false;
+        }
+
+        // A genuine physical transition may arrive far inside the destination
+        // on the next low-level-hook frame (high pointer velocity and mixed-DPI
+        // desktop coordinates both do this). If tracking was already at a source
+        // edge, preserve the normal LBM link mapping instead of mistaking that
+        // large frame for SetCursorPos.
+        let old_bounds = self.layout.arena[old_zone].pixels_bounds();
+        const SOURCE_EDGE_ENVELOPE_PX: i32 = 64;
+        if old_bounds.contains(self.old_point)
+            && (self.old_point.x() - old_bounds.left() <= SOURCE_EDGE_ENVELOPE_PX
+                || old_bounds.right() - 1 - self.old_point.x() <= SOURCE_EDGE_ENVELOPE_PX
+                || self.old_point.y() - old_bounds.top() <= SOURCE_EDGE_ENVELOPE_PX
+                || old_bounds.bottom() - 1 - self.old_point.y() <= SOURCE_EDGE_ENVELOPE_PX)
+        {
+            return false;
+        }
+
+        let dx = (e.point.x() as i64 - self.old_point.x() as i64).abs();
+        let dy = (e.point.y() as i64 - self.old_point.y() as i64).abs();
+        if dx.max(dy) < 256 {
+            return false;
+        }
+
+        let bounds = self.layout.arena[target_zone].pixels_bounds();
+        let margin_x = 32.min((bounds.width().saturating_sub(1) / 4).max(1));
+        let margin_y = 32.min((bounds.height().saturating_sub(1) / 4).max(1));
+        e.point.x() >= bounds.left() + margin_x
+            && e.point.x() < bounds.right() - margin_x
+            && e.point.y() >= bounds.top() + margin_y
+            && e.point.y() < bounds.bottom() - margin_y
+    }
+
+    fn resync_external_move(&mut self, env: &mut impl CursorEnv, point: Point<i32>) {
+        self.reset_clip(env);
+        self.current_resistance = None;
+        self.old_point = point;
+        self.old_zone = self.layout.containing_pixel(point);
+        self.mode = if self.old_zone.is_some() {
+            match self.layout.algorithm {
+                Algorithm::Strait => Mode::Straight,
+                Algorithm::CornerCrossing => Mode::Cross,
+            }
+        } else {
+            Mode::ExtFirst
+        };
     }
 
     fn is_freelook_active(&self, env: &impl CursorEnv) -> bool {
@@ -436,10 +516,26 @@ impl MouseEngine {
         let mut p = Point::default();
 
         let borders = [
-            (Side::Left, Segment::new(bounds.top_left(), bounds.bottom_left()), true),
-            (Side::Right, Segment::new(bounds.top_right(), bounds.bottom_right()), true),
-            (Side::Top, Segment::new(bounds.top_left(), bounds.top_right()), false),
-            (Side::Bottom, Segment::new(bounds.bottom_left(), bounds.bottom_right()), false),
+            (
+                Side::Left,
+                Segment::new(bounds.top_left(), bounds.bottom_left()),
+                true,
+            ),
+            (
+                Side::Right,
+                Segment::new(bounds.top_right(), bounds.bottom_right()),
+                true,
+            ),
+            (
+                Side::Top,
+                Segment::new(bounds.top_left(), bounds.top_right()),
+                false,
+            ),
+            (
+                Side::Bottom,
+                Segment::new(bounds.bottom_left(), bounds.bottom_right()),
+                false,
+            ),
         ];
 
         for (side, border, use_y) in borders {
@@ -655,7 +751,10 @@ mod tests {
         let mut env = FakeCursor::new();
         let ev = feed(&mut eng, &mut env, -100, 1000);
         assert!(!ev.handled);
-        assert_eq!(eng.old_zone, eng.layout.containing_pixel(Point::new(-100, 1000)));
+        assert_eq!(
+            eng.old_zone,
+            eng.layout.containing_pixel(Point::new(-100, 1000))
+        );
     }
 
     #[test]
@@ -673,7 +772,7 @@ mod tests {
         let mut eng = engine();
         let mut env = FakeCursor::new();
         feed(&mut eng, &mut env, -100, 1000); // init in Left
-        // Move to Left's right edge (x=0): crosses into Right, y remapped by DPI.
+                                              // Move to Left's right edge (x=0): crosses into Right, y remapped by DPI.
         let ev = feed(&mut eng, &mut env, 0, 1000);
         assert!(ev.handled, "crossing must be handled");
         // to_target_pixel(1000) = (1000-(-225))*2160/(2642+225) = 922
@@ -689,16 +788,75 @@ mod tests {
     }
 
     #[test]
+    fn programmatic_jump_into_another_zone_is_not_remapped_to_its_edge() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -1000, 1000);
+
+        // SetCursorPos-style jump: the absolute hook point and GetCursorPos agree
+        // on a destination deep inside another monitor.
+        env.pos = Point::new(1000, 1000);
+        let ev = feed(&mut eng, &mut env, 1000, 1000);
+
+        assert!(!ev.handled, "the requested destination must pass through");
+        assert_eq!(env.pos, Point::new(1000, 1000));
+        assert_eq!(eng.old_point, Point::new(1000, 1000));
+        assert_eq!(eng.old_zone, eng.layout.containing_pixel(env.pos));
+    }
+
+    #[test]
+    fn large_physical_crossing_from_source_edge_still_uses_lbm_mapping() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -1, 1000);
+
+        // Windows can report the next physical frame well inside the adjacent
+        // desktop at high velocity or across mixed-DPI coordinate spaces. The
+        // previous point at the source edge proves this is an ordinary crossing,
+        // not a teleport from the source interior.
+        env.pos = Point::new(1000, 1000);
+        let ev = feed(&mut eng, &mut env, 1000, 1000);
+
+        assert!(
+            ev.handled,
+            "LBM must map a crossing that began at the source edge"
+        );
+        assert_eq!(env.pos, Point::new(0, 922));
+    }
+
+    #[test]
+    fn injected_move_resynchronizes_even_near_a_linked_edge() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -10, 1000);
+
+        env.pos = Point::new(10, 1000);
+        let mut ev = MouseEventArg::new(env.pos);
+        ev.injected = true;
+        eng.on_mouse_move(&mut env, &mut ev);
+
+        assert!(!ev.handled);
+        assert_eq!(eng.old_point, Point::new(10, 1000));
+        assert_eq!(eng.old_zone, eng.layout.containing_pixel(env.pos));
+    }
+
+    #[test]
     fn ctrl_bypasses_border_resistance() {
         // Give the border some resistance and confirm Ctrl punches straight through.
-        let xml = FIXTURE.replace(r#"BorderResistance="0" TargetId="1""#, r#"BorderResistance="500" TargetId="1""#);
+        let xml = FIXTURE.replace(
+            r#"BorderResistance="0" TargetId="1""#,
+            r#"BorderResistance="500" TargetId="1""#,
+        );
         let mut eng = MouseEngine::new();
         eng.load(ZonesLayout::from_xml(&xml).unwrap());
         let mut env = FakeCursor::new();
         env.ctrl = true;
         feed(&mut eng, &mut env, -100, 1000);
         let ev = feed(&mut eng, &mut env, 0, 1000);
-        assert!(ev.handled, "Ctrl should force the crossing despite resistance");
+        assert!(
+            ev.handled,
+            "Ctrl should force the crossing despite resistance"
+        );
         assert_eq!(env.pos, Point::new(0, 922));
     }
 
@@ -715,7 +873,10 @@ mod tests {
         assert_eq!(env.pos, Point::new(0, 922));
 
         let ev = feed(&mut eng, &mut env, 0, 921); // tangential move on the edge column
-        assert!(!ev.handled, "vertical move on the landing column must not re-cross");
+        assert!(
+            !ev.handled,
+            "vertical move on the landing column must not re-cross"
+        );
         assert_eq!(env.pos, Point::new(0, 922), "cursor must not be warped");
 
         let ev = feed(&mut eng, &mut env, -1, 921); // actually leaving: crosses back
@@ -749,7 +910,11 @@ mod tests {
             let ev = feed(&mut eng, &mut env, 0, 1000 - i - 1);
             assert!(!ev.handled);
         }
-        assert_eq!(crossed_at, Some(9), "10px of resistance -> pass on the 10th push");
+        assert_eq!(
+            crossed_at,
+            Some(9),
+            "10px of resistance -> pass on the 10th push"
+        );
     }
 
     #[test]
@@ -782,8 +947,14 @@ mod tests {
             let ev = feed(&mut eng, &mut env, 0, 1000 - i - 1); // tangential, contained
             assert!(!ev.handled);
         }
-        assert!(crossed.is_some(), "the drain must survive tangential frames and eventually pass");
-        assert!(crossed.unwrap() > 0, "resistance must actually resist the first push");
+        assert!(
+            crossed.is_some(),
+            "the drain must survive tangential frames and eventually pass"
+        );
+        assert!(
+            crossed.unwrap() > 0,
+            "resistance must actually resist the first push"
+        );
     }
 
     #[test]
@@ -804,7 +975,7 @@ mod tests {
         let mut eng = engine();
         let mut env = FakeCursor::new();
         feed(&mut eng, &mut env, -100, 1000); // old_zone points into the first arena
-        // Reload: the old arena is dropped; old_zone must not be dereferenced.
+                                              // Reload: the old arena is dropped; old_zone must not be dereferenced.
         eng.load(ZonesLayout::from_xml(FIXTURE).unwrap());
         assert_eq!(eng.old_zone, None);
         // A fresh event re-initializes cleanly (no panic on a stale ZoneId).

@@ -42,17 +42,25 @@ public sealed class SamsungTizenService : ISamsungTizenService, IAsyncDisposable
             MacAddress = !string.IsNullOrWhiteSpace(device.MacAddress)
                 ? device.MacAddress
                 : macAddress?.Trim() ?? existing?.MacAddress ?? "",
-            Token = existing?.IpAddress == device.IpAddress ? existing.Token : "",
+            // Explicit Pair always requests a fresh on-device authorization before
+            // accepting a new certificate, so an old token is never exposed to a
+            // replacement endpoint.
+            Token = "",
+            ServerCertificateFingerprint = existing?.IpAddress == device.IpAddress
+                ? existing.ServerCertificateFingerprint : "",
             DeviceId = device.DeviceId,
             Name = device.Name,
             ModelName = device.ModelName,
             PictureMacro = existing?.PictureMacro ?? "",
         };
 
-        var client = new SamsungTizenClient(configuration.IpAddress, configuration.Token);
+        var client = new SamsungTizenClient(configuration.IpAddress,
+            expectedCertificateFingerprint: configuration.ServerCertificateFingerprint,
+            allowNewCertificate: true);
         try
         {
             configuration.Token = await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            configuration.ServerCertificateFingerprint = client.ServerCertificateFingerprint;
         }
         catch
         {
@@ -78,7 +86,11 @@ public sealed class SamsungTizenService : ISamsungTizenService, IAsyncDisposable
             throw new ArgumentException("Enter a valid IPv4 address.", nameof(ipAddress));
 
         var configuration = _store.Get(monitorId) ?? new SamsungTizenConfiguration { MonitorId = monitorId };
-        if (!configuration.IpAddress.Equals(ipAddress.Trim(), StringComparison.Ordinal)) configuration.Token = "";
+        if (!configuration.IpAddress.Equals(ipAddress.Trim(), StringComparison.Ordinal))
+        {
+            configuration.Token = "";
+            configuration.ServerCertificateFingerprint = "";
+        }
         configuration.IpAddress = ipAddress.Trim();
         configuration.MacAddress = macAddress.Trim();
         _store.Save(configuration);
@@ -139,7 +151,8 @@ public sealed class SamsungTizenService : ISamsungTizenService, IAsyncDisposable
         lock (_lock)
         {
             if (_clients.TryGetValue(monitorId, out var client)) return client;
-            client = new SamsungTizenClient(configuration.IpAddress, configuration.Token);
+            client = new SamsungTizenClient(configuration.IpAddress, configuration.Token,
+                configuration.ServerCertificateFingerprint);
             _clients[monitorId] = client;
             return client;
         }

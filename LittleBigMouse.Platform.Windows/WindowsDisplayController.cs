@@ -1,11 +1,29 @@
 #nullable enable
 using System.Collections.Generic;
+using System.Linq;
 using HLab.Geo;
 using HLab.Sys.Windows.Monitors.Factory;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Platform.Windows;
+
+public interface IWindowsDisplayTransaction
+{
+    bool Stage(DisplaySource source, Rect bounds);
+    bool Commit();
+    bool Restore();
+}
+
+sealed class NativeWindowsDisplayTransaction : IWindowsDisplayTransaction
+{
+    public bool Stage(DisplaySource source, Rect bounds)
+        => MonitorDeviceHelper.AttachToDesktop(source.InterfacePath, source.Primary,
+            bounds, source.Orientation, apply: false);
+
+    public bool Commit() => MonitorDeviceHelper.ApplyDesktop();
+    public bool Restore() => MonitorDeviceHelper.ResaveCurrentConfiguration();
+}
 
 /// <summary>
 /// Windows implementation of <see cref="IDisplayController"/>: reads the opaque
@@ -14,6 +32,13 @@ namespace LittleBigMouse.Platform.Windows;
 /// </summary>
 public class WindowsDisplayController : IDisplayController
 {
+    readonly IWindowsDisplayTransaction _transaction;
+
+    public WindowsDisplayController() : this(new NativeWindowsDisplayTransaction()) { }
+
+    public WindowsDisplayController(IWindowsDisplayTransaction transaction)
+        => _transaction = transaction;
+
     public bool SetPrimary(DisplaySource source)
         => MonitorDeviceHelper.SetPrimary(source.InterfacePath);
 
@@ -38,14 +63,22 @@ public class WindowsDisplayController : IDisplayController
 
         if (changed.Count == 0) return true;
 
-        var ok = true;
-        foreach (var (source, position) in changed)
-            ok &= MonitorDeviceHelper.AttachToDesktop(
-                source.InterfacePath, source.Primary,
-                new Rect(position, source.InPixel.Bounds.Size), source.Orientation,
-                apply: false);
+        if (changed.Any(item => string.IsNullOrWhiteSpace(item.Source.InterfacePath)
+            || item.Source.InPixel.Bounds.Width <= 0
+            || item.Source.InPixel.Bounds.Height <= 0))
+            return false;
 
-        MonitorDeviceHelper.ApplyDesktop();
-        return ok;
+        foreach (var (source, position) in changed)
+        {
+            if (_transaction.Stage(source,
+                    new Rect(position, source.InPixel.Bounds.Size))) continue;
+
+            _transaction.Restore();
+            return false;
+        }
+
+        if (_transaction.Commit()) return true;
+        _transaction.Restore();
+        return false;
     }
 }

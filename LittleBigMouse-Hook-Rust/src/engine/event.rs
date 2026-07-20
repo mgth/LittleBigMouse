@@ -10,6 +10,9 @@ pub struct MouseEventArg {
     /// Whether the hook is active. A synthetic `running = false` event is fed on
     /// unhook so the engine restores any clip it set.
     pub running: bool,
+    /// The low-level hook marked this move as injected. Injected moves are
+    /// authoritative cursor placements and must never be remapped.
+    pub injected: bool,
 }
 
 impl MouseEventArg {
@@ -18,6 +21,7 @@ impl MouseEventArg {
             point,
             handled: false,
             running: true,
+            injected: false,
         }
     }
 }

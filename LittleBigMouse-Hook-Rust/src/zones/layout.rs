@@ -343,11 +343,7 @@ mod tests {
         let (_, right) = zone_by_name(&layout, "Right"); // pixels (0,0,3840,2160), physical (0,0,698,393)
 
         // DPI ~ 139.7 for a 3840px / 698mm panel.
-        assert!(
-            (139.0..140.0).contains(&right.dpi),
-            "dpi was {}",
-            right.dpi
-        );
+        assert!((139.0..140.0).contains(&right.dpi), "dpi was {}", right.dpi);
 
         assert!(right.contains_pixel(Point::new(100, 100)));
         assert!(!right.contains_pixel(Point::new(-1, 100)));
@@ -368,8 +364,14 @@ mod tests {
         let (right_id, _) = zone_by_name(&layout, "Right");
 
         // A pixel inside the Left panel resolves to Left (not its clone).
-        assert_eq!(layout.containing_pixel(Point::new(-100, 100)), Some(left_id));
-        assert_eq!(layout.containing_pixel(Point::new(100, 100)), Some(right_id));
+        assert_eq!(
+            layout.containing_pixel(Point::new(-100, 100)),
+            Some(left_id)
+        );
+        assert_eq!(
+            layout.containing_pixel(Point::new(100, 100)),
+            Some(right_id)
+        );
         assert_eq!(layout.containing_pixel(Point::new(99999, 99999)), None);
     }
 }

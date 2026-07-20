@@ -13,6 +13,9 @@ use crate::ipc::server::ServerHandle;
 use crate::priority::Priority;
 
 pub struct Shared {
+    /// Whether the user/UI asked Little Big Mouse to run. This is intentionally
+    /// separate from `want_hook`, which also accounts for exclusions and sleep.
+    pub enabled: AtomicBool,
     /// The low-level mouse hook is currently installed (C++ `Hooker::Hooked`).
     pub hooked: AtomicBool,
     /// Desired hooking state (C++ `Hooker::_hookMouse`); the pump reconciles the
@@ -49,6 +52,7 @@ pub struct Shared {
 impl Shared {
     pub fn new() -> Self {
         Shared {
+            enabled: AtomicBool::new(false),
             hooked: AtomicBool::new(false),
             want_hook: AtomicBool::new(false),
             paused: AtomicBool::new(false),
@@ -80,7 +84,15 @@ impl Shared {
         let excluded = self.excluded.lock().unwrap();
         excluded
             .iter()
-            .any(|line| line.len() > 1 && path.contains(line.as_str()))
+            .any(|line| line.len() > 1 && crate::platform::process::path_contains(path, line))
+    }
+
+    /// Effective desired hook state. Every state transition reconciles through
+    /// this single predicate so asynchronous install/uninstall cannot win a race.
+    pub fn should_hook(&self) -> bool {
+        self.enabled.load(std::sync::atomic::Ordering::SeqCst)
+            && !self.paused.load(std::sync::atomic::Ordering::SeqCst)
+            && !self.suspended.load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 
@@ -107,6 +119,9 @@ mod tests {
         ];
         assert!(shared.is_excluded(r"D:\SteamLibrary\steamapps\common\Game\game.exe"));
         assert!(shared.is_excluded(r"C:\Program Files\Epic Games\Launcher\x.exe"));
+        if cfg!(windows) {
+            assert!(shared.is_excluded(r"C:\PROGRAM FILES\EPIC GAMES\Launcher\x.exe"));
+        }
         assert!(!shared.is_excluded(r"C:\Windows\explorer.exe"));
         assert!(!shared.is_excluded(""));
     }

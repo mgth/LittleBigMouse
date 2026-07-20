@@ -112,21 +112,24 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
     {
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowDetachAsync)) return;
 
-        _controller?.DetachFromDesktop(Model.ActiveSource.Source);
+        if (_controller?.DetachFromDesktop(Model.ActiveSource.Source) == false)
+            await MonitorWarningDialog.ShowFailureAsync(owner, "detach this monitor");
     }
 
     async Task AttachToDesktopAsync(Window? owner)
     {
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowAttachAsync)) return;
 
-        _controller?.AttachToDesktop(Model.ActiveSource.Source);
+        if (_controller?.AttachToDesktop(Model.ActiveSource.Source) == false)
+            await MonitorWarningDialog.ShowFailureAsync(owner, "attach this monitor");
     }
 
     async Task MakePrimaryAsync(Window? owner)
     {
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowMakePrimaryAsync)) return;
 
-        _controller?.SetPrimary(Model.ActiveSource.Source);
+        if (_controller?.SetPrimary(Model.ActiveSource.Source) == false)
+            await MonitorWarningDialog.ShowFailureAsync(owner, "make this monitor primary");
     }
 
     async Task<bool> ConfirmAsync(Window? owner, Func<Window?, Task<(bool Confirmed, bool DontShowAgain)>> showDialog)

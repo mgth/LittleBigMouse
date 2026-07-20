@@ -16,6 +16,7 @@ public sealed class HisenseVidaaConfiguration
     public string ClientCertificatePath { get; set; } = "";
     public string ClientKeyPath { get; set; } = "";
     public string ClientCertificatePassword { get; set; } = VidaaCertificate.DefaultPassword;
+    public string ServerCertificateFingerprint { get; set; } = "";
     public string Brand { get; set; } = "his";
     public int? ProtocolVersion { get; set; }
     public VidaaAuthMethod AuthMethod { get; set; }
@@ -29,6 +30,7 @@ public sealed class HisenseVidaaConfiguration
     public int RefreshTokenDurationDays { get; set; }
     public bool LegacyAuthorized { get; set; }
     public string KeyMacro { get; set; } = "KEY_BRIGHTNESSUP";
-    public bool HasPairing => LegacyAuthorized
-        || (!string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(AccessToken));
+    public bool HasPairing => !string.IsNullOrWhiteSpace(ServerCertificateFingerprint)
+        && (LegacyAuthorized
+            || (!string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(AccessToken)));
 }

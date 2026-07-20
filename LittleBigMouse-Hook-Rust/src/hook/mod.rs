@@ -20,12 +20,16 @@ use crate::shared::Shared;
 #[cfg(windows)]
 pub mod windows;
 #[cfg(windows)]
-pub use windows::{register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog};
+pub use windows::{
+    register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
+};
 
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "linux")]
-pub use linux::{register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog};
+pub use linux::{
+    register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
+};
 
 /// Count of deduped mouse-move events the active backend has processed.
 /// Lightweight instrumentation (one relaxed increment) to observe the hook
@@ -41,17 +45,13 @@ pub static CROSSINGS: AtomicU64 = AtomicU64::new(0);
 /// A display was added/removed/reconfigured: stop hooking and tell the UI to
 /// recompute and reload the layout (C++ `LittleBigMouseDaemon::DisplayChanged`).
 pub(crate) fn on_display_changed(shared: &Shared) {
-    if shared.hooked.load(Ordering::SeqCst) {
-        request_unhook(shared);
-    }
+    set_enabled(shared, false);
     shared.broadcast(protocol::DISPLAY_CHANGED);
 }
 
 /// The work area changed (C++ `SettingChanged`).
 pub(crate) fn on_setting_changed(shared: &Shared) {
-    if shared.hooked.load(Ordering::SeqCst) {
-        request_unhook(shared);
-    }
+    set_enabled(shared, false);
     shared.broadcast(protocol::SETTING_CHANGED);
 }
 
@@ -69,9 +69,7 @@ pub(crate) fn on_suspend(shared: &Shared) {
     if shared.suspended.swap(true, Ordering::SeqCst) {
         return; // already suspended — ignore the repeated current-state push
     }
-    if shared.hooked.load(Ordering::SeqCst) {
-        request_unhook(shared);
-    }
+    reconcile_hook(shared);
     shared.broadcast(protocol::SUSPENDED);
 }
 
@@ -92,22 +90,87 @@ pub(crate) fn on_resume(shared: &Shared) {
 /// The foreground window changed (C++ `FocusChanged`): pause the hook while an
 /// excluded app (e.g. a game) is focused, resume when it loses focus.
 pub(crate) fn on_focus_changed(shared: &Shared, path: String) {
-    if shared.is_excluded(&path) {
-        if !shared.paused.load(Ordering::SeqCst) && shared.hooked.load(Ordering::SeqCst) {
-            request_unhook(shared);
-            shared.paused.store(true, Ordering::SeqCst);
-        }
-    } else if shared.paused.load(Ordering::SeqCst) {
-        if !shared.hooked.load(Ordering::SeqCst) {
+    shared
+        .paused
+        .store(shared.is_excluded(&path), Ordering::SeqCst);
+    reconcile_hook(shared);
+    shared.broadcast(&protocol::focus_changed(&path));
+}
+
+/// Change the user's requested run state, then reconcile the platform hook.
+pub(crate) fn set_enabled(shared: &Shared, enabled: bool) {
+    shared.enabled.store(enabled, Ordering::SeqCst);
+    reconcile_hook(shared);
+}
+
+/// Reconcile asynchronous platform state from one authoritative predicate.
+pub(crate) fn reconcile_hook(shared: &Shared) {
+    let should_hook = shared.should_hook();
+    let wants_hook = shared.want_hook.load(Ordering::SeqCst);
+    let is_hooked = shared.hooked.load(Ordering::SeqCst);
+    if should_hook {
+        if !wants_hook || !is_hooked {
             request_hook(shared);
         }
-        shared.paused.store(false, Ordering::SeqCst);
+    } else if wants_hook || is_hooked {
+        request_unhook(shared);
     }
-    shared.broadcast(&protocol::focus_changed(&path));
 }
 
 /// Run a callback body catching any panic, so it can never unwind across an
 /// `extern "system"` FFI boundary (which would be UB).
 pub(crate) fn guard<F: FnOnce()>(body: F) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exclusion_is_recorded_while_unhook_is_still_pending() {
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = vec!["game.exe".to_string()];
+        shared.enabled.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+        shared.hooked.store(false, Ordering::SeqCst);
+
+        on_focus_changed(&shared, r"C:\Games\game.exe".to_string());
+
+        assert!(shared.paused.load(Ordering::SeqCst));
+        assert!(!shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn leaving_exclusion_reasserts_hook_while_unhook_is_pending() {
+        let shared = Shared::new();
+        shared.enabled.store(true, Ordering::SeqCst);
+        shared.paused.store(true, Ordering::SeqCst);
+        shared.want_hook.store(false, Ordering::SeqCst);
+        shared.hooked.store(true, Ordering::SeqCst);
+
+        on_focus_changed(&shared, r"C:\Windows\explorer.exe".to_string());
+
+        assert!(!shared.paused.load(Ordering::SeqCst));
+        assert!(shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn resume_waits_for_the_ui_to_reload_the_display_layout() {
+        let shared = Shared::new();
+        shared.enabled.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+        shared.hooked.store(true, Ordering::SeqCst);
+
+        on_suspend(&shared);
+        shared.hooked.store(false, Ordering::SeqCst);
+        on_resume(&shared);
+
+        assert!(!shared.suspended.load(Ordering::SeqCst));
+        assert!(shared.enabled.load(Ordering::SeqCst));
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "the UI must reload/revalidate the topology before re-hooking"
+        );
+    }
 }

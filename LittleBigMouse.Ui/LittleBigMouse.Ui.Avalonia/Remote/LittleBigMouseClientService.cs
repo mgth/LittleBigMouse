@@ -5,21 +5,20 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using LittleBigMouse.Plugins;
 using System.Threading;
 using System.Threading.Tasks;
-using HLab.Remote;
+using System.Xml;
+using Avalonia.Threading;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.Ui.Avalonia.Remote;
 
-public partial class LittleBigMouseClientService : ILittleBigMouseClientService
+public class LittleBigMouseClientService : ILittleBigMouseClientService, IDisposable
 {
     public event EventHandler<LittleBigMouseServiceEventArgs>? DaemonEventReceived;
-    //NamedPipeClientStream _client;
-    readonly RemoteClientSocket _client;
+    readonly LocalIpcClient _client;
 
 
 
@@ -33,11 +32,13 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     }
 
     readonly IDisplayController _displayController;
+    readonly ILayoutOptions _options;
 
     public LittleBigMouseClientService(ILayoutOptions options, IDisplayController displayController)
     {
         _displayController = displayController;
-        _client = new("localhost", options.DaemonPort);
+        _options = options;
+        _client = new LocalIpcClient();
 
         _client.ConnectionFailed += (sender, args) =>
         {
@@ -47,38 +48,20 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
         _client.MessageReceived += (sender, args) =>
         {
-            //TODO : message interpretation too lazy
-            if(args.Contains("Stopped"))
-                OnStateChanged(LittleBigMouseEvent.Stopped);
-            else if(args.Contains("Running"))
-                OnStateChanged(LittleBigMouseEvent.Running);
-            else if(args.Contains("Dead"))
-                OnStateChanged(LittleBigMouseEvent.Dead);
-            else if(args.Contains("DisplayChanged"))
-                OnStateChanged(LittleBigMouseEvent.DisplayChanged);
-            else if(args.Contains("DesktopChanged"))
-                OnStateChanged(LittleBigMouseEvent.DesktopChanged);
-            else if(args.Contains("Suspended"))
-                OnStateChanged(LittleBigMouseEvent.Suspended);
-            else if(args.Contains("Resumed"))
-                OnStateChanged(LittleBigMouseEvent.Resumed);
-            else if(args.Contains("FocusChanged"))
-            {
-                var payload = PayloadRegex().Match(args).Groups[1].Value;
-                OnStateChanged(LittleBigMouseEvent.FocusChanged,payload);
-            }
+            if (!DaemonMessage.TryParse(args, out var message)) return;
+            Dispatcher.UIThread.Post(() => OnStateChanged(message.Event, message.Payload));
         };
 
         _client.Connected += (sender, args) =>
         {
             Debug.WriteLine($"Connected");
-            OnStateChanged(LittleBigMouseEvent.Connected);
+            Dispatcher.UIThread.Post(() => OnStateChanged(LittleBigMouseEvent.Connected));
         };
 
         _client.Listen();
     }
 
-    public LittleBigMouseEvent State { get; private set; }
+    public LittleBigMouseEvent State { get; private set; } = LittleBigMouseEvent.Dead;
 
 
     public async Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
@@ -110,7 +93,21 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     // that stays dead is covered by RecoverStale at next startup.
     public async Task StopAsync(CancellationToken token = default)
     {
-        await SendAsync(token);
+        try
+        {
+            await SendAsync(token);
+        }
+        catch (Exception error) when (error is IOException
+                                      or OperationCanceledException
+                                      or UnauthorizedAccessException)
+        {
+            // Stop is a safety operation: losing IPC must not leave the input
+            // hook active or fault ReactiveCommand's observable pipeline. Kill
+            // only known hook images in this logon session as the last resort.
+            var stopped = ForceStopCurrentSessionDaemons();
+            Debug.WriteLine($"Stop IPC failed; daemon fallback stopped={stopped}: {error}");
+            OnStateChanged(stopped ? LittleBigMouseEvent.Stopped : LittleBigMouseEvent.Dead);
+        }
         await Task.Run(_displayController.RestoreAfterEngine, token);
     }
 
@@ -120,9 +117,58 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         await Task.Run(_displayController.RestoreAfterEngine, token);
     }
 
-    readonly SemaphoreSlim _startingSemaphore = new SemaphoreSlim(1, 1);
-
+    readonly object _daemonLaunchGate = new();
     Process? _daemonProcess;
+
+    bool ForceStopCurrentSessionDaemons()
+    {
+        // On Unix, process names are not scoped to a Windows-style logon session.
+        // Only terminate the daemon instance this UI actually launched; enumerating
+        // every "lbm-hook" could otherwise target another user's process (especially
+        // if the UI itself is running as root).
+        if (!OperatingSystem.IsWindows())
+        {
+            if (_daemonProcess is not null) return TryStopProcess(_daemonProcess);
+
+            var daemonFound = false;
+            foreach (var process in Process.GetProcessesByName(HookProcessNames[0]))
+            {
+                using (process)
+                    daemonFound |= !process.HasExited;
+            }
+            return !daemonFound;
+        }
+
+        var stopped = true;
+        var session = Process.GetCurrentProcess().SessionId;
+        foreach (var name in HookProcessNames)
+        foreach (var process in Process.GetProcessesByName(name))
+        {
+            using (process)
+            {
+                if (process.HasExited || process.SessionId != session) continue;
+                if (!TryStopProcess(process)) stopped = false;
+            }
+        }
+        return stopped;
+    }
+
+    static bool TryStopProcess(Process process)
+    {
+        try
+        {
+            if (process.HasExited) return true;
+            process.Kill(entireProcessTree: true);
+            return process.WaitForExit(2000);
+        }
+        catch (Exception error) when (error is InvalidOperationException
+                                      or System.ComponentModel.Win32Exception
+                                      or NotSupportedException)
+        {
+            Debug.WriteLine($"Could not force-stop {process.ProcessName}: {error.Message}");
+            return false;
+        }
+    }
 
     void CreateExcludedFile()
     {
@@ -139,54 +185,55 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
 
     public void LaunchDaemon()
     {
-        foreach (var name in HookProcessNames)
-        foreach (var process in Process.GetProcessesByName(name))
+        // The listener and a foreground command can both observe a missing endpoint.
+        // Keep their check-and-launch sequence atomic so they cannot start two daemons.
+        lock (_daemonLaunchGate)
         {
-            if(process.HasExited) continue;
-            Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
-            return;
-        }
-
-        var path = FindHookPath();
-        if (path is null)
-        {
-            Debug.WriteLine($"Not found : {HookExeName}");
-            return;
-        }
-
-        // Must not abort the daemon launch if the exclusion file can't be written.
-        try { CreateExcludedFile(); }
-        catch (Exception ex) { Debug.WriteLine($"CreateExcludedFile failed: {ex.Message}"); }
-
-        try
-        {
-            var startInfo = new ProcessStartInfo
+            foreach (var name in HookProcessNames)
+            foreach (var process in Process.GetProcessesByName(name))
             {
-                FileName = path,
+                using (process)
+                {
+                    if(process.HasExited) continue;
+                    if (OperatingSystem.IsWindows()
+                        && process.SessionId != Process.GetCurrentProcess().SessionId) continue;
+                    Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
+                    return;
+                }
+            }
 
-                //RedirectStandardOutput = true,
-                //RedirectStandardError = true,
+            var path = FindHookPath();
+            if (path is null)
+            {
+                Debug.WriteLine($"Not found : {HookExeName}");
+                return;
+            }
 
-                #if DEBUG
-                UseShellExecute = true,
-                #else
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                #endif
+            // Must not abort the daemon launch if the exclusion file can't be written.
+            try { CreateExcludedFile(); }
+            catch (Exception ex) { Debug.WriteLine($"CreateExcludedFile failed: {ex.Message}"); }
 
-            };
+            try
+            {
+                // The UI always remains at the user's integrity level. Elevation is
+                // narrowly scoped to the mouse engine when the user explicitly asks
+                // for transitions over elevated applications.
+                var startInfo = DaemonLaunchPolicy.Create(path,
+                    OperatingSystem.IsWindows() && _options.StartElevated);
 
-            var process = new Process { StartInfo = startInfo};
+                var process = new Process { StartInfo = startInfo};
 
-            process.Start();
+                process.Start();
 
-            _daemonProcess = process;
+                _daemonProcess?.Dispose();
+                _daemonProcess = process;
 
-            Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"LaunchDaemon failed: {ex}");
+                Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"LaunchDaemon failed: {ex}");
+            }
         }
     }
 
@@ -201,9 +248,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     /// <summary>
     /// Locate the hook daemon without depending on the .NET target framework folder
     /// (net8.0, net9.0, net10.0, ...). Deployed builds keep the hook next to the UI; in the
-    /// dev tree the Rust hook (the default on every platform) is built under
-    /// LittleBigMouse-Hook-Rust/target, and the Windows C++ hook (opt-out) under
-    /// LittleBigMouse.Hook\bin (own platform/config layout, no TFM subfolder).
+    /// dev tree the Rust hook is built under LittleBigMouse-Hook-Rust/target.
     /// Resistant to .NET version, platform (AnyCPU/x64) and configuration (Debug/Release) changes.
     /// </summary>
     static string? FindHookPath()
@@ -236,15 +281,7 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
                     Path.Combine(target, "debug", rustExe),
                 }
                 .FirstOrDefault(File.Exists);
-            if (rust is not null || !OperatingSystem.IsWindows()) return rust;
-
-            // C++ hook fallback (Windows opt-out builds).
-            var hookBin = Path.Combine(root, "LittleBigMouse.Hook", "bin");
-            if (!Directory.Exists(hookBin)) return null;
-
-            return Directory.EnumerateFiles(hookBin, HookExeName, SearchOption.AllDirectories)
-                .OrderByDescending(p => p.Contains($"{sep}{config}{sep}", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault();
+            return rust;
         }
         catch
         {
@@ -270,12 +307,15 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
     Task SendMessageAsync(CommandMessage message, int timeout,
         CancellationToken token = default)
     {
-        return SendMessagesAsync([message], token);
+        return SendMessagesAsync([message], token, timeout);
     }
 
-    async Task SendMessagesAsync(IEnumerable<CommandMessage> messages, CancellationToken token = default)
+    async Task SendMessagesAsync(IEnumerable<CommandMessage> messages,
+        CancellationToken token = default, int timeout = 5000)
     {
-        var xml = messages.Aggregate("", (current, command) => current + $"{command.Serialize()}\n");
+        var commands = messages.ToList();
+        var recoveryXml = string.Join("\n", commands.Select(command => command.Serialize())) + "\n";
+        var wireXml = $"<Messages>{string.Concat(commands.Select(command => command.Serialize()))}</Messages>";
 
         // The daemon reads this file back on startup: LbmPaths must match its side
         // (%LOCALAPPDATA%\Mgth\LittleBigMouse on Windows, ~/.local/share/LittleBigMouse on
@@ -283,22 +323,30 @@ public partial class LittleBigMouseClientService : ILittleBigMouseClientService
         // NAMED with backslashes on Linux.
         var path = Path.Combine(LbmPaths.DataDir, "Current.xml");
 
-        if (!Directory.Exists(Path.GetDirectoryName(path)))
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-
-        try
+        Exception? persistenceFailure = null;
+        if (commands.Any(command => command.Command == LittleBigMouseCommand.Load))
         {
-            await using var outputFile = new StreamWriter(path, false);
-            await outputFile.WriteAsync(xml);
+            try
+            {
+                await AtomicRecoveryFile.WriteAsync(path, recoveryXml, token);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or XmlException)
+            {
+                persistenceFailure = error;
+            }
         }
-        catch { }
 
-
-        //byte[] messageBytes = Encoding.UTF8.GetBytes(xml);
-
-        await _client.SendMessageAsync(xml, token); //.StandardInput.WriteAsync(xml);
+        await _client.SendMessageAsync(wireXml, TimeSpan.FromMilliseconds(timeout), token);
+        if (persistenceFailure is not null)
+            throw new InvalidOperationException(
+                "The live configuration was applied, but crash-recovery settings could not be saved.",
+                persistenceFailure);
     }
 
-    [GeneratedRegex("<Payload>(.*)</Payload>")]
-    private static partial Regex PayloadRegex();
+    public void Dispose()
+    {
+        _client.Dispose();
+        _daemonProcess?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

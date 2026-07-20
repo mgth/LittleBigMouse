@@ -12,7 +12,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{CallNextHookEx, HHOOK, MSLLHOOKSTRUCT, WM_MOUSEMOVE};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, HHOOK, LLMHF_INJECTED, LLMHF_LOWER_IL_INJECTED, MSLLHOOKSTRUCT, WM_MOUSEMOVE,
+};
 
 use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;
@@ -41,8 +43,7 @@ pub unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPAR
 }
 
 fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
-    // Faithful to the C++ filter `(wParam & WM_MOUSEMOVE) != 0`.
-    if !(code >= 0 && lparam.0 != 0 && (wparam.0 & WM_MOUSEMOVE as usize) != 0) {
+    if !is_mouse_move_message(code, wparam, lparam) {
         return false;
     }
 
@@ -78,9 +79,48 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
 
     let mut env = Win32Cursor;
     let mut e = MouseEventArg::new(Point::new(loc.0, loc.1));
+    e.injected = ms.flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED) != 0;
     engine.on_mouse_move(&mut env, &mut e);
     if e.handled {
         CROSSINGS.fetch_add(1, Ordering::Relaxed);
     }
     e.handled
+}
+
+fn is_mouse_move_message(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
+    code >= 0 && lparam.0 != 0 && wparam.0 == WM_MOUSEMOVE as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEWHEEL,
+        WM_RBUTTONDOWN, WM_RBUTTONUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
+    };
+
+    #[test]
+    fn only_mouse_move_can_enter_the_routing_engine() {
+        let pointer = LPARAM(1);
+        assert!(is_mouse_move_message(
+            0,
+            WPARAM(WM_MOUSEMOVE as usize),
+            pointer
+        ));
+
+        for message in [
+            WM_LBUTTONDOWN,
+            WM_LBUTTONUP,
+            WM_RBUTTONDOWN,
+            WM_RBUTTONUP,
+            WM_MBUTTONDOWN,
+            WM_MBUTTONUP,
+            WM_MOUSEWHEEL,
+            WM_MOUSEHWHEEL,
+            WM_XBUTTONDOWN,
+            WM_XBUTTONUP,
+        ] {
+            assert!(!is_mouse_move_message(0, WPARAM(message as usize), pointer));
+        }
+    }
 }

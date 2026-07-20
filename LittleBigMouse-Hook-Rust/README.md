@@ -4,9 +4,10 @@ A memory-safe Rust rewrite of the native C++ `LittleBigMouse.Hook` daemon: the
 separate process that installs the low-level Windows mouse hook and repositions
 the cursor across multi-DPI monitors.
 
-The daemon is language-agnostic behind its contract with the C# UI — a loopback
-TCP socket (port **25196**) exchanging `\n`-delimited XML — so this process is a
-drop-in replacement for the C++ one.
+The daemon is language-agnostic behind its contract with the C# UI: authenticated
+local IPC exchanges length-prefixed UTF-8 XML, so this process is a drop-in
+replacement for the C++ one. Windows uses a named pipe restricted to the current
+user and logon session; Linux uses a Unix-domain socket with mode `0600`.
 
 ## Why Rust
 
@@ -23,7 +24,7 @@ zones, geometry and IPC are 100% safe.
 
 | Module | Ports the C++ |
 |---|---|
-| `ipc/` | `Remote/` — TCP server, `\n` framing, `CommandMessage`/`DaemonMessage` |
+| `ipc/` | `Remote/` — bounded local IPC, length framing, `CommandMessage`/`DaemonMessage` |
 | `hook/` | `Hook/Hooker*` — `WH_MOUSE_LL`, WinEvents, display window, message pump |
 | `geometry/` | `Geometry/*.h` — `Point`/`Rect`/`Line`/`Segment` over a `Coord` trait |
 | `zones/` | `Engine/Zone`,`ZoneLink`,`ZonesLayout` on the arena |
@@ -46,19 +47,17 @@ cargo clippy --all-targets
 Cargo rejects a target named with a `.`, so the binary builds as **`lbm-hook.exe`**
 and must be renamed to **`LittleBigMouse.Hook.exe`** (the name the UI's
 `FindHookPath` / `GetProcessesByName` and the installer expect) when staging.
-`stage.ps1` does this; CI does it in the "Stage hook" step when `HOOK_IMPL=rust`.
+`stage.ps1` and CI both do this when staging the portable application.
 
 ## Environment overrides
 
 | Variable | Effect |
 |---|---|
-| `LBM_HOOK_PORT` | Listen on a non-default port (side-by-side testing next to a running C++ daemon; the port is irrelevant to the global hook itself) |
-| `LBM_HOOK_UI` | Force UI mode (wait for socket commands) instead of parent-process detection — used by test scripts |
+| `LBM_HOOK_UI` | Force UI mode (wait for IPC commands) instead of parent-process detection — used by test scripts |
 | `LBM_HOOK_DEBUG` | Print a stderr heartbeat: `hooked` / `mouse_events` / `crossings` |
 
-## CI coexistence
+## Shipped implementation
 
-`.github/workflows/dotnet-desktop.yml` builds the C++ hook by default
-(`HOOK_IMPL=cpp`). A manual `workflow_dispatch` with `hook_impl=rust` builds and
-ships this daemon instead. The C++ project stays in the solution until the Rust
-port reaches full parity.
+The memory-safe Rust daemon is the only hook built, staged, and packaged. The
+legacy C++ source remains as historical porting reference but is not part of the
+solution or any distributable path.

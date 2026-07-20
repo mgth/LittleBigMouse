@@ -92,18 +92,27 @@ fn payload_string(node: Node) -> String {
 pub const RUNNING: &str = "<DaemonMessage><Event>Running</Event></DaemonMessage>\n";
 pub const STOPPED: &str = "<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n";
 pub const PAUSED: &str = "<DaemonMessage><Event>Paused</Event></DaemonMessage>\n";
-pub const DISPLAY_CHANGED: &str =
-    "<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>\n";
-pub const SETTING_CHANGED: &str =
-    "<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>\n";
-pub const DESKTOP_CHANGED: &str =
-    "<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n";
+pub const DISPLAY_CHANGED: &str = "<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>\n";
+pub const SETTING_CHANGED: &str = "<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>\n";
+pub const DESKTOP_CHANGED: &str = "<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n";
 pub const SUSPENDED: &str = "<DaemonMessage><Event>Suspended</Event></DaemonMessage>\n";
 pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>\n";
 
 /// Build a `FocusChanged` event carrying the foreground process path.
 pub fn focus_changed(path: &str) -> String {
-    format!("<DaemonMessage><Event>FocusChanged</Event><Payload>{path}</Payload></DaemonMessage>\n")
+    format!(
+        "<DaemonMessage><Event>FocusChanged</Event><Payload>{}</Payload></DaemonMessage>\n",
+        escape_xml(path)
+    )
+}
+
+fn escape_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 #[cfg(test)]
@@ -133,7 +142,9 @@ mod tests {
         let msg = r#"<CommandMessage Command="Load"><Payload><ZonesLayout MaxTravelDistance="200"/></Payload></CommandMessage>"#;
         assert_eq!(
             parse(msg),
-            vec![Command::Load(r#"<ZonesLayout MaxTravelDistance="200"/>"#.to_string())]
+            vec![Command::Load(
+                r#"<ZonesLayout MaxTravelDistance="200"/>"#.to_string()
+            )]
         );
     }
 
@@ -146,15 +157,23 @@ mod tests {
             "</Messages>"
         );
         // Load with no Payload -> empty ZonesLayout XML.
-        assert_eq!(
-            parse(msg),
-            vec![Command::Load(String::new()), Command::Run]
-        );
+        assert_eq!(parse(msg), vec![Command::Load(String::new()), Command::Run]);
     }
 
     #[test]
     fn blank_and_malformed_yield_nothing() {
         assert!(parse("   ").is_empty());
         assert!(parse("not xml <<<").is_empty());
+    }
+
+    #[test]
+    fn focus_payload_is_well_formed_xml() {
+        let message = focus_changed(r#"C:\A&B\<game>.exe"#);
+        let document = Document::parse(&message).unwrap();
+        let payload = document
+            .descendants()
+            .find(|node| node.has_tag_name("Payload"))
+            .unwrap();
+        assert_eq!(payload.text(), Some(r#"C:\A&B\<game>.exe"#));
     }
 }

@@ -18,14 +18,22 @@ public class MainBootloader(
 
         await mainService.StartNotifierAsync();
 
-        // Check for update
-        if (mainService.MonitorsLayout.Options.AutoUpdate)
-            await updater.CheckUpdateAsync(false);
-
         // Show control
         if (!mainService.MonitorsLayout.Options.StartMinimized)
             await mainService.ShowControlAsync();
 
+        // Update discovery must never delay or fault normal startup. The updater
+        // has its own short network timeout; this boundary also contains any
+        // implementation failure that escapes it.
+        if (mainService.MonitorsLayout.Options.AutoUpdate)
+            _ = CheckUpdateSafelyAsync(updater);
+
         return BootState.Completed;
+    }
+
+    public static async Task CheckUpdateSafelyAsync(IApplicationUpdater updater)
+    {
+        try { await updater.CheckUpdateAsync(false); }
+        catch (Exception error) { System.Diagnostics.Debug.WriteLine(error); }
     }
 }

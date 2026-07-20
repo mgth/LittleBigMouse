@@ -7,82 +7,54 @@ using Microsoft.Win32.TaskScheduler;
 
 namespace LittleBigMouse.Platform.Windows;
 
-/// <summary>
-/// Windows autostart (Task Scheduler) for the layout. Lives in the Windows platform
-/// project — the model is platform-neutral; a Linux head provides its own autostart.
-/// Kept as extension methods on <see cref="IMonitorsLayout"/> so the existing call sites
-/// (registry persistence, MainService) are unchanged apart from the namespace.
-/// </summary>
+/// <summary>Per-user Windows Task Scheduler integration.</summary>
 public static class AutostartExtensions
 {
     static string ServiceName =>
-        "LittleBigMouse_" + System.Security.Principal.WindowsIdentity.GetCurrent().Name.Replace('\\', '_');
+        "LittleBigMouse_" + System.Security.Principal.WindowsIdentity.GetCurrent()
+            .Name.Replace('\\', '_');
 
     static string ApplicationExe =>
         AppDomain.CurrentDomain.BaseDirectory + AppDomain.CurrentDomain.FriendlyName + ".exe";
 
     public static bool IsScheduled(this IMonitorsLayout layout)
     {
-        // TEMP (Linux phase 1): Task Scheduler is Windows-only. Removed in phase 2 with the
-        // persistence seam (Linux autostart = systemd user unit or .desktop file).
         if (!OperatingSystem.IsWindows()) return false;
-
-        using var ts = new TaskService();
-        return ts.RootFolder.GetTasks(new Regex(ServiceName)).Any();
+        using var taskService = new TaskService();
+        return taskService.RootFolder.GetTasks(new Regex(ServiceName)).Any();
     }
 
-    /// <summary>
-    /// Align the startup scheduled task on the current options.
-    /// </summary>
     public static void UpdateSchedule(this IMonitorsLayout layout)
     {
-        if (layout.Options.LoadAtStartup) layout.Schedule(layout.Options.StartElevated); else layout.Unschedule();
+        if (layout.Options.LoadAtStartup) layout.Schedule(layout.Options.StartElevated);
+        else layout.Unschedule();
     }
 
-    public static bool Schedule(this IMonitorsLayout layout, bool elevated)
+    public static bool Schedule(this IMonitorsLayout layout, bool elevateHook)
     {
-        // TEMP (Linux phase 1): see IsScheduled above.
         if (!OperatingSystem.IsWindows()) return false;
-
         layout.Unschedule();
 
-        using var ts = new TaskService();
+        using var taskService = new TaskService();
+        var definition = taskService.NewTask();
+        definition.RegistrationInfo.Description = "Multi-DPI aware mouse transitions";
+        definition.Triggers.Add(new LogonTrigger
+        {
+            UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name,
+        });
+        definition.Actions.Add(new ExecAction(ApplicationExe, "",
+            AppDomain.CurrentDomain.BaseDirectory));
 
-        var td = ts.NewTask();
-        td.RegistrationInfo.Description = "Multi-dpi aware monitors mouse crossover";
-        td.Triggers.Add(
-            new LogonTrigger { UserId = System.Security.Principal.WindowsIdentity.GetCurrent().Name });
-
-        td.Actions.Add(
-            new ExecAction(ApplicationExe, "", AppDomain.CurrentDomain.BaseDirectory)
-        );
-
-        // Respect the requested level. The historical (2015) version tried Highest
-        // FIRST regardless of the option — back then running as admin was the whole
-        // point — so an elevated app kept re-registering an elevated task even with
-        // StartElevated off, and the elevation self-perpetuated across restarts.
-        td.Principal.RunLevel = elevated ? TaskRunLevel.Highest : TaskRunLevel.LUA;
-        td.Settings.DisallowStartIfOnBatteries = false;
-        td.Settings.DisallowStartOnRemoteAppSession = true;
-        td.Settings.StopIfGoingOnBatteries = false;
-        td.Settings.ExecutionTimeLimit = TimeSpan.Zero;
+        // Autostart always launches the UI at normal integrity. StartElevated is
+        // applied only to the hook daemon subsequently launched by that UI.
+        definition.Principal.RunLevel = ScheduledUiRunLevel(elevateHook);
+        definition.Settings.DisallowStartIfOnBatteries = false;
+        definition.Settings.DisallowStartOnRemoteAppSession = true;
+        definition.Settings.StopIfGoingOnBatteries = false;
+        definition.Settings.ExecutionTimeLimit = TimeSpan.Zero;
         try
         {
-            ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
-            return true;
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-
-        if (!elevated) return false;
-
-        // Elevation requested but not allowed to register an elevated task:
-        // degrade to a non-elevated autostart rather than none at all.
-        td.Principal.RunLevel = TaskRunLevel.LUA;
-        try
-        {
-            ts.RootFolder.RegisterTaskDefinition(ServiceName, td);
+            taskService.RootFolder.RegisterTaskDefinition(ServiceName, definition);
             return true;
         }
         catch (UnauthorizedAccessException)
@@ -91,18 +63,13 @@ public static class AutostartExtensions
         }
     }
 
+    public static TaskRunLevel ScheduledUiRunLevel(bool elevateHook) => TaskRunLevel.LUA;
+
     public static void Unschedule(this IMonitorsLayout layout)
     {
-        // TEMP (Linux phase 1): see IsScheduled above.
         if (!OperatingSystem.IsWindows()) return;
-
-        using var ts = new TaskService();
-        try
-        {
-            ts.RootFolder.DeleteTask(ServiceName, false);
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        using var taskService = new TaskService();
+        try { taskService.RootFolder.DeleteTask(ServiceName, exceptionOnNotExists: false); }
+        catch (UnauthorizedAccessException) { }
     }
 }

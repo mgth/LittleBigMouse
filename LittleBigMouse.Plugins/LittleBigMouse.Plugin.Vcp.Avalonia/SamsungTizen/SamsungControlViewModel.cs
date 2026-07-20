@@ -55,8 +55,9 @@ public sealed class SamsungControlViewModel : ReactiveObject
 
         Apply(configuration);
         Status = string.IsNullOrWhiteSpace(configuration.Token)
-            ? "Address saved; pairing is required."
-            : "Associated with this monitor.";
+                 || string.IsNullOrWhiteSpace(configuration.ServerCertificateFingerprint)
+            ? "Address saved; secure pairing is required."
+            : $"Associated with this monitor. Certificate SHA-256: {DeviceCertificatePin.Display(configuration.ServerCertificateFingerprint)}";
     }
 
     public ObservableCollection<SamsungTizenDevice> DiscoveredDevices { get; } = [];
@@ -184,7 +185,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
             var configuration = await _service.PairAsync(
                 _monitor.Id, IpAddress, MacAddress, cancellationToken);
             Apply(configuration);
-            Status = "Paired and connected over the local network.";
+            Status = $"Paired. Certificate SHA-256: {DeviceCertificatePin.Display(configuration.ServerCertificateFingerprint)}";
         }, TimeSpan.FromSeconds(90));
     }
 
@@ -254,7 +255,8 @@ public sealed class SamsungControlViewModel : ReactiveObject
             ? configuration.Name
             : $"{configuration.Name} · {configuration.ModelName}";
         PictureMacro = configuration.PictureMacro;
-        Paired = !string.IsNullOrWhiteSpace(configuration.Token);
+        Paired = !string.IsNullOrWhiteSpace(configuration.Token)
+                 && !string.IsNullOrWhiteSpace(configuration.ServerCertificateFingerprint);
         ShowSetup = !Paired;
     }
 }

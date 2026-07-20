@@ -1,6 +1,7 @@
 ﻿using System;
 using HLab.Sys.Monitors;
 using System.Collections.Generic;
+using System.Linq;
 using System.Xml.Serialization;
 
 namespace HLab.Sys.Windows.Monitors;
@@ -28,6 +29,23 @@ public class MonitorDevice : IEquatable<MonitorDevice>
 
    [XmlIgnore]
    public List<MonitorDeviceConnection> Connections = new();
+
+   /// <summary>
+   /// Connection currently participating in the desktop. EnumDisplayDevices can
+   /// expose the same target below several adapters, including stale inactive
+   /// candidates, so enumeration order is not an identity.
+   /// </summary>
+   [XmlIgnore]
+   public MonitorDeviceConnection? ActiveConnection => SelectConnection(Connections);
+
+   public static MonitorDeviceConnection? SelectConnection(
+      IEnumerable<MonitorDeviceConnection> connections)
+      => connections
+         .OrderByDescending(c => c.State?.AttachedToDesktop == true)
+         .ThenByDescending(c => c.Parent.HMonitor != 0)
+         .ThenByDescending(c => c.Parent.CurrentMode != null)
+         .ThenBy(c => c.Parent.DeviceName, StringComparer.OrdinalIgnoreCase)
+         .FirstOrDefault();
 
    public override bool Equals(object obj)
    {

@@ -14,6 +14,15 @@ pub fn parent_process_path() -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Linux backends do not currently receive foreground-window process events.
+pub fn foreground_process_path() -> Option<String> {
+    None
+}
+
+pub fn path_contains(path: &str, fragment: &str) -> bool {
+    path.contains(fragment)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

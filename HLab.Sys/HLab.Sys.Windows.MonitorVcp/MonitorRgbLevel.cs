@@ -6,7 +6,7 @@ using ReactiveUI;
 
 namespace HLab.Sys.Windows.MonitorVcp;
 
-public class MonitorRgbLevel : ReactiveObject
+public class MonitorRgbLevel : ReactiveObject, IDisposable
 {
    readonly MonitorLevel[] _values = new MonitorLevel[3];
 
@@ -52,4 +52,10 @@ public class MonitorRgbLevel : ReactiveObject
    }
 
    public uint[] GetValues() => _values.Select(t => t.Value).ToArray();
+
+   public void Dispose()
+   {
+      foreach (var level in _values) level.Dispose();
+      GC.SuppressFinalize(this);
+   }
 }

@@ -40,7 +40,8 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
                 HisenseVidaaProtocol.LegacyMqttPassword,
                 $"LittleBigMouse/{Guid.NewGuid():N}",
                 HisenseVidaaProtocol.LegacyMqttUsername,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                allowNewCertificate: true).ConfigureAwait(false);
             _pinAccepted = NewSignal();
             if (requestPin)
                 await _connection!.PublishAsync(
@@ -67,7 +68,8 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
             {
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 attempt.CancelAfter(TimeSpan.FromSeconds(6));
-                await ConnectAsync(credentials.Password, credentials.ClientId, credentials.Username, attempt.Token)
+                await ConnectAsync(credentials.Password, credentials.ClientId, credentials.Username,
+                    attempt.Token, allowNewCertificate: true)
                     .ConfigureAwait(false);
                 _configuration.DeviceUuid = candidate;
                 _configuration.AuthMethod = method;
@@ -410,7 +412,8 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
         string password,
         string clientId,
         string username,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowNewCertificate = false)
     {
         await ResetConnectionAsync().ConfigureAwait(false);
         _connection = new VidaaMqttConnection();
@@ -423,7 +426,12 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
             password,
             _configuration.ClientCertificatePath,
             _configuration.ClientCertificatePassword,
+            _configuration.ServerCertificateFingerprint,
+            allowNewCertificate,
             cancellationToken).ConfigureAwait(false);
+        if (allowNewCertificate)
+            _configuration.ServerCertificateFingerprint =
+                _connection.ServerCertificateFingerprint;
         var topics = HisenseVidaaProtocol.UsesStaticLegacyProtocol(_configuration.ProtocolVersion)
             ? HisenseVidaaProtocol.LegacyResponseTopics(_configuration.ClientId)
             : HisenseVidaaProtocol.ResponseTopics(_configuration.ClientId);

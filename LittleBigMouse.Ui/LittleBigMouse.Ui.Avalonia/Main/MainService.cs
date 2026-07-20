@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
@@ -111,15 +112,15 @@ public class MainService : ReactiveModel, IMainService
             .DisposeWith(this);
 
         options.WhenAnyValue(
-                o => o.LoadAtStartup,
-                o => o.StartElevated)
+                o => o.LoadAtStartup)
             .Skip(1)
             .Where(_ => !layoutPersistence.IsLoading)
             .Subscribe(_ => (MonitorsLayout as MonitorsLayout)?.UpdateSchedule())
             .DisposeWith(this);
 
         // Relate service state with notify icon
-        _littleBigMouseClientService.DaemonEventReceived += (o, a) => DaemonEventReceived(o, a);
+        _littleBigMouseClientService.DaemonEventReceived += (sender, args) =>
+            Dispatcher.UIThread.Post(() => _ = DaemonEventReceivedSafely(sender, args));
 
         // The platform watches the OS for wallpaper changes (Windows: a RegNotifyChangeKeyValue
         // registry watcher) and raises WallpaperChanged. Refresh the wallpaper drawn behind each
@@ -196,7 +197,7 @@ public class MainService : ReactiveModel, IMainService
 
         await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
-        await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
+        await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartFromUserAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
         {
             MonitorsLayout.Options.Enabled = false;
@@ -230,6 +231,13 @@ public class MainService : ReactiveModel, IMainService
     }
 
     Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
+
+    async Task StartFromUserAsync()
+    {
+        MonitorsLayout.Options.Enabled = true;
+        _layoutPersistence.SaveEnabled(MonitorsLayout);
+        await StartAsync();
+    }
 
     /// <summary>
     /// Tray-menu escape hatch: force a layout rebuild when the automatic display-change
@@ -272,6 +280,20 @@ public class MainService : ReactiveModel, IMainService
     }
 
     bool _justConnected = false;
+    async Task DaemonEventReceivedSafely(
+        object? sender, LittleBigMouseServiceEventArgs args)
+    {
+        try
+        {
+            await DaemonEventReceived(sender, args);
+        }
+        catch (Exception error)
+        {
+            // One failed notification must not stop later daemon events.
+            Debug.WriteLine($"Daemon event handler failed: {error}");
+        }
+    }
+
     async Task DaemonEventReceived(object? sender, LittleBigMouseServiceEventArgs args)
     {
         TraceDaemonEvent(args.Event);
@@ -322,8 +344,8 @@ public class MainService : ReactiveModel, IMainService
             // Start. EnsureRunningAfterResumeAsync re-asserts Start until it sticks.
             case LittleBigMouseEvent.Resumed:
                 _suspended = false;
-                await DisplayChangedAsync();
-                await EnsureRunningAfterResumeAsync();
+                if (await DisplayChangedAsync())
+                    await EnsureRunningAfterResumeAsync();
                 break;
 
             case LittleBigMouseEvent.FocusChanged:
@@ -349,18 +371,18 @@ public class MainService : ReactiveModel, IMainService
     const int DisplayStabilityMaxSteps = 8; // ~1.1s cap so a flapping config can't hang the settle loop
     int _displayChangeGeneration;
 
-    async Task DisplayChangedAsync()
+    async Task<bool> DisplayChangedAsync()
     {
         // Do nothing at all while the display is off: no debounce, no signature reads, no rebuild.
         // The daemon's Resumed event reconciles once when the desktop is back.
-        if (_suspended) return;
+        if (_suspended) return false;
 
         var gen = Interlocked.Increment(ref _displayChangeGeneration);
 
         // Trailing debounce: wait a short quiet window; if a newer event arrived meanwhile, bail
         // and let that later call handle it (so a burst collapses to a single rebuild).
         await Task.Delay(DisplayDebounceMs);
-        if (gen != Volatile.Read(ref _displayChangeGeneration)) return;
+        if (gen != Volatile.Read(ref _displayChangeGeneration)) return false;
 
         // Settle detection: rebuild only once the display config has stopped changing, i.e. two
         // consecutive signatures match. Capped so a pathological flapping config can't hang here.
@@ -368,7 +390,7 @@ public class MainService : ReactiveModel, IMainService
         for (var i = 0; i < DisplayStabilityMaxSteps; i++)
         {
             await Task.Delay(DisplayStabilityStepMs);
-            if (gen != Volatile.Read(ref _displayChangeGeneration)) return;
+            if (gen != Volatile.Read(ref _displayChangeGeneration)) return false;
             var next = _layoutFactory.DisplaySignature();
             if (next == signature) break;
             signature = next;
@@ -377,7 +399,7 @@ public class MainService : ReactiveModel, IMainService
         // A Suspended event may have arrived during the debounce/settle (the display went off while
         // this display-change was being handled): drop the rebuild — the daemon has unhooked and we
         // wait for Resumed.
-        if (_suspended) return;
+        if (_suspended) return false;
 
         // Idempotence guard: the settle loop confirms the config STOPPED changing, but not that it
         // actually DIFFERS from the generation we already built. A spurious WM_DISPLAYCHANGE (a
@@ -392,13 +414,14 @@ public class MainService : ReactiveModel, IMainService
             // when the config settles back to the same signature, nothing else would re-Start it, so
             // the engine would stay stopped ("blue") until a manual Start. Re-hook without rebuilding.
             await EnsureEngineHookedAsync();
-            return;
+            return true;
         }
 
         UpdateLayout();
         _lastBuiltSignature = signature;
         if (MonitorsLayout.Options.Enabled)
             await StartAsync();
+        return true;
     }
 
     // The daemon reports Running only while its low-level mouse hook is actually installed, so its

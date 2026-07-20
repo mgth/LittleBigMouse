@@ -43,7 +43,6 @@
       "LittleBigMouse.Plugins/LittleBigMouse.Plugins.Avalonia/LittleBigMouse.Plugins.Avalonia.csproj",
       "LittleBigMouse.Plugins/LittleBigMouse.Plugins.Core/LittleBigMouse.Plugins.csproj",
       "LittleBigMouse.Server/LittleBigMouse.Server.csproj",
-      "LittleBigMouse.Ui.Loader/LittleBigMouse.Ui.Loader.csproj",
       "LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/LittleBigMouse.Ui.Avalonia.csproj",
       "LittleBigMouse.Ui/LittleBigMouse.Ui.Core/LittleBigMouse.Ui.Core.csproj"
     ]

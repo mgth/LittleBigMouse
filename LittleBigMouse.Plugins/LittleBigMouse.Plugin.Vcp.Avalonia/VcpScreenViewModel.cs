@@ -1207,6 +1207,6 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       Hisense.Dispose();
       // ends the persistent spotread session along with any running sweep
       ArgyllProbe.Abort();
-      VcpExpendMonitor.Stop();
+      Vcp?.Dispose();
    }
 }

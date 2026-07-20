@@ -15,7 +15,14 @@ public static class VcpExpendMonitor
 
     /// <summary>Windows path: VCP channel from the Win32 device tree (dxva2 transport).</summary>
     public static VcpControl Vcp(this MonitorDevice monitor)
-        => AllVcp.GetValue(monitor, m => new VcpControl(m.Id, m.Edid?.ManufacturerCode, new DxVa2VcpTransport(m), LevelParser));
+    {
+        if (AllVcp.TryGetValue(monitor, out var control) && !control.IsDisposed)
+            return control;
+
+        AllVcp.Remove(monitor);
+        return AllVcp.GetValue(monitor, m => new VcpControl(m.Id,
+            m.Edid?.ManufacturerCode, new DxVa2VcpTransport(m), LevelParser));
+    }
 
     public static void Stop() => LevelParser.Stop();
 

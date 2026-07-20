@@ -262,8 +262,7 @@ internal static class WindowsLayoutMapping
     {
         source.InterfacePath = monitor.InterfacePath;
 
-        if(monitor.Connections.Count == 0) return source;
-        var device = monitor.Connections[0];
+        if (monitor.ActiveConnection is not { } device) return source;
 
         if(device.Parent == null) return source;
 
@@ -317,8 +316,7 @@ internal static class WindowsLayoutMapping
     /// </summary>
     public static DisplaySource UpdateWallpaperFrom(this DisplaySource source, MonitorDevice monitor, string? fallbackPath = null)
     {
-        if (monitor.Connections.Count == 0) return source;
-        var device = monitor.Connections[0];
+        if (monitor.ActiveConnection is not { } device) return source;
         if (device.Parent == null) return source;
 
         // Per-monitor COM path is empty during the wallpaper fade; fall back to the registry path
@@ -398,7 +396,7 @@ internal static class WindowsLayoutMapping
     {
         var edid = monitor.Edid is { PhysicalWidth: > 0, PhysicalHeight: > 0 } e ? monitor.Edid : null;
 
-        var display = monitor.Connections[0].Parent;
+        var display = monitor.ActiveConnection?.Parent;
 
         if (display?.CurrentMode != null)
         {
@@ -456,7 +454,7 @@ internal static class WindowsLayoutMapping
     {
         if (!string.IsNullOrEmpty(@this.PnpDeviceName)) return @this;
 
-        var name = HtmlHelper.CleanupPnpName(monitor.Connections[0].DeviceString);
+        var name = HtmlHelper.CleanupPnpName(monitor.ActiveConnection?.DeviceString ?? "");
         // A monitor without EDID (virtual display, DisplayLink, RDP, spacedesk, some panels)
         // reports "Generic PnP Monitor" and has a null Edid: keep the generic name then.
         if (name.ToLower() == "generic pnp monitor" && !string.IsNullOrEmpty(monitor.Edid?.Model))
@@ -482,7 +480,7 @@ internal static class WindowsLayoutMapping
 
     static string BrandLogo(this MonitorDevice device)
     {
-        var dev = device.Connections[0].Parent?.DeviceString;
+        var dev = device.ActiveConnection?.Parent?.DeviceString;
         if (dev != null)
         {
             // special case for Spacedesk support

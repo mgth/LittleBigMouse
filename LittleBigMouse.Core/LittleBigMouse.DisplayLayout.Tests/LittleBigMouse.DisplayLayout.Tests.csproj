@@ -26,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
     <ProjectReference Include="..\..\LittleBigMouse.Platform.Linux\LittleBigMouse.Platform.Linux.csproj" />
+    <ProjectReference Include="..\..\LittleBigMouse.Platform.Windows\LittleBigMouse.Platform.Windows.csproj" />
   </ItemGroup>
 
 </Project>

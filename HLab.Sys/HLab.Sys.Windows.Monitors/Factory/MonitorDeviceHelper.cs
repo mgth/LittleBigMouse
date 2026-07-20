@@ -2,6 +2,7 @@
 using HLab.Sys.Monitors;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -286,10 +287,8 @@ public static class MonitorDeviceHelper
 
         var ch = ChangeDisplaySettingsEx(sourceName, ref devMode, 0, flag, 0);
 
-        if (ch == DispChange.Successful && apply)
-            ApplyDesktop();
-
-        return ch == DispChange.Successful;
+        if (ch != DispChange.Successful) return false;
+        return !apply || ApplyDesktop();
     }
 
     /// <summary>
@@ -398,8 +397,9 @@ public static class MonitorDeviceHelper
             return false;
         }
 
-        ApplyDesktop();
-        return true;
+        if (ApplyDesktop()) return true;
+        ResaveCurrentConfiguration();
+        return false;
     }
 
     /// <summary>
@@ -441,16 +441,16 @@ public static class MonitorDeviceHelper
     /// coherent registry state when pending display writes were aborted halfway,
     /// which would otherwise fail every further UpdateRegistry call.
     /// </summary>
-    static void ResaveCurrentConfiguration()
+    public static bool ResaveCurrentConfiguration()
     {
-        if (QueryDisplayConfigPaths() is not { } cfg) return;
+        if (QueryDisplayConfigPaths() is not { } cfg) return false;
         var (paths, modes) = cfg;
 
-        SetDisplayConfig((uint)paths.Length, paths, (uint)modes.Length, modes,
+        return SetDisplayConfig((uint)paths.Length, paths, (uint)modes.Length, modes,
             SetDisplayConfigFlags.Apply
             | SetDisplayConfigFlags.UseSuppliedDisplayConfig
             | SetDisplayConfigFlags.AllowChanges
-            | SetDisplayConfigFlags.SaveToDatabase);
+            | SetDisplayConfigFlags.SaveToDatabase) == 0;
     }
 
     // Former source-based implementation, kept for reference. It detached whatever
@@ -491,7 +491,8 @@ public static class MonitorDeviceHelper
     //}
 
 
-    public static void ApplyDesktop() => ChangeDisplaySettingsEx(null, 0, 0, 0, 0);
+    public static bool ApplyDesktop()
+        => ChangeDisplaySettingsEx(null, 0, 0, 0, 0) == DispChange.Successful;
 
     public static RegistryKey OpenMonitorRegKey(this MonitorDevice @this, RegistryKey key, bool create = false)
     {
@@ -576,58 +577,56 @@ public static class MonitorDeviceHelper
             0
         ); // reserved
 
+        if (devInfo == 0 || devInfo == new nint(-1)) return null;
+
         try
         {
-            if (devInfo == 0)
-            {
-                return null;
-            }
-
             var devInfoData = new SP_DEVINFO_DATA();
 
-            uint i = 0;
-
-            do
+            for (uint i = 0; ; i++)
             {
-                if (SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
+                if (!SetupDiEnumDeviceInfo(devInfo, i, ref devInfoData))
                 {
-
-                    var hEdidRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData,
-                        DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
-
-                    try
-                    {
-                        if (hEdidRegKey != 0 && (int)hEdidRegKey != -1)
-                        {
-                            using var key = RegistryKey(hEdidRegKey, 1);
-                            var value = key?.GetValue("HardwareID");
-                            if (value is string[] { Length: > 0 } s)
-                            {
-                                var id = s[0] + "\\" +
-                                         key.GetValue("Driver");
-
-                                if (id == deviceId)
-                                {
-                                    var hKeyName = GetHKeyName(hEdidRegKey);
-                                    using var keyEdid = RegistryKey(hEdidRegKey);
-
-                                    var edid = (byte[])keyEdid.GetValue("EDID");
-                                    return edid != null ? EdidParser.Parse(hKeyName, edid) : null;
-                                }
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        var result = RegCloseKey(hEdidRegKey);
-                        if (result > 0)
-                            throw new Exception(GetLastErrorString());
-                    }
+                    var enumerationError = GetLastError();
+                    if (enumerationError != ErrorNoMoreItems)
+                        Debug.WriteLine($"SetupDiEnumDeviceInfo failed at {i}: {enumerationError}");
+                    break;
                 }
 
+                var hEdidRegKey = SetupDiOpenDevRegKey(devInfo, ref devInfoData,
+                    DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+                if (hEdidRegKey == 0 || hEdidRegKey == new nint(-1)) continue;
 
-                i++;
-            } while (ErrorNoMoreItems != GetLastError());
+                try
+                {
+                    var hKeyName = GetRegistryKeyName(hEdidRegKey);
+                    if (string.IsNullOrEmpty(hKeyName)) continue;
+
+                    using var key = RegistryKey(hKeyName, 1);
+                    var value = key?.GetValue("HardwareID");
+                    if (value is string[] { Length: > 0 } s)
+                    {
+                        var id = s[0] + "\\" + key.GetValue("Driver");
+
+                        if (id == deviceId)
+                        {
+                            using var keyEdid = RegistryKey(hKeyName);
+                            var edid = keyEdid?.GetValue("EDID") as byte[];
+                            return edid != null ? EdidParser.Parse(hKeyName, edid) : null;
+                        }
+                    }
+                }
+                catch (Exception error)
+                {
+                    Debug.WriteLine($"Skipping unreadable monitor registry entry: {error.Message}");
+                }
+                finally
+                {
+                    var result = RegCloseKey(hEdidRegKey);
+                    if (result != 0)
+                        Debug.WriteLine($"RegCloseKey failed: {result}");
+                }
+            }
         }
         finally
         {
@@ -635,6 +634,43 @@ public static class MonitorDeviceHelper
         }
 
         return null;
+    }
+
+    static string GetRegistryKeyName(nint hKey)
+    {
+        var status = Wdm.ZwQueryKey(hKey, Wdm.KeyInformationClass.KeyNameInformation,
+            0, 0, out var needed);
+        if (status == 0 || needed < sizeof(uint)) return string.Empty;
+
+        var buffer = Marshal.AllocHGlobal(needed);
+        try
+        {
+            var capacity = needed;
+            status = Wdm.ZwQueryKey(hKey, Wdm.KeyInformationClass.KeyNameInformation,
+                buffer, capacity, out var returned);
+            if (status != 0 || returned < sizeof(uint) || returned > capacity)
+                return string.Empty;
+
+            var bytes = new byte[returned];
+            Marshal.Copy(buffer, bytes, 0, returned);
+            return DecodeKeyNameInformation(bytes);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    /// <summary>Decode byte-counted KEY_NAME_INFORMATION without unmanaged over-read.</summary>
+    public static string DecodeKeyNameInformation(ReadOnlySpan<byte> buffer)
+    {
+        if (buffer.Length < sizeof(uint)) return string.Empty;
+        var nameLength = BitConverter.ToUInt32(buffer[..sizeof(uint)]);
+        if ((nameLength & 1) != 0 || nameLength > buffer.Length - sizeof(uint))
+            throw new InvalidDataException("Invalid KEY_NAME_INFORMATION byte length.");
+
+        return Encoding.Unicode.GetString(
+            buffer.Slice(sizeof(uint), checked((int)nameLength)));
     }
 
     /// <summary>

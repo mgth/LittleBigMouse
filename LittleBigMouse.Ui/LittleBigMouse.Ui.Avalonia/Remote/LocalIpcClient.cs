@@ -16,11 +16,25 @@ namespace LittleBigMouse.Ui.Avalonia.Remote;
 sealed class LocalIpcClient : IDisposable
 {
     const int MaxFrameSize = 1024 * 1024;
+    static readonly TimeSpan ConnectAttemptTimeout = TimeSpan.FromMilliseconds(250);
     static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(100);
 
     readonly CancellationTokenSource _stopping = new();
     readonly SemaphoreSlim _sendGate = new(1, 1);
+    readonly string _windowsPipeName;
     Task? _listener;
+
+    public LocalIpcClient()
+        : this(OperatingSystem.IsWindows()
+            ? $"LittleBigMouse-v1-session-{Process.GetCurrentProcess().SessionId}"
+            : string.Empty)
+    {
+    }
+
+    internal LocalIpcClient(string windowsPipeName)
+    {
+        _windowsPipeName = windowsPipeName;
+    }
 
     public event EventHandler<string>? MessageReceived;
     public event EventHandler? Connected;
@@ -80,9 +94,23 @@ sealed class LocalIpcClient : IDisposable
         while (true)
         {
             token.ThrowIfCancellationRequested();
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(token);
+            attempt.CancelAfter(ConnectAttemptTimeout);
             try
             {
-                return await ConnectAsync(token);
+                return await ConnectAsync(attempt.Token);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                // NamedPipeClientStream waits for a server instead of reporting
+                // "not found". Bound each attempt so the service can launch or
+                // relaunch the daemon through ConnectionFailed.
+                if (!notified)
+                {
+                    notified = true;
+                    ConnectionFailed?.Invoke(this, EventArgs.Empty);
+                }
+                await Task.Delay(RetryDelay, token);
             }
             catch (Exception error) when (error is IOException or SocketException)
             {
@@ -96,12 +124,11 @@ sealed class LocalIpcClient : IDisposable
         }
     }
 
-    static async Task<Stream> ConnectAsync(CancellationToken token)
+    async Task<Stream> ConnectAsync(CancellationToken token)
     {
         if (OperatingSystem.IsWindows())
         {
-            var name = $"LittleBigMouse-v1-session-{Process.GetCurrentProcess().SessionId}";
-            var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut,
+            var pipe = new NamedPipeClientStream(".", _windowsPipeName, PipeDirection.InOut,
                 PipeOptions.Asynchronous, TokenImpersonationLevel.Identification);
             try
             {

@@ -136,6 +136,21 @@ public sealed class UiLifecycleTests
         Assert.True(updater.Called);
     }
 
+    [Fact]
+    public async Task MissingDaemonRaisesConnectionFailedInsteadOfWaitingForever()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        using var client = new LocalIpcClient($"LittleBigMouse-test-{Guid.NewGuid():N}");
+        var failed = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        client.ConnectionFailed += (_, _) => failed.TrySetResult();
+
+        client.Listen();
+
+        await failed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
     sealed class TestResource : IDisposable
     {
         public bool Disposed { get; private set; }

@@ -61,7 +61,7 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         _client.Listen();
     }
 
-    public LittleBigMouseEvent State { get; private set; }
+    public LittleBigMouseEvent State { get; private set; } = LittleBigMouseEvent.Dead;
 
 
     public async Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
@@ -93,7 +93,21 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
     // that stays dead is covered by RecoverStale at next startup.
     public async Task StopAsync(CancellationToken token = default)
     {
-        await SendAsync(token);
+        try
+        {
+            await SendAsync(token);
+        }
+        catch (Exception error) when (error is IOException
+                                      or OperationCanceledException
+                                      or UnauthorizedAccessException)
+        {
+            // Stop is a safety operation: losing IPC must not leave the input
+            // hook active or fault ReactiveCommand's observable pipeline. Kill
+            // only known hook images in this logon session as the last resort.
+            var stopped = ForceStopCurrentSessionDaemons();
+            Debug.WriteLine($"Stop IPC failed; daemon fallback stopped={stopped}: {error}");
+            OnStateChanged(stopped ? LittleBigMouseEvent.Stopped : LittleBigMouseEvent.Dead);
+        }
         await Task.Run(_displayController.RestoreAfterEngine, token);
     }
 
@@ -103,7 +117,58 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         await Task.Run(_displayController.RestoreAfterEngine, token);
     }
 
+    readonly object _daemonLaunchGate = new();
     Process? _daemonProcess;
+
+    bool ForceStopCurrentSessionDaemons()
+    {
+        // On Unix, process names are not scoped to a Windows-style logon session.
+        // Only terminate the daemon instance this UI actually launched; enumerating
+        // every "lbm-hook" could otherwise target another user's process (especially
+        // if the UI itself is running as root).
+        if (!OperatingSystem.IsWindows())
+        {
+            if (_daemonProcess is not null) return TryStopProcess(_daemonProcess);
+
+            var daemonFound = false;
+            foreach (var process in Process.GetProcessesByName(HookProcessNames[0]))
+            {
+                using (process)
+                    daemonFound |= !process.HasExited;
+            }
+            return !daemonFound;
+        }
+
+        var stopped = true;
+        var session = Process.GetCurrentProcess().SessionId;
+        foreach (var name in HookProcessNames)
+        foreach (var process in Process.GetProcessesByName(name))
+        {
+            using (process)
+            {
+                if (process.HasExited || process.SessionId != session) continue;
+                if (!TryStopProcess(process)) stopped = false;
+            }
+        }
+        return stopped;
+    }
+
+    static bool TryStopProcess(Process process)
+    {
+        try
+        {
+            if (process.HasExited) return true;
+            process.Kill(entireProcessTree: true);
+            return process.WaitForExit(2000);
+        }
+        catch (Exception error) when (error is InvalidOperationException
+                                      or System.ComponentModel.Win32Exception
+                                      or NotSupportedException)
+        {
+            Debug.WriteLine($"Could not force-stop {process.ProcessName}: {error.Message}");
+            return false;
+        }
+    }
 
     void CreateExcludedFile()
     {
@@ -120,46 +185,55 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
 
     public void LaunchDaemon()
     {
-        foreach (var name in HookProcessNames)
-        foreach (var process in Process.GetProcessesByName(name))
+        // The listener and a foreground command can both observe a missing endpoint.
+        // Keep their check-and-launch sequence atomic so they cannot start two daemons.
+        lock (_daemonLaunchGate)
         {
-            if(process.HasExited) continue;
-            if (OperatingSystem.IsWindows()
-                && process.SessionId != Process.GetCurrentProcess().SessionId) continue;
-            Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
-            return;
-        }
+            foreach (var name in HookProcessNames)
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                using (process)
+                {
+                    if(process.HasExited) continue;
+                    if (OperatingSystem.IsWindows()
+                        && process.SessionId != Process.GetCurrentProcess().SessionId) continue;
+                    Debug.WriteLine($"Already running : {process.ProcessName} {process.Id}");
+                    return;
+                }
+            }
 
-        var path = FindHookPath();
-        if (path is null)
-        {
-            Debug.WriteLine($"Not found : {HookExeName}");
-            return;
-        }
+            var path = FindHookPath();
+            if (path is null)
+            {
+                Debug.WriteLine($"Not found : {HookExeName}");
+                return;
+            }
 
-        // Must not abort the daemon launch if the exclusion file can't be written.
-        try { CreateExcludedFile(); }
-        catch (Exception ex) { Debug.WriteLine($"CreateExcludedFile failed: {ex.Message}"); }
+            // Must not abort the daemon launch if the exclusion file can't be written.
+            try { CreateExcludedFile(); }
+            catch (Exception ex) { Debug.WriteLine($"CreateExcludedFile failed: {ex.Message}"); }
 
-        try
-        {
-            // The UI always remains at the user's integrity level. Elevation is
-            // narrowly scoped to the mouse engine when the user explicitly asks
-            // for transitions over elevated applications.
-            var startInfo = DaemonLaunchPolicy.Create(path,
-                OperatingSystem.IsWindows() && _options.StartElevated);
+            try
+            {
+                // The UI always remains at the user's integrity level. Elevation is
+                // narrowly scoped to the mouse engine when the user explicitly asks
+                // for transitions over elevated applications.
+                var startInfo = DaemonLaunchPolicy.Create(path,
+                    OperatingSystem.IsWindows() && _options.StartElevated);
 
-            var process = new Process { StartInfo = startInfo};
+                var process = new Process { StartInfo = startInfo};
 
-            process.Start();
+                process.Start();
 
-            _daemonProcess = process;
+                _daemonProcess?.Dispose();
+                _daemonProcess = process;
 
-            Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"LaunchDaemon failed: {ex}");
+                Debug.WriteLine($"Started : {process.ProcessName} {process.Id}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"LaunchDaemon failed: {ex}");
+            }
         }
     }
 

@@ -45,6 +45,7 @@
 
 	<ItemGroup>
 		<TrimmerRootDescriptor Include="Roots.xml" />
+		<InternalsVisibleTo Include="LittleBigMouse.Ui.Avalonia.Tests" />
 	</ItemGroup>
 
   <ItemGroup>

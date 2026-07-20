@@ -114,7 +114,8 @@ public class MonitorsLayoutPresenterViewModel
         // loads the saved one: the current physical layout survives only if saved first.
         _persistence?.Save(layout);
 
-        _controller.SetLocations(locations);
+        if (!_controller.SetLocations(locations))
+            await MonitorWarningDialog.ShowFailureAsync(owner, "apply the monitor layout");
     }
 
     public MonitorsLayoutPresenterViewModel():this(new MainViewModelDesign())

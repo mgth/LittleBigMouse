@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using OneOf;
 
 using HLab.Sys.Windows.Monitors;
@@ -21,14 +22,52 @@ namespace HLab.Sys.Windows.MonitorVcp;
 public sealed class DxVa2VcpTransport : IVcpTransport
 {
     PhysicalMonitor[] _physicalMonitors;
+    readonly int? _selectedIndex;
 
     public DxVa2VcpTransport(MonitorDevice monitor)
     {
-        var hMonitor = monitor.Connections.Count > 0 ? monitor.Connections[0].Parent.HMonitor : IntPtr.Zero;
+        var hMonitor = monitor.ActiveConnection?.Parent.HMonitor ?? IntPtr.Zero;
         _physicalMonitors = GetPhysicalMonitorsFromHMONITOR(hMonitor);
+        _selectedIndex = SelectPhysicalMonitorIndex(
+            _physicalMonitors.Select(p => p.szPhysicalMonitorDescription),
+            [monitor.Edid?.Model, monitor.Edid?.ProductCode,
+                monitor.ActiveConnection?.DeviceString, monitor.PnpCode]);
     }
 
-    nint HPhysical => _physicalMonitors.Length > 0 ? _physicalMonitors[0].hPhysicalMonitor : IntPtr.Zero;
+    nint HPhysical => _selectedIndex is { } index && index < _physicalMonitors.Length
+        ? _physicalMonitors[index].hPhysicalMonitor
+        : IntPtr.Zero;
+
+    /// <summary>
+    /// Resolve one physical handle without guessing. A logical HMONITOR may front
+    /// several tiled or mirrored panels; writes are disabled unless there is one
+    /// handle or the device identity matches exactly one description.
+    /// </summary>
+    public static int? SelectPhysicalMonitorIndex(
+        IEnumerable<string?> descriptions, IEnumerable<string?> identities)
+    {
+        var physical = descriptions.Select(NormalizeIdentity).ToList();
+        if (physical.Count == 1) return 0;
+        if (physical.Count == 0) return null;
+
+        var candidates = identities.Select(NormalizeIdentity)
+            .Where(value => value.Length >= 4)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var matches = physical
+            .Select((description, index) => (description, index))
+            .Where(item => item.description.Length >= 4 && candidates.Any(candidate =>
+                item.description.Contains(candidate, StringComparison.Ordinal)
+                || candidate.Contains(item.description, StringComparison.Ordinal)))
+            .Select(item => item.index)
+            .Distinct()
+            .ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    static string NormalizeIdentity(string? value)
+        => new((value ?? string.Empty).Where(char.IsLetterOrDigit)
+            .Select(char.ToUpperInvariant).ToArray());
 
     public IReadOnlySet<byte>? GetSupportedCodes()
     {

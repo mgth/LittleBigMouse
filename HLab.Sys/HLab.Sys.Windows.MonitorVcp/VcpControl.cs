@@ -25,6 +25,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reactive.Concurrency;
+using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
 using OneOf;
@@ -44,10 +45,15 @@ public enum VcpComponent
 }
 
 
-public class VcpControl : ReactiveObject
+public class VcpControl : ReactiveObject, IDisposable
 {
    readonly IVcpTransport _transport;
    readonly CommandWorker _worker;
+   readonly Task _probeTask;
+   int _disposed;
+   int _transportDisposed;
+
+   public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
    /// <summary>Identity of the monitor this channel talks to (used for the LUT store).</summary>
    public string MonitorId { get; }
@@ -67,7 +73,7 @@ public class VcpControl : ReactiveObject
       // The capabilities probe is a full DDC transaction — seconds per monitor
       // when the bus is slow or the monitor asleep. Run it off-thread; the
       // levels pop in through their reactive properties when it lands.
-      Task.Run(Probe);
+      _probeTask = Task.Run(Probe);
    }
 
    void Probe()
@@ -80,7 +86,8 @@ public class VcpControl : ReactiveObject
       }
       finally
       {
-         RxSchedulers.MainThreadScheduler.Schedule(() => OnProbed(codes));
+         if (Volatile.Read(ref _disposed) == 0)
+            RxSchedulers.MainThreadScheduler.Schedule(() => OnProbed(codes));
       }
    }
 
@@ -88,6 +95,7 @@ public class VcpControl : ReactiveObject
    {
       lock (_startLock)
       {
+         if (Volatile.Read(ref _disposed) != 0) return;
          if (codes is not null)
          {
             if (codes.Contains((byte)VcpCode.Brightness))
@@ -130,6 +138,7 @@ public class VcpControl : ReactiveObject
    {
       lock (_startLock)
       {
+         if (Volatile.Read(ref _disposed) != 0) return this;
          _started = true;
          _brightness?.Start();
          _contrast?.Start();
@@ -178,6 +187,7 @@ public class VcpControl : ReactiveObject
 
    public void ActivateAnyway()
    {
+      if (Volatile.Read(ref _disposed) != 0) return;
       Brightness ??= new MonitorLevel(_worker, GetBrightness, SetBrightness).Start();
       Contrast ??= new MonitorLevel(_worker, GetContrast, SetContrast).Start();
 
@@ -263,6 +273,35 @@ public class VcpControl : ReactiveObject
       => _transport.GetFeature(DriveCode(component));
    bool SetDrive(uint value, VcpComponent component)
       => _transport.SetFeature(DriveCode(component), value);
+
+   public void Dispose()
+   {
+      if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+      lock (_startLock)
+      {
+         _source?.Dispose();
+         _brightness?.Dispose();
+         _contrast?.Dispose();
+         _gain?.Dispose();
+         _drive?.Dispose();
+      }
+
+      if (_probeTask.IsCompleted)
+         DisposeTransport();
+      else
+         _ = _probeTask.ContinueWith(_ => DisposeTransport(),
+            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+      GC.SuppressFinalize(this);
+   }
+
+   void DisposeTransport()
+   {
+      if (Interlocked.Exchange(ref _transportDisposed, 1) == 0)
+         _transport.Dispose();
+   }
 }
 
 public delegate OneOf<(uint value, uint min, uint max), int> VcpGetter(VcpComponent component = VcpComponent.None);

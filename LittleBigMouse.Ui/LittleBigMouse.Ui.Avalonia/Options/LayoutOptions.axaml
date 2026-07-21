@@ -65,7 +65,7 @@
 					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"
 						                     Header="Start with elevated privileges"
-						                     Description="Needed to keep working over elevated apps">
+						                     Description="Keeps working over elevated apps (admin accounts only; one UAC prompt on manual launch, none at logon)">
 							<ToggleSwitch IsChecked="{Binding Model.StartElevated, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>

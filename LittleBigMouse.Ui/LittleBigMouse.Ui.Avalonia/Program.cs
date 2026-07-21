@@ -49,6 +49,19 @@ internal class Program
     {
         StartupLog.RedirectConsoleWhenDetached();
 
+        // Opportunistic elevation (manifest is asInvoker so standard users can start at
+        // all, #512/#400): when the "Start elevated" option is set and the user is a
+        // split-token admin, hand over to an elevated relaunch — BEFORE the
+        // single-instance guard, so the child takes the lock as soon as we return.
+        // A declined UAC (or a standard user) simply continues non-elevated.
+        if (OperatingSystem.IsWindows()
+            && LittleBigMouse.Platform.Windows.WindowsElevation.ShouldRelaunchElevated()
+            && LittleBigMouse.Platform.Windows.WindowsElevation.RelaunchElevated(args))
+        {
+            Console.Error.WriteLine("Handing over to the elevated instance.");
+            return;
+        }
+
         // Null means another instance already runs (and was signaled to show its window).
         using var instance = SingleInstanceGuard.TryAcquire();
         if (instance == null) return;

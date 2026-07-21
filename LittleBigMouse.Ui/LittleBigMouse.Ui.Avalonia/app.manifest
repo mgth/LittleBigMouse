@@ -18,7 +18,14 @@
 				<requestedExecutionLevel level="asInvoker" uiAccess="false"/>
 				 />
         -->
-				<requestedExecutionLevel  level="requireAdministrator" uiAccess="false" />
+				<!-- asInvoker so the app starts for EVERYONE, standard users included:
+				     requireAdministrator meant an unanswerable UAC credential prompt on
+				     non-admin accounts and the app never launching (#512, #400). Elevation
+				     is now opportunistic: WindowsElevation self-relaunches with runas when
+				     the "Start elevated" option is set AND the user is a split-token admin;
+				     the logon scheduled task keeps running elevated (RunLevel.Highest)
+				     without any prompt. -->
+				<requestedExecutionLevel  level="asInvoker" uiAccess="false" />
 			</requestedPrivileges>
 		</security>
 	</trustInfo>

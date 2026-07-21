@@ -146,6 +146,8 @@ pub fn run(shared: &'static Shared) -> bool {
 
     // Pointer sensitivity: raw device counts per logical pixel. Absolute output
     // makes this a pure feel knob (it never affects zone geometry). Default 1:1.
+    // Applied ON TOP of the libinput-parity pointer acceleration (see accel.rs;
+    // override with LBM_EVDEV_ACCEL=none|flat|adaptive and LBM_EVDEV_ACCEL_SPEED).
     let sens = std::env::var("LBM_EVDEV_SENS").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0);
 
     let debug = std::env::var("LBM_HOOK_DEBUG").is_ok();
@@ -225,7 +227,9 @@ pub fn run(shared: &'static Shared) -> bool {
 
 /// The grabbed devices, the virtual pointer + keyboard, and the authoritative cursor.
 struct Router {
-    devices: Vec<(std::path::PathBuf, Device)>,
+    /// Each grabbed mouse carries its own acceleration state: velocities must
+    /// not mix across devices, and kcminputrc settings are per-device.
+    devices: Vec<(std::path::PathBuf, Device, super::accel::PointerAccel)>,
     /// Observed (non-grabbed) keyboards feeding the ctrl-override state.
     keyboards: Vec<(std::path::PathBuf, Device)>,
     /// Hot-plug scans arriving from the scanner thread.
@@ -242,6 +246,12 @@ struct Router {
     debug: bool,
     /// Sub-pixel remainder of the sensitivity-scaled raw motion integration.
     rem: (f64, f64),
+    /// kcminputrc + env overrides, resolved per device at grab time (arm and
+    /// hot-plug rescan) — the pump itself never touches the filesystem.
+    accel_cfg: super::accel::AccelConfig,
+    /// Index (into `devices`) of the mouse that produced the motion being
+    /// accumulated — its accelerator gets fed at flush time.
+    last_motion_dev: usize,
 }
 
 impl Router {
@@ -255,6 +265,9 @@ impl Router {
         // node) therefore run first; the cursor may drift a few px between the
         // probe and the grab, which is harmless for a start point.
         let probed = kwin_cursor_pos();
+        // Pointer-accel settings (kcminputrc read) also belong to the slow
+        // pre-grab phase: the pump must stay I/O-free.
+        let accel_cfg = super::accel::AccelConfig::load();
         let mice = enumerate_mice();
         let mut keyboards = Vec::new();
         for (path, mut dev) in enumerate_keyboards() {
@@ -270,9 +283,13 @@ impl Router {
             dev.set_nonblocking(true)?;
             match dev.grab() {
                 Ok(()) => {
-                    eprintln!("[LittleBigMouse.Hook] evdev: grabbed {} ({:?})",
-                        dev.name().unwrap_or("?"), path);
-                    devices.push((path, dev));
+                    let id = dev.input_id();
+                    let name = dev.name().unwrap_or("?").to_string();
+                    let settings = accel_cfg.for_device(id.vendor(), id.product(), &name);
+                    eprintln!("[LittleBigMouse.Hook] evdev: grabbed {name} ({path:?}, accel {:?} speed {})",
+                        settings.profile, settings.speed);
+                    devices.push((path, dev,
+                        super::accel::PointerAccel::new(settings.profile, settings.speed)));
                 }
                 Err(e) => eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
             }
@@ -342,6 +359,8 @@ impl Router {
             sens,
             debug,
             rem: (0.0, 0.0),
+            accel_cfg,
+            last_motion_dev: 0,
         };
 
         // Place the cursor at the start point and prime the engine there.
@@ -377,7 +396,7 @@ impl Router {
         let mut fds: Vec<libc::pollfd> = self
             .devices
             .iter()
-            .map(|(_, d)| d.as_raw_fd())
+            .map(|(_, d, _)| d.as_raw_fd())
             .chain(self.keyboards.iter().map(|(_, d)| d.as_raw_fd()))
             .map(|fd| libc::pollfd { fd, events: libc::POLLIN, revents: 0 })
             .collect();
@@ -422,8 +441,14 @@ impl Router {
             for ev in events {
                 match ev.event_type() {
                     EventType::SYNCHRONIZATION => self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd),
-                    EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_X.0 => acc.0 += ev.value() as i64,
-                    EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_Y.0 => acc.1 += ev.value() as i64,
+                    EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_X.0 => {
+                        acc.0 += ev.value() as i64;
+                        self.last_motion_dev = i;
+                    }
+                    EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_Y.0 => {
+                        acc.1 += ev.value() as i64;
+                        self.last_motion_dev = i;
+                    }
                     // Wheels and any other relative axis: pass through verbatim.
                     EventType::RELATIVE => passthrough.push(ev),
                     // Buttons stay with the pointer; every other EV_KEY code is a
@@ -480,7 +505,7 @@ impl Router {
     fn rescan(&mut self) {
         while let Ok(scan) = self.scan_rx.try_recv() {
             for (path, mut dev) in scan.mice {
-                if self.devices.iter().any(|(p, _)| *p == path) {
+                if self.devices.iter().any(|(p, _, _)| *p == path) {
                     continue;
                 }
                 if dev.set_nonblocking(true).is_err() {
@@ -488,9 +513,13 @@ impl Router {
                 }
                 match dev.grab() {
                     Ok(()) => {
-                        eprintln!("[LittleBigMouse.Hook] evdev: grabbed {} ({:?}, hot-plug)",
-                            dev.name().unwrap_or("?"), path);
-                        self.devices.push((path, dev));
+                        let id = dev.input_id();
+                        let name = dev.name().unwrap_or("?").to_string();
+                        let settings = self.accel_cfg.for_device(id.vendor(), id.product(), &name);
+                        eprintln!("[LittleBigMouse.Hook] evdev: grabbed {name} ({path:?}, hot-plug, accel {:?} speed {})",
+                            settings.profile, settings.speed);
+                        self.devices.push((path, dev,
+                            super::accel::PointerAccel::new(settings.profile, settings.speed)));
                     }
                     // Retried every rescan; only worth the noise when debugging.
                     Err(e) if self.debug =>
@@ -517,8 +546,18 @@ impl Router {
         }
 
         if *acc != (0, 0) {
-            let sx = acc.0 as f64 * self.sens + self.rem.0;
-            let sy = acc.1 as f64 * self.sens + self.rem.1;
+            // Reproduce the pointer acceleration libinput would have applied had
+            // we not grabbed the device (the ABS virtual pointer bypasses it):
+            // per-device curve on the raw frame delta, THEN the user's flat
+            // LBM_EVDEV_SENS multiplier. Sub-pixel remainders carry over frames.
+            let now = self.env.started.elapsed().as_micros() as u64;
+            let idx = self.last_motion_dev.min(self.devices.len().saturating_sub(1));
+            let (ax, ay) = match self.devices.get_mut(idx) {
+                Some((_, _, accel)) => accel.apply(acc.0 as f64, acc.1 as f64, now),
+                None => (acc.0 as f64, acc.1 as f64),
+            };
+            let sx = ax * self.sens + self.rem.0;
+            let sy = ay * self.sens + self.rem.1;
             let (dx, dy) = (sx.trunc() as i32, sy.trunc() as i32);
             self.rem = (sx - dx as f64, sy - dy as f64);
 
@@ -593,7 +632,7 @@ impl Router {
 impl Drop for Router {
     fn drop(&mut self) {
         self.scan_stop.store(true, Ordering::Relaxed);
-        for (_, d) in &mut self.devices {
+        for (_, d, _) in &mut self.devices {
             let _ = d.ungrab();
         }
         // Keyboards were never grabbed; closing their fds is enough. The scanner

@@ -14,6 +14,7 @@
 //! `shared.want_hook`, install/remove their capture, feed the engine, exit on
 //! `want_quit`.
 
+pub mod accel;
 pub mod evdev;
 pub mod portal;
 pub mod x11;

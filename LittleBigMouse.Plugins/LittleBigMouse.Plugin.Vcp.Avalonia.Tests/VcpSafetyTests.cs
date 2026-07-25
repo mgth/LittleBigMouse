@@ -73,6 +73,62 @@ public class VcpSafetyTests
     }
 
     [Fact]
+    public void LiveReadSessionRefreshesUntilItsDeadlineThenStops()
+    {
+        var refreshes = 0;
+        var stopped = 0;
+        using var session = new LiveReadSession(
+            () => Interlocked.Increment(ref refreshes),
+            _ => Interlocked.Increment(ref stopped),
+            System.TimeSpan.FromMilliseconds(20),
+            System.TimeSpan.FromMilliseconds(200));
+
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref refreshes) >= 2, 2_000));
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref stopped) == 1, 2_000));
+
+        var settled = Volatile.Read(ref refreshes);
+        Thread.Sleep(100);
+        Assert.Equal(settled, Volatile.Read(ref refreshes));
+    }
+
+    [Fact]
+    public void LiveReadPollsTheTransportAndDisposeStopsIt()
+    {
+        var transport = new CountingTransport();
+        var control = new VcpControl("monitor", null, transport, new CommandWorker());
+
+        // wait for the capabilities probe so Brightness exists, then go live
+        Assert.True(SpinWait.SpinUntil(() => !control.Probing, 2_000));
+        control.Start();
+        control.StartLiveRead(
+            System.TimeSpan.FromMilliseconds(20), System.TimeSpan.FromMinutes(10));
+
+        Assert.True(SpinWait.SpinUntil(() => transport.Reads >= 3, 2_000));
+
+        control.Dispose();
+        Assert.True(SpinWait.SpinUntil(() => transport.Disposed, 2_000));
+        var settled = transport.Reads;
+        Thread.Sleep(100);
+        Assert.Equal(settled, transport.Reads);
+    }
+
+    sealed class CountingTransport : IVcpTransport
+    {
+        int _reads;
+        public int Reads => Volatile.Read(ref _reads);
+        public bool Disposed { get; private set; }
+        public IReadOnlySet<byte>? GetSupportedCodes()
+            => new HashSet<byte> { (byte)VcpCode.Brightness };
+        public OneOf<(uint value, uint min, uint max), int> GetFeature(VcpCode code)
+        {
+            Interlocked.Increment(ref _reads);
+            return (50u, 0u, 100u);
+        }
+        public bool SetFeature(VcpCode code, uint value) => true;
+        public void Dispose() => Disposed = true;
+    }
+
+    [Fact]
     public void DisposingControlReleasesItsTransport()
     {
         var transport = new FakeTransport();

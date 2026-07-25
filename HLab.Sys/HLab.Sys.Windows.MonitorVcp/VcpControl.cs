@@ -131,6 +131,74 @@ public class VcpControl : ReactiveObject, IDisposable
       return _started ? level.Start() : level;
    }
 
+   public static readonly TimeSpan LiveReadInterval = TimeSpan.FromSeconds(1);
+   public static readonly TimeSpan LiveReadDuration = TimeSpan.FromMinutes(2);
+
+   readonly object _liveLock = new();
+   LiveReadSession? _liveSession;
+
+   /// <summary>
+   /// Live-read mode: while true the levels are re-read every second so
+   /// monitor-side (OSD) changes show up in the UI. Auto-expires after
+   /// <see cref="LiveReadDuration"/>; settable so a ToggleButton can bind it.
+   /// </summary>
+   public bool LiveRead
+   {
+      get => _liveRead;
+      set { if (value) StartLiveRead(); else StopLiveRead(); }
+   }
+   bool _liveRead;
+
+   public void StartLiveRead() => StartLiveRead(LiveReadInterval, LiveReadDuration);
+
+   public void StartLiveRead(TimeSpan interval, TimeSpan duration)
+   {
+      lock (_liveLock)
+      {
+         if (Volatile.Read(ref _disposed) != 0) return;
+         _liveSession?.Dispose();
+         _liveSession = new LiveReadSession(RefreshAll, OnLiveReadStopped, interval, duration);
+         SetLiveRead(true);
+      }
+   }
+
+   public void StopLiveRead()
+   {
+      lock (_liveLock) _liveSession?.Dispose();
+   }
+
+   void OnLiveReadStopped(LiveReadSession session)
+   {
+      lock (_liveLock)
+      {
+         // A restart disposes the old session after installing the new one:
+         // only the current session's end may turn the mode off.
+         if (!ReferenceEquals(_liveSession, session)) return;
+         _liveSession = null;
+         SetLiveRead(false);
+      }
+   }
+
+   void SetLiveRead(bool value)
+   {
+      RxSchedulers.MainThreadScheduler.Schedule(() =>
+      {
+         if (_liveRead == value) return;
+         _liveRead = value;
+         this.RaisePropertyChanged(nameof(LiveRead));
+      });
+   }
+
+   void RefreshAll()
+   {
+      if (Volatile.Read(ref _disposed) != 0) return;
+      _source?.Refresh();
+      _brightness?.Refresh();
+      _contrast?.Refresh();
+      _gain?.Refresh();
+      _drive?.Refresh();
+   }
+
    readonly object _startLock = new();
    bool _started;
 
@@ -277,6 +345,8 @@ public class VcpControl : ReactiveObject, IDisposable
    public void Dispose()
    {
       if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+      StopLiveRead();
 
       lock (_startLock)
       {

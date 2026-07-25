@@ -741,7 +741,15 @@
                 <!-- Image -->
                 <Border Classes="card faders" IsVisible="{Binding ImageVisibility}">
                     <StackPanel>
-                        <TextBlock Classes="cardTitle" Text="Image"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="cardTitle" Text="Image"/>
+                            <ToggleButton Grid.Column="1" FontSize="11" Padding="6,2"
+                                          VerticalAlignment="Top"
+                                          IsChecked="{Binding Vcp.LiveRead, Mode=TwoWay}"
+                                          ToolTip.Tip="Follow changes made on the monitor's own menu: re-read all levels every second, for two minutes.">
+                                <TextBlock Text="Live read"/>
+                            </ToggleButton>
+                        </Grid>
                         <StackPanel Orientation="Horizontal" Spacing="6">
 
                             <StackPanel IsVisible="{Binding BrightnessVisibility}">

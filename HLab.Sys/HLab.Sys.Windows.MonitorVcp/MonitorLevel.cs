@@ -56,6 +56,13 @@ public class MonitorLevel(
         return this;
     }
 
+    /// <summary>
+    /// Ask for one read of the remote value (live-read mode). Safe to call at
+    /// any rate: the _queued guard coalesces requests, and a level being moved
+    /// by the user just continues its write loop.
+    /// </summary>
+    public void Refresh() => RequestWork();
+
     void RequestWork()
     {
         if (Volatile.Read(ref _disposed) != 0) return;

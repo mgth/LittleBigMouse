@@ -24,6 +24,12 @@ public class MonitorRgbLevel : ReactiveObject, IDisposable
       return this;
    }
 
+   public void Refresh()
+   {
+      foreach (var level in _values)
+         level.Refresh();
+   }
+
    public MonitorLevel Channel(uint channel) { return _values[channel]; }
 
    public MonitorLevel Red => Channel(0);

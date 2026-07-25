@@ -19,22 +19,45 @@ sealed class LocalIpcClient : IDisposable
     static readonly TimeSpan ConnectAttemptTimeout = TimeSpan.FromMilliseconds(250);
     static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(100);
 
+    const string WindowsPipePrefix = @"\\.\pipe\";
+
     readonly CancellationTokenSource _stopping = new();
     readonly SemaphoreSlim _sendGate = new(1, 1);
     readonly string _windowsPipeName;
+    readonly string? _unixSocketPath;
+
     Task? _listener;
 
+    // `LBM_HOOK_ENDPOINT` mirrors the daemon's override (the full pipe path on
+    // Windows, the socket path elsewhere): a launched daemon inherits the
+    // variable, so a test pair runs side by side with the production pair.
     public LocalIpcClient()
-        : this(OperatingSystem.IsWindows()
-            ? $"LittleBigMouse-v1-session-{Process.GetCurrentProcess().SessionId}"
-            : string.Empty)
     {
+        var endpoint = Environment.GetEnvironmentVariable("LBM_HOOK_ENDPOINT");
+        if (OperatingSystem.IsWindows())
+        {
+            _windowsPipeName = endpoint is null
+                ? $"LittleBigMouse-v1-session-{Process.GetCurrentProcess().SessionId}"
+                : PipeNameFromEndpoint(endpoint);
+        }
+        else
+        {
+            _windowsPipeName = string.Empty;
+            _unixSocketPath = endpoint;
+        }
     }
 
     internal LocalIpcClient(string windowsPipeName)
     {
         _windowsPipeName = windowsPipeName;
     }
+
+    // NamedPipeClientStream wants the bare pipe name while the daemon binds the
+    // full path, so accept both spellings of the same endpoint.
+    internal static string PipeNameFromEndpoint(string endpoint)
+        => endpoint.StartsWith(WindowsPipePrefix, StringComparison.OrdinalIgnoreCase)
+            ? endpoint[WindowsPipePrefix.Length..]
+            : endpoint;
 
     public event EventHandler<string>? MessageReceived;
     public event EventHandler? Connected;
@@ -150,14 +173,17 @@ sealed class LocalIpcClient : IDisposable
             }
         }
 
-        var endpoint = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-        if (string.IsNullOrWhiteSpace(endpoint)) endpoint = LbmPaths.DataDir;
+        var socketPath = _unixSocketPath;
+        if (socketPath is null)
+        {
+            var runtimeDir = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+            if (string.IsNullOrWhiteSpace(runtimeDir)) runtimeDir = LbmPaths.DataDir;
+            socketPath = Path.Combine(runtimeDir, "littlebigmouse-v1.sock");
+        }
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         try
         {
-            await socket.ConnectAsync(
-                new UnixDomainSocketEndPoint(Path.Combine(endpoint, "littlebigmouse-v1.sock")),
-                token);
+            await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), token);
             return new NetworkStream(socket, ownsSocket: true);
         }
         catch
@@ -167,7 +193,7 @@ sealed class LocalIpcClient : IDisposable
         }
     }
 
-    static async Task<string> ReadFrameAsync(Stream stream, CancellationToken token)
+    internal static async Task<string> ReadFrameAsync(Stream stream, CancellationToken token)
     {
         var prefix = new byte[sizeof(uint)];
         await stream.ReadExactlyAsync(prefix, token);
@@ -175,7 +201,16 @@ sealed class LocalIpcClient : IDisposable
         if (length > MaxFrameSize) throw new InvalidDataException("IPC frame exceeds 1 MiB");
         var payload = new byte[checked((int)length)];
         await stream.ReadExactlyAsync(payload, token);
-        return new UTF8Encoding(false, true).GetString(payload);
+        try
+        {
+            return new UTF8Encoding(false, true).GetString(payload);
+        }
+        catch (DecoderFallbackException error)
+        {
+            // Same InvalidData class as an oversized frame: the listener's catch
+            // filter must treat a corrupt peer like an I/O failure, not die on it.
+            throw new InvalidDataException("IPC frame is not valid UTF-8", error);
+        }
     }
 
     static async Task WriteFrameAsync(Stream stream, string message, CancellationToken token)

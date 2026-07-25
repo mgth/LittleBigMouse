@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using MsBox.Avalonia.Enums;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;
@@ -62,6 +63,27 @@ public sealed class UiLifecycleTests
 
         await failed.Task.WaitAsync(TimeSpan.FromSeconds(2));
     }
+
+    [Fact]
+    public async Task CorruptUtf8FrameSurfacesAsInvalidDataNotDecoderFallback()
+    {
+        // The listener's catch filter reconnects on InvalidDataException; an
+        // unlisted DecoderFallbackException would kill it silently forever.
+        var payload = new byte[] { 0xFF, 0xFE, 0xFD };
+        var frame = new byte[sizeof(uint) + payload.Length];
+        BinaryPrimitives.WriteUInt32LittleEndian(frame, (uint)payload.Length);
+        payload.CopyTo(frame, sizeof(uint));
+
+        using var stream = new MemoryStream(frame);
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => LocalIpcClient.ReadFrameAsync(stream, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(@"\\.\pipe\lbm-test", "lbm-test")]
+    [InlineData("lbm-test", "lbm-test")]
+    public void EndpointOverrideAcceptsFullPipePathOrBareName(string endpoint, string expected)
+        => Assert.Equal(expected, LocalIpcClient.PipeNameFromEndpoint(endpoint));
 
     sealed class TestResource : IDisposable
     {

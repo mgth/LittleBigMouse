@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -56,7 +57,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         LocalizationService = localizationService;
         Options = options;
         
-        CloseCommand = ReactiveCommand.Create(Close);
+        CloseCommand = ReactiveCommand.CreateFromTask(CloseAsync);
 
         _commandsCache.Connect()
             .Sort(SortExpressionComparer<IUiCommand>.Ascending(t => t.Id))
@@ -129,7 +130,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
     public ICommand MaximizeCommand { get; }
 
-    void Close()
+    async Task CloseAsync()
     {
         //if (Layout?.Saved ?? true)
         //{
@@ -137,28 +138,19 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         //    return;
         //}
 
-        var result = MessageBoxManager
+        var result = await MessageBoxManager
             .GetMessageBoxStandard(
-                "Save your changes before exiting ?",
-                "Confirmation", ButtonEnum.OkCancel,
+                "Exit LittleBigMouse?",
+                "LittleBigMouse will stop controlling mouse transitions until it is started again.",
+                ButtonEnum.YesNo,
                 Icon.Question, WindowStartupLocation.CenterOwner
-
                 )
-            //Todo get rid of Result
-            .ShowAsync().Result;
+            .ShowAsync();
 
-        if (result == ButtonResult.Yes)
-        {
-            /* Todo avalonia*/
-            //Layout.Save();
-            Shutdown();
-        }
-
-        if (result == ButtonResult.No)
-        {
-            Shutdown();
-        }
+        if (ShouldShutdown(result)) Shutdown();
     }
+
+    public static bool ShouldShutdown(ButtonResult result) => result == ButtonResult.Yes;
 
     public void Shutdown()
     {

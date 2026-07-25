@@ -1,3 +1,5 @@
+using MsBox.Avalonia.Enums;
+using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;
 using Xunit;
 
@@ -5,6 +7,13 @@ namespace LittleBigMouse.Ui.Avalonia.Tests;
 
 public sealed class UiLifecycleTests
 {
+    [Theory]
+    [InlineData(ButtonResult.Yes, true)]
+    [InlineData(ButtonResult.No, false)]
+    [InlineData(ButtonResult.None, false)]
+    public void CloseConfirmationOnlyAcceptsYes(ButtonResult result, bool expected)
+        => Assert.Equal(expected, MainViewModel.ShouldShutdown(result));
+
     [Fact]
     public void OlderAsyncResourceCannotReplaceNewerOne()
     {

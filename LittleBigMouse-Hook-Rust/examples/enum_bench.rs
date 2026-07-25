@@ -2,8 +2,10 @@
 //! The pump runs this every 2 s on the routing thread — if it is slow, the
 //! cursor hitches at the same cadence.
 
+#[cfg(target_os = "linux")]
 use std::time::Instant;
 
+#[cfg(target_os = "linux")]
 fn main() {
     // Warm-up (dentry/inode caches).
     let _ = evdev::enumerate().count();
@@ -20,5 +22,14 @@ fn main() {
         total += us;
         std::hint::black_box((mice, kbds));
     }
-    println!("two enumerates: avg {}us, worst {}us over {N} runs", total / N as u128, worst);
+    println!(
+        "two enumerates: avg {}us, worst {}us over {N} runs",
+        total / N as u128,
+        worst
+    );
+}
+
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    eprintln!("enum_bench is available on Linux only");
 }

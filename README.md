@@ -5,10 +5,10 @@
 </p>
 
 > [!IMPORTANT]
-> ## 🎉 5.4.1 is out!
-> Screen **rotation** works again, after being broken since the v5 rewrite (#507): portrait monitors are drawn portrait, every orientation keeps its own saved layout, and driver-side rotations are detected. On top of the 5.4.0 base: the mouse engine now runs on a **memory-safe Rust daemon**, sleep/resume hardening, Xbox / Game Pass games excluded by default, per-model or per-monitor border settings, and tray icon fixes.
+> ## 🎉 5.5.0 is out!
+> The UI and the mouse daemon now talk over a **secure per-user local channel** instead of a TCP port (#519): no more port clashes, a killed daemon restarts instantly, and the startup configuration survives crashes with automatic backup recovery. **Clicks and wheel scrolls during a screen crossing** now land where you expect, and excluding an elevated (anti-cheat) game actually pauses the hook (#518). The monitor control panel gets an opt-in **live read** to follow OSD changes, plus safer display topology and clone-mode handling (#517).
 >
-> **[⬇ Download 5.4.1](https://github.com/mgth/LittleBigMouse/releases/tag/v5.4.1)** — requires the [.NET 10 Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+> **[⬇ Download 5.5.0](https://github.com/mgth/LittleBigMouse/releases/tag/v5.5.0)** — requires the [.NET 10 Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 >
 > Something not working? [Tell us](https://github.com/mgth/LittleBigMouse/issues) 🙏
 

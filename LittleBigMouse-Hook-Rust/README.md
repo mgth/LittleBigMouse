@@ -53,7 +53,7 @@ and must be renamed to **`LittleBigMouse.Hook.exe`** (the name the UI's
 
 | Variable | Effect |
 |---|---|
-| `LBM_HOOK_PORT` | Listen on a non-default port (side-by-side testing next to a running C++ daemon; the port is irrelevant to the global hook itself) |
+| `LBM_HOOK_ENDPOINT` | Listen on a non-default endpoint — the **full** pipe path on Windows (`\\.\pipe\my-test`), the socket path elsewhere. The UI honours it too, so a test daemon/UI pair runs side by side with the production pair |
 | `LBM_HOOK_UI` | Force UI mode (wait for socket commands) instead of parent-process detection — used by test scripts |
 | `LBM_HOOK_DEBUG` | Print a stderr heartbeat: `hooked` / `mouse_events` / `crossings` |
 

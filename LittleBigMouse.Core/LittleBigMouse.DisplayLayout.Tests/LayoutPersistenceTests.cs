@@ -258,9 +258,15 @@ public class LayoutPersistenceTests
         persistence.Load(layout);
 
         // The list kept all previous defaults: new defaults are added, file included,
-        // and the applied version is recorded in the store.
-        Assert.Contains(@"\XboxGames\", layout.Options.ExcludedList);
-        Assert.Contains(@"\XboxGames\", File.ReadAllLines(excluded));
+        // and the applied version is recorded in the store. Separator-insensitive: on
+        // Linux the current defaults are slash-style while LegacyV0 is Windows-style.
+        foreach (var entry in ExcludedProcessDefaults.All)
+        {
+            Assert.True(ExcludedProcessDefaults.ContainsEntry(layout.Options.ExcludedList, entry),
+                $"missing default: {entry}");
+            Assert.True(ExcludedProcessDefaults.ContainsEntry(File.ReadAllLines(excluded), entry),
+                $"missing default in file: {entry}");
+        }
         Assert.Equal(ExcludedProcessDefaults.Version, store.GlobalOptions?.ExcludedDefaultsVersion);
     }
 
@@ -277,9 +283,17 @@ public class LayoutPersistenceTests
         var layout = NewLayout(out _, out _);
         persistence.Load(layout);
 
-        Assert.DoesNotContain(@"\XboxGames\", layout.Options.ExcludedList);
+        foreach (var entry in NewDefaults())
+        {
+            Assert.False(ExcludedProcessDefaults.ContainsEntry(layout.Options.ExcludedList, entry),
+                $"top-up ran on a customized list: {entry}");
+        }
         Assert.Equal(ExcludedProcessDefaults.Version, store.GlobalOptions?.ExcludedDefaultsVersion);
     }
+
+    /// <summary>Current defaults that are NOT legacy ones (the entries a top-up would add).</summary>
+    static IEnumerable<string> NewDefaults() =>
+        ExcludedProcessDefaults.All.Where(e => !ExcludedProcessDefaults.ContainsEntry(ExcludedProcessDefaults.LegacyV0, e));
 
     [Fact]
     public void Load_ExcludedDefaults_AlreadyApplied_DoesNothing()
@@ -295,7 +309,11 @@ public class LayoutPersistenceTests
         var layout = NewLayout(out _, out _);
         persistence.Load(layout);
 
-        Assert.DoesNotContain(@"\XboxGames\", layout.Options.ExcludedList);
+        foreach (var entry in NewDefaults())
+        {
+            Assert.False(ExcludedProcessDefaults.ContainsEntry(layout.Options.ExcludedList, entry),
+                $"top-up ran twice: {entry}");
+        }
     }
 
     [Fact]

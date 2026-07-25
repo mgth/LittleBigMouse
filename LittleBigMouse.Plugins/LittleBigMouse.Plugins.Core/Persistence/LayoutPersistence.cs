@@ -319,12 +319,13 @@ public abstract class LayoutPersistence : ILayoutPersistence
         if ((_excludedDefaultsVersion ?? 0) >= ExcludedProcessDefaults.Version) return;
 
         // Only top up a list that still holds all the previous defaults (i.e. the user kept them).
-        if (ExcludedProcessDefaults.LegacyV0.All(list.Contains))
+        // Separator-insensitive: pre-V2 Linux lists were seeded with the Windows-style entries.
+        if (ExcludedProcessDefaults.LegacyV0.All(e => ExcludedProcessDefaults.ContainsEntry(list, e)))
         {
             var added = false;
             foreach (var entry in ExcludedProcessDefaults.All)
             {
-                if (list.Contains(entry)) continue;
+                if (ExcludedProcessDefaults.ContainsEntry(list, entry)) continue;
                 list.Add(entry);
                 added = true;
             }

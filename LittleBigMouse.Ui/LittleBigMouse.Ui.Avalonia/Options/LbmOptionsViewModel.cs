@@ -127,7 +127,8 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         if (Model == null) return;
         foreach (var entry in ExcludedProcessDefaults.All)
         {
-            if (!Model.ExcludedList.Contains(entry)) Model.ExcludedList.Add(entry);
+            // Separator-insensitive: don't duplicate a Windows-style entry with its Linux twin.
+            if (!ExcludedProcessDefaults.ContainsEntry(Model.ExcludedList, entry)) Model.ExcludedList.Add(entry);
         }
     }
 

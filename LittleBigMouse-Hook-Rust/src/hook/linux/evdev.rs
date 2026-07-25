@@ -51,8 +51,9 @@
 //! the grabbed combined nodes. Hot-plug is handled by a periodic rescan (new
 //! mice would otherwise drive the cursor directly, next to the engine) and by
 //! purging dead nodes — a removed device reports POLLERR forever and would
-//! otherwise turn the pump into a busy loop. Not mapped: focus-based
-//! exclusion — reported inert, same as the other Linux backends.
+//! otherwise turn the pump into a busy loop. Focus-based exclusion is handled
+//! by the [`super::focus`] watcher, common to all backends: it flips
+//! `want_hook`, and the reconcile below ungrabs/regrabs accordingly.
 
 use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};

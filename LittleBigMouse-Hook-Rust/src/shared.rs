@@ -73,15 +73,44 @@ impl Shared {
 
     /// C++ `LittleBigMouseDaemon::Excluded` — is `path` covered by an exclusion
     /// entry (substring match, entries longer than one char)?
+    ///
+    /// Two liberties over the C++ `find`, driven by the Linux port (#515):
+    /// - separators are normalized (`\` == `/`), so the Windows-style defaults
+    ///   (`\steamapps\`) match a Wine path (`Z:\...\steamapps\...`) as well as a
+    ///   native one (`/home/.../steamapps/...`);
+    /// - `*` splits an entry into ordered substrings (`*EscapeFrom*`,
+    ///   `Escape*Tarkov`) — users write wildcards spontaneously (#515) and they
+    ///   used to silently never match. Without `*` this degrades to the exact
+    ///   C++ behavior.
     pub fn is_excluded(&self, path: &str) -> bool {
         if path.is_empty() {
             return false;
         }
+        let path = path.replace('\\', "/");
         let excluded = self.excluded.lock().unwrap();
         excluded
             .iter()
-            .any(|line| line.len() > 1 && path.contains(line.as_str()))
+            .any(|line| line.len() > 1 && matches(&path, &line.replace('\\', "/")))
     }
+}
+
+/// Unanchored ordered-substring match: every non-empty `*`-separated segment of
+/// `pattern` must occur in `path`, in order, without overlap. A pattern with no
+/// non-empty segment (`**`) matches nothing — never silently exclude everything.
+fn matches(path: &str, pattern: &str) -> bool {
+    let mut pos = 0;
+    let mut has_segment = false;
+    for segment in pattern.split('*') {
+        if segment.is_empty() {
+            continue;
+        }
+        has_segment = true;
+        match path[pos..].find(segment) {
+            Some(i) => pos += i + segment.len(),
+            None => return false,
+        }
+    }
+    has_segment
 }
 
 impl Default for Shared {
@@ -116,6 +145,43 @@ mod tests {
         // C++ requires entries longer than one char (guards against a stray line).
         let shared = Shared::new();
         *shared.excluded.lock().unwrap() = vec![r"\".to_string()];
+        assert!(!shared.is_excluded(r"C:\anything\at\all.exe"));
+    }
+
+    #[test]
+    fn separators_are_normalized() {
+        // The Windows-style defaults must cover native and Wine paths (#515).
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = vec![r"\steamapps\".to_string()];
+        assert!(shared.is_excluded("/home/u/.local/share/Steam/steamapps/common/G/g.x86_64"));
+        assert!(shared.is_excluded(r"Z:\home\u\Steam\steamapps\common\G\g.exe"));
+
+        // ...and the slash-style Linux defaults (ExcludedProcessDefaults.Linux)
+        // must cover the Windows-style command lines Wine games expose.
+        *shared.excluded.lock().unwrap() = vec!["/steamapps/".to_string(), "/Games/".to_string()];
+        assert!(shared.is_excluded(r"Z:\home\u\Steam\steamapps\common\G\g.exe"));
+        assert!(shared.is_excluded(r"Z:\home\u\Games\Heroic\G\g.exe"));
+        assert!(!shared.is_excluded(r"C:\Riot Games\League of Legends\lol.exe"));
+    }
+
+    #[test]
+    fn wildcard_entries_match_ordered_segments() {
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = vec![
+            "*EscapeFrom*".to_string(), // the exact entry from #515
+            "Riot*League".to_string(),
+        ];
+        assert!(shared.is_excluded(r"Z:\games\EFT\EscapeFromTarkov.exe"));
+        assert!(shared.is_excluded(r"C:\Riot Games\League of Legends\lol.exe"));
+        // segments must appear in order
+        assert!(!shared.is_excluded(r"C:\League Games\Riot of Legends"));
+    }
+
+    #[test]
+    fn wildcard_only_entries_match_nothing() {
+        // "**" passes the len > 1 guard but must not exclude everything.
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = vec!["**".to_string()];
         assert!(!shared.is_excluded(r"C:\anything\at\all.exe"));
     }
 }

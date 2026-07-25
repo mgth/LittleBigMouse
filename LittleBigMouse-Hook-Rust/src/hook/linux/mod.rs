@@ -16,6 +16,7 @@
 
 pub mod accel;
 pub mod evdev;
+pub mod focus;
 pub mod portal;
 pub mod x11;
 
@@ -33,6 +34,10 @@ pub fn spawn_watchdog(_shared: &'static Shared) {}
 
 /// Run the platform event loop until `request_quit`.
 pub fn run(shared: &'static Shared) {
+    // Process exclusion (#515) is backend-independent: a dedicated thread watches
+    // the active window and pauses/resumes whichever backend is routing.
+    focus::spawn(shared);
+
     // Preferred everywhere it is permitted: the sole-router model has none of the
     // portal's limitations. Returns false only if initial setup failed (fall back).
     if evdev::available() {

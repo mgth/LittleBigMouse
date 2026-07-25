@@ -58,7 +58,9 @@ strip = true
 # corrected stream through a uinput virtual pointer — LBM is the sole router,
 # like the Windows hook. No portal, no capture notification, no round-trip.
 evdev = "0.13"
-x11rb = { version = "0.13", features = ["xinput", "randr"] }
+# "res" (X-Resource) resolves the pid of clients that do not set _NET_WM_PID
+# (focus watcher / process exclusion).
+x11rb = { version = "0.13", features = ["xinput", "randr", "res"] }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "input_capture", "tracing"] }
 # Already in the tree through ashpd; used directly by the evdev backend to ask
 # KWin for the real cursor position (scripting API) when arming.

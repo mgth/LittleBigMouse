@@ -10,9 +10,9 @@
 //! - `GetAsyncKeyState(CTRL)` → `QueryKeymap` against the Control modifier keycodes
 //! - `WM_DISPLAYCHANGE`       → RandR `ScreenChangeNotify` → `on_display_changed`
 //!
-//! Not mapped (yet): focus-based exclusion (EWMH `_NET_ACTIVE_WINDOW`) and the
-//! freelook signals — `cursor_hidden` and `clip_is_subrect_of_virtual_screen`
-//! report "no freelook".
+//! Not mapped (yet): the freelook signals — `cursor_hidden` and
+//! `clip_is_subrect_of_virtual_screen` report "no freelook". Focus-based
+//! exclusion is handled by the [`super::focus`] watcher, common to all backends.
 
 use std::os::fd::AsRawFd;
 use std::sync::atomic::Ordering;
@@ -173,7 +173,7 @@ fn select_raw_motion(conn: &RustConnection, root: u32, on: bool) -> bool {
 }
 
 /// Block until the X socket is readable or `timeout_ms` elapses.
-fn wait_readable(conn: &RustConnection, timeout_ms: i32) {
+pub(super) fn wait_readable(conn: &RustConnection, timeout_ms: i32) {
     let fd = conn.stream().as_raw_fd();
     let mut pfd = libc::pollfd {
         fd,

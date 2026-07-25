@@ -64,8 +64,11 @@ public class ZoneSerializer
                         case float i: value = i.ToString(CultureInfo.InvariantCulture); break;
                         case decimal i: value = i.ToString(CultureInfo.InvariantCulture); break;
                     }
-                            
-                    p+=$@" {member.Name}=""{value}""";
+
+                    // Monitor names come straight from EDID/device strings: a raw
+                    // & or " here breaks both the daemon's parser and the recovery
+                    // file validation.
+                    p+=$@" {member.Name}=""{EscapeAttribute(value)}""";
                 }
             }
             else
@@ -77,6 +80,9 @@ public class ZoneSerializer
 
         return $@"<{name}{p}>{inside}</{name}>";
     }
+
+    static string EscapeAttribute(object? value) =>
+        System.Security.SecurityElement.Escape(value?.ToString() ?? string.Empty);
 
     public static string Serialize(IZonesSerializable obj)
     {

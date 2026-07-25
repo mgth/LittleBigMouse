@@ -67,7 +67,7 @@ pub fn receive_message(
 
 /// C++ `LittleBigMouseDaemon::ReceiveLoadMessage`: stop hooking, parse the
 /// layout into the engine, and adopt its priorities for the next hook.
-fn load_layout(shared: &Shared, xml: &str) {
+fn load_layout(shared: &Shared, xml: &str) -> bool {
     if shared.hooked.load(Ordering::SeqCst) {
         hook::request_unhook(shared);
     }
@@ -88,8 +88,10 @@ fn load_layout(shared: &Shared, xml: &str) {
             .unwrap_or_else(|p| p.into_inner())
             .load(layout);
         eprintln!("[LittleBigMouse.Hook] layout loaded: {zones} zones ({main} main)");
+        true
     } else {
         eprintln!("[LittleBigMouse.Hook] layout load FAILED to parse");
+        false
     }
 }
 
@@ -131,24 +133,45 @@ pub fn load_excluded(shared: &Shared) {
 /// C++ `LoadFromFile`: read `Current.xml` and replay its command lines
 /// (`Load` then `Run`) — the standalone/autostart path.
 pub fn load_from_file(shared: &Shared, path: &str) {
-    match std::fs::read_to_string(path) {
-        Ok(content) => replay(shared, &content),
-        Err(e) => eprintln!("[LittleBigMouse.Hook] standalone: cannot read {path}: {e}"),
+    // A file that parses into a layout is authoritative even if it holds no
+    // Run line (a stopped state is a valid persisted state — falling back to
+    // the .bak then would auto-start an older layout). The backup only covers
+    // unreadable or corrupt primaries, written atomically by the UI.
+    let primary_ok = std::fs::read_to_string(path)
+        .map(|content| replay(shared, &content))
+        .unwrap_or(false);
+    if primary_ok {
+        return;
+    }
+
+    let backup = format!("{path}.bak");
+    match std::fs::read_to_string(&backup) {
+        Ok(content) if replay(shared, &content) => {
+            eprintln!("[LittleBigMouse.Hook] recovered startup configuration from {backup}")
+        }
+        Ok(_) => eprintln!("[LittleBigMouse.Hook] startup configuration and backup are invalid"),
+        Err(error) => eprintln!(
+            "[LittleBigMouse.Hook] cannot recover startup configuration from {path} or {backup}: {error}"
+        ),
     }
 }
 
 /// Replay the `Load`/`Run` command lines from a serialized layout file. Runs
 /// without a socket client, so it only handles the commands the file contains.
-fn replay(shared: &Shared, content: &str) {
+/// Returns whether a layout was successfully loaded; `Run` is only honoured
+/// after a successful `Load` (a Run alone must not hook a stale engine).
+fn replay(shared: &Shared, content: &str) -> bool {
+    let mut loaded = false;
     for line in content.lines() {
         for command in protocol::parse(line) {
             match command {
-                Command::Load(xml) => load_layout(shared, &xml),
-                Command::Run => run(shared),
+                Command::Load(xml) => loaded = load_layout(shared, &xml),
+                Command::Run if loaded => run(shared),
                 _ => {}
             }
         }
     }
+    loaded
 }
 
 /// Report current state (C++ `SendState`): `Running` when hooked, else `Paused`
@@ -210,5 +233,62 @@ mod tests {
             shared.want_hook.load(Ordering::SeqCst),
             "Run must express the desired state even while the previous hook is still up"
         );
+    }
+
+    #[test]
+    fn run_without_a_successful_load_is_ignored() {
+        let shared = Shared::new();
+        replay(&shared, "<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "a Run alone must not hook an engine with no layout"
+        );
+    }
+
+    #[test]
+    fn corrupt_primary_recovers_last_good_backup() {
+        let shared = Shared::new();
+        let id = format!("{}-{:?}", std::process::id(), std::thread::current().id());
+        let path = std::env::temp_dir().join(format!("lbm-current-{id}.xml"));
+        let backup = format!("{}.bak", path.display());
+        std::fs::write(&path, "<truncated").unwrap();
+        std::fs::write(
+            &backup,
+            format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n"),
+        )
+        .unwrap();
+
+        load_from_file(&shared, path.to_str().unwrap());
+
+        assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
+        assert!(shared.want_hook.load(Ordering::SeqCst));
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&backup);
+    }
+
+    #[test]
+    fn valid_stopped_primary_does_not_fall_back_to_backup() {
+        // A primary holding only a Load (user stopped, state persisted) is
+        // authoritative: the backup must not auto-start an older layout.
+        let shared = Shared::new();
+        let id = format!("{}-{:?}", std::process::id(), std::thread::current().id());
+        let path = std::env::temp_dir().join(format!("lbm-stopped-{id}.xml"));
+        let backup = format!("{}.bak", path.display());
+        std::fs::write(&path, format!("{LOAD_LINE}\n")).unwrap();
+        std::fs::write(
+            &backup,
+            format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n"),
+        )
+        .unwrap();
+
+        load_from_file(&shared, path.to_str().unwrap());
+
+        assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "backup must not override a valid stopped state"
+        );
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&backup);
     }
 }

@@ -10,8 +10,6 @@ use std::sync::atomic::Ordering;
 use littlebigmouse_hook::shared::{Shared, SHARED};
 use littlebigmouse_hook::{daemon, hook, ipc, platform};
 
-const DAEMON_PORT: u16 = 25196;
-
 fn main() {
     platform::init();
 
@@ -21,18 +19,17 @@ fn main() {
     // command that would signal it.
     hook::register_main_thread(shared);
 
-    // The C++ daemon hardcodes 25196 while the C# side has a configurable
-    // DaemonPort; honoring an override here removes that friction and enables
-    // safe side-by-side testing next to a running daemon.
-    let port = std::env::var("LBM_HOOK_PORT")
-        .ok()
-        .and_then(|s| s.parse::<u16>().ok())
-        .unwrap_or(DAEMON_PORT);
-
-    let (server, port) = ipc::server::start(shared, port);
+    // `LBM_HOOK_ENDPOINT` overrides the per-session pipe/socket path, enabling
+    // side-by-side testing next to a running daemon (successor of the old
+    // LBM_HOOK_PORT override).
+    let (server, endpoint) = match std::env::var("LBM_HOOK_ENDPOINT") {
+        Ok(endpoint) => ipc::server::start_with_endpoint(shared, endpoint),
+        Err(_) => ipc::server::start(shared),
+    }
+    .unwrap_or_else(|error| panic!("failed to start per-user local IPC: {error}"));
     let _ = shared.server.set(server);
 
-    eprintln!("[LittleBigMouse.Hook] listening on 127.0.0.1:{port}");
+    eprintln!("[LittleBigMouse.Hook] listening on {endpoint}");
 
     // C++ Program.cpp: UI mode (wait for socket commands) when launched by the UI
     // (parent path contains "LittleBigMouse"); otherwise standalone — load the
@@ -44,7 +41,10 @@ fn main() {
 
     if !ui_mode {
         if let Some(path) = platform::paths::lbm_data_file("Current.xml") {
-            eprintln!("[LittleBigMouse.Hook] standalone mode: loading {}", path.display());
+            eprintln!(
+                "[LittleBigMouse.Hook] standalone mode: loading {}",
+                path.display()
+            );
             if let Some(path) = path.to_str() {
                 daemon::load_from_file(shared, path);
             }

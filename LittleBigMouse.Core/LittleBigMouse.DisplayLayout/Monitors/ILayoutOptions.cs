@@ -224,7 +224,8 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    bool ShowMonitorActionWarning { get; set; }
 
    /// <summary>
-   /// Daemon port for TCP communication
+   /// Legacy persisted setting retained so older layouts still deserialize.
+   /// Local IPC does not use a TCP port.
    /// </summary>
    public int DaemonPort { get; set; }
 

@@ -1,6 +1,7 @@
 using MsBox.Avalonia.Enums;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;
+using LittleBigMouse.Ui.Avalonia.Remote;
 using Xunit;
 
 namespace LittleBigMouse.Ui.Avalonia.Tests;
@@ -42,6 +43,24 @@ public sealed class UiLifecycleTests
         Assert.False(second.Disposed);
         slot.Dispose();
         Assert.True(second.Disposed);
+    }
+
+    [Fact]
+    public async Task MissingDaemonRaisesConnectionFailedInsteadOfWaitingForever()
+    {
+        // Windows-only: NamedPipeClientStream waits forever on a missing server,
+        // which is the failure mode this pins down. On Linux the UDS path is
+        // machine-global, so a developer's live daemon would make it flaky.
+        if (!OperatingSystem.IsWindows()) return;
+
+        using var client = new LocalIpcClient($"LittleBigMouse-test-{Guid.NewGuid():N}");
+        var failed = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        client.ConnectionFailed += (_, _) => failed.TrySetResult();
+
+        client.Listen();
+
+        await failed.Task.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
     sealed class TestResource : IDisposable

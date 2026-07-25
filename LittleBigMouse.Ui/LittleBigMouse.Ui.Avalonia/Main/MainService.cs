@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
@@ -118,8 +119,11 @@ public class MainService : ReactiveModel, IMainService
             .Subscribe(_ => (MonitorsLayout as MonitorsLayout)?.UpdateSchedule())
             .DisposeWith(this);
 
-        // Relate service state with notify icon
-        _littleBigMouseClientService.DaemonEventReceived += (o, a) => DaemonEventReceived(o, a);
+        // Relate service state with notify icon. Post to the UI thread so events
+        // arrive in order (a Task.Run per event could invert Running/Stopped);
+        // the Safely wrapper keeps one failed handler from stopping later events.
+        _littleBigMouseClientService.DaemonEventReceived += (sender, args) =>
+            Dispatcher.UIThread.Post(() => _ = DaemonEventReceivedSafely(sender, args));
 
         // The platform watches the OS for wallpaper changes (Windows: a RegNotifyChangeKeyValue
         // registry watcher) and raises WallpaperChanged. Refresh the wallpaper drawn behind each
@@ -196,7 +200,7 @@ public class MainService : ReactiveModel, IMainService
 
         await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
-        await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartAsync);
+        await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartFromUserAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>
         {
             MonitorsLayout.Options.Enabled = false;
@@ -230,6 +234,15 @@ public class MainService : ReactiveModel, IMainService
     }
 
     Task StartAsync() => _littleBigMouseClientService.StartAsync(MonitorsLayout.ComputeZones());
+
+    // Symmetric to the tray Stop: a user Start persists Enabled=true, otherwise
+    // the recovery guards (which test Options.Enabled) never reconcile it.
+    async Task StartFromUserAsync()
+    {
+        MonitorsLayout.Options.Enabled = true;
+        _layoutPersistence.SaveEnabled(MonitorsLayout);
+        await StartAsync();
+    }
 
     /// <summary>
     /// Tray-menu escape hatch: force a layout rebuild when the automatic display-change
@@ -272,6 +285,20 @@ public class MainService : ReactiveModel, IMainService
     }
 
     bool _justConnected = false;
+
+    async Task DaemonEventReceivedSafely(
+        object? sender, LittleBigMouseServiceEventArgs args)
+    {
+        try
+        {
+            await DaemonEventReceived(sender, args);
+        }
+        catch (Exception error)
+        {
+            // One failed notification must not stop later daemon events.
+            Debug.WriteLine($"Daemon event handler failed: {error}");
+        }
+    }
     async Task DaemonEventReceived(object? sender, LittleBigMouseServiceEventArgs args)
     {
         TraceDaemonEvent(args.Event);

@@ -4,8 +4,9 @@ A memory-safe Rust rewrite of the native C++ `LittleBigMouse.Hook` daemon: the
 separate process that installs the low-level Windows mouse hook and repositions
 the cursor across multi-DPI monitors.
 
-The daemon is language-agnostic behind its contract with the C# UI — a loopback
-TCP socket (port **25196**) exchanging `\n`-delimited XML — so this process is a
+The daemon is language-agnostic behind its contract with the C# UI — per-user
+local IPC (a per-session named pipe on Windows, a 0600 Unix socket in
+`$XDG_RUNTIME_DIR` on Linux) exchanging length-prefixed UTF-8 XML frames — so this process is a
 drop-in replacement for the C++ one.
 
 ## Why Rust
@@ -23,7 +24,7 @@ zones, geometry and IPC are 100% safe.
 
 | Module | Ports the C++ |
 |---|---|
-| `ipc/` | `Remote/` — TCP server, `\n` framing, `CommandMessage`/`DaemonMessage` |
+| `ipc/` | `Remote/` — local IPC server, u32-length framing, `CommandMessage`/`DaemonMessage` |
 | `hook/` | `Hook/Hooker*` — `WH_MOUSE_LL`, WinEvents, display window, message pump |
 | `geometry/` | `Geometry/*.h` — `Point`/`Rect`/`Line`/`Segment` over a `Coord` trait |
 | `zones/` | `Engine/Zone`,`ZoneLink`,`ZonesLayout` on the arena |

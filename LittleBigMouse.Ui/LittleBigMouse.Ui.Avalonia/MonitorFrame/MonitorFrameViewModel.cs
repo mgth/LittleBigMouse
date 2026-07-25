@@ -13,12 +13,15 @@ using ReactiveUI;
 using System;
 using System.Diagnostics;
 using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
 public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextProvider, IMonitorFrameViewModel
 {
+   readonly LatestResourceSlot<IImage> _wallpapers = new();
+
    public MonitorFrameViewModel()
    {
       _rotated = this.WhenAnyValue(
@@ -95,13 +98,15 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
           (ratio, mmu, _) => mmu.ScaleWithLocation(ratio)
       ).Log(this, "_unrotated").ToProperty(this, e => e.Unrotated);
 
-      var cmd = ReactiveCommand.CreateFromTask<(string, WallpaperStyle, ColorRGB<double>)>(p => SetWallpaper(p.Item1, p.Item2, p.Item3));
-
       this.WhenAnyValue(
           e => e.Model.ActiveSource.Source.WallpaperPath,
           e => e.Model.ActiveSource.Source.WallpaperStyle,
           e => e.Model.ActiveSource.Source.BackgroundColor)
-          .InvokeCommand(cmd).DisposeWith(this);
+          .Subscribe(p =>
+          {
+             var generation = _wallpapers.Begin();
+             _ = SetWallpaperSafely(p.Item1, p.Item2, p.Item3, generation);
+          }).DisposeWith(this);
 
       this
           .WhenAnyValue(e => e.Model)
@@ -122,10 +127,8 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
       Disposer.OnDispose(() =>
       {
-         if (Wallpaper is IDisposable bmp)
-         {
-            bmp.Dispose();
-         }
+         _wallpapers.Dispose();
+         Wallpaper = null;
       });
    }
 
@@ -147,7 +150,8 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       return new(r.X / shrink, r.Y / shrink, r.Width / shrink, r.Height / shrink);
    }
 
-   async Task SetWallpaper(string path, WallpaperStyle style, ColorRGB<double> color)
+   async Task SetWallpaper(
+      string path, WallpaperStyle style, ColorRGB<double> color, long generation)
    {
       Debug.Assert(Model?.ActiveSource?.Source != null);
 
@@ -155,7 +159,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       // (its pixel bounds may also be stale/non-zero, which would produce a bogus crop).
       if (string.IsNullOrWhiteSpace(path) || !Model.ActiveSource.Source.AttachedToDesktop)
       {
-         ApplyWallpaper(null);
+         ApplyWallpaper(null, generation);
          return;
       }
 
@@ -167,7 +171,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
       if (r.Width < shrink || r.Height < shrink)
       {
-         ApplyWallpaper(null);
+         ApplyWallpaper(null, generation);
          return;
       }
 
@@ -190,24 +194,42 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
          _ => throw new ArgumentOutOfRangeException()
       };
 
-      ApplyWallpaper(bitmap);
+      ApplyWallpaper(bitmap, generation);
 
 #if DEBUG
       WallpaperRendererHelper.ImageSharpDebugStats();
 #endif
    }
 
+   async Task SetWallpaperSafely(
+      string path, WallpaperStyle style, ColorRGB<double> color, long generation)
+   {
+      try
+      {
+         await SetWallpaper(path, style, color, generation);
+      }
+      catch (Exception error)
+      {
+         Debug.WriteLine($"Wallpaper rendering failed: {error}");
+         ApplyWallpaper(null, generation);
+      }
+   }
+
    // The wallpaper renderers await ImageSharp I/O + Task.Run without capturing the UI context, so
    // the continuation here can resume off the UI thread. Assigning the UI-bound Wallpaper property
    // off-thread does not refresh the Image, so marshal the assignment back to the UI thread.
-   void ApplyWallpaper(IImage? bitmap)
+   void ApplyWallpaper(IImage? bitmap, long generation)
    {
-      if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-         Wallpaper = bitmap;
-      else
-         global::Avalonia.Threading.Dispatcher.UIThread.Post(() => Wallpaper = bitmap);
-   }
+      void Apply()
+      {
+         if (_wallpapers.TryReplace(generation, bitmap)) Wallpaper = bitmap;
+      }
 
+      if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+         Apply();
+      else
+         global::Avalonia.Threading.Dispatcher.UIThread.Post(Apply);
+   }
 
    public IMonitorsLayoutPresenterViewModel? MonitorsPresenter { get;
       set => this.RaiseAndSetIfChanged(ref field, value);
@@ -238,7 +260,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
    readonly ObservableAsPropertyHelper<bool> _selected;
 
    public IImage? Wallpaper { get;
-      set => this.RaiseAndSetIfChanged(ref field, value);
+      private set => this.RaiseAndSetIfChanged(ref field, value);
    }
 
    public IFrameLocation Location { get;

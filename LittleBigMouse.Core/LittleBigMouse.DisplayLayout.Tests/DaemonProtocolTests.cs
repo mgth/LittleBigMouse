@@ -47,6 +47,50 @@ public class DaemonProtocolTests
     }
 
     [Fact]
+    public async Task MarkStoppedKeepsLoadButStripsRun()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"lbm-atomic-{Guid.NewGuid():N}");
+        var path = Path.Combine(directory, "Current.xml");
+        const string load = "<CommandMessage Command=\"Load\"><Payload></Payload></CommandMessage>";
+        const string run = "<CommandMessage Command=\"Run\" Payload=\"\"></CommandMessage>";
+        try
+        {
+            await AtomicRecoveryFile.WriteAsync(path, $"{load}\n{run}\n", CancellationToken.None);
+            await AtomicRecoveryFile.MarkStoppedAsync(path, CancellationToken.None);
+            Assert.Equal($"{load}\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MarkStoppedWithoutFileIsANoOp()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"lbm-atomic-{Guid.NewGuid():N}");
+        var path = Path.Combine(directory, "Current.xml");
+        await AtomicRecoveryFile.MarkStoppedAsync(path, CancellationToken.None);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void SerializedAttributesEscapeXmlMetacharacters()
+    {
+        var serialized = ZoneSerializer.Serialize(
+            new NamedThing { Name = "L&G \"32<40>\" TV" }, thing => thing.Name);
+
+        using var reader = System.Xml.XmlReader.Create(new StringReader(serialized));
+        Assert.True(reader.Read());
+        Assert.Equal("L&G \"32<40>\" TV", reader.GetAttribute("Name"));
+    }
+
+    class NamedThing
+    {
+        public string Name { get; set; } = "";
+    }
+
+    [Fact]
     public async Task InvalidRecoveryXmlDoesNotReplaceCurrentFile()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"lbm-atomic-{Guid.NewGuid():N}");

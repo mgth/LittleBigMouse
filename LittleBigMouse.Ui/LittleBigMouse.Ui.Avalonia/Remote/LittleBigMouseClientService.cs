@@ -342,6 +342,21 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
                 persistenceFailure = error;
             }
         }
+        else if (commands.Any(command => command.Command == LittleBigMouseCommand.Stop))
+        {
+            // A user Stop must survive a restart: strip the Run line so a
+            // standalone daemon replays the layout stopped instead of re-hooking
+            // the mouse at the next boot. Stop is a safety operation — a
+            // persistence failure must never fault it.
+            try
+            {
+                await AtomicRecoveryFile.MarkStoppedAsync(path, token);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or XmlException)
+            {
+                Debug.WriteLine($"Could not persist the stopped state: {error.Message}");
+            }
+        }
 
         await _client.SendMessageAsync(wireXml, TimeSpan.FromMilliseconds(timeout), token);
         if (persistenceFailure is not null)

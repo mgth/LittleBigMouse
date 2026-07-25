@@ -36,6 +36,21 @@ public static class AtomicRecoveryFile
         }
     }
 
+    /// <summary>
+    /// Rewrite an existing recovery file without its Run lines: Load-without-Run
+    /// is the persisted stopped state, which a standalone daemon replays without
+    /// re-hooking. A missing file means nothing to persist.
+    /// </summary>
+    public static async Task MarkStoppedAsync(string path, CancellationToken token)
+    {
+        if (!File.Exists(path)) return;
+        var lines = (await File.ReadAllLinesAsync(path, token))
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Where(line => !line.StartsWith("<CommandMessage Command=\"Run\"", StringComparison.Ordinal))
+            .ToList();
+        await WriteAsync(path, string.Join("\n", lines) + "\n", token);
+    }
+
     static void Validate(string content)
     {
         if (Encoding.UTF8.GetByteCount(content) > 1024 * 1024)

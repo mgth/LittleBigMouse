@@ -35,11 +35,11 @@ public static class MainPluginsViewModelExtension
             ToolTipText = toolTypeText,
         };
 
-        @this.WhenAnyValue(e => e.ContentViewMode).Do(e =>
+        @this.WhenAnyValue(e => e.ContentViewMode).Subscribe(e =>
         {
             if (e == typeof(T)) return;
             command.IsActive = false;
-        }).Subscribe(Console.WriteLine);
+        });
 
         isVisible?
             .ObserveOn(RxSchedulers.MainThreadScheduler)

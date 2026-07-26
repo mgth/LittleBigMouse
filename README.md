@@ -4,6 +4,12 @@
     <img src="https://raw.githubusercontent.com/mgth/LittleBigMouse/master/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Assets/lbm.png" width="200" alt="Little Big Mouse Logo"/>
 </p>
 
+> [!TIP]
+> ## 🌐 New: [littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/) — the official website
+> Little Big Mouse now has a home of its own: **[littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/)** — what it does, downloads, and guides, always in sync with this repository.
+>
+> ⚠️ Please note that **littlebigmouse.com is not affiliated with this project**. We don't operate that site, don't know who does, and can't vouch for anything it publishes. The only official sources for Little Big Mouse are this repository — with its [Releases](https://github.com/mgth/LittleBigMouse/releases) page — and [littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/).
+
 > [!IMPORTANT]
 > ## 🎉 5.5.0 is out!
 > The UI and the mouse daemon now talk over a **secure per-user local channel** instead of a TCP port (#519): no more port clashes, a killed daemon restarts instantly, and the startup configuration survives crashes with automatic backup recovery. **Clicks and wheel scrolls during a screen crossing** now land where you expect, and excluding an elevated (anti-cheat) game actually pauses the hook (#518). The monitor control panel gets an opt-in **live read** to follow OSD changes, plus safer display topology and clone-mode handling (#517).
@@ -80,7 +86,7 @@ are submodules.
 
 ## Usage
 
-Documentation : https://github.com/mgth/LittleBigMouse/wiki
+Documentation : https://littlebigmouse.mgth.fr/docs/ and https://github.com/mgth/LittleBigMouse/wiki
 
 Little Big Mouse provides a single-window interface with three main sections:
 

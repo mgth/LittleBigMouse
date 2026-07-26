@@ -17,4 +17,9 @@ public partial class ApplicationUpdaterView : Window
     {
         Close();
     }
+
+    void Kofi_OnClick(object sender, RoutedEventArgs e)
+    {
+        SupportLinks.OpenKofi();
+    }
 }

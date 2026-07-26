@@ -26,10 +26,22 @@
         </StackPanel>
 
         <!-- Buttons and progress stay pinned at the bottom, always visible. -->
-        <StackPanel Height="40" DockPanel.Dock="Bottom" VerticalAlignment="Bottom" HorizontalAlignment="Right" Orientation="Horizontal">
-            <Button FontWeight="Bold" IsDefault="True" Padding="5" Command="{Binding UpdateCommand}"> Update </Button>
-            <Button Padding="5" Click="ButtonBase_OnClick"> Cancel </Button>
-        </StackPanel>
+        <Grid Height="40" DockPanel.Dock="Bottom" VerticalAlignment="Bottom" ColumnDefinitions="*,Auto">
+            <Button Background="Transparent" BorderThickness="0" Padding="5"
+                    VerticalAlignment="Center" HorizontalAlignment="Left"
+                    Click="Kofi_OnClick"
+                    ToolTip.Tip="If Little Big Mouse is useful to you, support its development on Ko-fi">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Path Data="{StaticResource Lbm.Icon.Coffee}" Width="14" Height="14" Stretch="Uniform"
+                          Fill="{DynamicResource SystemAccentColor}" VerticalAlignment="Center"/>
+                    <TextBlock Text="Support on Ko-fi" Foreground="{DynamicResource SystemAccentColor}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button FontWeight="Bold" IsDefault="True" Padding="5" Command="{Binding UpdateCommand}"> Update </Button>
+                <Button Padding="5" Click="ButtonBase_OnClick"> Cancel </Button>
+            </StackPanel>
+        </Grid>
         <ProgressBar DockPanel.Dock="Bottom" Height="20" Value="{Binding Progress}" Maximum="100" Margin="20"/>
 
         <!-- Changelog fills the middle and scrolls, so a long release body can no

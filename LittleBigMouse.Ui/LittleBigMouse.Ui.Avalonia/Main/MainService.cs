@@ -140,9 +140,44 @@ public class MainService : ReactiveModel, IMainService
         // TODO : move to plugin
         var old = MonitorsLayout;
 
-        MonitorsLayout = _layoutFactory.Create();
+        MonitorsLayout = LoadVirtualLayoutFromEnv() ?? _layoutFactory.Create();
 
         old?.Dispose();
+    }
+
+    /// <summary>
+    /// Debug hook: LBM_VIRTUAL_LAYOUT=path-to-export(.json|.gz) replaces the system layout
+    /// with a virtual one, so a user's export can be inspected from the command line
+    /// (same display-only semantics as the "open virtual layout" debug button).
+    /// </summary>
+    static IMonitorsLayout? LoadVirtualLayoutFromEnv()
+    {
+        var path = Environment.GetEnvironmentVariable("LBM_VIRTUAL_LAYOUT");
+        if (string.IsNullOrWhiteSpace(path)) return null;
+
+        try
+        {
+            var bytes = File.ReadAllBytes(path);
+            string json;
+            if (bytes.Length > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b)
+            {
+                using var gzip = new System.IO.Compression.GZipStream(
+                    new MemoryStream(bytes), System.IO.Compression.CompressionMode.Decompress);
+                using var reader = new StreamReader(gzip);
+                json = reader.ReadToEnd();
+            }
+            else
+            {
+                json = System.Text.Encoding.UTF8.GetString(bytes);
+            }
+
+            return VirtualLayoutFactory.FromJson(json);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"LBM_VIRTUAL_LAYOUT: failed to load '{path}': {ex}");
+            return null;
+        }
     }
 
     Window _mainWindow = null!;

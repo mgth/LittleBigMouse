@@ -92,22 +92,35 @@ internal class Program
         //GC.KeepAlive(typeof(SvgImageExtension).Assembly);
         //GC.KeepAlive(typeof(global::Avalonia.Svg.Skia.Svg).Assembly);
 
-        return AppBuilder.Configure<App>()
+        var builder = AppBuilder.Configure<App>()
             .UseReactiveUI(_ => { })
             .UsePlatformDetect()
             .WithInterFont()
-            //.With(new Win32PlatformOptions
-            //{
-            //    RenderingMode = [Win32RenderingMode.AngleEgl],
-            //    CompositionMode = [Win32CompositionMode.WinUIComposition]
-
-            //})
             .UseSkia()
 #if DEBUG
             //            .LogToTrace(LogEventLevel.Verbose)
             .LogToTrace(LogEventLevel.Debug)
 #endif
             ;
+
+        // Diagnostic escape hatch (#506): LBM_RENDER=software bypasses GPU rendering
+        // entirely. Monitors present in list view but absent from the layout view on
+        // atypical adapters (DisplayLink docks, mixed dual-GPU) point at the Avalonia 12
+        // composition/D3D path — if the layout shows up with this switch, the GPU
+        // rendering path is the culprit and this doubles as an immediate workaround.
+        if (OperatingSystem.IsWindows()
+            && string.Equals(Environment.GetEnvironmentVariable("LBM_RENDER"), "software",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("LBM_RENDER=software: forcing software rendering.");
+            builder = builder.With(new Win32PlatformOptions
+            {
+                RenderingMode = [Win32RenderingMode.Software],
+                CompositionMode = [Win32CompositionMode.RedirectionSurface]
+            });
+        }
+
+        return builder;
     }
 
     public static void UIMain(Application app, string[] args)

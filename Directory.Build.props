@@ -9,6 +9,6 @@
        HLab submodules keep their own <Version> (a csproj property wins over
        this file). Bump this value when tagging a release. -->
   <PropertyGroup>
-    <Version>5.5.0</Version>
+    <Version>5.5.1</Version>
   </PropertyGroup>
 </Project>

@@ -58,6 +58,13 @@ public static class WindowsElevation
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
             };
             foreach (var a in args) psi.ArgumentList.Add(a);
+            // ShellExecute("runas") gives the elevated child a fresh environment built
+            // from the user profile: LBM_* diagnostic variables (#506) set in the
+            // launching shell would be silently lost. Forward them as arguments; Main
+            // re-applies them before anything reads the environment.
+            foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())
+                if (e.Key is string k && k.StartsWith("LBM_", StringComparison.OrdinalIgnoreCase))
+                    psi.ArgumentList.Add($"--env:{k}={e.Value}");
             return Process.Start(psi) != null;
         }
         catch (Win32Exception)

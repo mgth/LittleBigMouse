@@ -49,6 +49,17 @@ internal class Program
     {
         StartupLog.RedirectConsoleWhenDetached();
 
+        // LBM_* diagnostic variables forwarded through the elevated relaunch as
+        // --env: arguments (see WindowsElevation.RelaunchElevated): apply and strip
+        // them so the hooks read them as plain environment variables.
+        args = Array.FindAll(args, a =>
+        {
+            if (!a.StartsWith("--env:LBM_", StringComparison.OrdinalIgnoreCase)) return true;
+            var eq = a.IndexOf('=', "--env:".Length);
+            if (eq > 0) Environment.SetEnvironmentVariable(a["--env:".Length..eq], a[(eq + 1)..]);
+            return false;
+        });
+
         // Opportunistic elevation (manifest is asInvoker so standard users can start at
         // all, #512/#400): when the "Start elevated" option is set and the user is a
         // split-token admin, hand over to an elevated relaunch — BEFORE the

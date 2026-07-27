@@ -38,7 +38,6 @@ Check the very nice video from Touble Chute (a very big thanks to him):
 ## Features
 
 - **Smooth Mouse Transitions**: Ensures smooth and accurate mouse movement across screens with different DPI settings.
-- **DPI Aware Mouse Movement**: Adjusts mouse speed to remain consistent across monitors with different DPI values.
 - **Screen Looping**: Lets the cursor wrap around the desktop — leave the last screen and re-enter from the first, horizontally or vertically.
 - **Display Size Adjustments**: Allows for adjustments in the relative sizes of displays.
 - **Border Resistance**: Allow some resistance before crossing.
@@ -92,7 +91,7 @@ Little Big Mouse provides a single-window interface with three main sections:
 
 - **Top Panel**: Access view tabs for display and display adapter information, changing relative sizes and positions of displays, and adjusting color and brightness profiles.
 - **Center Panel**: Displays information about your display devices, including makes and models, capabilities, adapters, and relative positions.
-- **Bottom Panel**: Offers options and operations, including copying config to clipboard, enabling/disabling LBM functionality, and adjusting speed, pointer size, and corner crossing.
+- **Bottom Panel**: Offers options and operations, including copying config to clipboard, enabling/disabling LBM functionality, and corner crossing and looping options.
 
 ## Support
 

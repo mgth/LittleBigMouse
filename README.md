@@ -39,7 +39,7 @@ Check the very nice video from Touble Chute (a very big thanks to him):
 
 - **Smooth Mouse Transitions**: Ensures smooth and accurate mouse movement across screens with different DPI settings.
 - **DPI Aware Mouse Movement**: Adjusts mouse speed to remain consistent across monitors with different DPI values.
-- **Infinite Mouse Scrolling**: Enables seamless cursor movement between screens, either horizontally or vertically.
+- **Screen Looping**: Lets the cursor wrap around the desktop — leave the last screen and re-enter from the first, horizontally or vertically.
 - **Display Size Adjustments**: Allows for adjustments in the relative sizes of displays.
 - **Border Resistance**: Allow some resistance before crossing.
 - **Display Color and Brightness Balancing**: Offers control over color and brightness profiles of displays.

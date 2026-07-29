@@ -1,7 +1,8 @@
 # Build LittleBigMouse: managed UI (net10 / Avalonia) + native hook daemon (x64,
 # Rust by default, C++ as opt-out).
-# - Push / PR on master: build everything, upload a portable artifact.
-# - Tag v*: additionally compile the InnoSetup installer and attach it to a
+# - Push / PR on master: build everything (installer included, as a smoke test),
+#   upload a portable artifact.
+# - Tag v*: additionally publish the installer as an artifact and attach it to a
 #   draft GitHub release for manual review before publishing.
 
 name: Build
@@ -93,10 +94,21 @@ jobs:
           !${{ env.UI_OUTPUT }}\runtimes\linux*\**
           !${{ env.UI_OUTPUT }}\runtimes\osx*\**
 
+    # Compiled on every build, not only on tags: the installer script breaks in ways
+    # the app build can't catch (ISCC aborts on a wildcard matching nothing, so
+    # dropping the last file of a kind from the output is enough), and a release tag
+    # is far too late to find out. Costs a few seconds. Only the two publishing
+    # steps below stay tag-only.
     - name: Compile installer (InnoSetup)
-      if: startsWith(github.ref, 'refs/tags/v')
       run: |
-        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=${{ steps.ver.outputs.version }}" "/DHookImpl=${{ env.HOOK_IMPL }}" LittleBigMouse.Setup\LittleBigMouse.iss
+        # Off a release tag there is no version to inject. Leave AppVer undefined
+        # instead of passing an empty one (ISCC rejects an empty AppVersion) and let
+        # the .iss fall back to the built exe's FileVersion.
+        $defines = @("/DHookImpl=${{ env.HOOK_IMPL }}")
+        if ("${{ steps.ver.outputs.version }}") { $defines += "/DAppVer=${{ steps.ver.outputs.version }}" }
+        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" @defines LittleBigMouse.Setup\LittleBigMouse.iss
+        # Also fails the step if ISCC somehow reported success without producing it.
+        Get-ChildItem LittleBigMouse.Setup\LittleBigMouse_*.exe | Select-Object Name, Length
 
     - name: Upload installer artifact
       if: startsWith(github.ref, 'refs/tags/v')

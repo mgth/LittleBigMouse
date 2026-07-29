@@ -40,7 +40,10 @@ Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
 Source: "..\LittleBigMouse.Hook\bin\x64\Release\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 #endif
 Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
-Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.xml"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
+; No *.xml line here: the build output has not contained one since the Layout and
+; Vcp plugins stopped copying their unused colors.xml, and ISCC aborts the compile
+; on a wildcard that matches nothing. Add it back with the file, if one ever needs
+; shipping again.
 Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.json"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 
 ;Source: "..\bin\x86\Release\net10.0\*.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode

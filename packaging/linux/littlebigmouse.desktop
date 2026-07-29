@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Little Big Mouse
+GenericName=Multi-monitor mouse manager
+Comment=Make the mouse travel seamlessly between monitors of different sizes and resolutions
+# /usr/bin/littlebigmouse is a symlink to the app host in /usr/lib/littlebigmouse;
+# .NET resolves it through /proc/self/exe, so the daemon (lbm-hook) and the test
+# pattern viewer (lbm-pattern) are still found as siblings of the real binary.
+Exec=littlebigmouse
+Icon=littlebigmouse
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=mouse;cursor;monitor;display;multi-monitor;dpi;scaling;
+# Avalonia sets WM_CLASS from the entry assembly name; without this the tray app's
+# window is not matched to this entry in task managers / docks.
+StartupWMClass=LittleBigMouse.Ui.Avalonia
+StartupNotify=false

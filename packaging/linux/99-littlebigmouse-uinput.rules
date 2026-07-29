@@ -1,0 +1,18 @@
+# Little Big Mouse — access to the uinput virtual-device node.
+#
+# The preferred Linux backend of the hook daemon grabs the physical mice
+# (EVIOCGRAB on /dev/input/event*) and re-injects a corrected stream through a
+# uinput virtual pointer, so LBM is the sole router — exactly like the Windows
+# hook. That needs:
+#
+#   * read access to /dev/input/event*  — already root:input 0660 on most
+#     distributions, so membership of the `input` group is what grants it;
+#   * write access to /dev/uinput       — this rule.
+#
+# static_node= applies the ownership to the node the uinput module creates on
+# demand, so the permissions are right even before anything has opened it.
+#
+# Without these permissions the daemon silently falls back to the XDG
+# InputCapture portal (Wayland) or X11, which cannot intercept crossings between
+# adjacent outputs on KWin.
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

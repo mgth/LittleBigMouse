@@ -1,0 +1,35 @@
+pkgbase = littlebigmouse
+	pkgdesc = Seamless mouse travel between monitors of different sizes, resolutions and DPI
+	pkgver = 5.5.2
+	pkgrel = 1
+	url = https://github.com/mgth/LittleBigMouse
+	install = littlebigmouse.install
+	arch = x86_64
+	license = GPL-3.0-only
+	makedepends = dotnet-sdk-10.0
+	makedepends = cargo
+	makedepends = git
+	depends = dotnet-runtime-10.0
+	depends = fontconfig
+	depends = gcc-libs
+	depends = glibc
+	depends = libice
+	depends = libsm
+	depends = libx11
+	depends = libxcursor
+	depends = libxext
+	depends = libxi
+	depends = libxrandr
+	optdepends = kscreen: display layout detection and "apply layout to system" on KDE Plasma
+	optdepends = xorg-xrandr: display layout fallback outside Plasma
+	optdepends = ddcutil: DDC/CI monitor control (brightness, contrast, input source)
+	optdepends = argyllcms: colorimeter support in the monitor calibration panel
+	optdepends = libglvnd: GPU-accelerated rendering
+	source = littlebigmouse::git+https://github.com/mgth/LittleBigMouse.git#tag=v5.5.2
+	source = HLab.Core::git+https://github.com/mgth/HLab.Core.git
+	source = HLab.Avalonia::git+https://github.com/mgth/HLab.Avalonia.git
+	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = SKIP
+
+pkgname = littlebigmouse

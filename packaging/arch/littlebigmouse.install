@@ -1,0 +1,19 @@
+post_install() {
+  cat <<'EOF'
+
+Little Big Mouse routes the mouse itself (it grabs the physical mice through
+evdev and re-injects a corrected stream through a uinput virtual pointer), which
+needs access to the input devices. Add yourself to the "input" group and log out
+and back in:
+
+    sudo gpasswd -a "$USER" input
+
+Be aware that membership of the "input" group lets every program you run read
+all keyboard and mouse events.
+
+Without it the daemon falls back to the XDG InputCapture portal (Wayland) or
+X11, which cannot intercept the cursor crossing between adjacent outputs on
+KWin — the pointer will still jump natively at shared borders.
+
+EOF
+}

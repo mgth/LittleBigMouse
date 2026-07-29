@@ -54,13 +54,23 @@ Check the very nice video from Touble Chute (a very big thanks to him):
 
 ## Linux (experimental)
 
-The Linux port works, but is still experimental and currently builds from source only.
-Mouse routing uses an evdev/uinput backend — it grabs the physical mice and drives a
-virtual pointer, exactly like the Windows hook — with Wayland-portal and X11 fallbacks.
-It is developed and tested on KDE Plasma 6 (Wayland); feedback from other desktops is
-very welcome on the [issues](https://github.com/mgth/LittleBigMouse/issues) page.
+The Linux port works, but is still experimental. Mouse routing uses an evdev/uinput
+backend — it grabs the physical mice and drives a virtual pointer, exactly like the
+Windows hook — with Wayland-portal and X11 fallbacks. It is developed and tested on
+KDE Plasma 6 (Wayland); feedback from other desktops is very welcome on the
+[issues](https://github.com/mgth/LittleBigMouse/issues) page.
 
-### Prerequisites
+### Arch Linux
+
+```bash
+paru -S littlebigmouse   # or: yay -S littlebigmouse
+```
+
+The package builds from the tagged sources and installs the udev rule for
+`/dev/uinput`; you still have to add yourself to the `input` group (see below) and log
+out and back in. The packaging recipe lives in [`packaging/arch`](packaging/arch).
+
+### Prerequisites (building from source)
 
 - The **.NET 10 SDK** (the runtime alone is not enough to build) and the **Rust
   toolchain** (`cargo`):

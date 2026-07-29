@@ -9,9 +9,12 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Zoning;
 using ReactiveUI;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -124,6 +127,13 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
           (selected, monitor) => selected == monitor
           )
           .ToProperty(this, e => e.Selected);
+
+      _probeStrips = this.WhenAnyValue(
+          e => e.MonitorsPresenter.ProbeReport,
+          e => e.Rotated,
+          e => e.Model.ActiveSource.Source.Id,
+          GetProbeStrips)
+          .ToProperty(this, e => e.ProbeStrips);
 
       Disposer.OnDispose(() =>
       {
@@ -258,6 +268,65 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
 
    public bool Selected => _selected.Value;
    readonly ObservableAsPropertyHelper<bool> _selected;
+
+   public IReadOnlyList<ProbeStripViewModel> ProbeStrips => _probeStrips.Value;
+   readonly ObservableAsPropertyHelper<IReadOnlyList<ProbeStripViewModel>> _probeStrips;
+
+   /// <summary>
+   /// Map the edge-prober runs of this monitor's zone onto frame-local strips.
+   /// Runs are in desktop pixels along the zone edge; the strip position is the
+   /// proportional stretch of the monitor's CONTENT edge (borders excluded).
+   /// </summary>
+   IReadOnlyList<ProbeStripViewModel> GetProbeStrips(
+      ProbeReport? report, IDisplaySize? rotated, string? sourceId)
+   {
+      if (report is null || rotated is null || string.IsNullOrEmpty(sourceId))
+         return [];
+
+      var zone = report.Zones.FirstOrDefault(z => z.DeviceId == sourceId);
+      if (zone is null) return [];
+
+      var px = Model?.ActiveSource?.Source?.InPixel?.Bounds;
+      if (px is not { Width: >= 1, Height: >= 1 } pixels) return [];
+
+      var x0 = rotated.LeftBorder;
+      var y0 = rotated.TopBorder;
+      var w = rotated.Width;
+      var h = rotated.Height;
+      const double thickness = 5.0;
+
+      string TargetName(int id)
+      {
+         var target = report.Zones.FirstOrDefault(z => z.Id == id);
+         return target is null ? $"zone {id}"
+            : string.IsNullOrEmpty(target.Name) ? target.DeviceId : target.Name;
+      }
+
+      var strips = new List<ProbeStripViewModel>();
+      foreach (var edge in zone.Edges)
+      foreach (var run in edge.Runs)
+      {
+         var vertical = edge.Side is "Left" or "Right";
+         var span = vertical ? pixels.Height : pixels.Width;
+         var origin = vertical ? pixels.Y : pixels.X;
+         var from = Math.Clamp((run.From - origin) / span, 0.0, 1.0);
+         var to = Math.Clamp((run.To + 1 - origin) / span, 0.0, 1.0);
+         if (to <= from) continue;
+
+         var tip = run.IsWall
+            ? $"{edge.Side}: wall — the cursor stops here"
+            : $"{edge.Side}: crosses into {TargetName(run.TargetId)}";
+
+         strips.Add(edge.Side switch
+         {
+            "Left" => new ProbeStripViewModel(x0, y0 + from * h, thickness, (to - from) * h, run.IsWall, tip),
+            "Right" => new ProbeStripViewModel(x0 + w - thickness, y0 + from * h, thickness, (to - from) * h, run.IsWall, tip),
+            "Top" => new ProbeStripViewModel(x0 + from * w, y0, (to - from) * w, thickness, run.IsWall, tip),
+            _ => new ProbeStripViewModel(x0 + from * w, y0 + h - thickness, (to - from) * w, thickness, run.IsWall, tip),
+         });
+      }
+      return strips;
+   }
 
    public IImage? Wallpaper { get;
       private set => this.RaiseAndSetIfChanged(ref field, value);

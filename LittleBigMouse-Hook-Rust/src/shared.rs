@@ -42,6 +42,10 @@ pub struct Shared {
     /// Foreground-process path substrings that pause the hook (C++
     /// `LittleBigMouseDaemon::_excluded`), loaded from `Excluded.txt` on `Run`.
     pub excluded: Mutex<Vec<String>>,
+    /// Serialized XML of the last successfully loaded layout. The edge prober
+    /// re-parses it into a private engine so a `Probe` never disturbs the live
+    /// one (tracking state, clip) nor blocks the hook thread on the engine lock.
+    pub last_layout_xml: Mutex<String>,
     /// The IPC server handle, published once the listener is up.
     pub server: OnceLock<ServerHandle>,
 }
@@ -60,6 +64,7 @@ impl Shared {
             priority_unhooked: AtomicU8::new(Priority::Below.as_u8()),
             engine: Mutex::new(MouseEngine::new()),
             excluded: Mutex::new(Vec::new()),
+            last_layout_xml: Mutex::new(String::new()),
             server: OnceLock::new(),
         }
     }

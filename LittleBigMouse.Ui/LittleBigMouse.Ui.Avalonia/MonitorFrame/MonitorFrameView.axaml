@@ -266,5 +266,29 @@
 
         </Grid>
 
+        <!-- Edge-prober overlay: red = wall, green = crossing (tooltip says where to).
+             Frame-local coordinates computed by the view model from the probe report. -->
+        <ItemsControl ItemsSource="{Binding ProbeStrips}" ClipToBounds="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerTheme>
+                <ControlTheme TargetType="ContentPresenter" x:DataType="monitorFrame:ProbeStripViewModel">
+                    <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                    <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                </ControlTheme>
+            </ItemsControl.ItemContainerTheme>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="monitorFrame:ProbeStripViewModel">
+                    <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                               Fill="{Binding Fill}"
+                               RadiusX="2" RadiusY="2"
+                               ToolTip.Tip="{Binding Tip}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
     </Grid>
 </UserControl>

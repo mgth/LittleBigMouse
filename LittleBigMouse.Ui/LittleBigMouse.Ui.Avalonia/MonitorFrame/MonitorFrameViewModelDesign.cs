@@ -84,6 +84,7 @@ public class MonitorFrameViewModelDesign2 : MonitorFrameViewModel, IDesignViewMo
         public IMainPluginsViewModel MainViewModel => new MainViewModelDesign();
 
         public PhysicalMonitor? SelectedMonitor { get ; set ; }
+        public LittleBigMouse.Zoning.ProbeReport? ProbeReport => null;
         public ICommand ResetLocationsFromSystem { get; }
         public ICommand ResetSizesFromSystem { get; }
         public ICommand ApplyLocationsToSystem { get; }

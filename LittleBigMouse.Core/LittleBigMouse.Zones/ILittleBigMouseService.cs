@@ -44,6 +44,9 @@ public enum LittleBigMouseEvent
     // Running event will ever follow. Older daemons simply never send these.
     Loaded,
     LoadFailed,
+    // Edge-prober report (a <ProbeReport> document in the payload): emitted after every
+    // virtual Load and on an explicit Probe command. See ProbeReport.TryParse.
+    Probed,
 }
 public enum LittleBigMouseCommand
 {

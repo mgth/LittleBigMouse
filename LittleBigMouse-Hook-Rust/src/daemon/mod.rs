@@ -59,10 +59,16 @@ pub fn receive_message(
                             info.main,
                             info.virtual_layout,
                         ));
+                        // A virtual layout is loaded to be INSPECTED: probe it right
+                        // away so the UI gets the edge report without a round-trip.
+                        if info.virtual_layout {
+                            probe_loaded(shared, server);
+                        }
                     }
                     None => server.broadcast(protocol::LOAD_FAILED),
                 }
             }
+            Command::Probe => probe_loaded(shared, server),
             Command::LoadFromFile(path) => {
                 load_from_file(shared, &path);
             }
@@ -75,6 +81,24 @@ pub fn receive_message(
     }
 
     became_listening
+}
+
+/// Sweep the last loaded layout with the edge prober and broadcast the report.
+/// Runs on a re-parsed private layout, so the live engine and its lock are
+/// never touched (the hook thread cannot be stalled by a probe).
+fn probe_loaded(shared: &Shared, server: &ServerHandle) {
+    let xml = shared
+        .last_layout_xml
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    match crate::engine::probe::probe_xml(&xml) {
+        Some(report) => {
+            eprintln!("[LittleBigMouse.Hook] probe: report {} bytes", report.len());
+            server.broadcast(&protocol::probed(&report));
+        }
+        None => eprintln!("[LittleBigMouse.Hook] probe: no layout to probe"),
+    }
 }
 
 /// What a successful `Load` accepted — echoed back to the UI in the `Loaded` event.
@@ -111,6 +135,12 @@ fn load_layout(shared: &Shared, xml: &str) -> Option<LoadInfo> {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .load(layout);
+        // Kept for the edge prober, which re-parses rather than touching the
+        // live engine.
+        *shared
+            .last_layout_xml
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = xml.to_string();
         eprintln!(
             "[LittleBigMouse.Hook] layout loaded: {} zones ({} main){tag}",
             info.zones, info.main

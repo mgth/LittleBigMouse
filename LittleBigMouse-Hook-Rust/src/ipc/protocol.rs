@@ -18,6 +18,9 @@ pub enum Command {
     Run,
     Stop,
     State,
+    /// Sweep the loaded layout's edges with the engine and broadcast a
+    /// `Probed` event carrying the report.
+    Probe,
     Quit,
     Unknown(String),
 }
@@ -59,6 +62,7 @@ fn command_from(node: Node) -> Option<Command> {
         "Run" => Command::Run,
         "Stop" => Command::Stop,
         "State" => Command::State,
+        "Probe" => Command::Probe,
         "Quit" => Command::Quit,
         other => Command::Unknown(other.to_string()),
     })
@@ -109,6 +113,15 @@ pub fn loaded(zones: usize, main: usize, virtual_layout: bool) -> String {
     format!(
         "<DaemonMessage><Event>Loaded</Event><Payload>{zones} zones ({main} main){}</Payload></DaemonMessage>\n",
         if virtual_layout { ", virtual" } else { "" }
+    )
+}
+
+/// Build a `Probed` event carrying an edge-prober report (a `<ProbeReport>`
+/// document, escaped into the payload text).
+pub fn probed(report: &str) -> String {
+    format!(
+        "<DaemonMessage><Event>Probed</Event><Payload>{}</Payload></DaemonMessage>\n",
+        escape_xml(report)
     )
 }
 

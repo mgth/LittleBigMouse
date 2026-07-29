@@ -31,10 +31,13 @@ using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
+using HLab.Base.ReactiveUI;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Controls;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;
+using LittleBigMouse.Ui.Avalonia.Remote;
+using LittleBigMouse.Zoning;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia;
@@ -52,18 +55,38 @@ public class MonitorsLayoutPresenterViewModel
     readonly ILayoutPersistence? _persistence;
 
     public MonitorsLayoutPresenterViewModel(IMainPluginsViewModel mainViewModel)
-        : this(mainViewModel, null, null)
+        : this(mainViewModel, null, null, null)
     {
     }
 
     public MonitorsLayoutPresenterViewModel(
         IMainPluginsViewModel mainViewModel,
         IDisplayController? controller,
-        ILayoutPersistence? persistence)
+        ILayoutPersistence? persistence,
+        ILittleBigMouseClientService? service)
     {
         MainViewModel = mainViewModel;
         _controller = controller;
         _persistence = persistence;
+
+        // Edge-prober reports ride the daemon event stream (already marshalled to the
+        // UI thread by the client service). A report describes one loaded layout: a
+        // model swap (rebuild, back-to-local) makes it stale, so it is dropped then.
+        if (service is not null)
+        {
+            EventHandler<LittleBigMouseServiceEventArgs> onDaemonEvent = (_, args) =>
+            {
+                if (args.Event == LittleBigMouseEvent.Probed
+                    && Zoning.ProbeReport.TryParse(args.Payload, out var report))
+                    ProbeReport = report;
+            };
+            service.DaemonEventReceived += onDaemonEvent;
+            Disposer.OnDispose(() => service.DaemonEventReceived -= onDaemonEvent);
+        }
+
+        this.WhenAnyValue(e => e.Model)
+            .Subscribe(_ => ProbeReport = null)
+            .DisposeWith(this);
 
         _width = this.WhenAnyValue(
                 e => e.Model.PhysicalBounds.Width,
@@ -132,6 +155,12 @@ public class MonitorsLayoutPresenterViewModel
     public IDisplayRatio VisualRatio { get; } = new DisplayRatioValue(1.0);
 
     public PhysicalMonitor? SelectedMonitor { get; set => this.RaiseAndSetIfChanged(ref field, value);}
+
+    public Zoning.ProbeReport? ProbeReport
+    {
+        get;
+        private set => this.RaiseAndSetIfChanged(ref field, value);
+    }
 
     public ICommand ResetLocationsFromSystem { get; }
     public ICommand ResetSizesFromSystem { get; }

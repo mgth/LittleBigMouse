@@ -6,6 +6,7 @@
 
 pub mod cursor;
 pub mod event;
+pub mod probe;
 
 use cursor::CursorEnv;
 use event::MouseEventArg;

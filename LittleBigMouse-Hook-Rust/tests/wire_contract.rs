@@ -173,6 +173,64 @@ async fn listener_can_reconnect_after_disconnect() {
     }
 }
 
+/// A Load's outcome must reach the listening client: Loaded with a summary on
+/// success (the virtual-layout "simulate" flow has no Running event to wait
+/// for), LoadFailed when the payload cannot be parsed.
+#[tokio::test]
+async fn load_outcome_is_broadcast_to_listener() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut listener = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("listener connect timeout");
+    framing::write_frame(
+        &mut listener,
+        r#"<CommandMessage Command="Listen" Payload=""/>"#,
+    )
+    .await
+    .unwrap();
+    let ack = framing::read_frame(&mut listener).await.unwrap();
+    assert!(ack.contains("Stopped"), "got {ack:?}");
+
+    let mut commander = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("commander connect timeout");
+
+    let load = concat!(
+        r#"<CommandMessage Command="Load"><Payload>"#,
+        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200" Virtual="True"><MainZones>"#,
+        r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout></Payload></CommandMessage>"#,
+    );
+    framing::write_frame(&mut commander, load).await.unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
+        .await
+        .expect("Loaded event timeout")
+        .unwrap();
+    assert!(event.contains("Loaded"), "got {event:?}");
+    assert!(event.contains("1 zones (1 main), virtual"), "got {event:?}");
+
+    // A virtual load is auto-probed: the edge report follows immediately.
+    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
+        .await
+        .expect("Probed event timeout")
+        .unwrap();
+    assert!(event.contains("Probed"), "got {event:?}");
+    assert!(event.contains("ProbeReport"), "got {event:?}");
+
+    // An empty/unparsable payload reports failure the same way.
+    framing::write_frame(&mut commander, r#"<CommandMessage Command="Load"/>"#)
+        .await
+        .unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
+        .await
+        .expect("LoadFailed event timeout")
+        .unwrap();
+    assert!(event.contains("LoadFailed"), "got {event:?}");
+}
+
 #[tokio::test]
 async fn malformed_frame_is_ignored_without_crashing_server() {
     let shared: &'static Shared = Box::leak(Box::new(Shared::new()));

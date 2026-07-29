@@ -304,8 +304,10 @@ public class Zone : IZonesSerializable
 
     public string Serialize()
     {
-        return ZoneSerializer.Serialize(this, e => e.Id, e => e.Name, 
-            e => e.PixelsBounds, e => e.PhysicalBounds, 
+        // DeviceId rides along for the edge prober's report: it is the stable key the
+        // UI uses to map a probed zone back onto a monitor (zone ids are just order).
+        return ZoneSerializer.Serialize(this, e => e.Id, e => e.Name, e => e.DeviceId,
+            e => e.PixelsBounds, e => e.PhysicalBounds,
             e => e.LeftLinks, e => e.TopLinks,
             e => e.RightLinks, e => e.BottomLinks);
 

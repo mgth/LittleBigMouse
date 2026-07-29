@@ -78,11 +78,6 @@ build() {
   # Framework-dependent: the runtime comes from the dotnet-runtime package, so
   # .NET security updates do not need a rebuild of this one.
   # -f net10.0 is required (the project declares <TargetFrameworks>, plural).
-  # -p:ErrorOnDuplicatePublishOutputFiles=false: belt and braces. Up to 5.5.1 the
-  # Layout and Vcp plugins each copied an identical, unused Assets/Icon/colors.xml
-  # to the output, which "dotnet publish" rejects ("dotnet build", which the Windows
-  # CI uses, does not — so nothing caught it). Fixed in the csproj files, but the
-  # flag keeps a stray duplicate from breaking the package again.
   dotnet publish "$_ui_project" \
     --no-restore \
     -c Release \
@@ -91,7 +86,6 @@ build() {
     --self-contained false \
     -p:Version="$pkgver" \
     -p:DebugType=none \
-    -p:ErrorOnDuplicatePublishOutputFiles=false \
     -o "$srcdir/publish"
 
   cd "$srcdir/$pkgname/LittleBigMouse-Hook-Rust"

@@ -233,7 +233,10 @@ public class MainService : ReactiveModel, IMainService
                 _notify.Visible = !_options.HideTrayIcon;
         };
 
-        await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
+        // Hidden where the app cannot update itself (Linux: the distribution package
+        // owns updates) — clicking it would be a no-op.
+        if (_updaterLocator().IsSupported)
+            await _notify.AddMenuAsync(-1, "Check for update","Icon/lbm_on", async () => await _updaterLocator().CheckUpdateAsync(true));
         await _notify.AddMenuAsync(-1, "Open","Icon/lbm_off", ShowControlAsync);
         await _notify.AddMenuAsync(-1, "Start","Icon/Start", StartFromUserAsync);
         await _notify.AddMenuAsync(-1, "Stop","Icon/Stop", () =>

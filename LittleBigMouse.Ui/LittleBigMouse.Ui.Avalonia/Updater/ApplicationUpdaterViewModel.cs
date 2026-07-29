@@ -199,8 +199,18 @@ public class ApplicationUpdaterViewModel : ViewModel, IApplicationUpdater
         return Version.TryParse(text, out version!);
     }
     
+    /// <summary>
+    /// The GitHub releases only carry the Windows installer, and <see cref="RunUpdate"/>
+    /// downloads that asset and executes it. Everywhere else the app is installed by a
+    /// package manager (AUR, ...) which owns the update path — so the check is skipped
+    /// entirely rather than offering to download and run an .exe.
+    /// </summary>
+    public bool IsSupported => OperatingSystem.IsWindows();
+
     public async Task CheckUpdateAsync(bool show)
     {
+        if (!IsSupported) return;
+
         if(show)
         {
             var updaterView = new ApplicationUpdaterView

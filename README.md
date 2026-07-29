@@ -10,6 +10,21 @@
 >
 > ⚠️ Please note that **littlebigmouse.com is not affiliated with this project**. We don't operate that site, don't know who does, and can't vouch for anything it publishes. The only official sources for Little Big Mouse are this repository — with its [Releases](https://github.com/mgth/LittleBigMouse/releases) page — and [littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/).
 
+> [!TIP]
+> ## 🐧 New: Little Big Mouse is on the AUR
+> Arch Linux users get a real package — no more cloning and building by hand:
+>
+> ```bash
+> paru -S littlebigmouse   # or: yay -S littlebigmouse
+> ```
+>
+> [![AUR version](https://img.shields.io/aur/version/littlebigmouse?logo=archlinux&logoColor=white&label=AUR)](https://aur.archlinux.org/packages/littlebigmouse)
+> [![AUR last modified](https://img.shields.io/aur/last-modified/littlebigmouse?label=updated)](https://aur.archlinux.org/packages/littlebigmouse)
+>
+> It builds from the tagged sources and ships the desktop entry, the icon and the udev
+> rule for `/dev/uinput`. One manual step remains — joining the `input` group — see
+> [Linux](#linux-experimental).
+
 > [!IMPORTANT]
 > ## 🎉 5.5.0 is out!
 > The UI and the mouse daemon now talk over a **secure per-user local channel** instead of a TCP port (#519): no more port clashes, a killed daemon restarts instantly, and the startup configuration survives crashes with automatic backup recovery. **Clicks and wheel scrolls during a screen crossing** now land where you expect, and excluding an elevated (anti-cheat) game actually pauses the hook (#518). The monitor control panel gets an opt-in **live read** to follow OSD changes, plus safer display topology and clone-mode handling (#517).
@@ -60,17 +75,41 @@ Windows hook — with Wayland-portal and X11 fallbacks. It is developed and test
 KDE Plasma 6 (Wayland); feedback from other desktops is very welcome on the
 [issues](https://github.com/mgth/LittleBigMouse/issues) page.
 
-### Arch Linux
+### Arch Linux — install from the AUR
+
+[![AUR version](https://img.shields.io/aur/version/littlebigmouse?logo=archlinux&logoColor=white&label=AUR)](https://aur.archlinux.org/packages/littlebigmouse)
 
 ```bash
 paru -S littlebigmouse   # or: yay -S littlebigmouse
 ```
 
-The package builds from the tagged sources and installs the udev rule for
-`/dev/uinput`; you still have to add yourself to the `input` group (see below) and log
-out and back in. The packaging recipe lives in [`packaging/arch`](packaging/arch).
+That is the whole install. The package builds the Rust hook daemon and the Avalonia UI
+from the tagged sources, and lays down:
 
-### Prerequisites (building from source)
+- the app in `/usr/lib/littlebigmouse` with `littlebigmouse` on your `PATH`;
+- a desktop entry and the icon, so it shows up in your launcher;
+- a udev rule granting the `input` group write access to `/dev/uinput`.
+
+It depends on `dotnet-runtime-10.0` rather than bundling .NET, so runtime security
+updates come through pacman. `ddcutil`, `kscreen` and `argyllcms` are optional
+dependencies — install them for monitor brightness/contrast control, Plasma layout
+detection and colorimeter support respectively.
+
+**One manual step remains**, because a package cannot add you to a group:
+
+```bash
+sudo gpasswd -a "$USER" input   # then log out and back in
+```
+
+Without it the daemon falls back to the Wayland portal or X11, which cannot intercept
+the cursor crossing between adjacent screens on KWin. Note that `input` group membership
+lets every program you run read all keyboard and mouse events.
+
+The packaging recipe lives in [`packaging/arch`](packaging/arch); issues with the
+package go to the [issue tracker](https://github.com/mgth/LittleBigMouse/issues) like
+anything else.
+
+### Other distributions — build from source
 
 - The **.NET 10 SDK** (the runtime alone is not enough to build) and the **Rust
   toolchain** (`cargo`):

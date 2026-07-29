@@ -84,6 +84,9 @@ _ReSharper*/
 *.[Rr]e[Ss]harper
 *.DotSettings.user
 
+# JetBrains Rider / IntelliJ per-developer project state
+.idea/
+
 # JustCode is a .NET coding addin-in
 .JustCode
 

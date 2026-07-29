@@ -140,9 +140,23 @@ public class MainService : ReactiveModel, IMainService
         // TODO : move to plugin
         var old = MonitorsLayout;
 
-        MonitorsLayout = LoadVirtualLayoutFromEnv() ?? _layoutFactory.Create();
+        MonitorsLayout = (_virtualLayoutEnvDisabled ? null : LoadVirtualLayoutFromEnv())
+                         ?? _layoutFactory.Create();
 
         old?.Dispose();
+    }
+
+    /// <summary>
+    /// Sticky opt-out of LBM_VIRTUAL_LAYOUT: once the user explicitly comes back to the
+    /// local layout, later rebuilds (display changes…) must not silently re-enter virtual
+    /// mode — that trap is exactly what the badge's "back" button exists to avoid.
+    /// </summary>
+    bool _virtualLayoutEnvDisabled;
+
+    public void ReloadSystemLayout()
+    {
+        _virtualLayoutEnvDisabled = true;
+        UpdateLayout();
     }
 
     /// <summary>
@@ -171,7 +185,7 @@ public class MainService : ReactiveModel, IMainService
                 json = System.Text.Encoding.UTF8.GetString(bytes);
             }
 
-            return VirtualLayoutFactory.FromJson(json);
+            return VirtualLayoutFactory.FromJson(json, LayoutSource.VirtualFile, path);
         }
         catch (Exception ex)
         {
@@ -396,6 +410,11 @@ public class MainService : ReactiveModel, IMainService
                 break;
             case LittleBigMouseEvent.Connected:
                 _justConnected = true;
+                break;
+            // Load outcome: consumed by the location control (badge/status); nothing
+            // to reconcile at the service level.
+            case LittleBigMouseEvent.Loaded:
+            case LittleBigMouseEvent.LoadFailed:
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(args.Event), args.Event, null);

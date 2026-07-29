@@ -38,6 +38,8 @@ public readonly record struct DaemonMessage(LittleBigMouseEvent Event, string Pa
                 "FocusChanged" => LittleBigMouseEvent.FocusChanged,
                 "Suspended" => LittleBigMouseEvent.Suspended,
                 "Resumed" => LittleBigMouseEvent.Resumed,
+                "Loaded" => LittleBigMouseEvent.Loaded,
+                "LoadFailed" => LittleBigMouseEvent.LoadFailed,
                 _ => (LittleBigMouseEvent?)null,
             };
             if (daemonEvent is null) return false;

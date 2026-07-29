@@ -60,11 +60,34 @@ public abstract class LayoutPersistence : ILayoutPersistence
     }
 
     //==================//
+    // Virtual guard    //
+    //==================//
+
+    /// <summary>
+    /// The single choke point keeping virtual (foreign) layouts out of the local store
+    /// and the autostart scheduling. Guarding here rather than at the call sites means
+    /// no UI path — current or future — can leak a client's configuration into this
+    /// machine's state.
+    /// </summary>
+    static bool RefuseVirtual(IMonitorsLayout layout, string operation)
+    {
+        if (!layout.IsVirtual) return false;
+        Console.Error.WriteLine(
+            $"[LittleBigMouse] {operation} refused: '{layout.Id}' is a virtual layout ({layout.SourceOrigin ?? layout.Source.ToString()})");
+        return true;
+    }
+
+    //==================//
     // Load             //
     //==================//
 
     public void Load(MonitorsLayout layout)
     {
+        // A virtual layout's state comes from its export, and only from it: reading the
+        // local store here would apply options persisted for whatever LOCAL layout shares
+        // the client's id — foreign data over foreign data, all of it wrong.
+        if (RefuseVirtual(layout, nameof(Load))) return;
+
         var wasLoading = IsLoading;
         IsLoading = true;
         try
@@ -349,6 +372,8 @@ public abstract class LayoutPersistence : ILayoutPersistence
 
     public bool Save(MonitorsLayout layout)
     {
+        if (RefuseVirtual(layout, nameof(Save))) return false;
+
         SetAutostart(layout, layout.Options.LoadAtStartup, layout.Options.StartElevated);
 
         SaveGlobalOptions(layout.Options);
@@ -368,6 +393,11 @@ public abstract class LayoutPersistence : ILayoutPersistence
 
     public bool SaveEnabled(IMonitorsLayout layout)
     {
+        // This is the guard that matters most: SaveEnabled runs on every Stop, so without
+        // it a virtual layout CREATES a store entry named after the client's monitor
+        // combination (observed in the wild as a 61-byte {"Enabled": false} file).
+        if (RefuseVirtual(layout, nameof(SaveEnabled))) return false;
+
         // Read-modify-write: only Enabled changes; everything else stored for this layout
         // is preserved (the engine can be toggled on/off without a full save).
         var dto = _store.Read(layout.Id, []).Layout ?? new LayoutDto();

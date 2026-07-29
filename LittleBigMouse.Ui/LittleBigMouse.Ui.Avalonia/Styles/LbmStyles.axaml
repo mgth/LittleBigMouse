@@ -62,6 +62,16 @@
 	<Style Selector="Border.Badge.Success Path">
 		<Setter Property="Fill" Value="{DynamicResource Lbm.Brushes.Badge.Success.Foreground}"/>
 	</Style>
+	<Style Selector="Border.Badge.Virtual">
+		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Badge.Virtual.Background}"/>
+	</Style>
+	<Style Selector="Border.Badge.Virtual TextBlock">
+		<Setter Property="FontSize" Value="12"/>
+		<Setter Property="Foreground" Value="{DynamicResource Lbm.Brushes.Badge.Virtual.Foreground}"/>
+	</Style>
+	<Style Selector="Border.Badge.Virtual Path">
+		<Setter Property="Fill" Value="{DynamicResource Lbm.Brushes.Badge.Virtual.Foreground}"/>
+	</Style>
 
 	<Style Selector="ListBox.ChoiceCards">
 		<Setter Property="Background" Value="Transparent"/>

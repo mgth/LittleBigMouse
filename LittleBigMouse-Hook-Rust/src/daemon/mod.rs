@@ -49,7 +49,19 @@ pub fn receive_message(
                 send_state(server, Some(client_id), shared);
             }
             Command::Load(xml) => {
-                load_layout(shared, &xml);
+                // Report the outcome to every listening client: a Load-without-Run
+                // (virtual-layout inspection) has no later Running event to prove
+                // the zones were accepted.
+                match load_layout(shared, &xml) {
+                    Some(info) => {
+                        server.broadcast(&protocol::loaded(
+                            info.zones,
+                            info.main,
+                            info.virtual_layout,
+                        ));
+                    }
+                    None => server.broadcast(protocol::LOAD_FAILED),
+                }
             }
             Command::LoadFromFile(path) => {
                 load_from_file(shared, &path);
@@ -65,14 +77,26 @@ pub fn receive_message(
     became_listening
 }
 
+/// What a successful `Load` accepted — echoed back to the UI in the `Loaded` event.
+pub struct LoadInfo {
+    pub zones: usize,
+    pub main: usize,
+    pub virtual_layout: bool,
+}
+
 /// C++ `LittleBigMouseDaemon::ReceiveLoadMessage`: stop hooking, parse the
 /// layout into the engine, and adopt its priorities for the next hook.
-fn load_layout(shared: &Shared, xml: &str) -> bool {
+fn load_layout(shared: &Shared, xml: &str) -> Option<LoadInfo> {
     if shared.hooked.load(Ordering::SeqCst) {
         hook::request_unhook(shared);
     }
     if let Some(layout) = ZonesLayout::from_xml(xml) {
-        let (zones, main) = (layout.zones.len(), layout.main_zones.len());
+        let info = LoadInfo {
+            zones: layout.zones.len(),
+            main: layout.main_zones.len(),
+            virtual_layout: layout.virtual_layout,
+        };
+        let tag = if info.virtual_layout { " VIRTUAL" } else { "" };
         shared
             .priority
             .store(layout.priority.as_u8(), Ordering::SeqCst);
@@ -87,11 +111,14 @@ fn load_layout(shared: &Shared, xml: &str) -> bool {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .load(layout);
-        eprintln!("[LittleBigMouse.Hook] layout loaded: {zones} zones ({main} main)");
-        true
+        eprintln!(
+            "[LittleBigMouse.Hook] layout loaded: {} zones ({} main){tag}",
+            info.zones, info.main
+        );
+        Some(info)
     } else {
         eprintln!("[LittleBigMouse.Hook] layout load FAILED to parse");
-        false
+        None
     }
 }
 
@@ -106,6 +133,21 @@ fn load_layout(shared: &Shared, xml: &str) -> bool {
 /// (the router never observes the transient false) or at worst a quick
 /// re-arm — both correct.
 fn run(shared: &Shared) {
+    // A virtual (foreign) layout is loaded for inspection only: hooking it would
+    // confine the local mouse inside a geometry that does not exist on this
+    // machine. The refusal lives daemon-side, keyed on the wire flag, so no UI
+    // path — present or future — can capture the mouse with a client's layout.
+    let virtual_layout = shared
+        .engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .layout
+        .virtual_layout;
+    if virtual_layout {
+        eprintln!("[LittleBigMouse.Hook] Run refused: the loaded layout is virtual (inspection only)");
+        return;
+    }
+
     load_excluded(shared);
     if !shared.paused.load(Ordering::SeqCst) {
         hook::request_hook(shared);
@@ -165,7 +207,7 @@ fn replay(shared: &Shared, content: &str) -> bool {
     for line in content.lines() {
         for command in protocol::parse(line) {
             match command {
-                Command::Load(xml) => loaded = load_layout(shared, &xml),
+                Command::Load(xml) => loaded = load_layout(shared, &xml).is_some(),
                 Command::Run if loaded => run(shared),
                 _ => {}
             }
@@ -232,6 +274,34 @@ mod tests {
         assert!(
             shared.want_hook.load(Ordering::SeqCst),
             "Run must express the desired state even while the previous hook is still up"
+        );
+    }
+
+    // Same layout flagged as virtual: the daemon must accept the Load (so the
+    // engine can be inspected) but refuse the Run that follows.
+    const VIRTUAL_LOAD_LINE: &str = concat!(
+        r#"<CommandMessage Command="Load"><Payload>"#,
+        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200" Virtual="True"><MainZones>"#,
+        r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout></Payload></CommandMessage>"#,
+    );
+
+    #[test]
+    fn virtual_layout_loads_but_run_never_hooks() {
+        let shared = Shared::new();
+        let content = format!("{VIRTUAL_LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
+        replay(&shared, &content);
+
+        // The layout IS loaded (inspection works)...
+        let engine = shared.engine.lock().unwrap();
+        assert_eq!(engine.layout.zones.len(), 1);
+        assert!(engine.layout.virtual_layout, "the wire flag must be parsed");
+        drop(engine);
+
+        // ...but the hook must never be requested for it.
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "Run must be refused on a virtual layout"
         );
     }
 

@@ -95,6 +95,8 @@ void ZonesLayout::Load(tinyxml2::XMLElement* layoutElement)
 	AdjustSpeed = XmlHelper::GetBool(layoutElement,"AdjustSpeed");
 	LoopX = XmlHelper::GetBool(layoutElement,"LoopX");
 	LoopY = XmlHelper::GetBool(layoutElement,"LoopY");
+	// Absent on layouts from older UIs -> false.
+	Virtual = XmlHelper::GetBool(layoutElement,"Virtual");
 
 	const auto algorithm =  XmlHelper::GetString(layoutElement,"Algorithm");
 	if(algorithm=="Cross")

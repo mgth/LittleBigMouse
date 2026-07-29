@@ -89,6 +89,16 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
 
    public ILayoutOptions Options { get; }
 
+   /// <summary>
+   /// Origin of this layout, set once at construction. Immutable: a layout never
+   /// changes nature — a fresh system enumeration builds a fresh instance.
+   /// </summary>
+   public LayoutSource Source { get; init; } = LayoutSource.System;
+
+   public string SourceOrigin { get; init; }
+
+   public bool IsVirtual => Source != LayoutSource.System;
+
 
    /// <summary>
    /// DPI awareness of the UI process. Process-scoped, supplied by the display snapshot

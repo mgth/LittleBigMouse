@@ -65,6 +65,10 @@ public static class ZonesLayoutFactory
         zones.LoopX = layout.Options.LoopX;
         zones.LoopY = layout.Options.LoopY;
 
+        // Carried on the wire: the daemon keys its "never hook a virtual layout"
+        // guard on this flag, independently of what the UI sends afterwards.
+        zones.Virtual = layout.IsVirtual;
+
         // Init() computes zone links via ComputeLinks(), which reads MaxTravelDistance:
         // it must run after the options above are set, otherwise links are built with
         // default values (cursor stuck at some edges, wrong travel distance).

@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.ObjectModel;
 using HLab.Geo;
 
@@ -7,6 +8,18 @@ namespace LittleBigMouse.DisplayLayout.Monitors;
 public interface IMonitorsLayout : IDisposable
 {
     ILayoutOptions Options { get; }
+
+    /// <summary>
+    /// Origin of this layout. Everything that must not happen on a virtual layout
+    /// (persistence, autostart, hooking) keys on this — see <see cref="LayoutSource"/>.
+    /// </summary>
+    LayoutSource Source { get; }
+
+    /// <summary>Human-readable origin of a virtual layout (file path, "import"…), null for system layouts.</summary>
+    string? SourceOrigin { get; }
+
+    /// <summary>True for any layout not built from the machine's actual displays.</summary>
+    bool IsVirtual => Source != LayoutSource.System;
 
     bool Saved { get; set; }
 

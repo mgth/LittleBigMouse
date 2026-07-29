@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DynamicData;
@@ -11,8 +12,9 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 /// <summary>
 /// Rebuilds a MonitorsLayout from a configuration export, for on-screen inspection of a
 /// layout coming from another machine (no hardware needed). Only the "Layout" part of the
-/// export is used; devices and zones are ignored. The resulting layout is display-only:
-/// it is never persisted nor allowed to drive the daemon.
+/// export is used; devices and zones are ignored. The resulting layout is flagged with a
+/// virtual <see cref="LayoutSource"/>: the persistence layer refuses to store it and the
+/// daemon refuses to hook it — the guards live there, not here.
 /// </summary>
 public static class VirtualLayoutFactory
 {
@@ -21,8 +23,11 @@ public static class VirtualLayoutFactory
         NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals
     };
 
-    public static MonitorsLayout FromJson(string json)
+    public static MonitorsLayout FromJson(string json, LayoutSource layoutSource, string? origin = null)
     {
+        if (layoutSource == LayoutSource.System)
+            throw new ArgumentException("A parsed export is virtual by definition.", nameof(layoutSource));
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -30,20 +35,21 @@ public static class VirtualLayoutFactory
         var layoutEl = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("Layout", out var l)
             ? l : root;
 
-        var options = layoutEl.TryGetProperty("Options", out var optEl)
+        var imported = layoutEl.TryGetProperty("Options", out var optEl)
             ? optEl.Deserialize<ILayoutOptions.Design>(JsonOptions) ?? new ILayoutOptions.Design()
             : new ILayoutOptions.Design();
 
-        // a virtual layout must never start the mouse engine
-        options.Enabled = false;
-
-        // keep the debug menu visible while the virtual layout is displayed
-        // (its options replace the real layout's ones in the ui)
-        options.DebugTools = true;
+        // A REACTIVE options instance, not the inert Design POCO: the layout's Saved
+        // propagation and the options panel rely on change notifications — a dead
+        // options object silently breaks the whole dirty-tracking chain (the save
+        // button never lit up while a virtual layout was displayed).
+        var options = ToReactiveOptions(imported);
 
         var layout = new MonitorsLayout(options)
         {
-            Id = GetString(layoutEl, "Id", "virtual")
+            Id = GetString(layoutEl, "Id", "virtual"),
+            Source = layoutSource,
+            SourceOrigin = origin
         };
 
         if (layoutEl.TryGetProperty("PhysicalMonitors", out var monitors)
@@ -79,6 +85,41 @@ public static class VirtualLayoutFactory
         layout.Saved = true;
 
         return layout;
+    }
+
+    /// <summary>
+    /// Copy the LAYOUT-scoped options of the export (the set LayoutOptionsDto persists)
+    /// onto a live LbmOptions. App/machine-scoped options (autostart, tray, VCP, update
+    /// checks…) deliberately keep their defaults: they describe THIS machine's app, not
+    /// the client's layout.
+    /// </summary>
+    static LbmOptions ToReactiveOptions(ILayoutOptions imported)
+    {
+        var options = new LbmOptions
+        {
+            AllowOverlaps = imported.AllowOverlaps,
+            AllowDiscontinuity = imported.AllowDiscontinuity,
+            Algorithm = imported.Algorithm,
+            MaxTravelDistance = imported.MaxTravelDistance,
+            MinimalMaxTravelDistance = imported.MinimalMaxTravelDistance,
+            FreelookCheckInterval = imported.FreelookCheckInterval,
+            FreelookEnabled = imported.FreelookEnabled,
+            LoopX = imported.LoopX,
+            LoopY = imported.LoopY,
+            AdjustPointer = imported.AdjustPointer,
+            AdjustSpeed = imported.AdjustSpeed,
+            Priority = imported.Priority,
+            PriorityUnhooked = imported.PriorityUnhooked,
+            IsUnaryRatio = imported.IsUnaryRatio,
+
+            // a virtual layout must never engage the engine on its own
+            Enabled = false,
+
+            // keep the debug tools visible while the virtual layout is displayed:
+            // they are the only way to load another export or come back from one
+            DebugTools = true
+        };
+        return options;
     }
 
     static PhysicalMonitor CreateMonitor(JsonElement monitorEl, MonitorsLayout layout)

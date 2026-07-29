@@ -38,6 +38,12 @@ public enum LittleBigMouseEvent
     // display change, unhooks itself first so the cursor is never left confined without the UI.
     Suspended,
     Resumed,
+    // Outcome of a Load command: the daemon parsed the zones into its engine (payload is an
+    // informative summary, e.g. "3 zones (3 main)"), or could not parse them. This is what makes
+    // a Load-without-Run observable — the virtual-layout "simulate" flow relies on it, since no
+    // Running event will ever follow. Older daemons simply never send these.
+    Loaded,
+    LoadFailed,
 }
 public enum LittleBigMouseCommand
 {

@@ -66,6 +66,16 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
 
     public async Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
     {
+        // Virtual layout: inspection only. Send Load WITHOUT Run — the daemon parses the
+        // zones into its engine and reports Loaded/LoadFailed, but the input hook stays
+        // down (it would refuse anyway). No topology prologue either: PrepareForEngine
+        // MUTATES the local outputs, which a foreign layout must never cause.
+        if (zonesLayout.Virtual)
+        {
+            await SendMessagesAsync([new CommandMessage(LittleBigMouseCommand.Load, zonesLayout)], token);
+            return;
+        }
+
         // Topology prologue (Linux/KWin: open 1px gaps so the daemon's barriers pass the
         // compositor validator; Windows: no-op, returns false). When it actually moves
         // outputs, the zones we were handed are stale by construction (computed in the
@@ -331,7 +341,11 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         var path = Path.Combine(LbmPaths.DataDir, "Current.xml");
 
         Exception? persistenceFailure = null;
-        if (commands.Any(command => command.Command == LittleBigMouseCommand.Load))
+        // Virtual (foreign) layouts are sent to the daemon for inspection but must never
+        // become the crash-recovery/autostart state: a standalone daemon would replay a
+        // client's geometry over the local desktop at the next boot.
+        if (commands.Any(command => command.Command == LittleBigMouseCommand.Load
+                                    && command.Payload?.Virtual != true))
         {
             try
             {

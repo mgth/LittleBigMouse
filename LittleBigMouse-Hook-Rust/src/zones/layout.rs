@@ -36,6 +36,10 @@ pub struct ZonesLayout {
     pub priority_unhooked: Priority,
     pub loop_x: bool,
     pub loop_y: bool,
+    /// Zones of a virtual (foreign) layout, shown for inspection on another
+    /// machine. The daemon loads them into the engine for validation but
+    /// refuses to install the input hook on them (see `daemon::run`).
+    pub virtual_layout: bool,
 
     left: f64,
     top: f64,
@@ -65,6 +69,7 @@ impl Default for ZonesLayout {
             priority_unhooked: Priority::Above,
             loop_x: false,
             loop_y: false,
+            virtual_layout: false,
             left: 0.0,
             top: 0.0,
             right: 0.0,
@@ -99,6 +104,9 @@ impl ZonesLayout {
         layout.adjust_speed = get_bool(el, "AdjustSpeed", false);
         layout.loop_x = get_bool(el, "LoopX", false);
         layout.loop_y = get_bool(el, "LoopY", false);
+        // Absent on layouts from older UIs -> false: only a UI that actually
+        // flags virtual layouts can produce one.
+        layout.virtual_layout = get_bool(el, "Virtual", false);
         layout.algorithm = if get_string(el, "Algorithm") == "Cross" {
             Algorithm::CornerCrossing
         } else {

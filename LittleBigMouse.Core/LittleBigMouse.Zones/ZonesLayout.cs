@@ -9,6 +9,13 @@ namespace LittleBigMouse.Zoning
         public bool AdjustSpeed {get;set;}
         public bool LoopX {get;set;}
         public bool LoopY {get;set;}
+
+        /// <summary>
+        /// True when these zones come from a virtual (foreign) layout. Serialized on the
+        /// wire: the daemon refuses to hook a virtual layout no matter what commands
+        /// follow, so a client's geometry can never capture the local mouse.
+        /// </summary>
+        public bool Virtual {get;set;}
         public string Priority {get; set;}
         public string PriorityUnhooked {get; set;}
 
@@ -42,10 +49,11 @@ namespace LittleBigMouse.Zoning
         public string Serialize()
         {
             return ZoneSerializer.Serialize(this,
-                e => e.AdjustPointer, 
-                e => e.AdjustSpeed, 
+                e => e.AdjustPointer,
+                e => e.AdjustSpeed,
                 e => e.LoopX,
                 e => e.LoopY,
+                e => e.Virtual,
                 e => e.Priority,
                 e => e.PriorityUnhooked,
                 e => e.Algorithm,

@@ -8,11 +8,24 @@ public class DaemonProtocolTests
     [InlineData("Paused", LittleBigMouseEvent.Paused)]
     [InlineData("SettingChanged", LittleBigMouseEvent.SettingsChanged)]
     [InlineData("SettingsChanged", LittleBigMouseEvent.SettingsChanged)]
+    [InlineData("Loaded", LittleBigMouseEvent.Loaded)]
+    [InlineData("LoadFailed", LittleBigMouseEvent.LoadFailed)]
     public void ParserMapsExactEventElement(string name, LittleBigMouseEvent expected)
     {
         Assert.True(DaemonMessage.TryParse(
             $"<DaemonMessage><Event>{name}</Event></DaemonMessage>", out var message));
         Assert.Equal(expected, message.Event);
+    }
+
+    [Fact]
+    public void LoadedEvent_CarriesTheSummaryPayload()
+    {
+        // Exact daemon wire shape (protocol::loaded in the Rust hook).
+        const string xml = "<DaemonMessage><Event>Loaded</Event>" +
+                           "<Payload>3 zones (3 main), virtual</Payload></DaemonMessage>";
+        Assert.True(DaemonMessage.TryParse(xml, out var message));
+        Assert.Equal(LittleBigMouseEvent.Loaded, message.Event);
+        Assert.Equal("3 zones (3 main), virtual", message.Payload);
     }
 
     [Fact]

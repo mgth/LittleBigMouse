@@ -41,6 +41,10 @@ public:
 	bool LoopX = false;
 	bool LoopY = false;
 
+	// Zones of a virtual (foreign) layout, loaded for inspection only: the
+	// daemon refuses to install the input hook on them (see the Run command).
+	bool Virtual = false;
+
 	[[nodiscard]] Zone* Containing(const geo::Point<long>& pixel) const;
 	[[nodiscard]] Zone* Containing(const geo::Point<double>& physical) const;
 

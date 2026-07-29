@@ -98,6 +98,20 @@ pub const DESKTOP_CHANGED: &str = "<DaemonMessage><Event>DesktopChanged</Event><
 pub const SUSPENDED: &str = "<DaemonMessage><Event>Suspended</Event></DaemonMessage>\n";
 pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>\n";
 
+pub const LOAD_FAILED: &str =
+    "<DaemonMessage><Event>LoadFailed</Event><Payload>the layout could not be parsed</Payload></DaemonMessage>\n";
+
+/// Build a `Loaded` event: the outcome of a `Load` command. The payload is an
+/// informative summary only — the event itself is the success signal. This is
+/// what makes a Load-without-Run observable (the virtual-layout "simulate" flow
+/// gets no Running event to wait for).
+pub fn loaded(zones: usize, main: usize, virtual_layout: bool) -> String {
+    format!(
+        "<DaemonMessage><Event>Loaded</Event><Payload>{zones} zones ({main} main){}</Payload></DaemonMessage>\n",
+        if virtual_layout { ", virtual" } else { "" }
+    )
+}
+
 /// Build a `FocusChanged` event carrying the foreground process path.
 pub fn focus_changed(path: &str) -> String {
     format!(

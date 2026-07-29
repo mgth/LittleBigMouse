@@ -80,13 +80,42 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                 e => e.Running,
                 e => e.Dead,
                 e => e.Model.Saved,
-                (running, dead, saved) => (!running || !saved) && !dead)
+                e => e.Model,
+                // A virtual layout can always be (re)sent for simulation: Running
+                // refers to the SYSTEM engine and Saved is meaningless here.
+                (running, dead, saved, model) => (model?.IsVirtual == true || !running || !saved) && !dead)
                 .ObserveOn(RxSchedulers.MainThreadScheduler));
 
         StopCommand = ReactiveCommand.CreateFromTask(
             StopAsync,
             this.WhenAnyValue(e => e.Running)
         );
+
+        // Virtual-layout surface: the badge, its origin tooltip, the "simulate"
+        // wording and the way back. All derive from the (immutable per instance)
+        // source of the current model.
+        _isVirtualLayout = this.WhenAnyValue(e => e.Model)
+            .Select(m => m?.IsVirtual ?? false)
+            .ToProperty(this, e => e.IsVirtualLayout);
+
+        _virtualLayoutOrigin = this.WhenAnyValue(e => e.Model)
+            .Select(m => m?.IsVirtual != true ? ""
+                : m.SourceOrigin is { Length: > 0 } origin
+                    ? $"Foreign layout, shown for inspection: {origin}"
+                    : "Foreign layout, shown for inspection")
+            .ToProperty(this, e => e.VirtualLayoutOrigin);
+
+        _startTooltip = this.WhenAnyValue(e => e.Model)
+            .Select(m => m?.IsVirtual == true
+                ? "Simulate: send this layout to the daemon for validation (input hook stays off)"
+                : "Apply/Start")
+            .ToProperty(this, e => e.StartTooltip);
+
+        BackToLocalLayoutCommand = ReactiveCommand.Create(
+            _mainService.ReloadSystemLayout,
+            this.WhenAnyValue(e => e.Model)
+                .Select(m => m?.IsVirtual ?? false)
+                .ObserveOn(RxSchedulers.MainThreadScheduler));
 
         this.WhenAnyValue(
             e => e.LiveUpdate,
@@ -127,6 +156,13 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                         Running = false;
                     });
                     break;
+                case LittleBigMouseEvent.Loaded:
+                    Dispatcher.UIThread.Invoke(() => DaemonLayoutInfo = e.Payload);
+                    break;
+                case LittleBigMouseEvent.LoadFailed:
+                    Dispatcher.UIThread.Invoke(() =>
+                        DaemonLayoutInfo = string.IsNullOrEmpty(e.Payload) ? "load failed" : e.Payload);
+                    break;
                 case LittleBigMouseEvent.SettingsChanged:
                 case LittleBigMouseEvent.DisplayChanged:
                 case LittleBigMouseEvent.DesktopChanged:
@@ -155,6 +191,9 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
     protected override MonitorsLayout? OnModelChanging(MonitorsLayout? oldModel, MonitorsLayout? newModel)
     {
+        // The last Load outcome belongs to the previous layout generation.
+        Dispatcher.UIThread.Post(() => DaemonLayoutInfo = "");
+
         if (newModel is { } model)
         {
             model.PhysicalMonitors.AsObservableChangeSet()
@@ -214,7 +253,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     /// </summary>
     public void OpenVirtualLayout(string json)
     {
-        _mainService.MonitorsLayout = VirtualLayoutFactory.FromJson(json);
+        _mainService.MonitorsLayout = VirtualLayoutFactory.FromJson(json, LayoutSource.VirtualImport);
     }
 
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
@@ -225,6 +264,16 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     async Task StartAsync()
     {
         if(Model == null) return;
+
+        // Virtual layout: "simulate" — hand the zones to the daemon for validation
+        // (the client service sends Load without Run). Nothing is persisted, and
+        // Enabled stays false so a layout rebuild can never auto-engage a foreign
+        // geometry.
+        if (Model.IsVirtual)
+        {
+            await _service.StartAsync(Model.ComputeZones());
+            return;
+        }
 
         Model.Options.Enabled = true;
 
@@ -288,6 +337,29 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         set => this.RaiseAndSetIfChanged(ref _liveUpdate,value);
     }
    bool _liveUpdate;
+
+    /// <summary>
+    /// Last Load outcome reported by the daemon ("3 zones (3 main), virtual" / a failure
+    /// message). This is the only feedback a Load-without-Run produces — the virtual
+    /// layout badge displays it as the simulation status.
+    /// </summary>
+    public string DaemonLayoutInfo
+    {
+        get => _daemonLayoutInfo;
+        private set => this.RaiseAndSetIfChanged(ref _daemonLayoutInfo, value);
+    }
+    string _daemonLayoutInfo = "";
+
+    public bool IsVirtualLayout => _isVirtualLayout.Value;
+    readonly ObservableAsPropertyHelper<bool> _isVirtualLayout;
+
+    public string VirtualLayoutOrigin => _virtualLayoutOrigin.Value;
+    readonly ObservableAsPropertyHelper<string> _virtualLayoutOrigin;
+
+    public string StartTooltip => _startTooltip.Value;
+    readonly ObservableAsPropertyHelper<string> _startTooltip;
+
+    public ReactiveCommand<Unit, Unit> BackToLocalLayoutCommand { get; }
 
    public bool Saved
    {

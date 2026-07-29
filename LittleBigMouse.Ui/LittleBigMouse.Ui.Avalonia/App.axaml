@@ -30,6 +30,8 @@
 					<SolidColorBrush x:Key="Lbm.Brushes.Text.Secondary" Color="#9EA0A8"/>
 					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Background" Color="#1E3A26"/>
 					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Foreground" Color="#7BD08A"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Virtual.Background" Color="#33254A"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Virtual.Foreground" Color="#C0A6EE"/>
 				</ResourceDictionary>
 				<ResourceDictionary x:Key="{x:Static ThemeVariant.Light}">
 					<SolidColorBrush x:Key="Lbm.Brushes.Pane.Background" Color="#FFF2F2F5"/>
@@ -40,6 +42,8 @@
 					<SolidColorBrush x:Key="Lbm.Brushes.Text.Secondary" Color="#5F6368"/>
 					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Background" Color="#E4F5E9"/>
 					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Success.Foreground" Color="#1B7F3B"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Virtual.Background" Color="#EFE7FA"/>
+					<SolidColorBrush x:Key="Lbm.Brushes.Badge.Virtual.Foreground" Color="#6A2FA8"/>
 				</ResourceDictionary>
 			</ResourceDictionary.ThemeDictionaries>
 
@@ -65,6 +69,7 @@
 			<StreamGeometry x:Key="Lbm.Icon.Warning">M13,14H11V9H13M13,18H11V16H13M1,21H23L12,2L1,21Z</StreamGeometry>
 			<StreamGeometry x:Key="Lbm.Icon.Experimental">M7,2V4H8V18A4,4 0 0,0 12,22A4,4 0 0,0 16,18V4H17V2H7M11,16C10.4,16 10,15.6 10,15C10,14.4 10.4,14 11,14C11.6,14 12,14.4 12,15C12,15.6 11.6,16 11,16M13,12C12.4,12 12,11.6 12,11C12,10.4 12.4,10 13,10C13.6,10 14,10.4 14,11C14,11.6 13.6,12 13,12M14,7H10V4H14V7Z</StreamGeometry>
 			<StreamGeometry x:Key="Lbm.Icon.Coffee">M2,21H20V19H2M20,8H18V5H20M20,3H4V13A4,4 0 0,0 8,17H14A4,4 0 0,0 18,13V10H20A2,2 0 0,0 22,8V5C22,3.89 21.1,3 20,3Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Virtual">M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z</StreamGeometry>
 			<StreamGeometry x:Key="Lbm.Icon.Vcp">M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z</StreamGeometry>
 
 			<ControlTheme x:Key="{x:Type controls:SettingRow}" TargetType="controls:SettingRow">

@@ -208,7 +208,14 @@ void LittleBigMouseDaemon::ReceiveCommandMessage(tinyxml2::XMLElement* root, Rem
 
 		else if(strcmp(command, "Run")==0)
 		{
-			if(_hook && !_hook->Hooked())
+			// A virtual (foreign) layout is loaded for inspection only: hooking it
+			// would confine the local mouse inside a geometry that does not exist
+			// on this machine. Keyed on the wire flag so no UI path can bypass it.
+			if(_engine && _engine->Layout.Virtual)
+			{
+				LOG_TRACE("Run refused: the loaded layout is virtual (inspection only)");
+			}
+			else if(_hook && !_hook->Hooked())
 			{
 				LoadExcluded();
 				if(!_paused)

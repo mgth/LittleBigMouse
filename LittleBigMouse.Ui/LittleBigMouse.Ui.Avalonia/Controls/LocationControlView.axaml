@@ -24,6 +24,23 @@
 			<Label FontSize="30" Foreground="{DynamicResource ThemeForegroundBrush}">Little Big Mouse</Label>
 		</StackPanel>
 
+		<!-- Foreign-layout mode: unmistakable badge, load-outcome status, and the way back. -->
+		<Border Classes="Badge Virtual"
+		        IsVisible="{Binding IsVirtualLayout}"
+		        HorizontalAlignment="Center" VerticalAlignment="Center"
+		        ToolTip.Tip="{Binding VirtualLayoutOrigin}">
+			<StackPanel Orientation="Horizontal" Spacing="8">
+				<Path Data="{StaticResource Lbm.Icon.Virtual}" Width="14" Height="14"
+				      Stretch="Uniform" VerticalAlignment="Center"/>
+				<TextBlock Text="Virtual layout" FontWeight="SemiBold" VerticalAlignment="Center"/>
+				<TextBlock Text="{Binding DaemonLayoutInfo}" Opacity="0.75" VerticalAlignment="Center"
+				           IsVisible="{Binding DaemonLayoutInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+				<Button Content="Back to local layout"
+				        Command="{Binding BackToLocalLayoutCommand}"
+				        FontSize="12" Padding="8,2" VerticalAlignment="Center"/>
+			</StackPanel>
+		</Border>
+
 		<StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
 
 			<Button Classes="ToolbarButton">
@@ -37,7 +54,12 @@
 						          ToolTip.Tip="View a layout exported by another user, without the hardware. Display only: it cannot be loaded as your own layout."/>
 					</MenuFlyout>
 				</Button.Flyout>
-				<icons:IconView Height="22" Width="22" Path="Icon/LayoutExport"/>
+				<Panel>
+					<icons:IconView Height="22" Width="22" Path="Icon/LayoutExport"
+					                IsVisible="{Binding !IsVirtualLayout}"/>
+					<icons:IconView Height="22" Width="22" Path="Icon/LayoutVirtual"
+					                IsVisible="{Binding IsVirtualLayout}"/>
+				</Panel>
 			</Button>
 
 			<Border Classes="ToolbarSeparator"/>
@@ -49,8 +71,8 @@
 			</Button>
 
 			<Button Classes="ToolbarButton"
-				Command="{Binding StartCommand}">
-				<ToolTip.Tip>Apply/Start</ToolTip.Tip>
+				Command="{Binding StartCommand}"
+				ToolTip.Tip="{Binding StartTooltip}">
 				<icons:IconView Height="22" Width="22" Path="Icon/Start"/>
 			</Button>
 

@@ -13,12 +13,6 @@
     <None Remove="Assets\**" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Assets\Icon\colors.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
 	<ItemGroup>
 		<AvaloniaResource Include="Assets\**" />
 	</ItemGroup>

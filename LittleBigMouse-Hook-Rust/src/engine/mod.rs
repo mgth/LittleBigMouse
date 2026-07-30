@@ -25,11 +25,16 @@ enum Mode {
 
 /// Identity of a zone-border link, replacing the C++ `const ZoneLink*` pointer
 /// used to detect "same border as last event" for resistance tracking.
+///
+/// `drag` is part of the identity on purpose: pressing a button mid-push changes
+/// which of the link's two resistances applies, so the accumulator must re-arm
+/// rather than keep draining a value that no longer governs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ResistanceKey {
     zone: ZoneId,
     side: Side,
     index: usize,
+    drag: bool,
 }
 
 pub struct MouseEngine {
@@ -42,7 +47,7 @@ pub struct MouseEngine {
 
     current_resistance: Option<ResistanceKey>,
     border_resistance: f64,
-    border_resistance_px: i32,
+    border_resistance_px: i64,
 
     was_freelook: bool,
     last_freelook_check: u64,
@@ -261,8 +266,7 @@ impl MouseEngine {
         };
         let to_target = link.to_target_pixel(coord);
 
-        let key = ResistanceKey { zone, side, index };
-        if !self.try_pass_border_pixel(env, key, resistance_px, dist) {
+        if !self.try_pass_border_pixel(env, zone, side, index, resistance_px, dist) {
             self.no_zone_matches(env, e);
             return;
         }
@@ -451,9 +455,8 @@ impl MouseEngine {
                 let Some(index) = at_physical_index(links, pos) else {
                     return false;
                 };
-                let key = ResistanceKey { zone, side, index };
                 let resistance = links[index].border_resistance;
-                return self.try_pass_border(env, key, resistance, distance);
+                return self.try_pass_border(env, zone, side, index, resistance, distance);
             }
         }
         false
@@ -464,17 +467,28 @@ impl MouseEngine {
     fn try_pass_border(
         &mut self,
         env: &impl CursorEnv,
-        key: ResistanceKey,
-        link_resistance: f64,
+        zone: ZoneId,
+        side: Side,
+        index: usize,
+        link_resistance: [f64; 2],
         distance: f64,
     ) -> bool {
         if env.ctrl_down() {
             return true;
         }
+        let drag = env.buttons_down();
+        let key = ResistanceKey {
+            zone,
+            side,
+            index,
+            drag,
+        };
         if self.current_resistance != Some(key) {
             self.current_resistance = Some(key);
-            self.border_resistance = link_resistance;
+            self.border_resistance = link_resistance[drag as usize];
         }
+        // A blocked border carries INFINITY here, which no subtraction brings
+        // down to zero — the wall falls out of the arithmetic, not a branch.
         self.border_resistance -= distance;
         self.border_resistance <= 0.0
     }
@@ -482,18 +496,29 @@ impl MouseEngine {
     fn try_pass_border_pixel(
         &mut self,
         env: &impl CursorEnv,
-        key: ResistanceKey,
-        link_resistance_px: i32,
+        zone: ZoneId,
+        side: Side,
+        index: usize,
+        link_resistance_px: [i64; 2],
         distance: i32,
     ) -> bool {
         if env.ctrl_down() {
             return true;
         }
+        let drag = env.buttons_down();
+        let key = ResistanceKey {
+            zone,
+            side,
+            index,
+            drag,
+        };
         if self.current_resistance != Some(key) {
             self.current_resistance = Some(key);
-            self.border_resistance_px = link_resistance_px;
+            self.border_resistance_px = link_resistance_px[drag as usize];
         }
-        self.border_resistance_px -= distance;
+        // Blocked borders start at i64::MAX: draining it at a realistic pixel
+        // rate would take longer than the machine will ever run.
+        self.border_resistance_px -= distance as i64;
         self.border_resistance_px <= 0
     }
 
@@ -579,6 +604,7 @@ mod tests {
         pos: Point<i32>,
         clip: Rect<i32>,
         ctrl: bool,
+        buttons: bool,
         hidden: bool,
         clipped_sub: bool,
         tick: u64,
@@ -591,6 +617,7 @@ mod tests {
                 // A realistic "whole virtual desktop" clip so save/restore behaves.
                 clip: Rect::new(-10000, -10000, 30000, 20000),
                 ctrl: false,
+                buttons: false,
                 hidden: false,
                 clipped_sub: false,
                 tick: 0,
@@ -613,6 +640,9 @@ mod tests {
         }
         fn ctrl_down(&self) -> bool {
             self.ctrl
+        }
+        fn buttons_down(&self) -> bool {
+            self.buttons
         }
         fn cursor_hidden(&self) -> bool {
             self.hidden
@@ -701,6 +731,105 @@ mod tests {
         let ev = feed(&mut eng, &mut env, 0, 1000);
         assert!(ev.handled, "Ctrl should force the crossing despite resistance");
         assert_eq!(env.pos, Point::new(0, 922));
+    }
+
+    /// Rewrites the Left->Right link of [`FIXTURE`] with the given attributes.
+    fn engine_with_link_attrs(attrs: &str) -> MouseEngine {
+        let xml = FIXTURE.replace(
+            r#"BorderResistance="0" TargetId="1""#,
+            &format!(r#"{attrs} TargetId="1""#),
+        );
+        let mut eng = MouseEngine::new();
+        eng.load(ZonesLayout::from_xml(&xml).unwrap());
+        eng
+    }
+
+    #[test]
+    fn drag_resistance_applies_only_when_a_button_is_down() {
+        // The #389 setting: free while merely travelling, resisting while
+        // dragging a window or rubber-banding a selection.
+        let attrs = r#"BorderResistance="0" DragResistance="500""#;
+
+        let mut eng = engine_with_link_attrs(attrs);
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -100, 1000);
+        assert!(
+            feed(&mut eng, &mut env, 0, 1000).handled,
+            "no button held: the border must be free"
+        );
+
+        let mut eng = engine_with_link_attrs(attrs);
+        let mut env = FakeCursor::new();
+        env.buttons = true;
+        feed(&mut eng, &mut env, -100, 1000);
+        assert!(
+            !feed(&mut eng, &mut env, 0, 1000).handled,
+            "button held: the drag resistance must hold the cursor back"
+        );
+    }
+
+    #[test]
+    fn move_resistance_applies_only_when_no_button_is_down() {
+        // Mirror of the above: proves the two resistances are not swapped.
+        let attrs = r#"BorderResistance="500" DragResistance="0""#;
+
+        let mut eng = engine_with_link_attrs(attrs);
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -100, 1000);
+        assert!(!feed(&mut eng, &mut env, 0, 1000).handled);
+
+        let mut eng = engine_with_link_attrs(attrs);
+        let mut env = FakeCursor::new();
+        env.buttons = true;
+        feed(&mut eng, &mut env, -100, 1000);
+        assert!(feed(&mut eng, &mut env, 0, 1000).handled);
+    }
+
+    #[test]
+    fn blocked_border_never_yields() {
+        let mut eng = engine_with_link_attrs(r#"BorderResistance="0" MoveBlock="True""#);
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -100, 1000);
+        for i in 0..10_000 {
+            assert!(
+                !feed(&mut eng, &mut env, 0, 1000).handled,
+                "a blocked border must not drain (gave way on push {i})"
+            );
+        }
+    }
+
+    #[test]
+    fn ctrl_bypasses_a_blocked_border() {
+        // The escape hatch: however a layout is configured, Ctrl always gets the
+        // user out. Without it, blocking a whole shared edge would be a trap.
+        let mut eng = engine_with_link_attrs(r#"BorderResistance="0" MoveBlock="True""#);
+        let mut env = FakeCursor::new();
+        env.ctrl = true;
+        feed(&mut eng, &mut env, -100, 1000);
+        assert!(feed(&mut eng, &mut env, 0, 1000).handled);
+        assert_eq!(env.pos, Point::new(0, 922));
+    }
+
+    #[test]
+    fn pressing_a_button_mid_push_rearms_resistance() {
+        // 1 mm over this link is 7 px of resistance, and each push drains 1 px,
+        // so the 7th push would cross. Pressing a button on the 7th switches the
+        // link's mode: the accumulator must reload from the drag value (blocked)
+        // instead of finishing the move drain it had almost completed.
+        let mut eng = engine_with_link_attrs(r#"BorderResistance="1" DragBlock="True""#);
+        let mut env = FakeCursor::new();
+        feed(&mut eng, &mut env, -100, 1000);
+        for _ in 0..6 {
+            assert!(!feed(&mut eng, &mut env, 0, 1000).handled);
+        }
+
+        env.buttons = true;
+        for i in 0..100 {
+            assert!(
+                !feed(&mut eng, &mut env, 0, 1000).handled,
+                "pressing a button must re-arm, not inherit the drained move counter (push {i})"
+            );
+        }
     }
 
     #[test]

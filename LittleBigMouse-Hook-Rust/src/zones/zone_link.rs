@@ -3,8 +3,20 @@
 //! The C++ singly-linked list (`ZoneLink* Next`) becomes a `Vec<ZoneLink>` per
 //! side; the `Target` raw pointer becomes an `Option<ZoneId>` resolved from
 //! `TargetId` at layout init.
+//!
+//! Border resistance is a *pair* indexed by [`MODE_MOVE`] / [`MODE_DRAG`]: the
+//! engine indexes it with a bool instead of branching on the mode, so telling
+//! plain moves apart from drags costs nothing on the hot path (#389). An
+//! infinite resistance means "blocked": `INFINITY - distance` never drops to
+//! zero, and its pixel counterpart saturates on `i64::MAX`, so a wall is just
+//! the limit case of a resistance — no flag, no extra test.
 
 use super::ZoneId;
+
+/// Index of the plain-move resistance in [`ZoneLink::border_resistance`].
+pub const MODE_MOVE: usize = 0;
+/// Index of the drag resistance (at least one mouse button held).
+pub const MODE_DRAG: usize = 1;
 
 #[derive(Debug, Clone)]
 pub struct ZoneLink {
@@ -18,8 +30,28 @@ pub struct ZoneLink {
     pub source_to_px: i32,
     pub target_from_px: i32,
     pub target_to_px: i32,
-    pub border_resistance: f64,
-    pub border_resistance_px: i32,
+    /// `[move, drag]`, in mm — the Cross path.
+    pub border_resistance: [f64; 2],
+    /// `[move, drag]`, in pixels — the Strait path. `i64` (not `i32`) so a
+    /// blocked border can saturate on `i64::MAX` and still be drained by the
+    /// engine's plain subtraction without ever reaching zero.
+    pub border_resistance_px: [i64; 2],
+}
+
+/// Physical resistance -> pixel resistance along one link.
+fn to_px(resistance: f64, from: f64, to: f64, source_from_px: i32, source_to_px: i32) -> i64 {
+    if resistance <= 0.0 {
+        return 0;
+    }
+    // A blocked link must not go through the ratio below: catch-all links span
+    // `f64::MIN..f64::MAX`, so `to - from` is already `INFINITY` and the division
+    // would yield `NaN` — which casts to 0 in Rust, silently unblocking the border.
+    if !resistance.is_finite() {
+        return i64::MAX;
+    }
+    // i64 like to_target_pixel: catch-all links carry i32::MIN/MAX sentinel
+    // bounds, so the i32 subtraction overflows once a resistance is set.
+    ((resistance / (to - from)) * (source_to_px as i64 - source_from_px as i64) as f64) as i64
 }
 
 impl ZoneLink {
@@ -31,19 +63,11 @@ impl ZoneLink {
         source_to_px: i32,
         target_from_px: i32,
         target_to_px: i32,
-        border_resistance: f64,
+        move_resistance: f64,
+        drag_resistance: f64,
         target_id: i32,
     ) -> Self {
-        let mut border_resistance = border_resistance;
-        let mut border_resistance_px = 0;
-        if border_resistance <= 0.0 {
-            border_resistance = 0.0;
-        } else {
-            // i64 like to_target_pixel: catch-all links carry i32::MIN/MAX sentinel
-            // bounds, so the i32 subtraction overflows once a resistance is set.
-            border_resistance_px = ((border_resistance / (to - from))
-                * (source_to_px as i64 - source_from_px as i64) as f64) as i32;
-        }
+        let normalize = |r: f64| if r <= 0.0 { 0.0 } else { r };
 
         ZoneLink {
             target: None,
@@ -54,8 +78,11 @@ impl ZoneLink {
             source_to_px,
             target_from_px,
             target_to_px,
-            border_resistance,
-            border_resistance_px,
+            border_resistance: [normalize(move_resistance), normalize(drag_resistance)],
+            border_resistance_px: [
+                to_px(move_resistance, from, to, source_from_px, source_to_px),
+                to_px(drag_resistance, from, to, source_from_px, source_to_px),
+            ],
         }
     }
 

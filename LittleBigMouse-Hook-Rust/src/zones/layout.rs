@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use roxmltree::{Document, Node};
 use slotmap::SlotMap;
 
-use super::xml::{child, get_bool, get_f64, get_i32, get_rect_f64, get_rect_i32, get_string};
+use super::xml::{
+    child, get_bool, get_f64, get_f64_opt, get_i32, get_rect_f64, get_rect_i32, get_string,
+};
 use super::zone::Zone;
 use super::zone_link::ZoneLink;
 use super::ZoneId;
@@ -265,6 +267,12 @@ fn parse_links(container: Option<Node>) -> Vec<ZoneLink> {
         .children()
         .filter(|c| c.has_tag_name("ZoneLink"))
         .map(|zl| {
+            // `BorderResistance` is the historical single value. A UI that
+            // predates the move/drag split emits it alone, and omitting
+            // `DragResistance` must then behave exactly as before — hence the
+            // fallback rather than a 0.0 default.
+            let move_resistance = get_f64(zl, "BorderResistance");
+            let drag_resistance = get_f64_opt(zl, "DragResistance").unwrap_or(move_resistance);
             ZoneLink::new(
                 get_f64(zl, "From"),
                 get_f64(zl, "To"),
@@ -272,16 +280,27 @@ fn parse_links(container: Option<Node>) -> Vec<ZoneLink> {
                 get_i32(zl, "SourceToPixel"),
                 get_i32(zl, "TargetFromPixel"),
                 get_i32(zl, "TargetToPixel"),
-                get_f64(zl, "BorderResistance"),
+                block_or(get_bool(zl, "MoveBlock", false), move_resistance),
+                block_or(get_bool(zl, "DragBlock", false), drag_resistance),
                 get_i32(zl, "TargetId"),
             )
         })
         .collect()
 }
 
+/// A blocked border is an infinite resistance — see `zone_link`.
+fn block_or(blocked: bool, resistance: f64) -> f64 {
+    if blocked {
+        f64::INFINITY
+    } else {
+        resistance
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::zones::zone_link::{MODE_DRAG, MODE_MOVE};
 
     // Three zones: "Left", "Right", and a clone of "Left" (identical pixel
     // bounds). Exercises attribute parsing (bools, InvariantCulture doubles incl.
@@ -367,6 +386,54 @@ mod tests {
         let back = right.to_pixels(mm);
         assert_eq!(back.x(), px.x());
         assert_eq!(back.y(), px.y());
+    }
+
+    #[test]
+    fn absent_drag_attribute_falls_back_to_border_resistance() {
+        // The wire-compatibility guarantee: a layout produced by a UI that
+        // predates the move/drag split must behave exactly as it did, i.e. the
+        // single resistance governs both modes.
+        let xml = FIXTURE.replace(
+            r#"BorderResistance="0" TargetId="1""#,
+            r#"BorderResistance="42" TargetId="1""#,
+        );
+        let layout = ZonesLayout::from_xml(&xml).expect("parse");
+        let (_, left) = zone_by_name(&layout, "Left");
+        let link = &left.right[0];
+
+        assert_eq!(link.border_resistance[MODE_MOVE], 42.0);
+        assert_eq!(link.border_resistance[MODE_DRAG], 42.0);
+        assert_eq!(
+            link.border_resistance_px[MODE_MOVE],
+            link.border_resistance_px[MODE_DRAG]
+        );
+        assert!(link.border_resistance_px[MODE_MOVE] > 0);
+    }
+
+    #[test]
+    fn block_attributes_yield_an_undrainable_resistance() {
+        let xml = FIXTURE.replace(
+            r#"BorderResistance="0" TargetId="1""#,
+            r#"BorderResistance="10" DragBlock="True" TargetId="1""#,
+        );
+        let layout = ZonesLayout::from_xml(&xml).expect("parse");
+        let (_, left) = zone_by_name(&layout, "Left");
+        let link = &left.right[0];
+
+        assert!(link.border_resistance[MODE_MOVE].is_finite());
+        assert_eq!(link.border_resistance[MODE_DRAG], f64::INFINITY);
+        assert_eq!(link.border_resistance_px[MODE_DRAG], i64::MAX);
+
+        // The catch-all link spans f64::MIN..f64::MAX, so its `to - from` is
+        // already infinite: blocking it must not fall through the ratio and
+        // land on NaN (which casts to 0 — a silently unblocked border).
+        let xml = FIXTURE.replace(
+            r#"BorderResistance="0" TargetId="-1""#,
+            r#"BorderResistance="0" MoveBlock="True" TargetId="-1""#,
+        );
+        let layout = ZonesLayout::from_xml(&xml).expect("parse");
+        let (_, left) = zone_by_name(&layout, "Left");
+        assert_eq!(left.right[1].border_resistance_px[MODE_MOVE], i64::MAX);
     }
 
     #[test]

@@ -2,7 +2,9 @@
 //! the freelook signals from `MouseEngine::IsFreelookActive`.
 
 use windows::Win32::Foundation::{POINT, RECT};
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VK_CONTROL, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON, VK_XBUTTON1, VK_XBUTTON2,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     ClipCursor, GetClipCursor, GetCursorInfo, GetCursorPos, GetSystemMetrics, SetCursorPos,
     CURSORINFO, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
@@ -60,6 +62,22 @@ impl CursorEnv for Win32Cursor {
 
     fn ctrl_down(&self) -> bool {
         (unsafe { GetAsyncKeyState(VK_CONTROL.0 as i32) } as u16 & 0x8000) == 0x8000
+    }
+
+    fn buttons_down(&self) -> bool {
+        // Any button, not just the primary one: a right-drag or a middle-button
+        // pan runs into the border exactly like a window drag does. Testing all
+        // of them also sidesteps SM_SWAPBUTTON, since the union is the same
+        // either way.
+        [
+            VK_LBUTTON,
+            VK_RBUTTON,
+            VK_MBUTTON,
+            VK_XBUTTON1,
+            VK_XBUTTON2,
+        ]
+        .iter()
+        .any(|vk| (unsafe { GetAsyncKeyState(vk.0 as i32) } as u16 & 0x8000) == 0x8000)
     }
 
     fn cursor_hidden(&self) -> bool {

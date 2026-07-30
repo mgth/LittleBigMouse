@@ -19,6 +19,16 @@ pub trait CursorEnv {
     fn set_clip(&mut self, r: Rect<i32>);
     /// C++ `GetAsyncKeyState(VK_CONTROL) & 0x8000`.
     fn ctrl_down(&self) -> bool;
+    /// Whether at least one mouse button is held — the cursor is dragging
+    /// something (a window, a selection rectangle, a canvas) rather than just
+    /// travelling. Selects which of the two border resistances applies (#389).
+    ///
+    /// Deliberately has no default implementation: every backend must state its
+    /// answer, and a missing one is a compile error rather than a silent "never
+    /// dragging". Called on the same policy as [`CursorEnv::ctrl_down`] — only
+    /// once a border is actually reached, never on interior moves — so a
+    /// syscall or a server round-trip here is affordable.
+    fn buttons_down(&self) -> bool;
     /// Freelook signal 1: cursor hidden (`!(CURSORINFO.flags & CURSOR_SHOWING)`).
     fn cursor_hidden(&self) -> bool;
     /// Freelook signal 2: the cursor clip is a strict sub-rect of the virtual

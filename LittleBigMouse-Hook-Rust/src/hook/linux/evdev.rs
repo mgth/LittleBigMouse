@@ -83,6 +83,9 @@ const VIRTUAL_KBD_NAME: &str = "LittleBigMouse virtual keyboard";
 const BTN_RANGE: std::ops::RangeInclusive<u16> = 0x100..=0x15f;
 /// BTN_TRIGGER_HAPPY block — joystick buttons, not keyboard usages.
 const BTN_TRIGGER_HAPPY_RANGE: std::ops::RangeInclusive<u16> = 0x2c0..=0x2e7;
+/// BTN_LEFT..=BTN_TASK — the buttons whose being held counts as a drag, and
+/// exactly the set the virtual pointer declares in `build_virtual`.
+const BTN_MOUSE_RANGE: std::ops::RangeInclusive<u16> = 0x110..=0x117;
 
 /// Cadence of the hot-plug rescan (matches the C# side's 2 s sysfs poll).
 ///
@@ -356,6 +359,7 @@ impl Router {
                 started: Instant::now(),
                 ctrl_left: false,
                 ctrl_right: false,
+                buttons: 0,
             },
             sens,
             debug,
@@ -458,7 +462,10 @@ impl Router {
                     EventType::KEY
                         if BTN_RANGE.contains(&ev.code())
                             || BTN_TRIGGER_HAPPY_RANGE.contains(&ev.code()) =>
-                        passthrough.push(ev),
+                    {
+                        self.env.track_button(ev.code(), ev.value());
+                        passthrough.push(ev)
+                    }
                     EventType::KEY => {
                         // Combined receiver nodes carry the modifier too.
                         self.env.track_ctrl(ev.code(), ev.value());
@@ -837,6 +844,9 @@ struct EvdevCursor {
     /// nodes; left/right tracked apart so releasing one keeps the other held.
     ctrl_left: bool,
     ctrl_right: bool,
+    /// Bitmask of held [`BTN_MOUSE_RANGE`] buttons, one bit per code. Tracked
+    /// from the grabbed devices' own stream, so it costs nothing to read.
+    buttons: u8,
 }
 
 impl EvdevCursor {
@@ -846,6 +856,18 @@ impl EvdevCursor {
             self.ctrl_left = value != 0;
         } else if code == KeyCode::KEY_RIGHTCTRL.0 {
             self.ctrl_right = value != 0;
+        }
+    }
+
+    fn track_button(&mut self, code: u16, value: i32) {
+        if !BTN_MOUSE_RANGE.contains(&code) {
+            return;
+        }
+        let bit = 1u8 << (code - BTN_MOUSE_RANGE.start());
+        if value != 0 {
+            self.buttons |= bit;
+        } else {
+            self.buttons &= !bit;
         }
     }
 
@@ -882,6 +904,10 @@ impl CursorEnv for EvdevCursor {
 
     fn ctrl_down(&self) -> bool {
         self.ctrl_left || self.ctrl_right
+    }
+
+    fn buttons_down(&self) -> bool {
+        self.buttons != 0
     }
 
     fn cursor_hidden(&self) -> bool {

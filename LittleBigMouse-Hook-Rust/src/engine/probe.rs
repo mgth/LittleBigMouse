@@ -41,6 +41,9 @@ impl CursorEnv for ProbeCursor {
     fn ctrl_down(&self) -> bool {
         true // bypass border resistance: crossability only
     }
+    fn buttons_down(&self) -> bool {
+        false // moot while ctrl_down() bypasses resistance entirely
+    }
     fn cursor_hidden(&self) -> bool {
         false
     }

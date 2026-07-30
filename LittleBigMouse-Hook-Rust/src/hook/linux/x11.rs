@@ -287,6 +287,17 @@ impl CursorEnv for X11Cursor<'_> {
         }
     }
 
+    fn buttons_down(&self) -> bool {
+        let Ok(cookie) = self.conn.query_pointer(self.root) else {
+            return false;
+        };
+        let Ok(reply) = cookie.reply() else {
+            return false;
+        };
+        // Button1Mask..Button5Mask are bits 8..12 of the KeyButMask.
+        u16::from(reply.mask) & 0x1f00 != 0
+    }
+
     fn ctrl_down(&self) -> bool {
         let Ok(cookie) = self.conn.query_keymap() else {
             return false;

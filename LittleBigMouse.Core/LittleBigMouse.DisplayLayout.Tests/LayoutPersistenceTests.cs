@@ -89,12 +89,6 @@ public class LayoutPersistenceTests
         monitor.DepthProjection.Y = -42.25;
         monitor.DepthRatio.X = 1.25;
         monitor.DepthRatio.Y = 1.5;
-        monitor.BorderResistance.Left.Move = 1;
-        monitor.BorderResistance.Top.Move = 2;
-        monitor.BorderResistance.Right.Move = 3;
-        monitor.BorderResistance.Bottom.Move = 4;
-        monitor.BorderResistance.Left.Drag = 11;
-        monitor.BorderResistance.Left.DragBlock = true;
         monitor.BorderResistance.Right.Sections.Add(new BorderSection
         {
             From = 10, To = 60, Move = 5, MoveBlock = true, Drag = 6
@@ -109,10 +103,7 @@ public class LayoutPersistenceTests
         Assert.Equal(-42.25, restoredMonitor.DepthProjection.Y);
         Assert.Equal(1.25, restoredMonitor.DepthRatio.X);
         Assert.Equal(1.5, restoredMonitor.DepthRatio.Y);
-        Assert.Equal(1, restoredMonitor.BorderResistance.Left.Move);
-        Assert.Equal(4, restoredMonitor.BorderResistance.Bottom.Move);
-        Assert.Equal(11, restoredMonitor.BorderResistance.Left.Drag);
-        Assert.True(restoredMonitor.BorderResistance.Left.DragBlock);
+        Assert.Empty(restoredMonitor.BorderResistance.Left.Sections.Items);
 
         var section = Assert.Single(restoredMonitor.BorderResistance.Right.Sections.Items);
         Assert.Equal(10, section.From);
@@ -124,6 +115,43 @@ public class LayoutPersistenceTests
         Assert.True(restoredMonitor.Placed);
         Assert.True(restoredMonitor.Saved);
         Assert.True(restored.Saved);
+    }
+
+    [Fact]
+    public void Load_ConvertsAStoredPerEdgeResistanceIntoAWholeEdgeSection()
+    {
+        // Every layout saved before the section editor holds one resistance per edge.
+        // The notion is gone, so the value has to arrive as the section that says the
+        // same thing — otherwise upgrading would silently unblock people's borders.
+        var store = new FakeStore();
+        store.Layouts[LayoutId] = new LayoutDto
+        {
+            Monitors =
+            {
+                ["MON1"] = new MonitorDto
+                {
+                    BorderResistance = new BorderResistanceDto
+                    {
+                        Left = new BorderSideDto { Move = 20, Drag = 20 },
+                        Top = new BorderSideDto { Move = 0, Drag = 0 }
+                    }
+                }
+            }
+        };
+
+        var layout = NewLayout(out var monitor, out _);
+        NewPersistence(store).Load(layout);
+
+        var section = Assert.Single(monitor.BorderResistance.Left.Sections.Items);
+        Assert.Equal(0, section.From);
+        // The left edge spans the monitor's height.
+        Assert.Equal(monitor.DepthProjection.Height, section.To);
+        Assert.Equal(20, section.Move);
+        Assert.Equal(20, section.Drag);
+
+        // A zero edge is what "no resistance" always looked like: converting it would
+        // litter every layout with meaningless full-edge sections.
+        Assert.Empty(monitor.BorderResistance.Top.Sections.Items);
     }
 
     [Fact]

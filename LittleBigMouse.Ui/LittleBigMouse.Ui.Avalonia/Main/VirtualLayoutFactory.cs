@@ -205,10 +205,13 @@ public static class VirtualLayoutFactory
 
         if (monitorEl.TryGetProperty("BorderResistance", out var resistanceEl))
         {
-            ApplySide(monitor.BorderResistance.Left, resistanceEl, "Left");
-            ApplySide(monitor.BorderResistance.Top, resistanceEl, "Top");
-            ApplySide(monitor.BorderResistance.Right, resistanceEl, "Right");
-            ApplySide(monitor.BorderResistance.Bottom, resistanceEl, "Bottom");
+            var acrossMm = monitor.DepthProjection.Width;
+            var downMm = monitor.DepthProjection.Height;
+
+            ApplySide(monitor.BorderResistance.Left, resistanceEl, "Left", downMm);
+            ApplySide(monitor.BorderResistance.Top, resistanceEl, "Top", acrossMm);
+            ApplySide(monitor.BorderResistance.Right, resistanceEl, "Right", downMm);
+            ApplySide(monitor.BorderResistance.Bottom, resistanceEl, "Bottom", acrossMm);
         }
 
         monitor.Placed = true;
@@ -268,49 +271,71 @@ public static class VirtualLayoutFactory
     }
 
     /// <summary>
-    /// One border-resistance edge from an exported layout. Exports taken before the
-    /// move/drag split carry a bare number per edge, and diagnostics exports are
-    /// kept around for a long time, so both shapes are read.
+    /// One border-resistance edge from an exported layout. Diagnostics exports are
+    /// kept around for a long time, so all three shapes this has taken are read: a
+    /// bare number per edge, an object with a per-edge resistance, and the current
+    /// list of sections. The first two describe a resistance over the whole edge,
+    /// which is now expressed as a section spanning it.
     /// </summary>
-    static void ApplySide(BorderSide side, JsonElement resistanceEl, string name)
+    static void ApplySide(BorderSide side, JsonElement resistanceEl, string name, double edgeLengthMm)
     {
         if (resistanceEl.ValueKind != JsonValueKind.Object) return;
         if (!resistanceEl.TryGetProperty(name, out var sideEl)) return;
 
         if (sideEl.ValueKind == JsonValueKind.Number)
         {
-            side.Value = sideEl.GetDouble();
+            AddWholeEdge(sideEl.GetDouble(), false, sideEl.GetDouble(), false);
             return;
         }
 
         if (sideEl.ValueKind != JsonValueKind.Object) return;
 
-        side.Move = GetDouble(sideEl, "Move", 0);
-        side.MoveBlock = GetBool(sideEl, "MoveBlock");
-        side.Drag = GetDouble(sideEl, "Drag", 0);
-        side.DragBlock = GetBool(sideEl, "DragBlock");
-
-        if (!sideEl.TryGetProperty("Sections", out var sectionsEl)) return;
-        if (sectionsEl.ValueKind != JsonValueKind.Array) return;
-
-        side.Sections.Edit(list =>
+        if (sideEl.TryGetProperty("Sections", out var sectionsEl)
+            && sectionsEl.ValueKind == JsonValueKind.Array)
         {
-            list.Clear();
-            foreach (var sectionEl in sectionsEl.EnumerateArray())
+            side.Sections.Edit(list =>
             {
-                if (sectionEl.ValueKind != JsonValueKind.Object) continue;
-
-                list.Add(new BorderSection
+                list.Clear();
+                foreach (var sectionEl in sectionsEl.EnumerateArray())
                 {
-                    From = GetDouble(sectionEl, "From", 0),
-                    To = GetDouble(sectionEl, "To", 0),
-                    Move = GetDouble(sectionEl, "Move", 0),
-                    MoveBlock = GetBool(sectionEl, "MoveBlock"),
-                    Drag = GetDouble(sectionEl, "Drag", 0),
-                    DragBlock = GetBool(sectionEl, "DragBlock")
-                });
-            }
-        });
+                    if (sectionEl.ValueKind != JsonValueKind.Object) continue;
+
+                    list.Add(new BorderSection
+                    {
+                        From = GetDouble(sectionEl, "From", 0),
+                        To = GetDouble(sectionEl, "To", 0),
+                        Move = GetDouble(sectionEl, "Move", 0),
+                        MoveBlock = GetBool(sectionEl, "MoveBlock"),
+                        Drag = GetDouble(sectionEl, "Drag", 0),
+                        DragBlock = GetBool(sectionEl, "DragBlock")
+                    });
+                }
+            });
+
+            if (side.Sections.Count > 0) return;
+        }
+
+        AddWholeEdge(
+            GetDouble(sideEl, "Move", 0), GetBool(sideEl, "MoveBlock"),
+            GetDouble(sideEl, "Drag", 0), GetBool(sideEl, "DragBlock"));
+
+        return;
+
+        void AddWholeEdge(double move, bool moveBlock, double drag, bool dragBlock)
+        {
+            if (edgeLengthMm <= 0) return;
+            if (move <= 0 && drag <= 0 && !moveBlock && !dragBlock) return;
+
+            side.Sections.Add(new BorderSection
+            {
+                From = 0,
+                To = edgeLengthMm,
+                Move = move,
+                MoveBlock = moveBlock,
+                Drag = drag,
+                DragBlock = dragBlock
+            });
+        }
     }
 
     static double GetDouble(JsonElement el, string name, double fallback)

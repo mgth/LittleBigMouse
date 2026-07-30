@@ -22,16 +22,10 @@
 	</UserControl.Resources>
 
 	<UserControl.Styles>
-		<!-- Sized from the monitor's own drawing, like the Size and Location plugins:
-		     the map is zoomable, so anything given an absolute size is wrong at every
-		     zoom but one. Clamped so it stays usable on a tiny or huge screen. -->
+		<!-- No size here: the only numeric fields left are inside the section editor,
+		     which is scaled as a whole by its Viewbox. -->
 		<Style Selector="controls|DoubleBox">
 			<Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
-			<Setter Property="Height" Value="{Binding
-				Bounds,
-				ElementName=UserControl,
-				Converter={StaticResource Scale},
-				ConverterParameter=0.1|14|40}"/>
 			<Setter Property="Decimals" Value="1"/>
 		</Style>
 
@@ -83,33 +77,9 @@
 				DataContext="{Binding Bottom}"/>
 		</Grid>
 
-		<!-- Per-edge default resistance, unchanged: one number governing both modes
-		     wherever no section covers the edge. -->
-		<Grid Margin="22">
-			<controls:DoubleBox
-				HorizontalAlignment="Center" VerticalAlignment="Top"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Top edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Top.Value}"/>
-
-			<controls:DoubleBox
-				HorizontalAlignment="Left" VerticalAlignment="Center"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Left edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Left.Value}"/>
-
-			<controls:DoubleBox
-				HorizontalAlignment="Center" VerticalAlignment="Bottom"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Bottom edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Bottom.Value}"/>
-
-			<controls:DoubleBox
-				HorizontalAlignment="Right" VerticalAlignment="Center"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Right edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Right.Value}"/>
-		</Grid>
+		<!-- The four per-edge numbers are gone: an edge-wide resistance is a section
+		     spanning the edge, and an existing one is converted to exactly that on
+		     load, so it stays in force and becomes editable like any other. -->
 
 		<!-- Project the sections onto the real monitors. Same shape as the rulers'
 		     own toggle in MonitorLocationView, since it does the same kind of thing.

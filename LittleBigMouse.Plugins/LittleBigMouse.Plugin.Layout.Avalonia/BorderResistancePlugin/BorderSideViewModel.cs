@@ -126,22 +126,17 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     {
         get
         {
-            if (!Side.MoveBlock || !Side.DragBlock)
+            // Blocking sections have to cover the edge end to end, with no gap:
+            // anywhere they leave uncovered is free.
+            var covered = 0.0;
+            foreach (var s in Ordered())
             {
-                // Sections only block if together they cover the entire edge.
-                var covered = 0.0;
-                foreach (var s in Ordered())
-                {
-                    if (!s.MoveBlock || !s.DragBlock) return false;
-                    if (s.From > covered + 0.001) return false;
-                    covered = System.Math.Max(covered, s.To);
-                }
-
-                return covered >= LengthMm - 0.001;
+                if (!s.MoveBlock || !s.DragBlock) return false;
+                if (s.From > covered + 0.001) return false;
+                covered = System.Math.Max(covered, s.To);
             }
 
-            // Blocked by default: any section that opens a hole rescues it.
-            return Ordered().All(s => s.MoveBlock && s.DragBlock);
+            return covered >= LengthMm - 0.001;
         }
     }
 

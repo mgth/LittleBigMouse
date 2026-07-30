@@ -36,21 +36,7 @@ public class BorderSide : SavableReactiveModel, IBorderSide
             .Skip(1)
             .Subscribe(_ => Saved = false).DisposeWith(this);
 
-        // Value is a facade over Move, so it has no setter of its own to raise the
-        // change. Without this a load would update the model and leave the bound
-        // editor showing the previous number.
-        this.WhenAnyValue(e => e.Move)
-            .Subscribe(_ => this.RaisePropertyChanged(nameof(Value))).DisposeWith(this);
     }
-
-    /// <summary>Resistance applied wherever no section covers the edge.</summary>
-    public double Move { get; set => SetUnsavedValue(ref field, value); }
-
-    public bool MoveBlock { get; set => SetUnsavedValue(ref field, value); }
-
-    public double Drag { get; set => SetUnsavedValue(ref field, value); }
-
-    public bool DragBlock { get; set => SetUnsavedValue(ref field, value); }
 
     /// <summary>
     /// The editable collection. Hidden from the JSON diagnostics export: a
@@ -59,23 +45,6 @@ public class BorderSide : SavableReactiveModel, IBorderSide
     /// </summary>
     [JsonIgnore]
     public ISourceList<BorderSection> Sections { get; } = new SourceList<BorderSection>();
-
-    /// <summary>
-    /// A single value driving both modes. The border resistance UI has exposed one
-    /// number per edge since forever, and until the section editor lands it keeps
-    /// doing so: reading gives the move resistance, writing sets both — exactly
-    /// what a layout saved before the move/drag split meant.
-    /// </summary>
-    [JsonIgnore]
-    public double Value
-    {
-        get => Move;
-        set
-        {
-            Move = value;
-            Drag = value;
-        }
-    }
 
     /// <summary>
     /// Materialized on change rather than projected on each read: the link compiler

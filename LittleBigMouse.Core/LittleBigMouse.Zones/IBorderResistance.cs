@@ -34,20 +34,16 @@ public interface IBorderSection
 }
 
 /// <summary>
-/// One edge of a monitor: a default resistance pair, plus any number of sections
-/// overriding it over part of the edge.
+/// One edge of a monitor: the sections drawn on it, and nothing else.
+/// <para>
+/// An edge used to carry a single resistance of its own, applied over its whole
+/// length. That is just a section spanning the edge, so the notion was dropped
+/// rather than kept beside the sections: two ways to say the same thing, only one
+/// of them visible in the editor. Wherever no section covers it, an edge is free.
+/// </para>
 /// </summary>
 public interface IBorderSide
 {
-    /// <summary>Resistance applied wherever no section covers the edge.</summary>
-    double Move { get; }
-
-    bool MoveBlock { get; }
-
-    double Drag { get; }
-
-    bool DragBlock { get; }
-
     IReadOnlyList<IBorderSection> Sections { get; }
 }
 

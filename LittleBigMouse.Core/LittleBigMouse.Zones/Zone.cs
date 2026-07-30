@@ -225,9 +225,10 @@ public class Zone : IZonesSerializable
                     }
                 }
 
-                return new BorderResistanceValues(
-                    side.Move, side.MoveBlock,
-                    side.Drag, side.DragBlock);
+                // Not covered by any section: the edge offers no resistance. An edge
+                // used to carry a default of its own, but that is exactly a section
+                // spanning it, and one way of saying a thing is enough.
+                return new BorderResistanceValues(0, false, 0, false);
             }
         }
 

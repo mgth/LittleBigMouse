@@ -45,27 +45,44 @@ public class BorderSectionLinkTests
     static List<ZoneLink> Crossing(List<ZoneLink> links) => [.. links.Where(l => l.Target != null)];
 
     [Fact]
-    public void NoSections_ProducesOneRunCarryingTheSideDefault()
+    public void NoSections_LeavesTheEdgeFree()
     {
+        // An edge carries no resistance of its own any more: what no section covers
+        // is free.
+        var layout = TwoMonitors(out _);
+
+        var crossing = Assert.Single(Crossing(RightLinksOfLeft(layout)));
+
+        Assert.Equal(0, crossing.BorderResistance);
+        Assert.Equal(0, crossing.DragResistance);
+        Assert.False(crossing.MoveBlock);
+        Assert.False(crossing.DragBlock);
+    }
+
+    [Fact]
+    public void ASectionSpanningTheEdgeIsTheFormerPerEdgeResistance()
+    {
+        // The shape a stored per-edge resistance is converted into on load: one run
+        // over the whole edge, exactly as before the notion was dropped.
         var layout = TwoMonitors(out var borders);
-        borders.Right.Move = 7;
-        borders.Right.Drag = 9;
+        borders.Right.Sections.Add(new BorderSection
+        {
+            From = 0, To = EdgeHeightMm, Move = 7, Drag = 9
+        });
 
         var crossing = Assert.Single(Crossing(RightLinksOfLeft(layout)));
 
         Assert.Equal(7, crossing.BorderResistance);
         Assert.Equal(9, crossing.DragResistance);
         Assert.False(crossing.MoveBlock);
-        Assert.False(crossing.DragBlock);
     }
 
     [Fact]
     public void ASectionSplitsTheEdgeAndCarriesItsOwnResistances()
     {
         var layout = TwoMonitors(out var borders);
-        borders.Right.Move = 1;
-        borders.Right.Drag = 1;
-        // Top half of the edge: a wall for plain moves, heavy for drags.
+        // Top half of the edge: a wall for plain moves, heavy for drags. The bottom
+        // half is left uncovered, so it stays free.
         borders.Right.Sections.Add(new BorderSection
         {
             From = 0, To = EdgeHeightMm / 2, MoveBlock = true, Drag = 50
@@ -83,8 +100,8 @@ public class BorderSectionLinkTests
         Assert.Equal(540, crossing[0].SourceToPixel);
 
         Assert.False(crossing[1].MoveBlock);
-        Assert.Equal(1, crossing[1].BorderResistance);
-        Assert.Equal(1, crossing[1].DragResistance);
+        Assert.Equal(0, crossing[1].BorderResistance);
+        Assert.Equal(0, crossing[1].DragResistance);
         Assert.Equal(540, crossing[1].SourceFromPixel);
     }
 
@@ -154,9 +171,10 @@ public class BorderSectionLinkTests
         // it when DragResistance is absent, so this naming is a compatibility
         // contract with the Rust parser, not a style choice.
         var layout = TwoMonitors(out var borders);
-        borders.Right.Move = 3;
-        borders.Right.Drag = 4;
-        borders.Right.DragBlock = true;
+        borders.Right.Sections.Add(new BorderSection
+        {
+            From = 0, To = EdgeHeightMm, Move = 3, Drag = 4, DragBlock = true
+        });
 
         var xml = Crossing(RightLinksOfLeft(layout))[0].Serialize();
 

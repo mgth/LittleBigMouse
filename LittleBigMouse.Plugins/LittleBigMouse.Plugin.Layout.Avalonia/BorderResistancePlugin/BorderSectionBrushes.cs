@@ -26,9 +26,6 @@ public static class BorderSectionBrushes
     public static IBrush For(IBorderSection section) =>
         For(section.Move, section.MoveBlock, section.Drag, section.DragBlock);
 
-    public static IBrush For(IBorderSide side) =>
-        For(side.Move, side.MoveBlock, side.Drag, side.DragBlock);
-
     public static string Describe(double move, bool moveBlock, double drag, bool dragBlock)
     {
         var m = moveBlock ? "blocked" : $"{move:0.#} mm";

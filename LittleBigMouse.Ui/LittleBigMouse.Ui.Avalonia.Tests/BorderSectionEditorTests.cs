@@ -27,11 +27,13 @@ public sealed class BorderSectionEditorTests
         return layout;
     }
 
-    static PhysicalMonitor AddMonitor(MonitorsLayout layout, string id, double xMm, double yMm)
+    static PhysicalMonitor AddMonitor(
+        MonitorsLayout layout, string id, double xMm, double yMm,
+        double widthMm = 480, double heightMm = 270)
     {
         var model = new PhysicalMonitorModel($"PNP-{id}");
-        model.PhysicalSize.Width = 480;
-        model.PhysicalSize.Height = 270;
+        model.PhysicalSize.Width = widthMm;
+        model.PhysicalSize.Height = heightMm;
 
         var monitor = new PhysicalMonitor(id, layout, model);
         var source = new DisplaySource($"SRC-{id}") { AttachedToDesktop = true };
@@ -211,6 +213,80 @@ public sealed class BorderSectionEditorTests
 
         Assert.True(side.MirrorToFacingEdge(section));
         Assert.Single(right.BorderResistance.Left.Sections.Items);
+        Assert.NotNull(layout);
+    }
+
+    [Fact]
+    public void CanMirrorFollowsTheMonitorsMovingAround()
+    {
+        // The button's enabled state has to answer the same question as the action,
+        // and answer it again once the layout changes rather than going stale.
+        var layout = TwoMonitors(out var left, out var right);
+
+        var side = RightEdgeOf(left);
+        var section = side.Create(100, 200)!;
+
+        Assert.True(side.CanMirror(section));
+
+        // Pushed out of reach.
+        right.DepthProjection.X = 900;
+        Assert.False(side.CanMirror(section));
+
+        // Brought back.
+        right.DepthProjection.X = 0;
+        Assert.True(side.CanMirror(section));
+
+        // Slid down until it no longer overlaps this edge at all.
+        right.DepthProjection.Y = 400;
+        Assert.False(side.CanMirror(section));
+
+        Assert.NotNull(layout);
+    }
+
+    [Fact]
+    public void MirroringTakesTheFreePartWhenTheFacingEdgeIsPartlyTaken()
+    {
+        // Straight from a real three-monitor layout. The Samsung sits 57.6 mm higher
+        // than the Philips and 40 mm to its right; a section on the Samsung's left
+        // edge covers absolute Y 138.4 to 334.4, while the Philips' right edge is
+        // already occupied from 0 to 238.6. Only the bottom 96 mm face each other.
+        var layout = new MonitorsLayout(new ILayoutOptions.Design()) { Id = "REAL" };
+
+        var philips = AddMonitor(layout, "PHL", 0, 0, 698, 393);
+        var samsung = AddMonitor(layout, "SAM", 738, -57.634, 697, 392);
+
+        philips.BorderResistance.Right.Sections.Add(new BorderSection { From = 0, To = 238.558 });
+
+        var side = new BorderSideViewModel(samsung, BorderSideKind.Left, samsung.BorderResistance.Left)
+        {
+            PixelLength = 392
+        };
+        var section = side.Create(196, 392)!;
+
+        Assert.True(side.CanMirror(section));
+        Assert.True(side.MirrorToFacingEdge(section));
+
+        var mirrored = philips.BorderResistance.Right.Sections.Items
+            .Single(s => s.From > 200);
+
+        // The occupied stretch is skipped; the copy starts where it ends.
+        Assert.Equal(238.558, mirrored.From, 3);
+        Assert.Equal(334.366, mirrored.To, 3);
+    }
+
+    [Fact]
+    public void CanMirrorIsFalseWhenTheFacingEdgeHasNoRoom()
+    {
+        var layout = TwoMonitors(out var left, out var right);
+
+        var side = RightEdgeOf(left);
+        var section = side.Create(100, 200)!;
+
+        // The facing stretch is already taken, leaving nothing to land in.
+        right.BorderResistance.Left.Sections.Add(new BorderSection { From = 0, To = 270 });
+
+        Assert.False(side.CanMirror(section));
+        Assert.False(side.MirrorToFacingEdge(section));
         Assert.NotNull(layout);
     }
 

@@ -83,7 +83,9 @@ public partial class BorderResistanceView : UserControl, IView<BorderResistanceV
         var rx = p.X / db.Bounds.Width;
         var ry = p.Y / db.Bounds.Height;
 
-        db.Value += WheelDelta(e);
+        // Floored here as well as in the model: the wheel would otherwise walk the
+        // box down into negatives that the model silently drops.
+        db.Value = Math.Max(0, db.Value + WheelDelta(e));
         this.GetLayout()?.Compact();
 
         // Keeping the pointer over the box it is scrolling is a Win32-only nicety;

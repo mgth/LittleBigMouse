@@ -1,5 +1,6 @@
 using System;
 using Avalonia.Media;
+using Avalonia.Threading;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using ReactiveUI;
 
@@ -27,7 +28,18 @@ public class BorderSectionViewModel : ReactiveObject, IDisposable
         // drag would know to refresh itself; the others would keep drawing the
         // section where it used to be.
         this.WhenAnyValue(e => e.Model.From, e => e.Model.To)
-            .Subscribe(_ => Refresh());
+            .Subscribe(_ =>
+            {
+                Refresh();
+                // Moving a section can take it off the stretch that faces a
+                // neighbour, or bring it back onto one.
+                this.RaisePropertyChanged(nameof(CanMirror));
+            });
+
+        // …and so can moving or resizing any monitor, which is what makes the
+        // button follow a rearranged layout instead of going stale.
+        side.LayoutGeometryChanged
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(CanMirror)));
 
         OnSelectionChanged(BorderSectionSelection.Current);
         BorderSectionSelection.Changed += OnSelectionChanged;
@@ -39,12 +51,50 @@ public class BorderSectionViewModel : ReactiveObject, IDisposable
                 e => e.Model.DragBlock)
             .Subscribe(_ =>
             {
+                this.RaisePropertyChanged(nameof(Move));
+                this.RaisePropertyChanged(nameof(Drag));
                 this.RaisePropertyChanged(nameof(Fill));
                 this.RaisePropertyChanged(nameof(Description));
             });
     }
 
     public BorderSection Model { get; }
+
+    /// <summary>
+    /// The editor writes through here rather than straight to the model.
+    /// <para>
+    /// The model floors resistances at zero, but its refusal is announced while the
+    /// binding is still writing target to source, and a two-way binding ignores a
+    /// source change raised inside its own update — so the box went on displaying a
+    /// number the model had already dropped. Announcing it again once that update is
+    /// over puts the editor back in step.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Whether "Mirror" would do anything: a monitor across this edge, room left on
+    /// its facing edge, and more than a sliver of free space to land in.
+    /// </summary>
+    public bool CanMirror => Side.CanMirror(Model);
+
+    public double Move
+    {
+        get => Model.Move;
+        set => Write(value, v => Model.Move = v, () => Model.Move, nameof(Move));
+    }
+
+    public double Drag
+    {
+        get => Model.Drag;
+        set => Write(value, v => Model.Drag = v, () => Model.Drag, nameof(Drag));
+    }
+
+    void Write(double requested, Action<double> apply, Func<double> read, string property)
+    {
+        apply(requested);
+        if (read().Equals(requested)) return;
+
+        Dispatcher.UIThread.Post(() => this.RaisePropertyChanged(property));
+    }
 
     public BorderSideViewModel Side { get; }
 

@@ -124,6 +124,32 @@ public class BorderSectionLinkTests
     }
 
     [Fact]
+    public void ANegativeResistanceIsRefusedRatherThanCarriedToTheDaemon()
+    {
+        // The hook floors resistances at zero, so a negative one does nothing there.
+        // Keeping it in the model would only make the editor display a number that
+        // governs nothing.
+        var section = new BorderSection { Move = 5, Drag = 5 };
+
+        var raised = 0;
+        section.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(BorderSection.Move)) raised++;
+        };
+
+        section.Move = -5;
+
+        Assert.Equal(0, section.Move);
+
+        // Refused down to zero, and again from zero: the notification has to fire
+        // both times, or a bound editor keeps showing the value it was denied.
+        Assert.Equal(1, raised);
+        section.Move = -1;
+        Assert.Equal(2, raised);
+        Assert.Equal(0, section.Move);
+    }
+
+    [Fact]
     public void AdjacentSectionsWithIdenticalSettingsStillMerge()
     {
         var layout = TwoMonitors(out var borders);

@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using DynamicData;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -57,7 +59,21 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
             {
                 foreach (var section in Sections) section.Refresh();
             }));
+
+        // Whether a section can be mirrored depends on where the monitors sit
+        // relative to one another, so it has to be re-answered whenever any of them
+        // moves or is resized — not only when this edge is edited.
+        foreach (var other in monitor.Layout.PhysicalMonitors)
+        {
+            _subscriptions.Add(other.DepthProjection
+                .WhenAnyValue(d => d.X, d => d.Y, d => d.Width, d => d.Height)
+                .Skip(1)
+                .Subscribe(_ => LayoutGeometryChanged.OnNext(Unit.Default)));
+        }
     }
+
+    /// <summary>Fires when any monitor moves or changes size.</summary>
+    public Subject<Unit> LayoutGeometryChanged { get; } = new();
 
     readonly CompositeDisposable _subscriptions = [];
 
@@ -70,6 +86,7 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     public void Dispose()
     {
         _subscriptions.Dispose();
+        LayoutGeometryChanged.Dispose();
         foreach (var section in Sections) section.Dispose();
         Sections.Clear();
     }
@@ -83,7 +100,20 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     public ObservableCollection<BorderSectionViewModel> Sections { get; } = [];
 
     /// <summary>Left and Right edges run along Y; Top and Bottom along X.</summary>
-    public bool IsVertical => Kind is BorderSideKind.Left or BorderSideKind.Right;
+    public bool IsVertical => IsVerticalKind(Kind);
+
+    static bool IsVerticalKind(BorderSideKind kind) =>
+        kind is BorderSideKind.Left or BorderSideKind.Right;
+
+    // Taken on any monitor and edge, not just this one: the mirror has to measure the
+    // edge it is copying onto without building a view model for it.
+    static double OriginOf(PhysicalMonitor monitor, BorderSideKind kind) => IsVerticalKind(kind)
+        ? monitor.DepthProjection.Y
+        : monitor.DepthProjection.X;
+
+    static double LengthOf(PhysicalMonitor monitor, BorderSideKind kind) => IsVerticalKind(kind)
+        ? monitor.DepthProjection.Height
+        : monitor.DepthProjection.Width;
 
     /// <summary>Length of the strip in UI pixels, fed by the view on every resize.</summary>
     public double PixelLength
@@ -238,12 +268,49 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// an overlap would make one of them silently win.
     /// </para>
     /// </summary>
-    public (double Low, double High) FreeGapAround(double referenceMm, BorderSection? excluding)
+    public (double Low, double High) FreeGapAround(double referenceMm, BorderSection? excluding) =>
+        FreeGapAround(Side.Sections.Items, referenceMm, LengthMm, excluding);
+
+    /// <summary>
+    /// The longest stretch of <c>[from, to]</c> that no section occupies, or null if
+    /// the range is entirely taken. Used by the mirror, which has to settle for the
+    /// part of the facing edge that is actually free rather than give up on the whole
+    /// copy because one end is occupied.
+    /// </summary>
+    static (double From, double To)? LargestFreeSpan(
+        IEnumerable<BorderSection> sections, double from, double to)
+    {
+        var best = (From: 0.0, To: 0.0);
+        var cursor = from;
+
+        foreach (var section in sections
+                     .Where(s => s.To > from && s.From < to)
+                     .OrderBy(s => s.From))
+        {
+            if (section.From > cursor) Consider(cursor, System.Math.Min(section.From, to));
+
+            cursor = System.Math.Max(cursor, section.To);
+            if (cursor >= to) break;
+        }
+
+        if (cursor < to) Consider(cursor, to);
+
+        return best.To > best.From ? best : null;
+
+        void Consider(double low, double high)
+        {
+            if (high - low > best.To - best.From) best = (low, high);
+        }
+    }
+
+    /// <summary>Same, on any edge's sections — the mirror measures the facing one.</summary>
+    static (double Low, double High) FreeGapAround(
+        IEnumerable<BorderSection> sections, double referenceMm, double lengthMm, BorderSection? excluding)
     {
         var low = 0.0;
-        var high = LengthMm;
+        var high = lengthMm;
 
-        foreach (var other in Ordered())
+        foreach (var other in sections.OrderBy(s => s.From))
         {
             if (ReferenceEquals(other, excluding)) continue;
 
@@ -333,26 +400,12 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// </summary>
     public bool MirrorToFacingEdge(BorderSection section)
     {
-        using var facing = FindFacingSide();
-        if (facing == null) return false;
-        if (facing.Side.Sections.Count >= MaximumSections) return false;
+        if (PlanMirror(section) is not { } plan) return false;
 
-        // Same absolute layout coordinates, re-expressed against the other edge's origin.
-        var from = OriginMm + section.From - facing.OriginMm;
-        var to = OriginMm + section.To - facing.OriginMm;
-
-        var wantedFrom = System.Math.Clamp(from, 0, facing.LengthMm);
-        var wantedTo = System.Math.Clamp(to, 0, facing.LengthMm);
-
-        var (clampedFrom, clampedTo) = facing.ClampToFreeSpace(
-            wantedFrom, wantedTo, (wantedFrom + wantedTo) / 2, null);
-
-        if (clampedTo - clampedFrom < MinimumLengthMm) return false;
-
-        facing.Side.Sections.Add(new BorderSection
+        plan.Side.Sections.Add(new BorderSection
         {
-            From = clampedFrom,
-            To = clampedTo,
+            From = plan.From,
+            To = plan.To,
             Move = section.Move,
             MoveBlock = section.MoveBlock,
             Drag = section.Drag,
@@ -362,8 +415,45 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         return true;
     }
 
+    /// <summary>Whether <see cref="MirrorToFacingEdge"/> would do anything.</summary>
+    public bool CanMirror(BorderSection section) => PlanMirror(section) != null;
+
     /// <summary>
-    /// The opposite edge of the monitor across this one, if any.
+    /// Where the copy would land, or null if it cannot: no monitor across this edge,
+    /// the facing edge already full, or nothing but a sliver left free there.
+    /// <para>
+    /// Shared by the action and by the button's enabled state, so the button cannot
+    /// promise something the action then refuses. Deliberately free of side effects
+    /// and of view models — it is evaluated again on every layout change.
+    /// </para>
+    /// </summary>
+    (BorderSide Side, double From, double To)? PlanMirror(BorderSection section)
+    {
+        if (FindFacingEdge() is not { } facing) return null;
+
+        var side = SideOf(facing.Monitor, facing.Kind);
+        if (side.Sections.Count >= MaximumSections) return null;
+
+        var origin = OriginOf(facing.Monitor, facing.Kind);
+        var length = LengthOf(facing.Monitor, facing.Kind);
+
+        // Same absolute layout coordinates, re-expressed against the other edge.
+        var from = System.Math.Clamp(OriginMm + section.From - origin, 0, length);
+        var to = System.Math.Clamp(OriginMm + section.To - origin, 0, length);
+
+        // The longest free stretch INSIDE the wanted range, not the gap around its
+        // midpoint: the facing edge is often partly taken, and the two ranges then
+        // overlap only at one end. Probing the midpoint declared the whole mirror
+        // impossible whenever that midpoint happened to fall on an existing section,
+        // even with most of the range free.
+        if (LargestFreeSpan(side.Sections.Items, from, to) is not { } span) return null;
+        if (span.To - span.From < MinimumLengthMm) return null;
+
+        return (side, span.From, span.To);
+    }
+
+    /// <summary>
+    /// The monitor and edge across this one, if any.
     /// <para>
     /// The nearest candidate in the right direction that overlaps along the edge and
     /// sits within the layout's travel distance — the same question the link compiler
@@ -378,7 +468,7 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// borders, which is to say almost never.
     /// </para>
     /// </summary>
-    public BorderSideViewModel? FindFacingSide()
+    public (PhysicalMonitor Monitor, BorderSideKind Kind)? FindFacingEdge()
     {
         var mine = Monitor.DepthProjection.Bounds;
 
@@ -414,18 +504,13 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
         if (best == null) return null;
 
-        var facingKind = Kind switch
+        return (best, Kind switch
         {
             BorderSideKind.Left => BorderSideKind.Right,
             BorderSideKind.Right => BorderSideKind.Left,
             BorderSideKind.Top => BorderSideKind.Bottom,
             _ => BorderSideKind.Top
-        };
-
-        return new BorderSideViewModel(best, facingKind, SideOf(best, facingKind))
-        {
-            PixelLength = PixelLength
-        };
+        });
     }
 
     public static BorderSide SideOf(PhysicalMonitor monitor, BorderSideKind kind) => kind switch

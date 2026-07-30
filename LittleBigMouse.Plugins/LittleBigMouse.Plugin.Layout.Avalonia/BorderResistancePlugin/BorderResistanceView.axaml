@@ -19,6 +19,17 @@
 
 	<UserControl.Resources>
 		<converters:ScaleConverter x:Key="Scale" />
+
+		<!-- The HLab theme has no warning colour: Background, Foreground, Header and
+		     Selected, and that is all. A DynamicResource for a key that does not
+		     exist leaves the property at its default rather than falling back to the
+		     inherited value, which is how the delete button came out black and the
+		     lock warning black on a black panel.
+
+		     Same amber as a half-blocked section in the bands, so the colour keeps
+		     one meaning across the plugin. Readable on either theme, which is why it
+		     is a single value and not a themed pair. -->
+		<SolidColorBrush x:Key="Section.Warning" Color="#FFE08E2B"/>
 	</UserControl.Resources>
 
 	<UserControl.Styles>
@@ -47,7 +58,7 @@
 		</Style>
 
 		<Style Selector="Button.danger">
-			<Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Warning}"/>
+			<Setter Property="Foreground" Value="{StaticResource Section.Warning}"/>
 		</Style>
 	</UserControl.Styles>
 
@@ -140,7 +151,7 @@
 					                    PointerWheelChanged="OnMouseWheel"
 					                    ToolTip.Tip="Resistance in mm opposing a plain cursor move"
 					                    IsEnabled="{Binding !Selected.Model.MoveBlock}"
-					                    Value="{Binding Selected.Model.Move}"/>
+					                    Value="{Binding Selected.Move}"/>
 					<ToggleSwitch Grid.Row="1" Grid.Column="2" Classes="compact"
 					              IsChecked="{Binding Selected.Model.MoveBlock}"/>
 
@@ -149,7 +160,7 @@
 					                    PointerWheelChanged="OnMouseWheel"
 					                    ToolTip.Tip="Resistance in mm opposing a move made with a mouse button held"
 					                    IsEnabled="{Binding !Selected.Model.DragBlock}"
-					                    Value="{Binding Selected.Model.Drag}"/>
+					                    Value="{Binding Selected.Drag}"/>
 					<ToggleSwitch Grid.Row="2" Grid.Column="2" Classes="compact"
 					              IsChecked="{Binding Selected.Model.DragBlock}"/>
 				</Grid>
@@ -163,6 +174,7 @@
 					     easiest way to get a border that opens one way by accident. -->
 					<Button Grid.Column="0" Content="Mirror" HorizontalAlignment="Stretch"
 					        HorizontalContentAlignment="Center" CornerRadius="6"
+					        IsEnabled="{Binding Selected.CanMirror}"
 					        ToolTip.Tip="Copy this section onto the facing edge of the monitor across it"
 					        Click="OnMirror"/>
 
@@ -176,7 +188,7 @@
 				<TextBlock
 					IsVisible="{Binding Selected.Side.IsFullyBlocked}"
 					TextWrapping="Wrap" MaxWidth="230" FontSize="11"
-					Foreground="{DynamicResource HLab.Brushes.Warning}"
+					Foreground="{StaticResource Section.Warning}"
 					Text="This edge is fully blocked in both modes. Ctrl still forces a crossing on Windows and X11, but not on Wayland."/>
 			</StackPanel>
 		</Border>

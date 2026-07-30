@@ -26,10 +26,9 @@
 		     inherited value, which is how the delete button came out black and the
 		     lock warning black on a black panel.
 
-		     Same amber as a half-blocked section in the bands, so the colour keeps
-		     one meaning across the plugin. Readable on either theme, which is why it
-		     is a single value and not a themed pair. -->
-		<SolidColorBrush x:Key="Section.Warning" Color="#FFE08E2B"/>
+		     Readable on either theme, which is why it is a single value and not a
+		     themed pair. -->
+		<SolidColorBrush x:Key="Section.Warning" Color="#FFE0A32B"/>
 	</UserControl.Resources>
 
 	<UserControl.Styles>

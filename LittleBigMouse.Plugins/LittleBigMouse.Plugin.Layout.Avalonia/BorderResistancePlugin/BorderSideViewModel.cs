@@ -338,7 +338,7 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// </summary>
     public bool MirrorToFacingEdge(BorderSection section)
     {
-        var facing = FindFacingSide();
+        using var facing = FindFacingSide();
         if (facing == null) return false;
         if (facing.Side.Sections.Count >= MaximumSections) return false;
 
@@ -367,10 +367,28 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         return true;
     }
 
-    /// <summary>The opposite edge of the monitor sitting across this one, if any.</summary>
+    /// <summary>
+    /// The opposite edge of the monitor across this one, if any.
+    /// <para>
+    /// The nearest candidate in the right direction that overlaps along the edge and
+    /// sits within the layout's travel distance — the same question the link compiler
+    /// answers when it decides where a crossing leads, so the mirror agrees with what
+    /// the daemon will do.
+    /// </para>
+    /// <para>
+    /// Adjacency cannot be tested by "do the edges touch": these are the VISIBLE
+    /// rectangles, and two monitors placed frame against frame have their visible
+    /// areas separated by the sum of their two bezels — tens of millimetres. That
+    /// mistake made this find a facing edge only on monitors declared without
+    /// borders, which is to say almost never.
+    /// </para>
+    /// </summary>
     public BorderSideViewModel? FindFacingSide()
     {
         var mine = Monitor.DepthProjection.Bounds;
+
+        PhysicalMonitor? best = null;
+        var bestGap = Monitor.Layout.Options.MaxTravelDistance;
 
         foreach (var other in Monitor.Layout.PhysicalMonitors)
         {
@@ -378,17 +396,16 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
             var bounds = other.DepthProjection.Bounds;
 
-            // Touching (within a millimetre) and overlapping along the edge.
-            var touches = Kind switch
+            var gap = Kind switch
             {
-                BorderSideKind.Left => System.Math.Abs(bounds.Right - mine.Left) < 1,
-                BorderSideKind.Right => System.Math.Abs(bounds.Left - mine.Right) < 1,
-                BorderSideKind.Top => System.Math.Abs(bounds.Bottom - mine.Top) < 1,
-                BorderSideKind.Bottom => System.Math.Abs(bounds.Top - mine.Bottom) < 1,
-                _ => false
+                BorderSideKind.Left => mine.Left - bounds.Right,
+                BorderSideKind.Right => bounds.Left - mine.Right,
+                BorderSideKind.Top => mine.Top - bounds.Bottom,
+                _ => bounds.Top - mine.Bottom
             };
 
-            if (!touches) continue;
+            // Behind us, or further than the cursor would ever travel.
+            if (gap < 0 || gap > bestGap) continue;
 
             var overlaps = IsVertical
                 ? bounds.Bottom > mine.Top && bounds.Top < mine.Bottom
@@ -396,21 +413,24 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
             if (!overlaps) continue;
 
-            var facingKind = Kind switch
-            {
-                BorderSideKind.Left => BorderSideKind.Right,
-                BorderSideKind.Right => BorderSideKind.Left,
-                BorderSideKind.Top => BorderSideKind.Bottom,
-                _ => BorderSideKind.Top
-            };
-
-            return new BorderSideViewModel(other, facingKind, SideOf(other, facingKind))
-            {
-                PixelLength = PixelLength
-            };
+            best = other;
+            bestGap = gap;
         }
 
-        return null;
+        if (best == null) return null;
+
+        var facingKind = Kind switch
+        {
+            BorderSideKind.Left => BorderSideKind.Right,
+            BorderSideKind.Right => BorderSideKind.Left,
+            BorderSideKind.Top => BorderSideKind.Bottom,
+            _ => BorderSideKind.Top
+        };
+
+        return new BorderSideViewModel(best, facingKind, SideOf(best, facingKind))
+        {
+            PixelLength = PixelLength
+        };
     }
 
     public static BorderSide SideOf(PhysicalMonitor monitor, BorderSideKind kind) => kind switch

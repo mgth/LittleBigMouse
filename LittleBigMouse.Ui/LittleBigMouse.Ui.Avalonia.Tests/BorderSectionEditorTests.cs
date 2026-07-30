@@ -193,11 +193,33 @@ public sealed class BorderSectionEditorTests
     }
 
     [Fact]
+    public void MirroringWorksAcrossBezels()
+    {
+        // The case every real setup is in, and the one the first version missed:
+        // monitors are placed frame against frame, so their VISIBLE areas end up
+        // separated by the sum of the two bezels. Testing adjacency by "do the
+        // visible edges touch" found a facing edge only on borderless monitors —
+        // which is to say only in the other tests here.
+        var layout = TwoMonitors(out var left, out var right);
+
+        left.Model.PhysicalSize.RightBorder = 12;
+        right.Model.PhysicalSize.LeftBorder = 10;
+        right.DepthProjection.X = 22;
+
+        var side = RightEdgeOf(left);
+        var section = side.Create(100, 200)!;
+
+        Assert.True(side.MirrorToFacingEdge(section));
+        Assert.Single(right.BorderResistance.Left.Sections.Items);
+        Assert.NotNull(layout);
+    }
+
+    [Fact]
     public void MirroringDoesNothingWithoutAFacingMonitor()
     {
         var layout = TwoMonitors(out var left, out var right);
 
-        // Pull the neighbour away: nothing faces the left monitor's right edge.
+        // Beyond MaxTravelDistance: nothing faces the left monitor's right edge.
         right.DepthProjection.X = 900;
 
         var side = RightEdgeOf(left);

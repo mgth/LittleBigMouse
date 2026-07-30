@@ -199,15 +199,16 @@ public partial class BorderSideStrip : UserControl
         _target = null;
         e.Pointer.Capture(null);
 
-        // The layout has to be recompacted and re-pushed like any other edit.
-        this.GetLayout()?.Compact();
+        // The layout has to be recompacted and re-pushed like any other edit. On the
+        // real screen this strip has no presenter above it, so fall back to the
+        // monitor's own layout rather than silently skipping the push.
+        (this.GetLayout() ?? vm?.Monitor.Layout)?.Compact();
     }
 
-    void SelectInParent(BorderSectionViewModel? section)
-    {
-        var view = this.FindAncestorOfType<BorderResistanceView>();
-        (view?.DataContext as BorderResistanceViewModel)?.Select(section);
-    }
+    BorderResistanceViewModel? Parent =>
+        this.FindAncestorOfType<BorderResistanceView>()?.DataContext as BorderResistanceViewModel;
+
+    void SelectInParent(BorderSectionViewModel? section) => Parent?.Select(section);
 
     //==================//
     // Feedback         //

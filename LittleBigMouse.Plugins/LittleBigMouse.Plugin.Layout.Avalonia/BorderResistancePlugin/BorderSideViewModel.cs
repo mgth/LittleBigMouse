@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using DynamicData;
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -19,7 +23,7 @@ public enum BorderSideKind { Left, Top, Right, Bottom }
 /// a pixel offset here means the same thing to the daemon.
 /// </para>
 /// </summary>
-public class BorderSideViewModel : ReactiveObject
+public class BorderSideViewModel : ReactiveObject, IDisposable
 {
     /// <summary>A section thinner than this is a mis-click, not an intent.</summary>
     public const double MinimumLengthMm = 2.0;
@@ -38,16 +42,32 @@ public class BorderSideViewModel : ReactiveObject
         Kind = kind;
         Side = side;
 
-        side.Sections.Connect()
+        // AutoRefresh so that editing a section in place — not just adding or
+        // removing one — reaches the "is this edge sealed" warning too.
+        _subscriptions.Add(side.Sections.Connect()
+            .AutoRefresh(e => e.MoveBlock)
+            .AutoRefresh(e => e.DragBlock)
+            .AutoRefresh(e => e.From)
+            .AutoRefresh(e => e.To)
             .ToCollection()
-            .Subscribe(_ => RebuildSections());
+            .Subscribe(OnSectionsChanged));
 
-        this.WhenAnyValue(e => e.PixelLength)
+        _subscriptions.Add(this.WhenAnyValue(e => e.PixelLength)
             .Subscribe(_ =>
             {
                 foreach (var section in Sections) section.Refresh();
-            });
+            }));
     }
+
+    readonly CompositeDisposable _subscriptions = [];
+
+    /// <summary>
+    /// One side view model exists per view of the same edge — the layout map plus
+    /// one per screen band — and the on-screen ones are created and dropped every
+    /// time the overlay is toggled, so their subscriptions to the shared section
+    /// list have to go with them.
+    /// </summary>
+    public void Dispose() => _subscriptions.Dispose();
 
     public PhysicalMonitor Monitor { get; }
 
@@ -122,11 +142,17 @@ public class BorderSideViewModel : ReactiveObject
 
     IEnumerable<BorderSection> Ordered() => Side.Sections.Items.OrderBy(s => s.From);
 
-    void RebuildSections()
+    void OnSectionsChanged(IReadOnlyCollection<BorderSection> sections)
     {
-        Sections.Clear();
-        foreach (var section in Ordered())
-            Sections.Add(new BorderSectionViewModel(section, this));
+        // Rebuild only when the set of sections actually changed. An in-place edit
+        // also lands here through AutoRefresh, and recreating the item view models
+        // then would drop the selection and restart any drag in progress.
+        if (!Sections.Select(vm => vm.Model).SequenceEqual(sections.OrderBy(s => s.From)))
+        {
+            Sections.Clear();
+            foreach (var section in Ordered())
+                Sections.Add(new BorderSectionViewModel(section, this));
+        }
 
         this.RaisePropertyChanged(nameof(IsFullyBlocked));
     }
@@ -273,7 +299,7 @@ public class BorderSideViewModel : ReactiveObject
 
         section.From = from;
         section.To = to;
-        RefreshSection(section);
+        // No refresh here: every view of this section follows the model itself.
     }
 
     /// <summary>
@@ -290,7 +316,7 @@ public class BorderSideViewModel : ReactiveObject
 
         section.From = from;
         section.To = from + length;
-        RefreshSection(section);
+        // No refresh here: every view of this section follows the model itself.
     }
 
     public void Delete(BorderSection section) => Side.Sections.Remove(section);
@@ -385,18 +411,6 @@ public class BorderSideViewModel : ReactiveObject
         BorderSideKind.Right => monitor.BorderResistance.Right,
         _ => monitor.BorderResistance.Bottom
     };
-
-    void RefreshSection(BorderSection section)
-    {
-        foreach (var vm in Sections)
-        {
-            if (!ReferenceEquals(vm.Model, section)) continue;
-            vm.Refresh();
-            break;
-        }
-
-        this.RaisePropertyChanged(nameof(IsFullyBlocked));
-    }
 
     static (double From, double To) Order(double a, double b) => a <= b ? (a, b) : (b, a);
 }

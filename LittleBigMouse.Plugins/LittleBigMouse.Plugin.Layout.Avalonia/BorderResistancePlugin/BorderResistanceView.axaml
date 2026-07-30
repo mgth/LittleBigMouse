@@ -85,6 +85,14 @@
 				Value="{Binding Path=Model.BorderResistance.Right.Value}"/>
 		</Grid>
 
+		<!-- Project the sections onto the real monitors, like the rulers. Off by
+		     default: it puts topmost bands on every screen. -->
+		<CheckBox
+			HorizontalAlignment="Center" VerticalAlignment="Center"
+			Content="Show on screens"
+			IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNull}}"
+			IsChecked="{Binding ShowOnScreens}"/>
+
 		<!-- Editor for the selected section. Kept over the monitor rather than in a
 		     side panel: it belongs next to the edge being edited. -->
 		<Border

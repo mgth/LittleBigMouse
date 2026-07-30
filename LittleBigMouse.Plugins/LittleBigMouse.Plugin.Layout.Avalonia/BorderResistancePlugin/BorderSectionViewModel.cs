@@ -12,11 +12,6 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 /// </summary>
 public class BorderSectionViewModel : ReactiveObject
 {
-    static readonly IBrush BlockedBrush = new SolidColorBrush(Color.FromArgb(0xC0, 0xC0, 0x39, 0x2B));
-    static readonly IBrush HalfBlockedBrush = new SolidColorBrush(Color.FromArgb(0xC0, 0xE0, 0x8E, 0x2B));
-    static readonly IBrush ResistingBrush = new SolidColorBrush(Color.FromArgb(0xC0, 0x2B, 0x84, 0xC0));
-    static readonly IBrush FreeBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x70, 0x70, 0x70));
-
     static readonly IBrush SelectedStroke = Brushes.White;
     static readonly IBrush NormalStroke = Brushes.Transparent;
 
@@ -25,8 +20,14 @@ public class BorderSectionViewModel : ReactiveObject
         Model = model;
         Side = side;
 
-        // The look is derived from four independent settings, so watch them all
-        // rather than refreshing only when the geometry changes.
+        // Everything is driven from the model, never pushed in by whoever made the
+        // edit. The same section is shown by more than one view model at a time —
+        // the layout map and each on-screen band — and only the one performing a
+        // drag would know to refresh itself; the others would keep drawing the
+        // section where it used to be.
+        this.WhenAnyValue(e => e.Model.From, e => e.Model.To)
+            .Subscribe(_ => Refresh());
+
         this.WhenAnyValue(
                 e => e.Model.Move,
                 e => e.Model.MoveBlock,
@@ -66,26 +67,10 @@ public class BorderSectionViewModel : ReactiveObject
 
     public IBrush Stroke => IsSelected ? SelectedStroke : NormalStroke;
 
-    public IBrush Fill
-    {
-        get
-        {
-            if (Model.MoveBlock && Model.DragBlock) return BlockedBrush;
-            if (Model.MoveBlock || Model.DragBlock) return HalfBlockedBrush;
-            if (Model.Move > 0 || Model.Drag > 0) return ResistingBrush;
-            return FreeBrush;
-        }
-    }
+    public IBrush Fill => BorderSectionBrushes.For(Model);
 
-    public string Description
-    {
-        get
-        {
-            var move = Model.MoveBlock ? "blocked" : $"{Model.Move:0.#} mm";
-            var drag = Model.DragBlock ? "blocked" : $"{Model.Drag:0.#} mm";
-            return $"Move: {move}\nDrag: {drag}";
-        }
-    }
+    public string Description =>
+        BorderSectionBrushes.Describe(Model.Move, Model.MoveBlock, Model.Drag, Model.DragBlock);
 
     /// <summary>Recompute the pixel projection after a move, a resize or a zoom.</summary>
     public void Refresh()

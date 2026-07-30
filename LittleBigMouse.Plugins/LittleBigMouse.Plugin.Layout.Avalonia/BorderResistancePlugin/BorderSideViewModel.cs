@@ -67,7 +67,12 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// time the overlay is toggled, so their subscriptions to the shared section
     /// list have to go with them.
     /// </summary>
-    public void Dispose() => _subscriptions.Dispose();
+    public void Dispose()
+    {
+        _subscriptions.Dispose();
+        foreach (var section in Sections) section.Dispose();
+        Sections.Clear();
+    }
 
     public PhysicalMonitor Monitor { get; }
 
@@ -149,6 +154,10 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         // then would drop the selection and restart any drag in progress.
         if (!Sections.Select(vm => vm.Model).SequenceEqual(sections.OrderBy(s => s.From)))
         {
+            // Dropped item view models stay subscribed to the shared selection
+            // otherwise, and would keep answering for sections that no longer exist.
+            foreach (var vm in Sections) vm.Dispose();
+
             Sections.Clear();
             foreach (var section in Ordered())
                 Sections.Add(new BorderSectionViewModel(section, this));

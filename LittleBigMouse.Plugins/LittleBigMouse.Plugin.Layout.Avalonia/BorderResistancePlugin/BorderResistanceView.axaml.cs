@@ -63,7 +63,7 @@ public partial class BorderResistanceView : UserControl, IView<BorderResistanceV
         if (selected == null) return;
 
         selected.Side.Delete(selected.Model);
-        ViewModel?.Select(null);
+        BorderSectionSelection.Select(null);
         this.GetLayout()?.Compact();
     }
 

@@ -34,8 +34,31 @@ public partial class BorderSideStrip : UserControl
     {
         InitializeComponent();
 
+        // Focusable so Delete reaches the band that was last clicked, on the layout
+        // map and on the real screen alike.
+        Focusable = true;
+
         SizeChanged += (_, _) => UpdateGeometry();
         DataContextChanged += (_, _) => UpdateGeometry();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        var vm = ViewModel;
+        if (e.Key != Key.Delete || vm == null) return;
+
+        var selected = BorderSectionSelection.Current;
+        if (selected == null) return;
+
+        // Only the band actually holding the selection acts, so the key does not
+        // delete twice when several bands have been shown for the same edge.
+        if (!vm.Side.Sections.Items.Any(s => ReferenceEquals(s, selected))) return;
+
+        vm.Delete(selected);
+        BorderSectionSelection.Select(null);
+        (this.GetLayout() ?? vm.Monitor.Layout)?.Compact();
+
+        e.Handled = true;
     }
 
     BorderSideViewModel? ViewModel => DataContext as BorderSideViewModel;
@@ -134,6 +157,7 @@ public partial class BorderSideStrip : UserControl
         _anchorMm = vm.Snap(mm, SnapEnabled(e.KeyModifiers));
         _lastMm = mm;
 
+        Focus();
         e.Pointer.Capture(this);
         e.Handled = true;
     }
@@ -205,10 +229,11 @@ public partial class BorderSideStrip : UserControl
         (this.GetLayout() ?? vm?.Monitor.Layout)?.Compact();
     }
 
-    BorderResistanceViewModel? Parent =>
-        this.FindAncestorOfType<BorderResistanceView>()?.DataContext as BorderResistanceViewModel;
-
-    void SelectInParent(BorderSectionViewModel? section) => Parent?.Select(section);
+    // Selection goes through the shared holder rather than an ancestor editor: on a
+    // real screen this band has none, which is why clicking a section there used to
+    // select nothing.
+    static void SelectInParent(BorderSectionViewModel? section) =>
+        BorderSectionSelection.Select(section?.Model);
 
     //==================//
     // Feedback         //

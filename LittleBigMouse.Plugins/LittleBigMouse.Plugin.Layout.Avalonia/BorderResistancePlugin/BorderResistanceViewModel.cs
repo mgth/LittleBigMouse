@@ -27,6 +27,7 @@ using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Platform;
 using HLab.Mvvm.ReactiveUI;
+using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins.Avalonia;
 using ReactiveUI;
@@ -62,8 +63,18 @@ public class BorderResistanceViewModel : ViewModel<PhysicalMonitor>
     public BorderSectionViewModel? Selected
     {
         get;
-        set => this.RaiseAndSetIfChanged(ref field, value);
+        private set => this.RaiseAndSetIfChanged(ref field, value);
     }
+
+    public BorderResistanceViewModel()
+    {
+        BorderSectionSelection.Changed += OnSelectionChanged;
+
+        // Toggled from any monitor, reflected on all of them.
+        ScreenSectionsOverlay.Changed += OnOverlayChanged;
+    }
+
+    void OnOverlayChanged() => this.RaisePropertyChanged(nameof(ShowOnScreens));
 
     protected override PhysicalMonitor? OnModelChanging(PhysicalMonitor? oldModel, PhysicalMonitor? newModel)
     {
@@ -91,93 +102,49 @@ public class BorderResistanceViewModel : ViewModel<PhysicalMonitor>
     /// drawn at whatever zoom the window sits at, so it cannot answer the question
     /// the feature exists for — does this passage actually line up with the taskbar
     /// button, this wall with the window controls.
+    /// <para>
+    /// A proxy over the shared overlay: every monitor of the map shows this toggle,
+    /// and they are all the same switch.
+    /// </para>
     /// </summary>
     public bool ShowOnScreens
     {
-        get;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref field, value);
-            UpdateScreenOverlay();
-        }
+        get => ScreenSectionsOverlay.Visible;
+        set => ScreenSectionsOverlay.Toggle(Model?.Layout, value);
     }
 
     /// <summary>
-    /// Shared, not per-monitor: the overlay covers every screen, so the view model
-    /// of a second monitor toggling it must replace the bands rather than draw a
-    /// second set over the first.
+    /// Follow the shared selection so the editor opens on whatever was clicked —
+    /// in the map or on a real screen — and closes when the section is deleted.
     /// </summary>
-    static readonly List<ScreenSectionsWindow> Overlay = [];
-
-    /// <summary>Band thickness in DIPs. Thinner than the 100-DIP rulers: it carries no digits.</summary>
-    const double BandThickness = 24.0;
-
-    // No refresh entry point on purpose: the on-screen bands are the same control
-    // reading the same section collection, so they follow every edit on their own.
-    // Rebuilding them after a gesture would close and reopen four windows per
-    // screen, which flickers and would cut an interaction happening on the screen.
-
-    public void UpdateScreenOverlay()
+    void OnSelectionChanged(BorderSection? selected)
     {
-        foreach (var window in Overlay) window.Close();
-        Overlay.Clear();
-
-        if (!ShowOnScreens || Model?.Layout == null) return;
-
-        foreach (var source in Model.Layout.PhysicalSources)
+        if (selected == null)
         {
-            if (!source.Source.AttachedToDesktop) continue;
+            Selected = null;
+            return;
+        }
 
-            // Every edge, like the rulers: an edge with nothing on it still tells you
-            // that there is nothing on it, and a band that appears and disappears
-            // depending on its contents is harder to read than a constant frame.
-            var monitor = source.Monitor;
-            var windows = new List<(BorderSideKind Kind, ScreenSectionsWindow Window)>();
+        foreach (var side in (BorderSideViewModel?[])[Left, Top, Right, Bottom])
+        {
+            if (side == null) continue;
 
-            foreach (var kind in (BorderSideKind[])
-                     [BorderSideKind.Top, BorderSideKind.Bottom, BorderSideKind.Left, BorderSideKind.Right])
+            foreach (var section in side.Sections)
             {
-                var side = new BorderSideViewModel(monitor, kind, BorderSideViewModel.SideOf(monitor, kind));
-                windows.Add((kind, new ScreenSectionsWindow(side)));
-            }
-
-            // Layout space and windowing-system space can differ — KWin maps every
-            // XWayland output with one global factor — so the geometry comes from
-            // the matching Avalonia screen, as the rulers do. Screens is readable
-            // before the window is shown.
-            var layoutBounds = source.Source.InPixel.Bounds;
-            var screen = ScreenFinder.FromLayoutBounds(windows[0].Window.Screens, layoutBounds);
-
-            var bounds = screen?.Bounds ?? new PixelRect(
-                (int)layoutBounds.X, (int)layoutBounds.Y,
-                (int)layoutBounds.Width, (int)layoutBounds.Height);
-            var scaling = screen?.Scaling ?? source.Source.EffectiveDpi.Y / 96.0;
-            var thickness = BandThickness * scaling;
-
-            foreach (var (kind, window) in windows)
-            {
-                var (position, width, height) = kind switch
-                {
-                    BorderSideKind.Top =>
-                        (new PixelPoint(bounds.X, bounds.Y), bounds.Width, thickness),
-                    BorderSideKind.Bottom =>
-                        (new PixelPoint(bounds.X, (int)(bounds.Bottom - thickness)), bounds.Width, thickness),
-                    BorderSideKind.Left =>
-                        (new PixelPoint(bounds.X, bounds.Y), thickness, (double)bounds.Height),
-                    _ =>
-                        (new PixelPoint((int)(bounds.Right - thickness), bounds.Y), thickness, (double)bounds.Height)
-                };
-
-                window.ShowAt(position, width, height, scaling);
-                Overlay.Add(window);
+                if (!ReferenceEquals(section.Model, selected)) continue;
+                Selected = section;
+                return;
             }
         }
+
+        // The selected section belongs to another monitor: this editor closes.
+        Selected = null;
     }
 
-    public void Select(BorderSectionViewModel? section)
+    public override void OnDispose()
     {
-        if (Selected != null) Selected.IsSelected = false;
-        Selected = section;
-        if (section != null) section.IsSelected = true;
+        BorderSectionSelection.Changed -= OnSelectionChanged;
+        ScreenSectionsOverlay.Changed -= OnOverlayChanged;
+        base.OnDispose();
     }
 }

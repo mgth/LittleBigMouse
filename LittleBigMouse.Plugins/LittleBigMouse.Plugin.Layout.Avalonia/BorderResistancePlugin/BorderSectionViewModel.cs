@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Media;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using ReactiveUI;
@@ -10,7 +11,7 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 /// overlay in the layout view positions things. The fill says at a glance what the
 /// section does.
 /// </summary>
-public class BorderSectionViewModel : ReactiveObject
+public class BorderSectionViewModel : ReactiveObject, IDisposable
 {
     static readonly IBrush SelectedStroke = Brushes.White;
     static readonly IBrush NormalStroke = Brushes.Transparent;
@@ -27,6 +28,9 @@ public class BorderSectionViewModel : ReactiveObject
         // section where it used to be.
         this.WhenAnyValue(e => e.Model.From, e => e.Model.To)
             .Subscribe(_ => Refresh());
+
+        OnSelectionChanged(BorderSectionSelection.Current);
+        BorderSectionSelection.Changed += OnSelectionChanged;
 
         this.WhenAnyValue(
                 e => e.Model.Move,
@@ -55,15 +59,24 @@ public class BorderSectionViewModel : ReactiveObject
     public double Width => Side.IsVertical ? Side.PixelThickness : Length;
     public double Height => Side.IsVertical ? Length : Side.PixelThickness;
 
+    /// <summary>
+    /// Derived from the shared selection, so the same section lights up in the map
+    /// and on the screen at once, whichever one was clicked.
+    /// </summary>
     public bool IsSelected
     {
         get;
-        set
+        private set
         {
             this.RaiseAndSetIfChanged(ref field, value);
             this.RaisePropertyChanged(nameof(Stroke));
         }
     }
+
+    void OnSelectionChanged(BorderSection? selected) =>
+        IsSelected = ReferenceEquals(selected, Model);
+
+    public void Dispose() => BorderSectionSelection.Changed -= OnSelectionChanged;
 
     public IBrush Stroke => IsSelected ? SelectedStroke : NormalStroke;
 

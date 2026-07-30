@@ -5,6 +5,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:controls="clr-namespace:HLab.Base.Avalonia.Controls;assembly=HLab.Base.Avalonia"
+    xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
     xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
     xmlns:borderResistancePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin"
     mc:Ignorable="d"
@@ -24,6 +25,13 @@
 		<Style Selector="controls|DoubleBox">
 			<Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
 			<Setter Property="Decimals" Value="1"/>
+		</Style>
+
+		<!-- A bare number on a screen edge says nothing about what it measures. -->
+		<Style Selector="TextBlock.caption">
+			<Setter Property="HorizontalAlignment" Value="Center"/>
+			<Setter Property="FontSize" Value="10"/>
+			<Setter Property="Opacity" Value="0.85"/>
 		</Style>
 	</UserControl.Styles>
 
@@ -56,42 +64,54 @@
 		<!-- Per-edge default resistance, unchanged: one number governing both modes
 		     wherever no section covers the edge. -->
 		<Grid Margin="22">
-			<controls:DoubleBox
-				HorizontalAlignment="Center" VerticalAlignment="Top"
-				Height="24"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Top edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Top.Value}"/>
+			<StackPanel HorizontalAlignment="Center" VerticalAlignment="Top"
+			            ToolTip.Tip="Top edge default resistance (mm)">
+				<TextBlock Classes="caption" Text="resistance"/>
+				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
+				                    Value="{Binding Path=Model.BorderResistance.Top.Value}"/>
+			</StackPanel>
 
-			<controls:DoubleBox
-				HorizontalAlignment="Left" VerticalAlignment="Center"
-				Height="24"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Left edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Left.Value}"/>
+			<StackPanel HorizontalAlignment="Left" VerticalAlignment="Center"
+			            ToolTip.Tip="Left edge default resistance (mm)">
+				<TextBlock Classes="caption" Text="resistance"/>
+				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
+				                    Value="{Binding Path=Model.BorderResistance.Left.Value}"/>
+			</StackPanel>
 
-			<controls:DoubleBox
-				HorizontalAlignment="Center" VerticalAlignment="Bottom"
-				Height="24"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Bottom edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Bottom.Value}"/>
+			<StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom"
+			            ToolTip.Tip="Bottom edge default resistance (mm)">
+				<TextBlock Classes="caption" Text="resistance"/>
+				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
+				                    Value="{Binding Path=Model.BorderResistance.Bottom.Value}"/>
+			</StackPanel>
 
-			<controls:DoubleBox
-				HorizontalAlignment="Right" VerticalAlignment="Center"
-				Height="24"
-				PointerWheelChanged="OnMouseWheel"
-				ToolTip.Tip="Right edge default resistance (mm)"
-				Value="{Binding Path=Model.BorderResistance.Right.Value}"/>
+			<StackPanel HorizontalAlignment="Right" VerticalAlignment="Center"
+			            ToolTip.Tip="Right edge default resistance (mm)">
+				<TextBlock Classes="caption" Text="resistance"/>
+				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
+				                    Value="{Binding Path=Model.BorderResistance.Right.Value}"/>
+			</StackPanel>
 		</Grid>
 
-		<!-- Project the sections onto the real monitors, like the rulers. Off by
-		     default: it puts topmost bands on every screen. -->
-		<CheckBox
-			HorizontalAlignment="Center" VerticalAlignment="Center"
-			Content="Show on screens"
-			IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNull}}"
-			IsChecked="{Binding ShowOnScreens}"/>
+		<!-- Project the sections onto the real monitors. Same shape as the rulers'
+		     own toggle in MonitorLocationView, since it does the same kind of thing.
+		     Off by default: it puts topmost bands on every screen. -->
+		<ToggleButton
+			Width="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource Scale}, ConverterParameter=0.1}"
+			Height="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource Scale}, ConverterParameter=0.1}"
+			Cursor="Hand"
+			VerticalAlignment="Bottom" HorizontalAlignment="Left"
+			Margin="22"
+			Padding="2"
+			ToolTip.Tip="Show the sections on the real screens"
+			IsChecked="{Binding ShowOnScreens}">
+
+			<icons:IconView
+				Foreground="{DynamicResource HLab.Brushes.Background}"
+				Path="Icon/MonitorSectionsOnScreen"/>
+		</ToggleButton>
 
 		<!-- Editor for the selected section. Kept over the monitor rather than in a
 		     side panel: it belongs next to the edge being edited. -->
@@ -109,6 +129,7 @@
 				<Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" >
 					<TextBlock Grid.Row="0" Grid.Column="0" Text="Move" VerticalAlignment="Center" Margin="0,0,8,0"/>
 					<controls:DoubleBox Grid.Row="0" Grid.Column="1" Height="24"
+					                    PointerWheelChanged="OnMouseWheel"
 					                    IsEnabled="{Binding !Selected.Model.MoveBlock}"
 					                    Value="{Binding Selected.Model.Move}"/>
 					<CheckBox Grid.Row="0" Grid.Column="2" Content="Block" Margin="8,0,0,0"
@@ -116,6 +137,7 @@
 
 					<TextBlock Grid.Row="1" Grid.Column="0" Text="Drag" VerticalAlignment="Center" Margin="0,0,8,0"/>
 					<controls:DoubleBox Grid.Row="1" Grid.Column="1" Height="24"
+					                    PointerWheelChanged="OnMouseWheel"
 					                    IsEnabled="{Binding !Selected.Model.DragBlock}"
 					                    Value="{Binding Selected.Model.Drag}"/>
 					<CheckBox Grid.Row="1" Grid.Column="2" Content="Block" Margin="8,0,0,0"

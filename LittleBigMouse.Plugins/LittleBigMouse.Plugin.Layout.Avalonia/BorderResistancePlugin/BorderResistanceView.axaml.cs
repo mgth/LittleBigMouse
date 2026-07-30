@@ -24,6 +24,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using HLab.Base.Avalonia.Controls;
 using HLab.Mvvm.Annotations;
@@ -34,24 +35,36 @@ using LittleBigMouse.Plugins.Avalonia;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 
-public partial class BorderResistanceView : UserControl, IView<BorderResistanceViewMode, ScreenSizeViewModel>, IMonitorFrameContentViewClass
+// The view model used to be declared as SizePlugin's ScreenSizeViewModel — copied
+// along with the rest of that plugin's skeleton. It compiled because both derive
+// from ViewModel<PhysicalMonitor> and the bindings only ever went through Model,
+// but it meant BorderResistanceViewModel was never actually instantiated.
+public partial class BorderResistanceView : UserControl, IView<BorderResistanceViewMode, BorderResistanceViewModel>, IMonitorFrameContentViewClass
 {
     public BorderResistanceView()
     {
         InitializeComponent();
-
-        this.SizeChanged += MonitorSizeView_SizeChanged;
     }
 
-    private void MonitorSizeView_SizeChanged(object? sender, SizeChangedEventArgs e)
+    BorderResistanceViewModel? ViewModel => DataContext as BorderResistanceViewModel;
+
+    void OnMirror(object? sender, RoutedEventArgs e)
     {
-        if(DataContext is ScreenSizeViewModel vm)
-            vm.UpdateArrows(Bounds);
+        var selected = ViewModel?.Selected;
+        if (selected == null) return;
+
+        selected.Side.MirrorToFacingEdge(selected.Model);
+        this.GetLayout()?.Compact();
     }
 
-    protected override void OnMeasureInvalidated()
+    void OnDelete(object? sender, RoutedEventArgs e)
     {
-        base.OnMeasureInvalidated();
+        var selected = ViewModel?.Selected;
+        if (selected == null) return;
+
+        selected.Side.Delete(selected.Model);
+        ViewModel?.Select(null);
+        this.GetLayout()?.Compact();
     }
 
     static double WheelDelta(PointerWheelEventArgs e)
@@ -72,6 +85,10 @@ public partial class BorderResistanceView : UserControl, IView<BorderResistanceV
 
         db.Value += WheelDelta(e);
         this.GetLayout()?.Compact();
+
+        // Keeping the pointer over the box it is scrolling is a Win32-only nicety;
+        // the P/Invoke would throw DllNotFoundException on Linux.
+        if (!OperatingSystem.IsWindows()) return;
 
         Dispatcher.UIThread.InvokeAsync(() =>
         {

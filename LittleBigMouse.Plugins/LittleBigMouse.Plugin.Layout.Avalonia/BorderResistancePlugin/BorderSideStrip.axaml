@@ -1,0 +1,51 @@
+<UserControl
+    x:Class="LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin.BorderSideStrip"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:borderResistancePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin"
+    mc:Ignorable="d"
+    ClipToBounds="False"
+    x:DataType="borderResistancePlugin:BorderSideViewModel">
+
+    <!-- No Background on the Grid: hit testing is defined by the mitred Backdrop
+         below, so the corner triangle that belongs to the neighbouring band never
+         swallows a click here — whatever Clip does or does not do to input. -->
+    <Grid>
+
+        <!-- The band itself. Geometry set in code, mitred at both ends. -->
+        <Path x:Name="Backdrop" Fill="#18000000"/>
+
+        <!-- Canvas + bound Canvas.Left/Top, the same overlay idiom as the probe
+             strips in MonitorFrameView. -->
+        <ItemsControl ItemsSource="{Binding Sections}" ClipToBounds="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerTheme>
+                <ControlTheme TargetType="ContentPresenter" x:DataType="borderResistancePlugin:BorderSectionViewModel">
+                    <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                    <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                </ControlTheme>
+            </ItemsControl.ItemContainerTheme>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="borderResistancePlugin:BorderSectionViewModel">
+                    <Rectangle
+                        Width="{Binding Width}"
+                        Height="{Binding Height}"
+                        Fill="{Binding Fill}"
+                        Stroke="{Binding Stroke}"
+                        StrokeThickness="2"
+                        RadiusX="2" RadiusY="2"
+                        ToolTip.Tip="{Binding Description}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Snap guide and in-progress outline, drawn only while dragging. -->
+        <Canvas x:Name="Overlay" IsHitTestVisible="False" ClipToBounds="False"/>
+    </Grid>
+</UserControl>

@@ -77,11 +77,94 @@ public class JsonLayoutStoreTests : IDisposable
 
         var monitor = layout.Monitors["MON1"];
         Assert.Equal(12.5, monitor.XLocationInMm);
-        Assert.Equal(4, monitor.BorderResistance!.Bottom);
+
+        // Pre-move/drag-split shape: one number per edge. It must still load, and
+        // the single value governs both modes — that is what it always meant.
+        // Reading it as the current object shape would throw, and JsonLayoutStore
+        // swallows exceptions, so the whole layout would silently reset.
+        Assert.Equal(4, monitor.BorderResistance!.Bottom!.Move);
+        Assert.Equal(4, monitor.BorderResistance.Bottom.Drag);
+        Assert.Null(monitor.BorderResistance.Bottom.Sections);
+
         Assert.Equal(5, monitor.Borders!.Left);
         Assert.Equal("SRC1", monitor.ActiveSource);
         Assert.True(monitor.Sources!["SRC1"].Primary);
         Assert.Equal(1920, monitor.Sources["SRC1"].PixelWidth);
+    }
+
+    [Fact]
+    public void Read_BorderResistanceWithSections()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "layouts"));
+        File.WriteAllText(Path.Combine(_dir, "layouts", "LAYOUT1.json"), """
+        {
+          "Monitors": {
+            "MON1": {
+              "BorderResistance": {
+                "Right": {
+                  "Move": 1.5,
+                  "Drag": 20,
+                  "DragBlock": true,
+                  "Sections": [
+                    { "From": 0, "To": 100, "Move": 0, "MoveBlock": true, "Drag": 3 }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """);
+
+        var side = new JsonLayoutStore(_dir).Read("LAYOUT1", []).Layout!
+            .Monitors["MON1"].BorderResistance!.Right!;
+
+        Assert.Equal(1.5, side.Move);
+        Assert.Equal(20, side.Drag);
+        Assert.True(side.DragBlock);
+        Assert.Null(side.MoveBlock);
+
+        var section = Assert.Single(side.Sections!);
+        Assert.Equal(100, section.To);
+        Assert.True(section.MoveBlock);
+        Assert.Equal(3, section.Drag);
+    }
+
+    [Fact]
+    public void WriteThenRead_BorderResistanceRoundTrips()
+    {
+        var store = new JsonLayoutStore(_dir);
+
+        store.WriteLayout("L1", new LayoutDto
+        {
+            Monitors =
+            {
+                ["M1"] = new MonitorDto
+                {
+                    BorderResistance = new BorderResistanceDto
+                    {
+                        Left = new BorderSideDto
+                        {
+                            Move = 2,
+                            Drag = 30,
+                            MoveBlock = true,
+                            Sections = [new BorderSectionDto { From = 5, To = 15, Drag = 40, DragBlock = true }]
+                        }
+                    }
+                }
+            }
+        });
+
+        var side = store.Read("L1", []).Layout!.Monitors["M1"].BorderResistance!.Left!;
+
+        Assert.Equal(2, side.Move);
+        Assert.Equal(30, side.Drag);
+        Assert.True(side.MoveBlock);
+
+        var section = Assert.Single(side.Sections!);
+        Assert.Equal(5, section.From);
+        Assert.Equal(15, section.To);
+        Assert.Equal(40, section.Drag);
+        Assert.True(section.DragBlock);
     }
 
     [Fact]

@@ -257,10 +257,10 @@ public abstract class LayoutPersistence : ILayoutPersistence
         monitor.DepthRatio.X = dto.PhysicalRatioX ?? monitor.DepthRatio.X;
         monitor.DepthRatio.Y = dto.PhysicalRatioY ?? monitor.DepthRatio.Y;
 
-        monitor.BorderResistance.Left = dto.BorderResistance?.Left ?? monitor.BorderResistance.Left;
-        monitor.BorderResistance.Top = dto.BorderResistance?.Top ?? monitor.BorderResistance.Top;
-        monitor.BorderResistance.Right = dto.BorderResistance?.Right ?? monitor.BorderResistance.Right;
-        monitor.BorderResistance.Bottom = dto.BorderResistance?.Bottom ?? monitor.BorderResistance.Bottom;
+        Apply(monitor.BorderResistance.Left, dto.BorderResistance?.Left);
+        Apply(monitor.BorderResistance.Top, dto.BorderResistance?.Top);
+        Apply(monitor.BorderResistance.Right, dto.BorderResistance?.Right);
+        Apply(monitor.BorderResistance.Bottom, dto.BorderResistance?.Bottom);
 
         monitor.ExcludedFromLayout = dto.ExcludedFromLayout ?? monitor.ExcludedFromLayout;
 
@@ -279,6 +279,38 @@ public abstract class LayoutPersistence : ILayoutPersistence
         }
     }
 
+    static void Apply(BorderSide side, BorderSideDto? dto)
+    {
+        if (dto == null) return;
+
+        side.Move = dto.Move ?? side.Move;
+        side.MoveBlock = dto.MoveBlock ?? side.MoveBlock;
+        // A layout stored before the move/drag split carries one number, which the
+        // DTO layer already fanned out to both. The fallback here covers a
+        // partially-written store, not the migration.
+        side.Drag = dto.Drag ?? side.Drag;
+        side.DragBlock = dto.DragBlock ?? side.DragBlock;
+
+        if (dto.Sections == null) return;
+
+        side.Sections.Edit(list =>
+        {
+            list.Clear();
+            foreach (var s in dto.Sections)
+            {
+                list.Add(new BorderSection
+                {
+                    From = s.From ?? 0,
+                    To = s.To ?? 0,
+                    Move = s.Move ?? 0,
+                    MoveBlock = s.MoveBlock ?? false,
+                    Drag = s.Drag ?? 0,
+                    DragBlock = s.DragBlock ?? false
+                });
+            }
+        });
+    }
+
     /// <summary>
     /// Flag the monitor and every savable child as saved. Runs after a load — with or
     /// without stored data — so that the next edit produces a true→false transition the
@@ -291,6 +323,19 @@ public abstract class LayoutPersistence : ILayoutPersistence
 
         monitor.DepthProjection.Saved = true;
         monitor.DepthRatio.Saved = true;
+
+        // Depth first: marking a side saved after its sections would be undone by
+        // the collection's own unsaved propagation.
+        foreach (var side in (BorderSide[])
+                 [
+                     monitor.BorderResistance.Left, monitor.BorderResistance.Top,
+                     monitor.BorderResistance.Right, monitor.BorderResistance.Bottom
+                 ])
+        {
+            foreach (var section in side.Sections.Items) section.Saved = true;
+            side.Saved = true;
+        }
+
         monitor.BorderResistance.Saved = true;
 
         foreach (var source in monitor.Sources.Items)
@@ -458,18 +503,37 @@ public abstract class LayoutPersistence : ILayoutPersistence
         PriorityUnhooked = o.PriorityUnhooked
     };
 
+    static BorderSideDto ToDto(BorderSide side) => new()
+    {
+        Move = side.Move,
+        MoveBlock = side.MoveBlock,
+        Drag = side.Drag,
+        DragBlock = side.DragBlock,
+        Sections = side.Sections.Items.Count == 0
+            ? null
+            : [.. side.Sections.Items.Select(s => new BorderSectionDto
+            {
+                From = s.From,
+                To = s.To,
+                Move = s.Move,
+                MoveBlock = s.MoveBlock,
+                Drag = s.Drag,
+                DragBlock = s.DragBlock
+            })]
+    };
+
     static MonitorDto ToDto(PhysicalMonitor monitor) => new()
     {
         XLocationInMm = monitor.DepthProjection.X,
         YLocationInMm = monitor.DepthProjection.Y,
         PhysicalRatioX = monitor.DepthRatio.X,
         PhysicalRatioY = monitor.DepthRatio.Y,
-        BorderResistance = new BordersDto
+        BorderResistance = new BorderResistanceDto
         {
-            Left = monitor.BorderResistance.Left,
-            Top = monitor.BorderResistance.Top,
-            Right = monitor.BorderResistance.Right,
-            Bottom = monitor.BorderResistance.Bottom
+            Left = ToDto(monitor.BorderResistance.Left),
+            Top = ToDto(monitor.BorderResistance.Top),
+            Right = ToDto(monitor.BorderResistance.Right),
+            Bottom = ToDto(monitor.BorderResistance.Bottom)
         },
         // Stored whatever the current mode is (they must survive a Save() made in
         // PerModel mode), but only once the monitor owns them: uncustomized monitors

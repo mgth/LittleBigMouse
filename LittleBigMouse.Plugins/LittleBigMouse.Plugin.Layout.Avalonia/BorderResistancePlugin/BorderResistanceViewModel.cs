@@ -24,13 +24,67 @@
 using Avalonia;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
+using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 
-
-internal class BorderResistanceViewModel : ViewModel<PhysicalMonitor>
+public class BorderResistanceViewModel : ViewModel<PhysicalMonitor>
 {
-    public BorderResistanceViewModel()
+    public BorderSideViewModel? Left
     {
+        get;
+        private set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
+    public BorderSideViewModel? Top
+    {
+        get;
+        private set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
+    public BorderSideViewModel? Right
+    {
+        get;
+        private set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
+    public BorderSideViewModel? Bottom
+    {
+        get;
+        private set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
+    public BorderSectionViewModel? Selected
+    {
+        get;
+        set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
+    protected override PhysicalMonitor? OnModelChanging(PhysicalMonitor? oldModel, PhysicalMonitor? newModel)
+    {
+        if (newModel == null)
+        {
+            Left = Top = Right = Bottom = null;
+        }
+        else
+        {
+            Left = new BorderSideViewModel(newModel, BorderSideKind.Left, newModel.BorderResistance.Left);
+            Top = new BorderSideViewModel(newModel, BorderSideKind.Top, newModel.BorderResistance.Top);
+            Right = new BorderSideViewModel(newModel, BorderSideKind.Right, newModel.BorderResistance.Right);
+            Bottom = new BorderSideViewModel(newModel, BorderSideKind.Bottom, newModel.BorderResistance.Bottom);
+        }
+
+        return base.OnModelChanging(oldModel, newModel);
+    }
+
+    // The pixel scale of each edge is published by its own strip, whose length is
+    // the edge length by construction; deriving it here from the overlay bounds was
+    // wrong as soon as the strips stopped spanning the full rectangle.
+
+    public void Select(BorderSectionViewModel? section)
+    {
+        if (Selected != null) Selected.IsSelected = false;
+        Selected = section;
+        if (section != null) section.IsSelected = true;
     }
 }

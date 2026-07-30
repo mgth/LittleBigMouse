@@ -1,5 +1,6 @@
 ﻿#nullable enable
 using System.Collections.Generic;
+using System.Linq;
 using LittleBigMouse.Plugins.Persistence;
 using Microsoft.Win32;
 
@@ -111,7 +112,7 @@ public class RegistryLayoutStore : ILayoutStore
             YLocationInMm = key.TryGet("YLocationInMm"),
             PhysicalRatioX = key.TryGet("PhysicalRatioX"),
             PhysicalRatioY = key.TryGet("PhysicalRatioY"),
-            BorderResistance = ReadBorders(key, "BorderResistance"),
+            BorderResistance = ReadBorderResistance(key),
             // Presence of Borders\Left IS the "monitor owns its bezel borders" flag
             // (BordersCustomized) — a partial subkey without Left does not count.
             Borders = key.TryGet(@"Borders\Left") is { } left
@@ -172,6 +173,73 @@ public class RegistryLayoutStore : ILayoutStore
             Right = sub.TryGet("Right"),
             Bottom = sub.TryGet("Bottom")
         };
+    }
+
+    static BorderResistanceDto? ReadBorderResistance(RegistryKey key)
+    {
+        using var sub = key.OpenSubKey("BorderResistance");
+        if (sub == null) return null;
+
+        return new BorderResistanceDto
+        {
+            Left = ReadSide(sub, "Left"),
+            Top = ReadSide(sub, "Top"),
+            Right = ReadSide(sub, "Right"),
+            Bottom = ReadSide(sub, "Bottom")
+        };
+    }
+
+    /// <summary>
+    /// One edge. Before the move/drag split each edge was a single VALUE holding
+    /// its resistance; it is now a SUBKEY. Reading the value first is what
+    /// migrates an existing installation — one number meant "resist any crossing",
+    /// so it maps to both modes. See BorderSideDtoJsonConverter for the Linux twin.
+    /// </summary>
+    static BorderSideDto? ReadSide(RegistryKey borderResistance, string name)
+    {
+        if (borderResistance.TryGet(name) is { } legacy)
+            return new BorderSideDto { Move = legacy, Drag = legacy };
+
+        using var sub = borderResistance.OpenSubKey(name);
+        if (sub == null) return null;
+
+        return new BorderSideDto
+        {
+            Move = sub.TryGet("Move"),
+            MoveBlock = sub.TryGetBool("MoveBlock"),
+            Drag = sub.TryGet("Drag"),
+            DragBlock = sub.TryGetBool("DragBlock"),
+            Sections = ReadSections(sub)
+        };
+    }
+
+    static List<BorderSectionDto>? ReadSections(RegistryKey side)
+    {
+        using var container = side.OpenSubKey("Sections");
+        if (container == null) return null;
+
+        var sections = new List<BorderSectionDto>();
+
+        // Subkeys are named by index; order matters for nothing but stability, and
+        // GetSubKeyNames is alphabetical ("10" before "2"), hence the sort.
+        foreach (var name in container.GetSubKeyNames()
+                     .OrderBy(n => int.TryParse(n, out var i) ? i : int.MaxValue))
+        {
+            using var sectionKey = container.OpenSubKey(name);
+            if (sectionKey == null) continue;
+
+            sections.Add(new BorderSectionDto
+            {
+                From = sectionKey.TryGet("From"),
+                To = sectionKey.TryGet("To"),
+                Move = sectionKey.TryGet("Move"),
+                MoveBlock = sectionKey.TryGetBool("MoveBlock"),
+                Drag = sectionKey.TryGet("Drag"),
+                DragBlock = sectionKey.TryGetBool("DragBlock")
+            });
+        }
+
+        return sections;
     }
 
     //==================//
@@ -235,7 +303,7 @@ public class RegistryLayoutStore : ILayoutStore
         Set(key, "YLocationInMm", m.YLocationInMm);
         Set(key, "PhysicalRatioX", m.PhysicalRatioX);
         Set(key, "PhysicalRatioY", m.PhysicalRatioY);
-        WriteBorders(key, "BorderResistance", m.BorderResistance);
+        WriteBorderResistance(key, m.BorderResistance);
         // Presence is the BordersCustomized flag: nothing is written for null, so an
         // uncustomized monitor keeps mirroring its model on the next load.
         WriteBorders(key, "Borders", m.Borders);
@@ -278,6 +346,57 @@ public class RegistryLayoutStore : ILayoutStore
         Set(key, @$"{name}\Top", borders.Top);
         Set(key, @$"{name}\Right", borders.Right);
         Set(key, @$"{name}\Bottom", borders.Bottom);
+    }
+
+    static void WriteBorderResistance(RegistryKey key, BorderResistanceDto? resistance)
+    {
+        if (resistance == null) return;
+
+        using var sub = key.CreateSubKey("BorderResistance");
+        if (sub == null) return;
+
+        WriteSide(sub, "Left", resistance.Left);
+        WriteSide(sub, "Top", resistance.Top);
+        WriteSide(sub, "Right", resistance.Right);
+        WriteSide(sub, "Bottom", resistance.Bottom);
+    }
+
+    static void WriteSide(RegistryKey borderResistance, string name, BorderSideDto? side)
+    {
+        if (side == null) return;
+
+        // The pre-split VALUE of the same name must go, or ReadSide would keep
+        // preferring it and the edge would be frozen on its migrated setting. A
+        // registry key can hold a value and a subkey with the same name at once,
+        // so this is not hypothetical.
+        borderResistance.DeleteValue(name, throwOnMissingValue: false);
+
+        using var sideKey = borderResistance.CreateSubKey(name);
+        if (sideKey == null) return;
+
+        Set(sideKey, "Move", side.Move);
+        Set(sideKey, "MoveBlock", side.MoveBlock);
+        Set(sideKey, "Drag", side.Drag);
+        Set(sideKey, "DragBlock", side.DragBlock);
+
+        // Rewritten wholesale: leftover subkeys from a longer previous list would
+        // come back as phantom sections on the next load.
+        sideKey.DeleteSubKeyTree("Sections", throwOnMissingSubKey: false);
+
+        if (side.Sections is not { Count: > 0 } sections) return;
+
+        for (var i = 0; i < sections.Count; i++)
+        {
+            using var sectionKey = sideKey.CreateSubKey(@$"Sections\{i}");
+            if (sectionKey == null) continue;
+
+            Set(sectionKey, "From", sections[i].From);
+            Set(sectionKey, "To", sections[i].To);
+            Set(sectionKey, "Move", sections[i].Move);
+            Set(sectionKey, "MoveBlock", sections[i].MoveBlock);
+            Set(sectionKey, "Drag", sections[i].Drag);
+            Set(sectionKey, "DragBlock", sections[i].DragBlock);
+        }
     }
 
     static void Set(RegistryKey key, string name, string? value)

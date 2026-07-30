@@ -89,10 +89,16 @@ public class LayoutPersistenceTests
         monitor.DepthProjection.Y = -42.25;
         monitor.DepthRatio.X = 1.25;
         monitor.DepthRatio.Y = 1.5;
-        monitor.BorderResistance.Left = 1;
-        monitor.BorderResistance.Top = 2;
-        monitor.BorderResistance.Right = 3;
-        monitor.BorderResistance.Bottom = 4;
+        monitor.BorderResistance.Left.Move = 1;
+        monitor.BorderResistance.Top.Move = 2;
+        monitor.BorderResistance.Right.Move = 3;
+        monitor.BorderResistance.Bottom.Move = 4;
+        monitor.BorderResistance.Left.Drag = 11;
+        monitor.BorderResistance.Left.DragBlock = true;
+        monitor.BorderResistance.Right.Sections.Add(new BorderSection
+        {
+            From = 10, To = 60, Move = 5, MoveBlock = true, Drag = 6
+        });
 
         Assert.True(persistence.Save(layout));
 
@@ -103,8 +109,18 @@ public class LayoutPersistenceTests
         Assert.Equal(-42.25, restoredMonitor.DepthProjection.Y);
         Assert.Equal(1.25, restoredMonitor.DepthRatio.X);
         Assert.Equal(1.5, restoredMonitor.DepthRatio.Y);
-        Assert.Equal(1, restoredMonitor.BorderResistance.Left);
-        Assert.Equal(4, restoredMonitor.BorderResistance.Bottom);
+        Assert.Equal(1, restoredMonitor.BorderResistance.Left.Move);
+        Assert.Equal(4, restoredMonitor.BorderResistance.Bottom.Move);
+        Assert.Equal(11, restoredMonitor.BorderResistance.Left.Drag);
+        Assert.True(restoredMonitor.BorderResistance.Left.DragBlock);
+
+        var section = Assert.Single(restoredMonitor.BorderResistance.Right.Sections.Items);
+        Assert.Equal(10, section.From);
+        Assert.Equal(60, section.To);
+        Assert.Equal(5, section.Move);
+        Assert.True(section.MoveBlock);
+        Assert.Equal(6, section.Drag);
+        Assert.False(section.DragBlock);
         Assert.True(restoredMonitor.Placed);
         Assert.True(restoredMonitor.Saved);
         Assert.True(restored.Saved);

@@ -22,16 +22,38 @@
 	</UserControl.Resources>
 
 	<UserControl.Styles>
+		<!-- Sized from the monitor's own drawing, like the Size and Location plugins:
+		     the map is zoomable, so anything given an absolute size is wrong at every
+		     zoom but one. Clamped so it stays usable on a tiny or huge screen. -->
 		<Style Selector="controls|DoubleBox">
 			<Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
+			<Setter Property="Height" Value="{Binding
+				Bounds,
+				ElementName=UserControl,
+				Converter={StaticResource Scale},
+				ConverterParameter=0.1|14|40}"/>
 			<Setter Property="Decimals" Value="1"/>
 		</Style>
 
-		<!-- A bare number on a screen edge says nothing about what it measures. -->
+		<!-- Column headings in the section editor: a bare number and a bare switch
+		     say nothing about what they govern. -->
 		<Style Selector="TextBlock.caption">
 			<Setter Property="HorizontalAlignment" Value="Center"/>
 			<Setter Property="FontSize" Value="10"/>
-			<Setter Property="Opacity" Value="0.85"/>
+			<Setter Property="Opacity" Value="0.65"/>
+		</Style>
+
+		<!-- The column heading already says "block", so the switch drops the On/Off
+		     labels Fluent gives it by default and keeps the row compact. -->
+		<Style Selector="ToggleSwitch.compact">
+			<Setter Property="OnContent" Value=""/>
+			<Setter Property="OffContent" Value=""/>
+			<Setter Property="MinWidth" Value="0"/>
+			<Setter Property="VerticalAlignment" Value="Center"/>
+		</Style>
+
+		<Style Selector="Button.danger">
+			<Setter Property="Foreground" Value="{DynamicResource HLab.Brushes.Warning}"/>
 		</Style>
 	</UserControl.Styles>
 
@@ -64,33 +86,29 @@
 		<!-- Per-edge default resistance, unchanged: one number governing both modes
 		     wherever no section covers the edge. -->
 		<Grid Margin="22">
-			<StackPanel HorizontalAlignment="Center" VerticalAlignment="Top"
-			            ToolTip.Tip="Top edge default resistance (mm)">
-				<TextBlock Classes="caption" Text="resistance"/>
-				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
-				                    Value="{Binding Path=Model.BorderResistance.Top.Value}"/>
-			</StackPanel>
+			<controls:DoubleBox
+				HorizontalAlignment="Center" VerticalAlignment="Top"
+				PointerWheelChanged="OnMouseWheel"
+				ToolTip.Tip="Top edge default resistance (mm)"
+				Value="{Binding Path=Model.BorderResistance.Top.Value}"/>
 
-			<StackPanel HorizontalAlignment="Left" VerticalAlignment="Center"
-			            ToolTip.Tip="Left edge default resistance (mm)">
-				<TextBlock Classes="caption" Text="resistance"/>
-				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
-				                    Value="{Binding Path=Model.BorderResistance.Left.Value}"/>
-			</StackPanel>
+			<controls:DoubleBox
+				HorizontalAlignment="Left" VerticalAlignment="Center"
+				PointerWheelChanged="OnMouseWheel"
+				ToolTip.Tip="Left edge default resistance (mm)"
+				Value="{Binding Path=Model.BorderResistance.Left.Value}"/>
 
-			<StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom"
-			            ToolTip.Tip="Bottom edge default resistance (mm)">
-				<TextBlock Classes="caption" Text="resistance"/>
-				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
-				                    Value="{Binding Path=Model.BorderResistance.Bottom.Value}"/>
-			</StackPanel>
+			<controls:DoubleBox
+				HorizontalAlignment="Center" VerticalAlignment="Bottom"
+				PointerWheelChanged="OnMouseWheel"
+				ToolTip.Tip="Bottom edge default resistance (mm)"
+				Value="{Binding Path=Model.BorderResistance.Bottom.Value}"/>
 
-			<StackPanel HorizontalAlignment="Right" VerticalAlignment="Center"
-			            ToolTip.Tip="Right edge default resistance (mm)">
-				<TextBlock Classes="caption" Text="resistance"/>
-				<controls:DoubleBox Height="24" PointerWheelChanged="OnMouseWheel"
-				                    Value="{Binding Path=Model.BorderResistance.Right.Value}"/>
-			</StackPanel>
+			<controls:DoubleBox
+				HorizontalAlignment="Right" VerticalAlignment="Center"
+				PointerWheelChanged="OnMouseWheel"
+				ToolTip.Tip="Right edge default resistance (mm)"
+				Value="{Binding Path=Model.BorderResistance.Right.Value}"/>
 		</Grid>
 
 		<!-- Project the sections onto the real monitors. Same shape as the rulers'
@@ -114,50 +132,84 @@
 		</ToggleButton>
 
 		<!-- Editor for the selected section. Kept over the monitor rather than in a
-		     side panel: it belongs next to the edge being edited. -->
-		<Border
+		     side panel: it belongs next to the edge being edited.
+
+		     Laid out at its natural size and scaled as a whole by the Viewbox, so
+		     type, controls and spacing keep their proportions at any zoom — sizing
+		     each element from the monitor bounds instead would need a converter on
+		     every font size and never keep them in step. -->
+		<Viewbox
+			Stretch="Uniform"
+			HorizontalAlignment="Center" VerticalAlignment="Center"
 			IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}"
+			Height="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource Scale}, ConverterParameter=0.62|150|420}">
+		<Border
 			HorizontalAlignment="Center" VerticalAlignment="Center"
 			Background="{DynamicResource HLab.Brushes.Background}"
-			BorderBrush="White" BorderThickness="1" CornerRadius="4"
-			Padding="8" MinWidth="180">
+			BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
+			BorderThickness="1" CornerRadius="10"
+			BoxShadow="0 6 20 0 #60000000"
+			Padding="16,12" MinWidth="250">
 
-			<StackPanel Spacing="6">
+			<StackPanel Spacing="12">
 
-				<TextBlock Text="Section" FontWeight="Bold"/>
+				<TextBlock Text="Section" FontWeight="SemiBold" FontSize="15"/>
 
-				<Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" >
-					<TextBlock Grid.Row="0" Grid.Column="0" Text="Move" VerticalAlignment="Center" Margin="0,0,8,0"/>
-					<controls:DoubleBox Grid.Row="0" Grid.Column="1" Height="24"
+				<!-- Two settings, two states each: the number says how hard the edge
+				     pushes back, the switch turns it into a wall outright. -->
+				<Grid ColumnDefinitions="Auto,*,Auto"
+				      RowDefinitions="Auto,Auto,Auto"
+				      ColumnSpacing="12" RowSpacing="8">
+
+					<TextBlock Grid.Row="0" Grid.Column="1" Classes="caption" Text="resistance"/>
+					<TextBlock Grid.Row="0" Grid.Column="2" Classes="caption" Text="block"/>
+
+					<TextBlock Grid.Row="1" Grid.Column="0" Text="Move" VerticalAlignment="Center"/>
+					<controls:DoubleBox Grid.Row="1" Grid.Column="1" Height="26"
 					                    PointerWheelChanged="OnMouseWheel"
+					                    ToolTip.Tip="Resistance in mm opposing a plain cursor move"
 					                    IsEnabled="{Binding !Selected.Model.MoveBlock}"
 					                    Value="{Binding Selected.Model.Move}"/>
-					<CheckBox Grid.Row="0" Grid.Column="2" Content="Block" Margin="8,0,0,0"
-					          IsChecked="{Binding Selected.Model.MoveBlock}"/>
+					<ToggleSwitch Grid.Row="1" Grid.Column="2" Classes="compact"
+					              IsChecked="{Binding Selected.Model.MoveBlock}"/>
 
-					<TextBlock Grid.Row="1" Grid.Column="0" Text="Drag" VerticalAlignment="Center" Margin="0,0,8,0"/>
-					<controls:DoubleBox Grid.Row="1" Grid.Column="1" Height="24"
+					<TextBlock Grid.Row="2" Grid.Column="0" Text="Drag" VerticalAlignment="Center"/>
+					<controls:DoubleBox Grid.Row="2" Grid.Column="1" Height="26"
 					                    PointerWheelChanged="OnMouseWheel"
+					                    ToolTip.Tip="Resistance in mm opposing a move made with a mouse button held"
 					                    IsEnabled="{Binding !Selected.Model.DragBlock}"
 					                    Value="{Binding Selected.Model.Drag}"/>
-					<CheckBox Grid.Row="1" Grid.Column="2" Content="Block" Margin="8,0,0,0"
-					          IsChecked="{Binding Selected.Model.DragBlock}"/>
+					<ToggleSwitch Grid.Row="2" Grid.Column="2" Classes="compact"
+					              IsChecked="{Binding Selected.Model.DragBlock}"/>
 				</Grid>
 
-				<!-- A crossing is defined per source edge, so a symmetric passage has
-				     to exist on both sides. Forgetting the other half is the easiest
-				     way to get a border that opens one way by accident. -->
-				<Button Content="Mirror to facing edge" HorizontalAlignment="Stretch"
-				        Click="OnMirror"/>
+				<Border Height="1" Opacity="0.2"
+				        Background="{DynamicResource HLab.Brushes.Foreground}"/>
 
-				<Button Content="Delete section" HorizontalAlignment="Stretch"
-				        Click="OnDelete"/>
+				<Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+					<!-- A crossing is defined per source edge, so a symmetric passage
+					     has to exist on both sides. Forgetting the other half is the
+					     easiest way to get a border that opens one way by accident. -->
+					<Button Grid.Column="0" Content="Mirror" HorizontalAlignment="Stretch"
+					        HorizontalContentAlignment="Center" CornerRadius="6"
+					        ToolTip.Tip="Copy this section onto the facing edge of the monitor across it"
+					        Click="OnMirror"/>
+
+					<Button Grid.Column="1" Content="Delete" HorizontalAlignment="Stretch"
+					        HorizontalContentAlignment="Center" CornerRadius="6"
+					        Classes="danger"
+					        ToolTip.Tip="Remove this section (Delete)"
+					        Click="OnDelete"/>
+				</Grid>
 
 				<TextBlock
 					IsVisible="{Binding Selected.Side.IsFullyBlocked}"
-					TextWrapping="Wrap" MaxWidth="200" Foreground="Orange"
+					TextWrapping="Wrap" MaxWidth="230" FontSize="11"
+					Foreground="{DynamicResource HLab.Brushes.Warning}"
 					Text="This edge is fully blocked in both modes. Ctrl still forces a crossing on Windows and X11, but not on Wayland."/>
 			</StackPanel>
 		</Border>
+		</Viewbox>
 	</Grid>
 </UserControl>

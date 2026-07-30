@@ -5,10 +5,26 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:wallpaper="clr-namespace:LittleBigMouse.Plugin.Wallpaper.Avalonia"
+    xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
     mc:Ignorable="d"
     d:DesignHeight="300" d:DesignWidth="400"
+    x:Name="UserControl"
     x:DataType="wallpaper:WallpaperFrameViewModel"
     >
+
+	<UserControl.Resources>
+		<converters:ScaleConverter x:Key="Scale" />
+	</UserControl.Resources>
+
+	<!-- Laid out at its natural size and scaled as a whole, like the Size and
+	     Location plugins: the layout map is zoomable, so a panel given absolute
+	     sizes is right at exactly one zoom level and wrong everywhere else. -->
+	<Viewbox
+		Stretch="Uniform"
+		HorizontalAlignment="Center"
+		VerticalAlignment="Center"
+		Height="{Binding Bounds, ElementName=UserControl,
+			Converter={StaticResource Scale}, ConverterParameter=0.62|140|400}">
 
 	<Border
 		Background="{DynamicResource HLab.Brushes.Background}"
@@ -70,4 +86,5 @@
 
 		</StackPanel>
 	</Border>
+	</Viewbox>
 </UserControl>

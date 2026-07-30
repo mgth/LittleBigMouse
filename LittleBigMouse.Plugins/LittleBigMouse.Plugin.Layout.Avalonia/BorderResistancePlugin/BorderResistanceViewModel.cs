@@ -145,6 +145,11 @@ public class BorderResistanceViewModel : ViewModel<PhysicalMonitor>
     {
         BorderSectionSelection.Changed -= OnSelectionChanged;
         ScreenSectionsOverlay.Changed -= OnOverlayChanged;
+
+        // Belt and braces alongside the view's OnUnloaded: the bands are top-level
+        // windows, so nothing else would ever close them.
+        ScreenSectionsOverlay.Toggle(null, false);
+
         base.OnDispose();
     }
 }

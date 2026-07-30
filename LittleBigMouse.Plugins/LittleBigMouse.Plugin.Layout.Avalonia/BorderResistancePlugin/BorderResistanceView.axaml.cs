@@ -48,6 +48,18 @@ public partial class BorderResistanceView : UserControl, IView<BorderResistanceV
 
     BorderResistanceViewModel? ViewModel => DataContext as BorderResistanceViewModel;
 
+    /// <summary>
+    /// Leaving the view mode — or closing the main window — takes the on-screen
+    /// bands with it, as the rulers do. LittleBigMouse lives on in the tray with its
+    /// window shut, so topmost bands left behind would have nothing to dismiss them.
+    /// </summary>
+    protected override void OnUnloaded(RoutedEventArgs e)
+    {
+        if (ViewModel != null) ViewModel.ShowOnScreens = false;
+
+        base.OnUnloaded(e);
+    }
+
     void OnMirror(object? sender, RoutedEventArgs e)
     {
         var selected = ViewModel?.Selected;

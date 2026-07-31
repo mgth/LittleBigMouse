@@ -19,6 +19,7 @@
 
 	<UserControl.Resources>
 		<converters:ScaleConverter x:Key="Scale" />
+		<borderResistancePlugin:EditorSizeConverter x:Key="EditorSize" />
 
 		<!-- The HLab theme has no warning colour: Background, Foreground, Header and
 		     Selected, and that is all. A DynamicResource for a key that does not
@@ -33,10 +34,20 @@
 
 	<UserControl.Styles>
 		<!-- No size here: the only numeric fields left are inside the section editor,
-		     which is scaled as a whole by its Viewbox. -->
+		     which is scaled as a whole by its Viewbox.
+
+		     Which is also why no field may be given a height in pixels. A DoubleBox
+		     wraps a TextBox with a margin and a padding of its own, so its natural
+		     height is the line height plus that chrome; pinning it to a round number
+		     smaller than the sum crops the glyphs at every zoom, and the Viewbox
+		     then magnifies the crop along with everything else. Let the font decide
+		     and the proportions hold at any size. -->
 		<Style Selector="controls|DoubleBox">
 			<Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
 			<Setter Property="Decimals" Value="1"/>
+			<!-- The template adds a margin of its own around the text box; 2 keeps
+			     the row compact without cramping the digits. -->
+			<Setter Property="Padding" Value="2"/>
 		</Style>
 
 		<!-- Column headings in the section editor: a bare number and a bare switch
@@ -117,13 +128,23 @@
 		     Laid out at its natural size and scaled as a whole by the Viewbox, so
 		     type, controls and spacing keep their proportions at any zoom — sizing
 		     each element from the monitor bounds instead would need a converter on
-		     every font size and never keep them in step. -->
+		     every font size and never keep them in step.
+
+		     Bounded by the room left INSIDE the bands, not by the monitor: it used
+		     to keep a floor of 150 px, so a monitor drawn smaller than that had its
+		     bands covered by the panel — and the bands are the only way to reach a
+		     section. Within that room it takes everything there is, each axis
+		     measured on its own, and grows no further than the ceiling on its
+		     height. Sending these boxes to a properties area of their own, where
+		     none of this arbitration is needed, is issue #523. -->
 		<Viewbox
 			Stretch="Uniform"
 			HorizontalAlignment="Center" VerticalAlignment="Center"
 			IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}"
 			Height="{Binding Bounds, ElementName=UserControl,
-				Converter={StaticResource Scale}, ConverterParameter=0.62|150|420}">
+				Converter={StaticResource EditorSize}, ConverterParameter=height|420|20}"
+			MaxWidth="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource EditorSize}, ConverterParameter=width|0|20}">
 		<Border
 			HorizontalAlignment="Center" VerticalAlignment="Center"
 			Background="{DynamicResource HLab.Brushes.Background}"
@@ -146,7 +167,7 @@
 					<TextBlock Grid.Row="0" Grid.Column="2" Classes="caption" Text="block"/>
 
 					<TextBlock Grid.Row="1" Grid.Column="0" Text="Move" VerticalAlignment="Center"/>
-					<controls:DoubleBox Grid.Row="1" Grid.Column="1" Height="26"
+					<controls:DoubleBox Grid.Row="1" Grid.Column="1"
 					                    PointerWheelChanged="OnMouseWheel"
 					                    ToolTip.Tip="Resistance in mm opposing a plain cursor move"
 					                    IsEnabled="{Binding !Selected.Model.MoveBlock}"
@@ -155,7 +176,7 @@
 					              IsChecked="{Binding Selected.Model.MoveBlock}"/>
 
 					<TextBlock Grid.Row="2" Grid.Column="0" Text="Drag" VerticalAlignment="Center"/>
-					<controls:DoubleBox Grid.Row="2" Grid.Column="1" Height="26"
+					<controls:DoubleBox Grid.Row="2" Grid.Column="1"
 					                    PointerWheelChanged="OnMouseWheel"
 					                    ToolTip.Tip="Resistance in mm opposing a move made with a mouse button held"
 					                    IsEnabled="{Binding !Selected.Model.DragBlock}"

@@ -1,3 +1,4 @@
+using System.Globalization;
 using DynamicData;
 using HLab.Geo;
 using LittleBigMouse.DisplayLayout;
@@ -5,6 +6,10 @@ using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 using Xunit;
+
+// Both geometry namespaces are in play here: the layout model speaks HLab.Geo,
+// the converter under test is fed by Avalonia's layout pass.
+using AvaloniaRect = global::Avalonia.Rect;
 
 namespace LittleBigMouse.Ui.Avalonia.Tests;
 
@@ -281,6 +286,55 @@ public sealed class BorderSectionEditorTests
         Assert.Equal(BorderGrab.ResizeFrom, side.GrabAt(101).Grab);
         Assert.Equal(BorderGrab.Move, side.GrabAt(103).Grab);
         Assert.Equal(BorderGrab.ResizeTo, side.GrabAt(105).Grab);
+    }
+
+    //==================//
+    // The editor's size//
+    //==================//
+
+    // The bands are 16 px thick and the panel keeps 4 px off them: 20 per end.
+    static double EditorHeight(double width, double height) => EditorSize(width, height, "height|420|20");
+
+    static double EditorWidth(double width, double height) => EditorSize(width, height, "width|0|20");
+
+    static double EditorSize(double width, double height, string parameter) =>
+        (double)new EditorSizeConverter()
+            .Convert(new AvaloniaRect(0, 0, width, height), typeof(double), parameter, CultureInfo.InvariantCulture)!;
+
+    [Fact]
+    public void TheEditorTakesTheWholeRoomBetweenTheBands()
+    {
+        Assert.Equal(160, EditorHeight(800, 200));
+        Assert.Equal(760, EditorWidth(800, 200));
+    }
+
+    [Fact]
+    public void EachAxisIsMeasuredOnItsOwn()
+    {
+        // A 16:9 frame: the height is what it is, and the width is NOT bound to it.
+        // One figure for both used to pen the panel into a square the size of the
+        // smaller side, leaving most of the width unused on every landscape frame.
+        Assert.Equal(185, EditorHeight(400, 225));
+        Assert.Equal(360, EditorWidth(400, 225));
+    }
+
+    [Fact]
+    public void TheEditorStopsGrowingAtItsCeiling()
+    {
+        // Height is capped so the panel does not swallow a large monitor; width is
+        // not, or uniform scaling would crop a panel wider than it is tall.
+        Assert.Equal(420, EditorHeight(2000, 2000));
+        Assert.Equal(1960, EditorWidth(2000, 2000));
+    }
+
+    [Fact]
+    public void AMonitorSmallerThanItsBandsAsksForNoEditor()
+    {
+        // Nothing left between the bands: a negative size would be nonsense, and
+        // anything positive would sit on top of them.
+        Assert.Equal(0, EditorHeight(30, 30));
+        Assert.Equal(0, EditorWidth(30, 30));
+        Assert.Equal(0, EditorHeight(0, 0));
     }
 
     //==================//

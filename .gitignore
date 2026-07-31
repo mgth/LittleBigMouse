@@ -87,6 +87,9 @@ _ReSharper*/
 # JetBrains Rider / IntelliJ per-developer project state
 .idea/
 
+# Claude Code per-developer session state
+.claude/
+
 # JustCode is a .NET coding addin-in
 .JustCode
 

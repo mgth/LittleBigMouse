@@ -20,7 +20,10 @@
 
 	<!-- Geometry set in code: the line runs across whichever way the guide points. -->
 	<Canvas IsHitTestVisible="False">
+		<!-- Down until a boundary catches something; the window is parked off every
+		     screen meanwhile, and its visibility is what says which. -->
 		<Line x:Name="Guide"
+		      IsVisible="False"
 		      StrokeThickness="1"
 		      StrokeDashArray="4,4"
 		      Opacity="0.85"/>

@@ -80,6 +80,7 @@ public abstract class EdgeOverlayWindow : Window
         SetDipSize(scalingHint > 0 ? scalingHint : 1.0);
         Show();
 
+        MarkAsToolWindow();
         Anchor();
     }
 
@@ -105,8 +106,49 @@ public abstract class EdgeOverlayWindow : Window
     /// band stayed, so it moved from one run to the next.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Put the window away without hiding it: out beyond every screen, where it
+    /// covers nothing and takes no clicks.
+    /// <para>
+    /// Hiding would be the obvious way, and it is the wrong one. Avalonia remakes
+    /// the native window on the way back up, as an ordinary application window —
+    /// the shell keeps a place for it in the taskbar and brings the bar to the
+    /// front — and every extended style set on the old one goes with it. Parking
+    /// keeps one window from beginning to end.
+    /// </para>
+    /// </summary>
+    protected void Park(PixelPoint spot)
+    {
+        _parked = true;
+
+        Position = spot;
+        MoveThere(spot.X, spot.Y);
+    }
+
+    /// <summary>Bring it back over the screen it belongs to.</summary>
+    protected void Unpark()
+    {
+        _parked = false;
+        Anchor();
+    }
+
+    /// <summary>
+    /// Send the window somewhere else on the desktop, at the size it already has.
+    /// Only the place changes, which is what keeps a window that moves often out of
+    /// the negotiation over its size.
+    /// </summary>
+    protected void MoveTo(PixelRect target)
+    {
+        _target = target;
+        Unpark();
+    }
+
+    bool _parked;
+
     void Anchor()
     {
+        if (_parked) return;
+
         var granted = PixelSize.FromSize(ClientSize, DesktopScaling);
         if (granted.Width <= 0 || granted.Height <= 0) return;
 
@@ -148,5 +190,53 @@ public abstract class EdgeOverlayWindow : Window
         if (TryGetPlatformHandle()?.Handle is not { } window) return;
 
         SetWindowPos(window, 0, x, y, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+    }
+
+    const int GwlExStyle = -20;
+    const int WsExToolWindow = 0x00000080;
+
+    /// <summary>
+    /// Extended window bits this overlay needs beyond being a tool window, on
+    /// Windows. Applied with it, once, on the first showing.
+    /// </summary>
+    protected virtual int ExtraExtendedStyle => 0;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern int GetWindowLongW(nint window, int index);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern int SetWindowLongW(nint window, int index, int value);
+
+    /// <summary>
+    /// Say what these windows are: tools, not applications.
+    /// <para>
+    /// They already ask to stay out of the taskbar, and Avalonia obliges by having
+    /// the shell drop their button. That holds for a window shown once and left
+    /// alone — but the guide line is hidden and shown again at every snap, and the
+    /// button came back with it each time, bringing the taskbar to the front over
+    /// everything else. A tool window is never given a button at all, whatever it
+    /// does afterwards, which is the property actually wanted here.
+    /// </para>
+    /// <para>
+    /// Set on the first showing, while the window is still on its way up: Windows
+    /// keeps an existing button until the window is hidden and shown again, and the
+    /// overlays that stay up are past that point by the time anyone sees them. An
+    /// overlay that comes and goes must not be hidden at all — the native window is
+    /// remade on the way back, without any of this — which is why the guide line
+    /// stays up and empties itself instead.
+    /// </para>
+    /// </summary>
+    protected void MarkAsToolWindow()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        if (TryGetPlatformHandle()?.Handle is not { } window) return;
+
+        var style = GetWindowLongW(window, GwlExStyle);
+        if (style == 0) return;
+
+        var wanted = style | WsExToolWindow | ExtraExtendedStyle;
+        if (wanted == style) return;
+
+        SetWindowLongW(window, GwlExStyle, wanted);
     }
 }

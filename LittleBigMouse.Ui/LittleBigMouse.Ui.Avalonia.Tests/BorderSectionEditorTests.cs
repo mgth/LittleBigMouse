@@ -205,6 +205,48 @@ public sealed class BorderSectionEditorTests
         Assert.Equal(200, second.To);
     }
 
+    // 540 UI px over a 270 mm edge, so the 6 px handle is 3 mm and the 16 px mitre 8 mm.
+    [Fact]
+    public void TouchingSectionsEachKeepTheirOwnHandle()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var upper = side.Create(50, 150)!;
+        var lower = side.Create(150, 250)!;
+
+        // The shared boundary belongs to the section starting there, so the lower one
+        // can be resized from its top at all — pressing there used to hand the gesture
+        // to the upper section, whose end sits at the same place.
+        Assert.Equal((lower, BorderGrab.ResizeFrom), side.GrabAt(150));
+
+        // Just inside the lower section: it holds the point, so it wins even though
+        // the upper section's end is within grabbing distance.
+        Assert.Equal((lower, BorderGrab.ResizeFrom), side.GrabAt(151));
+
+        // Just above, the upper section holds the point and keeps its own end handle.
+        Assert.Equal((upper, BorderGrab.ResizeTo), side.GrabAt(149));
+
+        // Away from both boundaries, the press slides the section it landed on.
+        Assert.Equal((upper, BorderGrab.Move), side.GrabAt(100));
+        Assert.Equal((lower, BorderGrab.Move), side.GrabAt(200));
+
+        // The far end of the lower section is outside it, half open — still its handle.
+        Assert.Equal((lower, BorderGrab.ResizeTo), side.GrabAt(250));
+    }
+
+    [Fact]
+    public void APressInFreeSpaceReachesTheNearestHandleThenNothing()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(50, 150)!;
+
+        // Within the 3 mm handle of the start, from outside the section.
+        Assert.Equal((section, BorderGrab.ResizeFrom), side.GrabAt(48));
+
+        // Beyond it, the press draws a new section rather than resizing that one.
+        Assert.Equal((null, BorderGrab.None), side.GrabAt(40));
+        Assert.Equal((null, BorderGrab.None), side.GrabAt(200));
+    }
+
     [Fact]
     public void ASectionTooShortToBeIntentionalIsRejected()
     {

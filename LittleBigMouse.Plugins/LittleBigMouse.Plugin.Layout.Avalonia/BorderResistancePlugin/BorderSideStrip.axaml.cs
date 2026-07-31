@@ -20,9 +20,6 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 /// </summary>
 public partial class BorderSideStrip : UserControl
 {
-    /// <summary>How close to an end counts as grabbing its handle.</summary>
-    const double HandlePixels = 6;
-
     enum Mode { None, Draw, ResizeFrom, ResizeTo, Move }
 
     Mode _mode = Mode.None;
@@ -161,31 +158,6 @@ public partial class BorderSideStrip : UserControl
         return vm.ToMm(vm.IsVertical ? p.Y : p.X);
     }
 
-    /// <summary>
-    /// How far from a boundary a press still grabs it, in millimetres.
-    /// <para>
-    /// Constant along most of the edge, but not in the mitred corners: there the band
-    /// tapers to a point, so a fixed handle is a sliver a few pixels wide and all but
-    /// unclickable — which is what made the outer ends of a full edge so hard to
-    /// resize. Inside a mitre the handle widens inward, towards where the band
-    /// recovers its full thickness.
-    /// </para>
-    /// <para>
-    /// Never more than half the section, so its middle stays reachable and a short
-    /// section can still be moved rather than only resized.
-    /// </para>
-    /// </summary>
-    static double GrabMm(BorderSideViewModel vm, double boundaryMm, double sectionLengthMm)
-    {
-        var basic = vm.ToMm(HandlePixels);
-        var mitre = vm.ToMm(vm.PixelThickness);
-
-        var fromEnd = Math.Min(boundaryMm, vm.LengthMm - boundaryMm);
-        var grab = fromEnd < mitre ? Math.Max(basic, mitre - fromEnd) : basic;
-
-        return Math.Min(grab, sectionLengthMm / 2);
-    }
-
     static bool SnapEnabled(KeyModifiers modifiers) => (modifiers & KeyModifiers.Control) == 0;
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -196,28 +168,20 @@ public partial class BorderSideStrip : UserControl
 
         var mm = AlongMm(e);
 
-        _target = null;
-        _mode = Mode.Draw;
+        var (target, grab) = vm.GrabAt(mm);
 
-        foreach (var section in vm.Sections)
+        _target = target;
+        _mode = grab switch
         {
-            var model = section.Model;
-            var fromGrab = GrabMm(vm, model.From, model.To - model.From);
-            var toGrab = GrabMm(vm, model.To, model.To - model.From);
+            BorderGrab.ResizeFrom => Mode.ResizeFrom,
+            BorderGrab.ResizeTo => Mode.ResizeTo,
+            BorderGrab.Move => Mode.Move,
+            _ => Mode.Draw
+        };
 
-            if (mm < model.From - fromGrab || mm > model.To + toGrab) continue;
-
-            _target = model;
-            SelectInParent(section);
-
-            if (mm <= model.From + fromGrab) _mode = Mode.ResizeFrom;
-            else if (mm >= model.To - toGrab) _mode = Mode.ResizeTo;
-            else _mode = Mode.Move;
-
-            break;
-        }
-
-        if (_mode == Mode.Draw) SelectInParent(null);
+        SelectInParent(target == null
+            ? null
+            : vm.Sections.FirstOrDefault(s => ReferenceEquals(s.Model, target)));
 
         _anchorMm = vm.Snap(mm, SnapEnabled(e.KeyModifiers), _target);
         _lastMm = mm;

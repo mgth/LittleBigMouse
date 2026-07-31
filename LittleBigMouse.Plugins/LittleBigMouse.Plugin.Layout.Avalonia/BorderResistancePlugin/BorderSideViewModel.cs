@@ -34,6 +34,22 @@ public enum SnapKind
 /// <summary>A place a boundary wants to land, and where that place comes from.</summary>
 public readonly record struct SnapTarget(double Mm, SnapKind Kind);
 
+/// <summary>What a press on a band takes hold of.</summary>
+public enum BorderGrab
+{
+    /// <summary>Nothing: the press landed in free space and starts a new section.</summary>
+    None,
+
+    /// <summary>The section's starting boundary.</summary>
+    ResizeFrom,
+
+    /// <summary>The section's ending boundary.</summary>
+    ResizeTo,
+
+    /// <summary>The section itself, to slide it along the edge.</summary>
+    Move
+}
+
 /// <summary>
 /// The editing surface for one monitor edge.
 /// <para>
@@ -56,6 +72,9 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     public const int MaximumSections = 16;
 
     const double SnapToleranceUiPixels = 8.0;
+
+    /// <summary>How close to a boundary a press still counts as grabbing its handle.</summary>
+    const double HandleUiPixels = 6.0;
 
     public BorderSideViewModel(PhysicalMonitor monitor, BorderSideKind kind, BorderSide side)
     {
@@ -408,6 +427,89 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     {
         var (low, high) = FreeGapAround(referenceMm, excluding);
         return (System.Math.Max(from, low), System.Math.Min(to, high));
+    }
+
+    /// <summary>
+    /// How far from a boundary a press still grabs it, in millimetres.
+    /// <para>
+    /// Constant along most of the edge, but not in the mitred corners: there the band
+    /// tapers to a point, so a fixed handle is a sliver a few pixels wide and all but
+    /// unclickable — which is what made the outer ends of a full edge so hard to
+    /// resize. Inside a mitre the handle widens inward, towards where the band
+    /// recovers its full thickness.
+    /// </para>
+    /// <para>
+    /// Never more than half the section, so its middle stays reachable and a short
+    /// section can still be moved rather than only resized.
+    /// </para>
+    /// </summary>
+    double GrabMm(double boundaryMm, double sectionLengthMm)
+    {
+        var basic = ToMm(HandleUiPixels);
+        var mitre = ToMm(PixelThickness);
+
+        var fromEnd = System.Math.Min(boundaryMm, LengthMm - boundaryMm);
+        var grab = fromEnd < mitre ? System.Math.Max(basic, mitre - fromEnd) : basic;
+
+        return System.Math.Min(grab, sectionLengthMm / 2);
+    }
+
+    /// <summary>
+    /// What a press at <paramref name="mm"/> takes hold of.
+    /// <para>
+    /// A section that actually holds the point owns the press; the handle margins only
+    /// extend a section's reach into the free space AROUND it. That order is the whole
+    /// point: two sections that touch both claim their shared boundary, and taking the
+    /// first claimant handed every press there to the one starting further up the
+    /// edge. Its neighbour's near handle was then unreachable — the boundary could
+    /// only ever be moved from one side, and a click just inside the lower section
+    /// selected the upper one.
+    /// </para>
+    /// <para>
+    /// Containment is half open, <c>[From, To)</c>, the same convention the link
+    /// compiler uses to resolve an interval, so a shared boundary belongs to the
+    /// section starting there and each side keeps a handle of its own.
+    /// </para>
+    /// </summary>
+    public (BorderSection? Section, BorderGrab Grab) GrabAt(double mm)
+    {
+        var section = Ordered().FirstOrDefault(s => mm >= s.From && mm < s.To)
+                      ?? NearestWithinHandle(mm);
+
+        if (section == null) return (null, BorderGrab.None);
+
+        var length = section.To - section.From;
+
+        if (mm <= section.From + GrabMm(section.From, length)) return (section, BorderGrab.ResizeFrom);
+        if (mm >= section.To - GrabMm(section.To, length)) return (section, BorderGrab.ResizeTo);
+
+        return (section, BorderGrab.Move);
+    }
+
+    /// <summary>
+    /// The section whose nearest boundary is within grabbing distance of a point that
+    /// no section contains, closest first — a press in the free space beside a section
+    /// still reaches its handle.
+    /// </summary>
+    BorderSection? NearestWithinHandle(double mm)
+    {
+        BorderSection? best = null;
+        var bestDistance = double.MaxValue;
+
+        foreach (var section in Ordered())
+        {
+            var before = mm < section.From;
+            var boundary = before ? section.From : section.To;
+            var distance = System.Math.Abs(mm - boundary);
+
+            if (distance > GrabMm(boundary, section.To - section.From)) continue;
+            if (distance >= bestDistance) continue;
+
+            bestDistance = distance;
+            best = section;
+        }
+
+        return best;
     }
 
     /// <summary>

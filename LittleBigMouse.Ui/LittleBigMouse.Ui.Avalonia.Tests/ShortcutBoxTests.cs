@@ -106,6 +106,64 @@ public sealed class ShortcutBoxTests
             ShortcutBox.ModifierNames(KeyModifiers.Shift | KeyModifiers.Control));
     }
 
+    [Theory]
+    // The daemon's numbers (shortcut.rs::virtual_key), asserted here too. Only the
+    // position-named keys need one on this side, to turn back into a character for
+    // display — but a number that drifted would send the display and the registration
+    // to two different keys, and nothing else would notice.
+    [InlineData("Oem1", 0xBA)]
+    [InlineData("Oem2", 0xBF)]
+    [InlineData("Oem3", 0xC0)]
+    [InlineData("Oem4", 0xDB)]
+    [InlineData("Oem5", 0xDC)]
+    [InlineData("Oem6", 0xDD)]
+    [InlineData("Oem7", 0xDE)]
+    [InlineData("Oem8", 0xDF)]
+    [InlineData("Oem102", 0xE2)]
+    [InlineData("OemPlus", 0xBB)]
+    [InlineData("OemComma", 0xBC)]
+    [InlineData("OemMinus", 0xBD)]
+    [InlineData("OemPeriod", 0xBE)]
+    public void PositionNamesCarryTheDaemonsVirtualKeyCodes(string name, uint vk)
+    {
+        Assert.Equal(vk, ShortcutBox.VirtualKey(name));
+    }
+
+    [Fact]
+    public void OnlyPositionNamesHaveAVirtualKeyOnThisSide()
+    {
+        // The rest already read as themselves and are never translated for display.
+        Assert.Null(ShortcutBox.VirtualKey("M"));
+        Assert.Null(ShortcutBox.VirtualKey("F12"));
+        Assert.Null(ShortcutBox.VirtualKey("NumPad0"));
+        Assert.Null(ShortcutBox.VirtualKey("Oem9"));
+    }
+
+    [Fact]
+    public void ReadableLeavesEverythingItCannotImproveAlone()
+    {
+        // Layout-independent assertions only: what Oem7 prints is ² here and ' on the
+        // CI runner, so the test pins the shape, not the character.
+        Assert.Equal("Ctrl+Alt+Shift+M", ShortcutDisplay.Readably("Ctrl+Alt+Shift+M"));
+        Assert.Equal("Ctrl+F12", ShortcutDisplay.Readably("Ctrl+F12"));
+        Assert.Equal("Ctrl+NumPad0", ShortcutDisplay.Readably("Ctrl+NumPad0"));
+        Assert.Equal("", ShortcutDisplay.Readably(""));
+        Assert.Equal("", ShortcutDisplay.Readably(null));
+    }
+
+    [Fact]
+    public void ReadableTurnsAPositionIntoWhatTheKeyboardPrints()
+    {
+        var readable = ShortcutDisplay.Readably("Ctrl+Oem7");
+
+        Assert.StartsWith("Ctrl+", readable);
+        var key = readable["Ctrl+".Length..];
+
+        // One character on a layout that prints something there, the position name on
+        // one that does not — never blank, and never half-translated.
+        Assert.True(key.Length == 1 || key == "Oem7", $"unexpected rendering: {key}");
+    }
+
     [Fact]
     public void EveryModifierKeyIsRecognizedAsOne()
     {

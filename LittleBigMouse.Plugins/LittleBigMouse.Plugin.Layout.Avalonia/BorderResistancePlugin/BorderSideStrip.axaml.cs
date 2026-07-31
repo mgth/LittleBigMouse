@@ -30,6 +30,9 @@ public partial class BorderSideStrip : UserControl
     double _anchorMm;
     double _lastMm;
 
+    /// <summary>Where a moved section would start with no snapping — see the Move case.</summary>
+    double _movedFromMm;
+
     public BorderSideStrip()
     {
         InitializeComponent();
@@ -215,6 +218,7 @@ public partial class BorderSideStrip : UserControl
 
         _anchorMm = vm.Snap(mm, SnapEnabled(e.KeyModifiers), _target);
         _lastMm = mm;
+        _movedFromMm = _target?.From ?? 0;
 
         Focus();
         e.Pointer.Capture(this);
@@ -248,9 +252,19 @@ public partial class BorderSideStrip : UserControl
                 break;
 
             case Mode.Move when _target != null:
-                vm.MoveBy(_target, raw - _lastMm);
+                // The wanted position follows the pointer exactly and is kept apart
+                // from the applied one: feeding the snapped position back into the
+                // next delta would let the section drift away from the cursor, one
+                // correction at a time.
+                _movedFromMm += raw - _lastMm;
                 _lastMm = raw;
-                ShowGuide(vm, _target.From, snap);
+
+                var length = _target.To - _target.From;
+                vm.MoveTo(_target, snap
+                    ? vm.SnapMovedStart(_movedFromMm, length, _target)
+                    : _movedFromMm);
+
+                if (!ShowGuide(vm, _target.From, snap)) ShowGuide(vm, _target.To, snap, keep: true);
                 break;
         }
 
@@ -325,13 +339,14 @@ public partial class BorderSideStrip : UserControl
     /// Mark a boundary that landed exactly on a snap target — the same visual
     /// language as the anchor lines shown when dragging a monitor.
     /// </summary>
-    void ShowGuide(BorderSideViewModel vm, double mm, bool snap, bool keep = false)
+    /// <returns>Whether a guide was drawn, so a caller can fall back to the other end.</returns>
+    bool ShowGuide(BorderSideViewModel vm, double mm, bool snap, bool keep = false)
     {
         if (!keep) Overlay.Children.Clear();
-        if (!snap) return;
+        if (!snap) return false;
 
         var onTarget = vm.SnapTargetsMm(_target).Any(t => System.Math.Abs(t - mm) < 0.001);
-        if (!onTarget) return;
+        if (!onTarget) return false;
 
         var at = vm.ToPixels(mm);
 
@@ -346,5 +361,6 @@ public partial class BorderSideStrip : UserControl
         };
 
         Overlay.Children.Add(line);
+        return true;
     }
 }

@@ -259,6 +259,57 @@ public sealed class BorderSectionEditorTests
     }
 
     [Fact]
+    public void MovingSnapsWithTheSectionsStartToo()
+    {
+        // The regression that made snapping look random. Scoring each end by how far
+        // it moved let an end that found nothing score zero — an unbeatable distance
+        // — so the start's snap was always discarded and only the far end ever
+        // caught, however slowly you approached.
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(10, 40)!;
+
+        // 540 px over 270 mm, so the 8 px tolerance is 4 mm. The edge's middle, 135,
+        // is a target; the section's end at 167 is near nothing.
+        var start = side.SnapMovedStart(137, 30, section);
+
+        Assert.Equal(135, start);
+    }
+
+    [Fact]
+    public void MovingSnapsWithTheSectionsEndToo()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(10, 40)!;
+
+        // Now it is the end that lands near 135, so the section comes to rest at 105.
+        var start = side.SnapMovedStart(103, 30, section);
+
+        Assert.Equal(105, start);
+    }
+
+    [Fact]
+    public void MovingWithNoTargetInReachKeepsThePointerPosition()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(10, 40)!;
+
+        // 60 and 90 are both far from 0, 135 and 270.
+        Assert.Equal(60, side.SnapMovedStart(60, 30, section));
+    }
+
+    [Fact]
+    public void MovingToAPositionKeepsTheLength()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(40, 100)!;
+
+        side.MoveTo(section, 150);
+
+        Assert.Equal(150, section.From);
+        Assert.Equal(210, section.To);
+    }
+
+    [Fact]
     public void MovingASectionStopsAtItsNeighbour()
     {
         var side = RightEdgeOf(TwoMonitorsLeft());

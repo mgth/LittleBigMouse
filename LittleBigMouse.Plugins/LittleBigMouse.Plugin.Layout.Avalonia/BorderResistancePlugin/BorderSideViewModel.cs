@@ -445,13 +445,61 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// Slide a section along its edge, keeping its length. Pushed into a neighbour it
     /// comes to rest against it rather than refusing to move.
     /// </summary>
-    public void MoveBy(BorderSection section, double deltaMm)
+    public void MoveBy(BorderSection section, double deltaMm) =>
+        MoveTo(section, section.From + deltaMm);
+
+    /// <summary>
+    /// Where a section being moved should start, snapping whichever of its two ends
+    /// comes within reach of a target — a moved section keeps its length, so only one
+    /// of them can be honoured.
+    /// <para>
+    /// Only real candidates are scored. The obvious way to write this — snap each end
+    /// on its own and keep whichever moved least — silently never snaps the start:
+    /// an end that finds no target comes back unchanged, so it scores a distance of
+    /// zero, which beats any genuine snap. Only the far end could ever catch, at any
+    /// speed, which is what made the whole thing look erratic.
+    /// </para>
+    /// <para>
+    /// <paramref name="wantedFrom"/> is the UNSNAPPED position: feeding the applied
+    /// one back in would let the section drift away from the cursor, one correction
+    /// at a time.
+    /// </para>
+    /// </summary>
+    public double SnapMovedStart(double wantedFrom, double lengthMm, BorderSection? excluding = null)
+    {
+        var tolerance = ToMm(SnapToleranceUiPixels);
+
+        var best = wantedFrom;
+        var bestDistance = double.MaxValue;
+
+        foreach (var target in SnapTargetsMm(excluding))
+        {
+            Consider(target);              // the section's start meets the target
+            Consider(target - lengthMm);   // its end does
+        }
+
+        return best;
+
+        void Consider(double start)
+        {
+            var distance = System.Math.Abs(start - wantedFrom);
+
+            if (distance > tolerance) return;
+            if (distance >= bestDistance) return;
+
+            bestDistance = distance;
+            best = start;
+        }
+    }
+
+    /// <summary>Slide a section so it starts at <paramref name="fromMm"/>.</summary>
+    public void MoveTo(BorderSection section, double fromMm)
     {
         var length = section.To - section.From;
         var (low, high) = FreeGapAround((section.From + section.To) / 2, section);
         if (high - low < length) return;
 
-        var from = System.Math.Clamp(section.From + deltaMm, low, high - length);
+        var from = System.Math.Clamp(fromMm, low, high - length);
 
         section.From = from;
         section.To = from + length;

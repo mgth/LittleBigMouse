@@ -1,7 +1,7 @@
 # Build LittleBigMouse: managed UI (net10 / Avalonia) + native hook daemon (x64,
 # Rust by default, C++ as opt-out).
-# - Push / PR on master: build everything (installer included, as a smoke test),
-#   upload a portable artifact.
+# - Push / PR on master: run the suites, build everything (installer included, as
+#   a smoke test), upload a portable artifact.
 # - Tag v*: additionally publish the installer as an artifact and attach it to a
 #   draft GitHub release for manual review before publishing.
 
@@ -59,6 +59,20 @@ jobs:
         }
         "version=$v" >> $env:GITHUB_OUTPUT
         Write-Host "Release version: '$v'"
+
+    # Before anything is built for shipping: a red suite should cost seconds, not
+    # a full installer run.
+    #
+    # Through the filter rather than the solution, which still holds the C++ hook:
+    # `dotnet` cannot load a .vcxproj without the MSVC toolchain and fails the run
+    # over it, so the suites that did work were reported green under a failing
+    # build — and the UI suite, which the C++ project used to drag in, never ran at
+    # all. Being run by nobody is how a test comes to be trusted for nothing.
+    - name: Test (managed)
+      run: dotnet test LittleBigMouse-Managed.slnf -c Release --nologo
+
+    - name: Test (Rust hook)
+      run: cargo test --manifest-path $env:HOOK_RUST_PROJECT
 
     - name: Build UI (net10, x64 Release)
       run: |

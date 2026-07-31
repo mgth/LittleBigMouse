@@ -51,9 +51,6 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LittleBigMouse.Plugins.Avalonia", "LittleBigMouse.Plugins\LittleBigMouse.Plugins.Avalonia\LittleBigMouse.Plugins.Avalonia.csproj", "{E538FDBD-CCF1-4E20-A763-0C3CDA9D6335}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LittleBigMouse.Ui.Avalonia", "LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj", "{01FA453A-86CA-4EC5-A0E9-266FEE14775C}"
-	ProjectSection(ProjectDependencies) = postProject
-		{CB83115D-78BA-490D-AABD-31949F013F78} = {CB83115D-78BA-490D-AABD-31949F013F78}
-	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HLab.ColorTools.Avalonia", "HLab.Avalonia\HLab.ColorTools.Avalonia\HLab.ColorTools.Avalonia.csproj", "{33AD10FD-FB09-4603-9C79-8116B668F1E9}"
 EndProject

@@ -132,6 +132,17 @@ relaunches the app. UI and daemon logs land in `/tmp/lbm-ui.log`. If you cloned 
 `--recursive`, run `git submodule update --init --recursive` first — the HLab projects
 are submodules.
 
+### Tests
+
+```bash
+dotnet test LittleBigMouse-Managed.slnf
+cargo test --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml
+```
+
+Through the filter, not `LittleBigMouse.sln`: the solution still holds the C++ hook, and
+`dotnet` cannot load a `.vcxproj` without the MSVC toolchain — it then fails the run over
+that alone, whatever the suites did. Both commands are what CI runs.
+
 ## Usage
 
 Documentation : https://littlebigmouse.mgth.fr/docs/ and https://github.com/mgth/LittleBigMouse/wiki

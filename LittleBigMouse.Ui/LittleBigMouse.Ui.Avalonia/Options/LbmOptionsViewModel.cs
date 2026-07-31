@@ -93,6 +93,8 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         // Clearing the warning here makes it a fresh attempt: whatever comes back is
         // about the combination now being asked for.
         this.WhenAnyValue(e => e.Model.RescueShortcut)
+            // Nothing registers it off Windows, so nothing needs telling.
+            .Where(_ => RescueShortcutSupported)
             .Where(shortcut => !string.IsNullOrWhiteSpace(shortcut))
             .DistinctUntilChanged()
             .Subscribe(shortcut =>
@@ -116,6 +118,15 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         Dispatcher.UIThread.Post(() => ShortcutWarning =
             $"{e.Payload} is already taken by another application — the rescue shortcut is NOT active.");
     }
+
+    /// <summary>
+    /// Whether there is a rescue shortcut to configure. Windows only for now: the
+    /// daemon registers it with RegisterHotKey, and Wayland has no global shortcut
+    /// without a portal — reading one from evdev would mean opening the keyboard
+    /// devices, which is the keylogging surface the design avoids. Hidden rather than
+    /// shown dead, so a Linux build has nothing that looks broken.
+    /// </summary>
+    public bool RescueShortcutSupported => OperatingSystem.IsWindows();
 
     /// <summary>Empty while the rescue shortcut is registered and working.</summary>
     public string ShortcutWarning

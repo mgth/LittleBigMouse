@@ -248,7 +248,7 @@
 						</StackPanel>
 					</Border>
 
-					<Border Classes="SettingCard">
+					<Border Classes="SettingCard" IsVisible="{Binding RescueShortcutSupported}">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"
 							                     Header="Rescue shortcut"

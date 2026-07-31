@@ -183,9 +183,9 @@ and press the one you want. If another application already owns that combination
 setting says so — a rescue you only discover is missing when you need it would be worse
 than none.
 
-Windows only for now. Wayland has no global shortcut without a portal, and reading one
-from evdev would mean opening the keyboard devices, which is a great deal more than a
-mouse utility should ask for.
+Windows only for now — the setting is not shown elsewhere. Wayland has no global
+shortcut without a portal, and reading one from evdev would mean opening the keyboard
+devices, which is a great deal more than a mouse utility should ask for.
 
 ## Support
 

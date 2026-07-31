@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LittleBigMouse.Ui.Avalonia.Controls.UnsavedChangesDialog"
+        Title="Unsaved layout"
+        Width="480"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Lbm.Brushes.Pane.Background}">
+
+	<StackPanel Margin="24,20" Spacing="14">
+
+		<StackPanel Orientation="Horizontal" Spacing="12">
+			<Path Data="{StaticResource Lbm.Icon.Warning}"
+			      Fill="#E0A030" Width="26" Height="26" Stretch="Uniform"
+			      VerticalAlignment="Center"/>
+			<TextBlock x:Name="HeadingText"
+			           Text="Your layout has not been saved"
+			           FontSize="16" FontWeight="SemiBold"
+			           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+			           VerticalAlignment="Center" TextWrapping="Wrap"/>
+		</StackPanel>
+
+		<TextBlock x:Name="BodyText" TextWrapping="Wrap" FontSize="13"
+		           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"/>
+
+		<!-- Only shown when live update is on. Saving a layout nobody has tried, in the
+		     hurry of a dialog that stands between the user and leaving, is exactly how a
+		     bad geometry becomes the one that loads at the next boot. -->
+		<TextBlock x:Name="SaveNote" TextWrapping="Wrap" FontSize="12"
+		           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
+		           IsVisible="False"
+		           Text="Live update is on, so this layout is the one currently driving the mouse — saving it keeps what you have been feeling."/>
+
+		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+			<Button x:Name="CancelButton" Content="Cancel" Click="OnCancelClick" IsCancel="True"/>
+			<Button x:Name="ContinueButton" Content="Keep unsaved" Click="OnContinueClick"/>
+			<Button x:Name="SaveButton" Content="Save" Click="OnSaveClick"
+			        IsVisible="False" IsDefault="True"/>
+		</StackPanel>
+
+	</StackPanel>
+</Window>

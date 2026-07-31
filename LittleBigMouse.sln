@@ -97,7 +97,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Setup", "Setup", "{B71ECB15-F39E-4329-BEE3-73BBADF12BC7}"
 	ProjectSection(SolutionItems) = preProject
 		LittleBigMouse.Setup\LittleBigMouse.iss = LittleBigMouse.Setup\LittleBigMouse.iss
-		LittleBigMouse.Setup\LittleBigMouse.nsi = LittleBigMouse.Setup\LittleBigMouse.nsi
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HLab.Bugs.Avalonia", "HLab.Avalonia\HLab.Bugs.Avalonia\HLab.Bugs.Avalonia.csproj", "{6CA136B2-9239-4A02-9007-B67D9940674D}"

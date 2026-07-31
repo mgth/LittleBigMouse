@@ -20,6 +20,10 @@ public partial class ScreenSectionsWindow : EdgeOverlayWindow
     {
         DataContext = viewModel;
 
+        // The band fills this window, so the window can be cut to the band's mitre
+        // and stop catching the half of each corner it gave up to its neighbour.
+        if (Content is BorderSideStrip strip) strip.Host = this;
+
         // These windows come and go with the toggle, and their view models hold
         // subscriptions to the monitor's shared section list.
         Closed += (_, _) => viewModel.Dispose();

@@ -39,6 +39,17 @@ public partial class BorderSideStrip : UserControl
         return _gesture;
     }
 
+    /// <summary>
+    /// The window this band fills, when it is on a real screen rather than on the
+    /// layout map — set by that window, since it is the only one that knows.
+    /// <para>
+    /// Not looked up through the tree: the visual root of a band is a
+    /// <c>TopLevelHost</c> either way, so a band cannot tell from below whether it
+    /// is a window of its own or one of four siblings in the map.
+    /// </para>
+    /// </summary>
+    public EdgeOverlayWindow? Host { get; set; }
+
     /// <summary>Our layer in the presenter's shared panel, holding the reference line.</summary>
     Canvas? _reference;
 
@@ -159,6 +170,13 @@ public partial class BorderSideStrip : UserControl
         // right up to a corner so it follows the mitre instead of squaring it off.
         Backdrop.Data = new PolylineGeometry(points, true);
         Clip = new PolylineGeometry(points, true);
+
+        // On a real screen this band IS a window, and a window catches presses over
+        // its whole rectangle however its content is clipped — so the half of each
+        // corner it gave up would swallow what belongs to the band next to it. Give
+        // the window the same shape. On the layout map the bands are siblings in one
+        // window and hit testing already sorts the corners out.
+        Host?.ShapeTo(points);
 
         foreach (var section in vm.Sections) section.Refresh();
     }

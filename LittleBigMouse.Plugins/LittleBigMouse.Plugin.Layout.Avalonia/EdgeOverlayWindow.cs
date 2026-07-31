@@ -192,6 +192,72 @@ public abstract class EdgeOverlayWindow : Window
         SetWindowPos(window, 0, x, y, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
     }
 
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    static extern nint CreatePolygonRgn(System.Drawing.Point[] points, int count, int mode);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern int SetWindowRgn(nint window, nint region, bool redraw);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern bool GetWindowRect(nint window, out WindowRect rect);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    struct WindowRect { public int Left, Top, Right, Bottom; }
+
+    /// <summary>
+    /// Cut the window down to the shape its content actually occupies.
+    /// <para>
+    /// Four bands meet in each corner of a screen, and each keeps the triangle on
+    /// its own side of the square's diagonal so the corners meet like a picture
+    /// frame. Inside one window that is enough: the clipped-away half belongs to a
+    /// sibling and hit testing finds it. Across windows it is not — a window covers
+    /// its whole rectangle whatever its content does, so a press on the half it
+    /// gave up landed on it, missed everything, and died there instead of reaching
+    /// the band underneath. That is what made a handle in a corner unclickable.
+    /// </para>
+    /// <para>
+    /// The region is the mitre itself, so nothing is given up twice: what a band
+    /// does not draw, it no longer catches. Windows only — X11 has an input shape
+    /// and Wayland a region, neither reachable from here, so the corners there stay
+    /// as they are.
+    /// </para>
+    /// </summary>
+    /// <param name="shape">The outline, in this window's own device-independent pixels.</param>
+    public void ShapeTo(IReadOnlyList<Point> shape)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        if (shape.Count < 3) return;
+        if (TryGetPlatformHandle()?.Handle is not { } window) return;
+
+        // Scale from what the window was actually given rather than from the
+        // scaling it reports: the two have been seen to disagree while a window is
+        // still settling, and a region is silent when it is wrong.
+        if (!GetWindowRect(window, out var rect)) return;
+
+        // The client area, which is what the band fills and what the shape is
+        // expressed in. A window's own Bounds is not that, and is 0 here.
+        var width = ClientSize.Width;
+        var height = ClientSize.Height;
+        if (width <= 0 || height <= 0) return;
+
+        var scaleX = (rect.Right - rect.Left) / width;
+        var scaleY = (rect.Bottom - rect.Top) / height;
+
+        var points = new System.Drawing.Point[shape.Count];
+        for (var i = 0; i < shape.Count; i++)
+        {
+            points[i] = new System.Drawing.Point(
+                (int)System.Math.Round(shape[i].X * scaleX),
+                (int)System.Math.Round(shape[i].Y * scaleY));
+        }
+
+        // The window owns the region once it is set, and frees the one it held.
+        var region = CreatePolygonRgn(points, points.Length, 1);
+        if (region == 0) return;
+
+        SetWindowRgn(window, region, true);
+    }
+
     const int GwlExStyle = -20;
     const int WsExToolWindow = 0x00000080;
 

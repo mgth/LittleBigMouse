@@ -73,8 +73,19 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
     const double SnapToleranceUiPixels = 8.0;
 
-    /// <summary>How close to a boundary a press still counts as grabbing its handle.</summary>
-    const double HandleUiPixels = 6.0;
+    /// <summary>The smallest a handle is ever allowed to get, in UI pixels.</summary>
+    const double MinimumHandleUiPixels = 6.0;
+
+    /// <summary>
+    /// How deep a handle reaches along the edge, in UI pixels.
+    /// <para>
+    /// Half the band's thickness rather than a fixed count: the bands on the real
+    /// screens are thicker than the one on the layout map, and they are aimed at with
+    /// a pointer on glass rather than on a zoomed miniature, so the same handful of
+    /// pixels that is comfortable on the map is a sliver out there.
+    /// </para>
+    /// </summary>
+    public double HandleUiLength => System.Math.Max(MinimumHandleUiPixels, PixelThickness / 2);
 
     public BorderSideViewModel(PhysicalMonitor monitor, BorderSideKind kind, BorderSide side)
     {
@@ -92,7 +103,10 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
             .ToCollection()
             .Subscribe(OnSectionsChanged));
 
-        _subscriptions.Add(this.WhenAnyValue(e => e.PixelLength)
+        // Thickness as well as length: the handles are sized from it, so a band that
+        // is told how thick it is after its sections were projected would draw them
+        // with the handles of the size it was born with.
+        _subscriptions.Add(this.WhenAnyValue(e => e.PixelLength, e => e.PixelThickness)
             .Subscribe(_ =>
             {
                 foreach (var section in Sections) section.Refresh();
@@ -439,19 +453,21 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// recovers its full thickness.
     /// </para>
     /// <para>
-    /// Never more than half the section, so its middle stays reachable and a short
-    /// section can still be moved rather than only resized.
+    /// Never more than a third of the section: the two handles are drawn where they
+    /// answer, so at half each they would meet and cover a short section entirely —
+    /// hiding the colour that says what it does, and leaving nowhere to grab to move
+    /// it rather than resize it.
     /// </para>
     /// </summary>
-    double GrabMm(double boundaryMm, double sectionLengthMm)
+    public double GrabMm(double boundaryMm, double sectionLengthMm)
     {
-        var basic = ToMm(HandleUiPixels);
+        var basic = ToMm(HandleUiLength);
         var mitre = ToMm(PixelThickness);
 
         var fromEnd = System.Math.Min(boundaryMm, LengthMm - boundaryMm);
         var grab = fromEnd < mitre ? System.Math.Max(basic, mitre - fromEnd) : basic;
 
-        return System.Math.Min(grab, sectionLengthMm / 2);
+        return System.Math.Min(grab, sectionLengthMm / 3);
     }
 
     /// <summary>

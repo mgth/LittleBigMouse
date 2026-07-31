@@ -33,14 +33,39 @@
             </ItemsControl.ItemContainerTheme>
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="borderResistancePlugin:BorderSectionViewModel">
-                    <Rectangle
+                    <!-- The section, then a cap on each end marking where a press
+                         resizes instead of moving. The caps are measured by the hit
+                         test itself, so what is shown is what answers. -->
+                    <Canvas
                         Width="{Binding Width}"
                         Height="{Binding Height}"
-                        Fill="{Binding Fill}"
-                        Stroke="{Binding Stroke}"
-                        StrokeThickness="2"
-                        RadiusX="2" RadiusY="2"
-                        ToolTip.Tip="{Binding Description}"/>
+                        ToolTip.Tip="{Binding Description}"
+                        ToolTip.Placement="{Binding TipPlacement}"
+                        ToolTip.ShowDelay="700">
+
+                        <Rectangle
+                            Width="{Binding Width}"
+                            Height="{Binding Height}"
+                            Fill="{Binding Fill}"
+                            Stroke="{Binding Stroke}"
+                            StrokeThickness="2"
+                            RadiusX="2" RadiusY="2"/>
+
+                        <Rectangle
+                            Canvas.Left="0" Canvas.Top="0"
+                            Width="{Binding GripFromWidth}"
+                            Height="{Binding GripFromHeight}"
+                            Fill="{Binding Grip}"
+                            RadiusX="2" RadiusY="2"/>
+
+                        <Rectangle
+                            Canvas.Left="{Binding GripToLeft}"
+                            Canvas.Top="{Binding GripToTop}"
+                            Width="{Binding GripToWidth}"
+                            Height="{Binding GripToHeight}"
+                            Fill="{Binding Grip}"
+                            RadiusX="2" RadiusY="2"/>
+                    </Canvas>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

@@ -25,6 +25,13 @@ public static class BorderSectionBrushes
     public static readonly IBrush Free = new SolidColorBrush(Color.FromArgb(0x80, 0x70, 0x70, 0x70));
 
     /// <summary>
+    /// The grab handle at each end of a section. White reads on every fill above,
+    /// and says "this end resizes" without needing a colour of its own — the palette
+    /// is already spoken for by what the section does.
+    /// </summary>
+    public static readonly IBrush Grip = new SolidColorBrush(Color.FromArgb(0xD0, 0xFF, 0xFF, 0xFF));
+
+    /// <summary>
     /// One colour per state, the two half-blocks included: they are opposite
     /// settings — a barrier the cursor cannot pass but a window can, versus the
     /// reverse — and sharing an amber made them indistinguishable on the bands,

@@ -205,7 +205,8 @@ public sealed class BorderSectionEditorTests
         Assert.Equal(200, second.To);
     }
 
-    // 540 UI px over a 270 mm edge, so the 6 px handle is 3 mm and the 16 px mitre 8 mm.
+    // 540 UI px over a 270 mm edge: 2 px per mm. The band is 16 px thick by default,
+    // so the handle is 8 px — 4 mm — and the mitre 8 mm.
     [Fact]
     public void TouchingSectionsEachKeepTheirOwnHandle()
     {
@@ -245,6 +246,41 @@ public sealed class BorderSectionEditorTests
         // Beyond it, the press draws a new section rather than resizing that one.
         Assert.Equal((null, BorderGrab.None), side.GrabAt(40));
         Assert.Equal((null, BorderGrab.None), side.GrabAt(200));
+    }
+
+    [Fact]
+    public void TheHandleFollowsTheBandThickness()
+    {
+        var monitor = TwoMonitorsLeft();
+
+        // The same edge seen twice: the layout map's 16 px band and the 24 px one
+        // shown on the real screen. They share the section list.
+        var map = RightEdgeOf(monitor);
+        var screen = RightEdgeOf(monitor);
+        screen.PixelThickness = 24;
+
+        map.Create(50, 150);
+
+        // 8 px on the map, 12 px on the screen band — 4 mm and 6 mm here.
+        Assert.Equal(BorderGrab.ResizeFrom, map.GrabAt(54).Grab);
+        Assert.Equal(BorderGrab.Move, map.GrabAt(55).Grab);
+
+        Assert.Equal(BorderGrab.ResizeFrom, screen.GrabAt(55).Grab);
+        Assert.Equal(BorderGrab.Move, screen.GrabAt(57).Grab);
+    }
+
+    [Fact]
+    public void AShortSectionKeepsAMiddleToGrab()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        side.Create(100, 106);
+
+        // The handle would be 4 mm on each end of a 6 mm section and swallow it
+        // whole, so it is capped at a third: the middle stays there to move it by,
+        // and the two drawn caps never cover the colour that says what it does.
+        Assert.Equal(BorderGrab.ResizeFrom, side.GrabAt(101).Grab);
+        Assert.Equal(BorderGrab.Move, side.GrabAt(103).Grab);
+        Assert.Equal(BorderGrab.ResizeTo, side.GrabAt(105).Grab);
     }
 
     [Fact]

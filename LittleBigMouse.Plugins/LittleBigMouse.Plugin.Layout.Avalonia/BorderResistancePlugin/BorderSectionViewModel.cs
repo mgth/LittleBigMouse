@@ -1,4 +1,5 @@
 using System;
+using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
 using LittleBigMouse.DisplayLayout.Dimensions;
@@ -110,6 +111,48 @@ public class BorderSectionViewModel : ReactiveObject, IDisposable
     public double Height => Side.IsVertical ? Length : Side.PixelThickness;
 
     /// <summary>
+    /// The grab handles, in UI pixels along the edge.
+    /// <para>
+    /// Taken from the hit test itself rather than from a matching constant, so the
+    /// mark shows exactly where a press resizes rather than moves — including in a
+    /// mitred corner, where the handle widens, and on a short section, where it is
+    /// capped. The two ends are asked separately for that reason.
+    /// </para>
+    /// </summary>
+    double GripFrom => Side.ToPixels(Side.GrabMm(Model.From, Model.To - Model.From));
+
+    double GripTo => Side.ToPixels(Side.GrabMm(Model.To, Model.To - Model.From));
+
+    public double GripFromWidth => Side.IsVertical ? Side.PixelThickness : GripFrom;
+    public double GripFromHeight => Side.IsVertical ? GripFrom : Side.PixelThickness;
+
+    public double GripToWidth => Side.IsVertical ? Side.PixelThickness : GripTo;
+    public double GripToHeight => Side.IsVertical ? GripTo : Side.PixelThickness;
+
+    public double GripToLeft => Side.IsVertical ? 0 : Length - GripTo;
+    public double GripToTop => Side.IsVertical ? Length - GripTo : 0;
+
+    public IBrush Grip => BorderSectionBrushes.Grip;
+
+    /// <summary>
+    /// Where the tip opens: inwards, off the band.
+    /// <para>
+    /// A tooltip defaults to following the pointer, which is harmless on a button
+    /// and not at all on a surface you drag: the popup opens under the cursor and
+    /// takes the press meant for the section. Anchoring it to the section and
+    /// pushing it towards the middle of the screen keeps the band clear, and keeps
+    /// the tip on screen — an edge band has nothing beyond it.
+    /// </para>
+    /// </summary>
+    public PlacementMode TipPlacement => Side.Kind switch
+    {
+        BorderSideKind.Left => PlacementMode.Right,
+        BorderSideKind.Right => PlacementMode.Left,
+        BorderSideKind.Top => PlacementMode.Bottom,
+        _ => PlacementMode.Top
+    };
+
+    /// <summary>
     /// Derived from the shared selection, so the same section lights up in the map
     /// and on the screen at once, whichever one was clicked.
     /// </summary>
@@ -144,5 +187,12 @@ public class BorderSectionViewModel : ReactiveObject, IDisposable
         this.RaisePropertyChanged(nameof(Top));
         this.RaisePropertyChanged(nameof(Width));
         this.RaisePropertyChanged(nameof(Height));
+
+        this.RaisePropertyChanged(nameof(GripFromWidth));
+        this.RaisePropertyChanged(nameof(GripFromHeight));
+        this.RaisePropertyChanged(nameof(GripToWidth));
+        this.RaisePropertyChanged(nameof(GripToHeight));
+        this.RaisePropertyChanged(nameof(GripToLeft));
+        this.RaisePropertyChanged(nameof(GripToTop));
     }
 }

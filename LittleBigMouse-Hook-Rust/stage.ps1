@@ -4,7 +4,7 @@
 # LittleBigMouse.Hook.exe here.
 #
 # Usage:
-#   .\stage.ps1                       # build + stage under LittleBigMouse.Hook\bin\rust
+#   .\stage.ps1                       # build + stage under target\stage
 #   .\stage.ps1 -UiDir <path>         # also stage next to a UI output dir (preferred
 #                                     # by FindHookPath, which checks the sibling first)
 param([string]$UiDir)
@@ -16,7 +16,7 @@ $repo = Split-Path -Parent $root
 cargo build --release --manifest-path (Join-Path $root 'Cargo.toml')
 $src = Join-Path $root 'target\release\lbm-hook.exe'
 
-$binDir = Join-Path $repo 'LittleBigMouse.Hook\bin\rust'
+$binDir = Join-Path $root 'target\stage'
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 Copy-Item $src (Join-Path $binDir 'LittleBigMouse.Hook.exe') -Force
 Write-Host "Staged -> $binDir\LittleBigMouse.Hook.exe"

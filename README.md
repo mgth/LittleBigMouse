@@ -132,6 +132,15 @@ relaunches the app. UI and daemon logs land in `/tmp/lbm-ui.log`. If you cloned 
 `--recursive`, run `git submodule update --init --recursive` first — the HLab projects
 are submodules.
 
+### Tests
+
+```bash
+dotnet test LittleBigMouse.sln
+cargo test --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml
+```
+
+Both are what CI runs, before it builds anything for shipping.
+
 ## Usage
 
 Documentation : https://littlebigmouse.mgth.fr/docs/ and https://github.com/mgth/LittleBigMouse/wiki

@@ -56,6 +56,7 @@ Check the very nice video from Touble Chute (a very big thanks to him):
 - **Screen Looping**: Lets the cursor wrap around the desktop — leave the last screen and re-enter from the first, horizontally or vertically.
 - **Display Size Adjustments**: Allows for adjustments in the relative sizes of displays.
 - **Border Resistance**: Allow some resistance before crossing.
+- **Live Update**: Feel a layout while you edit it. Changes go straight to the mouse engine as you make them, without being saved, so you can try a resistance or a position with the real mouse instead of applying it and undoing it.
 - **Display Color and Brightness Balancing**: Offers control over color and brightness profiles of displays.
 - **Access to Display Debugging Information**: Provides detailed information from your displays and drivers.
 
@@ -149,7 +150,21 @@ Little Big Mouse provides a single-window interface with three main sections:
 
 - **Top Panel**: Access view tabs for display and display adapter information, changing relative sizes and positions of displays, and adjusting color and brightness profiles.
 - **Center Panel**: Displays information about your display devices, including makes and models, capabilities, adapters, and relative positions.
-- **Bottom Panel**: Offers options and operations, including copying config to clipboard, enabling/disabling LBM functionality, and corner crossing and looping options.
+- **Bottom Panel**: Exporting or copying the layout, and the operations that act on it — save, apply, stop, undo.
+
+### Applying a layout
+
+The apply button hands the layout to the mouse engine and saves it. The arrow next to it
+chooses *how* changes get there:
+
+- **Apply on click** — the default. Nothing reaches the engine until you press the button.
+- **Live update** — every change reaches the running engine as you make it, so the layout
+  can be felt with the real mouse straight away.
+
+Live update saves nothing: the button is still what keeps a layout, and **Undo** goes back
+to the last saved one. Nothing about it survives closing the app either — a restarted
+engine comes back to the layout you last applied, never to something you were only trying
+out.
 
 ## Support
 

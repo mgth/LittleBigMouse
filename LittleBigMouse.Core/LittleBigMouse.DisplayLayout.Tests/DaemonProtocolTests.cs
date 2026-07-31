@@ -18,6 +18,27 @@ public class DaemonProtocolTests
     }
 
     [Fact]
+    public void Rescued_IsUnderstood()
+    {
+        // The exact string the daemon sends (protocol::RESCUED). It carries no payload
+        // on purpose: the daemon does not know what the rescue should mean, only that
+        // it happened. Distinct from Stopped, which says the same thing without saying
+        // why — and why is the whole of what the UI acts on.
+        Assert.True(DaemonMessage.TryParse(
+            "<DaemonMessage><Event>Rescued</Event></DaemonMessage>", out var message));
+        Assert.Equal(LittleBigMouseEvent.Rescued, message.Event);
+    }
+
+    [Fact]
+    public void AnEventFromANewerDaemonIsRejectedRatherThanGuessed()
+    {
+        // Forward compatibility runs the other way too: the UI ignores what it does not
+        // know instead of mapping it onto something it does.
+        Assert.False(DaemonMessage.TryParse(
+            "<DaemonMessage><Event>SomethingNewerEntirely</Event></DaemonMessage>", out _));
+    }
+
+    [Fact]
     public void ProbeReport_RoundTripsThroughDaemonMessagePayload()
     {
         // Exact daemon wire shape: the report document is XML-escaped into the payload

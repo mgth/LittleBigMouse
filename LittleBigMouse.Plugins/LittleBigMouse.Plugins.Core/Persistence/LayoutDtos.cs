@@ -28,6 +28,7 @@ public class GlobalOptionsDto
     public bool? DebugTools { get; set; }
     public bool? ShowMonitorActionWarning { get; set; }
     public string? BorderValues { get; set; }
+    public string? RescueShortcut { get; set; }
     public bool? HideTrayIcon { get; set; }
 
     /// <summary>

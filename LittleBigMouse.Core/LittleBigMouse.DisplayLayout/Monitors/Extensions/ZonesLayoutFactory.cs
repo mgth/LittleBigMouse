@@ -58,6 +58,8 @@ public static class ZonesLayoutFactory
         zones.AdjustPointer = layout.Options.AdjustPointer;
         zones.AdjustSpeed = layout.Options.AdjustSpeed;
 
+        zones.RescueShortcut = layout.Options.RescueShortcut;
+
         zones.Algorithm = layout.Options.Algorithm;
         zones.Priority = layout.Options.Priority;
         zones.PriorityUnhooked = layout.Options.PriorityUnhooked;

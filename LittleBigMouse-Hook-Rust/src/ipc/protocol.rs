@@ -21,6 +21,10 @@ pub enum Command {
     /// Sweep the loaded layout's edges with the engine and broadcast a
     /// `Probed` event carrying the report.
     Probe,
+    /// Adopt this panic shortcut now, without waiting for a layout to carry it.
+    /// Recording one in the options has to take effect there and then — and has to
+    /// say so when the combination is already owned by something else.
+    Shortcut(String),
     Quit,
     Unknown(String),
 }
@@ -63,6 +67,7 @@ fn command_from(node: Node) -> Option<Command> {
         "Stop" => Command::Stop,
         "State" => Command::State,
         "Probe" => Command::Probe,
+        "Shortcut" => Command::Shortcut(payload_string(node)),
         "Quit" => Command::Quit,
         other => Command::Unknown(other.to_string()),
     })
@@ -101,6 +106,24 @@ pub const SETTING_CHANGED: &str = "<DaemonMessage><Event>SettingChanged</Event><
 pub const DESKTOP_CHANGED: &str = "<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n";
 pub const SUSPENDED: &str = "<DaemonMessage><Event>Suspended</Event></DaemonMessage>\n";
 pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>\n";
+
+/// The panic shortcut ran: the cursor is free and the engine is coming down. Carries
+/// no payload on purpose — the daemon does not know what the rescue should mean, only
+/// that it happened, and knowing nothing is what lets it work with no UI reachable.
+/// Distinct from `Stopped`, which says the same thing without saying why, and why is
+/// the whole of what the UI acts on.
+pub const RESCUED: &str = "<DaemonMessage><Event>Rescued</Event></DaemonMessage>\n";
+
+/// The panic shortcut could not be registered — almost always another application
+/// already owning the combination. Said out loud rather than logged: a rescue that
+/// silently does not exist is worse than none, because the user only finds out at the
+/// moment they need it.
+pub fn shortcut_unavailable(shortcut: &str) -> String {
+    format!(
+        "<DaemonMessage><Event>ShortcutUnavailable</Event><Payload>{}</Payload></DaemonMessage>\n",
+        escape_xml(shortcut)
+    )
+}
 
 pub const LOAD_FAILED: &str =
     "<DaemonMessage><Event>LoadFailed</Event><Payload>the layout could not be parsed</Payload></DaemonMessage>\n";

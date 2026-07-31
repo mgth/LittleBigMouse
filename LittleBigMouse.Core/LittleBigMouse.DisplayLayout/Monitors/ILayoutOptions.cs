@@ -33,6 +33,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool AdjustSpeed { get; set; } = false;
       public string Algorithm { get; set; } = "Strait";
       public string BorderValues { get; set; } = "PerModel";
+      public string RescueShortcut { get; set; } = "Ctrl+Alt+Shift+M";
       public string Priority { get; set; } = "Normal";
       public string PriorityUnhooked { get; set; } = "Below";
       public bool IsUnaryRatio { get; set; } = false;
@@ -137,6 +138,14 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// make/model) or "PerMonitor" (each physical monitor keeps its own).
    /// </summary>
    string BorderValues { get; set; }
+
+   /// <summary>
+   /// The shortcut that frees a cursor trapped where no click can reach the UI, written
+   /// the way it reads: "Ctrl+Alt+Shift+M". Held for about a second rather than tapped.
+   /// Travels to the daemon with the layout, which is what registers it — see
+   /// LittleBigMouse-Hook-Rust/src/shortcut.rs for the grammar both sides obey.
+   /// </summary>
+   string RescueShortcut { get; set; }
 
 
    /// <summary>

@@ -264,6 +264,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     }
     string _borderValues = "PerModel";
 
+    [DataMember]
+    public string RescueShortcut
+    {
+        get => _rescueShortcut;
+        set => SetUnsavedValue(ref _rescueShortcut, value);
+    }
+    string _rescueShortcut = "Ctrl+Alt+Shift+M";
+
     public ObservableCollection<string> ExcludedList { get; } = new();
 
     public string GetConfigPath(string layoutId, bool create)

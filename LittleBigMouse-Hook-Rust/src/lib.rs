@@ -16,4 +16,5 @@ pub mod ipc;
 pub mod platform;
 pub mod priority;
 pub mod shared;
+pub mod shortcut;
 pub mod zones;

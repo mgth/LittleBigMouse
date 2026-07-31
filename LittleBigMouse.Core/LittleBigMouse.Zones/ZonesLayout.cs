@@ -16,6 +16,13 @@ namespace LittleBigMouse.Zoning
         /// follow, so a client's geometry can never capture the local mouse.
         /// </summary>
         public bool Virtual {get;set;}
+        /// <summary>
+        /// The panic shortcut, carried to the daemon like every other daemon-side
+        /// setting — which is what gets it to a standalone daemon replaying its startup
+        /// file. The daemon is what registers it; nothing here reads it back.
+        /// </summary>
+        public string RescueShortcut {get; set;} = "";
+
         public string Priority {get; set;}
         public string PriorityUnhooked {get; set;}
 
@@ -54,6 +61,7 @@ namespace LittleBigMouse.Zoning
                 e => e.LoopX,
                 e => e.LoopY,
                 e => e.Virtual,
+                e => e.RescueShortcut,
                 e => e.Priority,
                 e => e.PriorityUnhooked,
                 e => e.Algorithm,

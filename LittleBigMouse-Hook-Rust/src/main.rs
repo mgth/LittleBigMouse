@@ -65,6 +65,11 @@ fn main() {
         });
     }
 
+    // The way out when the cursor is trapped where no click can reach the UI. Its
+    // own thread by design — see hook::windows::rescue_key. Started before the pump
+    // so it is already listening if the very first layout confines the cursor.
+    hook::spawn_rescue_key(shared, daemon::rescue_fired);
+
     // Heal silent OS removal of the low-level mouse hook (Windows only; no-op elsewhere).
     hook::spawn_watchdog(shared);
 

@@ -47,13 +47,27 @@ public enum LittleBigMouseEvent
     // Edge-prober report (a <ProbeReport> document in the payload): emitted after every
     // virtual Load and on an explicit Probe command. See ProbeReport.TryParse.
     Probed,
+    // The panic shortcut ran: the daemon has freed a cursor the user could not free with
+    // the mouse, and is coming down. No payload — it does not know what the rescue should
+    // mean, only that it happened, and knowing nothing is what lets it work with no UI
+    // reachable. Distinct from Stopped, which says the same thing without saying why.
+    Rescued,
+    // The panic shortcut could not be registered — almost always another application
+    // already owning the combination. Payload is the combination as it was asked for.
+    // Reported rather than logged: a rescue that silently does not exist is worse than
+    // none, because the user only finds out when they need it.
+    ShortcutUnavailable,
 }
 public enum LittleBigMouseCommand
 {
     Load,
     Run,
     Stop,
-    Quit
+    Quit,
+    // Adopt a panic shortcut now. It also travels inside the layout — which is how a
+    // standalone daemon gets one at boot — but recording one in the options has to take
+    // effect there and then, and has to say so when the combination is already taken.
+    Shortcut
 }
 
 public interface ILittleBigMouseService

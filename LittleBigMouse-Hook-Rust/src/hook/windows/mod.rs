@@ -8,6 +8,7 @@
 
 pub mod display;
 pub mod mouse;
+pub mod rescue_key;
 pub mod win_events;
 
 use std::sync::atomic::Ordering;
@@ -310,6 +311,22 @@ pub fn request_quit(shared: &Shared) {
 
 fn break_loop(shared: &Shared) {
     post(shared, WM_BREAK_LOOP);
+}
+
+/// Poke the panic-shortcut listener so it re-reads the shortcut and reconciles its
+/// registration. Posted to its own thread, never to the pump.
+pub fn post_rescue_reconfigure(shared: &Shared) {
+    let tid = shared.rescue_tid.load(Ordering::SeqCst);
+    if tid != 0 {
+        unsafe {
+            let _ = PostThreadMessageW(
+                tid,
+                rescue_key::WM_RESCUE_RECONFIGURE,
+                WPARAM(0),
+                LPARAM(0),
+            );
+        }
+    }
 }
 
 fn post(shared: &Shared, message: u32) {

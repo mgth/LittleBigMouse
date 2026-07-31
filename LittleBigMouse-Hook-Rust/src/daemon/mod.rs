@@ -72,6 +72,12 @@ pub fn receive_message(
                 }
             }
             Command::Probe => probe_loaded(shared, server),
+            // Always reconciles, even when the text is unchanged: the answer is what
+            // the user is waiting for, and a re-registration is cheap.
+            Command::Shortcut(text) => {
+                adopt_rescue_shortcut(shared, &text);
+                hook::rescue_shortcut_changed(shared);
+            }
             Command::LoadFromFile(path) => {
                 load_from_file(shared, &path);
             }
@@ -84,6 +90,56 @@ pub fn receive_message(
     }
 
     became_listening
+}
+
+/// The panic shortcut fired. Runs on the listener's own thread.
+///
+/// One thing, always: free the cursor and take the engine down. That is the whole of
+/// what can be decided without knowing anything — and knowing nothing is the point,
+/// because this runs when the UI may be unreachable behind the very cursor it is
+/// freeing, or not running at all.
+///
+/// What it should *mean* is the UI's to decide, and the UI is where the knowledge
+/// is. Previewing a layout? Then there is an experiment to throw away: it reloads
+/// the saved one and starts again. Not previewing? Then the layout that trapped the
+/// user is the one they committed to, and staying stopped is the answer — so the
+/// ordinary case needs no second press.
+///
+/// `Rescued` is broadcast before the unhook is requested, so a listening UI always
+/// sees it ahead of the `Stopped` the unhook produces. The other order would have
+/// the UI drop live preview on the stop and then find nothing left to act on.
+pub fn rescue_fired(shared: &'static Shared) {
+    eprintln!("[LittleBigMouse.Hook] rescue: freeing the cursor and stopping");
+    crate::platform::cursor::release_clip();
+    shared.broadcast(protocol::RESCUED);
+    hook::request_unhook(shared);
+    shared.paused.store(false, Ordering::SeqCst);
+}
+
+/// Adopt the panic shortcut a freshly loaded layout names, and tell the listener.
+/// It travels with the layout like every other daemon-side setting, so it arrives
+/// with the startup `LoadFromFile` too.
+fn adopt_rescue_shortcut(shared: &Shared, wanted: &str) {
+    let wanted = if wanted.trim().is_empty() {
+        crate::shortcut::DEFAULT
+    } else {
+        wanted
+    };
+    let changed = {
+        let mut current = shared
+            .rescue_shortcut
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if *current == wanted {
+            false
+        } else {
+            *current = wanted.to_string();
+            true
+        }
+    };
+    if changed {
+        hook::rescue_shortcut_changed(shared);
+    }
 }
 
 /// Sweep the last loaded layout with the edge prober and broadcast the report.
@@ -151,6 +207,8 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
         // Recover from a poisoned lock (a prior panic under the lock): a fresh Load fully replaces
         // the layout and resets tracking, so it is exactly the right place to shrug off the poison —
         // this is what lets a Stop/Start (Load) heal crossing instead of staying broken.
+        // Before the move: the layout is about to be handed to the engine.
+        adopt_rescue_shortcut(shared, &layout.rescue_shortcut);
         shared
             .engine
             .lock()
@@ -420,6 +478,37 @@ mod tests {
 
         assert_eq!(shared.unhook_requests.load(Ordering::SeqCst), 1);
         assert!(!shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn a_layout_carries_the_rescue_shortcut() {
+        // It travels with the layout like every other daemon-side setting, which is
+        // what gets it to a standalone daemon replaying Current.xml at boot.
+        let shared = Shared::new();
+        let line = LOAD_LINE.replace(
+            r#"<ZonesLayout Algorithm="Strait""#,
+            r#"<ZonesLayout RescueShortcut="Ctrl+Alt+F9" Algorithm="Strait""#,
+        );
+        replay(&shared, &format!("{line}\n"));
+
+        assert_eq!(
+            *shared.rescue_shortcut.lock().unwrap(),
+            "Ctrl+Alt+F9",
+            "the daemon must adopt what the layout names"
+        );
+    }
+
+    #[test]
+    fn a_layout_naming_no_shortcut_keeps_the_default() {
+        // Layouts written by an older UI have no such attribute; the rescue must
+        // still exist for them.
+        let shared = Shared::new();
+        replay(&shared, &format!("{LOAD_LINE}\n"));
+
+        assert_eq!(
+            *shared.rescue_shortcut.lock().unwrap(),
+            crate::shortcut::DEFAULT
+        );
     }
 
     #[test]

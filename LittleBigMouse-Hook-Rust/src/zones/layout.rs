@@ -36,6 +36,10 @@ pub struct ZonesLayout {
     pub algorithm: Algorithm,
     pub priority: Priority,
     pub priority_unhooked: Priority,
+    /// The panic shortcut, as the UI spells it (`Ctrl+Alt+Shift+M`). Travels with
+    /// the layout like every other daemon-side setting, so it reaches the daemon on
+    /// the startup replay too. Empty means "whatever the daemon defaults to".
+    pub rescue_shortcut: String,
     pub loop_x: bool,
     pub loop_y: bool,
     /// Zones of a virtual (foreign) layout, shown for inspection on another
@@ -69,6 +73,7 @@ impl Default for ZonesLayout {
             algorithm: Algorithm::Strait,
             priority: Priority::Normal,
             priority_unhooked: Priority::Above,
+            rescue_shortcut: String::new(),
             loop_x: false,
             loop_y: false,
             virtual_layout: false,
@@ -116,6 +121,7 @@ impl ZonesLayout {
         };
         layout.priority = Priority::parse(&get_string(el, "Priority"));
         layout.priority_unhooked = Priority::parse(&get_string(el, "PriorityUnhooked"));
+        layout.rescue_shortcut = get_string(el, "RescueShortcut");
 
         if let Some(main_zones) = child(el, "MainZones") {
             // Track (pixel bounds -> first ZoneId) for clone detection.

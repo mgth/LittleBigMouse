@@ -56,6 +56,7 @@ Check the very nice video from Touble Chute (a very big thanks to him):
 - **Screen Looping**: Lets the cursor wrap around the desktop — leave the last screen and re-enter from the first, horizontally or vertically.
 - **Display Size Adjustments**: Allows for adjustments in the relative sizes of displays.
 - **Border Resistance**: Allow some resistance before crossing.
+- **Rescue Shortcut**: A keyboard way out when a layout leaves the cursor somewhere it cannot escape — the one recovery that does not need a click.
 - **Live Update**: Feel a layout while you edit it. Changes go straight to the mouse engine as you make them, without being saved, so you can try a resistance or a position with the real mouse instead of applying it and undoing it.
 - **Display Color and Brightness Balancing**: Offers control over color and brightness profiles of displays.
 - **Access to Display Debugging Information**: Provides detailed information from your displays and drivers.
@@ -165,6 +166,26 @@ Live update saves nothing: the button is still what keeps a layout, and **Undo**
 to the last saved one. Nothing about it survives closing the app either — a restarted
 engine comes back to the layout you last applied, never to something you were only trying
 out.
+
+### If the cursor gets trapped
+
+A layout can leave the cursor somewhere it cannot get out of — and then Undo, Stop and the
+tray menu are all behind a click you cannot make. **Hold `Ctrl+Alt+Shift+M` for about a
+second** and the mouse comes back:
+
+- while **live update** is on, the layout you were trying is thrown away and the engine
+  goes back to the one you saved;
+- otherwise the engine stops, and the mouse behaves the way Windows alone would until you
+  start it again.
+
+The combination is yours to change under **Options → Mouse → Rescue shortcut**: click it
+and press the one you want. If another application already owns that combination, the
+setting says so — a rescue you only discover is missing when you need it would be worse
+than none.
+
+Windows only for now. Wayland has no global shortcut without a portal, and reading one
+from evdev would mean opening the keyboard devices, which is a great deal more than a
+mouse utility should ask for.
 
 ## Support
 

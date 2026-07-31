@@ -10,7 +10,7 @@
              Background="Transparent"
              >
 	<Border Background="{DynamicResource Lbm.Brushes.Pane.Background}">
-		<Grid RowDefinitions="Auto,*">
+		<Grid RowDefinitions="Auto,Auto,*">
 
 			<Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Lbm.Brushes.Card.Separator}" Padding="18,12">
 				<Grid ColumnDefinitions="*,Auto">
@@ -28,24 +28,28 @@
 				</Grid>
 			</Border>
 
-			<ScrollViewer Grid.Row="1">
+			<!-- Stays put while the rest scrolls, and gives up its explanation as soon as it
+			     stops being what you are looking at — a line of thanks should not cost a
+			     third of the panel for the whole visit. -->
+			<Border Grid.Row="1" Classes="SettingCard PinnedCard"
+			        Classes.Compact="{Binding #SettingsScroll.Offset, Converter={x:Static controls:ScrollConverters.IsScrolled}}"
+			        Margin="16,10,16,0">
+				<controls:SettingRow Icon="{StaticResource Lbm.Icon.Coffee}"
+				                     Classes.Compact="{Binding #SettingsScroll.Offset, Converter={x:Static controls:ScrollConverters.IsScrolled}}"
+				                     Header="Support LittleBigMouse"
+				                     Description="Free and open source — if it's useful to you, consider buying me a coffee">
+					<Button Click="Kofi_OnClick" ToolTip.Tip="ko-fi.com/mgth">
+						<StackPanel Orientation="Horizontal" Spacing="6">
+							<Path Data="{StaticResource Lbm.Icon.Coffee}" Width="13" Height="13" Stretch="Uniform"
+							      Fill="{DynamicResource Lbm.Brushes.Text.Primary}" VerticalAlignment="Center"/>
+							<TextBlock Text="Ko-fi" VerticalAlignment="Center"/>
+						</StackPanel>
+					</Button>
+				</controls:SettingRow>
+			</Border>
+
+			<ScrollViewer Grid.Row="2" x:Name="SettingsScroll">
 				<StackPanel Margin="16,2,16,18">
-
-					<TextBlock Classes="SectionHeader" Text="Support"/>
-
-					<Border Classes="SettingCard">
-						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Coffee}"
-						                     Header="Support LittleBigMouse"
-						                     Description="Free and open source — if it's useful to you, consider buying me a coffee">
-							<Button Click="Kofi_OnClick" ToolTip.Tip="ko-fi.com/mgth">
-								<StackPanel Orientation="Horizontal" Spacing="6">
-									<Path Data="{StaticResource Lbm.Icon.Coffee}" Width="13" Height="13" Stretch="Uniform"
-									      Fill="{DynamicResource Lbm.Brushes.Text.Primary}" VerticalAlignment="Center"/>
-									<TextBlock Text="Ko-fi" VerticalAlignment="Center"/>
-								</StackPanel>
-							</Button>
-						</controls:SettingRow>
-					</Border>
 
 					<TextBlock Classes="SectionHeader" Text="General"/>
 
@@ -153,7 +157,11 @@
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Algorithm}"
 							                     Header="Crossing algorithm"
 							                     Description="How the cursor jumps between screens"/>
-							<ListBox Classes="ChoiceCards" Margin="14,0,6,12"
+							<!-- AutoScrollToSelectedItem off: these lists hold two or three cards and are
+							     visible whole, so scrolling to the selection buys nothing — but the request
+							     travels up to the settings scroller, which then opens the panel part-way
+							     down instead of at the top. -->
+							<ListBox Classes="ChoiceCards" Margin="14,0,6,12" AutoScrollToSelectedItem="False"
 							         ItemsSource="{Binding AlgorithmList}"
 							         SelectedItem="{Binding SelectedAlgorithm}">
 								<ListBox.ItemTemplate>
@@ -240,6 +248,20 @@
 						</StackPanel>
 					</Border>
 
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"
+							                     Header="Rescue shortcut"
+							                     Description="Frees the cursor when it gets trapped where you cannot click. Hold it for about a second. One key plus at least one of Ctrl, Alt, Shift or Win.">
+								<controls:ShortcutBox Shortcut="{Binding Model.RescueShortcut, Mode=TwoWay, FallbackValue=''}"
+								                      MinWidth="170" HorizontalAlignment="Right"/>
+							</controls:SettingRow>
+							<TextBlock Classes="SettingWarning"
+							           Text="{Binding ShortcutWarning}"
+							           IsVisible="{Binding ShortcutWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+						</StackPanel>
+					</Border>
+
 					<TextBlock Classes="SectionHeader" Text="Layout"/>
 
 					<Border Classes="SettingCard">
@@ -263,7 +285,11 @@
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Ruler}"
 							                     Header="Border values"
 							                     Description="Where each monitor's bezel borders are stored"/>
-							<ListBox Classes="ChoiceCards" Margin="14,0,6,12"
+							<!-- AutoScrollToSelectedItem off: these lists hold two or three cards and are
+							     visible whole, so scrolling to the selection buys nothing — but the request
+							     travels up to the settings scroller, which then opens the panel part-way
+							     down instead of at the top. -->
+							<ListBox Classes="ChoiceCards" Margin="14,0,6,12" AutoScrollToSelectedItem="False"
 							         ItemsSource="{Binding BorderValuesList}"
 							         SelectedItem="{Binding SelectedBorderValues}">
 								<ListBox.ItemTemplate>

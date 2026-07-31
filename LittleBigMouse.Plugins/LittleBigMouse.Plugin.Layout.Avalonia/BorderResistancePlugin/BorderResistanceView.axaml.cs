@@ -48,13 +48,6 @@ public partial class BorderResistanceView : UserControl, IView<BorderResistanceV
 
     BorderResistanceViewModel? ViewModel => DataContext as BorderResistanceViewModel;
 
-    /// <summary>
-    /// Canvas the bands draw their reference lines into. It belongs to the view
-    /// rather than to a band because the line has to cross the whole monitor, and a
-    /// band clips itself to its own mitred shape.
-    /// </summary>
-    internal Canvas GuidesCanvas => Guides;
-
 
     /// <summary>
     /// Leaving the view mode — or closing the main window — takes the on-screen

@@ -33,6 +33,9 @@ public partial class BorderSideStrip : UserControl
     /// <summary>Where a moved section would start with no snapping — see the Move case.</summary>
     double _movedFromMm;
 
+    /// <summary>Our layer in the presenter's shared panel, holding the reference line.</summary>
+    Canvas? _reference;
+
     public BorderSideStrip()
     {
         InitializeComponent();
@@ -340,44 +343,64 @@ public partial class BorderSideStrip : UserControl
     /// language as the anchor lines shown when dragging a monitor.
     /// </summary>
     /// <summary>
-    /// Carry the guide across the monitor, towards whatever the boundary lined up
-    /// with. The band alone can only say "this caught something"; the line reaching
-    /// the opposite side is what shows it met the section over there, or the screen
-    /// edge beyond it.
+    /// Carry the guide across the whole layout, towards whatever the boundary lined
+    /// up with. The band alone can only say "this caught something"; the line running
+    /// through the neighbouring screens is what shows it met the section over there,
+    /// or that screen's edge.
     /// <para>
-    /// The bands live on a real screen too, one window each, where there is no view
-    /// spanning the monitor to draw into — there the colour carries the whole
-    /// message.
+    /// Drawn into the presenter's panel, the one surface spanning every monitor —
+    /// the same one the anchor lines use when a screen is dragged around. A band
+    /// clips itself to its mitred shape and a monitor's overlay stops at that
+    /// monitor, so neither can reach past its own screen.
+    /// </para>
+    /// <para>
+    /// The bands live on real screens too, one window each, where no such surface
+    /// exists — there the colour carries the whole message.
     /// </para>
     /// </summary>
     void ShowReference(BorderSideViewModel vm, double at, SnapKind kind)
     {
-        var view = this.FindAncestorOfType<BorderResistanceView>();
-        if (view == null) return;
-
-        var guides = view.GuidesCanvas;
-        guides.Children.Clear();
+        ClearReference();
 
         // The edge's own ends need no explaining: the band already ends there.
         if (kind == SnapKind.EdgeEnd) return;
 
-        guides.Children.Add(new Line
+        var panel = this.GetPresenter()?.MainPanel;
+        if (panel == null) return;
+
+        // Let the framework map the band's coordinate into the shared surface rather
+        // than re-deriving it from ratios and origins.
+        var here = vm.IsVertical ? new Point(0, at) : new Point(at, 0);
+        if (this.TranslatePoint(here, panel) is not { } origin) return;
+
+        _reference = new Canvas { IsHitTestVisible = false };
+        _reference.Children.Add(new Line
         {
-            StartPoint = vm.IsVertical ? new Point(0, at) : new Point(at, 0),
+            StartPoint = vm.IsVertical ? new Point(0, origin.Y) : new Point(origin.X, 0),
             EndPoint = vm.IsVertical
-                ? new Point(view.Bounds.Width, at)
-                : new Point(at, view.Bounds.Height),
+                ? new Point(panel.Bounds.Width, origin.Y)
+                : new Point(origin.X, panel.Bounds.Height),
             Stroke = SnapGuideBrushes.For(kind),
             StrokeThickness = 1,
             StrokeDashArray = [4, 4],
             Opacity = 0.85
         });
+
+        panel.Children.Add(_reference);
+    }
+
+    void ClearReference()
+    {
+        if (_reference == null) return;
+
+        (_reference.Parent as Panel)?.Children.Remove(_reference);
+        _reference = null;
     }
 
     void ClearGuides()
     {
         Overlay.Children.Clear();
-        this.FindAncestorOfType<BorderResistanceView>()?.GuidesCanvas.Children.Clear();
+        ClearReference();
     }
 
     /// <returns>Whether a guide was drawn, so a caller can fall back to the other end.</returns>

@@ -70,7 +70,13 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- Snap guide and in-progress outline, drawn only while dragging. -->
+        <!-- The outline of a section being swept out, drawn only by the band under
+             the hand. -->
         <Canvas x:Name="Overlay" IsHitTestVisible="False" ClipToBounds="False"/>
+
+        <!-- The snap guide, kept on its own layer because it does not belong to this
+             band: it is published for the edge and drawn by every band showing it,
+             so clearing it must not take the outline above with it. -->
+        <Canvas x:Name="Guides" IsHitTestVisible="False" ClipToBounds="False"/>
     </Grid>
 </UserControl>

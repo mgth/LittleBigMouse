@@ -23,6 +23,21 @@ public static class ScreenSectionsOverlay
 
     static readonly List<ScreenSectionsWindow> Windows = [];
 
+    /// <summary>
+    /// One screen, with what it takes to put the reference line where the layout
+    /// says it falls: the monitor for millimetres, the screen for pixels.
+    /// </summary>
+    sealed record Screen(PhysicalMonitor Monitor, PixelRect Bounds, double Scaling, GuideLineWindow Line);
+
+    static readonly List<Screen> Screens = [];
+
+    static ScreenSectionsOverlay()
+    {
+        // Subscribed for good: with the overlay down there are no screens to draw
+        // on, and the notification costs an empty loop.
+        BorderSectionGuide.Changed += OnGuideChanged;
+    }
+
     public static event Action? Changed;
 
     public static bool Visible
@@ -42,6 +57,9 @@ public static class ScreenSectionsOverlay
     {
         foreach (var window in Windows) window.Close();
         Windows.Clear();
+
+        foreach (var screen in Screens) screen.Line.Close();
+        Screens.Clear();
 
         if (!Visible || layout == null) return;
 
@@ -92,6 +110,53 @@ public static class ScreenSectionsOverlay
                 window.ShowAt(position, width, height, scaling);
                 Windows.Add(window);
             }
+
+            // Placed and measured with the bands rather than when a boundary
+            // catches something: a window made mid-gesture arrives late, and one
+            // moved mid-gesture arrives in the wrong place. Shown once so the
+            // windowing system settles its size and position, then out of the way
+            // until a guide needs it.
+            var line = new GuideLineWindow();
+            line.ShowAt(new PixelPoint(bounds.X, bounds.Y), bounds.Width, bounds.Height, scaling);
+            line.Hide();
+
+            Screens.Add(new Screen(monitor, bounds, scaling, line));
         }
+    }
+
+    /// <summary>
+    /// Put the reference line on every screen it crosses. The bands draw the guide
+    /// on the edge it belongs to; this is the line that says what it lined up WITH,
+    /// which is the part that lives away from that edge.
+    /// </summary>
+    static void OnGuideChanged(BorderGuide? guide)
+    {
+        foreach (var screen in Screens)
+        {
+            if (guide is { } g && Place(screen, g)) continue;
+
+            screen.Line.Hide();
+        }
+    }
+
+    static bool Place(Screen screen, BorderGuide guide)
+    {
+        // The edge's own ends need no explaining: the band already ends there. Same
+        // rule as on the layout map.
+        if (guide.Kind == SnapKind.EdgeEnd) return false;
+
+        var projection = screen.Monitor.DepthProjection;
+
+        var originMm = guide.IsVertical ? projection.Y : projection.X;
+        var lengthMm = guide.IsVertical ? projection.Height : projection.Width;
+
+        if (lengthMm <= 0) return false;
+        if (guide.LayoutMm < originMm || guide.LayoutMm > originMm + lengthMm) return false;
+
+        // A fraction of the screen, and nothing more: the window covers it, so it
+        // turns that into its own pixels without anyone here knowing its scaling.
+        screen.Line.Mark((guide.LayoutMm - originMm) / lengthMm, guide.IsVertical, guide.Kind);
+
+        return true;
     }
 }

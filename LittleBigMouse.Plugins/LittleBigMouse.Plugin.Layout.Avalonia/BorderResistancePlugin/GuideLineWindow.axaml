@@ -1,0 +1,28 @@
+<avalonia:EdgeOverlayWindow
+        x:Class="LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin.GuideLineWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+
+        xmlns:avalonia="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia"
+
+        mc:Ignorable="d"
+        d:DesignHeight="400" d:DesignWidth="400"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        CanResize="False"
+        WindowDecorations="None"
+
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+	<!-- Geometry set in code: the line runs across whichever way the guide points. -->
+	<Canvas IsHitTestVisible="False">
+		<Line x:Name="Guide"
+		      StrokeThickness="1"
+		      StrokeDashArray="4,4"
+		      Opacity="0.85"/>
+	</Canvas>
+</avalonia:EdgeOverlayWindow>

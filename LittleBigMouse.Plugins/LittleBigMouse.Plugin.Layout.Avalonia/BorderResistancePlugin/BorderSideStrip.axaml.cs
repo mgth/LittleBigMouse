@@ -54,6 +54,25 @@ public partial class BorderSideStrip : UserControl
         DataContextChanged += (_, _) => UpdateGeometry();
     }
 
+    // The guide is published for the edge, not owned by the band that draws it: the
+    // bands on the real screens come and go with the overlay, and one of them may be
+    // the very one leading the gesture the layout map has to show.
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+
+        BorderSectionGuide.Changed += OnGuideChanged;
+        OnGuideChanged(BorderSectionGuide.Current);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        BorderSectionGuide.Changed -= OnGuideChanged;
+        ClearGuide();
+
+        base.OnDetachedFromVisualTree(e);
+    }
+
     /// <summary>
     /// Double click takes all the free room there is: a section grows until it meets
     /// its neighbours, and empty space becomes a section filling the same stretch.
@@ -203,7 +222,9 @@ public partial class BorderSideStrip : UserControl
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         var vm = ViewModel;
-        ClearGuides();
+
+        Overlay.Children.Clear();
+        BorderSectionGuide.Clear();
 
         var created = _gesture?.Release(AlongMm(e), SnapEnabled(e.KeyModifiers));
 
@@ -236,28 +257,63 @@ public partial class BorderSideStrip : UserControl
     //==================//
 
     /// <summary>
-    /// Turn what the gesture reports into the outline and the guides. The gesture
-    /// has already applied its edit; this only says so on screen.
+    /// Turn what the gesture reports into the outline, and publish the guide. The
+    /// gesture has already applied its edit; this only says so on screen.
     /// </summary>
     void Render(BorderSideViewModel vm, BorderGestureFeedback feedback, bool snap)
     {
         if (feedback is { PreviewFromMm: { } from, PreviewToMm: { } to })
         {
             DrawPreview(vm, from, to);
+            // A section is swept out from a fixed anchor, so only the moving end
+            // can catch anything.
+            PublishGuide(vm, snap, to);
             return;
         }
 
-        if (feedback.GuideMm is not { } guide) return;
-
         // A moved section keeps its length, so at most one of its ends can have
-        // caught a target; try the far one when the near one found nothing.
-        if (ShowGuide(vm, guide, snap)) return;
-        if (feedback.SecondGuideMm is { } second) ShowGuide(vm, second, snap, keep: true);
+        // caught a target; the far one is tried when the near one found nothing.
+        PublishGuide(vm, snap, feedback.GuideMm, feedback.SecondGuideMm);
+    }
+
+    /// <summary>
+    /// Say where the boundary caught something, for every band showing this edge —
+    /// this one included, which draws it from the same notification as the others.
+    /// </summary>
+    void PublishGuide(BorderSideViewModel vm, bool snap, params double?[] candidates)
+    {
+        if (snap)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (candidate is not { } mm) continue;
+                if (vm.MatchedTarget(mm, _gesture?.Target) is not { } target) continue;
+
+                // Also in layout coordinates: the bands match this guide by their
+                // own edge, the screens by where it falls across them.
+                BorderSectionGuide.Show(vm.Side, mm, target.Kind, vm.OriginMm + mm, vm.IsVertical);
+                return;
+            }
+        }
+
+        BorderSectionGuide.Clear();
+    }
+
+    void OnGuideChanged(BorderGuide? guide)
+    {
+        var vm = ViewModel;
+
+        ClearGuide();
+
+        if (vm == null || guide is not { } g) return;
+        if (!ReferenceEquals(g.Side, vm.Side)) return;
+
+        DrawGuide(vm, g.Mm, g.Kind);
     }
 
     void DrawPreview(BorderSideViewModel vm, double fromMm, double toMm)
     {
-        ClearGuides();
+        Overlay.Children.Clear();
 
         var from = vm.ToPixels(System.Math.Min(fromMm, toMm));
         var length = vm.ToPixels(System.Math.Abs(toMm - fromMm));
@@ -274,8 +330,6 @@ public partial class BorderSideStrip : UserControl
         Canvas.SetLeft(preview, vm.IsVertical ? 0 : from);
         Canvas.SetTop(preview, vm.IsVertical ? from : 0);
         Overlay.Children.Add(preview);
-
-        ShowGuide(vm, toMm, snap: true, keep: true);
     }
 
     /// <summary>
@@ -337,35 +391,32 @@ public partial class BorderSideStrip : UserControl
         _reference = null;
     }
 
-    void ClearGuides()
+    void ClearGuide()
     {
-        Overlay.Children.Clear();
+        Guides.Children.Clear();
         ClearReference();
     }
 
-    /// <returns>Whether a guide was drawn, so a caller can fall back to the other end.</returns>
-    bool ShowGuide(BorderSideViewModel vm, double mm, bool snap, bool keep = false)
+    /// <summary>
+    /// Mark a boundary that landed on a snap target — the same visual language as
+    /// the anchor lines shown when dragging a monitor. Drawn on every band showing
+    /// this edge, whichever one the hand is on.
+    /// </summary>
+    void DrawGuide(BorderSideViewModel vm, double mm, SnapKind kind)
     {
-        if (!keep) ClearGuides();
-        if (!snap) return false;
-
-        // The section being edited is not a target for its own boundary.
-        if (vm.MatchedTarget(mm, _gesture?.Target) is not { } target) return false;
-
         var at = vm.ToPixels(mm);
 
         // Across the band, in the colour of whatever the boundary caught.
-        Overlay.Children.Add(new Line
+        Guides.Children.Add(new Line
         {
             StartPoint = vm.IsVertical ? new Point(0, at) : new Point(at, 0),
             EndPoint = vm.IsVertical
                 ? new Point(vm.PixelThickness, at)
                 : new Point(at, vm.PixelThickness),
-            Stroke = SnapGuideBrushes.For(target.Kind),
+            Stroke = SnapGuideBrushes.For(kind),
             StrokeThickness = 3
         });
 
-        ShowReference(vm, at, target.Kind);
-        return true;
+        ShowReference(vm, at, kind);
     }
 }

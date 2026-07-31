@@ -20,12 +20,40 @@ use crate::shared::Shared;
 #[cfg(windows)]
 pub mod windows;
 #[cfg(windows)]
-pub use windows::{register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog};
+pub use windows::{
+    register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
+};
 
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "linux")]
 pub use linux::{register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog};
+
+/// Start the panic-shortcut listener: a global hotkey that frees a cursor trapped
+/// where no click can reach the UI. `on_fire` runs on the listener's own thread.
+///
+/// Linux gets nothing yet. There is no global shortcut without a portal, and reading
+/// one from evdev would mean opening the keyboard devices — the keylogging surface
+/// this design exists to avoid. Tracked in mgth/LittleBigMouse#526.
+pub fn spawn_rescue_key(shared: &'static Shared, on_fire: fn(&'static Shared)) {
+    #[cfg(windows)]
+    windows::rescue_key::spawn(shared, on_fire);
+    #[cfg(not(windows))]
+    {
+        let _ = (shared, on_fire);
+    }
+}
+
+/// Tell the listener the desired shortcut changed. Safe to call when it never
+/// started — it is a post to a thread id that is still zero.
+pub fn rescue_shortcut_changed(shared: &Shared) {
+    #[cfg(windows)]
+    windows::post_rescue_reconfigure(shared);
+    #[cfg(not(windows))]
+    {
+        let _ = shared;
+    }
+}
 
 /// Count of deduped mouse-move events the active backend has processed.
 /// Lightweight instrumentation (one relaxed increment) to observe the hook

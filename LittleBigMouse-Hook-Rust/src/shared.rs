@@ -31,6 +31,17 @@ pub struct Shared {
     /// Thread id of the message pump, for `PostThreadMessageW`
     /// (C++ `Hooker::_currentThreadId`). Zero until the pump starts.
     pub pump_tid: AtomicU32,
+    /// Thread id of the panic-shortcut listener, for `PostThreadMessageW`. Zero
+    /// until it starts. Deliberately not the pump's: the rescue must not depend on
+    /// the thread it exists to rescue you from.
+    pub rescue_tid: AtomicU32,
+    /// Whether the panic shortcut is currently registered with the OS. False when
+    /// another application already owns the combination — the UI says so rather
+    /// than leaving the user with a rescue that does not exist.
+    pub rescue_registered: AtomicBool,
+    /// The panic shortcut as the layout spells it (`Ctrl+Alt+Shift+M`). Read by the
+    /// listener whenever it is asked to reconcile.
+    pub rescue_shortcut: Mutex<String>,
     /// How many times a `Load` has asked for the hook to come down. Taking it down
     /// tears the mouse, focus, desktop and display hooks apart and destroys the
     /// display window, so a `Load` that is immediately followed by a `Run` skips it —
@@ -65,6 +76,9 @@ impl Shared {
             suspended: AtomicBool::new(false),
             want_quit: AtomicBool::new(false),
             pump_tid: AtomicU32::new(0),
+            rescue_tid: AtomicU32::new(0),
+            rescue_registered: AtomicBool::new(false),
+            rescue_shortcut: Mutex::new(crate::shortcut::DEFAULT.to_string()),
             unhook_requests: AtomicU32::new(0),
             // C++ Hooker defaults, until a layout overrides them.
             priority: AtomicU8::new(Priority::Normal.as_u8()),

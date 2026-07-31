@@ -217,6 +217,28 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                     Dispatcher.UIThread.Invoke(() =>
                         DaemonLayoutInfo = string.IsNullOrEmpty(e.Payload) ? "load failed" : e.Payload);
                     break;
+                // The panic shortcut ran. Ending live preview is not cosmetic: the pump
+                // would otherwise hand the daemon back, within its next tick, the very
+                // geometry the user just escaped from.
+                // The panic shortcut ran: the daemon has freed the cursor and is coming
+                // down. That is all it can decide knowing nothing — and it deliberately
+                // knows nothing, because it must work with no UI reachable at all.
+                //
+                // What it means is ours. Previewing? Then there is an experiment to
+                // throw away: drop it, go back to the saved layout and start again.
+                // Not previewing? Then what trapped the user is what they committed to,
+                // and leaving the engine down is the right answer — no second press.
+                case LittleBigMouseEvent.Rescued:
+                    Dispatcher.UIThread.Invoke(() =>
+                    {
+                        var wasPreviewing = LiveUpdate;
+                        LiveUpdate = false;
+                        DaemonLayoutInfo = wasPreviewing
+                            ? "rescued: back to the saved layout"
+                            : "rescued: engine stopped";
+                        if (wasPreviewing) _ = AbandonPreviewAsync();
+                    });
+                    break;
                 case LittleBigMouseEvent.SettingsChanged:
                 case LittleBigMouseEvent.DisplayChanged:
                 case LittleBigMouseEvent.DesktopChanged:
@@ -224,8 +246,11 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                 case LittleBigMouseEvent.Paused:
                 case LittleBigMouseEvent.Connected:
                     break;
+                // Anything else — including events a newer daemon knows about and this
+                // build does not — is not ours to react to. This used to throw, which
+                // made every Suspended, Resumed and Probed fault the handler.
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(e.Event), e.Event, null);
+                    break;
             }
             //Dispatcher.UIThread.Invoke(new Action(() =>
             //    Running = e.Event switch
@@ -370,6 +395,18 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         {
             if (Model != null) _persistence.SaveEnabled(Model);
         });
+
+    /// <summary>
+    /// The panic shortcut interrupted a live preview: throw the experiment away and put
+    /// the engine back on the layout the user actually saved. Nothing is written — the
+    /// preview never was — so this is a pure reload plus a fresh start.
+    /// </summary>
+    async Task AbandonPreviewAsync()
+    {
+        await LoadAsync();
+        if (Model is null || Model.IsVirtual) return;
+        await _service.StartAsync(Model.ComputeZones());
+    }
 
     Task LoadAsync() =>
         Task.Run(() =>

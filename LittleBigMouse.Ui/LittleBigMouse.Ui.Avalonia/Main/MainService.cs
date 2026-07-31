@@ -416,8 +416,16 @@ public class MainService : ReactiveModel, IMainService
             case LittleBigMouseEvent.Loaded:
             case LittleBigMouseEvent.LoadFailed:
                 break;
+            // The panic shortcut ran. Its two steps announce themselves through the
+            // ordinary events as well — a restore reloads, a stop unhooks — so the tray
+            // icon is already right; the location control is what has to act.
+            case LittleBigMouseEvent.Rescued:
+                break;
+            // Anything else, including events only a newer daemon knows about, is not
+            // ours to reconcile. This used to throw, which faulted the handler on every
+            // Suspended, Resumed and Probed.
             default:
-                throw new ArgumentOutOfRangeException(nameof(args.Event), args.Event, null);
+                break;
         }
     }
 

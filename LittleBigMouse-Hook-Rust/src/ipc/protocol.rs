@@ -102,6 +102,13 @@ pub const DESKTOP_CHANGED: &str = "<DaemonMessage><Event>DesktopChanged</Event><
 pub const SUSPENDED: &str = "<DaemonMessage><Event>Suspended</Event></DaemonMessage>\n";
 pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>\n";
 
+/// The panic shortcut ran: the cursor is free and the engine is coming down. Carries
+/// no payload on purpose — the daemon does not know what the rescue should mean, only
+/// that it happened, and knowing nothing is what lets it work with no UI reachable.
+/// Distinct from `Stopped`, which says the same thing without saying why, and why is
+/// the whole of what the UI acts on.
+pub const RESCUED: &str = "<DaemonMessage><Event>Rescued</Event></DaemonMessage>\n";
+
 pub const LOAD_FAILED: &str =
     "<DaemonMessage><Event>LoadFailed</Event><Payload>the layout could not be parsed</Payload></DaemonMessage>\n";
 

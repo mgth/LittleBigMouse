@@ -47,6 +47,11 @@ public enum LittleBigMouseEvent
     // Edge-prober report (a <ProbeReport> document in the payload): emitted after every
     // virtual Load and on an explicit Probe command. See ProbeReport.TryParse.
     Probed,
+    // The panic shortcut ran: the daemon has freed a cursor the user could not free with
+    // the mouse, and is coming down. No payload — it does not know what the rescue should
+    // mean, only that it happened, and knowing nothing is what lets it work with no UI
+    // reachable. Distinct from Stopped, which says the same thing without saying why.
+    Rescued,
 }
 public enum LittleBigMouseCommand
 {

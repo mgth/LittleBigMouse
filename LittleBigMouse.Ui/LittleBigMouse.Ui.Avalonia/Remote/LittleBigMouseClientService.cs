@@ -114,6 +114,11 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
     }
 
 
+    public Task SendShortcutAsync(string shortcut, CancellationToken token = default) =>
+        SendMessagesAsync(
+            [CommandMessage.WithText(LittleBigMouseCommand.Shortcut, shortcut ?? "")],
+            token, persist: false);
+
     // The topology epilogue runs on explicit Stop/Quit only — NOT on a Dead daemon: the
     // socket layer auto-relaunches the daemon and MainService auto-restarts the engine
     // (Connected→Stopped→Start), so restoring there would fight the recovery. A daemon

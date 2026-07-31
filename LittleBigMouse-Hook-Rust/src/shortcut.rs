@@ -83,7 +83,44 @@ fn virtual_key(name: &str) -> Option<u32> {
         // Fall through: "f" prefixes nothing else in this table.
     }
 
+    if let Some(digit) = lower.strip_prefix("numpad") {
+        if let Ok(n) = digit.parse::<u32>() {
+            if n <= 9 {
+                return Some(0x60 + n);
+            }
+        }
+    }
+
+    if let Some(index) = lower.strip_prefix("oem") {
+        // OEM keys are positions, not characters: VK_OEM_3 is ` on a QWERTY board and
+        // ² on an AZERTY one. Registering the position is what makes a shortcut mean
+        // the same physical key whatever the layout says it prints.
+        if let Ok(n) = index.parse::<u32>() {
+            return match n {
+                1 => Some(0xBA),
+                2 => Some(0xBF),
+                3 => Some(0xC0),
+                4 => Some(0xDB),
+                5 => Some(0xDC),
+                6 => Some(0xDD),
+                7 => Some(0xDE),
+                8 => Some(0xDF),
+                102 => Some(0xE2),
+                _ => None,
+            };
+        }
+    }
+
     Some(match lower.as_str() {
+        "oemplus" => 0xBB,
+        "oemcomma" => 0xBC,
+        "oemminus" => 0xBD,
+        "oemperiod" => 0xBE,
+        "numpadmultiply" => 0x6A,
+        "numpadadd" => 0x6B,
+        "numpadsubtract" => 0x6D,
+        "numpaddecimal" => 0x6E,
+        "numpaddivide" => 0x6F,
         "space" => 0x20,
         "escape" | "esc" => 0x1B,
         "enter" | "return" => 0x0D,
@@ -129,6 +166,34 @@ mod tests {
         assert_eq!(Shortcut::parse("Ctrl+7").unwrap().key, 0x37);
         assert_eq!(Shortcut::parse("Win+Space").unwrap().key, 0x20);
         assert_eq!(Shortcut::parse("Alt+PageDown").unwrap().key, 0x22);
+    }
+
+    #[test]
+    fn reads_punctuation_and_the_numeric_keypad() {
+        // The half a French keyboard is made of. OEM keys name a position, not a
+        // character: Oem3 is ` on QWERTY and ² on AZERTY, and both register the same
+        // physical key. Every name here has to match ShortcutBox.KeyName exactly — that
+        // agreement is the contract, and nothing but these tests enforces it.
+        assert_eq!(Shortcut::parse("Ctrl+Oem1").unwrap().key, 0xBA);
+        assert_eq!(Shortcut::parse("Ctrl+Oem3").unwrap().key, 0xC0);
+        assert_eq!(Shortcut::parse("Ctrl+Oem7").unwrap().key, 0xDE);
+        assert_eq!(Shortcut::parse("Ctrl+Oem8").unwrap().key, 0xDF);
+        assert_eq!(Shortcut::parse("Ctrl+Oem102").unwrap().key, 0xE2);
+        assert_eq!(Shortcut::parse("Ctrl+OemPlus").unwrap().key, 0xBB);
+        assert_eq!(Shortcut::parse("Ctrl+OemComma").unwrap().key, 0xBC);
+        assert_eq!(Shortcut::parse("Ctrl+OemMinus").unwrap().key, 0xBD);
+        assert_eq!(Shortcut::parse("Ctrl+OemPeriod").unwrap().key, 0xBE);
+
+        assert_eq!(Shortcut::parse("Ctrl+NumPad0").unwrap().key, 0x60);
+        assert_eq!(Shortcut::parse("Ctrl+NumPad9").unwrap().key, 0x69);
+        assert_eq!(Shortcut::parse("Ctrl+NumPadMultiply").unwrap().key, 0x6A);
+        assert_eq!(Shortcut::parse("Ctrl+NumPadAdd").unwrap().key, 0x6B);
+        assert_eq!(Shortcut::parse("Ctrl+NumPadSubtract").unwrap().key, 0x6D);
+        assert_eq!(Shortcut::parse("Ctrl+NumPadDecimal").unwrap().key, 0x6E);
+        assert_eq!(Shortcut::parse("Ctrl+NumPadDivide").unwrap().key, 0x6F);
+
+        assert!(Shortcut::parse("Ctrl+Oem9").is_none());
+        assert!(Shortcut::parse("Ctrl+NumPad10").is_none());
     }
 
     #[test]

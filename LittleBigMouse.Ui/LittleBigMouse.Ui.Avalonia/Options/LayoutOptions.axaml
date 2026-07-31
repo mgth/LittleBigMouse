@@ -240,6 +240,20 @@
 						</StackPanel>
 					</Border>
 
+					<Border Classes="SettingCard">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"
+							                     Header="Rescue shortcut"
+							                     Description="Frees the cursor when it gets trapped where you cannot click. Hold it for about a second. One key plus at least one of Ctrl, Alt, Shift or Win.">
+								<controls:ShortcutBox Shortcut="{Binding Model.RescueShortcut, Mode=TwoWay, FallbackValue=''}"
+								                      MinWidth="170" HorizontalAlignment="Right"/>
+							</controls:SettingRow>
+							<TextBlock Classes="SettingWarning"
+							           Text="{Binding ShortcutWarning}"
+							           IsVisible="{Binding ShortcutWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+						</StackPanel>
+					</Border>
+
 					<TextBlock Classes="SectionHeader" Text="Layout"/>
 
 					<Border Classes="SettingCard">

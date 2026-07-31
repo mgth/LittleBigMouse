@@ -72,6 +72,12 @@ pub fn receive_message(
                 }
             }
             Command::Probe => probe_loaded(shared, server),
+            // Always reconciles, even when the text is unchanged: the answer is what
+            // the user is waiting for, and a re-registration is cheap.
+            Command::Shortcut(text) => {
+                adopt_rescue_shortcut(shared, &text);
+                hook::rescue_shortcut_changed(shared);
+            }
             Command::LoadFromFile(path) => {
                 load_from_file(shared, &path);
             }

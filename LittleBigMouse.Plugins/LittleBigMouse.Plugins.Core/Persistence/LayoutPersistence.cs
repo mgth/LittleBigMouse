@@ -146,6 +146,7 @@ public abstract class LayoutPersistence : ILayoutPersistence
         o.VcpControl = dto.VcpControl ?? o.VcpControl;
         o.ShowMonitorActionWarning = dto.ShowMonitorActionWarning ?? o.ShowMonitorActionWarning;
         o.BorderValues = dto.BorderValues ?? o.BorderValues;
+        o.RescueShortcut = dto.RescueShortcut ?? o.RescueShortcut;
         o.HideTrayIcon = dto.HideTrayIcon ?? o.HideTrayIcon;
     }
 
@@ -505,6 +506,7 @@ public abstract class LayoutPersistence : ILayoutPersistence
             VcpControl = o.VcpControl,
             ShowMonitorActionWarning = o.ShowMonitorActionWarning,
             BorderValues = o.BorderValues,
+            RescueShortcut = o.RescueShortcut,
             HideTrayIcon = o.HideTrayIcon,
             ExcludedDefaultsVersion = _excludedDefaultsVersion
         });

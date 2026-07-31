@@ -12,14 +12,20 @@ using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using Avalonia.Threading;
 using LittleBigMouse.Ui.Avalonia.Main;
+using LittleBigMouse.Ui.Avalonia.Remote;
+using LittleBigMouse.Zoning;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Options;
 
 public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
 {
-    public LbmOptionsViewModel(IProcessesCollector collector, IMainService mainService)
+    public LbmOptionsViewModel(
+        IProcessesCollector collector,
+        IMainService mainService,
+        ILittleBigMouseClientService daemon)
     {
         // Turning a permission OFF must fix the current layout right away, not
         // wait for the next monitor move: compact resolves the existing overlaps
@@ -74,6 +80,28 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             .Subscribe(p => Pattern = p?.Caption??"")
             .DisposeWith(this);
 
+        // The daemon is what registers the rescue shortcut, so it is the only one who
+        // knows whether the registration took. Reported rather than logged: a rescue
+        // that silently does not exist is worse than none, because the user only finds
+        // out at the moment they need it.
+        daemon.DaemonEventReceived += OnDaemonEvent;
+
+        // Send it as soon as it is recorded, not at the next Apply. It rides inside the
+        // layout too — that is what gets one to a standalone daemon at boot — but
+        // waiting for an Apply would mean recording a combination, seeing nothing
+        // happen, and having no way to tell "it works" from "something else owns it".
+        // Clearing the warning here makes it a fresh attempt: whatever comes back is
+        // about the combination now being asked for.
+        this.WhenAnyValue(e => e.Model.RescueShortcut)
+            .Where(shortcut => !string.IsNullOrWhiteSpace(shortcut))
+            .DistinctUntilChanged()
+            .Subscribe(shortcut =>
+            {
+                ShortcutWarning = "";
+                _ = daemon.SendShortcutAsync(shortcut);
+            })
+            .DisposeWith(this);
+
         collector.SeenProcesses
             .ToObservableChangeSet()
             .Transform(p => new SeenProcessViewModel(p,p, this))
@@ -81,6 +109,21 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             .Subscribe()
             .DisposeWith(this);
     }
+
+    void OnDaemonEvent(object? sender, LittleBigMouseServiceEventArgs e)
+    {
+        if (e.Event != LittleBigMouseEvent.ShortcutUnavailable) return;
+        Dispatcher.UIThread.Post(() => ShortcutWarning =
+            $"{e.Payload} is already taken by another application — the rescue shortcut is NOT active.");
+    }
+
+    /// <summary>Empty while the rescue shortcut is registered and working.</summary>
+    public string ShortcutWarning
+    {
+        get => _shortcutWarning;
+        private set => this.RaiseAndSetIfChanged(ref _shortcutWarning, value);
+    }
+    string _shortcutWarning = "";
 
     void CompactWhenTurnedOff(
         System.Linq.Expressions.Expression<Func<LbmOptionsViewModel, bool>> option,

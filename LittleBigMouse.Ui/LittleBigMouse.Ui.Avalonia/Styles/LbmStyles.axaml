@@ -33,6 +33,15 @@
 		<Setter Property="Margin" Value="4,14,0,4"/>
 	</Style>
 
+	<!-- A setting that is not doing what it says. Inside the card, under the row it
+	     belongs to, because it is about that row and nothing else. -->
+	<Style Selector="TextBlock.SettingWarning">
+		<Setter Property="FontSize" Value="12"/>
+		<Setter Property="TextWrapping" Value="Wrap"/>
+		<Setter Property="Foreground" Value="{DynamicResource Lbm.Brushes.Badge.Virtual.Foreground}"/>
+		<Setter Property="Margin" Value="14,0,14,12"/>
+	</Style>
+
 	<Style Selector="Border.SettingCard">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Card.Background}"/>
 		<Setter Property="BorderBrush" Value="{DynamicResource Lbm.Brushes.Card.Border}"/>

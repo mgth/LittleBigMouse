@@ -103,6 +103,21 @@
 				</Setter>
 			</ControlTheme>
 
+			<!-- The shortcut recorder is a button whose content IS its value: it shows the
+			     combination, and says what it is waiting for while it waits. Based on the
+			     Button theme so it looks like one; keyed on its own type so selectors
+			     written against ShortcutBox actually match it. -->
+			<ControlTheme x:Key="{x:Type controls:ShortcutBox}" TargetType="controls:ShortcutBox"
+			              BasedOn="{StaticResource {x:Type Button}}">
+				<Setter Property="HorizontalContentAlignment" Value="Center"/>
+				<Setter Property="Content" Value="{Binding $self.Shortcut}"/>
+				<Style Selector="^[IsRecording=True]">
+					<Setter Property="Content" Value="Press the combination…"/>
+					<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>
+					<Setter Property="BorderBrush" Value="{DynamicResource Lbm.Brushes.Accent}"/>
+				</Style>
+			</ControlTheme>
+
 		</ResourceDictionary>
 	</Application.Resources>
 

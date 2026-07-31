@@ -118,6 +118,7 @@ fn register_wanted(shared: &Shared, current: Option<Shortcut>) -> Option<Shortcu
     let Some(shortcut) = wanted else {
         if !text.trim().is_empty() {
             eprintln!("[LittleBigMouse.Hook] rescue shortcut \"{text}\" is not usable, ignored");
+            shared.broadcast(&crate::ipc::protocol::shortcut_unavailable(&text));
         }
         shared.rescue_registered.store(false, Ordering::SeqCst);
         return None;
@@ -143,6 +144,7 @@ fn register_wanted(shared: &Shared, current: Option<Shortcut>) -> Option<Shortcu
         // Almost always another application owning the combination. Worth saying
         // out loud: a rescue that silently does not exist is worse than none.
         eprintln!("[LittleBigMouse.Hook] rescue shortcut \"{text}\" is already taken, NOT registered");
+        shared.broadcast(&crate::ipc::protocol::shortcut_unavailable(&text));
         None
     }
 }

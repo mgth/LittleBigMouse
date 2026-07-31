@@ -40,4 +40,13 @@ public interface ILittleBigMouseClientService : ILittleBigMouseService
     /// the live-preview switch sends while the user edits.
     /// </summary>
     Task SendLiveAsync(ZonesLayout zonesLayout, CancellationToken token = default);
+
+    /// <summary>
+    /// Hand the daemon a panic shortcut to register now. It also travels inside the
+    /// layout, which is what gets one to a standalone daemon at boot — but a shortcut
+    /// recorded in the options has to take effect the moment it is recorded, and the
+    /// answer (it is already taken) has to come back while the user is still looking at
+    /// the setting rather than at the next Apply.
+    /// </summary>
+    Task SendShortcutAsync(string shortcut, CancellationToken token = default);
 }

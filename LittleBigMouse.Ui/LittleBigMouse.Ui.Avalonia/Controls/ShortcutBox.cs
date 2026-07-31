@@ -155,4 +155,32 @@ public class ShortcutBox : Button
 
         _ => null,
     };
+
+    /// <summary>
+    /// The Win32 virtual-key code behind a position name, for the position-named keys
+    /// only — the ones <see cref="ShortcutDisplay"/> has to turn back into whatever
+    /// character the current layout prints on them.
+    /// <para>
+    /// These numbers are the daemon's too (shortcut.rs::virtual_key). They are asserted
+    /// on both sides for the same reason the names are: nothing else would notice them
+    /// drifting apart.
+    /// </para>
+    /// </summary>
+    internal static uint? VirtualKey(string name) => name switch
+    {
+        "Oem1" => 0xBA,
+        "Oem2" => 0xBF,
+        "Oem3" => 0xC0,
+        "Oem4" => 0xDB,
+        "Oem5" => 0xDC,
+        "Oem6" => 0xDD,
+        "Oem7" => 0xDE,
+        "Oem8" => 0xDF,
+        "Oem102" => 0xE2,
+        "OemPlus" => 0xBB,
+        "OemComma" => 0xBC,
+        "OemMinus" => 0xBD,
+        "OemPeriod" => 0xBE,
+        _ => null,
+    };
 }

@@ -111,7 +111,8 @@
 			<ControlTheme x:Key="{x:Type controls:ShortcutBox}" TargetType="controls:ShortcutBox"
 			              BasedOn="{StaticResource {x:Type Button}}">
 				<Setter Property="HorizontalContentAlignment" Value="Center"/>
-				<Setter Property="Content" Value="{Binding $self.Shortcut}"/>
+				<Setter Property="Content"
+				        Value="{Binding $self.Shortcut, Converter={x:Static controls:ShortcutDisplay.Readable}}"/>
 				<Style Selector="^[IsRecording=True]">
 					<Setter Property="Content" Value="Press the combination…"/>
 					<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>

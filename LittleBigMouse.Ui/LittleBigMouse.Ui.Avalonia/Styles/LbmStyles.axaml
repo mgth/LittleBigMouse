@@ -170,6 +170,14 @@
 		<Setter Property="BorderBrush" Value="{DynamicResource Lbm.Brushes.Accent}"/>
 		<Setter Property="BorderThickness" Value="1"/>
 	</Style>
+	<!-- A Path has no Fill by default, so a geometry icon in a toolbar button would be
+	     invisible; and unlike IconView it does not follow Foreground on its own. -->
+	<Style Selector="ToggleButton.ToolbarButton Path">
+		<Setter Property="Fill" Value="{DynamicResource HLab.Brushes.Foreground}"/>
+	</Style>
+	<Style Selector="ToggleButton.ToolbarButton:checked Path">
+		<Setter Property="Fill" Value="{DynamicResource Lbm.Brushes.Accent}"/>
+	</Style>
 
 	<Style Selector="Button.IconButton">
 		<Setter Property="Background" Value="Transparent"/>

@@ -117,11 +117,47 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                 .Select(m => m?.IsVirtual ?? false)
                 .ObserveOn(RxSchedulers.MainThreadScheduler));
 
-        this.WhenAnyValue(
-            e => e.LiveUpdate,
-            e => e.Model.Saved
-            ).Subscribe(e => DoLiveUpdate());
+        // What live preview needs is a daemon to talk to, not a running engine — its own
+        // sends are what puts the engine up. Keying this on Running would be circular:
+        // a Load unhooks the daemon before the Run behind it hooks again, so Running
+        // dips on every tick and the switch would turn itself off a fifth of a second
+        // after being clicked. A foreign layout is excluded outright: the daemon refuses
+        // to hook one, so there would be nothing to feel.
+        _canLiveUpdate = this
+            .WhenAnyValue(e => e.Dead, e => e.IsVirtualLayout, (dead, virtualLayout) => !dead && !virtualLayout)
+            .ToProperty(this, e => e.CanLiveUpdate);
 
+        this.WhenAnyValue(e => e.CanLiveUpdate)
+            .Where(can => !can)
+            .Subscribe(_ => LiveUpdate = false);
+
+        // The engine going down while we preview into it — the tray Stop, a display
+        // change, an excluded application — outranks the preview: the next tick would
+        // otherwise hook it straight back up. A transition, not the current state:
+        // turning the switch on over a stopped engine is a legitimate way to start.
+        this.WhenAnyValue(e => e.Running)
+            .Skip(1)
+            .Where(running => !running)
+            .Subscribe(_ => LiveUpdate = false);
+
+        _live = new LiveLayoutUpdater(
+            () => Model?.ComputeZones(),
+            (zones, token) => _service.SendLiveAsync(zones, token));
+
+        _liveTimer = new DispatcherTimer { Interval = LiveLayoutUpdater.Interval };
+        _liveTimer.Tick += async (_, _) => await _live.TickAsync();
+
+        this.WhenAnyValue(e => e.LiveUpdate).Subscribe(live =>
+        {
+            if (live)
+            {
+                // The daemon is holding the last applied layout, not ours: make the
+                // first tick send unconditionally.
+                _live.Forget();
+                _liveTimer.Start();
+            }
+            else _liveTimer.Stop();
+        });
 
         this.UnsavedOn(e => e.Model);
 
@@ -193,6 +229,12 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         // The last Load outcome belongs to the previous layout generation.
         Dispatcher.UIThread.Post(() => DaemonLayoutInfo = "");
+
+        // A rebuild (display change, refresh, virtual layout opened) goes through
+        // MainService, which feeds the daemon itself: what we believe it holds no longer
+        // follows from what we last sent. Runs before the field is assigned on the very
+        // first model, where there is nothing to forget anyway.
+        _live?.Forget();
 
         if (newModel is { } model)
         {
@@ -289,6 +331,10 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         if(Model == null) return;
 
+        // Asking for the engine to stop outranks previewing into it — otherwise the
+        // next tick would hook it straight back up.
+        LiveUpdate = false;
+
         Model.Options.Enabled = false;
         await Task.Run(() => _persistence.SaveEnabled(Model));
         await _service.StopAsync();
@@ -331,12 +377,26 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     }
     bool _dead;
 
+    /// <summary>
+    /// Live preview: every edit reaches the running daemon within
+    /// <see cref="LiveLayoutUpdater.Interval"/>, so the layout can be felt with the real
+    /// mouse before it is applied. Deliberately not persisted — coming back to a session
+    /// with unsaved geometry already live would be a trap, and the switch costs one
+    /// click.
+    /// </summary>
     public bool LiveUpdate
     {
         get => _liveUpdate;
         set => this.RaiseAndSetIfChanged(ref _liveUpdate,value);
     }
    bool _liveUpdate;
+
+    /// <summary>Whether there is a running engine to preview into.</summary>
+    public bool CanLiveUpdate => _canLiveUpdate.Value;
+    readonly ObservableAsPropertyHelper<bool> _canLiveUpdate;
+
+    readonly LiveLayoutUpdater _live;
+    readonly DispatcherTimer _liveTimer;
 
     /// <summary>
     /// Last Load outcome reported by the daemon ("3 zones (3 main), virtual" / a failure
@@ -367,14 +427,4 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
       set => this.RaiseAndSetIfChanged(ref _saved, value);
    }
    bool _saved;
-
-
-    void DoLiveUpdate()
-    {
-        if (LiveUpdate && !Saved)
-        {
-            StartCommand.Execute();
-        }
-    }
-
 }

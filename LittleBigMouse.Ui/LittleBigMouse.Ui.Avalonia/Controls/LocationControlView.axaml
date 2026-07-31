@@ -64,6 +64,24 @@
 
 			<Border Classes="ToolbarSeparator"/>
 
+			<!-- Live preview. Out here rather than in the options because it is a mode you
+			     turn on for a minute and off again, not a preference. -->
+			<ToggleButton Classes="ToolbarButton"
+				IsChecked="{Binding LiveUpdate}"
+				IsEnabled="{Binding CanLiveUpdate}">
+				<ToolTip.Tip>
+					<StackPanel MaxWidth="320">
+						<TextBlock Text="Live preview" FontWeight="SemiBold"/>
+						<TextBlock TextWrapping="Wrap" Text="Send every change straight to the running mouse engine, so you can feel it while you edit. Nothing is saved: use Apply to keep it, Undo to go back."/>
+						<TextBlock TextWrapping="Wrap" Opacity="0.75" Text="Needs the engine running." IsVisible="{Binding !CanLiveUpdate}"/>
+					</StackPanel>
+				</ToolTip.Tip>
+				<Path Data="{StaticResource Lbm.Icon.Live}" Width="22" Height="22"
+				      Stretch="Uniform" VerticalAlignment="Center"/>
+			</ToggleButton>
+
+			<Border Classes="ToolbarSeparator"/>
+
 			<Button Classes="ToolbarButton"
 				Command="{Binding SaveCommand}">
 				<ToolTip.Tip>Save</ToolTip.Tip>

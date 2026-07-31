@@ -42,6 +42,37 @@ public partial class BorderSideStrip : UserControl
         DataContextChanged += (_, _) => UpdateGeometry();
     }
 
+    /// <summary>
+    /// Double click takes all the free room there is: a section grows until it meets
+    /// its neighbours, and empty space becomes a section filling the same stretch.
+    /// One gesture, one meaning, whether or not it lands on something.
+    /// </summary>
+    protected override void OnDoubleTapped(TappedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (vm == null) return;
+
+        var mm = AlongMm(e.GetPosition(this));
+
+        var target = vm.Sections.FirstOrDefault(s => mm >= s.Model.From && mm < s.Model.To);
+        if (target != null)
+        {
+            vm.Expand(target.Model);
+            SelectInParent(target);
+        }
+        else
+        {
+            var created = vm.CreateFilling(mm);
+            if (created != null)
+            {
+                SelectInParent(vm.Sections.FirstOrDefault(s => ReferenceEquals(s.Model, created)));
+            }
+        }
+
+        (this.GetLayout() ?? vm.Monitor.Layout)?.Compact();
+        e.Handled = true;
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         var vm = ViewModel;
@@ -114,13 +145,39 @@ public partial class BorderSideStrip : UserControl
             : [new Point(0, h), new Point(t, 0), new Point(w - t, 0), new Point(w, h)];
 
     /// <summary>Position along the edge, in millimetres from its starting corner.</summary>
-    double AlongMm(PointerEventArgs e)
+    double AlongMm(PointerEventArgs e) => AlongMm(e.GetPosition(this));
+
+    double AlongMm(Point p)
     {
         var vm = ViewModel;
         if (vm == null) return 0;
 
-        var p = e.GetPosition(this);
         return vm.ToMm(vm.IsVertical ? p.Y : p.X);
+    }
+
+    /// <summary>
+    /// How far from a boundary a press still grabs it, in millimetres.
+    /// <para>
+    /// Constant along most of the edge, but not in the mitred corners: there the band
+    /// tapers to a point, so a fixed handle is a sliver a few pixels wide and all but
+    /// unclickable — which is what made the outer ends of a full edge so hard to
+    /// resize. Inside a mitre the handle widens inward, towards where the band
+    /// recovers its full thickness.
+    /// </para>
+    /// <para>
+    /// Never more than half the section, so its middle stays reachable and a short
+    /// section can still be moved rather than only resized.
+    /// </para>
+    /// </summary>
+    static double GrabMm(BorderSideViewModel vm, double boundaryMm, double sectionLengthMm)
+    {
+        var basic = vm.ToMm(HandlePixels);
+        var mitre = vm.ToMm(vm.PixelThickness);
+
+        var fromEnd = Math.Min(boundaryMm, vm.LengthMm - boundaryMm);
+        var grab = fromEnd < mitre ? Math.Max(basic, mitre - fromEnd) : basic;
+
+        return Math.Min(grab, sectionLengthMm / 2);
     }
 
     static bool SnapEnabled(KeyModifiers modifiers) => (modifiers & KeyModifiers.Control) == 0;
@@ -132,7 +189,6 @@ public partial class BorderSideStrip : UserControl
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
         var mm = AlongMm(e);
-        var handle = vm.ToMm(HandlePixels);
 
         _target = null;
         _mode = Mode.Draw;
@@ -140,13 +196,16 @@ public partial class BorderSideStrip : UserControl
         foreach (var section in vm.Sections)
         {
             var model = section.Model;
-            if (mm < model.From - handle || mm > model.To + handle) continue;
+            var fromGrab = GrabMm(vm, model.From, model.To - model.From);
+            var toGrab = GrabMm(vm, model.To, model.To - model.From);
+
+            if (mm < model.From - fromGrab || mm > model.To + toGrab) continue;
 
             _target = model;
             SelectInParent(section);
 
-            if (mm <= model.From + handle) _mode = Mode.ResizeFrom;
-            else if (mm >= model.To - handle) _mode = Mode.ResizeTo;
+            if (mm <= model.From + fromGrab) _mode = Mode.ResizeFrom;
+            else if (mm >= model.To - toGrab) _mode = Mode.ResizeTo;
             else _mode = Mode.Move;
 
             break;

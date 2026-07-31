@@ -358,6 +358,29 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         return section;
     }
 
+    /// <summary>
+    /// Grow a section until it meets its neighbours, or the ends of the edge.
+    /// </summary>
+    public void Expand(BorderSection section)
+    {
+        var (low, high) = FreeGapAround((section.From + section.To) / 2, section);
+        Resize(section, low, high);
+    }
+
+    /// <summary>
+    /// Draw a section over the whole free stretch around <paramref name="atMm"/>.
+    /// <para>
+    /// Same operation as <see cref="Expand"/>, on space that holds nothing yet: both
+    /// answer "take everything that is free here", which is what a double click on a
+    /// band means whether or not it lands on a section.
+    /// </para>
+    /// </summary>
+    public BorderSection? CreateFilling(double atMm)
+    {
+        var (low, high) = FreeGapAround(atMm, null);
+        return Create(low, high);
+    }
+
     public void Resize(BorderSection section, double fromMm, double toMm)
     {
         // The section's own midpoint identifies the gap it lives in, whichever end

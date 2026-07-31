@@ -143,6 +143,57 @@ public sealed class BorderSectionEditorTests
     }
 
     [Fact]
+    public void ExpandingGrowsUntilTheNeighboursOrTheEnds()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        side.Create(0, 50);
+        var middle = side.Create(100, 120)!;
+        side.Create(200, 240);
+
+        side.Expand(middle);
+
+        Assert.Equal(50, middle.From);
+        Assert.Equal(200, middle.To);
+    }
+
+    [Fact]
+    public void ExpandingAloneTakesTheWholeEdge()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var only = side.Create(100, 120)!;
+
+        side.Expand(only);
+
+        Assert.Equal(0, only.From);
+        Assert.Equal(270, only.To);
+    }
+
+    [Fact]
+    public void CreatingFillingTakesTheFreeStretchAroundThePoint()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        side.Create(0, 50);
+        side.Create(200, 240);
+
+        // Between the two: the new one takes exactly the gap.
+        var created = side.CreateFilling(120);
+
+        Assert.NotNull(created);
+        Assert.Equal(50, created!.From);
+        Assert.Equal(200, created.To);
+    }
+
+    [Fact]
+    public void CreatingFillingOnAFullEdgeDoesNothing()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        side.Create(0, 270);
+
+        Assert.Null(side.CreateFilling(120));
+        Assert.Single(side.Side.Sections.Items);
+    }
+
+    [Fact]
     public void MovingASectionStopsAtItsNeighbour()
     {
         var side = RightEdgeOf(TwoMonitorsLeft());

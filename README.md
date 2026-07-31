@@ -26,10 +26,16 @@
 > [Linux](#linux-experimental).
 
 > [!IMPORTANT]
-> ## 🎉 5.5.0 is out!
-> The UI and the mouse daemon now talk over a **secure per-user local channel** instead of a TCP port (#519): no more port clashes, a killed daemon restarts instantly, and the startup configuration survives crashes with automatic backup recovery. **Clicks and wheel scrolls during a screen crossing** now land where you expect, and excluding an elevated (anti-cheat) game actually pauses the hook (#518). The monitor control panel gets an opt-in **live read** to follow OSD changes, plus safer display topology and clone-mode handling (#517).
+> ## 🎉 5.6.0 is out!
+> **Your monitors land where Windows has them.** The automatic placement lost the vertical offset between neighbouring screens, so a monitor sitting a little higher than the one beside it came out stacked a whole screen height away — and the first layout you were shown never matched what *Place from windows config* gave you afterwards (#531). Both are fixed, and the two directions now round-trip.
 >
-> **[⬇ Download 5.5.0](https://github.com/mgth/LittleBigMouse/releases/tag/v5.5.0)** — requires the [.NET 10 Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+> **Border resistance, drawn where you want it** (#522): sections along any edge, each with its own resistance, and separate settings for moving and for dragging a window. **Live update** (#525) sends your changes to the mouse engine as you make them, so you can feel a layout before keeping it — pick it from the arrow next to the apply button. And when a layout traps the cursor somewhere you cannot click, **hold `Ctrl+Alt+Shift+M`** to get the mouse back (#528) — configurable in the options.
+>
+> Closing with unsaved changes now asks first (#530), and the C++ hook is gone: the Rust daemon is the only one, and the test suites finally run in CI (#524).
+>
+> **[⬇ Download 5.6.0](https://github.com/mgth/LittleBigMouse/releases/tag/v5.6.0)** — requires the [.NET 10 Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+>
+> The rescue shortcut is Windows-only for now; the Linux release follows separately.
 >
 > Something not working? [Tell us](https://github.com/mgth/LittleBigMouse/issues) 🙏
 

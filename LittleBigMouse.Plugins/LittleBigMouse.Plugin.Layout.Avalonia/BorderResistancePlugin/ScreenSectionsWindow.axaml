@@ -1,0 +1,29 @@
+<avalonia:EdgeOverlayWindow
+        x:Class="LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin.ScreenSectionsWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+
+        xmlns:borderResistancePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin"
+        xmlns:avalonia="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia"
+
+        mc:Ignorable="d"
+        d:DesignHeight="40" d:DesignWidth="400"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        CanResize="False"
+        WindowDecorations="None"
+
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+
+        x:DataType="borderResistancePlugin:BorderSideViewModel">
+
+	<!-- The very same band as the layout map, on the real screen. Reusing the
+	     control rather than drawing a second time is what makes the on-screen view
+	     live and editable for free: it reads the same section collection, and its
+	     millimetre scale comes from its own size, which here IS the screen edge. -->
+	<borderResistancePlugin:BorderSideStrip/>
+</avalonia:EdgeOverlayWindow>

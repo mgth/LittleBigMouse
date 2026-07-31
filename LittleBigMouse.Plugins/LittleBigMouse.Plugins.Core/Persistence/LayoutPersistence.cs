@@ -257,10 +257,15 @@ public abstract class LayoutPersistence : ILayoutPersistence
         monitor.DepthRatio.X = dto.PhysicalRatioX ?? monitor.DepthRatio.X;
         monitor.DepthRatio.Y = dto.PhysicalRatioY ?? monitor.DepthRatio.Y;
 
-        monitor.BorderResistance.Left = dto.BorderResistance?.Left ?? monitor.BorderResistance.Left;
-        monitor.BorderResistance.Top = dto.BorderResistance?.Top ?? monitor.BorderResistance.Top;
-        monitor.BorderResistance.Right = dto.BorderResistance?.Right ?? monitor.BorderResistance.Right;
-        monitor.BorderResistance.Bottom = dto.BorderResistance?.Bottom ?? monitor.BorderResistance.Bottom;
+        // The edge length is needed to convert a stored whole-edge resistance into
+        // the section that now expresses it.
+        var acrossMm = monitor.DepthProjection.Width;
+        var downMm = monitor.DepthProjection.Height;
+
+        Apply(monitor.BorderResistance.Left, dto.BorderResistance?.Left, downMm);
+        Apply(monitor.BorderResistance.Top, dto.BorderResistance?.Top, acrossMm);
+        Apply(monitor.BorderResistance.Right, dto.BorderResistance?.Right, downMm);
+        Apply(monitor.BorderResistance.Bottom, dto.BorderResistance?.Bottom, acrossMm);
 
         monitor.ExcludedFromLayout = dto.ExcludedFromLayout ?? monitor.ExcludedFromLayout;
 
@@ -279,6 +284,66 @@ public abstract class LayoutPersistence : ILayoutPersistence
         }
     }
 
+    static void Apply(BorderSide side, BorderSideDto? dto, double edgeLengthMm)
+    {
+        if (dto == null) return;
+
+        side.Sections.Edit(list =>
+        {
+            list.Clear();
+
+            if (dto.Sections is { } stored)
+            {
+                foreach (var s in stored)
+                {
+                    list.Add(new BorderSection
+                    {
+                        From = s.From ?? 0,
+                        To = s.To ?? 0,
+                        Move = s.Move ?? 0,
+                        MoveBlock = s.MoveBlock ?? false,
+                        Drag = s.Drag ?? 0,
+                        DragBlock = s.DragBlock ?? false
+                    });
+                }
+
+                if (list.Count > 0) return;
+            }
+
+            // An edge saved before the section editor carried a single resistance
+            // over its whole length. Rather than keep that notion alongside the
+            // sections, it becomes the section that says the same thing — so an
+            // existing setting stays in force AND shows up in the editor, where it
+            // can be split or trimmed like any other.
+            var legacy = LegacySection(dto, edgeLengthMm);
+            if (legacy != null) list.Add(legacy);
+        });
+    }
+
+    static BorderSection? LegacySection(BorderSideDto dto, double edgeLengthMm)
+    {
+        if (edgeLengthMm <= 0) return null;
+
+        var move = dto.Move ?? 0;
+        var drag = dto.Drag ?? 0;
+        var moveBlock = dto.MoveBlock ?? false;
+        var dragBlock = dto.DragBlock ?? false;
+
+        // A zero, unblocked edge is what "no resistance" has always looked like:
+        // migrating it would litter every layout with meaningless full-edge sections.
+        if (move <= 0 && drag <= 0 && !moveBlock && !dragBlock) return null;
+
+        return new BorderSection
+        {
+            From = 0,
+            To = edgeLengthMm,
+            Move = move,
+            MoveBlock = moveBlock,
+            Drag = drag,
+            DragBlock = dragBlock
+        };
+    }
+
     /// <summary>
     /// Flag the monitor and every savable child as saved. Runs after a load — with or
     /// without stored data — so that the next edit produces a true→false transition the
@@ -291,6 +356,19 @@ public abstract class LayoutPersistence : ILayoutPersistence
 
         monitor.DepthProjection.Saved = true;
         monitor.DepthRatio.Saved = true;
+
+        // Depth first: marking a side saved after its sections would be undone by
+        // the collection's own unsaved propagation.
+        foreach (var side in (BorderSide[])
+                 [
+                     monitor.BorderResistance.Left, monitor.BorderResistance.Top,
+                     monitor.BorderResistance.Right, monitor.BorderResistance.Bottom
+                 ])
+        {
+            foreach (var section in side.Sections.Items) section.Saved = true;
+            side.Saved = true;
+        }
+
         monitor.BorderResistance.Saved = true;
 
         foreach (var source in monitor.Sources.Items)
@@ -458,18 +536,36 @@ public abstract class LayoutPersistence : ILayoutPersistence
         PriorityUnhooked = o.PriorityUnhooked
     };
 
+    // Sections only: the per-edge resistance is gone, and writing it back would
+    // resurrect it on the next load through the migration path. Always emitted, even
+    // empty, so deleting the last section clears what the store still holds.
+    static BorderSideDto ToDto(BorderSide side) => new()
+    {
+        Sections = side.Sections.Items.Count == 0
+            ? null
+            : [.. side.Sections.Items.Select(s => new BorderSectionDto
+            {
+                From = s.From,
+                To = s.To,
+                Move = s.Move,
+                MoveBlock = s.MoveBlock,
+                Drag = s.Drag,
+                DragBlock = s.DragBlock
+            })]
+    };
+
     static MonitorDto ToDto(PhysicalMonitor monitor) => new()
     {
         XLocationInMm = monitor.DepthProjection.X,
         YLocationInMm = monitor.DepthProjection.Y,
         PhysicalRatioX = monitor.DepthRatio.X,
         PhysicalRatioY = monitor.DepthRatio.Y,
-        BorderResistance = new BordersDto
+        BorderResistance = new BorderResistanceDto
         {
-            Left = monitor.BorderResistance.Left,
-            Top = monitor.BorderResistance.Top,
-            Right = monitor.BorderResistance.Right,
-            Bottom = monitor.BorderResistance.Bottom
+            Left = ToDto(monitor.BorderResistance.Left),
+            Top = ToDto(monitor.BorderResistance.Top),
+            Right = ToDto(monitor.BorderResistance.Right),
+            Bottom = ToDto(monitor.BorderResistance.Bottom)
         },
         // Stored whatever the current mode is (they must survive a Save() made in
         // PerModel mode), but only once the monitor owns them: uncustomized monitors

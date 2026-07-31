@@ -1,11 +1,11 @@
-﻿<UserControl
+<UserControl
     x:Class="LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin.BorderResistanceView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:sizePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin"
     xmlns:controls="clr-namespace:HLab.Base.Avalonia.Controls;assembly=HLab.Base.Avalonia"
+    xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
     xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
     xmlns:borderResistancePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin"
     mc:Ignorable="d"
@@ -18,95 +18,200 @@
     >
 
 	<UserControl.Resources>
-
 		<converters:ScaleConverter x:Key="Scale" />
+		<borderResistancePlugin:EditorSizeConverter x:Key="EditorSize" />
 
+		<!-- The HLab theme has no warning colour: Background, Foreground, Header and
+		     Selected, and that is all. A DynamicResource for a key that does not
+		     exist leaves the property at its default rather than falling back to the
+		     inherited value, which is how the delete button came out black and the
+		     lock warning black on a black panel.
+
+		     Readable on either theme, which is why it is a single value and not a
+		     themed pair. -->
+		<SolidColorBrush x:Key="Section.Warning" Color="#FFE0A32B"/>
 	</UserControl.Resources>
 
 	<UserControl.Styles>
-		<Style Selector="sizePlugin|MeasureArrow.Inside">
-			<Setter Property="StrokeThickness" Value="2.5"/>
-			<Setter Property="Stroke" Value="Bisque"/>
-			<Setter Property="Fill" Value="Bisque"/>
-		</Style>
+		<!-- No size here: the only numeric fields left are inside the section editor,
+		     which is scaled as a whole by its Viewbox.
 
-		<Style Selector="sizePlugin|MeasureArrow.Outside">
-			<Setter Property="StrokeThickness" Value="2"/>
-			<Setter Property="Stroke" Value="CadetBlue"/>
-			<Setter Property="Fill" Value="CadetBlue"/>
-		</Style>
-
-		<Style Selector="sizePlugin|MeasureArrow.Border">
-			<Setter Property="StrokeThickness" Value="1.5"/>
-			<Setter Property="Stroke" Value="White"/>
-			<Setter Property="Fill" Value="White"/>
-		</Style>
-
+		     Which is also why no field may be given a height in pixels. A DoubleBox
+		     wraps a TextBox with a margin and a padding of its own, so its natural
+		     height is the line height plus that chrome; pinning it to a round number
+		     smaller than the sum crops the glyphs at every zoom, and the Viewbox
+		     then magnifies the crop along with everything else. Let the font decide
+		     and the proportions hold at any size. -->
 		<Style Selector="controls|DoubleBox">
 			<Setter Property="Background" Value="{DynamicResource HLab.Brushes.Background}"/>
-			<Setter Property="Height" Value="{Binding 
-				Bounds,
-				ElementName=UserControl,
-				Converter={StaticResource Scale},
-				ConverterParameter=0.1}"/>
 			<Setter Property="Decimals" Value="1"/>
+			<!-- The template adds a margin of its own around the text box; 2 keeps
+			     the row compact without cramping the digits. -->
+			<Setter Property="Padding" Value="2"/>
+		</Style>
+
+		<!-- Column headings in the section editor: a bare number and a bare switch
+		     say nothing about what they govern. -->
+		<Style Selector="TextBlock.caption">
+			<Setter Property="HorizontalAlignment" Value="Center"/>
+			<Setter Property="FontSize" Value="10"/>
+			<Setter Property="Opacity" Value="0.65"/>
+		</Style>
+
+		<!-- The column heading already says "block", so the switch drops the On/Off
+		     labels Fluent gives it by default and keeps the row compact. -->
+		<Style Selector="ToggleSwitch.compact">
+			<Setter Property="OnContent" Value=""/>
+			<Setter Property="OffContent" Value=""/>
+			<Setter Property="MinWidth" Value="0"/>
+			<Setter Property="VerticalAlignment" Value="Center"/>
+		</Style>
+
+		<Style Selector="Button.danger">
+			<Setter Property="Foreground" Value="{StaticResource Section.Warning}"/>
 		</Style>
 	</UserControl.Styles>
 
 	<Grid>
 
-
-
-
-		<!--<Border BorderThickness="0" Background="{Binding Path=ScreenColor}"/>-->
-
-		<!--<ContentControl Content="{Binding InsideCoverControl}"/>-->
-
-		<!-- Borders -->
+		<!-- Drawing bands, one per edge. Each spans its edge END TO END and the four
+		     overlap in the corners; every strip then mitres itself so the corner
+		     square is split along its diagonal (see BorderSideStrip.UpdateGeometry).
+		     Insetting them instead would be simpler, but it would make each band
+		     shorter than the edge it represents — and the millimetre scale is
+		     derived from that length, so sections would drift and overshoot. -->
 		<Grid>
-			<!-- Top Border -->
-			<controls:DoubleBox
-				HorizontalAlignment="Center"
-				VerticalAlignment="Top"
-				PointerWheelChanged="OnMouseWheel"
+			<borderResistancePlugin:BorderSideStrip
+				HorizontalAlignment="Left" VerticalAlignment="Stretch" Width="16"
+				DataContext="{Binding Left}"/>
 
-				Value="{Binding Path=Model.BorderResistance.Top}"
-            />
+			<borderResistancePlugin:BorderSideStrip
+				HorizontalAlignment="Stretch" VerticalAlignment="Top" Height="16"
+				DataContext="{Binding Top}"/>
 
-			<!-- Left Border -->
-			<controls:DoubleBox 
-				HorizontalAlignment="Left"
-				VerticalAlignment="Center"
-				PointerWheelChanged="OnMouseWheel"
+			<borderResistancePlugin:BorderSideStrip
+				HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="16"
+				DataContext="{Binding Right}"/>
 
-				Value="{Binding Path=Model.BorderResistance.Left}"
-            />
-
-			<!-- Bottom Border -->
-			<controls:DoubleBox 
-				HorizontalAlignment="Center"
-				VerticalAlignment="Bottom"
-				PointerWheelChanged="OnMouseWheel"
-
-				Value="{Binding Path=Model.BorderResistance.Bottom}"
-            />
-
-			<!-- Right Border -->
-			<controls:DoubleBox 
-				HorizontalAlignment="Right"
-				VerticalAlignment="Center"
-				PointerWheelChanged="OnMouseWheel"
-
-				Value="{Binding Path=Model.BorderResistance.Right}"
-             />
+			<borderResistancePlugin:BorderSideStrip
+				HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="16"
+				DataContext="{Binding Bottom}"/>
 		</Grid>
 
+		<!-- The four per-edge numbers are gone: an edge-wide resistance is a section
+		     spanning the edge, and an existing one is converted to exactly that on
+		     load, so it stays in force and becomes editable like any other. -->
 
-		<!--<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Border x:Name="center" BorderThickness="5" CornerRadius="50" Width="100" Height="100" Background="{Binding Path=SelectedBrush, FallbackValue=#FF333E9A}" BorderBrush="#FFD9DCEC">
-                <Label FontSize="{Binding Path=FontSize}" x:Name="lblName" Margin="0,-7,0,-5" Content ="{Binding Path=Screen.DeviceNo,FallbackValue=1}" HorizontalAlignment="Center" VerticalAlignment="Center" VerticalContentAlignment="Center" Foreground="White" FontWeight="Bold" />
-            </Border>
-        </StackPanel>-->
+		<!-- Project the sections onto the real monitors. Same shape as the rulers'
+		     own toggle in MonitorLocationView, since it does the same kind of thing.
+		     Off by default: it puts topmost bands on every screen. -->
+		<ToggleButton
+			Width="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource Scale}, ConverterParameter=0.1}"
+			Height="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource Scale}, ConverterParameter=0.1}"
+			Cursor="Hand"
+			VerticalAlignment="Bottom" HorizontalAlignment="Left"
+			Margin="22"
+			Padding="2"
+			ToolTip.Tip="Show the sections on the real screens"
+			IsChecked="{Binding ShowOnScreens}">
 
+			<icons:IconView
+				Foreground="{DynamicResource HLab.Brushes.Background}"
+				Path="Icon/MonitorSectionsOnScreen"/>
+		</ToggleButton>
+
+		<!-- Editor for the selected section. Kept over the monitor rather than in a
+		     side panel: it belongs next to the edge being edited.
+
+		     Laid out at its natural size and scaled as a whole by the Viewbox, so
+		     type, controls and spacing keep their proportions at any zoom — sizing
+		     each element from the monitor bounds instead would need a converter on
+		     every font size and never keep them in step.
+
+		     Bounded by the room left INSIDE the bands, not by the monitor: it used
+		     to keep a floor of 150 px, so a monitor drawn smaller than that had its
+		     bands covered by the panel — and the bands are the only way to reach a
+		     section. Within that room it takes everything there is, each axis
+		     measured on its own, and grows no further than the ceiling on its
+		     height. Sending these boxes to a properties area of their own, where
+		     none of this arbitration is needed, is issue #523. -->
+		<Viewbox
+			Stretch="Uniform"
+			HorizontalAlignment="Center" VerticalAlignment="Center"
+			IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}"
+			Height="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource EditorSize}, ConverterParameter=height|420|20}"
+			MaxWidth="{Binding Bounds, ElementName=UserControl,
+				Converter={StaticResource EditorSize}, ConverterParameter=width|0|20}">
+		<Border
+			HorizontalAlignment="Center" VerticalAlignment="Center"
+			Background="{DynamicResource HLab.Brushes.Background}"
+			BorderBrush="{DynamicResource HLab.Brushes.Foreground}"
+			BorderThickness="1" CornerRadius="10"
+			BoxShadow="0 6 20 0 #60000000"
+			Padding="16,12" MinWidth="250">
+
+			<StackPanel Spacing="12">
+
+				<TextBlock Text="Section" FontWeight="SemiBold" FontSize="15"/>
+
+				<!-- Two settings, two states each: the number says how hard the edge
+				     pushes back, the switch turns it into a wall outright. -->
+				<Grid ColumnDefinitions="Auto,*,Auto"
+				      RowDefinitions="Auto,Auto,Auto"
+				      ColumnSpacing="12" RowSpacing="8">
+
+					<TextBlock Grid.Row="0" Grid.Column="1" Classes="caption" Text="resistance"/>
+					<TextBlock Grid.Row="0" Grid.Column="2" Classes="caption" Text="block"/>
+
+					<TextBlock Grid.Row="1" Grid.Column="0" Text="Move" VerticalAlignment="Center"/>
+					<controls:DoubleBox Grid.Row="1" Grid.Column="1"
+					                    PointerWheelChanged="OnMouseWheel"
+					                    ToolTip.Tip="Resistance in mm opposing a plain cursor move"
+					                    IsEnabled="{Binding !Selected.Model.MoveBlock}"
+					                    Value="{Binding Selected.Move}"/>
+					<ToggleSwitch Grid.Row="1" Grid.Column="2" Classes="compact"
+					              IsChecked="{Binding Selected.Model.MoveBlock}"/>
+
+					<TextBlock Grid.Row="2" Grid.Column="0" Text="Drag" VerticalAlignment="Center"/>
+					<controls:DoubleBox Grid.Row="2" Grid.Column="1"
+					                    PointerWheelChanged="OnMouseWheel"
+					                    ToolTip.Tip="Resistance in mm opposing a move made with a mouse button held"
+					                    IsEnabled="{Binding !Selected.Model.DragBlock}"
+					                    Value="{Binding Selected.Drag}"/>
+					<ToggleSwitch Grid.Row="2" Grid.Column="2" Classes="compact"
+					              IsChecked="{Binding Selected.Model.DragBlock}"/>
+				</Grid>
+
+				<Border Height="1" Opacity="0.2"
+				        Background="{DynamicResource HLab.Brushes.Foreground}"/>
+
+				<Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+					<!-- A crossing is defined per source edge, so a symmetric passage
+					     has to exist on both sides. Forgetting the other half is the
+					     easiest way to get a border that opens one way by accident. -->
+					<Button Grid.Column="0" Content="Mirror" HorizontalAlignment="Stretch"
+					        HorizontalContentAlignment="Center" CornerRadius="6"
+					        IsEnabled="{Binding Selected.CanMirror}"
+					        ToolTip.Tip="Copy this section onto the facing edge of the monitor across it"
+					        Click="OnMirror"/>
+
+					<Button Grid.Column="1" Content="Delete" HorizontalAlignment="Stretch"
+					        HorizontalContentAlignment="Center" CornerRadius="6"
+					        Classes="danger"
+					        ToolTip.Tip="Remove this section (Delete)"
+					        Click="OnDelete"/>
+				</Grid>
+
+				<TextBlock
+					IsVisible="{Binding Selected.Side.IsFullyBlocked}"
+					TextWrapping="Wrap" MaxWidth="230" FontSize="11"
+					Foreground="{StaticResource Section.Warning}"
+					Text="This edge is fully blocked in both modes. Ctrl still forces a crossing on Windows and X11, but not on Wayland."/>
+			</StackPanel>
+		</Border>
+		</Viewbox>
 	</Grid>
 </UserControl>

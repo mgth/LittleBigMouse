@@ -43,6 +43,9 @@ impl CursorEnv for FakeCursor {
     fn ctrl_down(&self) -> bool {
         false
     }
+    fn buttons_down(&self) -> bool {
+        false
+    }
     fn cursor_hidden(&self) -> bool {
         false
     }

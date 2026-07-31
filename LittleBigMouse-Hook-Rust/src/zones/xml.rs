@@ -31,9 +31,15 @@ pub fn get_i32(node: Node, name: &str) -> i32 {
 
 /// C++ `XmlHelper::GetDouble`.
 pub fn get_f64(node: Node, name: &str) -> f64 {
-    node.attribute(name)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0.0)
+    get_f64_opt(node, name).unwrap_or(0.0)
+}
+
+/// Like [`get_f64`], but tells "absent" apart from "zero". Needed wherever a
+/// missing attribute must fall back to *another* attribute rather than to `0.0`
+/// — e.g. `DragResistance` defaulting to `BorderResistance` on layouts produced
+/// by a UI that predates the move/drag split.
+pub fn get_f64_opt(node: Node, name: &str) -> Option<f64> {
+    node.attribute(name).and_then(|s| s.parse().ok())
 }
 
 /// C++ `XmlHelper::GetString`.

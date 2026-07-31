@@ -1,5 +1,6 @@
 ﻿#nullable enable
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace LittleBigMouse.Plugins.Persistence;
 
@@ -67,7 +68,7 @@ public class MonitorDto
     public double? YLocationInMm { get; set; }
     public double? PhysicalRatioX { get; set; }
     public double? PhysicalRatioY { get; set; }
-    public BordersDto? BorderResistance { get; set; }
+    public BorderResistanceDto? BorderResistance { get; set; }
 
     /// <summary>
     /// Per-monitor bezel borders. PRESENCE is the flag: non-null means the monitor owns its
@@ -103,6 +104,40 @@ public class BordersDto
     public double? Top { get; set; }
     public double? Right { get; set; }
     public double? Bottom { get; set; }
+}
+
+/// <summary>Border resistance, one entry per edge.</summary>
+public class BorderResistanceDto
+{
+    public BorderSideDto? Left { get; set; }
+    public BorderSideDto? Top { get; set; }
+    public BorderSideDto? Right { get; set; }
+    public BorderSideDto? Bottom { get; set; }
+}
+
+/// <summary>
+/// One edge's resistances. Layouts saved before the move/drag split stored a bare
+/// number here instead of an object; <see cref="BorderSideDtoJsonConverter"/> reads
+/// both shapes, so the historical key keeps working and nobody's layout resets.
+/// </summary>
+[JsonConverter(typeof(BorderSideDtoJsonConverter))]
+public class BorderSideDto
+{
+    public double? Move { get; set; }
+    public bool? MoveBlock { get; set; }
+    public double? Drag { get; set; }
+    public bool? DragBlock { get; set; }
+    public List<BorderSectionDto>? Sections { get; set; }
+}
+
+public class BorderSectionDto
+{
+    public double? From { get; set; }
+    public double? To { get; set; }
+    public double? Move { get; set; }
+    public bool? MoveBlock { get; set; }
+    public double? Drag { get; set; }
+    public bool? DragBlock { get; set; }
 }
 
 /// <summary>Per-model (PnP code) physical size, shared across layouts.</summary>

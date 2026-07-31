@@ -21,23 +21,15 @@
 	  http://www.mgth.fr
 */
 
-using Avalonia;
-using Avalonia.Controls;
-
 namespace LittleBigMouse.Plugin.Layout.Avalonia.Rulers;
 
 /// <summary>
-/// Borderless topmost window covering a single screen edge, hosting one ruler.
-/// One window per edge (instead of one fullscreen window per screen) so the
-/// screen center is never covered and clicks reach the applications below,
-/// without any OS-specific window-region cutting.
+/// One ruler along one screen edge. The window plumbing — pixel positioning and
+/// the two-step DIP conversion — lives in <see cref="EdgeOverlayWindow"/>, which
+/// the border-section overlay reuses.
 /// </summary>
-public partial class RulerWindow : Window
+public partial class RulerWindow : EdgeOverlayWindow
 {
-    PixelPoint _position;
-    double _pixelWidth;
-    double _pixelHeight;
-
     public RulerWindow()
     {
         InitializeComponent();
@@ -46,36 +38,5 @@ public partial class RulerWindow : Window
     public RulerWindow(RulerViewModel viewModel) : this()
     {
         DataContext = viewModel;
-
-        // The actual scaling is only known once the window is mapped on its
-        // screen; the ShowAt value is just a hint that may differ from what
-        // the windowing system applies.
-        Opened += (_, _) => FitToPixels();
-    }
-
-    /// <summary>
-    /// Position and size the window in windowing-system pixels, then show it.
-    /// </summary>
-    public void ShowAt(PixelPoint position, double pixelWidth, double pixelHeight, double scalingHint)
-    {
-        _position = position;
-        _pixelWidth = pixelWidth;
-        _pixelHeight = pixelHeight;
-
-        Position = position;
-        SetDipSize(scalingHint > 0 ? scalingHint : 1.0);
-        Show();
-    }
-
-    void FitToPixels()
-    {
-        SetDipSize(DesktopScaling);
-        Position = _position;
-    }
-
-    void SetDipSize(double scaling)
-    {
-        Width = _pixelWidth / scaling;
-        Height = _pixelHeight / scaling;
     }
 }

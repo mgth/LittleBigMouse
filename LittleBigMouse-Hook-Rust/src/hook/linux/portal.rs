@@ -134,6 +134,7 @@ async fn run_async(shared: &'static Shared) -> bool {
         clip: None,
         pending_warp: None,
         started: Instant::now(),
+        buttons: 0,
     };
     // Sub-pixel remainders of the relative motion integration.
     let (mut rem_x, mut rem_y) = (0f64, 0f64);
@@ -329,6 +330,10 @@ async fn run_async(shared: &'static Shared) -> bool {
                         }
                     }
                     EiEvent::Button(button) => {
+                        env.track_button(
+                            button.button,
+                            button.state == reis::ei::button::ButtonState::Press,
+                        );
                         // While captured, buttons stream to us and nowhere else. We
                         // cannot forward them, so a press mid-crossing would be
                         // swallowed. The user clicking means they are interacting,
@@ -525,6 +530,25 @@ struct PortalCursor {
     clip: Option<Rect<i32>>,
     pending_warp: Option<Point<i32>>,
     started: Instant,
+    /// Bitmask of held [`BTN_MOUSE_RANGE`] buttons, fed by the ei button stream.
+    buttons: u8,
+}
+
+/// BTN_LEFT..=BTN_TASK — libei reports Linux button codes.
+const BTN_MOUSE_RANGE: std::ops::RangeInclusive<u32> = 0x110..=0x117;
+
+impl PortalCursor {
+    fn track_button(&mut self, code: u32, pressed: bool) {
+        if !BTN_MOUSE_RANGE.contains(&code) {
+            return;
+        }
+        let bit = 1u8 << (code - BTN_MOUSE_RANGE.start());
+        if pressed {
+            self.buttons |= bit;
+        } else {
+            self.buttons &= !bit;
+        }
+    }
 }
 
 impl CursorEnv for PortalCursor {
@@ -553,6 +577,13 @@ impl CursorEnv for PortalCursor {
 
     fn ctrl_down(&self) -> bool {
         false // not observable on Wayland without capturing the keyboard
+    }
+
+    fn buttons_down(&self) -> bool {
+        // Buttons, unlike modifiers, *are* observable: while captured they
+        // stream to us. Note the asymmetry this creates on Wayland — drag
+        // resistance works, but the Ctrl escape hatch does not.
+        self.buttons != 0
     }
 
     fn cursor_hidden(&self) -> bool {

@@ -70,14 +70,14 @@ public class Zone : IZonesSerializable
     }
 
     List<ZoneLink> ComputeLinks(
-        ZonesLayout layout, 
-        Func<Zone,double> getBorderResistance,
-        Func<Zone,double> nearFunc,  
-        Func<Zone,double> farFunc,  
-        Func<Zone,double> fromFunc, 
-        Func<Zone,double> toFunc, 
-        Func<Zone,int> fromPixelsFunc, 
-        Func<Zone,int> toPixelsFunc, 
+        ZonesLayout layout,
+        Func<Zone,IBorderSide> getBorderSide,
+        Func<Zone,double> nearFunc,
+        Func<Zone,double> farFunc,
+        Func<Zone,double> fromFunc,
+        Func<Zone,double> toFunc,
+        Func<Zone,int> fromPixelsFunc,
+        Func<Zone,int> toPixelsFunc,
         double direction)
     {
         var values = new List<double> {double.MinValue, double.MaxValue};
@@ -87,6 +87,19 @@ public class Zone : IZonesSerializable
             if (ReferenceEquals(zone, this)) continue;
             Add(fromFunc(zone));
             Add(toFunc(zone));
+        }
+
+        // User-drawn sections are just more cut points: once their bounds are in
+        // here, every interval below falls entirely inside one section or entirely
+        // outside them all, and the daemon receives an ordinary link list. This is
+        // the whole of the feature's runtime cost — nothing reaches the hook.
+        var side = getBorderSide(this);
+        var edgeOrigin = fromFunc(this);
+        var edgeEnd = toFunc(this);
+        foreach (var section in side.Sections)
+        {
+            Add(edgeOrigin + section.From);
+            Add(edgeOrigin + section.To);
         }
 
         var links = new List<ZoneLink>();
@@ -134,9 +147,15 @@ public class Zone : IZonesSerializable
             var targetFromPixel = target!=null?fromPixelsFunc(target):0;
             var targetToPixel = target!=null?toPixelsFunc(target):0;
 
-            var borderResistance = getBorderResistance(this);
+            var resistance = ResistanceOver(from, to);
 
-            if (links.Count > 0 && ReferenceEquals(links.Last().Target, target))
+            // Adjacent intervals only merge when they are indistinguishable to the
+            // daemon. Comparing the target alone — as this did before sections
+            // existed — would silently swallow the boundary between two sections
+            // of different settings that happen to point at the same monitor.
+            if (links.Count > 0
+                && ReferenceEquals(links.Last().Target, target)
+                && links.Last().HasSameResistanceAs(resistance))
             {
                 links.Last().To = to;
                 links.Last().SourceToPixel = Interpolate(to,sourceFrom,sourceTo, sourceFromPixel,sourceToPixel);
@@ -147,7 +166,10 @@ public class Zone : IZonesSerializable
 
                 links.Add(new()
                 {
-                    BorderResistance = borderResistance, 
+                    BorderResistance = resistance.Move,
+                    MoveBlock = resistance.MoveBlock,
+                    DragResistance = resistance.Drag,
+                    DragBlock = resistance.DragBlock,
                     Distance = min,
                     From = from,
                     To = to,
@@ -175,6 +197,38 @@ public class Zone : IZonesSerializable
                 var pixelLength = pixelTo - pixelFrom;
 
                 return (int)((value - fromMm) * (double)pixelLength / length) + pixelFrom;
+            }
+
+            // Which section governs the interval [intervalFrom, intervalTo].
+            // Section bounds are cut points of `values`, so an interval is never
+            // split across two sections and probing its midpoint is exact.
+            BorderResistanceValues ResistanceOver(double intervalFrom, double intervalTo)
+            {
+                var low = Math.Max(intervalFrom, edgeOrigin);
+                var high = Math.Min(intervalTo, edgeEnd);
+
+                // Intervals off the ends of this edge can't be crossed anyway
+                // (no target), and their midpoint is meaningless — one of the
+                // bounds is a ±double sentinel. Fall back to the side default.
+                if (low < high)
+                {
+                    var probe = low + (high - low) / 2;
+
+                    foreach (var section in side.Sections)
+                    {
+                        if (probe < edgeOrigin + section.From) continue;
+                        if (probe >= edgeOrigin + section.To) continue;
+
+                        return new BorderResistanceValues(
+                            section.Move, section.MoveBlock,
+                            section.Drag, section.DragBlock);
+                    }
+                }
+
+                // Not covered by any section: the edge offers no resistance. An edge
+                // used to carry a default of its own, but that is exactly a section
+                // spanning it, and one way of saying a thing is enough.
+                return new BorderResistanceValues(0, false, 0, false);
             }
         }
 

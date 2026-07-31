@@ -145,18 +145,23 @@ internal class MonitorLocationViewModel : ViewModel<PhysicalMonitor>, IScreenCon
 
             var thickness = RulerThickness * scaling;
 
+            var band = (int)System.Math.Round(thickness);
+
             // Horizontal rulers first, vertical ones last so they end up on
-            // top in the corners, like in the former single-panel layout.
-            ShowRulerWindow(top, new PixelPoint(bounds.X, bounds.Y), bounds.Width, thickness, scaling);
-            ShowRulerWindow(bottom, new PixelPoint(bounds.X, (int)(bounds.Bottom - thickness)), bounds.Width, thickness, scaling);
-            ShowRulerWindow(left, new PixelPoint(bounds.X, bounds.Y), thickness, bounds.Height, scaling);
-            ShowRulerWindow(right, new PixelPoint((int)(bounds.Right - thickness), bounds.Y), thickness, bounds.Height, scaling);
+            // top in the corners, like in the former single-panel layout. Each is
+            // anchored to the edge it measures, since the platform can grant a
+            // window more thickness than it asks for.
+            ShowRulerWindow(top, new PixelRect(bounds.X, bounds.Y, bounds.Width, band), scaling);
+            ShowRulerWindow(bottom, new PixelRect(bounds.X, bounds.Bottom - band, bounds.Width, band), scaling, anchorBottom: true);
+            ShowRulerWindow(left, new PixelRect(bounds.X, bounds.Y, band, bounds.Height), scaling);
+            ShowRulerWindow(right, new PixelRect(bounds.Right - band, bounds.Y, band, bounds.Height), scaling, anchorRight: true);
         }
     }
 
-    void ShowRulerWindow(RulerWindow panel, PixelPoint position, double pixelWidth, double pixelHeight, double scaling)
+    void ShowRulerWindow(RulerWindow panel, PixelRect target, double scaling,
+        bool anchorRight = false, bool anchorBottom = false)
     {
-        panel.ShowAt(position, pixelWidth, pixelHeight, scaling);
+        panel.ShowAt(target, scaling, anchorRight, anchorBottom);
         _panels.Add(panel);
     }
 

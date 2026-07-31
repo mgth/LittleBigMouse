@@ -163,11 +163,22 @@ public class ForceCompactTests
         layout.UpdatePhysicalMonitors();
         layout.SetLocationsFromSystemConfiguration();
 
-        // P | S | H side by side, bottom-aligned like their pixel bounds.
+        // P | S | H side by side.
         Assert.Equal(700, middle.DepthProjection.X, 2);
         Assert.Equal(1400, tv.DepthProjection.X, 2);
+
+        // S has P's pitch, so sharing the same pixel rows puts it at the same height.
         Assert.Equal(400, middle.DepthProjection.Bounds.Bottom, 2);
-        Assert.Equal(400, tv.DepthProjection.Bounds.Bottom, 2);
+
+        // The TV does not, and it used to be asserted bottom-aligned with the others.
+        // That was arbitrary: the three span identical pixel rows, so their tops match
+        // exactly as much as their bottoms do, and a 920mm panel cannot have both. It
+        // was also not reversible — pushing that arrangement back through
+        // PixelLocationSolver did not return these pixel bounds. It is now centred on
+        // what it shares with its neighbour, which is the rule the solver inverts:
+        // 460mm of TV either side of the 200mm midpoint of S.
+        Assert.Equal(200, middle.DepthProjection.Bounds.Y + middle.DepthProjection.Bounds.Height / 2, 2);
+        Assert.Equal(200, tv.DepthProjection.Bounds.Y + tv.DepthProjection.Bounds.Height / 2, 2);
     }
 
     [Fact]

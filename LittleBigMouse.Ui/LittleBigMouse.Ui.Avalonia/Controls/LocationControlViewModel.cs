@@ -105,11 +105,19 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                     : "Foreign layout, shown for inspection")
             .ToProperty(this, e => e.VirtualLayoutOrigin);
 
+        // The click means the same thing in both modes — hand the layout to the engine
+        // and keep it — so only the second line has to say what the mode adds.
         _startTooltip = this.WhenAnyValue(e => e.Model)
-            .Select(m => m?.IsVirtual == true
-                ? "Simulate: send this layout to the daemon for validation (input hook stays off)"
-                : "Apply/Start")
+            .Select(m => m?.IsVirtual == true ? "Simulate" : "Apply and start")
             .ToProperty(this, e => e.StartTooltip);
+
+        _startTooltipDetail = this.WhenAnyValue(e => e.Model, e => e.LiveUpdate)
+            .Select(t => t.Item1?.IsVirtual == true
+                ? "Send this layout to the daemon for validation. The input hook stays off — a foreign layout never drives the local mouse."
+                : t.Item2
+                    ? "Live update is on: your changes are already being felt, but none of them is saved. This keeps them."
+                    : "Save the layout and hand it to the mouse engine. Use the arrow to have changes sent as you make them instead.")
+            .ToProperty(this, e => e.StartTooltipDetail);
 
         BackToLocalLayoutCommand = ReactiveCommand.Create(
             _mainService.ReloadSystemLayout,
@@ -130,6 +138,15 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         this.WhenAnyValue(e => e.CanLiveUpdate)
             .Where(can => !can)
             .Subscribe(_ => LiveUpdate = false);
+
+        // Two modes, each one its own command, so the menu can show both at once with
+        // the current one marked. A single toggling entry read as a control that was
+        // off rather than as the mode you are not in.
+        ManualUpdateCommand = ReactiveCommand.Create(() => { LiveUpdate = false; });
+
+        LiveUpdateCommand = ReactiveCommand.Create(
+            () => { LiveUpdate = true; },
+            this.WhenAnyValue(e => e.CanLiveUpdate).ObserveOn(RxSchedulers.MainThreadScheduler));
 
         // The engine going down while we preview into it — the tray Stop, a display
         // change, an excluded application — outranks the preview: the next tick would
@@ -379,11 +396,11 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     bool _dead;
 
     /// <summary>
-    /// Live preview: every edit reaches the running daemon within
-    /// <see cref="LiveLayoutUpdater.Interval"/>, so the layout can be felt with the real
-    /// mouse before it is applied. Deliberately not persisted — coming back to a session
-    /// with unsaved geometry already live would be a trap, and the switch costs one
-    /// click.
+    /// How the apply button delivers: on click, or continuously. While it is on, every
+    /// edit reaches the running daemon within <see cref="LiveLayoutUpdater.Interval"/>,
+    /// so the layout can be felt with the real mouse before it is kept. Deliberately not
+    /// persisted across sessions — coming back to unsaved geometry already live would be
+    /// a trap, and the mode costs one click.
     /// </summary>
     public bool LiveUpdate
     {
@@ -392,9 +409,15 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     }
    bool _liveUpdate;
 
-    /// <summary>Whether there is a running engine to preview into.</summary>
+    /// <summary>Whether there is a daemon to preview into, and a layout worth previewing.</summary>
     public bool CanLiveUpdate => _canLiveUpdate.Value;
     readonly ObservableAsPropertyHelper<bool> _canLiveUpdate;
+
+    /// <summary>The apply button delivers on click.</summary>
+    public ReactiveCommand<Unit, Unit> ManualUpdateCommand { get; }
+
+    /// <summary>The apply button also delivers continuously, as edits are made.</summary>
+    public ReactiveCommand<Unit, Unit> LiveUpdateCommand { get; }
 
     readonly LiveLayoutUpdater _live;
     readonly DispatcherTimer _liveTimer;
@@ -419,6 +442,9 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
     public string StartTooltip => _startTooltip.Value;
     readonly ObservableAsPropertyHelper<string> _startTooltip;
+
+    public string StartTooltipDetail => _startTooltipDetail.Value;
+    readonly ObservableAsPropertyHelper<string> _startTooltipDetail;
 
     public ReactiveCommand<Unit, Unit> BackToLocalLayoutCommand { get; }
 

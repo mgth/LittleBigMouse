@@ -77,7 +77,7 @@ pub fn spawn_watchdog(shared: &'static Shared) {
             // Reinstall on the pump thread so crossing heals instead of staying dead until a restart.
             if hooked && want && pos != last_pos && moves == last_moves {
                 eprintln!("[LittleBigMouse.Hook] watchdog: reinstalling silently-dropped mouse hook");
-                request_hook(shared);
+                force_rehook(shared);
             }
 
             last_moves = moves;
@@ -269,14 +269,37 @@ fn pump_messages() -> bool {
 }
 
 /// Ask the pump to install the mouse hook (C++ `Hooker::Hook`).
+///
+/// Breaking the pump loop is not a light request: `Hooker::run` unconditionally runs a
+/// full `do_unhook` then `do_hook` around it, tearing down and rebuilding the mouse,
+/// focus, desktop and display hooks and the display window — and broadcasting `Stopped`
+/// then `Running` on the way. Asking for a state that already holds must not cost that.
+/// It is what every Apply did, and what the UI's live preview would do several times a
+/// second. Use [`force_rehook`] when the rebuild itself is the point.
 pub fn request_hook(shared: &Shared) {
+    let was_wanted = shared.want_hook.swap(true, Ordering::SeqCst);
+    if was_wanted && shared.hooked.load(Ordering::SeqCst) {
+        // Nothing to reconcile — but a Load just ahead of this may carry a new
+        // priority, and `do_hook` is what normally applies it.
+        platform::set_process_priority(Priority::from_u8(shared.priority.load(Ordering::SeqCst)));
+        return;
+    }
+    break_loop(shared);
+}
+
+/// Rebuild the hooks even though the desired state already holds — for the watchdog,
+/// whose whole job is to reinstall a mouse hook Windows dropped behind our back.
+pub fn force_rehook(shared: &Shared) {
     shared.want_hook.store(true, Ordering::SeqCst);
     break_loop(shared);
 }
 
 /// Ask the pump to remove the mouse hook (C++ `Hooker::Unhook`).
 pub fn request_unhook(shared: &Shared) {
-    shared.want_hook.store(false, Ordering::SeqCst);
+    let was_wanted = shared.want_hook.swap(false, Ordering::SeqCst);
+    if !was_wanted && !shared.hooked.load(Ordering::SeqCst) {
+        return;
+    }
     break_loop(shared);
 }
 

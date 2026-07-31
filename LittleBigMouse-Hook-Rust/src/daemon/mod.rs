@@ -31,7 +31,10 @@ pub fn receive_message(
 
     let mut became_listening = false;
 
-    for command in protocol::parse(line) {
+    let commands = protocol::parse(line);
+    let rehooks = frame_rehooks(&commands);
+
+    for command in commands {
         match command {
             Command::Listen => {
                 server.set_listening(client_id);
@@ -52,7 +55,7 @@ pub fn receive_message(
                 // Report the outcome to every listening client: a Load-without-Run
                 // (virtual-layout inspection) has no later Running event to prove
                 // the zones were accepted.
-                match load_layout(shared, &xml) {
+                match load_layout(shared, &xml, rehooks) {
                     Some(info) => {
                         server.broadcast(&protocol::loaded(
                             info.zones,
@@ -108,10 +111,28 @@ pub struct LoadInfo {
     pub virtual_layout: bool,
 }
 
+/// Does this frame put the hook straight back up after its `Load`?
+///
+/// Every Apply sends `Load`+`Run`, and so does every tick of the UI's live preview.
+/// Taking the hook down in between is pure loss: `do_unhook` tears down the mouse,
+/// focus, desktop and display hooks and destroys the display window, `do_hook` builds
+/// all of it again, and the pair broadcasts `Stopped` then `Running` — which the UI
+/// shows as the tray icon blinking off and on. Once per Apply that is merely wasteful;
+/// several times a second under live preview it is visible.
+fn frame_rehooks(commands: &[Command]) -> bool {
+    commands.iter().any(|command| matches!(command, Command::Run))
+}
+
 /// C++ `LittleBigMouseDaemon::ReceiveLoadMessage`: stop hooking, parse the
 /// layout into the engine, and adopt its priorities for the next hook.
-fn load_layout(shared: &Shared, xml: &str) -> Option<LoadInfo> {
-    if shared.hooked.load(Ordering::SeqCst) {
+///
+/// `keep_hooked` is for the `Load`+`Run` frames described on
+/// [`frame_rehooks`]: the engine swap itself is safe under a live hook (the
+/// callback takes the same lock), the teardown was only ever there because the
+/// hook had no reason to stay up across a layout it no longer knew.
+fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo> {
+    if shared.hooked.load(Ordering::SeqCst) && !keep_hooked {
+        shared.unhook_requests.fetch_add(1, Ordering::SeqCst);
         hook::request_unhook(shared);
     }
     if let Some(layout) = ZonesLayout::from_xml(xml) {
@@ -135,6 +156,12 @@ fn load_layout(shared: &Shared, xml: &str) -> Option<LoadInfo> {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .load(layout);
+        // The one thing the teardown used to guarantee: a cursor confined by the
+        // outgoing geometry is never left confined by it. The engine re-clips on the
+        // next move if the new layout still calls for it.
+        if keep_hooked {
+            crate::platform::cursor::release_clip();
+        }
         // Kept for the edge prober, which re-parses rather than touching the
         // live engine.
         *shared
@@ -237,7 +264,10 @@ fn replay(shared: &Shared, content: &str) -> bool {
     for line in content.lines() {
         for command in protocol::parse(line) {
             match command {
-                Command::Load(xml) => loaded = load_layout(shared, &xml).is_some(),
+                // One command per line here, so a Run is never in sight when the Load
+                // is handled. It costs nothing: this is the startup path, where there
+                // is no hook up to take down.
+                Command::Load(xml) => loaded = load_layout(shared, &xml, false).is_some(),
                 Command::Run if loaded => run(shared),
                 _ => {}
             }
@@ -333,6 +363,63 @@ mod tests {
             !shared.want_hook.load(Ordering::SeqCst),
             "Run must be refused on a virtual layout"
         );
+    }
+
+    // The payload alone, as `load_layout` receives it once the CommandMessage
+    // envelope is off.
+    const ZONES_XML: &str = concat!(
+        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
+        r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+
+    #[test]
+    fn a_frame_is_recognized_as_rehooking_by_its_run() {
+        // The shape the UI actually sends for an Apply, and for every live-preview
+        // tick: both commands in one frame.
+        let frame = format!(
+            "<Messages><CommandMessage Command=\"Load\"><Payload>{ZONES_XML}</Payload></CommandMessage><CommandMessage Command=\"Run\" Payload=\"\"/></Messages>"
+        );
+        assert!(frame_rehooks(&protocol::parse(&frame)));
+
+        let load_only = format!(
+            "<CommandMessage Command=\"Load\"><Payload>{ZONES_XML}</Payload></CommandMessage>"
+        );
+        assert!(
+            !frame_rehooks(&protocol::parse(&load_only)),
+            "a Load on its own — the virtual-layout inspection path — has nothing putting the hook back"
+        );
+    }
+
+    #[test]
+    fn a_load_a_run_follows_never_takes_the_hook_down() {
+        let shared = Shared::new();
+        shared.hooked.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+
+        assert!(load_layout(&shared, ZONES_XML, true).is_some());
+
+        assert_eq!(
+            shared.unhook_requests.load(Ordering::SeqCst),
+            0,
+            "tearing the hooks down to put them straight back up is the whole cost being avoided"
+        );
+        assert!(shared.want_hook.load(Ordering::SeqCst));
+        assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
+    }
+
+    #[test]
+    fn a_load_on_its_own_still_takes_the_hook_down() {
+        // Nothing is putting it back, so leaving it up would hold the cursor to a
+        // geometry the engine no longer knows.
+        let shared = Shared::new();
+        shared.hooked.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+
+        assert!(load_layout(&shared, ZONES_XML, false).is_some());
+
+        assert_eq!(shared.unhook_requests.load(Ordering::SeqCst), 1);
+        assert!(!shared.want_hook.load(Ordering::SeqCst));
     }
 
     #[test]

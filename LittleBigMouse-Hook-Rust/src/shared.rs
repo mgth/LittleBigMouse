@@ -31,6 +31,12 @@ pub struct Shared {
     /// Thread id of the message pump, for `PostThreadMessageW`
     /// (C++ `Hooker::_currentThreadId`). Zero until the pump starts.
     pub pump_tid: AtomicU32,
+    /// How many times a `Load` has asked for the hook to come down. Taking it down
+    /// tears the mouse, focus, desktop and display hooks apart and destroys the
+    /// display window, so a `Load` that is immediately followed by a `Run` skips it —
+    /// see `daemon::load_layout`. Counted because that is the only way to observe,
+    /// from a test, a teardown that did not happen.
+    pub unhook_requests: AtomicU32,
     /// Process priority while hooking / idle (C++ `Hooker::_priority` /
     /// `_priorityUnhooked`), stored as `Priority as u8`. Set from the loaded
     /// layout; read by the pump when (re)installing the hook.
@@ -59,6 +65,7 @@ impl Shared {
             suspended: AtomicBool::new(false),
             want_quit: AtomicBool::new(false),
             pump_tid: AtomicU32::new(0),
+            unhook_requests: AtomicU32::new(0),
             // C++ Hooker defaults, until a layout overrides them.
             priority: AtomicU8::new(Priority::Normal.as_u8()),
             priority_unhooked: AtomicU8::new(Priority::Below.as_u8()),

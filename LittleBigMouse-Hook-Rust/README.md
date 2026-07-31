@@ -1,13 +1,13 @@
-# LittleBigMouse.Hook — Rust port
+# LittleBigMouse.Hook — the daemon
 
-A memory-safe Rust rewrite of the native C++ `LittleBigMouse.Hook` daemon: the
-separate process that installs the low-level Windows mouse hook and repositions
-the cursor across multi-DPI monitors.
+The separate process that installs the low-level mouse hook and repositions the
+cursor across multi-DPI monitors. A memory-safe Rust rewrite of the native C++
+daemon it replaced, and since 5.4 the only one — the C++ implementation was
+removed from the tree once it had stopped speaking the current wire protocol.
 
 The daemon is language-agnostic behind its contract with the C# UI — per-user
 local IPC (a per-session named pipe on Windows, a 0600 Unix socket in
-`$XDG_RUNTIME_DIR` on Linux) exchanging length-prefixed UTF-8 XML frames — so this process is a
-drop-in replacement for the C++ one.
+`$XDG_RUNTIME_DIR` on Linux) exchanging length-prefixed UTF-8 XML frames.
 
 ## Why Rust
 
@@ -47,7 +47,7 @@ cargo clippy --all-targets
 Cargo rejects a target named with a `.`, so the binary builds as **`lbm-hook.exe`**
 and must be renamed to **`LittleBigMouse.Hook.exe`** (the name the UI's
 `FindHookPath` / `GetProcessesByName` and the installer expect) when staging.
-`stage.ps1` does this; CI does it in the "Stage hook" step when `HOOK_IMPL=rust`.
+`stage.ps1` does this; CI does it in the "Stage hook next to UI output" step.
 
 ## Environment overrides
 
@@ -57,9 +57,9 @@ and must be renamed to **`LittleBigMouse.Hook.exe`** (the name the UI's
 | `LBM_HOOK_UI` | Force UI mode (wait for socket commands) instead of parent-process detection — used by test scripts |
 | `LBM_HOOK_DEBUG` | Print a stderr heartbeat: `hooked` / `mouse_events` / `crossings` |
 
-## CI coexistence
+## CI
 
-`.github/workflows/dotnet-desktop.yml` builds the C++ hook by default
-(`HOOK_IMPL=cpp`). A manual `workflow_dispatch` with `hook_impl=rust` builds and
-ships this daemon instead. The C++ project stays in the solution until the Rust
-port reaches full parity.
+`.github/workflows/dotnet-desktop.yml` builds and ships this daemon, and runs its
+tests alongside the managed ones. It is the only hook: the C++ implementation was
+removed once this port had passed it, having stopped speaking the current wire
+protocol.

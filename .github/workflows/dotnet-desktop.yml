@@ -1,5 +1,4 @@
-# Build LittleBigMouse: managed UI (net10 / Avalonia) + native hook daemon (x64,
-# Rust by default, C++ as opt-out).
+# Build LittleBigMouse: managed UI (net10 / Avalonia) + the hook daemon (Rust, x64).
 # - Push / PR on master: run the suites, build everything (installer included, as
 #   a smoke test), upload a portable artifact.
 # - Tag v*: additionally publish the installer as an artifact and attach it to a
@@ -14,20 +13,9 @@ on:
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
-    inputs:
-      hook_impl:
-        description: 'Hook daemon implementation to build and ship'
-        default: 'rust'
-        type: choice
-        options: [ rust, cpp ]
 
 env:
-  # Which hook daemon to build/stage. The Rust port is the default on every
-  # build; the C++ implementation stays available as an opt-out via
-  # workflow_dispatch while it remains in the tree.
-  HOOK_IMPL: ${{ github.event.inputs.hook_impl || 'rust' }}
   UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
-  HOOK_PROJECT: LittleBigMouse.Hook\LittleBigMouse.Hook.vcxproj
   HOOK_RUST_PROJECT: LittleBigMouse-Hook-Rust\Cargo.toml
   UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
 
@@ -46,9 +34,6 @@ jobs:
       with:
         dotnet-version: 10.0.x
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-
     - name: Derive version from tag
       id: ver
       run: |
@@ -62,14 +47,8 @@ jobs:
 
     # Before anything is built for shipping: a red suite should cost seconds, not
     # a full installer run.
-    #
-    # Through the filter rather than the solution, which still holds the C++ hook:
-    # `dotnet` cannot load a .vcxproj without the MSVC toolchain and fails the run
-    # over it, so the suites that did work were reported green under a failing
-    # build — and the UI suite, which the C++ project used to drag in, never ran at
-    # all. Being run by nobody is how a test comes to be trusted for nothing.
     - name: Test (managed)
-      run: dotnet test LittleBigMouse-Managed.slnf -c Release --nologo
+      run: dotnet test LittleBigMouse.sln -c Release --nologo
 
     - name: Test (Rust hook)
       run: cargo test --manifest-path $env:HOOK_RUST_PROJECT
@@ -80,24 +59,14 @@ jobs:
         if ("${{ steps.ver.outputs.version }}") { $buildArgs += "-p:Version=${{ steps.ver.outputs.version }}" }
         dotnet build $env:UI_PROJECT @buildArgs
 
-    - name: Build hook (C++, x64 Release)
-      if: env.HOOK_IMPL == 'cpp'
-      run: msbuild $env:HOOK_PROJECT /m /p:Configuration=Release /p:Platform=x64
-
     # windows-latest ships a stable Rust toolchain preinstalled, so no install step.
     - name: Build hook (Rust, release)
-      if: env.HOOK_IMPL == 'rust'
       run: cargo build --release --manifest-path $env:HOOK_RUST_PROJECT
 
     - name: Stage hook next to UI output
       # Cargo can't emit a target named with a '.', so the Rust binary is built as
       # lbm-hook.exe and renamed to the contract name here.
-      run: |
-        if ($env:HOOK_IMPL -eq 'rust') {
-          Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
-        } else {
-          Copy-Item LittleBigMouse.Hook\bin\x64\Release\LittleBigMouse.Hook.exe $env:UI_OUTPUT\
-        }
+      run: Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
 
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4
@@ -118,7 +87,7 @@ jobs:
         # Off a release tag there is no version to inject. Leave AppVer undefined
         # instead of passing an empty one (ISCC rejects an empty AppVersion) and let
         # the .iss fall back to the built exe's FileVersion.
-        $defines = @("/DHookImpl=${{ env.HOOK_IMPL }}")
+        $defines = @()
         if ("${{ steps.ver.outputs.version }}") { $defines += "/DAppVer=${{ steps.ver.outputs.version }}" }
         & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" @defines LittleBigMouse.Setup\LittleBigMouse.iss
         # Also fails the step if ISCC somehow reported success without producing it.

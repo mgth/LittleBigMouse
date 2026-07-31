@@ -135,13 +135,11 @@ are submodules.
 ### Tests
 
 ```bash
-dotnet test LittleBigMouse-Managed.slnf
+dotnet test LittleBigMouse.sln
 cargo test --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml
 ```
 
-Through the filter, not `LittleBigMouse.sln`: the solution still holds the C++ hook, and
-`dotnet` cannot load a `.vcxproj` without the MSVC toolchain — it then fails the run over
-that alone, whatever the suites did. Both commands are what CI runs.
+Both are what CI runs, before it builds anything for shipping.
 
 ## Usage
 

@@ -9,6 +9,23 @@
 		<Setter Property="Padding" Value="44,8,14,10"/>
 	</Style>
 
+	<!-- A row that has stopped being what you are looking at: keep what it offers, drop
+	     the sentence explaining it. -->
+	<Style Selector="controls|SettingRow.Compact">
+		<Setter Property="Padding" Value="14,6"/>
+	</Style>
+	<Style Selector="controls|SettingRow.Compact /template/ TextBlock#PART_Description">
+		<Setter Property="IsVisible" Value="False"/>
+	</Style>
+
+	<!-- Pinned above the scroller rather than scrolling with it. The separator only
+	     appears once there is content passing underneath, so at rest the card looks like
+	     any other. -->
+	<Style Selector="Border.PinnedCard.Compact">
+		<Setter Property="CornerRadius" Value="8"/>
+		<Setter Property="BoxShadow" Value="0 2 8 0 #22000000"/>
+	</Style>
+
 	<Style Selector="controls|SettingRow ToggleSwitch">
 		<Setter Property="OnContent" Value="{x:Null}"/>
 		<Setter Property="OffContent" Value="{x:Null}"/>

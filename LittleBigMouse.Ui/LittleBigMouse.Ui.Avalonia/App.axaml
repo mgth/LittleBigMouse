@@ -89,7 +89,8 @@
 								<TextBlock Text="{TemplateBinding Header}"
 								           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
 								           FontSize="13" TextWrapping="Wrap"/>
-								<TextBlock Text="{TemplateBinding Description}"
+								<TextBlock x:Name="PART_Description"
+								           Text="{TemplateBinding Description}"
 								           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
 								           FontSize="12" TextWrapping="Wrap"
 								           IsVisible="{TemplateBinding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>

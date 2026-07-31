@@ -205,8 +205,13 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// snapping onto them guarantees a section never leaves a one-millimetre sliver
     /// of a link behind.
     /// </para>
+    /// <para>
+    /// Sections drawn anywhere on an edge parallel to this one contribute too, near
+    /// or far, so a passage can be lined up with the one across the gap, with the one
+    /// on the opposite side of this same screen, or with a screen further along.
+    /// </para>
     /// </summary>
-    public IReadOnlyList<double> SnapTargetsMm()
+    public IReadOnlyList<double> SnapTargetsMm(BorderSection? excluding = null)
     {
         var targets = new List<double> { 0, LengthMm, LengthMm / 2 };
 
@@ -223,6 +228,42 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
             AddIfOnEdge(far - OriginMm);
         }
 
+        // The sections already on this edge: butting a new one against its neighbour
+        // is the commonest intent, and the one hardest to hit by hand.
+        foreach (var section in Side.Sections.Items)
+        {
+            if (ReferenceEquals(section, excluding)) continue;
+
+            AddIfOnEdge(section.From);
+            AddIfOnEdge(section.To);
+        }
+
+        // Every other edge in the layout running along the same axis, at its absolute
+        // position: the edge facing this one, the opposite side of this very monitor,
+        // and screens further away. Adjacency is not the criterion — what lines up is
+        // the coordinate along the axis, so a section two screens over is as valid a
+        // target as the one across the gap. Anything projecting outside this edge
+        // falls away on its own, since only positions on the edge are kept.
+        var parallel = IsVertical
+            ? (BorderSideKind[])[BorderSideKind.Left, BorderSideKind.Right]
+            : [BorderSideKind.Top, BorderSideKind.Bottom];
+
+        foreach (var monitor in Monitor.Layout.PhysicalMonitors)
+        {
+            foreach (var kind in parallel)
+            {
+                if (ReferenceEquals(monitor, Monitor) && kind == Kind) continue;
+
+                var origin = OriginOf(monitor, kind);
+
+                foreach (var section in SideOf(monitor, kind).Sections.Items)
+                {
+                    AddIfOnEdge(origin + section.From - OriginMm);
+                    AddIfOnEdge(origin + section.To - OriginMm);
+                }
+            }
+        }
+
         return targets;
 
         void AddIfOnEdge(double value)
@@ -233,8 +274,12 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         }
     }
 
-    /// <summary>Snap <paramref name="mm"/> to the nearest target within tolerance.</summary>
-    public double Snap(double mm, bool enabled = true)
+    /// <summary>
+    /// Snap <paramref name="mm"/> to the nearest target within tolerance. The section
+    /// being dragged is left out of the targets, or its own boundaries would hold it
+    /// where it already is.
+    /// </summary>
+    public double Snap(double mm, bool enabled = true, BorderSection? excluding = null)
     {
         var clamped = System.Math.Clamp(mm, 0, LengthMm);
         if (!enabled) return clamped;
@@ -243,7 +288,7 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         var best = clamped;
         var bestDistance = tolerance;
 
-        foreach (var target in SnapTargetsMm())
+        foreach (var target in SnapTargetsMm(excluding))
         {
             var distance = System.Math.Abs(target - clamped);
             if (distance >= bestDistance) continue;
@@ -495,8 +540,38 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     {
         var mine = Monitor.DepthProjection.Bounds;
 
-        PhysicalMonitor? best = null;
-        var bestGap = Monitor.Layout.Options.MaxTravelDistance;
+        (PhysicalMonitor Monitor, BorderSideKind Kind)? best = null;
+        var bestGap = double.MaxValue;
+
+        foreach (var candidate in FacingEdges())
+        {
+            var gap = GapTo(mine, candidate.Monitor.DepthProjection.Bounds);
+            if (gap >= bestGap) continue;
+
+            bestGap = gap;
+            best = candidate;
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Every edge across this one, nearest or not. More than one monitor can face a
+    /// single edge — two screens stacked against a tall one — and each contributes
+    /// its own sections as snap targets, so only the mirror needs to single one out.
+    /// </summary>
+    public IEnumerable<(PhysicalMonitor Monitor, BorderSideKind Kind)> FacingEdges()
+    {
+        var mine = Monitor.DepthProjection.Bounds;
+        var reach = Monitor.Layout.Options.MaxTravelDistance;
+
+        var facingKind = Kind switch
+        {
+            BorderSideKind.Left => BorderSideKind.Right,
+            BorderSideKind.Right => BorderSideKind.Left,
+            BorderSideKind.Top => BorderSideKind.Bottom,
+            _ => BorderSideKind.Top
+        };
 
         foreach (var other in Monitor.Layout.PhysicalMonitors)
         {
@@ -504,16 +579,9 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
             var bounds = other.DepthProjection.Bounds;
 
-            var gap = Kind switch
-            {
-                BorderSideKind.Left => mine.Left - bounds.Right,
-                BorderSideKind.Right => bounds.Left - mine.Right,
-                BorderSideKind.Top => mine.Top - bounds.Bottom,
-                _ => bounds.Top - mine.Bottom
-            };
-
             // Behind us, or further than the cursor would ever travel.
-            if (gap < 0 || gap > bestGap) continue;
+            var gap = GapTo(mine, bounds);
+            if (gap < 0 || gap > reach) continue;
 
             var overlaps = IsVertical
                 ? bounds.Bottom > mine.Top && bounds.Top < mine.Bottom
@@ -521,20 +589,17 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
             if (!overlaps) continue;
 
-            best = other;
-            bestGap = gap;
+            yield return (other, facingKind);
         }
-
-        if (best == null) return null;
-
-        return (best, Kind switch
-        {
-            BorderSideKind.Left => BorderSideKind.Right,
-            BorderSideKind.Right => BorderSideKind.Left,
-            BorderSideKind.Top => BorderSideKind.Bottom,
-            _ => BorderSideKind.Top
-        });
     }
+
+    double GapTo(HLab.Geo.Rect mine, HLab.Geo.Rect other) => Kind switch
+    {
+        BorderSideKind.Left => mine.Left - other.Right,
+        BorderSideKind.Right => other.Left - mine.Right,
+        BorderSideKind.Top => mine.Top - other.Bottom,
+        _ => other.Top - mine.Bottom
+    };
 
     public static BorderSide SideOf(PhysicalMonitor monitor, BorderSideKind kind) => kind switch
     {

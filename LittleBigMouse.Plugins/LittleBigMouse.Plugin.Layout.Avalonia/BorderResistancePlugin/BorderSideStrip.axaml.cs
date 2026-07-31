@@ -213,7 +213,7 @@ public partial class BorderSideStrip : UserControl
 
         if (_mode == Mode.Draw) SelectInParent(null);
 
-        _anchorMm = vm.Snap(mm, SnapEnabled(e.KeyModifiers));
+        _anchorMm = vm.Snap(mm, SnapEnabled(e.KeyModifiers), _target);
         _lastMm = mm;
 
         Focus();
@@ -229,7 +229,7 @@ public partial class BorderSideStrip : UserControl
 
         var snap = SnapEnabled(e.KeyModifiers);
         var raw = AlongMm(e);
-        var mm = vm.Snap(raw, snap);
+        var mm = vm.Snap(raw, snap, _target);
 
         switch (_mode)
         {
@@ -264,7 +264,7 @@ public partial class BorderSideStrip : UserControl
 
         if (vm != null && _mode == Mode.Draw)
         {
-            var mm = vm.Snap(AlongMm(e), SnapEnabled(e.KeyModifiers));
+            var mm = vm.Snap(AlongMm(e), SnapEnabled(e.KeyModifiers), _target);
             var created = vm.Create(_anchorMm, mm);
 
             if (created != null)
@@ -330,7 +330,7 @@ public partial class BorderSideStrip : UserControl
         if (!keep) Overlay.Children.Clear();
         if (!snap) return;
 
-        var onTarget = vm.SnapTargetsMm().Any(t => System.Math.Abs(t - mm) < 0.001);
+        var onTarget = vm.SnapTargetsMm(_target).Any(t => System.Math.Abs(t - mm) < 0.001);
         if (!onTarget) return;
 
         var at = vm.ToPixels(mm);

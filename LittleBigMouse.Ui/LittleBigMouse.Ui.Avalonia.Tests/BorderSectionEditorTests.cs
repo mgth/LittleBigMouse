@@ -106,6 +106,71 @@ public sealed class BorderSectionEditorTests
     }
 
     [Fact]
+    public void SnapTargetsIncludeTheSectionsAlreadyOnThisEdge()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var first = side.Create(40, 90)!;
+
+        var targets = side.SnapTargetsMm();
+
+        Assert.Contains(40.0, targets);
+        Assert.Contains(90.0, targets);
+
+        // While that very section is being dragged its own edges drop out, or they
+        // would hold it where it already sits.
+        var dragging = side.SnapTargetsMm(first);
+        Assert.DoesNotContain(40.0, dragging);
+        Assert.DoesNotContain(90.0, dragging);
+    }
+
+    [Fact]
+    public void SnapTargetsIncludeTheSectionsFacingThisEdge()
+    {
+        var layout = TwoMonitors(out var left, out var right);
+
+        // The neighbour is 60 mm lower, so its own 0..50 section sits at absolute
+        // 60..110 — which is 60..110 on this edge too, both origins being 0 and 60.
+        right.DepthProjection.Y = 60;
+        right.BorderResistance.Left.Sections.Add(new BorderSection { From = 0, To = 50 });
+
+        var targets = RightEdgeOf(left).SnapTargetsMm();
+
+        Assert.Contains(60.0, targets);
+        Assert.Contains(110.0, targets);
+        Assert.NotNull(layout);
+    }
+
+    [Fact]
+    public void SnapTargetsIncludeTheOppositeEdgeOfTheSameScreen()
+    {
+        // Lining the two sides of one screen up makes a straight path through it.
+        var left = TwoMonitorsLeft();
+        left.BorderResistance.Left.Sections.Add(new BorderSection { From = 30, To = 80 });
+
+        var targets = RightEdgeOf(left).SnapTargetsMm();
+
+        Assert.Contains(30.0, targets);
+        Assert.Contains(80.0, targets);
+    }
+
+    [Fact]
+    public void SnapTargetsReachScreensBeyondTheAdjacentOne()
+    {
+        var layout = TwoMonitors(out var left, out var right);
+
+        // A third screen well past the second, far outside mirroring range, and
+        // vertically offset by 20 mm.
+        var far = AddMonitor(layout, "FAR", 2000, 20);
+        far.BorderResistance.Left.Sections.Add(new BorderSection { From = 0, To = 60 });
+
+        var targets = RightEdgeOf(left).SnapTargetsMm();
+
+        Assert.Contains(20.0, targets);
+        Assert.Contains(80.0, targets);
+        Assert.NotNull(right);
+    }
+
+    [Fact]
     public void SnapPullsOnlyWithinTolerance()
     {
         var side = RightEdgeOf(TwoMonitorsLeft());

@@ -39,6 +39,7 @@ using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Ui.Avalonia.Controls;
 using LittleBigMouse.Ui.Avalonia.Options;
 using LittleBigMouse.Platform.Windows;
 using LittleBigMouse.Ui.Avalonia.Remote;
@@ -222,11 +223,60 @@ public class MainService : ReactiveModel, IMainService
 
         _mainWindow.Closed += (s, a) => _mainWindow = null!;
 
+        // Closing the window is not leaving — the layout lives on the service and comes
+        // back with the window — but it is the gesture that reads as "done", and the
+        // moment to say the configuration was never saved. Closing has to be cancelled
+        // to ask, then repeated once answered.
+        var closeConfirmed = false;
+        _mainWindow.Closing += async (s, e) =>
+        {
+            if (closeConfirmed || s is not Window window) return;
+
+            e.Cancel = true;
+            if (!await ConfirmLeavingAsync(window, leaving: false)) return;
+
+            closeConfirmed = true;
+            window.Close();
+        };
+
         _mainWindow.Show();
 
         return Task.CompletedTask;
     }
 
+
+    /// <inheritdoc/>
+    public bool LivePreview { get; set; }
+
+    /// <summary>
+    /// Is there anything to lose? The layout carries the flag for its whole subtree, so
+    /// this is the same question the Save button answers.
+    /// </summary>
+    bool HasUnsavedLayout => MonitorsLayout is { IsVirtual: false, Saved: false };
+
+    /// <summary>
+    /// Stand between the user and leaving, but only when leaving costs something.
+    /// Returns false when they chose to stay.
+    /// </summary>
+    async Task<bool> ConfirmLeavingAsync(Window? owner, bool leaving)
+    {
+        if (!HasUnsavedLayout) return true;
+
+        var choice = await UnsavedChangesDialog.ShowAsync(owner, leaving, canSave: LivePreview);
+
+        switch (choice)
+        {
+            case UnsavedChoice.Cancel:
+                return false;
+            case UnsavedChoice.Save:
+                // Only reachable under live update, so this writes the geometry that is
+                // driving the mouse at this moment — never one nobody has tried.
+                await Task.Run(() => _layoutPersistence.Save((MonitorsLayout)MonitorsLayout));
+                return true;
+            default:
+                return true;
+        }
+    }
 
     public async Task StartNotifierAsync()
     {
@@ -279,6 +329,9 @@ public class MainService : ReactiveModel, IMainService
 
     async Task QuitAsync()
     {
+        // The one place the edits are actually lost.
+        if (!await ConfirmLeavingAsync(_mainWindow, leaving: true)) return;
+
         // TODO : it should not append by sometimes the QuitAsync does not return
         var t = Task.Delay(5000).ContinueWith(t => Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal));
         await _littleBigMouseClientService.QuitAsync();

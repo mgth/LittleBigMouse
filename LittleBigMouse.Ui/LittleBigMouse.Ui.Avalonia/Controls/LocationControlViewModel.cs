@@ -167,6 +167,11 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
         this.WhenAnyValue(e => e.LiveUpdate).Subscribe(live =>
         {
+            // Told to the service because leaving is decided there, and because only
+            // live update makes an unsaved layout safe to offer to save: it is the one
+            // driving the mouse, so it has been felt.
+            _mainService.LivePreview = live;
+
             if (live)
             {
                 // The daemon is holding the last applied layout, not ours: make the

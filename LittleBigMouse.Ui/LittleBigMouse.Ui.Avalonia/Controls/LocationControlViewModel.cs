@@ -141,6 +141,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
             .Subscribe(_ => LiveUpdate = false);
 
         _live = new LiveLayoutUpdater(
+            () => SavableReactiveModel.Revision,
             () => Model?.ComputeZones(),
             (zones, token) => _service.SendLiveAsync(zones, token));
 

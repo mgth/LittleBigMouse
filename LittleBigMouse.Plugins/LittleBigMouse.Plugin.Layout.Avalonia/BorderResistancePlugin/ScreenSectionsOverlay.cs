@@ -18,8 +18,21 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 /// </summary>
 public static class ScreenSectionsOverlay
 {
-    /// <summary>Band thickness in DIPs. Thinner than the 100-DIP rulers: it carries no digits.</summary>
-    const double BandThickness = 24.0;
+    /// <summary>
+    /// Band thickness in DIPs. Thinner than the 100-DIP rulers: it carries no digits.
+    /// <para>
+    /// Not thinner than 40, though. A window is not granted less than the platform's
+    /// minimum — the decorations' own size, still applied to a window that has none
+    /// (AvaloniaUI/Avalonia#20251) — which on Windows lands at 56 px across a
+    /// horizontal band and 44 down a vertical one at 150%, and 103 at 300%. Asking
+    /// for 24 got each band whatever its own axis allowed, so the horizontal ones
+    /// came out visibly fatter than the vertical ones, and differently again from one
+    /// screen to the next. Above the floor the request is honoured exactly, and the
+    /// four bands of every screen match: 60 px at 150%, 120 at 300%, 40 at 100%.
+    /// The rulers have never met this because 100 DIP clears it everywhere.
+    /// </para>
+    /// </summary>
+    const double BandThickness = 40.0;
 
     static readonly List<ScreenSectionsWindow> Windows = [];
 
@@ -93,21 +106,26 @@ public static class ScreenSectionsOverlay
             var scaling = screen?.Scaling ?? source.Source.EffectiveDpi.Y / 96.0;
             var thickness = BandThickness * scaling;
 
+            var band = (int)System.Math.Round(thickness);
+
             foreach (var (kind, window) in windows)
             {
-                var (position, width, height) = kind switch
+                // Each band is anchored to the edge it measures: the platform may
+                // grant it more thickness than it asks for, and it is the outer edge
+                // that has to stay put.
+                var (rect, anchorRight, anchorBottom) = kind switch
                 {
                     BorderSideKind.Top =>
-                        (new PixelPoint(bounds.X, bounds.Y), bounds.Width, thickness),
+                        (new PixelRect(bounds.X, bounds.Y, bounds.Width, band), false, false),
                     BorderSideKind.Bottom =>
-                        (new PixelPoint(bounds.X, (int)(bounds.Bottom - thickness)), bounds.Width, thickness),
+                        (new PixelRect(bounds.X, bounds.Bottom - band, bounds.Width, band), false, true),
                     BorderSideKind.Left =>
-                        (new PixelPoint(bounds.X, bounds.Y), thickness, (double)bounds.Height),
+                        (new PixelRect(bounds.X, bounds.Y, band, bounds.Height), false, false),
                     _ =>
-                        (new PixelPoint((int)(bounds.Right - thickness), bounds.Y), thickness, (double)bounds.Height)
+                        (new PixelRect(bounds.Right - band, bounds.Y, band, bounds.Height), true, false)
                 };
 
-                window.ShowAt(position, width, height, scaling);
+                window.ShowAt(rect, scaling, anchorRight, anchorBottom);
                 Windows.Add(window);
             }
 
@@ -117,7 +135,7 @@ public static class ScreenSectionsOverlay
             // windowing system settles its size and position, then out of the way
             // until a guide needs it.
             var line = new GuideLineWindow();
-            line.ShowAt(new PixelPoint(bounds.X, bounds.Y), bounds.Width, bounds.Height, scaling);
+            line.ShowAt(bounds, scaling);
             line.Hide();
 
             Screens.Add(new Screen(monitor, bounds, scaling, line));

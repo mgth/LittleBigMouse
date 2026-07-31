@@ -15,6 +15,25 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 
 public enum BorderSideKind { Left, Top, Right, Bottom }
 
+/// <summary>What a snap target is derived from, so the guide can name its source.</summary>
+public enum SnapKind
+{
+    /// <summary>One of this edge's own two ends.</summary>
+    EdgeEnd,
+
+    /// <summary>The middle of this edge.</summary>
+    Middle,
+
+    /// <summary>The visible edge of another screen.</summary>
+    ScreenEdge,
+
+    /// <summary>A boundary of a section already drawn, here or on a parallel edge.</summary>
+    Section
+}
+
+/// <summary>A place a boundary wants to land, and where that place comes from.</summary>
+public readonly record struct SnapTarget(double Mm, SnapKind Kind);
+
 /// <summary>
 /// The editing surface for one monitor edge.
 /// <para>
@@ -211,9 +230,14 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// on the opposite side of this same screen, or with a screen further along.
     /// </para>
     /// </summary>
-    public IReadOnlyList<double> SnapTargetsMm(BorderSection? excluding = null)
+    public IReadOnlyList<SnapTarget> SnapTargetsMm(BorderSection? excluding = null)
     {
-        var targets = new List<double> { 0, LengthMm, LengthMm / 2 };
+        var targets = new List<SnapTarget>
+        {
+            new(0, SnapKind.EdgeEnd),
+            new(LengthMm, SnapKind.EdgeEnd),
+            new(LengthMm / 2, SnapKind.Middle)
+        };
 
         foreach (var other in Monitor.Layout.PhysicalMonitors)
         {
@@ -224,8 +248,8 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
                 ? (bounds.Top, bounds.Bottom)
                 : (bounds.Left, bounds.Right);
 
-            AddIfOnEdge(near - OriginMm);
-            AddIfOnEdge(far - OriginMm);
+            AddIfOnEdge(near - OriginMm, SnapKind.ScreenEdge);
+            AddIfOnEdge(far - OriginMm, SnapKind.ScreenEdge);
         }
 
         // The sections already on this edge: butting a new one against its neighbour
@@ -234,8 +258,8 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         {
             if (ReferenceEquals(section, excluding)) continue;
 
-            AddIfOnEdge(section.From);
-            AddIfOnEdge(section.To);
+            AddIfOnEdge(section.From, SnapKind.Section);
+            AddIfOnEdge(section.To, SnapKind.Section);
         }
 
         // Every other edge in the layout running along the same axis, at its absolute
@@ -258,20 +282,31 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
                 foreach (var section in SideOf(monitor, kind).Sections.Items)
                 {
-                    AddIfOnEdge(origin + section.From - OriginMm);
-                    AddIfOnEdge(origin + section.To - OriginMm);
+                    AddIfOnEdge(origin + section.From - OriginMm, SnapKind.Section);
+                    AddIfOnEdge(origin + section.To - OriginMm, SnapKind.Section);
                 }
             }
         }
 
         return targets;
 
-        void AddIfOnEdge(double value)
+        void AddIfOnEdge(double value, SnapKind kind)
         {
             if (value < 0 || value > LengthMm) return;
-            if (targets.Any(t => System.Math.Abs(t - value) < 0.001)) return;
-            targets.Add(value);
+            if (targets.Any(t => System.Math.Abs(t.Mm - value) < 0.001)) return;
+            targets.Add(new SnapTarget(value, kind));
         }
+    }
+
+    /// <summary>The target a boundary has landed exactly on, if any.</summary>
+    public SnapTarget? MatchedTarget(double mm, BorderSection? excluding = null)
+    {
+        foreach (var target in SnapTargetsMm(excluding))
+        {
+            if (System.Math.Abs(target.Mm - mm) < 0.001) return target;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -290,10 +325,10 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
         foreach (var target in SnapTargetsMm(excluding))
         {
-            var distance = System.Math.Abs(target - clamped);
+            var distance = System.Math.Abs(target.Mm - clamped);
             if (distance >= bestDistance) continue;
             bestDistance = distance;
-            best = target;
+            best = target.Mm;
         }
 
         return best;
@@ -474,8 +509,8 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
 
         foreach (var target in SnapTargetsMm(excluding))
         {
-            Consider(target);              // the section's start meets the target
-            Consider(target - lengthMm);   // its end does
+            Consider(target.Mm);              // the section's start meets the target
+            Consider(target.Mm - lengthMm);   // its end does
         }
 
         return best;

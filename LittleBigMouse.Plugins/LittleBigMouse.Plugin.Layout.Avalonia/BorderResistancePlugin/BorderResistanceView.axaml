@@ -87,6 +87,11 @@
 				DataContext="{Binding Bottom}"/>
 		</Grid>
 
+		<!-- Where a snap guide is extended across the monitor, to show what the
+		     boundary lined up with rather than only that it lined up. Above the bands
+		     and unclipped, so it can reach the far side. -->
+		<Canvas x:Name="Guides" IsHitTestVisible="False" ClipToBounds="False"/>
+
 		<!-- The four per-edge numbers are gone: an edge-wide resistance is a section
 		     spanning the edge, and an existing one is converted to exactly that on
 		     load, so it stays in force and becomes editable like any other. -->

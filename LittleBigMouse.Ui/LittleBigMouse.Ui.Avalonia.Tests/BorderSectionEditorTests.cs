@@ -52,6 +52,12 @@ public sealed class BorderSectionEditorTests
         return monitor;
     }
 
+    static void AssertTarget(IReadOnlyList<SnapTarget> targets, double mm, SnapKind kind)
+        => Assert.Contains(targets, t => System.Math.Abs(t.Mm - mm) < 0.001 && t.Kind == kind);
+
+    static void AssertNoTarget(IReadOnlyList<SnapTarget> targets, double mm)
+        => Assert.DoesNotContain(targets, t => System.Math.Abs(t.Mm - mm) < 0.001);
+
     static BorderSideViewModel RightEdgeOf(PhysicalMonitor monitor, double pixelLength = 540)
         => new(monitor, BorderSideKind.Right, monitor.BorderResistance.Right) { PixelLength = pixelLength };
 
@@ -78,12 +84,12 @@ public sealed class BorderSectionEditorTests
         var targets = RightEdgeOf(left).SnapTargetsMm();
 
         // Own ends and centre.
-        Assert.Contains(0.0, targets);
-        Assert.Contains(270.0, targets);
-        Assert.Contains(135.0, targets);
+        AssertTarget(targets, 0, SnapKind.EdgeEnd);
+        AssertTarget(targets, 270, SnapKind.EdgeEnd);
+        AssertTarget(targets, 135, SnapKind.Middle);
 
         // The neighbour's visible top edge, relative to this edge's origin.
-        Assert.Contains(100.0, targets);
+        AssertTarget(targets, 100, SnapKind.ScreenEdge);
 
         Assert.NotNull(layout);
     }
@@ -100,8 +106,8 @@ public sealed class BorderSectionEditorTests
 
         var targets = RightEdgeOf(left).SnapTargetsMm();
 
-        Assert.Contains(100.0, targets);
-        Assert.DoesNotContain(80.0, targets);
+        AssertTarget(targets, 100, SnapKind.ScreenEdge);
+        AssertNoTarget(targets, 80);
         Assert.NotNull(layout);
     }
 
@@ -113,14 +119,14 @@ public sealed class BorderSectionEditorTests
 
         var targets = side.SnapTargetsMm();
 
-        Assert.Contains(40.0, targets);
-        Assert.Contains(90.0, targets);
+        AssertTarget(targets, 40, SnapKind.Section);
+        AssertTarget(targets, 90, SnapKind.Section);
 
         // While that very section is being dragged its own edges drop out, or they
         // would hold it where it already sits.
         var dragging = side.SnapTargetsMm(first);
-        Assert.DoesNotContain(40.0, dragging);
-        Assert.DoesNotContain(90.0, dragging);
+        AssertNoTarget(dragging, 40);
+        AssertNoTarget(dragging, 90);
     }
 
     [Fact]
@@ -135,8 +141,8 @@ public sealed class BorderSectionEditorTests
 
         var targets = RightEdgeOf(left).SnapTargetsMm();
 
-        Assert.Contains(60.0, targets);
-        Assert.Contains(110.0, targets);
+        AssertTarget(targets, 60, SnapKind.ScreenEdge);
+        AssertTarget(targets, 110, SnapKind.Section);
         Assert.NotNull(layout);
     }
 
@@ -149,8 +155,8 @@ public sealed class BorderSectionEditorTests
 
         var targets = RightEdgeOf(left).SnapTargetsMm();
 
-        Assert.Contains(30.0, targets);
-        Assert.Contains(80.0, targets);
+        AssertTarget(targets, 30, SnapKind.Section);
+        AssertTarget(targets, 80, SnapKind.Section);
     }
 
     [Fact]
@@ -165,8 +171,8 @@ public sealed class BorderSectionEditorTests
 
         var targets = RightEdgeOf(left).SnapTargetsMm();
 
-        Assert.Contains(20.0, targets);
-        Assert.Contains(80.0, targets);
+        AssertTarget(targets, 20, SnapKind.ScreenEdge);
+        AssertTarget(targets, 80, SnapKind.Section);
         Assert.NotNull(right);
     }
 

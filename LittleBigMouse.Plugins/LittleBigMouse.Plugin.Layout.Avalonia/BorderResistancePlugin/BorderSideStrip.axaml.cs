@@ -274,7 +274,7 @@ public partial class BorderSideStrip : UserControl
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         var vm = ViewModel;
-        Overlay.Children.Clear();
+        ClearGuides();
 
         if (vm != null && _mode == Mode.Draw)
         {
@@ -314,7 +314,7 @@ public partial class BorderSideStrip : UserControl
 
     void DrawPreview(BorderSideViewModel vm, double fromMm, double toMm)
     {
-        Overlay.Children.Clear();
+        ClearGuides();
 
         var from = vm.ToPixels(System.Math.Min(fromMm, toMm));
         var length = vm.ToPixels(System.Math.Abs(toMm - fromMm));
@@ -339,28 +339,69 @@ public partial class BorderSideStrip : UserControl
     /// Mark a boundary that landed exactly on a snap target — the same visual
     /// language as the anchor lines shown when dragging a monitor.
     /// </summary>
+    /// <summary>
+    /// Carry the guide across the monitor, towards whatever the boundary lined up
+    /// with. The band alone can only say "this caught something"; the line reaching
+    /// the opposite side is what shows it met the section over there, or the screen
+    /// edge beyond it.
+    /// <para>
+    /// The bands live on a real screen too, one window each, where there is no view
+    /// spanning the monitor to draw into — there the colour carries the whole
+    /// message.
+    /// </para>
+    /// </summary>
+    void ShowReference(BorderSideViewModel vm, double at, SnapKind kind)
+    {
+        var view = this.FindAncestorOfType<BorderResistanceView>();
+        if (view == null) return;
+
+        var guides = view.GuidesCanvas;
+        guides.Children.Clear();
+
+        // The edge's own ends need no explaining: the band already ends there.
+        if (kind == SnapKind.EdgeEnd) return;
+
+        guides.Children.Add(new Line
+        {
+            StartPoint = vm.IsVertical ? new Point(0, at) : new Point(at, 0),
+            EndPoint = vm.IsVertical
+                ? new Point(view.Bounds.Width, at)
+                : new Point(at, view.Bounds.Height),
+            Stroke = SnapGuideBrushes.For(kind),
+            StrokeThickness = 1,
+            StrokeDashArray = [4, 4],
+            Opacity = 0.85
+        });
+    }
+
+    void ClearGuides()
+    {
+        Overlay.Children.Clear();
+        this.FindAncestorOfType<BorderResistanceView>()?.GuidesCanvas.Children.Clear();
+    }
+
     /// <returns>Whether a guide was drawn, so a caller can fall back to the other end.</returns>
     bool ShowGuide(BorderSideViewModel vm, double mm, bool snap, bool keep = false)
     {
-        if (!keep) Overlay.Children.Clear();
+        if (!keep) ClearGuides();
         if (!snap) return false;
 
-        var onTarget = vm.SnapTargetsMm(_target).Any(t => System.Math.Abs(t - mm) < 0.001);
-        if (!onTarget) return false;
+        if (vm.MatchedTarget(mm, _target) is not { } target) return false;
 
         var at = vm.ToPixels(mm);
 
-        var line = new Line
+        // Across the band, in the colour of whatever the boundary caught.
+        Overlay.Children.Add(new Line
         {
             StartPoint = vm.IsVertical ? new Point(0, at) : new Point(at, 0),
             EndPoint = vm.IsVertical
                 ? new Point(vm.PixelThickness, at)
                 : new Point(at, vm.PixelThickness),
-            Stroke = Brushes.Yellow,
-            StrokeThickness = 2
-        };
+            Stroke = SnapGuideBrushes.For(target.Kind),
+            StrokeThickness = 3
+        });
 
-        Overlay.Children.Add(line);
+        ShowReference(vm, at, target.Kind);
         return true;
     }
 }

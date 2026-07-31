@@ -43,7 +43,7 @@
 
 		<StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
 
-			<Button Classes="ToolbarButton">
+			<Button Classes="ToolbarButton Menu">
 				<ToolTip.Tip>Export layout</ToolTip.Tip>
 				<Button.Flyout>
 					<MenuFlyout Placement="TopEdgeAlignedLeft">
@@ -70,10 +70,51 @@
 				<icons:IconView Height="22" Width="22" Path="Icon/Save"/>
 			</Button>
 
-			<Button Classes="ToolbarButton"
-				Command="{Binding StartCommand}"
-				ToolTip.Tip="{Binding StartTooltip}">
-				<icons:IconView Height="22" Width="22" Path="Icon/Start"/>
+			<!-- Apply, and the way it is delivered. One control: the click always hands the
+			     layout to the engine and keeps it, the chevron chooses whether edits also
+			     go out continuously on the way. The icon is the mode. -->
+			<Button Classes="ToolbarButton SplitPrimary"
+				Classes.Live="{Binding LiveUpdate}"
+				Command="{Binding StartCommand}">
+				<ToolTip.Tip>
+					<StackPanel MaxWidth="320">
+						<TextBlock Text="{Binding StartTooltip}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+						<TextBlock TextWrapping="Wrap" Opacity="0.75" Text="{Binding StartTooltipDetail}"/>
+					</StackPanel>
+				</ToolTip.Tip>
+				<Panel>
+					<icons:IconView Height="22" Width="22" Path="Icon/Start"
+					                IsVisible="{Binding !LiveUpdate}"/>
+					<Path Data="{StaticResource Lbm.Icon.Live}" Width="22" Height="22"
+					      Stretch="Uniform" VerticalAlignment="Center"
+					      IsVisible="{Binding LiveUpdate}"/>
+				</Panel>
+			</Button>
+
+			<Button Classes="ToolbarButton SplitChevron Menu"
+				Classes.Live="{Binding LiveUpdate}">
+				<Button.Flyout>
+					<!-- Both modes, always, with the current one marked: a single item that
+					     changed its wording read as a control that was off or unavailable,
+					     which is not what a mode is. No tips in here — a tip inside a flyout
+					     lands on the pointer, over the item being clicked. -->
+					<MenuFlyout Placement="TopEdgeAlignedLeft">
+						<MenuItem Header="Apply on click"
+						          ToggleType="Radio" GroupName="ApplyMode"
+						          IsChecked="{Binding !LiveUpdate, Mode=OneWay}"
+						          Command="{Binding ManualUpdateCommand}"/>
+						<MenuItem Header="Live update"
+						          ToggleType="Radio" GroupName="ApplyMode"
+						          IsChecked="{Binding LiveUpdate, Mode=OneWay}"
+						          IsEnabled="{Binding CanLiveUpdate}"
+						          Command="{Binding LiveUpdateCommand}"/>
+					</MenuFlyout>
+				</Button.Flyout>
+				<!-- Points down, the way a dropdown does, even though the flyout opens
+				     upward: the chevron says "there is a menu here", not which way it
+				     unrolls. -->
+				<Path Data="{StaticResource Lbm.Icon.ChevronDown}" Width="10" Height="10"
+				      Stretch="Uniform" VerticalAlignment="Center"/>
 			</Button>
 
 			<Button Classes="ToolbarButton"

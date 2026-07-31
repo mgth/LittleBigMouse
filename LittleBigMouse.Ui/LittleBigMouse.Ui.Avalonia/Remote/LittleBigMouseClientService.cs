@@ -96,6 +96,23 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         await SendMessagesAsync(commands, token);
     }
 
+    /// <summary>
+    /// The live-preview send. Same two commands as a Start — a Load unhooks the daemon,
+    /// so the Run is what puts the mouse back under the new geometry — with everything
+    /// that makes a Start permanent left out: no store write, no recovery file, and no
+    /// topology prologue (that one belongs to engine startup, and on Linux it forks a
+    /// subprocess, which has no business running several times a second).
+    /// </summary>
+    public Task SendLiveAsync(ZonesLayout zonesLayout, CancellationToken token = default)
+    {
+        // A foreign layout is inspection-only; the daemon refuses to hook it anyway.
+        if (zonesLayout.Virtual) return Task.CompletedTask;
+
+        return SendMessagesAsync(
+            [new(LittleBigMouseCommand.Load, zonesLayout), new(LittleBigMouseCommand.Run)],
+            token, persist: false);
+    }
+
 
     // The topology epilogue runs on explicit Stop/Quit only — NOT on a Dead daemon: the
     // socket layer auto-relaunches the daemon and MainService auto-restarts the engine
@@ -327,11 +344,16 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         return SendMessagesAsync([message], token, timeout);
     }
 
+    /// <param name="persist">
+    /// False for a send the daemon should run but not remember (live preview): the
+    /// recovery file keeps describing the last applied layout. Serializing a layout is
+    /// the expensive half of a send, so the recovery copy is only built when it is
+    /// actually going to be written.
+    /// </param>
     async Task SendMessagesAsync(IEnumerable<CommandMessage> messages,
-        CancellationToken token = default, int timeout = 5000)
+        CancellationToken token = default, int timeout = 5000, bool persist = true)
     {
         var commands = messages.ToList();
-        var recoveryXml = string.Join("\n", commands.Select(command => command.Serialize())) + "\n";
         var wireXml = $"<Messages>{string.Concat(commands.Select(command => command.Serialize()))}</Messages>";
 
         // The daemon reads this file back on startup: LbmPaths must match its side
@@ -344,9 +366,10 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         // Virtual (foreign) layouts are sent to the daemon for inspection but must never
         // become the crash-recovery/autostart state: a standalone daemon would replay a
         // client's geometry over the local desktop at the next boot.
-        if (commands.Any(command => command.Command == LittleBigMouseCommand.Load
+        if (persist && commands.Any(command => command.Command == LittleBigMouseCommand.Load
                                     && command.Payload?.Virtual != true))
         {
+            var recoveryXml = string.Join("\n", commands.Select(command => command.Serialize())) + "\n";
             try
             {
                 await AtomicRecoveryFile.WriteAsync(path, recoveryXml, token);
@@ -356,7 +379,7 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
                 persistenceFailure = error;
             }
         }
-        else if (commands.Any(command => command.Command == LittleBigMouseCommand.Stop))
+        else if (persist && commands.Any(command => command.Command == LittleBigMouseCommand.Stop))
         {
             // A user Stop must survive a restart: strip the Run line so a
             // standalone daemon replays the layout stopped instead of re-hooking

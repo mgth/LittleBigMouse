@@ -105,11 +105,19 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                     : "Foreign layout, shown for inspection")
             .ToProperty(this, e => e.VirtualLayoutOrigin);
 
+        // The click means the same thing in both modes — hand the layout to the engine
+        // and keep it — so only the second line has to say what the mode adds.
         _startTooltip = this.WhenAnyValue(e => e.Model)
-            .Select(m => m?.IsVirtual == true
-                ? "Simulate: send this layout to the daemon for validation (input hook stays off)"
-                : "Apply/Start")
+            .Select(m => m?.IsVirtual == true ? "Simulate" : "Apply and start")
             .ToProperty(this, e => e.StartTooltip);
+
+        _startTooltipDetail = this.WhenAnyValue(e => e.Model, e => e.LiveUpdate)
+            .Select(t => t.Item1?.IsVirtual == true
+                ? "Send this layout to the daemon for validation. The input hook stays off — a foreign layout never drives the local mouse."
+                : t.Item2
+                    ? "Live update is on: your changes are already being felt, but none of them is saved. This keeps them."
+                    : "Save the layout and hand it to the mouse engine. Use the arrow to have changes sent as you make them instead.")
+            .ToProperty(this, e => e.StartTooltipDetail);
 
         BackToLocalLayoutCommand = ReactiveCommand.Create(
             _mainService.ReloadSystemLayout,
@@ -117,11 +125,57 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                 .Select(m => m?.IsVirtual ?? false)
                 .ObserveOn(RxSchedulers.MainThreadScheduler));
 
-        this.WhenAnyValue(
-            e => e.LiveUpdate,
-            e => e.Model.Saved
-            ).Subscribe(e => DoLiveUpdate());
+        // What live preview needs is a daemon to talk to, not a running engine — its own
+        // sends are what puts the engine up. Keying this on Running would be circular:
+        // a Load unhooks the daemon before the Run behind it hooks again, so Running
+        // dips on every tick and the switch would turn itself off a fifth of a second
+        // after being clicked. A foreign layout is excluded outright: the daemon refuses
+        // to hook one, so there would be nothing to feel.
+        _canLiveUpdate = this
+            .WhenAnyValue(e => e.Dead, e => e.IsVirtualLayout, (dead, virtualLayout) => !dead && !virtualLayout)
+            .ToProperty(this, e => e.CanLiveUpdate);
 
+        this.WhenAnyValue(e => e.CanLiveUpdate)
+            .Where(can => !can)
+            .Subscribe(_ => LiveUpdate = false);
+
+        // Two modes, each one its own command, so the menu can show both at once with
+        // the current one marked. A single toggling entry read as a control that was
+        // off rather than as the mode you are not in.
+        ManualUpdateCommand = ReactiveCommand.Create(() => { LiveUpdate = false; });
+
+        LiveUpdateCommand = ReactiveCommand.Create(
+            () => { LiveUpdate = true; },
+            this.WhenAnyValue(e => e.CanLiveUpdate).ObserveOn(RxSchedulers.MainThreadScheduler));
+
+        // The engine going down while we preview into it — the tray Stop, a display
+        // change, an excluded application — outranks the preview: the next tick would
+        // otherwise hook it straight back up. A transition, not the current state:
+        // turning the switch on over a stopped engine is a legitimate way to start.
+        this.WhenAnyValue(e => e.Running)
+            .Skip(1)
+            .Where(running => !running)
+            .Subscribe(_ => LiveUpdate = false);
+
+        _live = new LiveLayoutUpdater(
+            () => SavableReactiveModel.Revision,
+            () => Model?.ComputeZones(),
+            (zones, token) => _service.SendLiveAsync(zones, token));
+
+        _liveTimer = new DispatcherTimer { Interval = LiveLayoutUpdater.Interval };
+        _liveTimer.Tick += async (_, _) => await _live.TickAsync();
+
+        this.WhenAnyValue(e => e.LiveUpdate).Subscribe(live =>
+        {
+            if (live)
+            {
+                // The daemon is holding the last applied layout, not ours: make the
+                // first tick send unconditionally.
+                _live.Forget();
+                _liveTimer.Start();
+            }
+            else _liveTimer.Stop();
+        });
 
         this.UnsavedOn(e => e.Model);
 
@@ -193,6 +247,12 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         // The last Load outcome belongs to the previous layout generation.
         Dispatcher.UIThread.Post(() => DaemonLayoutInfo = "");
+
+        // A rebuild (display change, refresh, virtual layout opened) goes through
+        // MainService, which feeds the daemon itself: what we believe it holds no longer
+        // follows from what we last sent. Runs before the field is assigned on the very
+        // first model, where there is nothing to forget anyway.
+        _live?.Forget();
 
         if (newModel is { } model)
         {
@@ -289,6 +349,10 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         if(Model == null) return;
 
+        // Asking for the engine to stop outranks previewing into it — otherwise the
+        // next tick would hook it straight back up.
+        LiveUpdate = false;
+
         Model.Options.Enabled = false;
         await Task.Run(() => _persistence.SaveEnabled(Model));
         await _service.StopAsync();
@@ -331,12 +395,32 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     }
     bool _dead;
 
+    /// <summary>
+    /// How the apply button delivers: on click, or continuously. While it is on, every
+    /// edit reaches the running daemon within <see cref="LiveLayoutUpdater.Interval"/>,
+    /// so the layout can be felt with the real mouse before it is kept. Deliberately not
+    /// persisted across sessions — coming back to unsaved geometry already live would be
+    /// a trap, and the mode costs one click.
+    /// </summary>
     public bool LiveUpdate
     {
         get => _liveUpdate;
         set => this.RaiseAndSetIfChanged(ref _liveUpdate,value);
     }
    bool _liveUpdate;
+
+    /// <summary>Whether there is a daemon to preview into, and a layout worth previewing.</summary>
+    public bool CanLiveUpdate => _canLiveUpdate.Value;
+    readonly ObservableAsPropertyHelper<bool> _canLiveUpdate;
+
+    /// <summary>The apply button delivers on click.</summary>
+    public ReactiveCommand<Unit, Unit> ManualUpdateCommand { get; }
+
+    /// <summary>The apply button also delivers continuously, as edits are made.</summary>
+    public ReactiveCommand<Unit, Unit> LiveUpdateCommand { get; }
+
+    readonly LiveLayoutUpdater _live;
+    readonly DispatcherTimer _liveTimer;
 
     /// <summary>
     /// Last Load outcome reported by the daemon ("3 zones (3 main), virtual" / a failure
@@ -359,6 +443,9 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     public string StartTooltip => _startTooltip.Value;
     readonly ObservableAsPropertyHelper<string> _startTooltip;
 
+    public string StartTooltipDetail => _startTooltipDetail.Value;
+    readonly ObservableAsPropertyHelper<string> _startTooltipDetail;
+
     public ReactiveCommand<Unit, Unit> BackToLocalLayoutCommand { get; }
 
    public bool Saved
@@ -367,14 +454,4 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
       set => this.RaiseAndSetIfChanged(ref _saved, value);
    }
    bool _saved;
-
-
-    void DoLiveUpdate()
-    {
-        if (LiveUpdate && !Saved)
-        {
-            StartCommand.Execute();
-        }
-    }
-
 }

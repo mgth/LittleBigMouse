@@ -22,6 +22,8 @@
 */
 
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.Ui.Avalonia.Remote;
@@ -30,4 +32,12 @@ public interface ILittleBigMouseClientService : ILittleBigMouseService
 {
     event EventHandler<LittleBigMouseServiceEventArgs> DaemonEventReceived;
     LittleBigMouseEvent State { get; }
+
+    /// <summary>
+    /// Hand the daemon a layout to run right now, without adopting it: nothing is
+    /// written to the store and nothing is written to the crash-recovery file, so a
+    /// daemon restart comes back to the last <em>applied</em> layout. This is what
+    /// the live-preview switch sends while the user edits.
+    /// </summary>
+    Task SendLiveAsync(ZonesLayout zonesLayout, CancellationToken token = default);
 }

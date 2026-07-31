@@ -130,6 +130,17 @@
 	</Style>
 
 	<Style Selector="ToggleButton.ToolbarButton, Button.ToolbarButton">
+		<!-- Anchor tips above the button, never on the pointer. Avalonia's default puts
+		     the tip where the cursor is; in a bar sitting at the bottom of the window the
+		     positioner then flips it upward, straight over the button you are aiming at,
+		     and the click lands on the tip's own window instead. Nothing in ToolTip's API
+		     makes that window ignore input — it has ten attached properties and not one
+		     of them is about hit-testing — and IsHitTestVisible would not help either,
+		     since the OS routes the click to that top-level before Avalonia hit-tests
+		     inside it. Keeping the tip off the pointer is the fix, not a mitigation.
+		     Same cause as the border-handle tips in #522. -->
+		<Setter Property="ToolTip.Placement" Value="Top"/>
+		<Setter Property="ToolTip.ShowDelay" Value="700"/>
 		<Setter Property="Background" Value="Transparent"/>
 		<Setter Property="BorderThickness" Value="0"/>
 		<Setter Property="CornerRadius" Value="8"/>
@@ -169,6 +180,53 @@
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>
 		<Setter Property="BorderBrush" Value="{DynamicResource Lbm.Brushes.Accent}"/>
 		<Setter Property="BorderThickness" Value="1"/>
+	</Style>
+	<!-- A Path has no Fill by default, so a geometry icon in a toolbar button would be
+	     invisible; and unlike IconView it does not follow Foreground on its own. -->
+	<Style Selector="ToggleButton.ToolbarButton Path, Button.ToolbarButton Path">
+		<Setter Property="Fill" Value="{DynamicResource HLab.Brushes.Foreground}"/>
+	</Style>
+	<Style Selector="ToggleButton.ToolbarButton:checked Path">
+		<Setter Property="Fill" Value="{DynamicResource Lbm.Brushes.Accent}"/>
+	</Style>
+
+	<!-- Split button: one action, plus a chevron choosing how it is delivered. Two
+	     ordinary toolbar buttons sharing an outline rather than a SplitButton, so the
+	     bar keeps one flat look and one set of states to reason about. The halves close
+	     the gap between them and each keeps the outer corners only. -->
+	<Style Selector="Button.ToolbarButton.SplitPrimary">
+		<Setter Property="Margin" Value="2,0,0,0"/>
+		<Setter Property="CornerRadius" Value="8,0,0,8"/>
+		<Setter Property="Padding" Value="9,9,7,9"/>
+	</Style>
+	<Style Selector="Button.ToolbarButton.SplitChevron">
+		<Setter Property="Margin" Value="0,0,2,0"/>
+		<Setter Property="CornerRadius" Value="0,8,8,0"/>
+		<Setter Property="Padding" Value="2,9,5,9"/>
+	</Style>
+	<!-- A button whose flyout opens upward must not also put a tip up there: the bar
+	     sits at the bottom of the window, so "above the button" is exactly where the
+	     menu unrolls, and the tip ends up between the pointer and the item it is
+	     travelling to. Send it left instead, over the empty stretch of bar. -->
+	<Style Selector="Button.ToolbarButton.Menu">
+		<Setter Property="ToolTip.Placement" Value="Left"/>
+	</Style>
+	<!-- Live update on: both halves carry it, so the pair still reads as one control. -->
+	<Style Selector="Button.ToolbarButton.Live /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>
+	</Style>
+	<Style Selector="Button.ToolbarButton.Live Path">
+		<Setter Property="Fill" Value="{DynamicResource Lbm.Brushes.Accent}"/>
+	</Style>
+	<!-- Live update on, and nothing left to apply: the click has nothing to do, so the
+	     command disables itself. Greying the button out then says the mode is off or
+	     broken, which is the opposite of the truth — the engine is being fed as fast as
+	     you can edit. Here the icon is a mode indicator first and an action second, so
+	     it keeps its colour. Must follow the :disabled rules above, which it overrides
+	     by coming later. -->
+	<Style Selector="Button.ToolbarButton.Live:disabled /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>
+		<Setter Property="Opacity" Value="1"/>
 	</Style>
 
 	<Style Selector="Button.IconButton">

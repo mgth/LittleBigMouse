@@ -283,6 +283,119 @@ public sealed class BorderSectionEditorTests
         Assert.Equal(BorderGrab.ResizeTo, side.GrabAt(105).Grab);
     }
 
+    //==================//
+    // The gesture      //
+    //==================//
+
+    [Fact]
+    public void ResizingHoldsTheBoundaryWhereItWasGrabbed()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(50, 150)!;
+        var gesture = new BorderSectionGesture(side);
+
+        // Pressed 3 mm inside the handle rather than on the line, which is the usual
+        // case: the handle is 4 mm deep here. The boundary must not move yet.
+        gesture.Press(53, snap: false);
+        Assert.Equal(50, section.From);
+
+        // A pointer position arrives with the press itself. Before the grab offset
+        // was kept, this alone slid the boundary from 50 to 53.
+        gesture.Move(53, snap: false);
+        Assert.Equal(50, section.From);
+
+        // From there the boundary follows the movement, not the position.
+        gesture.Move(63, snap: false);
+        Assert.Equal(60, section.From);
+        Assert.Equal(150, section.To);
+    }
+
+    [Fact]
+    public void ResizingTheFarEndHoldsItsGripToo()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(50, 150)!;
+        var gesture = new BorderSectionGesture(side);
+
+        gesture.Press(147, snap: false);
+        gesture.Move(147, snap: false);
+        Assert.Equal(150, section.To);
+
+        gesture.Move(137, snap: false);
+        Assert.Equal(140, section.To);
+        Assert.Equal(50, section.From);
+    }
+
+    [Fact]
+    public void MovingCarriesTheWholeSection()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var section = side.Create(50, 150)!;
+        var gesture = new BorderSectionGesture(side);
+
+        Assert.Same(section, gesture.Press(100, snap: false));
+        Assert.Equal(BorderSectionGesture.Kind.Move, gesture.Mode);
+
+        gesture.Move(120, snap: false);
+
+        Assert.Equal(70, section.From);
+        Assert.Equal(170, section.To);
+    }
+
+    [Fact]
+    public void DrawingCreatesOnlyOnRelease()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var gesture = new BorderSectionGesture(side);
+
+        Assert.Null(gesture.Press(50, snap: false));
+        Assert.Equal(BorderSectionGesture.Kind.Draw, gesture.Mode);
+
+        // The sweep only outlines: nothing exists until the button comes up.
+        var feedback = gesture.Move(150, snap: false);
+        Assert.Equal(50, feedback.PreviewFromMm);
+        Assert.Equal(150, feedback.PreviewToMm);
+        Assert.Empty(side.Side.Sections.Items);
+
+        var created = gesture.Release(150, snap: false);
+
+        Assert.NotNull(created);
+        Assert.Equal(50, created!.From);
+        Assert.Equal(150, created.To);
+        Assert.False(gesture.Active);
+    }
+
+    [Fact]
+    public void AClickThatDrawsNothingCreatesNothing()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        var gesture = new BorderSectionGesture(side);
+
+        gesture.Press(50, snap: false);
+
+        Assert.Null(gesture.Release(50, snap: false));
+        Assert.Empty(side.Side.Sections.Items);
+    }
+
+    [Fact]
+    public void AGestureOnATouchingBoundaryTakesTheSectionItStartsFrom()
+    {
+        var side = RightEdgeOf(TwoMonitorsLeft());
+        side.Create(50, 150);
+        var lower = side.Create(150, 250)!;
+        var gesture = new BorderSectionGesture(side);
+
+        // The whole point of the handle rule, end to end: pressing the shared
+        // boundary resizes the lower section rather than the one above it.
+        Assert.Same(lower, gesture.Press(150, snap: false));
+
+        gesture.Move(150, snap: false);
+        gesture.Move(170, snap: false);
+
+        Assert.Equal(170, lower.From);
+        Assert.Equal(250, lower.To);
+    }
+
     [Fact]
     public void ASectionTooShortToBeIntentionalIsRejected()
     {

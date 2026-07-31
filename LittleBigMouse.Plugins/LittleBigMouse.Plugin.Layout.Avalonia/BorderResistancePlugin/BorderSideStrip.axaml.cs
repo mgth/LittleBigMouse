@@ -20,15 +20,24 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 /// </summary>
 public partial class BorderSideStrip : UserControl
 {
-    enum Mode { None, Draw, ResizeFrom, ResizeTo, Move }
+    /// <summary>
+    /// The gesture in progress. Rebuilt whenever the band is bound to another edge,
+    /// since it edits through that edge's view model.
+    /// </summary>
+    BorderSectionGesture? _gesture;
 
-    Mode _mode = Mode.None;
-    BorderSection? _target;
-    double _anchorMm;
-    double _lastMm;
+    BorderSideViewModel? _gestureSide;
 
-    /// <summary>Where a moved section would start with no snapping — see the Move case.</summary>
-    double _movedFromMm;
+    BorderSectionGesture Gesture(BorderSideViewModel vm)
+    {
+        if (_gesture == null || !ReferenceEquals(_gestureSide, vm))
+        {
+            _gesture = new BorderSectionGesture(vm);
+            _gestureSide = vm;
+        }
+
+        return _gesture;
+    }
 
     /// <summary>Our layer in the presenter's shared panel, holding the reference line.</summary>
     Canvas? _reference;
@@ -166,26 +175,12 @@ public partial class BorderSideStrip : UserControl
         if (vm == null) return;
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
-        var mm = AlongMm(e);
-
-        var (target, grab) = vm.GrabAt(mm);
-
-        _target = target;
-        _mode = grab switch
-        {
-            BorderGrab.ResizeFrom => Mode.ResizeFrom,
-            BorderGrab.ResizeTo => Mode.ResizeTo,
-            BorderGrab.Move => Mode.Move,
-            _ => Mode.Draw
-        };
+        var gesture = Gesture(vm);
+        var target = gesture.Press(AlongMm(e), SnapEnabled(e.KeyModifiers));
 
         SelectInParent(target == null
             ? null
             : vm.Sections.FirstOrDefault(s => ReferenceEquals(s.Model, target)));
-
-        _anchorMm = vm.Snap(mm, SnapEnabled(e.KeyModifiers), _target);
-        _lastMm = mm;
-        _movedFromMm = _target?.From ?? 0;
 
         Focus();
         e.Pointer.Capture(this);
@@ -195,45 +190,12 @@ public partial class BorderSideStrip : UserControl
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         var vm = ViewModel;
-        if (vm == null || _mode == Mode.None) return;
+        if (vm == null || _gesture is not { Active: true } gesture) return;
         if (e.Pointer.Captured != this) return;
 
         var snap = SnapEnabled(e.KeyModifiers);
-        var raw = AlongMm(e);
-        var mm = vm.Snap(raw, snap, _target);
 
-        switch (_mode)
-        {
-            case Mode.Draw:
-                DrawPreview(vm, _anchorMm, mm);
-                break;
-
-            case Mode.ResizeFrom when _target != null:
-                vm.Resize(_target, mm, _target.To);
-                ShowGuide(vm, mm, snap);
-                break;
-
-            case Mode.ResizeTo when _target != null:
-                vm.Resize(_target, _target.From, mm);
-                ShowGuide(vm, mm, snap);
-                break;
-
-            case Mode.Move when _target != null:
-                // The wanted position follows the pointer exactly and is kept apart
-                // from the applied one: feeding the snapped position back into the
-                // next delta would let the section drift away from the cursor, one
-                // correction at a time.
-                _movedFromMm += raw - _lastMm;
-                _lastMm = raw;
-
-                var length = _target.To - _target.From;
-                vm.MoveTo(_target, snap
-                    ? vm.SnapMovedStart(_movedFromMm, length, _target)
-                    : _movedFromMm);
-
-                if (!ShowGuide(vm, _target.From, snap)) ShowGuide(vm, _target.To, snap, keep: true);
-                break;
-        }
+        Render(vm, gesture.Move(AlongMm(e), snap), snap);
 
         e.Handled = true;
     }
@@ -243,24 +205,18 @@ public partial class BorderSideStrip : UserControl
         var vm = ViewModel;
         ClearGuides();
 
-        if (vm != null && _mode == Mode.Draw)
-        {
-            var mm = vm.Snap(AlongMm(e), SnapEnabled(e.KeyModifiers), _target);
-            var created = vm.Create(_anchorMm, mm);
+        var created = _gesture?.Release(AlongMm(e), SnapEnabled(e.KeyModifiers));
 
-            if (created != null)
+        if (vm != null && created != null)
+        {
+            foreach (var section in vm.Sections)
             {
-                foreach (var section in vm.Sections)
-                {
-                    if (!ReferenceEquals(section.Model, created)) continue;
-                    SelectInParent(section);
-                    break;
-                }
+                if (!ReferenceEquals(section.Model, created)) continue;
+                SelectInParent(section);
+                break;
             }
         }
 
-        _mode = Mode.None;
-        _target = null;
         e.Pointer.Capture(null);
 
         // The layout has to be recompacted and re-pushed like any other edit. On the
@@ -278,6 +234,26 @@ public partial class BorderSideStrip : UserControl
     //==================//
     // Feedback         //
     //==================//
+
+    /// <summary>
+    /// Turn what the gesture reports into the outline and the guides. The gesture
+    /// has already applied its edit; this only says so on screen.
+    /// </summary>
+    void Render(BorderSideViewModel vm, BorderGestureFeedback feedback, bool snap)
+    {
+        if (feedback is { PreviewFromMm: { } from, PreviewToMm: { } to })
+        {
+            DrawPreview(vm, from, to);
+            return;
+        }
+
+        if (feedback.GuideMm is not { } guide) return;
+
+        // A moved section keeps its length, so at most one of its ends can have
+        // caught a target; try the far one when the near one found nothing.
+        if (ShowGuide(vm, guide, snap)) return;
+        if (feedback.SecondGuideMm is { } second) ShowGuide(vm, second, snap, keep: true);
+    }
 
     void DrawPreview(BorderSideViewModel vm, double fromMm, double toMm)
     {
@@ -373,7 +349,8 @@ public partial class BorderSideStrip : UserControl
         if (!keep) ClearGuides();
         if (!snap) return false;
 
-        if (vm.MatchedTarget(mm, _target) is not { } target) return false;
+        // The section being edited is not a target for its own boundary.
+        if (vm.MatchedTarget(mm, _gesture?.Target) is not { } target) return false;
 
         var at = vm.ToPixels(mm);
 

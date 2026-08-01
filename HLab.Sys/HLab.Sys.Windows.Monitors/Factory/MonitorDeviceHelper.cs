@@ -2,7 +2,6 @@
 using HLab.Sys.Monitors;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -599,7 +598,7 @@ public static class MonitorDeviceHelper
 
                 try
                 {
-                    var hKeyName = GetRegistryKeyName(hEdidRegKey);
+                    var hKeyName = GetHKeyName(hEdidRegKey);
                     if (string.IsNullOrEmpty(hKeyName)) continue;
 
                     using var key = RegistryKey(hKeyName, 1);
@@ -634,43 +633,6 @@ public static class MonitorDeviceHelper
         }
 
         return null;
-    }
-
-    static string GetRegistryKeyName(nint hKey)
-    {
-        var status = Wdm.ZwQueryKey(hKey, Wdm.KeyInformationClass.KeyNameInformation,
-            0, 0, out var needed);
-        if (status == 0 || needed < sizeof(uint)) return string.Empty;
-
-        var buffer = Marshal.AllocHGlobal(needed);
-        try
-        {
-            var capacity = needed;
-            status = Wdm.ZwQueryKey(hKey, Wdm.KeyInformationClass.KeyNameInformation,
-                buffer, capacity, out var returned);
-            if (status != 0 || returned < sizeof(uint) || returned > capacity)
-                return string.Empty;
-
-            var bytes = new byte[returned];
-            Marshal.Copy(buffer, bytes, 0, returned);
-            return DecodeKeyNameInformation(bytes);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    /// <summary>Decode byte-counted KEY_NAME_INFORMATION without unmanaged over-read.</summary>
-    public static string DecodeKeyNameInformation(ReadOnlySpan<byte> buffer)
-    {
-        if (buffer.Length < sizeof(uint)) return string.Empty;
-        var nameLength = BitConverter.ToUInt32(buffer[..sizeof(uint)]);
-        if ((nameLength & 1) != 0 || nameLength > buffer.Length - sizeof(uint))
-            throw new InvalidDataException("Invalid KEY_NAME_INFORMATION byte length.");
-
-        return Encoding.Unicode.GetString(
-            buffer.Slice(sizeof(uint), checked((int)nameLength)));
     }
 
     /// <summary>

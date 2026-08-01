@@ -1,7 +1,7 @@
 using System.Text;
 using HLab.Geo;
+using HLab.Sys.Windows.API;
 using HLab.Sys.Windows.Monitors;
-using HLab.Sys.Windows.Monitors.Factory;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Platform.Windows;
@@ -20,10 +20,10 @@ public class WindowsMonitorSafetyTests
         BitConverter.TryWriteBytes(data.AsSpan(), (uint)name.Length);
         name.CopyTo(data, sizeof(uint));
 
-        Assert.Equal(path, MonitorDeviceHelper.DecodeKeyNameInformation(data));
+        Assert.Equal(path, WinReg.DecodeKeyNameInformation(data));
 
         BitConverter.TryWriteBytes(data.AsSpan(), (uint)(name.Length + 2));
-        Assert.Throws<InvalidDataException>(() => MonitorDeviceHelper.DecodeKeyNameInformation(data));
+        Assert.Throws<InvalidDataException>(() => WinReg.DecodeKeyNameInformation(data));
     }
 
     [Fact]

@@ -60,8 +60,32 @@ jobs:
         dotnet build $env:UI_PROJECT @buildArgs
 
     # windows-latest ships a stable Rust toolchain preinstalled, so no install step.
+    # LBM_VERSION is to build.rs what -p:Version is to the managed build: off a tag
+    # it stays empty and the version resource falls back to Directory.Build.props.
     - name: Build hook (Rust, release)
+      env:
+        LBM_VERSION: ${{ steps.ver.outputs.version }}
       run: cargo build --release --manifest-path $env:HOOK_RUST_PROJECT
+
+    # The hook shipped with no VERSIONINFO at all until build.rs was added, and the
+    # failure mode is silent: a missing crate, a target without a resource compiler,
+    # or a props file that stops parsing all leave a nameless exe that still builds
+    # and still runs. Assert on the artifact rather than trust the build script.
+    - name: Verify hook version resource
+      run: |
+        $exe = 'LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe'
+        $info = (Get-Item $exe).VersionInfo
+        if ($info.ProductName -ne 'Little Big Mouse') {
+          throw "hook ProductName is '$($info.ProductName)', expected 'Little Big Mouse'"
+        }
+        if ($info.FileVersion -notmatch '^\d+\.\d+\.\d+') {
+          throw "hook FileVersion is '$($info.FileVersion)', expected a numeric version"
+        }
+        if ("${{ steps.ver.outputs.version }}" -and
+            $info.FileVersion -ne "${{ steps.ver.outputs.version }}") {
+          throw "hook FileVersion is '$($info.FileVersion)', expected the tag version"
+        }
+        "hook: $($info.ProductName) $($info.FileVersion)"
 
     - name: Stage hook next to UI output
       # Cargo can't emit a target named with a '.', so the Rust binary is built as

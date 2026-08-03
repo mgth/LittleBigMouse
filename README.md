@@ -8,7 +8,9 @@
 > ## 🌐 New: [littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/) — the official website
 > Little Big Mouse now has a home of its own: **[littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/)** — what it does, downloads, and guides, always in sync with this repository.
 >
-> ⚠️ Warning! Note that **littlebigmouse.com is not affiliated with this project**. It is used to distribute malware. We don't operate that site, don't know who does, and can't vouch for anything it publishes. The only official sources for Little Big Mouse are this repository — with its [Releases](https://github.com/mgth/LittleBigMouse/releases) page — and [littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/).
+> ⚠️ Warning! Note that **littlebigmouse.com is not affiliated with this project**. It is used to distribute malware. We don't operate that site, don't know who does, and can't vouch for anything it publishes. If you have some time to help, please report it to google or other search engines.
+>
+> The only official sources for Little Big Mouse are this repository — with its [Releases](https://github.com/mgth/LittleBigMouse/releases) page — and [littlebigmouse.mgth.fr](https://littlebigmouse.mgth.fr/). 
 
 > [!TIP]
 > ## 🐧 New: Little Big Mouse is on the AUR

@@ -55,4 +55,4 @@ The draft release carries the installer and nothing else, deliberately: the in-a
 Get-AuthenticodeSignature .\LittleBigMouse_5.6.1.exe | Format-List Status, SignerCertificate
 ```
 
-Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).

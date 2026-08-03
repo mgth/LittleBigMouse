@@ -31,6 +31,17 @@ slotmap = "1"
 # Local IPC server (named pipe / UDS): async accept loop, bounded queues.
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
+# Embeds the VERSIONINFO resource (see build.rs). Not under a
+# [target.'cfg(windows)'] table on purpose: build-dependencies are resolved
+# against the *host*, so gating it that way would break a Linux host
+# cross-compiling to Windows. build.rs decides at run time instead, on
+# CARGO_CFG_TARGET_OS, and does nothing off Windows.
+[build-dependencies]
+winresource = "0.1.31"
+# Reads <Version> out of Directory.Build.props. A substring search is not enough:
+# that file mentions "<Version>" inside its own comment, ahead of the real element.
+roxmltree = "0.20"
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

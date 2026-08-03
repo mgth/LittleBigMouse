@@ -454,7 +454,7 @@ internal static class WindowsLayoutMapping
     {
         if (!string.IsNullOrEmpty(@this.PnpDeviceName)) return @this;
 
-        var name = HtmlHelper.CleanupPnpName(monitor.ActiveConnection?.DeviceString ?? "");
+        var name = PnpName.Cleanup(monitor.ActiveConnection?.DeviceString ?? "");
         // A monitor without EDID (virtual display, DisplayLink, RDP, spacedesk, some panels)
         // reports "Generic PnP Monitor" and has a null Edid: keep the generic name then.
         if (name.ToLower() == "generic pnp monitor" && !string.IsNullOrEmpty(monitor.Edid?.Model))

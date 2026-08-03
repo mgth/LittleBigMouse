@@ -197,7 +197,7 @@ devices, which is a great deal more than a mouse utility should ask for.
 
 If you encounter any issues or have suggestions for improvements, please open an issue on our [Issues](https://github.com/mgth/LittleBigMouse/issues) page. We appreciate your feedback and are always looking to improve the tool.
 
-How releases are signed, and how to check a download you just made, is documented in [SIGNING.md](SIGNING.md).
+Little Big Mouse collects no analytics and sends no telemetry; what it stores and the few cases where it uses the network are set out in the [privacy policy](PRIVACY.md). How releases are signed, and how to check a download you just made, is documented in [SIGNING.md](SIGNING.md).
 
 **We Welcome Contributions**: Your help is invaluable! Whether it's reporting bugs, suggesting new features, or submitting pull requests, we encourage you to get involved. Your contributions can make a significant difference in the development and improvement of Little Big Mouse. **First time?** Check out [This guide](https://github.com/firstcontributions/first-contributions) to get started.
 

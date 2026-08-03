@@ -1,9 +1,17 @@
 ﻿; -- LittleBigMouse.iss --
+; SourceDir is where the packaged binaries are read from. It defaults to the local
+; build output, so a manual compile keeps working unchanged; the release workflow
+; overrides it (ISCC /DSourceDir=...) to point at the binaries SignPath sent back,
+; because the installer has to carry the *signed* exe and dlls, not the build ones.
+#ifndef SourceDir
+  #define SourceDir "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0"
+#endif
+
 ; AppVer is normally passed by CI from the git tag (ISCC /DAppVer=5.3.0-beta.2)
 ; so betas are distinguishable in Programs & Features and in the installer name.
 ; Falls back to the built exe's numeric FileVersion for a manual local compile.
 #ifndef AppVer
-  #define AppVer GetVersionNumbersString('..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\LittleBigMouse.Ui.Avalonia.exe')
+  #define AppVer GetVersionNumbersString(SourceDir + '\LittleBigMouse.Ui.Avalonia.exe')
 #endif
 
 ; The hook daemon is staged into the UI output before the installer is compiled,
@@ -31,13 +39,13 @@ CloseApplications=force
 RestartApplications=no
 
 [Files]
-Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
-Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
+Source: "{#SourceDir}\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
+Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 ; No *.xml line here: the build output has not contained one since the Layout and
 ; Vcp plugins stopped copying their unused colors.xml, and ISCC aborts the compile
 ; on a wildcard that matches nothing. Add it back with the file, if one ever needs
 ; shipping again.
-Source: "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0\*.json"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
+Source: "{#SourceDir}\*.json"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 
 ;Source: "..\bin\x86\Release\net10.0\*.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode
 ;Source: "..\bin\x86\Release\net10.0\*.dll"; DestDir: "{app}"; Check: not Is64BitInstallMode

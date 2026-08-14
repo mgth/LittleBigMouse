@@ -1,87 +1,25 @@
 #nullable enable
-using System.Text.Json;
 using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 
 /// <summary>
-/// Atomic, plugin-owned storage. The remote token only authorizes this application on
-/// the display's local network; on Unix the file is nevertheless restricted to its owner.
+/// The Samsung remote token only authorizes this application on the display's local network,
+/// but it is a credential all the same, so it is stored encrypted — see
+/// <see cref="EncryptedJsonStore{T}"/> for what that does and does not buy.
 /// </summary>
-public sealed class SamsungTizenSettingsStore
+public sealed class SamsungTizenSettingsStore : EncryptedJsonStore<SamsungTizenConfiguration>
 {
-    static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    readonly object _lock = new();
-    readonly string _filePath;
-    Dictionary<string, SamsungTizenConfiguration>? _settings;
-
     public SamsungTizenSettingsStore()
         : this(Path.Combine(LbmPaths.ConfigDir, "samsung-tizen.json"))
     {
     }
 
-    public SamsungTizenSettingsStore(string filePath) => _filePath = filePath;
-
-    public SamsungTizenConfiguration? Get(string monitorId)
+    public SamsungTizenSettingsStore(string filePath) : base("Samsung/Tizen", filePath)
     {
-        lock (_lock)
-        {
-            EnsureLoaded();
-            return _settings!.TryGetValue(monitorId, out var value) ? Clone(value) : null;
-        }
     }
 
-    public void Save(SamsungTizenConfiguration configuration)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(configuration.MonitorId);
-
-        lock (_lock)
-        {
-            EnsureLoaded();
-            _settings![configuration.MonitorId] = Clone(configuration);
-            SaveLocked();
-        }
-    }
-
-    void EnsureLoaded()
-    {
-        if (_settings is not null) return;
-
-        try
-        {
-            _settings = File.Exists(_filePath)
-                ? JsonSerializer.Deserialize<Dictionary<string, SamsungTizenConfiguration>>(
-                    File.ReadAllText(_filePath), JsonOptions) ?? []
-                : [];
-        }
-        catch (Exception e)
-        {
-            Console.Error.WriteLine($"Samsung/Tizen settings unreadable, starting fresh: {e.Message}");
-            _settings = [];
-        }
-    }
-
-    void SaveLocked()
-    {
-        try
-        {
-            var directory = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-
-            var temporary = _filePath + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(_settings, JsonOptions));
-            File.Move(temporary, _filePath, overwrite: true);
-
-            if (!OperatingSystem.IsWindows())
-                File.SetUnixFileMode(_filePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-        }
-        catch (Exception e)
-        {
-            Console.Error.WriteLine($"Samsung/Tizen settings not saved: {e.Message}");
-        }
-    }
-
-    static SamsungTizenConfiguration Clone(SamsungTizenConfiguration source) => new()
+    protected override SamsungTizenConfiguration Clone(SamsungTizenConfiguration source) => new()
     {
         MonitorId = source.MonitorId,
         IpAddress = source.IpAddress,

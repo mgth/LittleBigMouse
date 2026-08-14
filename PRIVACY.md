@@ -20,23 +20,28 @@ The installer additionally downloads the .NET 10 Runtime from Microsoft's `aka.m
 
 - `HKCU\SOFTWARE\Mgth\LittleBigMouse` — layout options, monitor positions and border settings.
 - `%LOCALAPPDATA%\Mgth\LittleBigMouse` — `Current.xml` (the active layout), `Excluded.txt`, and the UI log.
-- `%APPDATA%\LittleBigMouse\hisense-vidaa.json` and the Samsung equivalent in the configuration directory — smart-TV addresses and pairing tokens.
+- `%LOCALAPPDATA%\Mgth\LittleBigMouse\samsung-tizen.json` and `hisense-vidaa.json` — smart-TV addresses and pairing tokens, encrypted (see below). Up to 5.6.0 the Hisense file was written to `%APPDATA%\LittleBigMouse\` instead; it is moved on first read and the old copy deleted.
 - A Windows Task Scheduler entry named `LittleBigMouse_<your account>`, if you enable start-on-logon. It is removed with the setting.
 
 **Linux**
 
-- `~/.config/LittleBigMouse/` — `options.json`, `models.json`, `layouts/`, `window.json`, `samsung-tizen.json`, `wallpaper.json`.
+- `~/.config/LittleBigMouse/` — `options.json`, `models.json`, `layouts/`, `window.json`, `samsung-tizen.json`, `hisense-vidaa.json`, `wallpaper.json`, `secrets.key`.
 - `~/.local/share/LittleBigMouse/` — `Current.xml`, `Excluded.txt`, `ui.log`, `wallpapers/`.
 
 `Excluded.txt` holds the list of applications excluded from mouse handling, as fragments of executable paths (`\steamapps\`, `/Games/`, and whatever you add). It is seeded with defaults and only ever grows by your choice. No history of what you ran is kept: nothing records which applications were seen, only which ones you excluded.
 
-## Smart-TV credentials are not encrypted
+## Smart-TV credentials are encrypted
 
-Pairing tokens for Samsung Tizen and Hisense VIDAA televisions are stored **in plain text**, as JSON, in the locations above.
+Pairing tokens for Samsung Tizen and Hisense VIDAA televisions are encrypted before they are written, so the files listed above hold ciphertext rather than readable JSON.
 
-On Linux and other Unix systems the Samsung store is created with owner-only permissions (`0600`). On Windows the file carries no protection beyond the ACL of your user profile, and the Hisense store is not permission-restricted on any platform.
+- **Windows** — DPAPI (`CurrentUser` scope). The key comes from your logon credentials; nothing extra is stored on disk, and another Windows account cannot read the tokens even if it can reach your profile directory.
+- **Linux and other Unix systems** — AES-GCM, with a 32-byte random key in `~/.config/LittleBigMouse/secrets.key`. That file is created with owner-only permissions (`0600`), as are the token files themselves.
 
-These tokens authorise control of a television on your own network — changing input, volume, power. They are not accounts, and they carry no payment or identity data. Still, anything running as you can read them, and they are not protected against another user with access to your profile directory. If that matters in your situation, do not pair a television.
+If a token file cannot be decrypted — a restored profile without its key, a file copied from another account — it is discarded and you are asked to pair again. Files written in clear by 5.6.0 and earlier are read once and rewritten encrypted the next time the application starts.
+
+**What this does not protect against.** Anything running under your own account can read the key file, or ask DPAPI, exactly as this application does. Encryption at rest keeps the tokens out of backups, synced profiles, support archives and other users' hands; it is not a defence against malware already running as you.
+
+These tokens authorise control of a television on your own network — changing input, volume, power. They are not accounts, and they carry no payment or identity data.
 
 ## What is never done
 

@@ -1,4 +1,6 @@
 #nullable enable
+using LittleBigMouse.Plugins;
+
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 
 public sealed record HisenseVidaaDevice(string IpAddress, string Name = "Hisense VIDAA", string ModelName = "", string MacAddress = "", int? ProtocolVersion = null, string Brand = "his")
@@ -6,7 +8,7 @@ public sealed record HisenseVidaaDevice(string IpAddress, string Name = "Hisense
     public static bool IsValidAddress(string value) => System.Net.IPAddress.TryParse(value?.Trim(), out var ip) && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
 }
 
-public sealed class HisenseVidaaConfiguration
+public sealed class HisenseVidaaConfiguration : IMonitorSetting
 {
     public string MonitorId { get; set; } = "";
     public string IpAddress { get; set; } = "";

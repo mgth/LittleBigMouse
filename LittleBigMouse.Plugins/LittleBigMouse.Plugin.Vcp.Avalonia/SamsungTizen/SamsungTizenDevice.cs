@@ -1,5 +1,6 @@
 #nullable enable
 using System.Net;
+using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 
@@ -21,7 +22,7 @@ public sealed record SamsungTizenDevice(
 }
 
 /// <summary>Persisted association between an EDID monitor and one Tizen network device.</summary>
-public sealed class SamsungTizenConfiguration
+public sealed class SamsungTizenConfiguration : IMonitorSetting
 {
     public string MonitorId { get; set; } = "";
     public string IpAddress { get; set; } = "";

@@ -11,6 +11,7 @@
 
 	<ItemGroup>
 		<AvaloniaResource Include="Assets\**" />
+		<InternalsVisibleTo Include="LittleBigMouse.Plugin.Vcp.Avalonia.Tests" />
 	</ItemGroup>
 
   <ItemGroup>

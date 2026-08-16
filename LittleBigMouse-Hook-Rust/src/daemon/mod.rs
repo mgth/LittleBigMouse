@@ -264,9 +264,21 @@ fn run(shared: &Shared) {
     }
 
     load_excluded(shared);
-    if !shared.paused.load(Ordering::SeqCst) {
-        hook::request_hook(shared);
+
+    // Ask who is in front rather than wait to be told. The list was just
+    // (re)read, and `Run` is the one moment the daemon decides to hook — reading
+    // a pause flag that only a focus *change* ever sets is what let the engine
+    // hook straight over an excluded game that was already running (#541).
+    if hook::adopt_foreground(shared) {
+        // An excluded app holds the foreground: do not hook over it, and let go
+        // if an earlier Run already did.
+        if shared.hooked.load(Ordering::SeqCst) {
+            hook::request_unhook(shared);
+        }
+        return;
     }
+
+    hook::request_hook(shared);
 }
 
 /// C++ `LoadExcluded`: read `Excluded.txt`, skipping blank lines and `:` comments.

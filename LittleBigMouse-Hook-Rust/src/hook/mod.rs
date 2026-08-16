@@ -134,8 +134,94 @@ pub(crate) fn on_focus_changed(shared: &Shared, path: String) {
     shared.broadcast(&protocol::focus_changed(&path));
 }
 
+/// Re-decide the pause against whoever is in the foreground *right now*, and
+/// report whether an excluded app is in front.
+///
+/// [`on_focus_changed`] only ever fires on a *change*, so an excluded app already
+/// in front was never announced and the pause never engaged: the engine hooked
+/// straight over a game and stayed there until the user alt-tabbed out and back
+/// (#541). Starting LBM after the game was always enough to reproduce it; live
+/// update (#525) made it ordinary rather than rare, by re-Running on every edit.
+///
+/// This is the question asked at `Run` time, which is the one moment the daemon
+/// decides to hook, and therefore the one place the answer changes anything.
+pub(crate) fn adopt_foreground(shared: &Shared) -> bool {
+    let path = crate::platform::process::foreground_path_now();
+    adopt_foreground_path(shared, path.as_deref())
+}
+
+/// See [`adopt_foreground`]; split from the OS query so the decision can be
+/// tested without a desktop.
+pub(crate) fn adopt_foreground_path(shared: &Shared, path: Option<&str>) -> bool {
+    // Unknown foreground (no window, unresolvable owner, a platform that does not
+    // answer) leaves the flag exactly as it was: the last thing we actually knew
+    // beats a guess, and guessing "not excluded" would unpause over a game.
+    let Some(path) = path.filter(|p| !p.is_empty()) else {
+        return shared.paused.load(Ordering::SeqCst);
+    };
+
+    let excluded = shared.is_excluded(path);
+    shared.paused.store(excluded, Ordering::SeqCst);
+    // Same announcement a real focus change makes: the UI keeps its own idea of
+    // what is in front, and it must not diverge just because nothing moved.
+    shared.broadcast(&protocol::focus_changed(path));
+    excluded
+}
+
 /// Run a callback body catching any panic, so it can never unwind across an
 /// `extern "system"` FFI boundary (which would be UB).
 pub(crate) fn guard<F: FnOnce()>(body: F) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shared_excluding(entries: &[&str]) -> Shared {
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = entries.iter().map(|e| e.to_string()).collect();
+        shared
+    }
+
+    /// The #541 case: the game is already in front when `Run` arrives, so no
+    /// focus change ever announced it.
+    #[test]
+    fn a_foreground_already_excluded_engages_the_pause() {
+        let shared = shared_excluding(&[r"\Genshin Impact\"]);
+        let excluded = adopt_foreground_path(
+            &shared,
+            Some(r"C:\Games\Genshin Impact\Genshin Impact game\GenshinImpact.exe"),
+        );
+
+        assert!(excluded, "an excluded foreground must stop Run hooking");
+        assert!(shared.paused.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn a_foreground_that_is_not_excluded_lifts_a_stale_pause() {
+        let shared = shared_excluding(&[r"\Genshin Impact\"]);
+        shared.paused.store(true, Ordering::SeqCst);
+
+        let explorer = Some(r"C:\Windows\explorer.exe");
+        assert!(!adopt_foreground_path(&shared, explorer));
+        assert!(!shared.paused.load(Ordering::SeqCst));
+    }
+
+    /// "Unknown" is not "nobody": a locked session, an unresolvable owner, or a
+    /// platform that does not answer must not unpause over a game.
+    #[test]
+    fn an_unknown_foreground_leaves_the_pause_untouched() {
+        for path in [None, Some("")] {
+            let shared = shared_excluding(&[r"\Genshin Impact\"]);
+
+            shared.paused.store(true, Ordering::SeqCst);
+            assert!(adopt_foreground_path(&shared, path), "{path:?} unpaused");
+            assert!(shared.paused.load(Ordering::SeqCst));
+
+            shared.paused.store(false, Ordering::SeqCst);
+            assert!(!adopt_foreground_path(&shared, path), "{path:?} paused");
+            assert!(!shared.paused.load(Ordering::SeqCst));
+        }
+    }
 }

@@ -10,7 +10,22 @@ use windows::Win32::System::Threading::{
     GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
     PROCESS_QUERY_LIMITED_INFORMATION,
 };
-use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+
+/// Full Win32 executable path of whatever holds the foreground *right now*, or
+/// `None` when there is nothing to ask about (a locked session, a switch in
+/// progress) or the owner cannot be resolved.
+///
+/// The focus hook only ever reports a *change*. This is how the daemon asks the
+/// same question at a moment of its own choosing — when it is about to hook, and
+/// needs to know whether it would be hooking over an excluded app (#541).
+pub fn foreground_path_now() -> Option<String> {
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd == HWND::default() {
+        return None;
+    }
+    exe_path_from_window(hwnd)
+}
 
 /// Full Win32 executable path of the process owning `hwnd`, or `None`.
 pub fn exe_path_from_window(hwnd: HWND) -> Option<String> {

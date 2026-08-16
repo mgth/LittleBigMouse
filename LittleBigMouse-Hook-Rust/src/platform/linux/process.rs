@@ -14,6 +14,19 @@ pub fn parent_process_path() -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Windows counterpart of "who is in front right now?" — deliberately unanswered
+/// here, and `None` means "unknown", not "nobody": the caller leaves the pause
+/// flag as it stands rather than guess.
+///
+/// Answering would mean opening an X connection from whichever thread asked. The
+/// focus watcher already owns one, and already reports the active window once
+/// when it connects (`hook/linux/focus.rs`, the `report` before the event loop),
+/// so the case this exists for on Windows — a game already in front when the
+/// engine starts — is covered here by that initial report instead.
+pub fn foreground_path_now() -> Option<String> {
+    None
+}
+
 /// Identity string of a foreground process, for exclusion matching and the UI's
 /// seen-processes list (Windows reports the exe full path there).
 ///

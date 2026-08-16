@@ -70,8 +70,23 @@ public class SecretStorageTests : IDisposable
         Assert.ThrowsAny<CryptographicException>(() => protector.Unprotect(tampered));
     }
 
+    /// <summary>
+    /// What a protector rooted somewhere else can read follows the scope of the key, and that
+    /// scope differs per platform — so assert both rather than skip the one that does not fit.
+    /// <para>
+    /// Unix keys on the file's own directory: another directory is another key, and the payload
+    /// must be refused. Windows keys on the logon credentials through DPAPI, where the location
+    /// plays no part at all — the same user reads it back wherever it sits. Asserting the Unix
+    /// answer everywhere is what made this fail on Windows while the code was doing exactly what
+    /// it says it does.
+    /// </para>
+    /// <para>
+    /// The isolation DPAPI does buy is between user accounts, and a test running as a single
+    /// account cannot exercise it. Nothing here should be read as covering it.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void PayloadFromAnotherKeyIsRejected()
+    public void WhatAnotherLocationCanReadFollowsTheKeyScope()
     {
         var mine = SecretProtector.ForFile(At("data.json"));
         var envelope = mine.Protect("token");
@@ -79,7 +94,14 @@ public class SecretStorageTests : IDisposable
         var elsewhere = Directory.CreateDirectory(At("other")).FullName;
         var theirs = SecretProtector.ForFile(Path.Combine(elsewhere, "data.json"));
 
-        Assert.ThrowsAny<CryptographicException>(() => theirs.Unprotect(envelope));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal("token", theirs.Unprotect(envelope));
+        }
+        else
+        {
+            Assert.ThrowsAny<CryptographicException>(() => theirs.Unprotect(envelope));
+        }
     }
 
     [Fact]

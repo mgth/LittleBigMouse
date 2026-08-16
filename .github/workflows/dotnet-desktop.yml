@@ -92,6 +92,23 @@ jobs:
         }
         "hook: $($info.ProductName) $($info.FileVersion)"
 
+    # A hook that imports vcruntime140.dll does not start at all on a Windows
+    # that never installed a VC++ redistributable (#539), and every machine that
+    # builds it has one — so the break is invisible right up to the user. The
+    # static CRT that avoids it is set in .cargo/config.toml, which Cargo
+    # resolves from the working directory: moving this build into the hook's own
+    # directory, or adding a second config closer to the manifest, silently
+    # drops the flag. Read the imports off the artifact instead of trusting
+    # that; a PE names its DLLs in plain ASCII, so no toolchain is needed.
+    - name: Verify hook needs no VC++ redistributable
+      run: |
+        $exe = 'LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe'
+        $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
+        if ($text -match 'VCRUNTIME\d|MSVCP\d') {
+          throw "hook imports the MSVC runtime: it will not start where no VC++ redistributable was ever installed (#539)"
+        }
+        "hook: statically linked, no VC++ redistributable needed"
+
     - name: Stage hook next to UI output
       # Cargo can't emit a target named with a '.', so the Rust binary is built as
       # lbm-hook.exe and renamed to the contract name here.

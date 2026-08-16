@@ -1,0 +1,26 @@
+# The hook carries the MSVC runtime instead of asking for it.
+#
+# Rust's x86_64-pc-windows-msvc target links vcruntime140.dll dynamically, and
+# Windows does not ship that DLL. On a machine that never installed a VC++
+# redistributable — a fresh install, a reset PC — LittleBigMouse.Hook.exe dies
+# before main() with "VCRUNTIME140.dll was not found" (#539): the UI comes up,
+# the daemon never does, and nothing in the app is in a position to say why.
+# The C++ hook this one replaced did not have the problem, so the whole failure
+# arrived with the port, on exactly the machines least able to diagnose it.
+#
+# Linking statically rather than shipping the redistributable with the
+# installer: the daemon is a standalone exe with no C dependency on Windows
+# (`cargo tree --target x86_64-pc-windows-msvc -i cc` finds nothing), so there
+# is no second CRT to disagree with this one over a heap — the reason static
+# linking is usually the wrong answer does not apply. It also keeps the portable
+# build working, which an installer-side redistributable would not.
+#
+# This file has to live at the repository root rather than next to the hook's
+# Cargo.toml: Cargo resolves .cargo/config.toml from the *working directory*
+# upwards, never from the manifest, and CI builds the hook from the root with
+# --manifest-path. A config under LittleBigMouse-Hook-Rust/ would be picked up
+# by a developer building in that directory and ignored by the build that ships
+# — the one failure mode this file exists to prevent. From the root it covers
+# both, since Cargo walks up from wherever cargo was invoked.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -23,6 +23,7 @@
 
 using LittleBigMouse.DisplayLayout.Monitors;
 using ReactiveUI;
+using System.Reactive.Linq;
 using System.Reactive.Concurrency;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
@@ -55,10 +56,18 @@ public class DisplayScaleDip : DisplaySize
             (h, r) => h * r
             ).ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
 
-        _mainRatio = this.WhenAnyValue(
-            e => e.Layout.PrimarySource.EffectiveDpi.X,
-            e => e.Layout.PrimarySource.EffectiveDpi.Y,
-            (x, y) => new DisplayRatioValue(96 / x, 96 / y))
+        _mainRatio = this.WhenAnyValue(e => e.Layout.PrimarySource)
+            .Select(primarySource =>
+            {
+                if (primarySource == null)
+                    return Observable.Empty<IDisplayRatio>();
+
+                return primarySource.WhenAnyValue(
+                    e => e.EffectiveDpi.X,
+                    e => e.EffectiveDpi.Y,
+                    (x, y) => (IDisplayRatio)new DisplayRatioValue(96 / x, 96 / y));
+            })
+            .Switch()
             .ToProperty(this,e=>e.MainRatio, scheduler: Scheduler.Immediate);
 
         _width = this.WhenAnyValue(

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reactive.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using HLab.Base.ReactiveUI;
@@ -93,18 +94,39 @@ public class PhysicalSource : SavableReactiveModel
             GetRealDpiAvg
         ).ToProperty(this, e => e.RealDpiAvg).DisposeWith(this);
 
-        _dipToPixelRatio = this.WhenAnyValue(
+        var primaryDpi = this.WhenAnyValue(e => e.Monitor.Layout.PrimarySource)
+            .Select(primarySource =>
+            {
+                if (primarySource == null)
+                    return Observable.Empty<(double X, double Y)>();
+
+                return primarySource.WhenAnyValue(
+                    e => e.EffectiveDpi.X,
+                    e => e.EffectiveDpi.Y,
+                    (x, y) => (X: x, Y: y));
+            })
+            .Switch();
+
+        var dipToPixelInputs = this.WhenAnyValue(
             e => e.Monitor.Layout.DpiAwareness,
             e => e.RealDpi.X,
             e => e.RealDpi.Y,
             e => e.Source.DpiAwareAngularDpi.X,
             e => e.Source.DpiAwareAngularDpi.Y,
-            e => e.Monitor.Layout.PrimarySource.EffectiveDpi.X,
-            e => e.Monitor.Layout.PrimarySource.EffectiveDpi.Y,
             e => e.Source.EffectiveDpi.X,
             e => e.Source.EffectiveDpi.Y,
-            UpdateDipToPixelRatio
-        ).ToProperty(this, e => e.DipToPixelRatio).DisposeWith(this);
+            (aware, realX, realY, angularX, angularY, sourceX, sourceY) =>
+                (aware, realX, realY, angularX, angularY, sourceX, sourceY));
+
+        _dipToPixelRatio = dipToPixelInputs
+            .CombineLatest(primaryDpi, (input, primary) => UpdateDipToPixelRatio(
+                input.aware,
+                input.realX, input.realY,
+                input.angularX, input.angularY,
+                primary.X, primary.Y,
+                input.sourceX, input.sourceY))
+            .ToProperty(this, e => e.DipToPixelRatio)
+            .DisposeWith(this);
 
         _mmToDipRatio = this.WhenAnyValue(
             e => e.Monitor.DepthRatio,

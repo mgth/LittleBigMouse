@@ -30,6 +30,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using HLab.Base.ReactiveUI;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using HLab.Sys.Argyll;
@@ -56,6 +57,8 @@ public record ObserverChoice(ArgyllProbe.ObserverEnum Value, string Label);
 
 public record SpeedChoice(string Label, bool Adaptive, int SettleMs);
 
+record VcpResolution(VcpControl? Control, bool Resolving);
+
 public class ProbeLogEntry
 {
    public bool R { get; init; }
@@ -70,6 +73,9 @@ public class ProbeLogEntry
 public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 {
    readonly IVcpService? _vcpService;
+   readonly CalibrationTaskCoordinator _calibrations;
+   static readonly SemaphoreSlim SpotreadCommandGate = new(1, 1);
+   int _disposed;
 
    // TODO : use reactive ui for collections
    public VcpScreenViewModel(
@@ -80,20 +86,24 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
        ILayoutOptions? layoutOptions)
    {
       _vcpService = vcpService;
+      _calibrations = new CalibrationTaskCoordinator(ReportCalibrationError);
 
       // experimental gate: Argyll calibration and the smart-TV test tooling
       // stay hidden unless enabled in the application options
       _experimentalEnabled = (layoutOptions is null
               ? Observable.Return(false)
               : layoutOptions.WhenAnyValue(o => o.ExperimentalFeatures))
-          .ToProperty(this, e => e.ExperimentalEnabled);
+          .ToProperty(this, e => e.ExperimentalEnabled)
+          .DisposeWith(this);
       Samsung = new SamsungControlViewModel(samsungTizenService);
       Hisense = new HisenseControlViewModel(hisenseVidaaService);
 
       this.WhenAnyValue(e => e.Model)
-          .Subscribe(Samsung.SetMonitor);
+          .Subscribe(Samsung.SetMonitor)
+          .DisposeWith(this);
       this.WhenAnyValue(e => e.Model)
-          .Subscribe(Hisense.SetMonitor);
+          .Subscribe(Hisense.SetMonitor)
+          .DisposeWith(this);
 
       TestPatterns.Add(getButtonPattern(this)
          .Set(TestPatternType.ContrastBoth)
@@ -124,39 +134,56 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       // Resolving a physical DDC/CI channel may enumerate DRM/sysfs or Win32
       // monitor handles. Keep the entire lookup off the UI thread; VcpControl
       // itself continues its capabilities probe in the background.
-      _vcp = this.WhenAnyValue(e => e.Model)
+      var vcpResolution = this.WhenAnyValue(e => e.Model)
           .Select(m => m is null || _vcpService is null
-              ? Observable.Return<VcpControl?>(null)
-              : Observable.FromAsync(ct => _vcpService.GetControlAsync(m, ct))
-                  .Catch<VcpControl?, Exception>(error =>
-                  {
-                     Console.Error.WriteLine($"VCP: unable to resolve {m.Id}: {error.Message}");
-                     return Observable.Return<VcpControl?>(null);
-                  }))
+              ? Observable.Return(new VcpResolution(null, false))
+              : Observable.Concat(
+                  Observable.Return(new VcpResolution(null, true)),
+                  Observable.FromAsync(ct => _vcpService.GetControlAsync(m, ct))
+                      .Select(control => new VcpResolution(control, false))
+                      .Catch<VcpResolution, Exception>(error =>
+                      {
+                         Console.Error.WriteLine($"VCP: unable to resolve {m.Id}: {error.Message}");
+                         return Observable.Return(new VcpResolution(null, false));
+                      })))
           .Switch()
           .ObserveOn(RxSchedulers.MainThreadScheduler)
-          .Select(control => control?.Start())
-          .ToProperty(this, e => e.Vcp);
+          .Replay(1)
+          .RefCount();
+
+      _vcp = vcpResolution
+          .Select(resolution => resolution.Control?.Start())
+          .ToProperty(this, e => e.Vcp)
+          .DisposeWith(this);
+
+      _vcpResolving = vcpResolution
+          .Select(resolution => resolution.Resolving)
+          .ToProperty(this, e => e.VcpResolving)
+          .DisposeWith(this);
 
       _brightnessVisibility = this.WhenAnyValue(
           e => e.Vcp.Brightness,
           selector: e => e != null)
-          .ToProperty(this, e => e.BrightnessVisibility);
+          .ToProperty(this, e => e.BrightnessVisibility)
+          .DisposeWith(this);
 
       _contrastVisibility = this.WhenAnyValue(
           e => e.Vcp.Contrast,
           selector: e => e != null)
-          .ToProperty(this, e => e.ContrastVisibility);
+          .ToProperty(this, e => e.ContrastVisibility)
+          .DisposeWith(this);
 
       _gainVisibility = this.WhenAnyValue(
            e => e.Vcp.Gain,
            selector: e => e != null)
-           .ToProperty(this, e => e.GainVisibility);
+           .ToProperty(this, e => e.GainVisibility)
+           .DisposeWith(this);
 
       _driveVisibility = this.WhenAnyValue(
            e => e.Vcp.Drive,
            selector: e => e != null)
-           .ToProperty(this, e => e.DriveVisibility);
+           .ToProperty(this, e => e.DriveVisibility)
+           .DisposeWith(this);
 
       // hidden while the capabilities probe is still running: no point offering
       // the forced activation before knowing what the monitor answered
@@ -164,14 +191,17 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
            e => e.Vcp.Brightness,
            e => e.Vcp.Contrast,
            e => e.Vcp.Probing,
-           (b, c, probing) => !probing && (b == null || c == null))
-           .ToProperty(this, e => e.AnywayVisibility);
+           e => e.VcpResolving,
+           (b, c, probing, resolving) => !resolving && !probing && (b == null || c == null))
+           .ToProperty(this, e => e.AnywayVisibility)
+           .DisposeWith(this);
 
       _imageVisibility = this.WhenAnyValue(
            e => e.Vcp.Brightness,
            e => e.Vcp.Contrast,
            (b, c) => b != null || c != null)
-           .ToProperty(this, e => e.ImageVisibility);
+           .ToProperty(this, e => e.ImageVisibility)
+           .DisposeWith(this);
 
       // the advanced section is only meaningful once the monitor answered with
       // at least one adjustable level; without the experimental gate it only
@@ -182,51 +212,85 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
            e => e.Vcp.Drive,
            e => e.ExperimentalEnabled,
            (b, c, d, experimental) => d != null || (experimental && (b != null || c != null)))
-           .ToProperty(this, e => e.AdvancedVisibility);
+           .ToProperty(this, e => e.AdvancedVisibility)
+           .DisposeWith(this);
 
       _calibrationVisibility = this.WhenAnyValue(
            e => e.BrightnessVisibility,
            e => e.ExperimentalEnabled,
            (brightness, experimental) => brightness && experimental)
-           .ToProperty(this, e => e.CalibrationVisibility);
+           .ToProperty(this, e => e.CalibrationVisibility)
+           .DisposeWith(this);
 
       _probingVisibility = this.WhenAnyValue(
-           e => e.Vcp.Probing)
-           .ToProperty(this, e => e.ProbingVisibility);
+           e => e.Vcp.Probing,
+           e => e.VcpResolving,
+           (probing, resolving) => probing || resolving)
+           .ToProperty(this, e => e.ProbingVisibility)
+           .DisposeWith(this);
+
+      _message = this.WhenAnyValue(
+           e => e.Vcp.Probing,
+           e => e.VcpResolving,
+           (probing, resolving) => resolving
+               ? "Locating this monitor's DDC/CI channel…"
+               : probing
+                   ? "Reading this monitor's available controls…"
+                   : "")
+           .ToProperty(this, e => e.Message)
+           .DisposeWith(this);
 
       _selectedSpeed = Speeds[1];
 
       // the speed preset drives spotread's adaptive integration flag
       this.WhenAnyValue(e => e.SelectedSpeed)
-          .Subscribe(s => { if (s is not null) ArgyllProbe.Adaptive = s.Adaptive; });
+          .Subscribe(s => { if (s is not null) ArgyllProbe.Adaptive = s.Adaptive; })
+          .DisposeWith(this);
 
       // persisted calibration settings: common file, overridden per monitor
       this.WhenAnyValue(e => e.Model)
-          .Subscribe(m => { if (m is not null) LoadCalibrationSettings(m.Id); });
+          .Subscribe(m => { if (m is not null) LoadCalibrationSettings(m.Id); })
+          .DisposeWith(this);
 
       this.WhenAnyValue(
            e => e.ArgyllProbe.ColorTemp,
            e => e.ArgyllProbe.Observer,
            e => e.SelectedSpeed)
-          .Subscribe(_ => SaveCalibrationValues());
+          .Subscribe(_ => SaveCalibrationValues())
+          .DisposeWith(this);
 
       this.WhenAnyValue(e => e.TestPairs)
-          .Subscribe(_ => SaveMonitorCalibration());
+          .Subscribe(_ => SaveMonitorCalibration())
+          .DisposeWith(this);
 
       this.WhenAnyValue(e => e.UseCustomSettings)
-          .Subscribe(OnUseCustomChanged);
+          .Subscribe(OnUseCustomChanged)
+          .DisposeWith(this);
 
       // what will actually be launched, kept honest by recomputing from the probe
       _spotreadCommand = this.WhenAnyValue(
            e => e.ArgyllProbe.Observer,
            e => e.ArgyllProbe.ColorTemp,
            e => e.SelectedSpeed,
-           (o, t, s) => $"spotread{ArgyllProbe.SpotReadArgs}   →   D{t / 100:0} target")
-           .ToProperty(this, e => e.SpotreadCommand);
+           e => e.ExperimentalEnabled)
+           .Select(values => values.Item4
+               ? Observable.FromAsync(LoadSpotreadCommandAsync)
+                   .StartWith("Detecting ArgyllCMS…")
+               : Observable.Return(""))
+           .Switch()
+           .ObserveOn(RxSchedulers.MainThreadScheduler)
+           .ToProperty(this, e => e.SpotreadCommand)
+           .DisposeWith(this);
 
 
-      AnywayCommand = ReactiveCommand.Create(() => Vcp?.ActivateAnyway());
-      ProbeBrightnessCommand = ReactiveCommand.Create(ProbeBrightness);
+      AnywayCommand = ReactiveCommand.Create(() => Vcp?.ActivateAnyway())
+          .DisposeWith(this);
+
+      var probeBrightnessCommand = ReactiveCommand.CreateFromTask(() => ProbeBrightnessAsync());
+      probeBrightnessCommand.ThrownExceptions
+          .Subscribe(_ => { })
+          .DisposeWith(this);
+      ProbeBrightnessCommand = probeBrightnessCommand.DisposeWith(this);
 
       ClearLutCommand = ReactiveCommand.Create(() =>
       {
@@ -237,13 +301,14 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
          LastMeasure = "";
          ProbeLog.Clear();
          ProbeVisible = false;
-      });
+      }).DisposeWith(this);
 
       StopTuneCommand = ReactiveCommand.Create(() =>
       {
+         _calibrations.Cancel();
          ArgyllProbe.Abort();
          ArgyllProbe.Message = "Stopping…";
-      });
+      }).DisposeWith(this);
 
       _probeLut = this.WhenAnyValue(
           e => e.Vcp,
@@ -255,7 +320,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
              lut?.Load();
              return lut;
           })
-          .ToProperty(this, e => e.ProbeLut);
+          .ToProperty(this, e => e.ProbeLut)
+          .DisposeWith(this);
 
 
       _series = this.WhenAnyValue(
@@ -323,7 +389,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                },
 
             })
-            .ToProperty(this, e => e.Series);
+            .ToProperty(this, e => e.Series)
+            .DisposeWith(this);
 
       _xAxes = this.WhenAnyValue(
             e => e.ProbeLut,
@@ -344,7 +411,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
                },
             })
-            .ToProperty(this, e => e.XAxes);
+            .ToProperty(this, e => e.XAxes)
+            .DisposeWith(this);
 
       _yAxes = this.WhenAnyValue(
             e => e.ProbeLut,
@@ -398,7 +466,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                }
 
             })
-            .ToProperty(this, e => e.YAxes);
+            .ToProperty(this, e => e.YAxes)
+            .DisposeWith(this);
    }
 
    public bool BrightnessVisibility => _brightnessVisibility.Value;
@@ -515,7 +584,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       // called from the measurement task: the observable collection feeds an
       // ItemsControl and must only mutate on the UI thread
-      RxSchedulers.MainThreadScheduler.Schedule(() =>
+      ScheduleOnUi(() =>
       {
          ProbeLog.Insert(0, entry);
          while (ProbeLog.Count > ProbeLogLength) ProbeLog.RemoveAt(ProbeLog.Count - 1);
@@ -525,6 +594,9 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
    public VcpControl? Vcp => _vcp.Value;
    readonly ObservableAsPropertyHelper<VcpControl?> _vcp;
+
+   public bool VcpResolving => _vcpResolving.Value;
+   readonly ObservableAsPropertyHelper<bool> _vcpResolving;
 
    public Color ColorA
    {
@@ -712,31 +784,65 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
    public string SpotreadCommand => _spotreadCommand.Value;
    readonly ObservableAsPropertyHelper<string> _spotreadCommand;
 
-   public void ProbeLowLuminance()
+   async Task<string> LoadSpotreadCommandAsync(CancellationToken cancellationToken)
+   {
+      await SpotreadCommandGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+      try
+      {
+         return await Task.Run(() =>
+         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var command = $"spotread{ArgyllProbe.SpotReadArgs}   →   D{ArgyllProbe.ColorTemp / 100:0} target";
+            cancellationToken.ThrowIfCancellationRequested();
+            return command;
+         }, cancellationToken).ConfigureAwait(false);
+      }
+      finally
+      {
+         SpotreadCommandGate.Release();
+      }
+   }
+
+   public Task ProbeLowLuminance(CancellationToken cancellationToken = default)
    {
       if (!ArgyllProbe.Installed)
       {
          PleaseInstall();
-         return;
+         return Task.CompletedTask;
       }
 
+      var level = Vcp?.Brightness;
+      var gain = Vcp?.Gain;
+      var lut = ProbeLut;
+      if (level is null || gain is null || lut is null)
+         return Task.CompletedTask;
 
-      new Thread(() =>
+      return RunCalibrationAsync(
+          "low-luminance probe",
+          ArgyllProbe,
+          token => ProbeLowLuminanceCoreAsync(level, gain, lut, token),
+          cancellationToken);
+   }
+
+   async Task ProbeLowLuminanceCoreAsync(
+       MonitorLevel level,
+       MonitorRgbLevel gain,
+       ProbeLut lut,
+       CancellationToken cancellationToken)
+   {
+      var max = gain.Red.Max;
+      var min = gain.Red.Min;
+      var old = lut.Luminance;
+      level.Value = 0;
+
+      try
       {
-         var level = Vcp.Brightness;
-
-         var max = Vcp.Gain.Red.Max;
-         var min = Vcp.Gain.Red.Min;
-
-         var old = ProbeLut?.Luminance ?? 0;
-         level.Value = 0;
-
          for (var i = max; i >= min; i--)
          {
-            TuneWhitePoint(i);
+            cancellationToken.ThrowIfCancellationRequested();
+            await TuneWhitePointCoreAsync(gain, i, cancellationToken).ConfigureAwait(false);
 
-            var t = ProbeLut.Current;
-
+            var t = lut.Current;
             if (ArgyllProbe.SpotRead())
             {
                t.Y = ArgyllProbe.ProbedColor.xyY.Y;
@@ -744,29 +850,26 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                t.y = ArgyllProbe.ProbedColor.xyY.y;
             }
 
-
-            ProbeLut.RemoveLowBrightness(i);
-            ProbeLut.Add(t);
-
-            ProbeLut.Save();
+            cancellationToken.ThrowIfCancellationRequested();
+            lut.RemoveLowBrightness(i);
+            lut.Add(t);
+            lut.Save();
 
             if (t.MinGain <= min) break;
          }
-
-         if (ProbeLut is not null) ProbeLut.Luminance = old;
       }
-      ).Start();
-      return;
+      finally
+      {
+         lut.Luminance = old;
+      }
    }
 
-   int _tuneRunning;
-
-   void ProbeBrightness()
+   async Task ProbeBrightnessAsync(CancellationToken cancellationToken = default)
    {
-      if (Vcp?.Brightness is null) return;
-
+      var level = Vcp?.Brightness;
+      var gain = Vcp?.Gain;
       var lut = ProbeLut;
-      if (lut is null) return;
+      if (level is null || gain is null || lut is null) return;
 
       // the panel's probe instance: its Message property is bound in the
       // calibration section, so progress and errors are actually visible
@@ -777,235 +880,166 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
          return;
       }
 
-      if (Interlocked.Exchange(ref _tuneRunning, 1) == 1) return;
+      await _calibrations.RunAsync(
+          "brightness probe",
+          async token =>
+          {
+             probe.ResetAbort();
+             using var abortRegistration = token.Register(probe.Abort);
+             token.ThrowIfCancellationRequested();
 
-      probe.ResetAbort();
-      TuneRunning = true;
+             TuneRunning = true;
+             // the instrument needs several seconds to come up, then may ask for its
+             // calibration position: say so before spotread produces its first output
+             probe.Message = "Initializing instrument — calibration may be requested…";
 
-      // the instrument needs several seconds to come up, then may ask for its
-      // calibration position: say so before spotread produces its first output
-      probe.Message = "Initializing instrument — calibration may be requested…";
-
-      Task.Run(() =>
-         {
-            try
-            {
-               var level = Vcp.Brightness;
-
-               for (var i = level.Min; i <= level.Max && !probe.Aborted; i++)
-               {
-                  if(ProbeLut.SortedLut.Any(t => t.Brightness == i)) continue;
-
-                  probe.Message = $"Measuring brightness {i} / {level.Max}…";
-
-                  level.Value = i;
-
-                  TuneWhitePoint();
-
-                  // aborted mid-tuning: don't record a half-tuned point
-                  if (probe.Aborted) break;
-
-                  var t = lut.Current;
-                  if (probe.SpotRead())
-                  {
-                     t.Y = probe.ProbedColor.xyY.Y;
-                     t.x = probe.ProbedColor.xyY.x;
-                     t.y = probe.ProbedColor.xyY.y;
-                     t.DeltaE = probe.ProbedColor.DeltaE00();
-                  }
-                  else if (probe.Aborted) break;
-
-                  lut.RemoveBrightness(t.Brightness);
-                  lut.Add(t);
-
-                  ProbeLut?.Save();
-
-                  LastMeasure = $"B {t.Brightness:0} → {t.Y:0.0} cd/m² · R {t.Red:0} G {t.Green:0} B {t.Blue:0} · ΔE00 {t.DeltaE:0.00}";
-               }
-
-               probe.Message = probe.Aborted ? "Tuning stopped" : "White point tuning done";
-            }
-            finally
-            {
-               Interlocked.Exchange(ref _tuneRunning, 0);
-               RxSchedulers.MainThreadScheduler.Schedule(() => TuneRunning = false);
-            }
-         }
-      );
-      return;
-
-      Task.Run(async () =>
-      {
-         for (uint channel = 0; channel < 3; channel++)
-         {
-            var level = Vcp.Gain.Channel(channel);
-            //LineSeries line = new LineSeries();
-
-            switch (channel)
-            {
-               case 0:
-                  //line.Color = OxyColors.Red;
-                  break;
-               case 1:
-                  //line.Color = OxyColors.Green;
-                  break;
-               case 2:
-                  //line.Color = OxyColors.Blue;
-                  break;
-            }
-
-            //  Curve.PlotModel.Series.Add(line);
-
-            var max = level.Value;
-
-            for (uint i = 32; i <= max; i++)
-            {
-               level.Value = i; await Task.Delay(1000);
-               probe.SpotRead();
-               var color = probe.ProbedColor;
-
-               //line.Points.Add(new DataPoint(i, color.DeltaE00()));
-               //Curve.Refresh();
-            }
-
-            var min = double.MaxValue;
-            var minIdx = level.Value;
-            //foreach (DataPoint dp in line.Points)
-            //{
-            //    if (dp.Y < min)
-            //    {
-            //        min = dp.Y;
-            //        minIdx = (uint)dp.X;
-            //    }
-            //}
-
-            level.Value = minIdx;
-         }
-      });
+             try
+             {
+                await Task.Run(
+                    () => ProbeBrightnessCoreAsync(level, gain, lut, probe, token),
+                    token).ConfigureAwait(false);
+             }
+             finally
+             {
+                if (token.IsCancellationRequested) probe.Message = "Tuning stopped";
+                ScheduleOnUi(() => TuneRunning = false);
+             }
+          },
+          cancellationToken).ConfigureAwait(false);
    }
 
-   void Probe(ArgyllProbe probe, Color c, MonitorLevel level)
+   async Task ProbeBrightnessCoreAsync(
+       MonitorLevel level,
+       MonitorRgbLevel gain,
+       ProbeLut lut,
+       ArgyllProbe probe,
+       CancellationToken cancellationToken)
    {
-      //LineSeries line = new LineSeries {Color = c};
-
-
-      //Curve.PlotModel.Series.Add(line);
-
-      for (var i = level.Min; i <= level.Max; i++)
+      for (var i = level.Min; i <= level.Max && !probe.Aborted; i++)
       {
+         cancellationToken.ThrowIfCancellationRequested();
+         if (lut.SortedLut.Any(t => t.Brightness == i)) continue;
+
+         probe.Message = $"Measuring brightness {i} / {level.Max}…";
          level.Value = i;
 
+         await TuneWhitePointCoreAsync(gain, 0, cancellationToken).ConfigureAwait(false);
+
+         // aborted mid-tuning: don't record a half-tuned point
+         if (probe.Aborted) break;
+
+         var t = lut.Current;
          if (probe.SpotRead())
          {
-            //line.Points.Add(new DataPoint(i, probe.ProbedColor.Lab.L));
-            //Curve.Refresh();                    
+            t.Y = probe.ProbedColor.xyY.Y;
+            t.x = probe.ProbedColor.xyY.x;
+            t.y = probe.ProbedColor.xyY.y;
+            t.DeltaE = probe.ProbedColor.DeltaE00();
          }
+         else if (probe.Aborted) break;
+
+         cancellationToken.ThrowIfCancellationRequested();
+         lut.RemoveBrightness(t.Brightness);
+         lut.Add(t);
+         lut.Save();
+
+         LastMeasure = $"B {t.Brightness:0} → {t.Y:0.0} cd/m² · R {t.Red:0} G {t.Green:0} B {t.Blue:0} · ΔE00 {t.DeltaE:0.00}";
       }
 
+      probe.Message = probe.Aborted ? "Tuning stopped" : "White point tuning done";
    }
-   public void Probe()
+
+   static void ProbeLevel(
+       ArgyllProbe probe,
+       Color color,
+       MonitorLevel level,
+       CancellationToken cancellationToken)
    {
+      _ = color;
+      for (var i = level.Min; i <= level.Max; i++)
+      {
+         cancellationToken.ThrowIfCancellationRequested();
+         level.Value = i;
+         probe.SpotRead();
+      }
+   }
+
+   public Task Probe(CancellationToken cancellationToken = default)
+   {
+      var gain = Vcp?.Gain;
+      var contrast = Vcp?.Contrast;
+      if (gain is null || contrast is null) return Task.CompletedTask;
+
       var probe = new ArgyllProbe();
       if (!probe.Installed)
       {
          PleaseInstall();
-         return;
+         return Task.CompletedTask;
       }
-      //Vcp.Brightness.SetToMax();
-      //Vcp.Contrast.SetToMax();
-      var red = Vcp.Gain.Red.Value;
-      var green = Vcp.Gain.Green.Value;
-      var blue = Vcp.Gain.Blue.Value;
-      //Vcp.Brightness.SetToMax();
-      //Vcp.Contrast.SetToMax();
-      //Vcp.Gain.Red.SetToMax();
-      //Vcp.Gain.Green.SetToMax();
-      //Vcp.Gain.Blue.SetToMax();
-      Task.Run(() =>
+
+      return RunCalibrationAsync(
+          "contrast probe",
+          probe,
+          token => ProbeCoreAsync(gain, contrast, probe, token),
+          cancellationToken);
+   }
+
+   static Task ProbeCoreAsync(
+       MonitorRgbLevel gain,
+       MonitorLevel contrast,
+       ArgyllProbe probe,
+       CancellationToken cancellationToken)
+   {
+      var red = gain.Red.Value;
+      var green = gain.Green.Value;
+      var blue = gain.Blue.Value;
+
+      try
       {
-         Vcp.Gain.Red.SetToMax();
-         Vcp.Gain.Green.SetToMin();
-         Vcp.Gain.Blue.SetToMin();
-         Probe(probe, Colors.Red, Vcp.Contrast);
+         gain.Red.SetToMax();
+         gain.Green.SetToMin();
+         gain.Blue.SetToMin();
+         ProbeLevel(probe, Colors.Red, contrast, cancellationToken);
 
-         Vcp.Gain.Red.SetToMin();
-         Vcp.Gain.Green.SetToMax();
-         Vcp.Gain.Blue.SetToMin();
-         Probe(probe, Colors.Green, Vcp.Contrast);
+         gain.Red.SetToMin();
+         gain.Green.SetToMax();
+         gain.Blue.SetToMin();
+         ProbeLevel(probe, Colors.Green, contrast, cancellationToken);
 
-         Vcp.Gain.Red.SetToMin();
-         Vcp.Gain.Green.SetToMin();
-         Vcp.Gain.Blue.SetToMax();
-         Probe(probe, Colors.Blue, Vcp.Contrast);
-
-         Vcp.Gain.Red.Value = red;
-         Vcp.Gain.Green.Value = green;
-         Vcp.Gain.Blue.Value = blue;
+         gain.Red.SetToMin();
+         gain.Green.SetToMin();
+         gain.Blue.SetToMax();
+         ProbeLevel(probe, Colors.Blue, contrast, cancellationToken);
       }
-      );
-      return;
-
-      Task.Run(async () =>
+      finally
       {
-         for (uint channel = 0; channel < 3; channel++)
-         {
-            var level = Vcp.Gain.Channel(channel);
-            //LineSeries line = new LineSeries();
+         gain.Red.Value = red;
+         gain.Green.Value = green;
+         gain.Blue.Value = blue;
+      }
 
-            switch (channel)
-            {
-               case 0:
-                  //line.Color = OxyColors.Red;
-                  break;
-               case 1:
-                  //line.Color = OxyColors.Green;
-                  break;
-               case 2:
-                  //line.Color = OxyColors.Blue;
-                  break;
-            }
-
-            //    Curve.PlotModel.Series.Add(line);
-
-            var max = level.Value;
-
-            for (uint i = 32; i <= max; i++)
-            {
-               level.Value = i; await Task.Delay(1000);
-
-               if (probe.SpotRead())
-               {
-                  //line.Points.Add(new DataPoint(i,probe.ProbedColor.DeltaE00()));
-                  //Curve.Refresh();                                            
-               }
-            }
-
-            var min = double.MaxValue;
-            var minIdx = level.Value;
-            //foreach (DataPoint dp in line.Points)
-            //{
-            //    if (dp.Y < min)
-            //    {
-            //        min = dp.Y;
-            //        minIdx = (uint)dp.X;
-            //    }
-            //}
-
-            level.Value = minIdx;
-         }
-      });
+      return Task.CompletedTask;
    }
 
    double[,,] _tune = new double[0, 0, 0];
 
-   public void Tune() => new Thread(TuneWhitePoint).Start();
-
-   public void TuneWhitePoint() => TuneWhitePoint(0);
-
-   public void TuneWhitePoint(uint max)
+   public Task Tune(CancellationToken cancellationToken = default)
    {
       var gain = Vcp?.Gain;
-      if (gain is null) return;
+      if (gain is null) return Task.CompletedTask;
+
+      return RunCalibrationAsync(
+          "white-point tuning",
+          ArgyllProbe,
+          token => TuneWhitePointCoreAsync(gain, 0, token),
+          cancellationToken);
+   }
+
+   async Task TuneWhitePointCoreAsync(
+       MonitorRgbLevel gain,
+       uint max,
+       CancellationToken cancellationToken)
+   {
 
       var count = 6;
       uint channel = 0;
@@ -1014,21 +1048,37 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       var rgb = gain.GetValues();
 
-      while (count > 0 && !ArgyllProbe.Aborted)
+      try
       {
-         if (TuneWhitePoint(channel, ref rgb, max)) count = 5;
-         else count--;
+         while (count > 0 && !ArgyllProbe.Aborted)
+         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await TuneWhitePointChannelAsync(
+                    gain,
+                    channel,
+                    rgb,
+                    max,
+                    cancellationToken).ConfigureAwait(false)) count = 5;
+            else count--;
 
-         channel++;
-         // phases 3-5 move channel pairs, for monitors whose gains interact —
-         // skippable, they double the cycle
-         channel %= TestPairs ? 6u : 3u;
+            channel++;
+            // phases 3-5 move channel pairs, for monitors whose gains interact —
+            // skippable, they double the cycle
+            channel %= TestPairs ? 6u : 3u;
+         }
       }
-
-      gain.SetTo(rgb);
+      finally
+      {
+         gain.SetTo(rgb);
+      }
    }
 
-   bool TuneWhitePoint(uint channel, ref uint[] rgb, uint maxLevel)
+   async Task<bool> TuneWhitePointChannelAsync(
+       MonitorRgbLevel gain,
+       uint channel,
+       uint[] rgb,
+       uint maxLevel,
+       CancellationToken cancellationToken)
    {
       uint[] c;
       var min = new uint[3];
@@ -1070,8 +1120,8 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       for (var i = 0; i < 3; i++)
       {
-         min[i] = Vcp.Gain.Channel(c[i]).Min;
-         max[i] = maxLevel == 0 ? Vcp.Gain.Channel(c[i]).Max : maxLevel;
+         min[i] = gain.Channel(c[i]).Min;
+         max[i] = maxLevel == 0 ? gain.Channel(c[i]).Max : maxLevel;
       }
 
 
@@ -1090,16 +1140,17 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       uint[] oldGain = [rgb[c[0]], rgb[c[1]], rgb[c[2]]];
 
-      var deltaE = Probe(rgb);
+      var deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
       ReportProbe(c, (int)n, "", deltaE, deltaE);
 
       while (!ArgyllProbe.Aborted && rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]] > min[2]))
       {
+         cancellationToken.ThrowIfCancellationRequested();
          var old = deltaE;
 
          for (var i = 0; i < n; i++) rgb[c[i]]--;
 
-         deltaE = Probe(rgb);
+         deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
          ReportProbe(c, (int)n, "↓", old, deltaE);
 
          if (deltaE > old) break;
@@ -1107,18 +1158,19 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       while (!ArgyllProbe.Aborted && rgb[c[0]] < max[0] && (n < 2 || rgb[c[1]] < max[1]) && (n < 3 || rgb[c[2]] < max[2]))
       {
+         cancellationToken.ThrowIfCancellationRequested();
          var old = deltaE;
 
          for (var i = 0; i < n; i++) rgb[c[i]]++;
 
-         deltaE = Probe(rgb);
+         deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
          ReportProbe(c, (int)n, "↑", old, deltaE);
 
          if (deltaE <= old) continue;
 
          for (var i = 0; i < n; i++) rgb[c[i]]--;
          var reverted = deltaE;
-         deltaE = Probe(rgb);
+         deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
          ReportProbe(c, (int)n, "↓", reverted, deltaE, revert: true);
          break;
       }
@@ -1133,14 +1185,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
    static readonly bool PerfTrace =
       Environment.GetEnvironmentVariable("LBM_PERF") is "1" or "true" or "yes";
 
-   double Probe(uint[] rgb)
+   async Task<double> ProbeGainAsync(
+       MonitorRgbLevel gain,
+       uint[] rgb,
+       CancellationToken cancellationToken)
    {
-      var gain = Vcp?.Gain;
-      if (gain is null) return 0;
-
-      ref var tune = ref _tune[rgb[0], rgb[1], rgb[2]];
+      var tune = _tune[rgb[0], rgb[1], rgb[2]];
       if (tune != 0) return tune;
 
+      cancellationToken.ThrowIfCancellationRequested();
       var sw = PerfTrace ? Stopwatch.StartNew() : null;
       if (sw is not null)
          Console.Error.WriteLine(
@@ -1149,7 +1202,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       gain.SetTo(rgb);
 
       // let the panel settle on the new gains before reading
-      Thread.Sleep(SelectedSpeed?.SettleMs ?? 500);
+      await Task.Delay(SelectedSpeed?.SettleMs ?? 500, cancellationToken).ConfigureAwait(false);
 
       var settleDone = sw?.ElapsedMilliseconds ?? 0;
 
@@ -1164,6 +1217,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       if (probe.SpotRead())
       {
          tune = probe.ProbedColor.DeltaE00();
+         _tune[rgb[0], rgb[1], rgb[2]] = tune;
       }
       else if (!probe.Aborted)
       {
@@ -1178,6 +1232,38 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
             $"PERF {DateTime.Now:HH:mm:ss.fff} tune-probe done: settle={settleDone} ms, spotread={sw.ElapsedMilliseconds - settleDone} ms, total={sw.ElapsedMilliseconds} ms");
 
       return tune;
+   }
+
+   async Task RunCalibrationAsync(
+       string operationName,
+       ArgyllProbe probe,
+       Func<CancellationToken, Task> operation,
+       CancellationToken cancellationToken)
+   {
+      await _calibrations.RunAsync(
+          operationName,
+          async token =>
+          {
+             probe.ResetAbort();
+             using var abortRegistration = token.Register(probe.Abort);
+             token.ThrowIfCancellationRequested();
+             await Task.Run(() => operation(token), token).ConfigureAwait(false);
+          },
+          cancellationToken).ConfigureAwait(false);
+   }
+
+   void ReportCalibrationError(string operationName, Exception error)
+   {
+      Console.Error.WriteLine($"VCP calibration '{operationName}' failed: {error}");
+      ScheduleOnUi(() => ArgyllProbe.Message = $"Calibration failed: {error.Message}");
+   }
+
+   void ScheduleOnUi(Action action)
+   {
+      RxSchedulers.MainThreadScheduler.Schedule(() =>
+      {
+         if (Volatile.Read(ref _disposed) == 0) action();
+      });
    }
 
    public void Save()
@@ -1203,10 +1289,15 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
    public override void OnDispose()
    {
+      if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
       CloseNativePattern();
       Hisense.Dispose();
-      // ends the persistent spotread session along with any running sweep
+      // Abort releases a blocking spotread call. The coordinator cancellation
+      // stops delays and loops, then disposes the DDC control only after the
+      // calibration code has relinquished it.
       ArgyllProbe.Abort();
-      Vcp?.Dispose();
+      var control = Vcp;
+      _calibrations.Dispose(() => control?.Dispose());
    }
 }

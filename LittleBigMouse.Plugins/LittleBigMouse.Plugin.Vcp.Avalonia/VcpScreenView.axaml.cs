@@ -88,19 +88,25 @@ public partial class VcpScreenView : UserControl, IView<MonitorVcpViewMode, VcpS
     //    //User32.SendMessage(-1, User32.WM_SYSCOMMAND, User32.SC_MONITORPOWER, -1);
     //}
 
-    void ProbeLowLuminance_OnClick(object sender, RoutedEventArgs e)
+    async void ProbeLowLuminance_OnClick(object sender, RoutedEventArgs e)
     {
-        ViewModel?.ProbeLowLuminance();
+        if (ViewModel is not { } viewModel) return;
+        try { await viewModel.ProbeLowLuminance(); }
+        catch (Exception) { /* logged and surfaced by the ViewModel */ }
     }
 
-    void Probe_OnClick(object sender, RoutedEventArgs e)
+    async void Probe_OnClick(object sender, RoutedEventArgs e)
     {
-        ViewModel?.Probe();
+        if (ViewModel is not { } viewModel) return;
+        try { await viewModel.Probe(); }
+        catch (Exception) { /* logged and surfaced by the ViewModel */ }
     }
 
-    void Tune_OnClick(object sender, RoutedEventArgs e)
+    async void Tune_OnClick(object sender, RoutedEventArgs e)
     {
-        ViewModel?.Tune();
+        if (ViewModel is not { } viewModel) return;
+        try { await viewModel.Tune(); }
+        catch (Exception) { /* logged and surfaced by the ViewModel */ }
     }
 
 

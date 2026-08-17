@@ -49,15 +49,20 @@ public interface IMonitorsLayout : IDisposable
     double Y0 { get; }
 
     /// <summary>
-    /// 
+    /// Primary display source, or <see langword="null"/> while the layout is empty,
+    /// partially built, or between primary sources during reconfiguration.
     /// </summary>
-    DisplaySource PrimarySource { get; }
+    DisplaySource? PrimarySource { get; }
 
 
     string Id { get; set; }
 
     DpiAwarenessKind DpiAwareness { get; }
-    PhysicalMonitor PrimaryMonitor { get; }
+    /// <summary>
+    /// Physical monitor displaying <see cref="PrimarySource"/>, or
+    /// <see langword="null"/> whenever no primary source is currently designated.
+    /// </summary>
+    PhysicalMonitor? PrimaryMonitor { get; }
 
     void Compact();
     void ForceCompact();

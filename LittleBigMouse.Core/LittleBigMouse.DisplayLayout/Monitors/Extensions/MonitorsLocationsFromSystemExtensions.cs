@@ -56,7 +56,9 @@ public static class MonitorsLocationsFromSystemExtensions
     /// <param name="placeAll">reset already placed windows</param>
     public static void SetLocationsFromSystemConfiguration(this IMonitorsLayout layout, bool placeAll = true)
     {
-        if (layout.PrimarySource == null) return;
+        var primarySource = layout.PrimarySource;
+        var primaryMonitor = layout.PrimaryMonitor;
+        if (primarySource == null || primaryMonitor == null) return;
 
         lock (CompactLock)
         {
@@ -69,7 +71,7 @@ public static class MonitorsLocationsFromSystemExtensions
 
             // start with primary display
             Queue<PhysicalMonitor> todo = new();
-            todo.Enqueue(layout.PrimaryMonitor);
+            todo.Enqueue(primaryMonitor);
 
             while (todo.Count > 0)
             {

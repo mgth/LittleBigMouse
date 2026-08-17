@@ -46,6 +46,7 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
       _physicalSourcesCache.Connect()
           .AutoRefresh(e => e.Source.EffectiveDpi.X)
           .AutoRefresh(e => e.Source.EffectiveDpi.Y)
+          .AutoRefresh(e => e.Source.Primary)
           .AutoRefresh(e => e.PixelToDipRatio)
           .ToCollection()
           .Do(ParseDisplaySources)
@@ -266,16 +267,17 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    public void ForceCompact()
    {
       // we cannot compact until primary monitor is placed
-      if (PrimaryMonitor == null) return;
+      var primaryMonitor = PrimaryMonitor;
+      if (primaryMonitor == null) return;
 
       var monitors = PhysicalMonitors.ToList();
       if (monitors.Count < 2) return;
 
-      if (!Options.AllowOverlaps) ResolveOverlaps(monitors);
+      if (!Options.AllowOverlaps) ResolveOverlaps(monitors, primaryMonitor);
 
       // Primary monitor is always at 0,0: its cluster anchors everything.
       var clusters = BuildClusters(monitors);
-      var anchored = clusters.First(c => c.Contains(PrimaryMonitor));
+      var anchored = clusters.First(c => c.Contains(primaryMonitor));
       var todo = clusters.Where(c => !ReferenceEquals(c, anchored)).ToList();
 
       while (todo.Count > 0)
@@ -334,14 +336,14 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
    /// neighbours forever); fall back to the shortest push when every direction is
    /// occupied, and iterate until stable.
    /// </summary>
-   void ResolveOverlaps(List<PhysicalMonitor> monitors)
+   void ResolveOverlaps(List<PhysicalMonitor> monitors, PhysicalMonitor primaryMonitor)
    {
       for (var pass = 0; pass < monitors.Count + 4; pass++)
       {
          var moved = false;
          foreach (var monitor in monitors)
          {
-            if (ReferenceEquals(monitor, PrimaryMonitor)) continue;
+            if (ReferenceEquals(monitor, primaryMonitor)) continue;
 
             var others = monitors.Where(m => !ReferenceEquals(m, monitor)).ToList();
             var overlapped = others.FirstOrDefault(o => Overlap(monitor.DepthProjection.OutsideBounds, o.DepthProjection.OutsideBounds));

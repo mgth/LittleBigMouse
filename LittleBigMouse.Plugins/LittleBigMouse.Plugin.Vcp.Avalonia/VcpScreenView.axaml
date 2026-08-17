@@ -203,7 +203,7 @@
             <Border Classes="card" IsVisible="{Binding ProbingVisibility}">
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <ProgressBar IsIndeterminate="True" Width="140" Height="4" VerticalAlignment="Center"/>
-                    <TextBlock Classes="rowLabel" Text="Probing DDC/CI…"/>
+                    <TextBlock Classes="rowLabel" Text="{Binding Message}"/>
                 </StackPanel>
             </Border>
 

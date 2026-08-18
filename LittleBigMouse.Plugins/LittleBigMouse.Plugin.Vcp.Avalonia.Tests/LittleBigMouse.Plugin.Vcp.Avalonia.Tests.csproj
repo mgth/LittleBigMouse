@@ -17,6 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp.Avalonia\LittleBigMouse.Plugin.Vcp.Avalonia.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugin.Vcp\LittleBigMouse.Plugin.Vcp.csproj" />
   </ItemGroup>
 </Project>
-

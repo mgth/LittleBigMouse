@@ -24,6 +24,7 @@ using LittleBigMouse.Plugin.Layout.Avalonia.LocationPlugin;
 using LittleBigMouse.Plugin.Vcp.Avalonia;
 using LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 using LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
+using LittleBigMouse.Plugin.Vcp.Calibration;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
@@ -184,6 +185,7 @@ internal class Program
                 () => ActivatorUtilities.CreateInstance<ApplicationUpdaterViewModel>(sp));
             services.AddSingleton<Func<VcpScreenViewModel, LittleBigMouse.Plugin.Vcp.Avalonia.Patterns.TestPatternButtonViewModel>>(sp =>
                 vm => ActivatorUtilities.CreateInstance<LittleBigMouse.Plugin.Vcp.Avalonia.Patterns.TestPatternButtonViewModel>(sp, vm));
+            services.AddSingleton<ICalibrationService, CalibrationService>();
 
             // SystemMonitorsService stays registered on every OS: its constructor is inert
             // (the Win32 enumeration is lazy behind .Root) and view-models inject it, so

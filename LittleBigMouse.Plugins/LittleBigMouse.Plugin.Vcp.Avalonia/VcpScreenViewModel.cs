@@ -37,9 +37,11 @@ using HLab.Sys.Argyll;
 using HLab.Sys.Windows.MonitorVcp;
 using HLab.Sys.Windows.MonitorVcp.Avalonia;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugin.Vcp.Avalonia.Calibration;
 using LittleBigMouse.Plugin.Vcp.Avalonia.Patterns;
 using LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 using LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
+using LittleBigMouse.Plugin.Vcp.Calibration;
 using LiveChartsCore;
 using LiveChartsCore.Kernel;
 using LiveChartsCore.SkiaSharpView;
@@ -51,7 +53,7 @@ using SkiaSharp;
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
 public class VcpScreenViewModelDesign()
-    : VcpScreenViewModel(vm => new TestPatternButtonViewModel(vm), null, null, null, null), IDesignViewModel;
+    : VcpScreenViewModel(vm => new TestPatternButtonViewModel(vm), null, null, null, null, null), IDesignViewModel;
 
 public record ObserverChoice(ArgyllProbe.ObserverEnum Value, string Label);
 
@@ -73,6 +75,7 @@ public class ProbeLogEntry
 public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 {
    readonly IVcpService? _vcpService;
+   readonly ICalibrationService _calibrationService;
    readonly CalibrationTaskCoordinator _calibrations;
    static readonly SemaphoreSlim SpotreadCommandGate = new(1, 1);
    int _disposed;
@@ -83,9 +86,11 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
        IVcpService? vcpService,
        ISamsungTizenService? samsungTizenService,
        IHisenseVidaaService? hisenseVidaaService,
-       ILayoutOptions? layoutOptions)
+       ILayoutOptions? layoutOptions,
+       ICalibrationService? calibrationService)
    {
       _vcpService = vcpService;
+      _calibrationService = calibrationService ?? new CalibrationService();
       _calibrations = new CalibrationTaskCoordinator(ReportCalibrationError);
 
       // experimental gate: Argyll calibration and the smart-TV test tooling
@@ -540,16 +545,20 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
    public ObservableCollection<ProbeLogEntry> ProbeLog { get; } = new();
 
    /// <summary>One entry per spot read: channels touched, direction, ΔE00 before → after, verdict.</summary>
-   void ReportProbe(uint[] channels, int n, string arrow, double previous, double current, bool revert = false)
+   void ReportProbe(WhitePointAdjustment adjustment)
    {
-      var r = false; var g = false; var b = false;
-      for (var i = 0; i < n; i++)
-         switch (channels[i])
-         {
-            case 0: r = true; break;
-            case 1: g = true; break;
-            case 2: b = true; break;
-         }
+      var r = adjustment.Channels.HasFlag(CalibrationChannels.Red);
+      var g = adjustment.Channels.HasFlag(CalibrationChannels.Green);
+      var b = adjustment.Channels.HasFlag(CalibrationChannels.Blue);
+      var arrow = adjustment.Direction switch
+      {
+         CalibrationDirection.Down => "↓",
+         CalibrationDirection.Up => "↑",
+         CalibrationDirection.Revert => "↓",
+         _ => "",
+      };
+      var previous = adjustment.PreviousDeltaE;
+      var current = adjustment.CurrentDeltaE;
 
       string delta, verdict;
       IBrush brush;
@@ -563,7 +572,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       else
       {
          delta = $"ΔE00 {previous:0.00} → {current:0.00}";
-         (verdict, brush) = revert
+         (verdict, brush) = adjustment.Direction == CalibrationDirection.Revert
             ? ("revert", NeutralBrush)
             : current.CompareTo(previous) switch
             {
@@ -811,65 +820,31 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
          return Task.CompletedTask;
       }
 
-      var level = Vcp?.Brightness;
-      var gain = Vcp?.Gain;
+      var control = Vcp;
       var lut = ProbeLut;
-      if (level is null || gain is null || lut is null)
+      if (control?.Brightness is null || control.Gain is null || lut is null)
          return Task.CompletedTask;
 
+      var input = new LowLuminanceCalibrationInput(WhitePointInput());
       return RunCalibrationAsync(
           "low-luminance probe",
           ArgyllProbe,
-          token => ProbeLowLuminanceCoreAsync(level, gain, lut, token),
+          control,
+          async (hardware, progress, token) =>
+          {
+             var result = await _calibrationService.CalibrateLowLuminanceAsync(
+                 hardware, input, progress, token).ConfigureAwait(false);
+             SetCompletionMessage(result.Completion);
+          },
+          progress => ProjectLowLuminanceProgress(lut, progress),
           cancellationToken);
-   }
-
-   async Task ProbeLowLuminanceCoreAsync(
-       MonitorLevel level,
-       MonitorRgbLevel gain,
-       ProbeLut lut,
-       CancellationToken cancellationToken)
-   {
-      var max = gain.Red.Max;
-      var min = gain.Red.Min;
-      var old = lut.Luminance;
-      level.Value = 0;
-
-      try
-      {
-         for (var i = max; i >= min; i--)
-         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await TuneWhitePointCoreAsync(gain, i, cancellationToken).ConfigureAwait(false);
-
-            var t = lut.Current;
-            if (ArgyllProbe.SpotRead())
-            {
-               t.Y = ArgyllProbe.ProbedColor.xyY.Y;
-               t.x = ArgyllProbe.ProbedColor.xyY.x;
-               t.y = ArgyllProbe.ProbedColor.xyY.y;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            lut.RemoveLowBrightness(i);
-            lut.Add(t);
-            lut.Save();
-
-            if (t.MinGain <= min) break;
-         }
-      }
-      finally
-      {
-         lut.Luminance = old;
-      }
    }
 
    async Task ProbeBrightnessAsync(CancellationToken cancellationToken = default)
    {
-      var level = Vcp?.Brightness;
-      var gain = Vcp?.Gain;
+      var control = Vcp;
       var lut = ProbeLut;
-      if (level is null || gain is null || lut is null) return;
+      if (control?.Brightness is null || control.Gain is null || lut is null) return;
 
       // the panel's probe instance: its Message property is bound in the
       // calibration section, so progress and errors are actually visible
@@ -880,95 +855,34 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
          return;
       }
 
-      await _calibrations.RunAsync(
+      var measured = lut.SortedLut
+          .Select(t => (uint)t.Brightness)
+          .ToHashSet();
+      var input = new BrightnessCalibrationInput(
+          control.Brightness.Min,
+          control.Brightness.Max,
+          measured,
+          WhitePointInput());
+
+      await RunCalibrationAsync(
           "brightness probe",
-          async token =>
+          probe,
+          control,
+          async (hardware, progress, token) =>
           {
-             probe.ResetAbort();
-             using var abortRegistration = token.Register(probe.Abort);
-             token.ThrowIfCancellationRequested();
-
-             TuneRunning = true;
-             // the instrument needs several seconds to come up, then may ask for its
-             // calibration position: say so before spotread produces its first output
-             probe.Message = "Initializing instrument — calibration may be requested…";
-
-             try
-             {
-                await Task.Run(
-                    () => ProbeBrightnessCoreAsync(level, gain, lut, probe, token),
-                    token).ConfigureAwait(false);
-             }
-             finally
-             {
-                if (token.IsCancellationRequested) probe.Message = "Tuning stopped";
-                ScheduleOnUi(() => TuneRunning = false);
-             }
+             var result = await _calibrationService.CalibrateBrightnessAsync(
+                 hardware, input, progress, token).ConfigureAwait(false);
+             SetCompletionMessage(result.Completion);
           },
-          cancellationToken).ConfigureAwait(false);
-   }
-
-   async Task ProbeBrightnessCoreAsync(
-       MonitorLevel level,
-       MonitorRgbLevel gain,
-       ProbeLut lut,
-       ArgyllProbe probe,
-       CancellationToken cancellationToken)
-   {
-      for (var i = level.Min; i <= level.Max && !probe.Aborted; i++)
-      {
-         cancellationToken.ThrowIfCancellationRequested();
-         if (lut.SortedLut.Any(t => t.Brightness == i)) continue;
-
-         probe.Message = $"Measuring brightness {i} / {level.Max}…";
-         level.Value = i;
-
-         await TuneWhitePointCoreAsync(gain, 0, cancellationToken).ConfigureAwait(false);
-
-         // aborted mid-tuning: don't record a half-tuned point
-         if (probe.Aborted) break;
-
-         var t = lut.Current;
-         if (probe.SpotRead())
-         {
-            t.Y = probe.ProbedColor.xyY.Y;
-            t.x = probe.ProbedColor.xyY.x;
-            t.y = probe.ProbedColor.xyY.y;
-            t.DeltaE = probe.ProbedColor.DeltaE00();
-         }
-         else if (probe.Aborted) break;
-
-         cancellationToken.ThrowIfCancellationRequested();
-         lut.RemoveBrightness(t.Brightness);
-         lut.Add(t);
-         lut.Save();
-
-         LastMeasure = $"B {t.Brightness:0} → {t.Y:0.0} cd/m² · R {t.Red:0} G {t.Green:0} B {t.Blue:0} · ΔE00 {t.DeltaE:0.00}";
-      }
-
-      probe.Message = probe.Aborted ? "Tuning stopped" : "White point tuning done";
-   }
-
-   static void ProbeLevel(
-       ArgyllProbe probe,
-       Color color,
-       MonitorLevel level,
-       CancellationToken cancellationToken)
-   {
-      _ = color;
-      for (var i = level.Min; i <= level.Max; i++)
-      {
-         cancellationToken.ThrowIfCancellationRequested();
-         level.Value = i;
-         probe.SpotRead();
-      }
+          progress => ProjectBrightnessProgress(lut, progress),
+          cancellationToken,
+          showRunning: true).ConfigureAwait(false);
    }
 
    public Task Probe(CancellationToken cancellationToken = default)
    {
-      var gain = Vcp?.Gain;
-      var contrast = Vcp?.Contrast;
-      if (gain is null || contrast is null) return Task.CompletedTask;
+      var control = Vcp;
+      if (control?.Gain is null || control.Contrast is null) return Task.CompletedTask;
 
       var probe = new ArgyllProbe();
       if (!probe.Installed)
@@ -977,269 +891,123 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
          return Task.CompletedTask;
       }
 
+      var input = new ContrastCalibrationInput(control.Contrast.Min, control.Contrast.Max);
       return RunCalibrationAsync(
           "contrast probe",
           probe,
-          token => ProbeCoreAsync(gain, contrast, probe, token),
+          control,
+          async (hardware, progress, token) =>
+          {
+             await _calibrationService.ProbeContrastAsync(
+                 hardware, input, progress, token).ConfigureAwait(false);
+          },
+          ProjectCalibrationProgress,
           cancellationToken);
    }
 
-   static Task ProbeCoreAsync(
-       MonitorRgbLevel gain,
-       MonitorLevel contrast,
-       ArgyllProbe probe,
-       CancellationToken cancellationToken)
-   {
-      var red = gain.Red.Value;
-      var green = gain.Green.Value;
-      var blue = gain.Blue.Value;
-
-      try
-      {
-         gain.Red.SetToMax();
-         gain.Green.SetToMin();
-         gain.Blue.SetToMin();
-         ProbeLevel(probe, Colors.Red, contrast, cancellationToken);
-
-         gain.Red.SetToMin();
-         gain.Green.SetToMax();
-         gain.Blue.SetToMin();
-         ProbeLevel(probe, Colors.Green, contrast, cancellationToken);
-
-         gain.Red.SetToMin();
-         gain.Green.SetToMin();
-         gain.Blue.SetToMax();
-         ProbeLevel(probe, Colors.Blue, contrast, cancellationToken);
-      }
-      finally
-      {
-         gain.Red.Value = red;
-         gain.Green.Value = green;
-         gain.Blue.Value = blue;
-      }
-
-      return Task.CompletedTask;
-   }
-
-   double[,,] _tune = new double[0, 0, 0];
-
    public Task Tune(CancellationToken cancellationToken = default)
    {
-      var gain = Vcp?.Gain;
-      if (gain is null) return Task.CompletedTask;
+      var control = Vcp;
+      if (control?.Gain is null) return Task.CompletedTask;
 
       return RunCalibrationAsync(
           "white-point tuning",
           ArgyllProbe,
-          token => TuneWhitePointCoreAsync(gain, 0, token),
+          control,
+          async (hardware, progress, token) =>
+          {
+             var result = await _calibrationService.TuneWhitePointAsync(
+                 hardware, WhitePointInput(), progress, token).ConfigureAwait(false);
+             SetCompletionMessage(result.Completion);
+          },
+          ProjectCalibrationProgress,
           cancellationToken);
    }
 
-   async Task TuneWhitePointCoreAsync(
-       MonitorRgbLevel gain,
-       uint max,
-       CancellationToken cancellationToken)
+   WhitePointCalibrationInput WhitePointInput(uint maximumGain = 0)
+      => new(
+          maximumGain,
+          TestPairs,
+          TimeSpan.FromMilliseconds(SelectedSpeed?.SettleMs ?? 500));
+
+   void ProjectCalibrationProgress(CalibrationProgress progress)
    {
-
-      var count = 6;
-      uint channel = 0;
-
-      _tune = new double[gain.Red.Max + 1, gain.Green.Max + 1, gain.Blue.Max + 1];
-
-      var rgb = gain.GetValues();
-
-      try
+      if (progress.Adjustment is { } adjustment)
       {
-         while (count > 0 && !ArgyllProbe.Aborted)
-         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (await TuneWhitePointChannelAsync(
-                    gain,
-                    channel,
-                    rgb,
-                    max,
-                    cancellationToken).ConfigureAwait(false)) count = 5;
-            else count--;
+         ReportProbe(adjustment);
+         return;
+      }
 
-            channel++;
-            // phases 3-5 move channel pairs, for monitors whose gains interact —
-            // skippable, they double the cycle
-            channel %= TestPairs ? 6u : 3u;
-         }
-      }
-      finally
+      var message = progress.Stage switch
       {
-         gain.SetTo(rgb);
-      }
+         CalibrationStage.Initializing => "Initializing instrument — calibration may be requested…",
+         CalibrationStage.SettingBrightness => $"Measuring brightness {progress.Current} / {progress.Total}…",
+         CalibrationStage.SettingContrast => $"Measuring contrast {progress.Current} / {progress.Total}…",
+         CalibrationStage.Measuring => "Measuring…",
+         _ => null,
+      };
+      if (message is not null) ScheduleOnUi(() => ArgyllProbe.Message = message);
    }
 
-   async Task<bool> TuneWhitePointChannelAsync(
-       MonitorRgbLevel gain,
-       uint channel,
-       uint[] rgb,
-       uint maxLevel,
-       CancellationToken cancellationToken)
+   void ProjectBrightnessProgress(ProbeLut lut, CalibrationProgress progress)
    {
-      uint[] c;
-      var min = new uint[3];
-      var max = new uint[3];
-      uint n = 0;
+      ProjectCalibrationProgress(progress);
+      if (progress.Point is not { } point) return;
 
-      switch (channel)
+      ScheduleOnUi(() =>
       {
-         case 0:
-            c = [0, 1, 2];
-            n = 1;
-            break;
-         case 1:
-            c = [1, 2, 0];
-            n = 1;
-            break;
-         case 2:
-            c = [2, 0, 1];
-            n = 1;
-            break;
-         case 3: //0
-            c = [0, 1, 2];
-            n = 2;
-            break;
-         case 4: //1
-            c = [1, 2, 0];
-            n = 2;
-            break;
-         case 5: //2
-            c = [2, 0, 1];
-            n = 2;
-            break;
-         default:
-            c = [0, 1, 2];
-            n = 3;
-            break;
-      }
-
-
-      for (var i = 0; i < 3; i++)
-      {
-         min[i] = gain.Channel(c[i]).Min;
-         max[i] = maxLevel == 0 ? gain.Channel(c[i]).Max : maxLevel;
-      }
-
-
-      // keep one channel to its max
-      switch (n)
-      {
-         case 1:
-            if (rgb[c[0]] == max[0] && rgb[c[1]] < max[1] && rgb[c[2]] < max[2]) return false;
-            break;
-         case 2:
-            if ((rgb[c[0]] == max[0] || rgb[c[1]] == max[1]) && rgb[c[2]] < max[2]) return false;
-            break;
-         case 3:
-            return false;
-      }
-
-      uint[] oldGain = [rgb[c[0]], rgb[c[1]], rgb[c[2]]];
-
-      var deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
-      ReportProbe(c, (int)n, "", deltaE, deltaE);
-
-      while (!ArgyllProbe.Aborted && rgb[c[0]] > min[0] && (n < 2 || rgb[c[1]] > min[1]) && (n < 3 || rgb[c[2]] > min[2]))
-      {
-         cancellationToken.ThrowIfCancellationRequested();
-         var old = deltaE;
-
-         for (var i = 0; i < n; i++) rgb[c[i]]--;
-
-         deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
-         ReportProbe(c, (int)n, "↓", old, deltaE);
-
-         if (deltaE > old) break;
-      }
-
-      while (!ArgyllProbe.Aborted && rgb[c[0]] < max[0] && (n < 2 || rgb[c[1]] < max[1]) && (n < 3 || rgb[c[2]] < max[2]))
-      {
-         cancellationToken.ThrowIfCancellationRequested();
-         var old = deltaE;
-
-         for (var i = 0; i < n; i++) rgb[c[i]]++;
-
-         deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
-         ReportProbe(c, (int)n, "↑", old, deltaE);
-
-         if (deltaE <= old) continue;
-
-         for (var i = 0; i < n; i++) rgb[c[i]]--;
-         var reverted = deltaE;
-         deltaE = await ProbeGainAsync(gain, rgb, cancellationToken).ConfigureAwait(false);
-         ReportProbe(c, (int)n, "↓", reverted, deltaE, revert: true);
-         break;
-      }
-
-      return (
-          oldGain[0] != rgb[c[0]]
-          || oldGain[1] != rgb[c[1]]
-          || oldGain[2] != rgb[c[2]]
-          );
+         var tune = ToTune(point);
+         lut.RemoveBrightness(tune.Brightness);
+         lut.Add(tune);
+         lut.Save();
+         LastMeasure = $"B {tune.Brightness:0} → {tune.Y:0.0} cd/m² · R {tune.Red:0} G {tune.Green:0} B {tune.Blue:0} · ΔE00 {tune.DeltaE:0.00}";
+      });
    }
 
-   static readonly bool PerfTrace =
-      Environment.GetEnvironmentVariable("LBM_PERF") is "1" or "true" or "yes";
-
-   async Task<double> ProbeGainAsync(
-       MonitorRgbLevel gain,
-       uint[] rgb,
-       CancellationToken cancellationToken)
+   void ProjectLowLuminanceProgress(ProbeLut lut, CalibrationProgress progress)
    {
-      var tune = _tune[rgb[0], rgb[1], rgb[2]];
-      if (tune != 0) return tune;
+      ProjectCalibrationProgress(progress);
+      if (progress.Point is not { } point) return;
 
-      cancellationToken.ThrowIfCancellationRequested();
-      var sw = PerfTrace ? Stopwatch.StartNew() : null;
-      if (sw is not null)
-         Console.Error.WriteLine(
-            $"PERF {DateTime.Now:HH:mm:ss.fff} tune-probe SetTo({rgb[0]},{rgb[1]},{rgb[2]}) queued");
-
-      gain.SetTo(rgb);
-
-      // let the panel settle on the new gains before reading
-      await Task.Delay(SelectedSpeed?.SettleMs ?? 500, cancellationToken).ConfigureAwait(false);
-
-      var settleDone = sw?.ElapsedMilliseconds ?? 0;
-
-      // shared panel instance: spotread's prompts stay visible in the bound Message
-      var probe = ArgyllProbe;
-      if (!probe.Installed)
+      ScheduleOnUi(() =>
       {
-         PleaseInstall();
-         return 0;
-      }
-
-      if (probe.SpotRead())
-      {
-         tune = probe.ProbedColor.DeltaE00();
-         _tune[rgb[0], rgb[1], rgb[2]] = tune;
-      }
-      else if (!probe.Aborted)
-      {
-         // a failed reading must not feed ΔE=0 ("perfect") into the optimizer:
-         // it would walk the gains into the walls one dead cycle at a time
-         probe.Message = "Measurement failed — tuning stopped";
-         probe.Abort();
-      }
-
-      if (sw is not null)
-         Console.Error.WriteLine(
-            $"PERF {DateTime.Now:HH:mm:ss.fff} tune-probe done: settle={settleDone} ms, spotread={sw.ElapsedMilliseconds - settleDone} ms, total={sw.ElapsedMilliseconds} ms");
-
-      return tune;
+         var tune = ToTune(point);
+         lut.RemoveLowBrightness(tune.MaxGain);
+         lut.Add(tune);
+         lut.Save();
+      });
    }
+
+   static Tune ToTune(CalibrationPoint point) => new()
+   {
+      Date = DateTime.Now,
+      Brightness = point.Display.Brightness,
+      Contrast = point.Display.Contrast,
+      Red = point.Display.Gains.Red,
+      Green = point.Display.Gains.Green,
+      Blue = point.Display.Gains.Blue,
+      Y = point.Measurement.Luminance,
+      x = point.Measurement.ChromaticityX,
+      y = point.Measurement.ChromaticityY,
+      DeltaE = point.Measurement.DeltaE,
+   };
+
+   void SetCompletionMessage(CalibrationCompletion completion)
+      => ScheduleOnUi(() => ArgyllProbe.Message = completion == CalibrationCompletion.Converged
+          ? "White point tuning done"
+          : "White point tuning did not converge");
 
    async Task RunCalibrationAsync(
        string operationName,
        ArgyllProbe probe,
-       Func<CancellationToken, Task> operation,
-       CancellationToken cancellationToken)
+       VcpControl control,
+       Func<ICalibrationHardware, IProgress<CalibrationProgress>, CancellationToken, Task> operation,
+       Action<CalibrationProgress> projectProgress,
+       CancellationToken cancellationToken,
+       bool showRunning = false)
    {
+      var hardware = new VcpCalibrationHardware(control, probe);
+      var progress = new CallbackProgress<CalibrationProgress>(projectProgress);
       await _calibrations.RunAsync(
           operationName,
           async token =>
@@ -1247,9 +1015,32 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
              probe.ResetAbort();
              using var abortRegistration = token.Register(probe.Abort);
              token.ThrowIfCancellationRequested();
-             await Task.Run(() => operation(token), token).ConfigureAwait(false);
+             if (showRunning)
+             {
+                ScheduleOnUi(() =>
+                {
+                   TuneRunning = true;
+                   probe.Message = "Initializing instrument — calibration may be requested…";
+                });
+             }
+
+             try
+             {
+                await operation(hardware, progress, token).ConfigureAwait(false);
+             }
+             finally
+             {
+                if (token.IsCancellationRequested)
+                   ScheduleOnUi(() => probe.Message = "Tuning stopped");
+                if (showRunning) ScheduleOnUi(() => TuneRunning = false);
+             }
           },
           cancellationToken).ConfigureAwait(false);
+   }
+
+   sealed class CallbackProgress<T>(Action<T> callback) : IProgress<T>
+   {
+      public void Report(T value) => callback(value);
    }
 
    void ReportCalibrationError(string operationName, Exception error)

@@ -101,7 +101,10 @@ mod tests {
             &args(&["./game.x86_64", "-nolauncher"]),
             Some("game.x86_64"),
         );
-        assert_eq!(id.as_deref(), Some("/home/u/Steam/steamapps/common/Game/game.x86_64"));
+        assert_eq!(
+            id.as_deref(),
+            Some("/home/u/Steam/steamapps/common/Game/game.x86_64")
+        );
     }
 
     #[test]
@@ -110,7 +113,10 @@ mod tests {
         // preloader — the .exe argument is the only useful identity.
         let id = compose_identity(
             Some("/home/u/Steam/steamapps/common/Proton 9.0/files/bin/wine64-preloader"),
-            &args(&[r"Z:\home\u\Steam\steamapps\common\EFT\EscapeFromTarkov.exe", "-something"]),
+            &args(&[
+                r"Z:\home\u\Steam\steamapps\common\EFT\EscapeFromTarkov.exe",
+                "-something",
+            ]),
             Some("EscapeFromTarko"),
         );
         assert_eq!(

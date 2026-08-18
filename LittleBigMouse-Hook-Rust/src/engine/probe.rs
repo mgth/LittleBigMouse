@@ -135,10 +135,42 @@ pub fn probe(layout: ZonesLayout) -> Vec<ZoneProbe> {
 
         let edges = [
             // side, coordinate range along the edge, inside point, outside point
-            ("Left", bounds.top(), bounds.bottom(), EdgeGeometry::Vertical { inside_x: bounds.left() + 1, outside_x: bounds.left() - 1 }),
-            ("Right", bounds.top(), bounds.bottom(), EdgeGeometry::Vertical { inside_x: bounds.right() - 2, outside_x: bounds.right() }),
-            ("Top", bounds.left(), bounds.right(), EdgeGeometry::Horizontal { inside_y: bounds.top() + 1, outside_y: bounds.top() - 1 }),
-            ("Bottom", bounds.left(), bounds.right(), EdgeGeometry::Horizontal { inside_y: bounds.bottom() - 2, outside_y: bounds.bottom() }),
+            (
+                "Left",
+                bounds.top(),
+                bounds.bottom(),
+                EdgeGeometry::Vertical {
+                    inside_x: bounds.left() + 1,
+                    outside_x: bounds.left() - 1,
+                },
+            ),
+            (
+                "Right",
+                bounds.top(),
+                bounds.bottom(),
+                EdgeGeometry::Vertical {
+                    inside_x: bounds.right() - 2,
+                    outside_x: bounds.right(),
+                },
+            ),
+            (
+                "Top",
+                bounds.left(),
+                bounds.right(),
+                EdgeGeometry::Horizontal {
+                    inside_y: bounds.top() + 1,
+                    outside_y: bounds.top() - 1,
+                },
+            ),
+            (
+                "Bottom",
+                bounds.left(),
+                bounds.right(),
+                EdgeGeometry::Horizontal {
+                    inside_y: bounds.bottom() - 2,
+                    outside_y: bounds.bottom(),
+                },
+            ),
         ];
 
         let mut reports = Vec::new();
@@ -149,12 +181,21 @@ pub fn probe(layout: ZonesLayout) -> Vec<ZoneProbe> {
                 let target = probe_point(&mut engine, &mut env, desktop, inside, outside);
                 match runs.last_mut() {
                     Some(run) if run.target == target && run.to + 1 == c => run.to = c,
-                    _ => runs.push(EdgeRun { from: c, to: c, target }),
+                    _ => runs.push(EdgeRun {
+                        from: c,
+                        to: c,
+                        target,
+                    }),
                 }
             }
             reports.push(EdgeReport { side, runs });
         }
-        zones.push(ZoneProbe { id, name, device_id, edges: reports });
+        zones.push(ZoneProbe {
+            id,
+            name,
+            device_id,
+            edges: reports,
+        });
     }
     zones
 }
@@ -167,12 +208,14 @@ enum EdgeGeometry {
 impl EdgeGeometry {
     fn points(&self, c: i32) -> (Point<i32>, Point<i32>) {
         match *self {
-            EdgeGeometry::Vertical { inside_x, outside_x } => {
-                (Point::new(inside_x, c), Point::new(outside_x, c))
-            }
-            EdgeGeometry::Horizontal { inside_y, outside_y } => {
-                (Point::new(c, inside_y), Point::new(c, outside_y))
-            }
+            EdgeGeometry::Vertical {
+                inside_x,
+                outside_x,
+            } => (Point::new(inside_x, c), Point::new(outside_x, c)),
+            EdgeGeometry::Horizontal {
+                inside_y,
+                outside_y,
+            } => (Point::new(c, inside_y), Point::new(c, outside_y)),
         }
     }
 }
@@ -298,15 +341,24 @@ mod tests {
         // The shared border crosses over its full height, in both directions.
         let right = edge(&zones, "Left", "Right");
         assert_eq!(right.runs.len(), 1, "one homogeneous run expected");
-        assert_eq!((right.runs[0].from, right.runs[0].to, right.runs[0].target), (0, 1079, 1));
+        assert_eq!(
+            (right.runs[0].from, right.runs[0].to, right.runs[0].target),
+            (0, 1079, 1)
+        );
 
         let left = edge(&zones, "Right", "Left");
         assert_eq!(left.runs.len(), 1);
         assert_eq!(left.runs[0].target, 0);
 
         // Outer edges are walls end to end.
-        for (zone, side) in [("Left", "Left"), ("Left", "Top"), ("Left", "Bottom"),
-                             ("Right", "Right"), ("Right", "Top"), ("Right", "Bottom")] {
+        for (zone, side) in [
+            ("Left", "Left"),
+            ("Left", "Top"),
+            ("Left", "Bottom"),
+            ("Right", "Right"),
+            ("Right", "Top"),
+            ("Right", "Bottom"),
+        ] {
             let e = edge(&zones, zone, side);
             assert_eq!(e.runs.len(), 1, "{zone}/{side}");
             assert_eq!(e.runs[0].target, -1, "{zone}/{side} must be a wall");
@@ -333,7 +385,10 @@ mod tests {
         // And the horizontal loop lands on the OPPOSITE monitor.
         let z0 = zones.iter().find(|z| z.id == 0).unwrap();
         let left = z0.edges.iter().find(|e| e.side == "Left").unwrap();
-        assert!(left.runs.iter().all(|r| r.target == 2), "left loop must land on zone 2");
+        assert!(
+            left.runs.iter().all(|r| r.target == 2),
+            "left loop must land on zone 2"
+        );
     }
 
     #[test]
@@ -344,6 +399,9 @@ mod tests {
         assert_eq!(root.tag_name().name(), "ProbeReport");
         assert_eq!(root.attribute("Algorithm"), Some("Strait"));
         // 2 zones, 4 edges each.
-        assert_eq!(root.children().filter(|c| c.has_tag_name("Zone")).count(), 2);
+        assert_eq!(
+            root.children().filter(|c| c.has_tag_name("Zone")).count(),
+            2
+        );
     }
 }

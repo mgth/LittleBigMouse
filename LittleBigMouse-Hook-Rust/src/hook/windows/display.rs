@@ -23,8 +23,12 @@ const CLASS_NAME: PCWSTR = w!("HookerDisplayChange");
 /// delivered as a `WM_POWERBROADCAST`/`PBT_POWERSETTINGCHANGE`. Data = 0 off, 1 on, 2 dimmed.
 /// This is the signal that actually fires for this machine's "veille" (a session-state transition,
 /// not a classic S3 suspend — so PBT_APMSUSPEND is never sent).
-const GUID_CONSOLE_DISPLAY_STATE: GUID =
-    GUID::from_values(0x6fe69556, 0x704a, 0x47a0, [0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47]);
+const GUID_CONSOLE_DISPLAY_STATE: GUID = GUID::from_values(
+    0x6fe69556,
+    0x704a,
+    0x47a0,
+    [0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47],
+);
 
 /// Register the class (idempotent — `do_hook` runs every loop iteration) and
 /// create the hidden window. Returns a null `HWND` on failure.
@@ -84,7 +88,12 @@ pub fn destroy_window(hwnd: HWND) {
     }
 }
 
-unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn wnd_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     match msg {
         WM_DISPLAYCHANGE => {
             crate::hook::guard(|| {

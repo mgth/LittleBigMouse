@@ -207,10 +207,16 @@ mod tests {
     #[test]
     fn refuses_what_it_cannot_register() {
         assert!(Shortcut::parse("").is_none());
-        assert!(Shortcut::parse("Ctrl+Alt").is_none(), "modifiers are not a key");
+        assert!(
+            Shortcut::parse("Ctrl+Alt").is_none(),
+            "modifiers are not a key"
+        );
         assert!(Shortcut::parse("Ctrl+NoSuchKey").is_none());
         assert!(Shortcut::parse("Ctrl+F0").is_none());
         assert!(Shortcut::parse("Ctrl+F25").is_none());
-        assert!(Shortcut::parse("Ctrl+A+B").is_none(), "two keys is malformed");
+        assert!(
+            Shortcut::parse("Ctrl+A+B").is_none(),
+            "two keys is malformed"
+        );
     }
 }

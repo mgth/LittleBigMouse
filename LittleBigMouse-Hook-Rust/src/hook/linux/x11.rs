@@ -233,9 +233,16 @@ impl X11Cursor<'_> {
     }
 
     fn warp(&self, p: Point<i32>) {
-        let _ = self
-            .conn
-            .warp_pointer(x11rb::NONE, self.root, 0, 0, 0, 0, p.x() as i16, p.y() as i16);
+        let _ = self.conn.warp_pointer(
+            x11rb::NONE,
+            self.root,
+            0,
+            0,
+            0,
+            0,
+            p.x() as i16,
+            p.y() as i16,
+        );
         let _ = self.conn.flush();
     }
 

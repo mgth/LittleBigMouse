@@ -116,9 +116,13 @@ fn enumerate_mice() -> Vec<(std::path::PathBuf, Device)> {
         .filter(|(_, d)| {
             d.name().map(|n| !n.contains(VIRTUAL_NAME)).unwrap_or(true)
                 && d.supported_relative_axes()
-                    .map(|a| a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y))
+                    .map(|a| {
+                        a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y)
+                    })
                     .unwrap_or(false)
-                && d.supported_keys().map(|k| k.contains(KeyCode::BTN_LEFT)).unwrap_or(false)
+                && d.supported_keys()
+                    .map(|k| k.contains(KeyCode::BTN_LEFT))
+                    .unwrap_or(false)
         })
         .collect()
 }
@@ -131,12 +135,18 @@ fn enumerate_keyboards() -> Vec<(std::path::PathBuf, Device)> {
         d.supported_relative_axes()
             .map(|a| a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y))
             .unwrap_or(false)
-            && d.supported_keys().map(|k| k.contains(KeyCode::BTN_LEFT)).unwrap_or(false)
+            && d.supported_keys()
+                .map(|k| k.contains(KeyCode::BTN_LEFT))
+                .unwrap_or(false)
     };
     evdev::enumerate()
         .filter(|(_, d)| {
-            d.name().map(|n| !n.contains("LittleBigMouse virtual")).unwrap_or(true)
-                && d.supported_keys().map(|k| k.contains(KeyCode::KEY_LEFTCTRL)).unwrap_or(false)
+            d.name()
+                .map(|n| !n.contains("LittleBigMouse virtual"))
+                .unwrap_or(true)
+                && d.supported_keys()
+                    .map(|k| k.contains(KeyCode::KEY_LEFTCTRL))
+                    .unwrap_or(false)
                 && !is_mouse(d)
         })
         .collect()
@@ -152,7 +162,10 @@ pub fn run(shared: &'static Shared) -> bool {
     // makes this a pure feel knob (it never affects zone geometry). Default 1:1.
     // Applied ON TOP of the libinput-parity pointer acceleration (see accel.rs;
     // override with LBM_EVDEV_ACCEL=none|flat|adaptive and LBM_EVDEV_ACCEL_SPEED).
-    let sens = std::env::var("LBM_EVDEV_SENS").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0);
+    let sens = std::env::var("LBM_EVDEV_SENS")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(1.0);
 
     let debug = std::env::var("LBM_HOOK_DEBUG").is_ok();
 
@@ -259,7 +272,12 @@ struct Router {
 }
 
 impl Router {
-    fn arm(shared: &Shared, sens: f64, debug: bool, resume_at: Option<Point<i32>>) -> std::io::Result<Router> {
+    fn arm(
+        shared: &Shared,
+        sens: f64,
+        debug: bool,
+        resume_at: Option<Point<i32>>,
+    ) -> std::io::Result<Router> {
         let desktop = desktop_bounds_blocking(shared);
 
         // Everything slow happens BEFORE the first grab: from EVIOCGRAB on, the
@@ -292,17 +310,25 @@ impl Router {
                     let settings = accel_cfg.for_device(id.vendor(), id.product(), &name);
                     eprintln!("[LittleBigMouse.Hook] evdev: grabbed {name} ({path:?}, accel {:?} speed {})",
                         settings.profile, settings.speed);
-                    devices.push((path, dev,
-                        super::accel::PointerAccel::new(settings.profile, settings.speed)));
+                    devices.push((
+                        path,
+                        dev,
+                        super::accel::PointerAccel::new(settings.profile, settings.speed),
+                    ));
                 }
                 Err(e) => eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
             }
         }
         if devices.is_empty() {
-            return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no grabbable mouse"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no grabbable mouse",
+            ));
         }
-        eprintln!("[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override",
-            keyboards.len());
+        eprintln!(
+            "[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override",
+            keyboards.len()
+        );
 
         // Take over from where the cursor really is: ask the compositor (KWin
         // scripting, logical coordinates — the zones' space), else where the
@@ -314,17 +340,28 @@ impl Router {
                 Some(p) => (p, "previous position"),
                 None => (
                     first_zone_center(shared).unwrap_or_else(|| {
-                        Point::new(desktop.left() + desktop.width() / 2, desktop.top() + desktop.height() / 2)
+                        Point::new(
+                            desktop.left() + desktop.width() / 2,
+                            desktop.top() + desktop.height() / 2,
+                        )
                     }),
                     "fallback",
                 ),
             },
         };
         let start = Point::new(
-            start.x().clamp(desktop.left(), desktop.left() + desktop.width() - 1),
-            start.y().clamp(desktop.top(), desktop.top() + desktop.height() - 1),
+            start
+                .x()
+                .clamp(desktop.left(), desktop.left() + desktop.width() - 1),
+            start
+                .y()
+                .clamp(desktop.top(), desktop.top() + desktop.height() - 1),
         );
-        eprintln!("[LittleBigMouse.Hook] evdev: starting at ({},{}) ({origin})", start.x(), start.y());
+        eprintln!(
+            "[LittleBigMouse.Hook] evdev: starting at ({},{}) ({origin})",
+            start.x(),
+            start.y()
+        );
 
         // The scanner thread owns the expensive enumeration; the pump only
         // drains its channel. It exits on the stop flag or once the Router
@@ -338,7 +375,10 @@ impl Router {
                 if stop.load(Ordering::Relaxed) {
                     return;
                 }
-                let scan = ScanResult { mice: enumerate_mice(), keyboards: enumerate_keyboards() };
+                let scan = ScanResult {
+                    mice: enumerate_mice(),
+                    keyboards: enumerate_keyboards(),
+                };
                 if scan_tx.send(scan).is_err() {
                     return;
                 }
@@ -403,7 +443,11 @@ impl Router {
             .iter()
             .map(|(_, d, _)| d.as_raw_fd())
             .chain(self.keyboards.iter().map(|(_, d)| d.as_raw_fd()))
-            .map(|fd| libc::pollfd { fd, events: libc::POLLIN, revents: 0 })
+            .map(|fd| libc::pollfd {
+                fd,
+                events: libc::POLLIN,
+                revents: 0,
+            })
             .collect();
         if fds.is_empty() {
             // Every device vanished: keep the cadence (poll(0 fds) returns
@@ -411,7 +455,9 @@ impl Router {
             std::thread::sleep(Duration::from_millis(100));
             return;
         }
-        unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 100); }
+        unsafe {
+            libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 100);
+        }
 
         let mut acc = (0i64, 0i64);
         let mut passthrough: Vec<InputEvent> = Vec::new();
@@ -445,7 +491,9 @@ impl Router {
             };
             for ev in events {
                 match ev.event_type() {
-                    EventType::SYNCHRONIZATION => self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd),
+                    EventType::SYNCHRONIZATION => {
+                        self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd)
+                    }
                     EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_X.0 => {
                         acc.0 += ev.value() as i64;
                         self.last_motion_dev = i;
@@ -526,12 +574,16 @@ impl Router {
                         let settings = self.accel_cfg.for_device(id.vendor(), id.product(), &name);
                         eprintln!("[LittleBigMouse.Hook] evdev: grabbed {name} ({path:?}, hot-plug, accel {:?} speed {})",
                             settings.profile, settings.speed);
-                        self.devices.push((path, dev,
-                            super::accel::PointerAccel::new(settings.profile, settings.speed)));
+                        self.devices.push((
+                            path,
+                            dev,
+                            super::accel::PointerAccel::new(settings.profile, settings.speed),
+                        ));
                     }
                     // Retried every rescan; only worth the noise when debugging.
-                    Err(e) if self.debug =>
-                        eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
+                    Err(e) if self.debug => {
+                        eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}")
+                    }
                     Err(_) => {}
                 }
             }
@@ -548,7 +600,13 @@ impl Router {
 
     /// Run the engine over the accumulated motion and place the cursor at the
     /// resulting absolute position, forwarding buttons/wheels in the same frame.
-    fn flush_frame(&mut self, shared: &Shared, acc: &mut (i64, i64), passthrough: &mut Vec<InputEvent>, kbd: &mut Vec<InputEvent>) {
+    fn flush_frame(
+        &mut self,
+        shared: &Shared,
+        acc: &mut (i64, i64),
+        passthrough: &mut Vec<InputEvent>,
+        kbd: &mut Vec<InputEvent>,
+    ) {
         if *acc == (0, 0) && passthrough.is_empty() && kbd.is_empty() {
             return;
         }
@@ -559,7 +617,9 @@ impl Router {
             // per-device curve on the raw frame delta, THEN the user's flat
             // LBM_EVDEV_SENS multiplier. Sub-pixel remainders carry over frames.
             let now = self.env.started.elapsed().as_micros() as u64;
-            let idx = self.last_motion_dev.min(self.devices.len().saturating_sub(1));
+            let idx = self
+                .last_motion_dev
+                .min(self.devices.len().saturating_sub(1));
             let (ax, ay) = match self.devices.get_mut(idx) {
                 Some((_, _, accel)) => accel.apply(acc.0 as f64, acc.1 as f64, now),
                 None => (acc.0 as f64, acc.1 as f64),
@@ -573,10 +633,7 @@ impl Router {
             // Win32 parity: the LL hook sees the UNCLIPPED proposed point even while
             // ClipCursor pins the cursor — the growing past-border distance is what
             // drains border resistance. Only the committed position gets clamped.
-            let candidate = Point::new(
-                old.x().saturating_add(dx),
-                old.y().saturating_add(dy),
-            );
+            let candidate = Point::new(old.x().saturating_add(dx), old.y().saturating_add(dy));
 
             let mut engine = match shared.engine.try_lock() {
                 Ok(g) => g,
@@ -654,17 +711,24 @@ impl Drop for Router {
 fn build_virtual(desktop: Rect<i32>) -> std::io::Result<VirtualDevice> {
     let mut keys = AttributeSet::<KeyCode>::new();
     for k in [
-        KeyCode::BTN_LEFT, KeyCode::BTN_RIGHT, KeyCode::BTN_MIDDLE,
-        KeyCode::BTN_SIDE, KeyCode::BTN_EXTRA, KeyCode::BTN_FORWARD,
-        KeyCode::BTN_BACK, KeyCode::BTN_TASK,
+        KeyCode::BTN_LEFT,
+        KeyCode::BTN_RIGHT,
+        KeyCode::BTN_MIDDLE,
+        KeyCode::BTN_SIDE,
+        KeyCode::BTN_EXTRA,
+        KeyCode::BTN_FORWARD,
+        KeyCode::BTN_BACK,
+        KeyCode::BTN_TASK,
     ] {
         keys.insert(k);
     }
 
     let mut wheels = AttributeSet::<RelativeAxisCode>::new();
     for a in [
-        RelativeAxisCode::REL_WHEEL, RelativeAxisCode::REL_HWHEEL,
-        RelativeAxisCode::REL_WHEEL_HI_RES, RelativeAxisCode::REL_HWHEEL_HI_RES,
+        RelativeAxisCode::REL_WHEEL,
+        RelativeAxisCode::REL_HWHEEL,
+        RelativeAxisCode::REL_WHEEL_HI_RES,
+        RelativeAxisCode::REL_HWHEEL_HI_RES,
     ] {
         wheels.insert(a);
     }
@@ -726,7 +790,11 @@ fn try_desktop_bounds(shared: &Shared) -> Option<Rect<i32>> {
 }
 
 fn bounds_of(engine: &crate::engine::MouseEngine) -> Rect<i32> {
-    let mut it = engine.layout.main_zones.iter().map(|&id| engine.layout.arena[id].pixels_bounds());
+    let mut it = engine
+        .layout
+        .main_zones
+        .iter()
+        .map(|&id| engine.layout.arena[id].pixels_bounds());
     let Some(first) = it.next() else {
         return Rect::new(0, 0, 1920, 1080);
     };
@@ -765,7 +833,10 @@ pub fn kwin_cursor_pos() -> Option<Point<i32>> {
         }
     }
 
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
     rt.block_on(async {
         let (tx, mut rx) = mpsc::channel(1);
         let service = format!("org.littlebigmouse.CursorProbe{}", std::process::id());
@@ -792,21 +863,38 @@ pub fn kwin_cursor_pos() -> Option<Point<i32>> {
         )
         .ok()?;
 
-        let scripting = zbus::Proxy::new(&conn, "org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting")
-            .await
-            .ok()?;
+        let scripting = zbus::Proxy::new(
+            &conn,
+            "org.kde.KWin",
+            "/Scripting",
+            "org.kde.kwin.Scripting",
+        )
+        .await
+        .ok()?;
         // A probe left over by a crashed run would make loadScript return -1.
-        let _ = scripting.call_method("unloadScript", &(plugin.as_str(),)).await;
+        let _ = scripting
+            .call_method("unloadScript", &(plugin.as_str(),))
+            .await;
 
         let id: i32 = scripting
-            .call("loadScript", &(script_path.to_string_lossy().as_ref(), plugin.as_str()))
+            .call(
+                "loadScript",
+                &(script_path.to_string_lossy().as_ref(), plugin.as_str()),
+            )
             .await
             .unwrap_or(-1);
 
         let result = if id < 0 {
             None
         } else {
-            match zbus::Proxy::new(&conn, "org.kde.KWin", format!("/Scripting/Script{id}"), "org.kde.kwin.Script").await {
+            match zbus::Proxy::new(
+                &conn,
+                "org.kde.KWin",
+                format!("/Scripting/Script{id}"),
+                "org.kde.kwin.Script",
+            )
+            .await
+            {
                 Ok(script) if script.call::<_, _, ()>("run", &()).await.is_ok() => {
                     tokio::time::timeout(Duration::from_millis(700), rx.recv())
                         .await
@@ -818,7 +906,9 @@ pub fn kwin_cursor_pos() -> Option<Point<i32>> {
             }
         };
 
-        let _ = scripting.call_method("unloadScript", &(plugin.as_str(),)).await;
+        let _ = scripting
+            .call_method("unloadScript", &(plugin.as_str(),))
+            .await;
         let _ = std::fs::remove_file(&script_path);
         result
     })
@@ -829,7 +919,10 @@ fn first_zone_center(shared: &Shared) -> Option<Point<i32>> {
     let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
     let id = *engine.layout.main_zones.first()?;
     let b = engine.layout.arena[id].pixels_bounds();
-    Some(Point::new(b.left() + b.width() / 2, b.top() + b.height() / 2))
+    Some(Point::new(
+        b.left() + b.width() / 2,
+        b.top() + b.height() / 2,
+    ))
 }
 
 /// CursorEnv over the authoritative virtual position. `set_mouse_location` is a

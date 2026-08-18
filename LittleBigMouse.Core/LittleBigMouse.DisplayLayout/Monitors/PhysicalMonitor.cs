@@ -118,8 +118,11 @@ public class PhysicalMonitor : SavableReactiveModel
         // WhenAnyValue(e => e.EffectivePhysicalSize) OAPH-PropertyChanged round-trip that breaks
         // in Avalonia's synchronous reentrancy model (mode-change event → OAPH fires → inner
         // PropertyChanged → WhenAnyValue chain stops).
+        IMutableDisplaySize EffectiveSizeFor(string mode) =>
+            mode == "PerMonitor" ? _borderOverride : Model.PhysicalSize;
+
         var effectiveSizeObs = borderValuesObs
-            .Select(mode => mode == "PerMonitor" ? (IDisplaySize)_borderOverride : Model.PhysicalSize)
+            .Select(EffectiveSizeFor)
             .Replay(1)
             .RefCount();
 
@@ -147,7 +150,7 @@ public class PhysicalMonitor : SavableReactiveModel
             .CombineLatest(
                 this.WhenAnyValue(e => e.ActiveSource.Source.Orientation),
                 this.WhenAnyValue(e => e.DepthRatio),
-                (physicalSize, orientation, ratio) => (IDisplaySize)physicalSize.Rotate(orientation).Scale(ratio).Locate()
+                (physicalSize, orientation, ratio) => physicalSize.Rotate(orientation).Scale(ratio).Locate()
             )
             .Log(this, "_inMm")
             .Subscribe(dp => DepthProjection = dp)
@@ -303,8 +306,8 @@ public class PhysicalMonitor : SavableReactiveModel
     /// It exists as the single seam where a future "Border values: per monitor" option can substitute
     /// a per-monitor border source, without touching any geometry consumer. See the border-values plan.
     /// </summary>
-    public IDisplaySize EffectivePhysicalSize => _effectivePhysicalSize.Value;
-    readonly ObservableAsPropertyHelper<IDisplaySize> _effectivePhysicalSize;
+    public IMutableDisplaySize EffectivePhysicalSize => _effectivePhysicalSize.Value;
+    readonly ObservableAsPropertyHelper<IMutableDisplaySize> _effectivePhysicalSize;
 
     /// <summary>
     /// This monitor's own bezel borders, used to build the geometry only when "Border values" is
@@ -328,7 +331,7 @@ public class PhysicalMonitor : SavableReactiveModel
     /// <summary>
     /// Dimensions with rotation applied
     /// </summary>
-    [DataMember] public IDisplaySize PhysicalRotated
+    [DataMember] public IMutableDisplaySize PhysicalRotated
     {
         get;
         private set
@@ -347,7 +350,7 @@ public class PhysicalMonitor : SavableReactiveModel
     /// Dimensions with depth ratio applied to deal with monitor distance
     /// </summary>
     [DataMember]
-    public IDisplaySize DepthProjection
+    public IMutableDisplaySize DepthProjection
     {
         get;
         private set
@@ -370,14 +373,14 @@ public class PhysicalMonitor : SavableReactiveModel
     /// Dimensions with depth ratio applied but without rotation
     /// </summary>
     [DataMember]
-    public IDisplaySize DepthProjectionUnrotated => _depthProjectionUnrotated.Value;
-    readonly ObservableAsPropertyHelper<IDisplaySize> _depthProjectionUnrotated;
+    public IMutableDisplaySize DepthProjectionUnrotated => _depthProjectionUnrotated.Value;
+    readonly ObservableAsPropertyHelper<IMutableDisplaySize> _depthProjectionUnrotated;
 
     /// <summary>
     /// Final ratio to deal with monitor distance
     /// </summary>
     [DataMember]
-    public IDisplayRatio DepthRatio { get; }
+    public IMutableDisplayRatio DepthRatio { get; }
 
     [DataMember]
     public BorderResistance BorderResistance { get; } = new BorderResistance();
@@ -487,4 +490,3 @@ public class PhysicalMonitor : SavableReactiveModel
 
     public override string ToString() => $"{this.Id}";
 }
-

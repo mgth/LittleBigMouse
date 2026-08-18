@@ -29,7 +29,7 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 /// <summary>
 /// Actual real monitor size 
 /// </summary>
-public class DisplaySizeInMm : DisplaySize
+public class DisplaySizeInMm : MutableDisplaySize
 {
     public DisplaySizeInMm() : base(null) => Init();
 

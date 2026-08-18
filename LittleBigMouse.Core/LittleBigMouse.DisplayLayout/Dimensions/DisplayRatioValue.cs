@@ -1,25 +1,24 @@
 ﻿using HLab.Geo;
+using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class DisplayRatioValue(double x, double y) : DisplayRatio
+public class DisplayRatioValue(double x, double y) : MutableDisplayRatio
 {
    public DisplayRatioValue(double r):this(r,r) {}
     public DisplayRatioValue(Vector v):this(v.X, v.Y) {}
 
     public DisplayRatioValue Set(double x, double y)
     {
-        _x = x;
-        _y = y;
+        using (DelayChangeNotifications())
+        {
+            X = x;
+            Y = y;
+        }
         return this;
     }
 
-    public DisplayRatioValue Set(Vector v)
-    {
-        _x = v.X;
-        _y = v.Y;
-        return this;
-    }
+    public DisplayRatioValue Set(Vector v) => Set(v.X, v.Y);
 
     public override double X
     {

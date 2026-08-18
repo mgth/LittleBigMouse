@@ -152,7 +152,7 @@ public class MonitorsLayoutPresenterViewModel
     public double Height => _height.Value;
     readonly ObservableAsPropertyHelper<double> _height;
 
-    public IDisplayRatio VisualRatio { get; } = new DisplayRatioValue(1.0);
+    public IMutableDisplayRatio VisualRatio { get; } = new DisplayRatioValue(1.0);
 
     public PhysicalMonitor? SelectedMonitor { get; set => this.RaiseAndSetIfChanged(ref field, value);}
 

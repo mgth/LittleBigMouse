@@ -29,7 +29,7 @@ using ReactiveUI;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class DisplayRatioRegistry : DisplayRatio
+public class DisplayRatioRegistry : MutableDisplayRatio
 {
     readonly string _prefix;
     public PhysicalMonitor Monitor { get; }

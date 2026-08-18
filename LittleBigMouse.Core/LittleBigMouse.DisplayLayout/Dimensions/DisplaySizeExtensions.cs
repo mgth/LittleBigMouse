@@ -23,7 +23,7 @@ public static class DisplaySizeExtensions
         return new(x, y);
     }
 
-    public static T Set<T>(this T @this, Size size) where T : IDisplaySize
+    public static T Set<T>(this T @this, Size size) where T : IMutableDisplayBounds
     {
         using (@this.DelayChangeNotifications())
         {
@@ -33,7 +33,7 @@ public static class DisplaySizeExtensions
         }
     }
 
-    public static T Set<T>(this T @this, Rect rect) where T : IDisplaySize
+    public static T Set<T>(this T @this, Rect rect) where T : IMutableDisplayBounds
     {
         using (@this.DelayChangeNotifications())
         {

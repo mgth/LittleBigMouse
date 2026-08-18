@@ -10,7 +10,7 @@ public interface IMonitorsLayoutPresenterViewModel : INotifyPropertyChanged
 {
     IMainPluginsViewModel MainViewModel { get; }
 
-    IDisplayRatio VisualRatio { get; }
+    IMutableDisplayRatio VisualRatio { get; }
 
     IMonitorsLayout Model { get; }
 

@@ -12,9 +12,9 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 /// Sits at the raw-size root of the chain (below rotation/scale), so those transforms apply to the
 /// overridden borders exactly as they do to the model's.
 /// </summary>
-public class DisplayBorderOverride : DisplaySize
+public class DisplayBorderOverride : MutableDisplaySize
 {
-    public DisplayBorderOverride(IDisplaySize source, DisplayBorders borderSource) : base(source)
+    public DisplayBorderOverride(IMutableDisplaySize source, DisplayBorders borderSource) : base(source)
     {
         BorderSource = borderSource;
 

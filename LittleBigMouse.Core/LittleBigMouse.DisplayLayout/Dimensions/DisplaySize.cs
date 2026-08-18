@@ -108,22 +108,30 @@ public abstract class DisplaySize(IDisplaySize source) : SavableReactiveModel, I
     public IDisplaySize Source { get; } = source;
 
     //[DataMember]
-    public abstract double Width { get; set; }
+    public double Width => WidthValue;
+    protected abstract double WidthValue { get; }
     //[DataMember]
-    public abstract double Height { get; set; }
+    public double Height => HeightValue;
+    protected abstract double HeightValue { get; }
     //[DataMember]
-    public abstract double X { get; set; }
+    public double X => XValue;
+    protected abstract double XValue { get; }
     //[DataMember]
-    public abstract double Y { get; set; }
+    public double Y => YValue;
+    protected abstract double YValue { get; }
     //[DataMember]
-    public abstract double TopBorder { get; set; }
+    public double TopBorder => TopBorderValue;
+    protected abstract double TopBorderValue { get; }
     //[DataMember]
-    public abstract double BottomBorder { get; set; }
+    public double BottomBorder => BottomBorderValue;
+    protected abstract double BottomBorderValue { get; }
     //[DataMember]
-    public abstract double LeftBorder { get; set; }
+    public double LeftBorder => LeftBorderValue;
+    protected abstract double LeftBorderValue { get; }
 
     //[DataMember]
-    public abstract double RightBorder { get; set; }
+    public double RightBorder => RightBorderValue;
+    protected abstract double RightBorderValue { get; }
 
 
     [DataMember]
@@ -131,26 +139,10 @@ public abstract class DisplaySize(IDisplaySize source) : SavableReactiveModel, I
     ObservableAsPropertyHelper<Thickness> _borders;
 
     //[DataMember]
-    public Point Location
-    {
-        get => _location.Value;
-        set
-        {
-            X = value.X;
-            Y = value.Y;
-        }
-    }
+    public Point Location => _location.Value;
     ObservableAsPropertyHelper<Point> _location;
 
-    public Size Size
-    {
-        get => _size.Value;
-        set
-        {
-            Height = value.Height;
-            Width = value.Width;
-        }
-    }
+    public Size Size => _size.Value;
     ObservableAsPropertyHelper<Size> _size;
 
     public Point Center => _center.Value;
@@ -160,33 +152,17 @@ public abstract class DisplaySize(IDisplaySize source) : SavableReactiveModel, I
     ObservableAsPropertyHelper<Rect> _bounds;
 
     //[DataMember]
-    public double OutsideX
-    {
-        get => _outsideX.Value;
-        set => X = value + LeftBorder;
-    }
+    public double OutsideX => _outsideX.Value;
     ObservableAsPropertyHelper<double> _outsideX;
 
     //[DataMember]
-    public double OutsideY
-    {
-        get => _outsideY.Value;
-        set => Y = value + TopBorder;
-    }
+    public double OutsideY => _outsideY.Value;
     ObservableAsPropertyHelper<double> _outsideY;
 
-    public double OutsideWidth
-    {
-        get => _outsideWidth.Value;
-        set => throw new NotImplementedException();
-    }
+    public double OutsideWidth => _outsideWidth.Value;
     ObservableAsPropertyHelper<double> _outsideWidth;
 
-    public double OutsideHeight
-    {
-        get => _outsideHeight.Value;
-        set => throw new NotImplementedException();
-    }
+    public double OutsideHeight => _outsideHeight.Value;
     ObservableAsPropertyHelper<double> _outsideHeight;
 
     [DataMember]
@@ -215,4 +191,78 @@ public abstract class DisplaySize(IDisplaySize source) : SavableReactiveModel, I
 
         return b.ToString();
     }
+}
+
+/// <summary>
+/// Base class for dimensions that can propagate every edit, including borders, to
+/// their source. Read-only computed dimensions derive directly from <see cref="DisplaySize"/>.
+/// </summary>
+public abstract class MutableDisplayBounds(IMutableDisplayBounds source)
+    : DisplaySize(source), IMutableDisplayBounds
+{
+    [JsonIgnore]
+    public new IMutableDisplayBounds Source => source;
+
+    public new abstract double Width { get; set; }
+    public new abstract double Height { get; set; }
+    public new abstract double X { get; set; }
+    public new abstract double Y { get; set; }
+
+    public new Point Location
+    {
+        get => base.Location;
+        set
+        {
+            X = value.X;
+            Y = value.Y;
+        }
+    }
+
+    public new Size Size
+    {
+        get => base.Size;
+        set
+        {
+            Width = value.Width;
+            Height = value.Height;
+        }
+    }
+
+    public new double OutsideX
+    {
+        get => base.OutsideX;
+        set => X = value + LeftBorder;
+    }
+
+    public new double OutsideY
+    {
+        get => base.OutsideY;
+        set => Y = value + TopBorder;
+    }
+
+    protected sealed override double WidthValue => Width;
+    protected sealed override double HeightValue => Height;
+    protected sealed override double XValue => X;
+    protected sealed override double YValue => Y;
+}
+
+/// <summary>
+/// Base class for dimensions that can propagate every edit, including borders, to
+/// their source.
+/// </summary>
+public abstract class MutableDisplaySize(IMutableDisplaySize source)
+    : MutableDisplayBounds(source), IMutableDisplaySize
+{
+    [JsonIgnore]
+    public new IMutableDisplaySize Source => source;
+
+    public new abstract double TopBorder { get; set; }
+    public new abstract double BottomBorder { get; set; }
+    public new abstract double LeftBorder { get; set; }
+    public new abstract double RightBorder { get; set; }
+
+    protected sealed override double TopBorderValue => TopBorder;
+    protected sealed override double BottomBorderValue => BottomBorder;
+    protected sealed override double LeftBorderValue => LeftBorder;
+    protected sealed override double RightBorderValue => RightBorder;
 }

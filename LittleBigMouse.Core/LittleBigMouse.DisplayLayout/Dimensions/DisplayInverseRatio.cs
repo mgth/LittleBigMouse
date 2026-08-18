@@ -46,17 +46,9 @@ public class DisplayInverseRatio : DisplayRatio
 
     public IDisplayRatio Source { get; }
 
-    public override double X
-    {
-        get => _x.Value;
-        set => Source.X = 1 / value;
-    }
+    protected override double XValue => _x.Value;
     readonly ObservableAsPropertyHelper<double> _x;
 
-    public override double Y
-    {
-        get => _y.Value;
-        set => Source.Y = 1 / value;
-    }
+    protected override double YValue => _y.Value;
     readonly ObservableAsPropertyHelper<double> _y;
 }

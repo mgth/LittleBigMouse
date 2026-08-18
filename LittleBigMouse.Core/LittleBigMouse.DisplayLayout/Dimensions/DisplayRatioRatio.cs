@@ -21,7 +21,6 @@
 	  http://www.mgth.fr
 */
 
-using System;
 using System.Reactive.Concurrency;
 using ReactiveUI;
 
@@ -55,17 +54,9 @@ public class DisplayRatioRatio : DisplayRatio
 
 
 
-    public override double X
-    {
-        get => _x.Value;
-        set => throw new NotImplementedException();
-    }
+    protected override double XValue => _x.Value;
     readonly ObservableAsPropertyHelper<double> _x;
 
-    public override double Y
-    {
-        get => _y.Value;
-        set => throw new NotImplementedException();
-    }
+    protected override double YValue => _y.Value;
     readonly ObservableAsPropertyHelper<double> _y;
 }

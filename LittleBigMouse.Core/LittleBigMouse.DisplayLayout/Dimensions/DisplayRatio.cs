@@ -31,9 +31,11 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 public abstract class DisplayRatio : SavableReactiveModel, IDisplayRatio, IEquatable<IDisplayRatio>
 {
     [DataMember]
-    public abstract double X { get; set; }
+    public double X => XValue;
+    protected abstract double XValue { get; }
     [DataMember]
-    public abstract double Y { get; set; }
+    public double Y => YValue;
+    protected abstract double YValue { get; }
 
     public bool IsUnary => Math.Abs(X - 1) < double.Epsilon && Math.Abs(Y - 1) < double.Epsilon;
 
@@ -45,4 +47,16 @@ public abstract class DisplayRatio : SavableReactiveModel, IDisplayRatio, IEquat
 
     public override string ToString() => $"({X},{Y})";
 
+}
+
+/// <summary>
+/// Base class for ratios whose components are explicitly editable.
+/// </summary>
+public abstract class MutableDisplayRatio : DisplayRatio, IMutableDisplayRatio
+{
+    public new abstract double X { get; set; }
+    public new abstract double Y { get; set; }
+
+    protected sealed override double XValue => X;
+    protected sealed override double YValue => Y;
 }

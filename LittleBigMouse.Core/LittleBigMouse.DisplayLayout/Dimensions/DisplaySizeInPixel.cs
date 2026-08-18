@@ -21,12 +21,11 @@
 	  http://www.mgth.fr
 */
 
-using System;
 using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class DisplaySizeInPixels : DisplaySize
+public class DisplaySizeInPixels : MutableDisplayBounds
 {
     public DisplaySizeInPixels(Rect rect) : base(null)
     {
@@ -39,8 +38,8 @@ public class DisplaySizeInPixels : DisplaySize
     public override double X { get; set => SetUnsavedValue(ref field, value); }
     public override double Y { get; set => SetUnsavedValue(ref field, value); }
 
-    public override double TopBorder { get => 0; set => throw new NotImplementedException(); }
-    public override double BottomBorder { get => 0; set => throw new NotImplementedException(); }
-    public override double LeftBorder { get => 0; set => throw new NotImplementedException(); }
-    public override double RightBorder { get => 0; set => throw new NotImplementedException(); }
+    protected override double TopBorderValue => 0;
+    protected override double BottomBorderValue => 0;
+    protected override double LeftBorderValue => 0;
+    protected override double RightBorderValue => 0;
 }

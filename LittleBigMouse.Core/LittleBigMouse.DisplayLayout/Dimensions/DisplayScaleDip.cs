@@ -28,13 +28,15 @@ using System.Reactive.Concurrency;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class DisplayScaleDip : DisplaySize
+public class DisplayScaleDip : MutableDisplayBounds
 {
     public IDisplayRatio EffectiveDpi { get; }
     public IMonitorsLayout Layout { get; }
+    IMutableDisplayBounds MutableSource { get; }
 
-    public DisplayScaleDip(IDisplaySize source, IDisplayRatio effectiveDpi, IMonitorsLayout layout) : base(source)
+    public DisplayScaleDip(IMutableDisplayBounds source, IDisplayRatio effectiveDpi, IMonitorsLayout layout) : base(source)
     {
+        MutableSource = source;
         EffectiveDpi = effectiveDpi;
         Layout = layout;
 
@@ -118,57 +120,41 @@ public class DisplayScaleDip : DisplaySize
     public override double Width
     {
         get => _width.Value;
-        set => Source.Width = value / Ratio.X;
+        set => MutableSource.Width = value / Ratio.X;
     }
     readonly ObservableAsPropertyHelper<double> _width;
 
     public override double Height
     {
         get => _height.Value;
-        set => Source.Height = value / Ratio.Y;
+        set => MutableSource.Height = value / Ratio.Y;
     }
     readonly ObservableAsPropertyHelper<double> _height;
 
     public override double X
     {
         get => _x.Value;
-        set => Source.X = value / MainRatio.X;
+        set => MutableSource.X = value / MainRatio.X;
     }
     readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
         get => _y.Value;
-        set => Source.Y = value / MainRatio.Y;
+        set => MutableSource.Y = value / MainRatio.Y;
     }
     readonly ObservableAsPropertyHelper<double> _y;
 
-    public override double TopBorder
-    {
-        get => _topBorder.Value;
-        set => Source.TopBorder = value / Ratio.Y;
-    }
+    protected override double TopBorderValue => _topBorder.Value;
     readonly ObservableAsPropertyHelper<double> _topBorder;
 
-    public override double BottomBorder
-    {
-        get => _bottomBorder.Value;
-        set => Source.BottomBorder = value / Ratio.Y;
-    }
+    protected override double BottomBorderValue => _bottomBorder.Value;
     readonly ObservableAsPropertyHelper<double> _bottomBorder;
 
-    public override double LeftBorder
-    {
-        get => _leftBorder.Value;
-        set => Source.LeftBorder = value / Ratio.X;
-    }
+    protected override double LeftBorderValue => _leftBorder.Value;
     readonly ObservableAsPropertyHelper<double> _leftBorder;
 
-    public override double RightBorder
-    {
-        get => _rightBorder.Value;
-        set => Source.RightBorder = value / Ratio.X;
-    }
+    protected override double RightBorderValue => _rightBorder.Value;
     readonly ObservableAsPropertyHelper<double> _rightBorder;
 
     public override string TransformToString => $"DPI:{EffectiveDpi}";

@@ -27,9 +27,9 @@ using System.Reactive.Concurrency;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class DisplayScaleWithLocation : DisplaySize
+public class DisplayScaleWithLocation : MutableDisplaySize
 {
-    public DisplayScaleWithLocation(IDisplaySize source, IDisplayRatio ratio) : base(source)
+    public DisplayScaleWithLocation(IMutableDisplaySize source, IDisplayRatio ratio) : base(source)
     {
         Ratio = ratio;
 

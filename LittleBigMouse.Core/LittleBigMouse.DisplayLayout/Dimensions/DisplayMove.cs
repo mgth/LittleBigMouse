@@ -3,9 +3,9 @@ using System.Reactive.Concurrency;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public abstract class DisplayMove : DisplaySize
+public abstract class DisplayMove : MutableDisplaySize
 {
-    protected DisplayMove(IDisplaySize source) : base(source)
+    protected DisplayMove(IMutableDisplaySize source) : base(source)
     {
         _width = this.WhenAnyValue(e => e.Source.Width)
             .ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);

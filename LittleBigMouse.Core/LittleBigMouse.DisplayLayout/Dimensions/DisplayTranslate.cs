@@ -29,12 +29,12 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public static class DisplayTranslateExt
 {
-    public static IDisplaySize Translate(this IDisplaySize source, Vector translation) => new DisplayTranslate(source, translation);
+    public static IMutableDisplaySize Translate(this IMutableDisplaySize source, Vector translation) => new DisplayTranslate(source, translation);
 }
 
 public class DisplayTranslate : DisplayMove
 {
-    public DisplayTranslate(IDisplaySize source, Vector? translation = null) : base(source)
+    public DisplayTranslate(IMutableDisplaySize source, Vector? translation = null) : base(source)
     {
         Translation = translation ?? new Vector();
         

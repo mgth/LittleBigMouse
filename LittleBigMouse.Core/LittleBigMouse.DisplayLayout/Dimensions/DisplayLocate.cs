@@ -28,7 +28,7 @@ namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public class DisplayLocate : DisplayMove
 {
-    public DisplayLocate(IDisplaySize source, Point? point = null) : base(source)
+    public DisplayLocate(IMutableDisplaySize source, Point? point = null) : base(source)
     {
         Location = point ?? new Point();
     }

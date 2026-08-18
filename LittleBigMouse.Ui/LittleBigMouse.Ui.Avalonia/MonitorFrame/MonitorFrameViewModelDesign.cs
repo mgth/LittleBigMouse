@@ -78,7 +78,7 @@ public class MonitorFrameViewModelDesign2 : MonitorFrameViewModel, IDesignViewMo
 {
     class MonitorsPresenterDesign : IMonitorsLayoutPresenterViewModel, IDesignViewModel
     {
-        public IDisplayRatio VisualRatio => new DisplayRatioValue(1.0);
+        public IMutableDisplayRatio VisualRatio => new DisplayRatioValue(1.0);
         public IMonitorsLayout Model { get; }
 
         public IMainPluginsViewModel MainViewModel => new MainViewModelDesign();

@@ -21,70 +21,87 @@
 	  http://www.mgth.fr
 */
 
+using System.Reactive.Concurrency;
+using ReactiveUI;
+
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
 public static class ScreenSizeWpfExt
 {
-    public static IDisplaySize Wpf(this DisplaySizeInPixels source, IDisplayRatio ratio) => new DisplayScale(source, ratio);
+    public static IMutableDisplayBounds Wpf(this DisplaySizeInPixels source, IDisplayRatio ratio) => new DisplaySizeWpf(source, ratio);
 }
-public class DisplaySizeWpf : DisplaySize
+public class DisplaySizeWpf : MutableDisplayBounds
 {
-    public DisplaySizeWpf(IDisplaySize source) : base(source)
+    public DisplaySizeWpf(IMutableDisplayBounds source, IDisplayRatio ratio) : base(source)
     {
+        MutableSource = source;
+        Ratio = ratio;
+
+        _width = this.WhenAnyValue(e => e.Source.Width, e => e.Ratio.X, (value, scale) => value * scale)
+            .ToProperty(this, e => e.Width, scheduler: Scheduler.Immediate);
+        _height = this.WhenAnyValue(e => e.Source.Height, e => e.Ratio.Y, (value, scale) => value * scale)
+            .ToProperty(this, e => e.Height, scheduler: Scheduler.Immediate);
+        _x = this.WhenAnyValue(e => e.Source.X)
+            .ToProperty(this, e => e.X, scheduler: Scheduler.Immediate);
+        _y = this.WhenAnyValue(e => e.Source.Y)
+            .ToProperty(this, e => e.Y, scheduler: Scheduler.Immediate);
+        _topBorder = this.WhenAnyValue(e => e.Source.TopBorder, e => e.Ratio.Y, (value, scale) => value * scale)
+            .ToProperty(this, e => e.TopBorder, scheduler: Scheduler.Immediate);
+        _bottomBorder = this.WhenAnyValue(e => e.Source.BottomBorder, e => e.Ratio.Y, (value, scale) => value * scale)
+            .ToProperty(this, e => e.BottomBorder, scheduler: Scheduler.Immediate);
+        _leftBorder = this.WhenAnyValue(e => e.Source.LeftBorder, e => e.Ratio.X, (value, scale) => value * scale)
+            .ToProperty(this, e => e.LeftBorder, scheduler: Scheduler.Immediate);
+        _rightBorder = this.WhenAnyValue(e => e.Source.RightBorder, e => e.Ratio.X, (value, scale) => value * scale)
+            .ToProperty(this, e => e.RightBorder, scheduler: Scheduler.Immediate);
+
         Init();
     }
+
+    IMutableDisplayBounds MutableSource { get; }
 
     public IDisplayRatio Ratio
     {
        get;
-       set => field = value;
+       private set => field = value;
     }
 
     public override double Width
     {
-        get => Source.Width * Ratio.X;
-        set => Source.Width = value / Ratio.X;
+        get => _width.Value;
+        set => MutableSource.Width = value / Ratio.X;
     }
+    readonly ObservableAsPropertyHelper<double> _width;
 
     public override double Height
     {
-        get => Source.Height * Ratio.Y;
-        set => Source.Height = value / Ratio.Y;
+        get => _height.Value;
+        set => MutableSource.Height = value / Ratio.Y;
     }
+    readonly ObservableAsPropertyHelper<double> _height;
 
     public override double X
     {
-        get => Source.X * Ratio.X;
-        set => Source.X = value / Ratio.X;
+        get => _x.Value;
+        set => MutableSource.X = value;
     }
+    readonly ObservableAsPropertyHelper<double> _x;
 
     public override double Y
     {
-        get => Source.Y * Ratio.Y;
-        set => Source.Y = value / Ratio.Y;
+        get => _y.Value;
+        set => MutableSource.Y = value;
     }
+    readonly ObservableAsPropertyHelper<double> _y;
 
-    public override double TopBorder
-    {
-        get => Source.TopBorder * Ratio.Y;
-        set => Source.TopBorder = value / Ratio.Y;
-    }
+    protected override double TopBorderValue => _topBorder.Value;
+    readonly ObservableAsPropertyHelper<double> _topBorder;
 
-    public override double BottomBorder
-    {
-        get => Source.BottomBorder * Ratio.Y;
-        set => Source.BottomBorder = value / Ratio.Y;
-    }
+    protected override double BottomBorderValue => _bottomBorder.Value;
+    readonly ObservableAsPropertyHelper<double> _bottomBorder;
 
-    public override double LeftBorder
-    {
-        get => Source.LeftBorder * Ratio.X;
-        set => Source.LeftBorder = value / Ratio.X;
-    }
+    protected override double LeftBorderValue => _leftBorder.Value;
+    readonly ObservableAsPropertyHelper<double> _leftBorder;
 
-    public override double RightBorder
-    {
-        get => Source.RightBorder * Ratio.X;
-        set => Source.RightBorder = value / Ratio.X;
-    }
+    protected override double RightBorderValue => _rightBorder.Value;
+    readonly ObservableAsPropertyHelper<double> _rightBorder;
 }

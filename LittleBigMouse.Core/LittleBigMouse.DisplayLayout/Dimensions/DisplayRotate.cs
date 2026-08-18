@@ -27,11 +27,11 @@ using HLab.Geo;
 
 namespace LittleBigMouse.DisplayLayout.Dimensions;
 
-public class DisplayRotate : DisplaySize
+public class DisplayRotate : MutableDisplaySize
 {
     public int Rotation { get; }
 
-    public DisplayRotate(IDisplaySize source, int rotation = 0) : base(source)
+    public DisplayRotate(IMutableDisplaySize source, int rotation = 0) : base(source)
     {
         Rotation = rotation;
 

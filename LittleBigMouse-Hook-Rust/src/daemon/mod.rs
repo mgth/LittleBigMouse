@@ -110,7 +110,7 @@ pub fn receive_message(
 /// the UI drop live preview on the stop and then find nothing left to act on.
 pub fn rescue_fired(shared: &'static Shared) {
     eprintln!("[LittleBigMouse.Hook] rescue: freeing the cursor and stopping");
-    crate::platform::cursor::release_clip();
+    crate::platform::cursor::force_release_clip();
     shared.broadcast(protocol::RESCUED);
     hook::request_unhook(shared);
     shared.paused.store(false, Ordering::SeqCst);
@@ -209,16 +209,15 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
         // this is what lets a Stop/Start (Load) heal crossing instead of staying broken.
         // Before the move: the layout is about to be handed to the engine.
         adopt_rescue_shortcut(shared, &layout.rescue_shortcut);
-        shared
-            .engine
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .load(layout);
-        // The one thing the teardown used to guarantee: a cursor confined by the
-        // outgoing geometry is never left confined by it. The engine re-clips on the
-        // next move if the new layout still calls for it.
-        if keep_hooked {
-            crate::platform::cursor::release_clip();
+        {
+            let mut engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
+            // A Load+Run keeps the hook alive. Restore the outgoing engine's clip
+            // BEFORE replacing its tracking state, but only when that exact LBM
+            // clip is still active. A game-owned replacement must survive reload.
+            if keep_hooked {
+                crate::platform::cursor::restore_managed_clip(&mut engine);
+            }
+            engine.load(layout);
         }
         // Kept for the edge prober, which re-parses rather than touching the
         // live engine.

@@ -23,6 +23,12 @@ enum Mode {
     Cross,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FreelookReason {
+    CursorHidden,
+    ExternalClip,
+}
+
 /// Identity of a zone-border link, replacing the C++ `const ZoneLink*` pointer
 /// used to detect "same border as last event" for resistance tracking.
 ///
@@ -42,7 +48,12 @@ pub struct MouseEngine {
 
     old_point: Point<i32>,
     old_zone: Option<ZoneId>,
+    /// Clip that was active before LBM first confined the cursor. Kept until
+    /// LBM restores it or another application replaces our confinement.
     old_clip_rect: Rect<i32>,
+    /// Last clip LBM applied. This is the ownership check that prevents a
+    /// teardown/reload from restoring over a newer game-owned ClipCursor rect.
+    managed_clip_rect: Rect<i32>,
     mode: Mode,
 
     current_resistance: Option<ResistanceKey>,
@@ -60,6 +71,7 @@ impl MouseEngine {
             old_point: Point::default(),
             old_zone: None,
             old_clip_rect: Rect::empty(),
+            managed_clip_rect: Rect::empty(),
             mode: Mode::ExtFirst,
             current_resistance: None,
             border_resistance: 0.0,
@@ -86,14 +98,34 @@ impl MouseEngine {
     // --- clip save/restore ---------------------------------------------------
 
     fn save_clip(&mut self, env: &impl CursorEnv) {
-        self.old_clip_rect = env.get_clip();
+        // A resisted border can apply the same confinement for many consecutive
+        // events. Preserve the clip from before LBM's FIRST write; overwriting it
+        // with our own zone rect would later restore a stale LBM confinement.
+        if self.old_clip_rect.is_empty() {
+            self.old_clip_rect = env.get_clip();
+        }
     }
 
-    fn reset_clip(&mut self, env: &mut impl CursorEnv) {
-        if !self.old_clip_rect.is_empty() {
+    fn set_managed_clip(&mut self, env: &mut impl CursorEnv, rect: Rect<i32>) {
+        env.set_clip(rect);
+        self.managed_clip_rect = rect;
+    }
+
+    fn owns_current_clip(&self, env: &impl CursorEnv) -> bool {
+        !self.managed_clip_rect.is_empty() && env.get_clip() == self.managed_clip_rect
+    }
+
+    /// Restore only a confinement LBM still owns.
+    ///
+    /// `ClipCursor` is process-global. A game may replace our temporary zone
+    /// clip before the next mouse event; in that case its new rect is ownership
+    /// changing hands, not something LBM is allowed to overwrite or clear.
+    pub(crate) fn restore_managed_clip(&mut self, env: &mut impl CursorEnv) {
+        if !self.old_clip_rect.is_empty() && self.owns_current_clip(env) {
             env.set_clip(self.old_clip_rect);
-            self.old_clip_rect = Rect::empty();
         }
+        self.old_clip_rect = Rect::empty();
+        self.managed_clip_rect = Rect::empty();
     }
 
     // --- entry: freelook gate + dispatch (C++ MouseEngine::OnMouseMove) -------
@@ -106,24 +138,33 @@ impl MouseEngine {
         } else if self.was_freelook {
             env.tick_count().wrapping_sub(self.last_freelook_check)
                 >= self.layout.freelook_check_interval_ms as u64
-        } else if self.mode == Mode::ExtFirst || self.old_zone.is_none() {
+        } else if self.mode == Mode::ExtFirst {
             true
-        } else {
-            let bounds = self.layout.arena[self.old_zone.unwrap()].pixels_bounds();
+        } else if let Some(old_zone) = self.old_zone {
+            let bounds = self.layout.arena[old_zone].pixels_bounds();
             e.point.x() <= bounds.left()
                 || e.point.x() >= bounds.right() - 1
                 || e.point.y() <= bounds.top()
                 || e.point.y() >= bounds.bottom() - 1
+        } else {
+            true
         };
 
         if check_freelook {
             self.last_freelook_check = env.tick_count();
-            let freelook = self.is_freelook_active(env);
+            let reason = self.freelook_reason(env);
+            let freelook = reason.is_some();
             if freelook != self.was_freelook {
                 if freelook {
                     // Entering freelook: hand the game a clean cursor environment.
-                    self.reset_clip(env);
+                    self.restore_managed_clip(env);
                     self.reset();
+                    eprintln!(
+                        "[LittleBigMouse.Hook] pointer-capture bypass entered: {:?}",
+                        reason.unwrap()
+                    );
+                } else {
+                    eprintln!("[LittleBigMouse.Hook] pointer-capture bypass left");
                 }
                 self.was_freelook = freelook;
             }
@@ -140,20 +181,21 @@ impl MouseEngine {
         }
     }
 
-    fn is_freelook_active(&self, env: &impl CursorEnv) -> bool {
+    fn freelook_reason(&self, env: &impl CursorEnv) -> Option<FreelookReason> {
         if env.cursor_hidden() {
-            return true;
+            return Some(FreelookReason::CursorHidden);
         }
-        // Skip the clip check when LBM itself set the clip.
-        if self.old_clip_rect.is_empty() && env.clip_is_subrect_of_virtual_screen() {
-            return true;
+        // Skip the clip check only while LBM's own rect is still active. If a
+        // game replaced it, ownership changed and its confinement is freelook.
+        if !self.owns_current_clip(env) && env.clip_is_subrect_of_virtual_screen() {
+            return Some(FreelookReason::ExternalClip);
         }
-        false
+        None
     }
 
     /// C++ `CheckForStopped`.
     fn check_for_stopped(&mut self, env: &mut impl CursorEnv, e: &MouseEventArg) -> bool {
-        self.reset_clip(env);
+        self.restore_managed_clip(env);
         if e.running {
             return false;
         }
@@ -558,14 +600,14 @@ impl MouseEngine {
             if rect.contains(pos) {
                 continue;
             }
-            env.set_clip(*rect);
+            self.set_managed_clip(env, *rect);
             pos = env.get_mouse_location();
             if rect.contains(p_out) {
                 break;
             }
         }
 
-        env.set_clip(r);
+        self.set_managed_clip(env, r);
         env.set_mouse_location(p_out);
         e.handled = true;
     }
@@ -574,7 +616,7 @@ impl MouseEngine {
     fn no_zone_matches(&mut self, env: &mut impl CursorEnv, e: &mut MouseEventArg) {
         self.save_clip(env);
         let bounds = self.layout.arena[self.old_zone.unwrap()].pixels_bounds();
-        env.set_clip(bounds);
+        self.set_managed_clip(env, bounds);
         e.handled = false;
     }
 
@@ -927,6 +969,59 @@ mod tests {
         let ev = feed(&mut eng, &mut env, 0, 1000);
         assert!(!ev.handled, "freelook must pass the event through");
         assert_eq!(env.pos, Point::new(0, 0), "cursor untouched in freelook");
+    }
+
+    #[test]
+    fn repeated_lbm_confinement_restores_the_original_clip() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        let original = env.clip;
+        let first_lbm_clip = Rect::new(-3840, 0, 3840, 2160);
+        let second_lbm_clip = Rect::new(0, 0, 3840, 2160);
+
+        eng.save_clip(&env);
+        eng.set_managed_clip(&mut env, first_lbm_clip);
+        // A second resisted/crossing frame must not replace `original` with
+        // the first LBM rect.
+        eng.save_clip(&env);
+        eng.set_managed_clip(&mut env, second_lbm_clip);
+        eng.restore_managed_clip(&mut env);
+
+        assert_eq!(env.clip, original);
+        assert!(eng.old_clip_rect.is_empty());
+        assert!(eng.managed_clip_rect.is_empty());
+    }
+
+    #[test]
+    fn game_clip_that_replaces_lbm_clip_survives_restore() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+        let lbm_clip = Rect::new(-3840, 0, 3840, 2160);
+        let game_clip = Rect::new(700, 300, 1920, 1080);
+
+        eng.save_clip(&env);
+        eng.set_managed_clip(&mut env, lbm_clip);
+        // Another process calls ClipCursor after LBM. Its differing rect proves
+        // that LBM no longer owns the global confinement.
+        env.clip = game_clip;
+        eng.restore_managed_clip(&mut env);
+
+        assert_eq!(env.clip, game_clip, "LBM must not overwrite a newer game clip");
+        assert!(eng.old_clip_rect.is_empty());
+        assert!(eng.managed_clip_rect.is_empty());
+    }
+
+    #[test]
+    fn game_clip_replacing_lbm_clip_is_detected_as_freelook() {
+        let mut eng = engine();
+        let mut env = FakeCursor::new();
+
+        eng.save_clip(&env);
+        eng.set_managed_clip(&mut env, Rect::new(-3840, 0, 3840, 2160));
+        env.clip = Rect::new(700, 300, 1920, 1080);
+        env.clipped_sub = true;
+
+        assert_eq!(eng.freelook_reason(&env), Some(FreelookReason::ExternalClip));
     }
 
     #[test]

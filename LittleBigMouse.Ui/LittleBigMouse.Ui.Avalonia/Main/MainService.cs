@@ -286,7 +286,11 @@ public class MainService : ReactiveModel, IMainService
         // window instead of doing nothing. Raised on a background thread.
         if (Program.SingleInstance is { } singleInstance)
         {
-            singleInstance.ShowRequested += () => Dispatcher.UIThread.Post(() => _ = ShowControlAsync());
+            singleInstance.ShowRequested += () =>
+            {
+                Console.Error.WriteLine("Single-instance activation requested: showing the control window.");
+                Dispatcher.UIThread.Post(() => _ = ShowControlAsync());
+            };
         }
 
         // Apply / react to the "hide tray icon" option. The notify service hides the tray icon

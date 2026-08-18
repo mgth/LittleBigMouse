@@ -18,13 +18,20 @@ public class MainBootloader(
 
         await mainService.StartNotifierAsync();
 
-        // Check for update
-        if (mainService.MonitorsLayout.Options.AutoUpdate)
+        var options = mainService.MonitorsLayout.Options;
+        Console.Error.WriteLine(
+            $"Startup options: StartMinimized={options.StartMinimized}, AutoUpdate={options.AutoUpdate}");
+
+        // A blind update check is not actually silent when a newer release exists: the
+        // updater opens its window.  "Start minimized to tray" must suppress every
+        // automatic startup window, not only the main configuration window (#549).
+        if (options.AutoUpdate && !options.StartMinimized)
             await updater.CheckUpdateAsync(false);
 
-        // Show control
-        if (!mainService.MonitorsLayout.Options.StartMinimized)
+        if (!options.StartMinimized)
             await mainService.ShowControlAsync();
+        else
+            Console.Error.WriteLine("Startup UI suppressed: running in the notification area.");
 
         return BootState.Completed;
     }

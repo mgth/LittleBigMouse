@@ -25,11 +25,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Threading;
 using HLab.Base.Avalonia.Controls;
 using HLab.Mvvm.Annotations;
-using HLab.Sys.Windows.API;
-using LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 
@@ -41,6 +38,8 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 // but it meant BorderResistanceViewModel was never actually instantiated.
 public partial class BorderResistanceView : UserControl, IView<BorderResistanceViewMode, BorderResistanceViewModel>, IMonitorFrameContentViewClass
 {
+    readonly WheelPointerCapture _wheelPointerCapture = new();
+
     public BorderResistanceView()
     {
         InitializeComponent();
@@ -92,24 +91,10 @@ public partial class BorderResistanceView : UserControl, IView<BorderResistanceV
     {
         if (sender is not DoubleBox db) return;
 
-        var p = e.GetPosition(db);
-        var rx = p.X / db.Bounds.Width;
-        var ry = p.Y / db.Bounds.Height;
-
         // Floored here as well as in the model: the wheel would otherwise walk the
         // box down into negatives that the model silently drops.
         db.Value = Math.Max(0, db.Value + WheelDelta(e));
         this.GetLayout()?.Compact();
-
-        // Keeping the pointer over the box it is scrolling is a Win32-only nicety;
-        // the P/Invoke would throw DllNotFoundException on Linux.
-        if (!OperatingSystem.IsWindows()) return;
-
-        Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            var p2 = new Point(rx * db.Bounds.Width, ry * db.Bounds.Height);
-            var l = db.PointToScreen(p2);
-            WinUser.SetCursorPos((int)l.X, (int)l.Y);
-        }, DispatcherPriority.Loaded);
+        _wheelPointerCapture.KeepOn(db, e.Pointer);
     }
 }

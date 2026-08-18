@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="LittleBigMouse.Ui.Avalonia.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="Assets\**" />
   </ItemGroup>
 

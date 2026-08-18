@@ -63,6 +63,8 @@ public static class MonitorAnchorsExtensions
 
 internal partial class MonitorLocationView : UserControl, IView<MonitorLocationViewMode, MonitorLocationViewModel>, IMonitorFrameContentViewClass
 {
+    readonly WheelPointerCapture _wheelPointerCapture = new();
+
     public MonitorLocationView()
     {
         InitializeComponent();
@@ -201,20 +203,10 @@ internal partial class MonitorLocationView : UserControl, IView<MonitorLocationV
     {
         if (sender is not DoubleBox db) return;
 
-        var p = e.GetPosition(db);
-        var rx = p.X / db.Bounds.Width;
-        var ry = p.Y / db.Bounds.Height;
-
         db.Value += WheelDelta(e);
 
         this.GetLayout()?.Compact();
-
-        Dispatcher.UIThread.InvokeAsync(() => 
-        {
-            var p2 = new Point(rx * db.Bounds.Width, ry * db.Bounds.Height);
-            var l = db.PointToScreen(p2);
-            SetCursorPos((int)l.X, (int)l.Y);
-        }, DispatcherPriority.Loaded);
+        _wheelPointerCapture.KeepOn(db, e.Pointer);
     }
 
     void OnMouseDoubleClick(object sender, PointerPressedEventArgs e)

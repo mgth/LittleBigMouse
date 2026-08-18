@@ -235,7 +235,7 @@
 		<!-- Borders -->
 		<Grid ColumnDefinitions="*,*,*,*">
 			<!-- Top Border -->
-			<controls:DoubleBox Grid.Column="1"
+			<sizePlugin:NonNegativeDoubleBox Grid.Column="1"
 								HorizontalAlignment="Center"
 								VerticalAlignment="Top"
 								PointerWheelChanged="OnMouseWheel"
@@ -244,7 +244,7 @@
                             />
 
 			<!-- Left Border -->
-			<controls:DoubleBox Grid.Column="0"
+			<sizePlugin:NonNegativeDoubleBox Grid.Column="0"
 								HorizontalAlignment="Left"
 								VerticalAlignment="Center"
 								PointerWheelChanged="OnMouseWheel"
@@ -253,7 +253,7 @@
                             />
 
 			<!-- Bottom Border -->
-			<controls:DoubleBox Grid.Column="1"
+			<sizePlugin:NonNegativeDoubleBox Grid.Column="1"
 								HorizontalAlignment="Center"
 								VerticalAlignment="Bottom"
 								PointerWheelChanged="OnMouseWheel"
@@ -262,7 +262,7 @@
                             />
 
 			<!-- Right Border -->
-			<controls:DoubleBox Grid.Column="3"
+			<sizePlugin:NonNegativeDoubleBox Grid.Column="3"
 								HorizontalAlignment="Right"
 								VerticalAlignment="Center"
 								PointerWheelChanged="OnMouseWheel"

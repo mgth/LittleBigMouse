@@ -24,10 +24,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Threading;
 using HLab.Base.Avalonia.Controls;
 using HLab.Mvvm.Annotations;
-using HLab.Sys.Windows.API;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Avalonia;
 
@@ -35,6 +33,8 @@ namespace LittleBigMouse.Plugin.Layout.Avalonia.SizePlugin;
 
 public partial class MonitorSizeView : UserControl, IView<ScreenSizeViewMode, ScreenSizeViewModel>, IMonitorFrameContentViewClass
 {
+    readonly WheelPointerCapture _wheelPointerCapture = new();
+
     public MonitorSizeView()
     {
         InitializeComponent();
@@ -65,18 +65,8 @@ public partial class MonitorSizeView : UserControl, IView<ScreenSizeViewMode, Sc
     {
         if (sender is not DoubleBox db) return;
 
-        var p = e.GetPosition(db);
-        var rx = p.X / db.Bounds.Width;
-        var ry = p.Y / db.Bounds.Height;
-
         db.Value += WheelDelta(e);
         this.GetLayout()?.Compact();
-
-        Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            var p2 = new Point(rx * db.Bounds.Width, ry * db.Bounds.Height);
-            var l = db.PointToScreen(p2);
-            WinUser.SetCursorPos((int)l.X, (int)l.Y);
-        }, DispatcherPriority.Loaded);
+        _wheelPointerCapture.KeepOn(db, e.Pointer);
     }
 }

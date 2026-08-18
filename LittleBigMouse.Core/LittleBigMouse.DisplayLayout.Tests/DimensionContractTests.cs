@@ -180,4 +180,21 @@ public class DimensionContractTests
         Assert.Equal(55, product.X);
         Assert.Equal(91, product.Y);
     }
+
+    [Fact]
+    public void PerMonitorBordersRejectNegativeValues()
+    {
+        var borders = new DisplayBorders
+        {
+            Left = -1,
+            Top = -2,
+            Right = -3,
+            Bottom = -4,
+        };
+
+        Assert.Equal(0, borders.Left);
+        Assert.Equal(0, borders.Top);
+        Assert.Equal(0, borders.Right);
+        Assert.Equal(0, borders.Bottom);
+    }
 }

@@ -139,6 +139,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Plugin.Vcp.A
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Ui.Avalonia.Tests", "LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia.Tests\LittleBigMouse.Ui.Avalonia.Tests.csproj", "{CE26BEB7-FCB0-455D-9242-A5F23F83E0C4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleBigMouse.Plugin.Vcp", "LittleBigMouse.Plugins\LittleBigMouse.Plugin.Vcp\LittleBigMouse.Plugin.Vcp.csproj", "{C96376AB-3843-452D-9816-62B18DB36EA1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -689,6 +691,18 @@ Global
 		{CE26BEB7-FCB0-455D-9242-A5F23F83E0C4}.Release|Any CPU.Build.0 = Release|Any CPU
 		{CE26BEB7-FCB0-455D-9242-A5F23F83E0C4}.Release|x86.ActiveCfg = Release|Any CPU
 		{CE26BEB7-FCB0-455D-9242-A5F23F83E0C4}.Release|x86.Build.0 = Release|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Debug|x64.Build.0 = Debug|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Debug|x86.Build.0 = Debug|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Release|x64.ActiveCfg = Release|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Release|x64.Build.0 = Release|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Release|x86.ActiveCfg = Release|Any CPU
+		{C96376AB-3843-452D-9816-62B18DB36EA1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -750,6 +764,7 @@ Global
 		{3F3568D1-1F1F-4382-9304-72973583891C} = {67C1648C-60F9-983A-F0CE-4DED081F4360}
 		{A9E377DB-32EF-4BF7-A96E-851C377A21EA} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{CE26BEB7-FCB0-455D-9242-A5F23F83E0C4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{C96376AB-3843-452D-9816-62B18DB36EA1} = {60F661FB-CF7A-A585-BA9C-7DA885772308}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2294431E-9ED9-4BB8-AEDA-305882A2919F}

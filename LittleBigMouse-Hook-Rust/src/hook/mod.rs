@@ -27,7 +27,9 @@ pub use windows::{
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "linux")]
-pub use linux::{register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog};
+pub use linux::{
+    register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
+};
 
 /// Start the panic-shortcut listener: a global hotkey that frees a cursor trapped
 /// where no click can reach the UI. `on_fire` runs on the listener's own thread.

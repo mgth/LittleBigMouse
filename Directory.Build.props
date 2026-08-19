@@ -10,5 +10,16 @@
        this file). Bump this value when tagging a release. -->
   <PropertyGroup>
     <Version>5.6.0</Version>
+
+    <!-- Common compiler policy. Individual projects may keep a documented
+         exception while the warning baseline is being reduced. -->
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <Nullable>enable</Nullable>
+
+    <!-- Opt in per project as its existing warnings are cleared. Once every
+         project opts in, this default can be flipped and the switch removed. -->
+    <CodePolicyEnforceWarnings Condition="'$(CodePolicyEnforceWarnings)' == ''">false</CodePolicyEnforceWarnings>
+    <TreatWarningsAsErrors Condition="'$(CodePolicyEnforceWarnings)' == 'true'">true</TreatWarningsAsErrors>
   </PropertyGroup>
 </Project>

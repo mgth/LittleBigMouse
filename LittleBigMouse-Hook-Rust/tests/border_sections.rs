@@ -149,7 +149,10 @@ fn the_block_is_what_holds_the_cursor_back() {
     let unblocked = XML
         .replace(r#"MoveBlock="True""#, r#"MoveBlock="False""#)
         .replace(r#"DragBlock="True""#, r#"DragBlock="False""#);
-    assert_ne!(unblocked, XML, "the block attributes must be there to clear");
+    assert_ne!(
+        unblocked, XML,
+        "the block attributes must be there to clear"
+    );
 
     let mut eng = MouseEngine::new();
     eng.load(ZonesLayout::from_xml(&unblocked).expect("fixture parses"));

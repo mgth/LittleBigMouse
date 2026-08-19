@@ -19,7 +19,11 @@ struct FakeCursor {
 impl FakeCursor {
     fn new() -> Self {
         let desktop = Rect::new(0, 0, 11520, 2160);
-        FakeCursor { pos: Point::new(0, 0), clip: desktop, desktop }
+        FakeCursor {
+            pos: Point::new(0, 0),
+            clip: desktop,
+            desktop,
+        }
     }
 }
 
@@ -58,7 +62,10 @@ impl CursorEnv for FakeCursor {
 }
 
 fn engine(algorithm: &str) -> MouseEngine {
-    let xml = XML.replace(r#"Algorithm="Strait""#, &format!(r#"Algorithm="{algorithm}""#));
+    let xml = XML.replace(
+        r#"Algorithm="Strait""#,
+        &format!(r#"Algorithm="{algorithm}""#),
+    );
     let mut e = MouseEngine::new();
     let layout = ZonesLayout::from_xml(&xml).expect("parse zones xml");
     assert!(layout.loop_x && layout.loop_y, "loop flags must be parsed");
@@ -87,10 +94,20 @@ fn run_case(algorithm: &str) {
     }
     match crossed {
         Some((i, pos)) => {
-            println!("[{algorithm}] LEFT edge: crossed after {i} px, landed at ({}, {})", pos.x(), pos.y());
-            assert!(pos.x() > 7680, "[{algorithm}] left loop should land on rightmost monitor, got {}", pos.x());
+            println!(
+                "[{algorithm}] LEFT edge: crossed after {i} px, landed at ({}, {})",
+                pos.x(),
+                pos.y()
+            );
+            assert!(
+                pos.x() > 7680,
+                "[{algorithm}] left loop should land on rightmost monitor, got {}",
+                pos.x()
+            );
         }
-        None => println!("[{algorithm}] LEFT edge: NEVER crossed (loop broken — cursor stays blocked)"),
+        None => {
+            println!("[{algorithm}] LEFT edge: NEVER crossed (loop broken — cursor stays blocked)")
+        }
     }
 
     // --- horizontal loop: push through the RIGHT edge of the rightmost monitor
@@ -107,8 +124,16 @@ fn run_case(algorithm: &str) {
     }
     match crossed {
         Some((i, pos)) => {
-            println!("[{algorithm}] RIGHT edge: crossed after {i} px, landed at ({}, {})", pos.x(), pos.y());
-            assert!(pos.x() < 3840, "[{algorithm}] right loop should land on leftmost monitor, got {}", pos.x());
+            println!(
+                "[{algorithm}] RIGHT edge: crossed after {i} px, landed at ({}, {})",
+                pos.x(),
+                pos.y()
+            );
+            assert!(
+                pos.x() < 3840,
+                "[{algorithm}] right loop should land on leftmost monitor, got {}",
+                pos.x()
+            );
         }
         None => println!("[{algorithm}] RIGHT edge: NEVER crossed (loop broken)"),
     }
@@ -127,8 +152,16 @@ fn run_case(algorithm: &str) {
     }
     match crossed {
         Some((i, pos)) => {
-            println!("[{algorithm}] TOP edge: crossed after {i} px, landed at ({}, {})", pos.x(), pos.y());
-            assert!(pos.y() > 2000, "[{algorithm}] top loop should land near the bottom, got {}", pos.y());
+            println!(
+                "[{algorithm}] TOP edge: crossed after {i} px, landed at ({}, {})",
+                pos.x(),
+                pos.y()
+            );
+            assert!(
+                pos.y() > 2000,
+                "[{algorithm}] top loop should land near the bottom, got {}",
+                pos.y()
+            );
         }
         None => println!("[{algorithm}] TOP edge: NEVER crossed (vertical loop broken)"),
     }
@@ -147,8 +180,16 @@ fn run_case(algorithm: &str) {
     }
     match crossed {
         Some((i, pos)) => {
-            println!("[{algorithm}] BOTTOM edge: crossed after {i} px, landed at ({}, {})", pos.x(), pos.y());
-            assert!(pos.y() < 200, "[{algorithm}] bottom loop should land near the top, got {}", pos.y());
+            println!(
+                "[{algorithm}] BOTTOM edge: crossed after {i} px, landed at ({}, {})",
+                pos.x(),
+                pos.y()
+            );
+            assert!(
+                pos.y() < 200,
+                "[{algorithm}] bottom loop should land near the top, got {}",
+                pos.y()
+            );
         }
         None => println!("[{algorithm}] BOTTOM edge: NEVER crossed (vertical loop broken)"),
     }

@@ -96,7 +96,8 @@ impl ZoneLink {
         if s_len == 0 {
             return self.target_from_px;
         }
-        ((v as i64 - self.source_from_px as i64) * t_len / s_len + self.target_from_px as i64) as i32
+        ((v as i64 - self.source_from_px as i64) * t_len / s_len + self.target_from_px as i64)
+            as i32
     }
 }
 

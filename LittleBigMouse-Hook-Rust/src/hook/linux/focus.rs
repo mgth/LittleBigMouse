@@ -57,7 +57,9 @@ pub fn spawn(shared: &'static Shared) {
                     Ok(()) => return, // want_quit
                     Err(e) => {
                         if !announced {
-                            eprintln!("[LittleBigMouse.Hook] focus: X watch failed ({e}), retrying");
+                            eprintln!(
+                                "[LittleBigMouse.Hook] focus: X watch failed ({e}), retrying"
+                            );
                             announced = true;
                         }
                     }
@@ -70,10 +72,7 @@ pub fn spawn(shared: &'static Shared) {
 /// One connection lifetime: subscribe, replay the current state (a game may
 /// already be focused when the daemon starts), then follow `PropertyNotify`.
 /// Returns `Err` on any connection-level failure so the caller reconnects.
-fn watch(
-    shared: &'static Shared,
-    announced: &mut bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn watch(shared: &'static Shared, announced: &mut bool) -> Result<(), Box<dyn std::error::Error>> {
     let (conn, screen_num) = x11rb::connect(None)?;
     let root = conn.setup().roots[screen_num].root;
 
@@ -148,9 +147,13 @@ impl Watcher<'_> {
     /// (every hwnd resolves there); here the empty broadcast is harmless, the
     /// UI's `ProcessesCollector.AddProcess` ignores empty payloads.
     fn report(&mut self, shared: &Shared) {
-        let window =
-            window_property(self.conn, self.root, self.net_active_window, AtomEnum::WINDOW)
-                .unwrap_or(0);
+        let window = window_property(
+            self.conn,
+            self.root,
+            self.net_active_window,
+            AtomEnum::WINDOW,
+        )
+        .unwrap_or(0);
         if self.last == Some(window) {
             return;
         }
@@ -163,7 +166,10 @@ impl Watcher<'_> {
             .unwrap_or_default();
         // Focus changes are user-paced (low volume) and this line is the one
         // that lets an issue reporter see what string their entry must match.
-        eprintln!("[LittleBigMouse.Hook] focus: {}", if path.is_empty() { "<none>" } else { &path });
+        eprintln!(
+            "[LittleBigMouse.Hook] focus: {}",
+            if path.is_empty() { "<none>" } else { &path }
+        );
         crate::hook::on_focus_changed(shared, path);
     }
 

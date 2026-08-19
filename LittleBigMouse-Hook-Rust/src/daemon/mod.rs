@@ -176,7 +176,9 @@ pub struct LoadInfo {
 /// shows as the tray icon blinking off and on. Once per Apply that is merely wasteful;
 /// several times a second under live preview it is visible.
 fn frame_rehooks(commands: &[Command]) -> bool {
-    commands.iter().any(|command| matches!(command, Command::Run))
+    commands
+        .iter()
+        .any(|command| matches!(command, Command::Run))
 }
 
 /// C++ `LittleBigMouseDaemon::ReceiveLoadMessage`: stop hooking, parse the
@@ -259,7 +261,9 @@ fn run(shared: &Shared) {
         .layout
         .virtual_layout;
     if virtual_layout {
-        eprintln!("[LittleBigMouse.Hook] Run refused: the loaded layout is virtual (inspection only)");
+        eprintln!(
+            "[LittleBigMouse.Hook] Run refused: the loaded layout is virtual (inspection only)"
+        );
         return;
     }
 
@@ -419,7 +423,8 @@ mod tests {
     #[test]
     fn virtual_layout_loads_but_run_never_hooks() {
         let shared = Shared::new();
-        let content = format!("{VIRTUAL_LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
+        let content =
+            format!("{VIRTUAL_LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
         replay(&shared, &content);
 
         // The layout IS loaded (inspection works)...

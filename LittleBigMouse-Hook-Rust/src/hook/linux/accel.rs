@@ -50,15 +50,41 @@ pub enum Profile {
 fn xy_get_direction(x: f64, y: f64) -> u32 {
     // N=1 NE=2 E=4 SE=8 S=16 SW=32 W=64 NW=128
     if x.abs() < 2.0 && y.abs() < 2.0 {
-        if x > 0.0 && y > 0.0 { 16 | 8 | 4 }          // S | SE | E
-        else if x > 0.0 && y < 0.0 { 1 | 2 | 4 }      // N | NE | E
-        else if x < 0.0 && y > 0.0 { 16 | 32 | 64 }   // S | SW | W
-        else if x < 0.0 && y < 0.0 { 1 | 128 | 64 }   // N | NW | W
-        else if x > 0.0 { 2 | 4 | 8 }                 // NE | E | SE
-        else if x < 0.0 { 128 | 64 | 32 }             // NW | W | SW
-        else if y > 0.0 { 8 | 16 | 32 }               // SE | S | SW
-        else if y < 0.0 { 2 | 1 | 128 }               // NE | N | NW
-        else { UNDEFINED_DIRECTION }
+        if x > 0.0 && y > 0.0 {
+            16 | 8 | 4
+        }
+        // S | SE | E
+        else if x > 0.0 && y < 0.0 {
+            1 | 2 | 4
+        }
+        // N | NE | E
+        else if x < 0.0 && y > 0.0 {
+            16 | 32 | 64
+        }
+        // S | SW | W
+        else if x < 0.0 && y < 0.0 {
+            1 | 128 | 64
+        }
+        // N | NW | W
+        else if x > 0.0 {
+            2 | 4 | 8
+        }
+        // NE | E | SE
+        else if x < 0.0 {
+            128 | 64 | 32
+        }
+        // NW | W | SW
+        else if y > 0.0 {
+            8 | 16 | 32
+        }
+        // SE | S | SW
+        else if y < 0.0 {
+            2 | 1 | 128
+        }
+        // NE | N | NW
+        else {
+            UNDEFINED_DIRECTION
+        }
     } else {
         let mut r = y.atan2(x);
         r = (r + 2.5 * std::f64::consts::PI) % (2.0 * std::f64::consts::PI);
@@ -106,7 +132,10 @@ impl PointerAccel {
             accel,
             incline,
             flat_factor,
-            trackers: [Tracker { dir: UNDEFINED_DIRECTION, ..Default::default() }; NTRACKERS],
+            trackers: [Tracker {
+                dir: UNDEFINED_DIRECTION,
+                ..Default::default()
+            }; NTRACKERS],
             cur: 0,
             last_velocity: 0.0,
         }
@@ -136,8 +165,12 @@ impl PointerAccel {
             t.dy += dy;
         }
         self.cur = (self.cur + 1) % NTRACKERS;
-        self.trackers[self.cur] =
-            Tracker { dx: 0.0, dy: 0.0, time, dir: xy_get_direction(dx, dy) };
+        self.trackers[self.cur] = Tracker {
+            dx: 0.0,
+            dy: 0.0,
+            time,
+            dir: xy_get_direction(dx, dy),
+        };
     }
 
     fn tracker_velocity(t: &Tracker, time: u64) -> f64 {
@@ -214,7 +247,10 @@ pub struct AccelSettings {
 impl Default for AccelSettings {
     /// libinput's default for mice: adaptive, speed 0.
     fn default() -> Self {
-        AccelSettings { profile: Profile::Adaptive, speed: 0.0 }
+        AccelSettings {
+            profile: Profile::Adaptive,
+            speed: 0.0,
+        }
     }
 }
 
@@ -271,7 +307,9 @@ impl AccelConfig {
             // Name drifts between kernel and KDE on some receivers: fall back
             // to a vid/pid-only match before giving up.
             .or_else(|| {
-                self.devices.iter().find(|((v, p, _), _)| *v == vendor && *p == product)
+                self.devices
+                    .iter()
+                    .find(|((v, p, _), _)| *v == vendor && *p == product)
             })
             .map(|(_, s)| *s)
             .unwrap_or_default()
@@ -302,7 +340,9 @@ impl AccelConfig {
                 continue;
             }
             let Some(key) = current.clone() else { continue };
-            let Some((k, v)) = line.split_once('=') else { continue };
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
             let entry = match out.iter_mut().find(|(id, _)| *id == key) {
                 Some(e) => e,
                 None => {
@@ -392,7 +432,11 @@ mod tests {
             t += 8_000; // 125 Hz frames
             last = a.apply(16.0, 0.0, t); // 2 u/ms: brisk swipe
         }
-        assert!((last.0 / 16.0 - 2.0).abs() < 0.01, "fast swipe caps at 2x, got {}", last.0 / 16.0);
+        assert!(
+            (last.0 / 16.0 - 2.0).abs() < 0.01,
+            "fast swipe caps at 2x, got {}",
+            last.0 / 16.0
+        );
 
         let mut a = adaptive0();
         let mut t = 0u64;
@@ -418,10 +462,16 @@ mod tests {
         }
         t += 5_000_000; // 5s pause, then a crawl
         let (first, _) = a.apply(1.0, 0.0, t);
-        assert!(first < 2.0, "post-pause frame must leave the cap, got {first}");
+        assert!(
+            first < 2.0,
+            "post-pause frame must leave the cap, got {first}"
+        );
         t += 20_000;
         let (second, _) = a.apply(1.0, 0.0, t);
-        assert!(second < 0.85, "second crawl frame must decelerate, got {second}");
+        assert!(
+            second < 0.85,
+            "second crawl frame must decelerate, got {second}"
+        );
     }
 
     #[test]
@@ -432,7 +482,10 @@ mod tests {
 PointerAcceleration=0.2\nPointerAccelerationProfile=1\n\n\
 [Libinput][6127][24647][PixArt Dell MS116 USB Optical Mouse]\n\
 PointerAcceleration=-0.4\n";
-        let cfg = AccelConfig { devices: AccelConfig::parse_kcminputrc(content), force: None };
+        let cfg = AccelConfig {
+            devices: AccelConfig::parse_kcminputrc(content),
+            force: None,
+        };
 
         let s = cfg.for_device(1133, 50503, "Logitech USB Receiver Mouse");
         assert_eq!(s.profile, Profile::Flat);

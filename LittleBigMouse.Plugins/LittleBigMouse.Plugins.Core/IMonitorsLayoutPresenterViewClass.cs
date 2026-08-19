@@ -1,15 +1,15 @@
 ﻿/*
-  LittleBigMouse.Control.Core
+  LittleBigMouse.Plugins
   Copyright (c) 2021 Mathieu GRENET.  All right reserved.
 
-  This file is part of LittleBigMouse.Control.Core.
+  This file is part of LittleBigMouse.Plugins.
 
-    LittleBigMouse.Control.Core is free software: you can redistribute it and/or modify
+    LittleBigMouse.Plugins is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    LittleBigMouse.Control.Core is distributed in the hope that it will be useful,
+    LittleBigMouse.Plugins is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.

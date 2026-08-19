@@ -13,27 +13,6 @@ using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 
-public enum BorderSideKind { Left, Top, Right, Bottom }
-
-/// <summary>What a snap target is derived from, so the guide can name its source.</summary>
-public enum SnapKind
-{
-    /// <summary>One of this edge's own two ends.</summary>
-    EdgeEnd,
-
-    /// <summary>The middle of this edge.</summary>
-    Middle,
-
-    /// <summary>The visible edge of another screen.</summary>
-    ScreenEdge,
-
-    /// <summary>A boundary of a section already drawn, here or on a parallel edge.</summary>
-    Section
-}
-
-/// <summary>A place a boundary wants to land, and where that place comes from.</summary>
-public readonly record struct SnapTarget(double Mm, SnapKind Kind);
-
 /// <summary>What a press on a band takes hold of.</summary>
 public enum BorderGrab
 {
@@ -167,6 +146,17 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         ? monitor.DepthProjection.Height
         : monitor.DepthProjection.Width;
 
+    static BorderRectangle BoundsOf(PhysicalMonitor monitor)
+    {
+        var bounds = monitor.DepthProjection.Bounds;
+        return new BorderRectangle(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+    }
+
+    IEnumerable<BorderSpan> SectionSpans(BorderSection? excluding = null) =>
+        Side.Sections.Items
+            .Where(section => !ReferenceEquals(section, excluding))
+            .Select(section => new BorderSpan(section.From, section.To));
+
     /// <summary>Length of the strip in UI pixels, fed by the view on every resize.</summary>
     public double PixelLength
     {
@@ -265,107 +255,48 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// </summary>
     public IReadOnlyList<SnapTarget> SnapTargetsMm(BorderSection? excluding = null)
     {
-        var targets = new List<SnapTarget>
-        {
-            new(0, SnapKind.EdgeEnd),
-            new(LengthMm, SnapKind.EdgeEnd),
-            new(LengthMm / 2, SnapKind.Middle)
-        };
+        var screens = Monitor.Layout.PhysicalMonitors
+            .Where(other => !ReferenceEquals(other, Monitor))
+            .Select(BoundsOf);
 
-        foreach (var other in Monitor.Layout.PhysicalMonitors)
-        {
-            if (ReferenceEquals(other, Monitor)) continue;
+        return BorderSnapEngine.BuildTargets(
+            LengthMm,
+            OriginMm,
+            IsVertical,
+            screens,
+            SectionSpans(excluding),
+            ParallelSectionSpans());
+    }
 
-            var bounds = other.DepthProjection.Bounds;
-            var (near, far) = IsVertical
-                ? (bounds.Top, bounds.Bottom)
-                : (bounds.Left, bounds.Right);
-
-            AddIfOnEdge(near - OriginMm, SnapKind.ScreenEdge);
-            AddIfOnEdge(far - OriginMm, SnapKind.ScreenEdge);
-        }
-
-        // The sections already on this edge: butting a new one against its neighbour
-        // is the commonest intent, and the one hardest to hit by hand.
-        foreach (var section in Side.Sections.Items)
-        {
-            if (ReferenceEquals(section, excluding)) continue;
-
-            AddIfOnEdge(section.From, SnapKind.Section);
-            AddIfOnEdge(section.To, SnapKind.Section);
-        }
-
-        // Every other edge in the layout running along the same axis, at its absolute
-        // position: the edge facing this one, the opposite side of this very monitor,
-        // and screens further away. Adjacency is not the criterion — what lines up is
-        // the coordinate along the axis, so a section two screens over is as valid a
-        // target as the one across the gap. Anything projecting outside this edge
-        // falls away on its own, since only positions on the edge are kept.
+    IEnumerable<ParallelBorderSpan> ParallelSectionSpans()
+    {
         var parallel = IsVertical
             ? (BorderSideKind[])[BorderSideKind.Left, BorderSideKind.Right]
             : [BorderSideKind.Top, BorderSideKind.Bottom];
 
         foreach (var monitor in Monitor.Layout.PhysicalMonitors)
+        foreach (var kind in parallel)
         {
-            foreach (var kind in parallel)
-            {
-                if (ReferenceEquals(monitor, Monitor) && kind == Kind) continue;
+            if (ReferenceEquals(monitor, Monitor) && kind == Kind) continue;
 
-                var origin = OriginOf(monitor, kind);
-
-                foreach (var section in SideOf(monitor, kind).Sections.Items)
-                {
-                    AddIfOnEdge(origin + section.From - OriginMm, SnapKind.Section);
-                    AddIfOnEdge(origin + section.To - OriginMm, SnapKind.Section);
-                }
-            }
-        }
-
-        return targets;
-
-        void AddIfOnEdge(double value, SnapKind kind)
-        {
-            if (value < 0 || value > LengthMm) return;
-            if (targets.Any(t => System.Math.Abs(t.Mm - value) < 0.001)) return;
-            targets.Add(new SnapTarget(value, kind));
+            var origin = OriginOf(monitor, kind);
+            foreach (var section in SideOf(monitor, kind).Sections.Items)
+                yield return new ParallelBorderSpan(origin, new BorderSpan(section.From, section.To));
         }
     }
 
     /// <summary>The target a boundary has landed exactly on, if any.</summary>
-    public SnapTarget? MatchedTarget(double mm, BorderSection? excluding = null)
-    {
-        foreach (var target in SnapTargetsMm(excluding))
-        {
-            if (System.Math.Abs(target.Mm - mm) < 0.001) return target;
-        }
-
-        return null;
-    }
+    public SnapTarget? MatchedTarget(double mm, BorderSection? excluding = null) =>
+        BorderSnapEngine.MatchedTarget(SnapTargetsMm(excluding), mm);
 
     /// <summary>
     /// Snap <paramref name="mm"/> to the nearest target within tolerance. The section
     /// being dragged is left out of the targets, or its own boundaries would hold it
     /// where it already is.
     /// </summary>
-    public double Snap(double mm, bool enabled = true, BorderSection? excluding = null)
-    {
-        var clamped = System.Math.Clamp(mm, 0, LengthMm);
-        if (!enabled) return clamped;
-
-        var tolerance = ToMm(SnapToleranceUiPixels);
-        var best = clamped;
-        var bestDistance = tolerance;
-
-        foreach (var target in SnapTargetsMm(excluding))
-        {
-            var distance = System.Math.Abs(target.Mm - clamped);
-            if (distance >= bestDistance) continue;
-            bestDistance = distance;
-            best = target.Mm;
-        }
-
-        return best;
-    }
+    public double Snap(double mm, bool enabled = true, BorderSection? excluding = null) =>
+        BorderSnapEngine.Snap(
+            mm, LengthMm, ToMm(SnapToleranceUiPixels), SnapTargetsMm(excluding), enabled);
 
     //==================//
     // Editing          //
@@ -381,66 +312,18 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// an overlap would make one of them silently win.
     /// </para>
     /// </summary>
-    public (double Low, double High) FreeGapAround(double referenceMm, BorderSection? excluding) =>
-        FreeGapAround(Side.Sections.Items, referenceMm, LengthMm, excluding);
-
-    /// <summary>
-    /// The longest stretch of <c>[from, to]</c> that no section occupies, or null if
-    /// the range is entirely taken. Used by the mirror, which has to settle for the
-    /// part of the facing edge that is actually free rather than give up on the whole
-    /// copy because one end is occupied.
-    /// </summary>
-    static (double From, double To)? LargestFreeSpan(
-        IEnumerable<BorderSection> sections, double from, double to)
+    public (double Low, double High) FreeGapAround(double referenceMm, BorderSection? excluding)
     {
-        var best = (From: 0.0, To: 0.0);
-        var cursor = from;
-
-        foreach (var section in sections
-                     .Where(s => s.To > from && s.From < to)
-                     .OrderBy(s => s.From))
-        {
-            if (section.From > cursor) Consider(cursor, System.Math.Min(section.From, to));
-
-            cursor = System.Math.Max(cursor, section.To);
-            if (cursor >= to) break;
-        }
-
-        if (cursor < to) Consider(cursor, to);
-
-        return best.To > best.From ? best : null;
-
-        void Consider(double low, double high)
-        {
-            if (high - low > best.To - best.From) best = (low, high);
-        }
-    }
-
-    /// <summary>Same, on any edge's sections — the mirror measures the facing one.</summary>
-    static (double Low, double High) FreeGapAround(
-        IEnumerable<BorderSection> sections, double referenceMm, double lengthMm, BorderSection? excluding)
-    {
-        var low = 0.0;
-        var high = lengthMm;
-
-        foreach (var other in sections.OrderBy(s => s.From))
-        {
-            if (ReferenceEquals(other, excluding)) continue;
-
-            if (other.From < referenceMm && other.To > referenceMm) return (referenceMm, referenceMm);
-
-            if (other.To <= referenceMm && other.To > low) low = other.To;
-            if (other.From >= referenceMm && other.From < high) high = other.From;
-        }
-
-        return (low, high);
+        var gap = BorderSectionGeometry.FreeGapAround(SectionSpans(excluding), referenceMm, LengthMm);
+        return (gap.From, gap.To);
     }
 
     /// <summary>Restrict [from, to] to the free gap containing <paramref name="referenceMm"/>.</summary>
     public (double From, double To) ClampToFreeSpace(double from, double to, double referenceMm, BorderSection? excluding)
     {
-        var (low, high) = FreeGapAround(referenceMm, excluding);
-        return (System.Math.Max(from, low), System.Math.Min(to, high));
+        var gap = BorderSectionGeometry.FreeGapAround(SectionSpans(excluding), referenceMm, LengthMm);
+        var result = BorderSectionGeometry.ClampToFreeSpace(new BorderSpan(from, to), gap);
+        return (result.From, result.To);
     }
 
     /// <summary>
@@ -538,14 +421,14 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     {
         if (Side.Sections.Count >= MaximumSections) return null;
 
-        var (from, to) = Order(anchorMm, toMm);
-        (from, to) = ClampToFreeSpace(from, to, anchorMm, null);
-        if (to - from < MinimumLengthMm) return null;
+        if (BorderSectionGeometry.Create(
+                SectionSpans(), anchorMm, toMm, LengthMm, MinimumLengthMm) is not { } span)
+            return null;
 
         var section = new BorderSection
         {
-            From = from,
-            To = to,
+            From = span.From,
+            To = span.To,
             // A fresh section starts as a wall for plain moves and free for drags:
             // that is the #458 shape (a barrier you can still drag a window across),
             // and it makes the section visible the moment it is drawn.
@@ -561,8 +444,15 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// </summary>
     public void Expand(BorderSection section)
     {
-        var (low, high) = FreeGapAround((section.From + section.To) / 2, section);
-        Resize(section, low, high);
+        if (BorderSectionGeometry.Expand(
+                SectionSpans(section),
+                new BorderSpan(section.From, section.To),
+                LengthMm,
+                MinimumLengthMm) is not { } span)
+            return;
+
+        section.From = span.From;
+        section.To = span.To;
     }
 
     /// <summary>
@@ -575,22 +465,35 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// </summary>
     public BorderSection? CreateFilling(double atMm)
     {
-        var (low, high) = FreeGapAround(atMm, null);
-        return Create(low, high);
+        if (Side.Sections.Count >= MaximumSections) return null;
+        if (BorderSectionGeometry.CreateFilling(
+                SectionSpans(), atMm, LengthMm, MinimumLengthMm) is not { } span)
+            return null;
+
+        var section = new BorderSection
+        {
+            From = span.From,
+            To = span.To,
+            MoveBlock = true
+        };
+
+        Side.Sections.Add(section);
+        return section;
     }
 
     public void Resize(BorderSection section, double fromMm, double toMm)
     {
-        // The section's own midpoint identifies the gap it lives in, whichever end
-        // is being dragged.
-        var reference = (section.From + section.To) / 2;
+        if (BorderSectionGeometry.Resize(
+                SectionSpans(section),
+                new BorderSpan(section.From, section.To),
+                fromMm,
+                toMm,
+                LengthMm,
+                MinimumLengthMm) is not { } span)
+            return;
 
-        var (from, to) = Order(fromMm, toMm);
-        (from, to) = ClampToFreeSpace(from, to, reference, section);
-        if (to - from < MinimumLengthMm) return;
-
-        section.From = from;
-        section.To = to;
+        section.From = span.From;
+        section.To = span.To;
         // No refresh here: every view of this section follows the model itself.
     }
 
@@ -618,44 +521,22 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// at a time.
     /// </para>
     /// </summary>
-    public double SnapMovedStart(double wantedFrom, double lengthMm, BorderSection? excluding = null)
-    {
-        var tolerance = ToMm(SnapToleranceUiPixels);
-
-        var best = wantedFrom;
-        var bestDistance = double.MaxValue;
-
-        foreach (var target in SnapTargetsMm(excluding))
-        {
-            Consider(target.Mm);              // the section's start meets the target
-            Consider(target.Mm - lengthMm);   // its end does
-        }
-
-        return best;
-
-        void Consider(double start)
-        {
-            var distance = System.Math.Abs(start - wantedFrom);
-
-            if (distance > tolerance) return;
-            if (distance >= bestDistance) return;
-
-            bestDistance = distance;
-            best = start;
-        }
-    }
+    public double SnapMovedStart(double wantedFrom, double lengthMm, BorderSection? excluding = null) =>
+        BorderSnapEngine.SnapMovedStart(
+            wantedFrom, lengthMm, ToMm(SnapToleranceUiPixels), SnapTargetsMm(excluding));
 
     /// <summary>Slide a section so it starts at <paramref name="fromMm"/>.</summary>
     public void MoveTo(BorderSection section, double fromMm)
     {
-        var length = section.To - section.From;
-        var (low, high) = FreeGapAround((section.From + section.To) / 2, section);
-        if (high - low < length) return;
+        if (BorderSectionGeometry.Move(
+                SectionSpans(section),
+                new BorderSpan(section.From, section.To),
+                fromMm,
+                LengthMm) is not { } span)
+            return;
 
-        var from = System.Math.Clamp(fromMm, low, high - length);
-
-        section.From = from;
-        section.To = from + length;
+        section.From = span.From;
+        section.To = span.To;
         // No refresh here: every view of this section follows the model itself.
     }
 
@@ -703,20 +584,15 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         var side = SideOf(facing.Monitor, facing.Kind);
         if (side.Sections.Count >= MaximumSections) return null;
 
-        var origin = OriginOf(facing.Monitor, facing.Kind);
-        var length = LengthOf(facing.Monitor, facing.Kind);
-
-        // Same absolute layout coordinates, re-expressed against the other edge.
-        var from = System.Math.Clamp(OriginMm + section.From - origin, 0, length);
-        var to = System.Math.Clamp(OriginMm + section.To - origin, 0, length);
-
-        // The longest free stretch INSIDE the wanted range, not the gap around its
-        // midpoint: the facing edge is often partly taken, and the two ranges then
-        // overlap only at one end. Probing the midpoint declared the whole mirror
-        // impossible whenever that midpoint happened to fall on an existing section,
-        // even with most of the range free.
-        if (LargestFreeSpan(side.Sections.Items, from, to) is not { } span) return null;
-        if (span.To - span.From < MinimumLengthMm) return null;
+        var occupied = side.Sections.Items.Select(s => new BorderSpan(s.From, s.To));
+        if (BorderSectionGeometry.PlanMirror(
+                OriginMm,
+                new BorderSpan(section.From, section.To),
+                OriginOf(facing.Monitor, facing.Kind),
+                LengthOf(facing.Monitor, facing.Kind),
+                occupied,
+                MinimumLengthMm) is not { } span)
+            return null;
 
         return (side, span.From, span.To);
     }
@@ -739,21 +615,13 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// </summary>
     public (PhysicalMonitor Monitor, BorderSideKind Kind)? FindFacingEdge()
     {
-        var mine = Monitor.DepthProjection.Bounds;
+        var facing = FacingEdgeResolver.FindNearest(
+            Kind,
+            BoundsOf(Monitor),
+            Monitor.Layout.Options.MaxTravelDistance,
+            FacingCandidates());
 
-        (PhysicalMonitor Monitor, BorderSideKind Kind)? best = null;
-        var bestGap = double.MaxValue;
-
-        foreach (var candidate in FacingEdges())
-        {
-            var gap = GapTo(mine, candidate.Monitor.DepthProjection.Bounds);
-            if (gap >= bestGap) continue;
-
-            bestGap = gap;
-            best = candidate;
-        }
-
-        return best;
+        return facing is { } edge ? (edge.Value, edge.Kind) : null;
     }
 
     /// <summary>
@@ -763,9 +631,6 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
     /// </summary>
     public IEnumerable<(PhysicalMonitor Monitor, BorderSideKind Kind)> FacingEdges()
     {
-        var mine = Monitor.DepthProjection.Bounds;
-        var reach = Monitor.Layout.Options.MaxTravelDistance;
-
         var facingKind = Kind switch
         {
             BorderSideKind.Left => BorderSideKind.Right,
@@ -774,33 +639,18 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
             _ => BorderSideKind.Top
         };
 
-        foreach (var other in Monitor.Layout.PhysicalMonitors)
-        {
-            if (ReferenceEquals(other, Monitor)) continue;
-
-            var bounds = other.DepthProjection.Bounds;
-
-            // Behind us, or further than the cursor would ever travel.
-            var gap = GapTo(mine, bounds);
-            if (gap < 0 || gap > reach) continue;
-
-            var overlaps = IsVertical
-                ? bounds.Bottom > mine.Top && bounds.Top < mine.Bottom
-                : bounds.Right > mine.Left && bounds.Left < mine.Right;
-
-            if (!overlaps) continue;
-
-            yield return (other, facingKind);
-        }
+        foreach (var candidate in FacingEdgeResolver.FindAll(
+                     Kind,
+                     BoundsOf(Monitor),
+                     Monitor.Layout.Options.MaxTravelDistance,
+                     FacingCandidates()))
+            yield return (candidate.Value, facingKind);
     }
 
-    double GapTo(HLab.Geo.Rect mine, HLab.Geo.Rect other) => Kind switch
-    {
-        BorderSideKind.Left => mine.Left - other.Right,
-        BorderSideKind.Right => other.Left - mine.Right,
-        BorderSideKind.Top => mine.Top - other.Bottom,
-        _ => other.Top - mine.Bottom
-    };
+    IEnumerable<FacingEdgeCandidate<PhysicalMonitor>> FacingCandidates() =>
+        Monitor.Layout.PhysicalMonitors
+            .Where(other => !ReferenceEquals(other, Monitor))
+            .Select(other => new FacingEdgeCandidate<PhysicalMonitor>(other, BoundsOf(other)));
 
     public static BorderSide SideOf(PhysicalMonitor monitor, BorderSideKind kind) => kind switch
     {
@@ -809,6 +659,4 @@ public class BorderSideViewModel : ReactiveObject, IDisposable
         BorderSideKind.Right => monitor.BorderResistance.Right,
         _ => monitor.BorderResistance.Bottom
     };
-
-    static (double From, double To) Order(double a, double b) => a <= b ? (a, b) : (b, a);
 }

@@ -10,8 +10,10 @@ namespace LittleBigMouse.DisplayLayout.Monitors.Extensions;
 /// Solver input: one monitor reduced to what placement actually depends on — its identity,
 /// its mm panel bounds (display surface, <c>DepthProjection.Bounds</c>) and its mm outside
 /// bounds (panel plus bezels, <c>DepthProjection.OutsideBounds</c>). Plain record so the
-/// geometry stays testable without the reactive model graph, same contract as
-/// <see cref="PixelPlacementMonitor"/>.
+/// geometry stays testable without the reactive model graph — the millimetre half of
+/// <see cref="MonitorSnapshot"/>, which builds one through
+/// <see cref="MonitorSnapshot.ForCompaction"/>. Compaction has no pixel dimension whatsoever, so
+/// it keeps its own input rather than carry a field it must never read.
 /// </summary>
 public sealed record CompactionMonitor(string Id, Rect Bounds, Rect OutsideBounds, bool Primary);
 

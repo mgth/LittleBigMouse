@@ -375,25 +375,29 @@ public class LayoutPersistenceGoldenTests : IDisposable
     }
 
     [Fact]
-    public void Load_ExcludedFileCommentLines_BecomeEntries_KnownQuirk()
+    public void Load_ExcludedFileCommentLines_StayOutOfTheListAndSurviveASave()
     {
-        // Characterization, NOT an endorsement: the daemon ignores ':'-prefixed lines, and
-        // LittleBigMouseClientService.CreateExcludedFile writes ExcludedProcessDefaults.Header
-        // atop the file when IT is the one seeding it. The persistence layer has no notion of
-        // comments — every line is an entry, shown as such in the options UI and written back
-        // on every save. Filtering them here would silently delete a user's own annotations,
-        // so the behavior is recorded rather than changed.
+        // A real file as CreateExcludedFile seeds it, plus a line the user added by hand.
+        // The daemon skips ':' lines and empty ones (daemon::load_excluded), so neither is
+        // an exclusion — but neither may be lost when the app rewrites the file either.
         var dir = Fixture("v5.6-current"); // ExcludedDefaultsVersion 2: no top-up interference
         var excluded = Path.Combine(_work, "commented", "Excluded.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(excluded)!);
         File.WriteAllLines(excluded,
-            [ExcludedProcessDefaults.Header, .. ExcludedProcessDefaults.All, ":my own note"]);
+            [ExcludedProcessDefaults.Header, .. ExcludedProcessDefaults.All, "", ":my own note"]);
 
         var layout = NewLayout(out _, out _);
-        new TestPersistence(new JsonLayoutStore(dir), excluded).Load(layout);
+        var persistence = new TestPersistence(new JsonLayoutStore(dir), excluded);
+        persistence.Load(layout);
 
-        Assert.Equal(ExcludedProcessDefaults.Header, layout.Options.ExcludedList[0]);
-        Assert.Contains(":my own note", layout.Options.ExcludedList);
+        Assert.Equal(ExcludedProcessDefaults.All, layout.Options.ExcludedList);
+
+        persistence.SaveLive(layout.Options);
+
+        var written = File.ReadAllLines(excluded);
+        Assert.Equal(ExcludedProcessDefaults.Header, written[0]);
+        Assert.Equal(":my own note", written[1]);
+        Assert.Equal(ExcludedProcessDefaults.All, written[2..]);
     }
 
     //==================//

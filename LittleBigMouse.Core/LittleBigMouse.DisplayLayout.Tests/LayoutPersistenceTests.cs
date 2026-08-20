@@ -286,8 +286,40 @@ public class LayoutPersistenceTests
         var layout = NewLayout(out _, out _);
         persistence.Load(layout);
 
+        // The header is a comment for the daemon, so it is not an entry of the list —
+        // but the seeded file carries it, exactly like the one CreateExcludedFile writes.
         Assert.Equal(ExcludedProcessDefaults.All, layout.Options.ExcludedList);
-        Assert.Equal(ExcludedProcessDefaults.All, File.ReadAllLines(excluded));
+        string[] expectedFile = [ExcludedProcessDefaults.Header, .. ExcludedProcessDefaults.All];
+        Assert.Equal(expectedFile, File.ReadAllLines(excluded));
+    }
+
+    [Fact]
+    public void ExcludedList_CommentsStayOutOfTheListAndSurviveASave()
+    {
+        var store = new FakeStore
+        {
+            // Current version: the top-up must not interfere with what is asserted here.
+            GlobalOptions = new GlobalOptionsDto { ExcludedDefaultsVersion = ExcludedProcessDefaults.Version }
+        };
+        var excluded = TempExcludedFile();
+        File.WriteAllLines(excluded, [ExcludedProcessDefaults.Header, @"\steamapps\", "", ":my own note"]);
+        var persistence = new TestPersistence(store, excluded);
+
+        var layout = NewLayout(out _, out _);
+        persistence.Load(layout);
+
+        // Only the exclusions reach the model: the daemon skips ':' lines and empty ones,
+        // and the options list is what the user edits — it must hold the same thing.
+        Assert.Equal([@"\steamapps\"], layout.Options.ExcludedList);
+
+        layout.Options.ExcludedList.Add(@"\my\game\");
+        persistence.SaveLive(layout.Options);
+
+        // The comments are still on disk, above the entries: they were never the list's
+        // to drop, and one of them may be the user's own annotation.
+        Assert.Equal(
+            [ExcludedProcessDefaults.Header, ":my own note", @"\steamapps\", @"\my\game\"],
+            File.ReadAllLines(excluded));
     }
 
     [Fact]

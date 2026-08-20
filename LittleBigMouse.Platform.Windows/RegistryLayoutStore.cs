@@ -16,13 +16,22 @@ namespace LittleBigMouse.Platform.Windows;
 /// lived in the layout key, and the old "ShowAttachDetachWarning" name — and migrate to
 /// the current location at the next write. Unlike the historical GetOrSet code, reads
 /// never seed the registry: values appear at the first save.
+/// <para>The root key is injectable for tests, like <c>JsonLayoutStore</c>'s config dir:
+/// there is no other way to exercise this class without writing to the real settings of
+/// whoever runs the suite.</para>
 /// </summary>
 public class RegistryLayoutStore : ILayoutStore
 {
-    const string RootKey = @"SOFTWARE\Mgth\LittleBigMouse";
+    public const string DefaultRootKey = @"SOFTWARE\Mgth\LittleBigMouse";
 
-    static RegistryKey? OpenRoot(bool create)
-        => create ? Registry.CurrentUser.CreateSubKey(RootKey) : Registry.CurrentUser.OpenSubKey(RootKey);
+    readonly string _rootKey;
+
+    public RegistryLayoutStore() : this(DefaultRootKey) { }
+
+    public RegistryLayoutStore(string rootKey) => _rootKey = rootKey;
+
+    RegistryKey? OpenRoot(bool create)
+        => create ? Registry.CurrentUser.CreateSubKey(_rootKey) : Registry.CurrentUser.OpenSubKey(_rootKey);
 
     //==================//
     // Read             //

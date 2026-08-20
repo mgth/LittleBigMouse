@@ -43,7 +43,8 @@ public class LocationSolverRoundTripTests(ITestOutputHelper output)
     /// final position from <see cref="CompactionSolver"/>, and that second step is where the
     /// information a round trip loses actually gets lost.
     /// </summary>
-    static IReadOnlyList<MonitorSnapshot> PlaceFromSystem(IReadOnlyList<MonitorSnapshot> monitors)
+    static IReadOnlyList<MonitorSnapshot> PlaceFromSystem(
+        IReadOnlyList<MonitorSnapshot> monitors, double minimalEdgeOverlap = 20)
     {
         var solved = SystemLocationSolver.Solve(monitors);
         var placed = monitors
@@ -52,7 +53,8 @@ public class LocationSolverRoundTripTests(ITestOutputHelper output)
 
         var offsets = CompactionSolver.Solve(
             [.. placed.Select(m => m.ForCompaction())],
-            new CompactionOptions(AllowOverlaps: false, AllowDiscontinuity: false, MinimalEdgeOverlap: 20));
+            new CompactionOptions(AllowOverlaps: false, AllowDiscontinuity: false,
+                MinimalEdgeOverlap: minimalEdgeOverlap));
 
         return [.. placed.Select(m => offsets.TryGetValue(m.Id, out var v)
             ? m.MovedTo(new Point(m.MmBounds.X + v.X, m.MmBounds.Y + v.Y))
@@ -189,6 +191,48 @@ public class LocationSolverRoundTripTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// A 2x2 grid, which is where the diagonal neighbour has to be refused. D shares a pixel edge
+    /// with the primary on BOTH axes at once — a corner, which the cursor cannot cross — and a
+    /// contact with no overlap across it does not claim. So D is not consumed on the diagonal: it
+    /// waits for B (or C), whose edge with it is real, and docks bezel-flush like everything else.
+    /// Nothing overlaps, compaction finds nothing to do, and the grid comes back as a grid.
+    /// <para>
+    /// This used to be the one configuration in this file that did not survive the trip: both
+    /// corner contacts fired, each ran the perpendicular projection on the other axis, and the two
+    /// projections overwrote both coordinates the contact rules had set. D landed panel-flush at
+    /// (600,340) with its frame inside the primary's, and compaction skewed the whole grid by a
+    /// bezel width on each axis to pull them apart — B to (620,-20), C to (-20,360).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DiagonalNeighbourInAGrid_IsRefused_AndTheGridRoundTrips()
+    {
+        var monitors = new[]
+        {
+            Monitor("A", 600, 340, 0, 0, 1920, 1080, primary: true),
+            Monitor("B", 600, 340, 1920, 0, 1920, 1080),
+            Monitor("C", 600, 340, 0, 1080, 1920, 1080),
+            Monitor("D", 600, 340, 1920, 1080, 1920, 1080),
+        };
+
+        // The walk alone, before compaction: every monitor bezel-flush against its neighbours,
+        // D at 620 rather than the 600 a panel-flush diagonal dock used to give.
+        var walked = SystemLocationSolver.Solve(monitors);
+        Assert.Equal(new Point(620, 0), walked["B"]);
+        Assert.Equal(new Point(0, 360), walked["C"]);
+        Assert.Equal(new Point(620, 360), walked["D"]);
+
+        // Bezels touching on all four inner edges, so compaction has nothing left to separate and
+        // the grid keeps its shape.
+        var placed = PlaceFromSystem(monitors);
+        Assert.Equal(new Point(620, 0), placed.Single(m => m.Id == "B").MmLocation);
+        Assert.Equal(new Point(0, 360), placed.Single(m => m.Id == "C").MmLocation);
+        Assert.Equal(new Point(620, 360), placed.Single(m => m.Id == "D").MmLocation);
+
+        AssertRoundTrips(monitors);
+    }
+
     // ------------------------------------------------------------ not invertible
 
     /// <summary>
@@ -225,55 +269,6 @@ public class LocationSolverRoundTripTests(ITestOutputHelper output)
         var b = new Rect(back["B"], monitors[1].PixelSize);
         Assert.False(LayoutGeometry.Overlap(a, b));
         Assert.Equal(a.Bottom, b.Y);
-    }
-
-    /// <summary>
-    /// A 2x2 grid does NOT round-trip, and the reason is worth stating: the diagonal neighbour
-    /// shares a pixel edge on BOTH axes at once, so the inbound walk claims it as adjacent twice
-    /// over. Each contact then runs the perpendicular projection on the other axis, and the two
-    /// projections overwrite both coordinates the contact rules had set — the diagonal monitor
-    /// ends up panel-flush instead of bezel-flush, its frame overlapping the primary's, and
-    /// compaction pushes the grid into a skew to separate them.
-    /// <para>
-    /// Pinned here as it stands rather than corrected: this is what users' saved layouts were
-    /// built from. Changing it is a deliberate behaviour change, not a refactor.
-    /// </para>
-    /// </summary>
-    [Fact]
-    public void DiagonalNeighbourInAGrid_IsClaimedOnBothAxes_AndSkewsTheGrid()
-    {
-        var monitors = new[]
-        {
-            Monitor("A", 600, 340, 0, 0, 1920, 1080, primary: true),
-            Monitor("B", 600, 340, 1920, 0, 1920, 1080),
-            Monitor("C", 600, 340, 0, 1080, 1920, 1080),
-            Monitor("D", 600, 340, 1920, 1080, 1920, 1080),
-        };
-
-        // The walk alone, before compaction: D is claimed by A, not by B or C, and lands
-        // panel-flush on the diagonal — 600, not the 620 a bezel-flush dock would give.
-        var walked = SystemLocationSolver.Solve(monitors);
-        Assert.Equal(new Point(600, 340), walked["D"]);
-        Assert.Equal(new Point(620, 0), walked["B"]);
-        Assert.Equal(new Point(0, 360), walked["C"]);
-
-        // D's bezels then overlap A's by exactly one bezel width on each axis, and compaction
-        // has to break the tie somewhere: the row and the column each shift by 20mm.
-        var placed = PlaceFromSystem(monitors);
-        var back = PixelLocationSolver.Solve(placed);
-        output.WriteLine(Describe(placed, back));
-
-        Assert.Equal(new Point(620, -20), placed.Single(m => m.Id == "B").MmLocation);
-        Assert.Equal(new Point(-20, 360), placed.Single(m => m.Id == "C").MmLocation);
-        Assert.Equal(new Point(620, 340), placed.Single(m => m.Id == "D").MmLocation);
-
-        // What survives the trip: the grid is still a grid in pixels, one screen per cell.
-        Assert.Equal(new Point(1920, 1080), back["D"]);
-        Assert.Equal(1920, back["B"].X);
-        Assert.Equal(1080, back["C"].Y);
-
-        // What does not: the skew shows up as a vertical shift the system never asked for.
-        Assert.NotEqual(0, back["B"].Y);
     }
 
     /// <summary>
@@ -317,6 +312,14 @@ public class LocationSolverRoundTripTests(ITestOutputHelper output)
             Monitor("B", 600, 340, 1920, 1080, 1920, 1080),
         };
 
+        // Inbound, the walk refuses the contact on both axes — neither has any overlap across it
+        // — so B is never claimed and no projection runs on it. The contact rule still SUGGESTS a
+        // position, which is the whole difference between a corner-only neighbour and one that
+        // touches nothing: B keeps the diagonal it was on, bezel-flush at (620,360) rather than
+        // staying stacked on the primary at the origin.
+        var walked = SystemLocationSolver.Solve(monitors);
+        Assert.Equal(new Point(620, 360), walked["B"]);
+
         var placed = PlaceFromSystem(monitors);
         var back = PixelLocationSolver.Solve(placed);
         output.WriteLine(Describe(placed, back));
@@ -324,9 +327,8 @@ public class LocationSolverRoundTripTests(ITestOutputHelper output)
         var a = placed.Single(m => m.Id == "A");
         var b = placed.Single(m => m.Id == "B");
 
-        // Inbound, the walk claims the contact on both axes and puts B panel-flush on the
-        // diagonal, bezels overlapping; compaction docks it to the right with the frames flush
-        // and slides it up until the two panels share the 20mm corridor the options demand.
+        // Compaction then keeps the frames flush on the right and slides B up until the two
+        // panels share the 20mm corridor the options demand.
         Assert.Equal(a.MmOutsideBounds.Right, b.MmOutsideBounds.X, 6);
         Assert.Equal(20, LayoutGeometry.OverlapOn(a.MmBounds, b.MmBounds, Axis.Vertical), 6);
 
@@ -339,6 +341,42 @@ public class LocationSolverRoundTripTests(ITestOutputHelper output)
 
         Assert.True(sharedEdge, $"corner became {pa} / {pb}, still not crossable");
         Assert.NotEqual(new Point(1920, 1080), back["B"]);
+    }
+
+    /// <summary>
+    /// The same corner, for the user who asked to keep corners: <c>MinimalEdgeOverlap = 0</c> is
+    /// how bare corner contact is accepted, and with the walk leaving B bezel-flush on the
+    /// diagonal there is nothing for compaction to undo. The physical layout the user sees is
+    /// then the one the system reported, which is the payoff for a refused contact still
+    /// SUGGESTING a position: were B left unplaced it would sit on the primary and be shoved off
+    /// to one side instead.
+    /// <para>
+    /// Only the millimetre half survives — the trip back out still cannot express it, since
+    /// <see cref="PixelLocationSolver"/> refuses corners whatever the options say and treats B as
+    /// a detached island to be snapped into contact. Two solvers, one option: the corridor rule
+    /// is layout editing, the pixel grid has to stay crossable regardless.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CornerToCornerContact_SurvivesWhenNoCorridorIsDemanded()
+    {
+        var monitors = new[]
+        {
+            Monitor("A", 600, 340, 0, 0, 1920, 1080, primary: true),
+            Monitor("B", 600, 340, 1920, 1080, 1920, 1080),
+        };
+
+        var placed = PlaceFromSystem(monitors, minimalEdgeOverlap: 0);
+        var back = PixelLocationSolver.Solve(placed);
+        output.WriteLine(Describe(placed, back));
+
+        var a = placed.Single(m => m.Id == "A");
+        var b = placed.Single(m => m.Id == "B");
+
+        // Frames meeting at the single point (610, 350), panels still 20mm apart on each axis.
+        Assert.Equal(new Point(620, 360), b.MmLocation);
+        Assert.Equal(a.MmOutsideBounds.Right, b.MmOutsideBounds.X, 6);
+        Assert.Equal(a.MmOutsideBounds.Bottom, b.MmOutsideBounds.Y, 6);
     }
 
     /// <summary>

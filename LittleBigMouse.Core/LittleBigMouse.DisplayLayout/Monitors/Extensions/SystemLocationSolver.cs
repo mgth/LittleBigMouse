@@ -104,10 +104,12 @@ public static class SystemLocationSolver
     /// Everything one already-placed monitor says about where another one goes, and whether that
     /// amounts to claiming it.
     /// <para>
-    /// Only a real pixel-space edge adjacency PLACES a monitor. The alignment equalities are
-    /// hints: applying them must not consume the monitor, or a monitor whose only adjacency is
-    /// with a later-placed neighbour never gets its adjacency rule tested (e.g. P|S|H side by
-    /// side: H aligned on P by Y equality used to be swallowed before S could claim it).
+    /// Only a crossable pixel-space edge adjacency PLACES a monitor — one the two actually
+    /// straddle, a shared corner not counting. Everything else here is a hint: applying a hint
+    /// must not consume the monitor, or one whose only real adjacency is with a later-placed
+    /// neighbour never gets its adjacency rule tested (e.g. P|S|H side by side: H aligned on P by
+    /// Y equality used to be swallowed before S could claim it; and the diagonal of a 2x2 grid,
+    /// claimed by the primary on both axes at once, used to be dragged into the primary's bezels).
     /// </para>
     /// <para>
     /// Contact rule, then alignment hints, then edge projection — each stage overwriting the
@@ -137,8 +139,9 @@ public static class SystemLocationSolver
     }
 
     /// <summary>
-    /// The contact rule and the two alignment hints on one axis. Returns whether the contact
-    /// rule fired, which is the only thing that claims the monitor.
+    /// The contact rule and the two alignment hints on one axis. Returns whether a CROSSABLE
+    /// contact fired, which is the only thing that claims the monitor — every rule here suggests
+    /// a position, none of the others consumes the target.
     /// </summary>
     static bool Claim(MonitorSnapshot anchor, MonitorSnapshot target, Axis axis, ref Point position)
     {
@@ -150,6 +153,16 @@ public static class SystemLocationSolver
         // B  |__       transposes
         //  __|
         var contact = LayoutGeometry.ContactBetween(anchor.PixelBounds, target.PixelBounds, axis, PixelTolerance);
+
+        // A shared edge the two monitors do not straddle is a corner meeting, and the cursor has
+        // nowhere to cross it — the same rule <see cref="PixelLocationSolver.TryPlaceAdjacent"/>
+        // applies in the other direction. The contact still SUGGESTS a position, so a monitor
+        // whose only neighbour is diagonal keeps landing on that diagonal rather than staying
+        // stacked at the origin, but it no longer claims: claiming on both axes at once is what
+        // used to let the two perpendicular projections overwrite each other's coordinate and
+        // pull a diagonal neighbour panel-flush into its anchor's bezels.
+        var crossable = LayoutGeometry.OverlapOn(anchor.PixelBounds, target.PixelBounds, axis.Perpendicular()) > 0;
+
         var outside = anchor.MmOutsideBounds.On(axis);
 
         position = contact switch
@@ -175,7 +188,7 @@ public static class SystemLocationSolver
         if (targetPixel.Hi == anchorPixel.Hi)
             position = position.With(axis, anchorPanel.Hi - target.MmBounds.On(axis).Size);
 
-        return contact != EdgeContact.None;
+        return contact != EdgeContact.None && crossable;
     }
 
     /// <summary>Solve the shared-midpoint invariant along <paramref name="axis"/>.</summary>

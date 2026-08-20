@@ -62,6 +62,7 @@ public class RegistryLayoutStore : ILayoutStore
         StartMinimized = root.TryGetBool("StartMinimized") ?? layoutKey?.TryGetBool("StartMinimized"),
         StartElevated = root.TryGetBool("StartElevated") ?? layoutKey?.TryGetBool("StartElevated"),
         DebugTools = root.TryGetBool("DebugTools"),
+        ExperimentalFeatures = root.TryGetBool("ExperimentalFeatures"),
         VcpControl = root.TryGetBool("VcpControl"),
         // "ShowAttachDetachWarning" is the former name of the option, read as fallback.
         ShowMonitorActionWarning = root.TryGetBool("ShowMonitorActionWarning") ?? root.TryGetBool("ShowAttachDetachWarning"),
@@ -260,6 +261,7 @@ public class RegistryLayoutStore : ILayoutStore
         Set(root, "StartMinimized", o.StartMinimized);
         Set(root, "StartElevated", o.StartElevated);
         Set(root, "DebugTools", o.DebugTools);
+        Set(root, "ExperimentalFeatures", o.ExperimentalFeatures);
         Set(root, "VcpControl", o.VcpControl);
         Set(root, "ShowMonitorActionWarning", o.ShowMonitorActionWarning);
         Set(root, "BorderValues", o.BorderValues);

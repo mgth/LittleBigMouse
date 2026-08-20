@@ -452,6 +452,36 @@ public class LayoutPersistenceTests
     }
 
     [Fact]
+    public void ExperimentalFeatures_SurviveARestart()
+    {
+        var store = new FakeStore();
+
+        var layout = NewLayout(out _, out _);
+        layout.Options.ExperimentalFeatures = true;
+        NewPersistence(store).SaveLive(layout.Options);
+
+        Assert.True(store.GlobalOptions?.ExperimentalFeatures);
+
+        var restored = NewLayout(out _, out _);
+        NewPersistence(store).Load(restored);
+
+        Assert.True(restored.Options.ExperimentalFeatures);
+    }
+
+    [Fact]
+    public void ExperimentalFeatures_AbsentFromTheStore_KeepsTheDefault()
+    {
+        // Every installation predating this option: the value is not there, and off is
+        // what it has always been at start.
+        var store = new FakeStore { GlobalOptions = new GlobalOptionsDto { Pinned = true } };
+
+        var layout = NewLayout(out _, out _);
+        NewPersistence(store).Load(layout);
+
+        Assert.False(layout.Options.ExperimentalFeatures);
+    }
+
+    [Fact]
     public void Load_TransposesPre541OrientedStoredSize()
     {
         // Pre-5.4.1 the model persisted the size ORIENTED to the rotation at save time:

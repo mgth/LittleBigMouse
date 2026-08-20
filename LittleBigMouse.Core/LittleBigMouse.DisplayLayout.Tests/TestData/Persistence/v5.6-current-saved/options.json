@@ -9,6 +9,7 @@
   "StartMinimized": true,
   "StartElevated": false,
   "DebugTools": false,
+  "ExperimentalFeatures": false,
   "ShowMonitorActionWarning": false,
   "BorderValues": "PerMonitor",
   "RescueShortcut": "Ctrl\u002BAlt\u002BShift\u002BM",

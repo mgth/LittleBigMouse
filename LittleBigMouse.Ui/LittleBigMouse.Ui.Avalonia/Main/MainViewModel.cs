@@ -60,8 +60,7 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
         CloseCommand = ReactiveCommand.CreateFromTask(CloseAsync);
 
         _commandsCache.Connect()
-            .Sort(SortExpressionComparer<IUiCommand>.Ascending(t => t.Id))
-            .Bind(out _commands)
+            .SortAndBind(out _commands, SortExpressionComparer<IUiCommand>.Ascending(t => t.Id))
             .Subscribe().DisposeWith(this);
 
         MaximizeCommand = ReactiveCommand.Create(() =>

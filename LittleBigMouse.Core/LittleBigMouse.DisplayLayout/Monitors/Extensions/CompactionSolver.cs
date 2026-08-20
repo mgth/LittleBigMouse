@@ -18,8 +18,7 @@ public sealed record CompactionMonitor(string Id, Rect Bounds, Rect OutsideBound
 /// <summary>
 /// The layout options compaction obeys, snapshotted so the solve is a pure function.
 /// <see cref="MinimalEdgeOverlap"/> is the corridor requirement in mm — see the class docs of
-/// <see cref="CompactionSolver"/>; the caller derives it from the user option and the
-/// crossing algorithm (corner crossing needs none).
+/// <see cref="CompactionSolver"/>.
 /// </summary>
 public readonly record struct CompactionOptions(
     bool AllowOverlaps,
@@ -40,9 +39,8 @@ public readonly record struct CompactionOptions(
 /// On top of that, <see cref="CompactionOptions.MinimalEdgeOverlap"/> demands a crossing
 /// corridor: at least that many mm of DISPLAY SURFACE (panels, bezels excluded) shared along
 /// the contact. Bezels cannot carry the cursor, so two monitors whose outside rects overlap
-/// only bezel-on-bezel are as uncrossable in strait mode as a corner-only meeting — which is
-/// why the requirement is measured on the panels. Zero keeps the bare contact rule: corner
-/// crossing can cross a corner, so the caller passes 0 there.
+/// only bezel-on-bezel are as uncrossable as a corner-only meeting — which is why the
+/// requirement is measured on the panels. Zero keeps the bare contact rule.
 /// </summary>
 public static class CompactionSolver
 {

@@ -34,6 +34,26 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         CompactWhenTurnedOff(e => e.Model.AllowOverlaps, mainService);
         CompactWhenTurnedOff(e => e.Model.AllowDiscontinuity, mainService);
 
+        // Editing the corridor requirement reshapes the current layout right away
+        // too: compaction is what enforces the new value. Same transition rule —
+        // only a CHANGE compacts, the value seen when a layout loads does not.
+        // Throttled because the NumericUpDown fires on every 5mm step while the
+        // spinner button is held; the throttle timer completes off the UI thread,
+        // and compaction writes reactive properties the view is bound to.
+        this.WhenAnyValue(e => e.Model.MinimalEdgeOverlap)
+            .DistinctUntilChanged()
+            .Buffer(2, 1)
+            .Where(w => w.Count == 2 && !Equals(w[0], w[1]))
+            .Throttle(TimeSpan.FromMilliseconds(400))
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ =>
+            {
+                if (mainService.MonitorsLayout is not { } layout) return;
+                layout.Compact();
+                layout.UpdatePhysicalMonitors();
+            })
+            .DisposeWith(this);
+
         AddExcludedProcessCommand = ReactiveCommand.Create(
             AddExcludedProcess, 
             this.WhenAnyValue(

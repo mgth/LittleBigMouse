@@ -208,14 +208,15 @@ public class ForceCompactTests
     }
 
     /// <summary>
-    /// The corridor option flows algorithm-aware through the live model: under strait a
-    /// corner-only meeting is slid until the panels share the required span, while under
-    /// corner crossing — which can cross a corner — the exact same layout is left alone.
+    /// The corridor requirement is a layout-editing rule and deliberately independent of the
+    /// crossing algorithm, which belongs to mouse behaviour: the same corner-only meeting is
+    /// slid into a 20mm corridor under both. Setting the option to 0 is the way to accept
+    /// bare corner contact, not switching algorithm.
     /// </summary>
     [Theory]
-    [InlineData("Strait", 380.0)]
-    [InlineData("CornerCrossing", 400.0)]
-    public void MinimalEdgeOverlap_IsConditionedOnTheAlgorithm(string algorithm, double expectedY)
+    [InlineData("Strait")]
+    [InlineData("CornerCrossing")]
+    public void MinimalEdgeOverlap_IsIndependentOfTheAlgorithm(string algorithm)
     {
         var layout = new MonitorsLayout(new ILayoutOptions.Design
         {
@@ -230,7 +231,7 @@ public class ForceCompactTests
         layout.ForceCompact();
 
         Assert.Equal(700, corner.DepthProjection.X, 2);
-        Assert.Equal(expectedY, corner.DepthProjection.Y, 2);
+        Assert.Equal(380, corner.DepthProjection.Y, 2);
     }
 
     /// <summary>

@@ -80,8 +80,9 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// <summary>
    /// Minimal crossing corridor compaction guarantees between two touching monitors, in mm of
    /// DISPLAY SURFACE shared along the contact edge — bezels excluded, they cannot carry the
-   /// cursor. 0 only asks for bezel contact (a corner counts); ignored under the
-   /// corner-crossing algorithm, which can cross a corner.
+   /// cursor. 0 only asks for bezel contact (a corner counts). A layout-editing rule on its
+   /// own: it deliberately does NOT look at the crossing algorithm, which belongs to mouse
+   /// behaviour — coupling the two would make either option harder to reason about.
    /// </summary>
    double MinimalEdgeOverlap { get; set; }
 

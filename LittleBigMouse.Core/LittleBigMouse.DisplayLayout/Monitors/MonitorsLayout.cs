@@ -282,15 +282,9 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
               ReferenceEquals(m, primaryMonitor)))
           .ToList();
 
-      // The corridor requirement only exists where the cursor cannot cross a corner:
-      // the corner-crossing algorithm can, so compaction demands bare contact there.
-      var minimalEdgeOverlap = Options.Algorithm == "CornerCrossing"
-          ? 0
-          : Options.MinimalEdgeOverlap;
-
       var offsets = CompactionSolver.Solve(
           snapshot,
-          new CompactionOptions(Options.AllowOverlaps, Options.AllowDiscontinuity, minimalEdgeOverlap));
+          new CompactionOptions(Options.AllowOverlaps, Options.AllowDiscontinuity, Options.MinimalEdgeOverlap));
 
       foreach (var monitor in monitors)
       {

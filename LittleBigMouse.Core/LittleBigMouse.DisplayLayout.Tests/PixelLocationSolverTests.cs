@@ -7,21 +7,25 @@ public class PixelLocationSolverTests
 {
     const double Bezel = 20.0;
 
-    /// <summary>Build a monitor whose panel sits at (x,y) mm with uniform bezels.</summary>
-    static PixelPlacementMonitor Monitor(
+    /// <summary>
+    /// Build a monitor whose panel sits at (x,y) mm with uniform bezels. Only the SIZE of the
+    /// pixel rect matters to this solver — the positions are what it computes — so the pixel
+    /// origin is left at zero here.
+    /// </summary>
+    static MonitorSnapshot Monitor(
         string id, double x, double y, double widthMm, double heightMm,
         double pixelWidth, double pixelHeight, bool primary = false, double bezel = Bezel)
         => new(
             id,
             new Rect(x, y, widthMm, heightMm),
             new Rect(x - bezel, y - bezel, widthMm + 2 * bezel, heightMm + 2 * bezel),
-            new Size(pixelWidth, pixelHeight),
+            new Rect(0, 0, pixelWidth, pixelHeight),
             primary);
 
-    static Rect RectOf(PixelPlacementMonitor m, IReadOnlyDictionary<string, Point> solved)
+    static Rect RectOf(MonitorSnapshot m, IReadOnlyDictionary<string, Point> solved)
         => new(solved[m.Id], m.PixelSize);
 
-    static void AssertNoOverlap(IReadOnlyList<PixelPlacementMonitor> monitors, IReadOnlyDictionary<string, Point> solved)
+    static void AssertNoOverlap(IReadOnlyList<MonitorSnapshot> monitors, IReadOnlyDictionary<string, Point> solved)
     {
         for (var i = 0; i < monitors.Count; i++)
         for (var j = i + 1; j < monitors.Count; j++)
@@ -172,7 +176,7 @@ public class PixelLocationSolverTests
     }
 
     /// <summary>Every monitor reachable from every other through real shared edges.</summary>
-    static void AssertConnected(IReadOnlyList<PixelPlacementMonitor> monitors, IReadOnlyDictionary<string, Point> solved)
+    static void AssertConnected(IReadOnlyList<MonitorSnapshot> monitors, IReadOnlyDictionary<string, Point> solved)
     {
         var rects = monitors.Select(m => RectOf(m, solved)).ToList();
 

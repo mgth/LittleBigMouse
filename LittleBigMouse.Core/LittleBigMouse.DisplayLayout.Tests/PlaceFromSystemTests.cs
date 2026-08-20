@@ -138,12 +138,7 @@ public class PlaceFromSystemTests(ITestOutputHelper output)
         output.WriteLine(Describe(layout));
 
         var solved = PixelLocationSolver.Solve(
-            [.. layout.PhysicalMonitors.Select(m => new PixelPlacementMonitor(
-                m.Id,
-                m.DepthProjection.Bounds,
-                m.DepthProjection.OutsideBounds,
-                new Size(m.ActiveSource.Source.InPixel.Bounds.Width, m.ActiveSource.Source.InPixel.Bounds.Height),
-                m.ActiveSource.Source.Primary))]);
+            [.. layout.PhysicalMonitors.Select(m => m.Snapshot(m.ActiveSource.Source.Primary))]);
 
         // Both sides are anchored on the primary, so compare against the system's own
         // pixel positions relative to it.

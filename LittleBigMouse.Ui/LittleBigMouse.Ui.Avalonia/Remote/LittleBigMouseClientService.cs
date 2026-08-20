@@ -202,6 +202,14 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         }
     }
 
+    /// <summary>
+    /// Last-resort seed of the exclusion list, right before the daemon starts reading it.
+    /// <see cref="LittleBigMouse.Plugins.Persistence.ExcludedListPersistence"/> normally
+    /// gets there first (loading a layout precedes launching the daemon) and writes the
+    /// same content, header included; this stays as the guard for any path that reaches
+    /// the daemon without a load, where the alternative is a daemon running with no
+    /// exclusions at all. Both must keep writing the same thing.
+    /// </summary>
     void CreateExcludedFile()
     {
         var dir = LbmPaths.DataDir;

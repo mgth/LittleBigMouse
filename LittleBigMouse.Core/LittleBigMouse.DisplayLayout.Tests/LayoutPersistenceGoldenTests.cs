@@ -186,13 +186,10 @@ public class LayoutPersistenceGoldenTests : IDisposable
         // A save right after a load must not change what the user has: every byte the
         // current version writes is compared against the committed expectation.
         //
-        // Two differences from the loaded document are visible in the golden and are
-        // PRE-EXISTING behavior this test only records — neither is endorsed here:
-        //  - options.json comes back with "Priority": "Realtime", the value the LAYOUT
-        //    document overrode it with. Both levels map to the same ILayoutOptions
-        //    property, so a per-layout priority is written back as the app-level one at
-        //    the next save (and the layout keeps its copy). The two levels are not
-        //    actually independent once a layout has been saved.
+        // Two differences from the loaded document are visible in the golden:
+        //  - the layout's Priority/PriorityUnhooked moved to options.json, which is the
+        //    one place they are stored now — see
+        //    SaveAfterLoad_PromotesTheLayoutPriorityToTheAppLevelAndDropsIt.
         //  - RescueShortcut comes back with every '+' written as a unicode escape: that
         //    is the default JSON encoder, and the string parses back identically, so a
         //    hand-edited file keeps working. Only the bytes differ.
@@ -232,15 +229,13 @@ public class LayoutPersistenceGoldenTests : IDisposable
     }
 
     [Fact]
-    public void SaveAfterLoad_MergesTheTwoPriorityLevels_KnownQuirk()
+    public void SaveAfterLoad_PromotesTheLayoutPriorityToTheAppLevelAndDropsIt()
     {
-        // Characterization, NOT an endorsement: Priority/PriorityUnhooked exist both in
-        // the global options and in the layout document, but both load into the same
-        // ILayoutOptions property, and the save writes that one property to both places.
-        // So the per-layout override becomes the app-level value, and a layout that had
-        // no override gets one — the two levels stop being distinguishable after the
-        // first save. Nothing here reinterprets it; it is recorded so a future fix
-        // (separate model properties) starts from a failing test instead of a surprise.
+        // A layout carrying its own Priority still wins at load — that is what keeps an
+        // upgrade from changing anybody's setting. The save then stores it once, at the
+        // app level, and the layout copy is gone: the two locations were never two
+        // settings (both load into the same options property), and keeping the copy is
+        // what used to hand one layout's value to all the others.
         var dir = Fixture("v5.6-current");
         var store = new JsonLayoutStore(dir);
 
@@ -253,7 +248,39 @@ public class LayoutPersistenceGoldenTests : IDisposable
 
         persistence.Save(layout);
 
-        Assert.Equal("Realtime", store.Read(LayoutId, []).GlobalOptions!.Priority);
+        var saved = store.Read(LayoutId, []);
+        Assert.Equal("Realtime", saved.GlobalOptions!.Priority);
+        Assert.Equal("Idle", saved.GlobalOptions.PriorityUnhooked);
+        Assert.Null(saved.Layout!.Options!.Priority);
+        Assert.Null(saved.Layout.Options.PriorityUnhooked);
+
+        // And it stays there: a reload finds one value, in one place.
+        var reloaded = NewLayout(out _, out _);
+        NewPersistence(new JsonLayoutStore(dir)).Load(reloaded);
+        Assert.Equal("Realtime", reloaded.Options.Priority);
+    }
+
+    [Fact]
+    public void SaveEnabled_DoesNotPutTheLayoutPriorityBack()
+    {
+        // SaveEnabled rewrites the document it just read, so without care it would
+        // restore the legacy keys a full save had migrated away.
+        var dir = Fixture("v5.6-current");
+        var store = new JsonLayoutStore(dir);
+
+        var layout = NewLayout(out _, out _);
+        var persistence = NewPersistence(store);
+        persistence.Load(layout);
+
+        layout.Options.Enabled = false;
+        Assert.True(persistence.SaveEnabled(layout));
+
+        var saved = store.Read(LayoutId, []).Layout!;
+        Assert.False(saved.Options!.Enabled);
+        Assert.Null(saved.Options.Priority);
+        // Everything else the document held is still there.
+        Assert.Equal("CornerCrossing", saved.Options.Algorithm);
+        Assert.True(saved.Monitors.ContainsKey(MonitorId));
     }
 
     static string? ReadFixtureGlobalPriority(string fixture) =>
@@ -375,25 +402,29 @@ public class LayoutPersistenceGoldenTests : IDisposable
     }
 
     [Fact]
-    public void Load_ExcludedFileCommentLines_BecomeEntries_KnownQuirk()
+    public void Load_ExcludedFileCommentLines_StayOutOfTheListAndSurviveASave()
     {
-        // Characterization, NOT an endorsement: the daemon ignores ':'-prefixed lines, and
-        // LittleBigMouseClientService.CreateExcludedFile writes ExcludedProcessDefaults.Header
-        // atop the file when IT is the one seeding it. The persistence layer has no notion of
-        // comments — every line is an entry, shown as such in the options UI and written back
-        // on every save. Filtering them here would silently delete a user's own annotations,
-        // so the behavior is recorded rather than changed.
+        // A real file as CreateExcludedFile seeds it, plus a line the user added by hand.
+        // The daemon skips ':' lines and empty ones (daemon::load_excluded), so neither is
+        // an exclusion — but neither may be lost when the app rewrites the file either.
         var dir = Fixture("v5.6-current"); // ExcludedDefaultsVersion 2: no top-up interference
         var excluded = Path.Combine(_work, "commented", "Excluded.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(excluded)!);
         File.WriteAllLines(excluded,
-            [ExcludedProcessDefaults.Header, .. ExcludedProcessDefaults.All, ":my own note"]);
+            [ExcludedProcessDefaults.Header, .. ExcludedProcessDefaults.All, "", ":my own note"]);
 
         var layout = NewLayout(out _, out _);
-        new TestPersistence(new JsonLayoutStore(dir), excluded).Load(layout);
+        var persistence = new TestPersistence(new JsonLayoutStore(dir), excluded);
+        persistence.Load(layout);
 
-        Assert.Equal(ExcludedProcessDefaults.Header, layout.Options.ExcludedList[0]);
-        Assert.Contains(":my own note", layout.Options.ExcludedList);
+        Assert.Equal(ExcludedProcessDefaults.All, layout.Options.ExcludedList);
+
+        persistence.SaveLive(layout.Options);
+
+        var written = File.ReadAllLines(excluded);
+        Assert.Equal(ExcludedProcessDefaults.Header, written[0]);
+        Assert.Equal(":my own note", written[1]);
+        Assert.Equal(ExcludedProcessDefaults.All, written[2..]);
     }
 
     //==================//

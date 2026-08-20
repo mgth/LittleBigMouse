@@ -62,6 +62,7 @@ public class RegistryLayoutStore : ILayoutStore
         StartMinimized = root.TryGetBool("StartMinimized") ?? layoutKey?.TryGetBool("StartMinimized"),
         StartElevated = root.TryGetBool("StartElevated") ?? layoutKey?.TryGetBool("StartElevated"),
         DebugTools = root.TryGetBool("DebugTools"),
+        ExperimentalFeatures = root.TryGetBool("ExperimentalFeatures"),
         VcpControl = root.TryGetBool("VcpControl"),
         // "ShowAttachDetachWarning" is the former name of the option, read as fallback.
         ShowMonitorActionWarning = root.TryGetBool("ShowMonitorActionWarning") ?? root.TryGetBool("ShowAttachDetachWarning"),
@@ -261,6 +262,7 @@ public class RegistryLayoutStore : ILayoutStore
         Set(root, "StartMinimized", o.StartMinimized);
         Set(root, "StartElevated", o.StartElevated);
         Set(root, "DebugTools", o.DebugTools);
+        Set(root, "ExperimentalFeatures", o.ExperimentalFeatures);
         Set(root, "VcpControl", o.VcpControl);
         Set(root, "ShowMonitorActionWarning", o.ShowMonitorActionWarning);
         Set(root, "BorderValues", o.BorderValues);
@@ -288,8 +290,13 @@ public class RegistryLayoutStore : ILayoutStore
             Set(key, "Enabled", o.Enabled);
             Set(key, "AdjustPointer", o.AdjustPointer);
             Set(key, "AdjustSpeed", o.AdjustSpeed);
-            Set(key, "Priority", o.Priority);
-            Set(key, "PriorityUnhooked", o.PriorityUnhooked);
+
+            // Priority/PriorityUnhooked belong to the root key. Deleting is what ends the
+            // migration ReadGlobalOptions has been half-doing for versions: Set() skips a
+            // null but never removes, so a value left here would go on overriding the root
+            // one at every load. Same reason WriteSide deletes the pre-split edge value.
+            key.DeleteValue("Priority", throwOnMissingValue: false);
+            key.DeleteValue("PriorityUnhooked", throwOnMissingValue: false);
         }
 
         foreach (var (id, monitor) in layout.Monitors)

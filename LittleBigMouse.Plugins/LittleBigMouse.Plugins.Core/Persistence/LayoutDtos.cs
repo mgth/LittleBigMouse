@@ -26,6 +26,7 @@ public class GlobalOptionsDto
     public bool? StartMinimized { get; set; }
     public bool? StartElevated { get; set; }
     public bool? DebugTools { get; set; }
+    public bool? ExperimentalFeatures { get; set; }
     public bool? ShowMonitorActionWarning { get; set; }
     public string? BorderValues { get; set; }
     public string? RescueShortcut { get; set; }
@@ -45,7 +46,7 @@ public class LayoutDto
     public Dictionary<string, MonitorDto> Monitors { get; set; } = [];
 }
 
-/// <summary>Per-layout options. Priority/PriorityUnhooked here override the global ones.</summary>
+/// <summary>Per-layout options.</summary>
 public class LayoutOptionsDto
 {
     public bool? AllowOverlaps { get; set; }
@@ -59,7 +60,17 @@ public class LayoutOptionsDto
     public bool? Enabled { get; set; }
     public bool? AdjustPointer { get; set; }
     public bool? AdjustSpeed { get; set; }
+
+    /// <summary>
+    /// READ-ONLY legacy pair. These are app-level options (see <see cref="GlobalOptionsDto"/>)
+    /// that older versions also stored per layout; both locations load into the same options
+    /// property, and only the app-level one is written from now on. Kept so a layout that
+    /// still carries them keeps its priority on upgrade — after which it is stored once, at
+    /// the app level, and this reads null forever.
+    /// </summary>
     public string? Priority { get; set; }
+
+    /// <inheritdoc cref="Priority"/>
     public string? PriorityUnhooked { get; set; }
 }
 

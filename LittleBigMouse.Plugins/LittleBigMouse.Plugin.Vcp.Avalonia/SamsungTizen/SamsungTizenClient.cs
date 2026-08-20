@@ -7,50 +7,28 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 /// <summary>One serialized local remote-control channel to a Samsung Tizen display.</summary>
 public sealed class SamsungTizenClient(string ipAddress, string token = "") : IAsyncDisposable
 {
-    readonly SemaphoreSlim _gate = new(1, 1);
+    readonly DeviceCommandGate _commands = new();
     ClientWebSocket? _socket;
     string _token = token;
 
     public string Token => _token;
     public bool Connected => _socket?.State == WebSocketState.Open;
 
-    public async Task<string> ConnectAsync(CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+    public Task<string> ConnectAsync(CancellationToken cancellationToken = default)
+        => _commands.RunExclusiveAsync(async commandToken =>
         {
-            await EnsureConnectedLockedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureConnectedLockedAsync(commandToken).ConfigureAwait(false);
             return _token;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
+        }, cancellationToken);
 
-    public async Task SendKeyAsync(string key, CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+    public Task SendKeyAsync(string key, CancellationToken cancellationToken = default)
+        => _commands.RunExclusiveAsync(async commandToken =>
         {
-            await EnsureConnectedLockedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureConnectedLockedAsync(commandToken).ConfigureAwait(false);
             var payload = SamsungTizenProtocol.RemoteKeyPayload(key);
-            try
-            {
-                await SendTextLockedAsync(payload, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception e) when (e is WebSocketException or IOException or ObjectDisposedException)
-            {
-                ResetSocketLocked();
-                await EnsureConnectedLockedAsync(cancellationToken).ConfigureAwait(false);
-                await SendTextLockedAsync(payload, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
+            await SendWithRetryAsync(token => SendTextLockedAsync(payload, token), commandToken)
+                .ConfigureAwait(false);
+        }, cancellationToken);
 
     async Task EnsureConnectedLockedAsync(CancellationToken cancellationToken)
     {
@@ -124,6 +102,23 @@ public sealed class SamsungTizenClient(string ipAddress, string token = "") : IA
         return exception.Message;
     }
 
+    /// <summary>
+    /// Binds <see cref="StaleConnectionRetry"/> to what a dead channel means here: the socket
+    /// has to be aborted and rebuilt, since a <see cref="ClientWebSocket"/> cannot be
+    /// reconnected once it has left the Open state.
+    /// </summary>
+    Task SendWithRetryAsync(Func<CancellationToken, Task> send, CancellationToken cancellationToken)
+        => StaleConnectionRetry.SendAsync(send, ReopenAsync, IsTransportFailure, cancellationToken);
+
+    async Task ReopenAsync(CancellationToken cancellationToken)
+    {
+        ResetSocketLocked();
+        await EnsureConnectedLockedAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    static bool IsTransportFailure(Exception exception)
+        => exception is WebSocketException or IOException or ObjectDisposedException;
+
     async Task SendTextLockedAsync(string payload, CancellationToken cancellationToken)
     {
         var bytes = Encoding.UTF8.GetBytes(payload);
@@ -158,9 +153,7 @@ public sealed class SamsungTizenClient(string ipAddress, string token = "") : IA
     }
 
     public async ValueTask DisposeAsync()
-    {
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
+        => await _commands.CloseAsync(async () =>
         {
             if (_socket?.State == WebSocketState.Open)
             {
@@ -177,11 +170,5 @@ public sealed class SamsungTizenClient(string ipAddress, string token = "") : IA
             }
             _socket?.Dispose();
             _socket = null;
-        }
-        finally
-        {
-            _gate.Release();
-            _gate.Dispose();
-        }
-    }
+        }).ConfigureAwait(false);
 }

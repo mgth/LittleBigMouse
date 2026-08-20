@@ -1,5 +1,6 @@
 #nullable enable
 using System.Net;
+using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 
@@ -176,9 +177,21 @@ public sealed class HisenseVidaaService : IHisenseVidaaService, IAsyncDisposable
         }
         _store.Save(c);
     }
+    /// <summary>
+    /// Slower burst than Tizen, and the trailing delay is kept: awaiting PowerOnAsync
+    /// therefore leaves the projector 150 ms to react before the caller reconnects.
+    /// </summary>
+    static readonly WakeOnLanOptions WakeOnLanBurst = new()
+    {
+        PacketCount = 3,
+        Port = 9,
+        DelayBetweenPackets = TimeSpan.FromMilliseconds(150),
+        DelayAfterLastPacket = true,
+    };
+
     public Task PowerOnAsync(string id, CancellationToken ct = default)
     {
-        var c=Required(id); if (string.IsNullOrWhiteSpace(c.MacAddress)) throw new InvalidOperationException("Enter the projector Wi-Fi MAC address first."); return WakeOnLan.SendAsync(c.MacAddress, ct);
+        var c=Required(id); if (string.IsNullOrWhiteSpace(c.MacAddress)) throw new InvalidOperationException("Enter the projector Wi-Fi MAC address first."); return WakeOnLan.SendAsync(c.MacAddress, WakeOnLanBurst, cancellationToken: ct);
     }
     HisenseVidaaConfiguration Required(string id) => _store.Get(id) is { } c && !string.IsNullOrWhiteSpace(c.IpAddress) ? c : throw new InvalidOperationException("Associate a Hisense VIDAA projector first.");
 

@@ -110,17 +110,6 @@ public class SamsungTizenProtocolTests
     }
 
     [Fact]
-    public void CreatesStandardWakeOnLanPacket()
-    {
-        var packet = WakeOnLan.CreateMagicPacket("AA:BB:CC:DD:EE:FF");
-
-        Assert.Equal(102, packet.Length);
-        Assert.All(packet.Take(6), value => Assert.Equal(0xff, value));
-        for (var offset = 6; offset < packet.Length; offset += 6)
-            Assert.Equal(new byte[] { 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff }, packet.Skip(offset).Take(6));
-    }
-
-    [Fact]
     public void ParsesSsdpHeadersCaseInsensitively()
     {
         const string response = "HTTP/1.1 200 OK\r\nLocation: http://192.168.1.42:9197/dmr\r\n\r\n";

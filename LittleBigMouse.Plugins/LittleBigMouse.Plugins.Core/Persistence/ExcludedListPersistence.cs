@@ -28,6 +28,17 @@ public sealed class ExcludedListPersistence(ILayoutStore store, Func<string> exc
     public int? AppliedDefaultsVersion { get; private set; }
 
     /// <summary>
+    /// The ':'-prefixed lines found in the file, kept aside at load and re-emitted on top
+    /// at every write. The daemon skips them (<c>daemon::load_excluded</c>), so they are
+    /// not exclusions and have no business in the options model — the seeded
+    /// <see cref="ExcludedProcessDefaults.Header"/> used to show up in the UI list as an
+    /// entry the user could neither understand nor usefully delete. Holding them here
+    /// rather than dropping them is what lets someone annotate their own file: the
+    /// annotations disappear from the list, not from the disk.
+    /// </summary>
+    IReadOnlyList<string> _comments = [];
+
+    /// <summary>
     /// Fill <paramref name="options"/> from the file, seeding or topping up the defaults as
     /// needed. <paramref name="global"/> is the options document as READ from the store: it
     /// carries the applied version in, and the top-up writes it back through it — mutating
@@ -43,25 +54,38 @@ public sealed class ExcludedListPersistence(ILayoutStore store, Func<string> exc
         var file = excludedListFile();
         if (!File.Exists(file))
         {
-            // First run: seed the defaults and write the file the daemon reads. The version
-            // is remembered so the next global-options write records the top-up as applied.
+            // First run: seed the defaults and write the file the daemon reads. Same
+            // content as LittleBigMouseClientService.CreateExcludedFile, header included,
+            // since either of the two can be the one to create it. The version is
+            // remembered so the next global-options write records the top-up as applied.
+            _comments = [ExcludedProcessDefaults.Header];
             foreach (var entry in ExcludedProcessDefaults.All) options.ExcludedList.Add(entry);
             AppliedDefaultsVersion = ExcludedProcessDefaults.Version;
             Write(file, options.ExcludedList);
             return;
         }
 
-        foreach (var line in File.ReadAllLines(file)) options.ExcludedList.Add(line);
+        // Split the file the way the daemon does: an empty line is nothing, a ':' line is
+        // a comment, everything else is an exclusion. Diverging here would mean the list
+        // the user edits and the list that actually filters are not the same list.
+        var comments = new List<string>();
+        foreach (var line in File.ReadAllLines(file))
+        {
+            if (line.StartsWith(':')) { comments.Add(line); continue; }
+            if (line.Length == 0) continue;
+            options.ExcludedList.Add(line);
+        }
+        _comments = comments;
 
         MigrateDefaults(options.ExcludedList, global, file);
     }
 
-    /// <summary>Rewrite the file the daemon reads. Best effort.</summary>
+    /// <summary>Rewrite the file the daemon reads, comments first. Best effort.</summary>
     public void Write(IEnumerable<string> entries) => Write(excludedListFile(), entries);
 
-    static void Write(string file, IEnumerable<string> entries)
+    void Write(string file, IEnumerable<string> entries)
     {
-        try { File.WriteAllLines(file, entries); }
+        try { File.WriteAllLines(file, _comments.Concat(entries)); }
         catch { /* the in-memory list is authoritative; the next full save retries */ }
     }
 

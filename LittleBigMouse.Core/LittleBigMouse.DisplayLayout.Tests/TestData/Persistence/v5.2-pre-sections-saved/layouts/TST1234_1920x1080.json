@@ -3,6 +3,7 @@
     "AllowOverlaps": false,
     "AllowDiscontinuity": false,
     "Algorithm": "Strait",
+    "MinimalEdgeOverlap": 20,
     "MaxTravelDistance": 200,
     "FreelookCheckInterval": 100,
     "FreelookEnabled": true,

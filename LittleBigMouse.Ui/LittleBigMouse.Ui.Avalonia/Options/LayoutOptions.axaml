@@ -277,6 +277,15 @@
 							                     Description="Gaps between monitors are allowed">
 								<ToggleSwitch IsChecked="{Binding Model.AllowDiscontinuity, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Ruler}"
+							                     Header="Minimal edge overlap"
+							                     Description="Display surface two touching screens must share, in mm"
+							                     ToolTip.Tip="When compaction brings two monitors into contact, it guarantees at least this many millimeters of shared display surface along the edge — bezels excluded, the cursor cannot cross them. 0 only asks for contact (a corner counts).">
+								<NumericUpDown Minimum="0" Increment="5"
+								               Value="{Binding Model.MinimalEdgeOverlap, FallbackValue=20}"
+								               ClipValueToMinMax="True"/>
+							</controls:SettingRow>
 						</StackPanel>
 					</Border>
 

@@ -145,6 +145,60 @@ public class PixelLocationSolverTests
         Assert.True(touchX || touchY, $"island not in contact: A{a} B{b}");
     }
 
+    /// <summary>
+    /// Several detached islands, each snapped against everything placed before it, must still
+    /// end up as ONE connected desktop — Windows requires it, and on KWin a gap is uncrossable
+    /// without the engine. Contact is checked the strict way here (a shared edge of non-zero
+    /// length), since a corner-only meeting is not crossable either.
+    /// </summary>
+    [Fact]
+    public void SeveralDetachedIslands_AllEndUpConnected()
+    {
+        var monitors = new[]
+        {
+            Monitor("A", 0, 0, 480, 270, 1920, 1080, primary: true),
+            // Adjacent: placed by the walk, so the anchored group starts as a column.
+            Monitor("B", 0, 270 + 2 * Bezel, 480, 270, 1920, 1080),
+            // Islands, diagonally scattered so the placed group grows an irregular outline.
+            Monitor("C", 1600, -1200, 480, 270, 1920, 1080),
+            Monitor("D", 1500, 900, 480, 270, 1920, 1080),
+            Monitor("E", 3000, -200, 480, 270, 1920, 1080),
+        };
+
+        var solved = PixelLocationSolver.Solve(monitors);
+
+        AssertNoOverlap(monitors, solved);
+        AssertConnected(monitors, solved);
+    }
+
+    /// <summary>Every monitor reachable from every other through real shared edges.</summary>
+    static void AssertConnected(IReadOnlyList<PixelPlacementMonitor> monitors, IReadOnlyDictionary<string, Point> solved)
+    {
+        var rects = monitors.Select(m => RectOf(m, solved)).ToList();
+
+        static bool Touch(Rect a, Rect b)
+            => (a.X == b.Right || b.X == a.Right) && Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Y, b.Y) > 0
+            || (a.Y == b.Bottom || b.Y == a.Bottom) && Math.Min(a.Right, b.Right) - Math.Max(a.X, b.X) > 0;
+
+        var seen = new List<Rect> { rects[0] };
+        var todo = rects.Skip(1).ToList();
+
+        for (var grown = true; grown;)
+        {
+            grown = false;
+            for (var i = todo.Count - 1; i >= 0; i--)
+            {
+                if (!seen.Any(s => Touch(s, todo[i]))) continue;
+                seen.Add(todo[i]);
+                todo.RemoveAt(i);
+                grown = true;
+            }
+        }
+
+        Assert.True(todo.Count == 0,
+            "disconnected desktop: " + string.Join(" ", monitors.Select(m => $"{m.Id}{RectOf(m, solved)}")));
+    }
+
     [Fact]
     public void PrimaryAlwaysAtOrigin()
     {

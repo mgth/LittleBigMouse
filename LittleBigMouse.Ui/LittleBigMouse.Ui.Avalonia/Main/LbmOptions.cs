@@ -222,6 +222,20 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _pinned;
 
     /// <summary>
+    /// Minimal crossing corridor compaction guarantees between two touching monitors, in mm
+    /// of display surface shared along the contact edge (bezels excluded). 0 = bare contact,
+    /// a corner counts. Independent of the crossing algorithm: layout editing and mouse
+    /// behaviour are separate domains.
+    /// </summary>
+    [DataMember]
+    public double MinimalEdgeOverlap
+    {
+        get => _minimalEdgeOverlap;
+        set => SetUnsavedValue(ref _minimalEdgeOverlap, value);
+    }
+    double _minimalEdgeOverlap = 20.0;
+
+    /// <summary>
     /// allow monitors to overlap, may be useful for overlapped borders
     /// </summary>
     [DataMember]

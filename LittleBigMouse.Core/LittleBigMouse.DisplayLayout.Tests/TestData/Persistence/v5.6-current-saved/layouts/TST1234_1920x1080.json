@@ -3,6 +3,7 @@
     "AllowOverlaps": false,
     "AllowDiscontinuity": true,
     "Algorithm": "CornerCrossing",
+    "MinimalEdgeOverlap": 20,
     "MaxTravelDistance": 150,
     "FreelookCheckInterval": 100,
     "FreelookEnabled": true,

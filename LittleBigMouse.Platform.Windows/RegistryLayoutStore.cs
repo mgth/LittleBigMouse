@@ -90,6 +90,7 @@ public class RegistryLayoutStore : ILayoutStore
                 AllowOverlaps = key.TryGetBool("AllowOverlaps"),
                 AllowDiscontinuity = key.TryGetBool("AllowDiscontinuity"),
                 Algorithm = key.TryGetString("Algorithm"),
+                MinimalEdgeOverlap = key.TryGet("MinimalEdgeOverlap"),
                 MaxTravelDistance = key.TryGet("MaxTravelDistance"),
                 FreelookCheckInterval = key.TryGet("FreelookCheckInterval"),
                 FreelookEnabled = key.TryGetBool("FreelookEnabled"),
@@ -291,6 +292,7 @@ public class RegistryLayoutStore : ILayoutStore
             Set(key, "AllowOverlaps", o.AllowOverlaps);
             Set(key, "AllowDiscontinuity", o.AllowDiscontinuity);
             Set(key, "Algorithm", o.Algorithm);
+            Set(key, "MinimalEdgeOverlap", o.MinimalEdgeOverlap);
             Set(key, "MaxTravelDistance", o.MaxTravelDistance);
             Set(key, "FreelookCheckInterval", o.FreelookCheckInterval);
             Set(key, "FreelookEnabled", o.FreelookEnabled);

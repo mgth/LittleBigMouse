@@ -206,4 +206,73 @@ public class ForceCompactTests
         var d = new Thickness(-100, -200, -300, -50);
         Assert.Equal(-50, d.DistanceHV(), 2);
     }
+
+    /// <summary>
+    /// The corridor requirement is a layout-editing rule and deliberately independent of the
+    /// crossing algorithm, which belongs to mouse behaviour: the same corner-only meeting is
+    /// slid into a 20mm corridor under both. Setting the option to 0 is the way to accept
+    /// bare corner contact, not switching algorithm.
+    /// </summary>
+    [Theory]
+    [InlineData("Strait")]
+    [InlineData("CornerCrossing")]
+    public void MinimalEdgeOverlap_IsIndependentOfTheAlgorithm(string algorithm)
+    {
+        var layout = new MonitorsLayout(new ILayoutOptions.Design
+        {
+            Algorithm = algorithm,
+            MinimalEdgeOverlap = 20,
+        });
+
+        AddMonitor(layout, "P", "PHL0001", 700, 400, 0, 0, primary: true);
+        var corner = AddMonitor(layout, "S", "SAM0001", 600, 340, 700, 400);
+
+        layout.UpdatePhysicalMonitors();
+        layout.ForceCompact();
+
+        Assert.Equal(700, corner.DepthProjection.X, 2);
+        Assert.Equal(380, corner.DepthProjection.Y, 2);
+    }
+
+    /// <summary>
+    /// Same layout, monitors declared in a different order: the compacted result must be
+    /// identical. This goes through the live model rather than the solver, so it also covers
+    /// the snapshot/apply bridge — PhysicalMonitors is bound from an unkeyed SourceCache, so
+    /// nothing guarantees the app sees the same order twice for one physical arrangement.
+    /// <see cref="CompactionSolverTests"/> proves the same property on the solver itself.
+    /// </summary>
+    [Fact]
+    public void ForceCompact_DoesNotDependOnDeclarationOrder()
+    {
+        string Run(params int[] order)
+        {
+            var layout = new MonitorsLayout(new ILayoutOptions.Design());
+            var monitors = new Dictionary<int, PhysicalMonitor>();
+
+            foreach (var i in order)
+            {
+                monitors[i] = i switch
+                {
+                    0 => AddMonitor(layout, "P", "PHL0001", 700, 400, 0, 0, primary: true),
+                    1 => AddMonitor(layout, "TV", "TV_0001", 1650, 920, 1454, -294),
+                    2 => AddMonitor(layout, "S", "SAM0001", 700, 400, 754, 16),
+                    _ => AddMonitor(layout, "D", "DEL0001", 520, 330, -1400, 700),
+                };
+            }
+
+            layout.UpdatePhysicalMonitors();
+            layout.ForceCompact();
+
+            return string.Join(" ", layout.PhysicalMonitors
+                .OrderBy(m => m.Id, StringComparer.Ordinal)
+                .Select(m => $"{m.Id}={Math.Round(m.DepthProjection.X, 6)},{Math.Round(m.DepthProjection.Y, 6)}"));
+        }
+
+        var expected = Run(0, 1, 2, 3);
+
+        Assert.Equal(expected, Run(3, 2, 1, 0));
+        Assert.Equal(expected, Run(1, 3, 0, 2));
+        Assert.Equal(expected, Run(2, 0, 3, 1));
+        Assert.Equal(expected, Run(1, 2, 3, 0));
+    }
 }

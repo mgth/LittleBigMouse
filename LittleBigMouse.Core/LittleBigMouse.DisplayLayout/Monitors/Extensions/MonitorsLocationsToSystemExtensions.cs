@@ -181,9 +181,9 @@ public static class PixelLocationSolver
     }
 
     /// <summary>
-    /// Pixel-space equivalent of <see cref="PhysicalMonitor.PlaceAuto"/>: slide into the
-    /// group band when no single translation can touch, then translate by the smallest
-    /// positive distance. Results stay integer because inputs are integer.
+    /// Snap a detached island into contact: slide into the group band when no single
+    /// translation can touch, then translate by the smallest positive distance. Results stay
+    /// integer because inputs are integer.
     /// </summary>
     static Rect SnapToTouch(Rect rect, List<Rect> others)
     {
@@ -201,8 +201,8 @@ public static class PixelLocationSolver
             var toRight = rect.X - right;
             var toBottom = rect.Y - bottom;
 
-            // Like PlaceAuto: slide along the axis with the smaller gap so the rect
-            // straddles the group band, then one translation on the other axis touches.
+            // Slide along the axis with the smaller gap so the rect straddles the group
+            // band, then one translation on the other axis touches.
             if (Math.Max(toLeft, toRight) <= Math.Max(toTop, toBottom))
                 rect.X = toLeft >= toRight ? left - Math.Round(rect.Width / 2) : right - Math.Round(rect.Width / 2);
             else

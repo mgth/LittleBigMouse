@@ -1,11 +1,12 @@
 using System.Globalization;
 using DynamicData;
-using HLab.Geo;
 using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 using Xunit;
+
+using static LittleBigMouse.Ui.Avalonia.Tests.BorderTestLayouts;
 
 // Both geometry namespaces are in play here: the layout model speaks HLab.Geo,
 // the converter under test is fed by Avalonia's layout pass.
@@ -21,50 +22,11 @@ namespace LittleBigMouse.Ui.Avalonia.Tests;
 /// </summary>
 public sealed class BorderSectionEditorTests
 {
-    // Two 1920x1080 monitors, 480x270 mm each, side by side and vertically aligned.
-    static MonitorsLayout TwoMonitors(out PhysicalMonitor left, out PhysicalMonitor right)
-    {
-        var layout = new MonitorsLayout(new ILayoutOptions.Design()) { Id = "TEST" };
-
-        left = AddMonitor(layout, "LEFT", -480, 0);
-        right = AddMonitor(layout, "RIGHT", 0, 0);
-
-        return layout;
-    }
-
-    static PhysicalMonitor AddMonitor(
-        MonitorsLayout layout, string id, double xMm, double yMm,
-        double widthMm = 480, double heightMm = 270)
-    {
-        var model = new PhysicalMonitorModel($"PNP-{id}");
-        model.PhysicalSize.Width = widthMm;
-        model.PhysicalSize.Height = heightMm;
-
-        var monitor = new PhysicalMonitor(id, layout, model);
-        var source = new DisplaySource($"SRC-{id}") { AttachedToDesktop = true };
-        source.InPixel.Set(new Rect(new Point(0, 0), new Size(1920, 1080)));
-
-        var physicalSource = new PhysicalSource($"DEV-{id}", monitor, source);
-        monitor.ActiveSource = physicalSource;
-        monitor.Sources.Add(physicalSource);
-
-        layout.AddOrUpdatePhysicalMonitor(monitor);
-        layout.AddOrUpdatePhysicalSource(physicalSource);
-
-        monitor.DepthProjection.X = xMm;
-        monitor.DepthProjection.Y = yMm;
-
-        return monitor;
-    }
-
     static void AssertTarget(IReadOnlyList<SnapTarget> targets, double mm, SnapKind kind)
         => Assert.Contains(targets, t => System.Math.Abs(t.Mm - mm) < 0.001 && t.Kind == kind);
 
     static void AssertNoTarget(IReadOnlyList<SnapTarget> targets, double mm)
         => Assert.DoesNotContain(targets, t => System.Math.Abs(t.Mm - mm) < 0.001);
-
-    static BorderSideViewModel RightEdgeOf(PhysicalMonitor monitor, double pixelLength = 540)
-        => new(monitor, BorderSideKind.Right, monitor.BorderResistance.Right) { PixelLength = pixelLength };
 
     [Fact]
     public void PixelsAndMillimetresRoundTrip()
@@ -210,8 +172,6 @@ public sealed class BorderSectionEditorTests
         Assert.Equal(200, second.To);
     }
 
-    // 540 UI px over a 270 mm edge: 2 px per mm. The band is 16 px thick by default,
-    // so the handle is 8 px — 4 mm — and the mitre 8 mm.
     [Fact]
     public void TouchingSectionsEachKeepTheirOwnHandle()
     {
@@ -338,117 +298,10 @@ public sealed class BorderSectionEditorTests
     }
 
     //==================//
-    // The gesture      //
+    // Editing          //
     //==================//
 
-    [Fact]
-    public void ResizingHoldsTheBoundaryWhereItWasGrabbed()
-    {
-        var side = RightEdgeOf(TwoMonitorsLeft());
-        var section = side.Create(50, 150)!;
-        var gesture = new BorderSectionGesture(side);
-
-        // Pressed 3 mm inside the handle rather than on the line, which is the usual
-        // case: the handle is 4 mm deep here. The boundary must not move yet.
-        gesture.Press(53, snap: false);
-        Assert.Equal(50, section.From);
-
-        // A pointer position arrives with the press itself. Before the grab offset
-        // was kept, this alone slid the boundary from 50 to 53.
-        gesture.Move(53, snap: false);
-        Assert.Equal(50, section.From);
-
-        // From there the boundary follows the movement, not the position.
-        gesture.Move(63, snap: false);
-        Assert.Equal(60, section.From);
-        Assert.Equal(150, section.To);
-    }
-
-    [Fact]
-    public void ResizingTheFarEndHoldsItsGripToo()
-    {
-        var side = RightEdgeOf(TwoMonitorsLeft());
-        var section = side.Create(50, 150)!;
-        var gesture = new BorderSectionGesture(side);
-
-        gesture.Press(147, snap: false);
-        gesture.Move(147, snap: false);
-        Assert.Equal(150, section.To);
-
-        gesture.Move(137, snap: false);
-        Assert.Equal(140, section.To);
-        Assert.Equal(50, section.From);
-    }
-
-    [Fact]
-    public void MovingCarriesTheWholeSection()
-    {
-        var side = RightEdgeOf(TwoMonitorsLeft());
-        var section = side.Create(50, 150)!;
-        var gesture = new BorderSectionGesture(side);
-
-        Assert.Same(section, gesture.Press(100, snap: false));
-        Assert.Equal(BorderSectionGesture.Kind.Move, gesture.Mode);
-
-        gesture.Move(120, snap: false);
-
-        Assert.Equal(70, section.From);
-        Assert.Equal(170, section.To);
-    }
-
-    [Fact]
-    public void DrawingCreatesOnlyOnRelease()
-    {
-        var side = RightEdgeOf(TwoMonitorsLeft());
-        var gesture = new BorderSectionGesture(side);
-
-        Assert.Null(gesture.Press(50, snap: false));
-        Assert.Equal(BorderSectionGesture.Kind.Draw, gesture.Mode);
-
-        // The sweep only outlines: nothing exists until the button comes up.
-        var feedback = gesture.Move(150, snap: false);
-        Assert.Equal(50, feedback.PreviewFromMm);
-        Assert.Equal(150, feedback.PreviewToMm);
-        Assert.Empty(side.Side.Sections.Items);
-
-        var created = gesture.Release(150, snap: false);
-
-        Assert.NotNull(created);
-        Assert.Equal(50, created!.From);
-        Assert.Equal(150, created.To);
-        Assert.False(gesture.Active);
-    }
-
-    [Fact]
-    public void AClickThatDrawsNothingCreatesNothing()
-    {
-        var side = RightEdgeOf(TwoMonitorsLeft());
-        var gesture = new BorderSectionGesture(side);
-
-        gesture.Press(50, snap: false);
-
-        Assert.Null(gesture.Release(50, snap: false));
-        Assert.Empty(side.Side.Sections.Items);
-    }
-
-    [Fact]
-    public void AGestureOnATouchingBoundaryTakesTheSectionItStartsFrom()
-    {
-        var side = RightEdgeOf(TwoMonitorsLeft());
-        side.Create(50, 150);
-        var lower = side.Create(150, 250)!;
-        var gesture = new BorderSectionGesture(side);
-
-        // The whole point of the handle rule, end to end: pressing the shared
-        // boundary resizes the lower section rather than the one above it.
-        Assert.Same(lower, gesture.Press(150, snap: false));
-
-        gesture.Move(150, snap: false);
-        gesture.Move(170, snap: false);
-
-        Assert.Equal(170, lower.From);
-        Assert.Equal(250, lower.To);
-    }
+    // The gestures that drive these edits are in BorderGestureSequenceTests.
 
     [Fact]
     public void ASectionTooShortToBeIntentionalIsRejected()
@@ -744,11 +597,5 @@ public sealed class BorderSectionEditorTests
         // Opening drags anywhere rescues it.
         rest.DragBlock = false;
         Assert.False(side.IsFullyBlocked);
-    }
-
-    static PhysicalMonitor TwoMonitorsLeft()
-    {
-        TwoMonitors(out var left, out _);
-        return left;
     }
 }

@@ -22,6 +22,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public string GetConfigPath(string fileName, bool create) => "";
 
       public double MinimalMaxTravelDistance { get; set; } = 20;
+      public double MinimalEdgeOverlap { get; set; } = 20;
       public bool AllowDiscontinuity { get; set; } = false;
       public bool AllowOverlaps { get; set; } = false;
       public bool LoopX { get; set; } = false;
@@ -75,6 +76,14 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    public string GetConfigPath(string fileName, bool create);
 
    double MinimalMaxTravelDistance { get; set; }
+
+   /// <summary>
+   /// Minimal crossing corridor compaction guarantees between two touching monitors, in mm of
+   /// DISPLAY SURFACE shared along the contact edge — bezels excluded, they cannot carry the
+   /// cursor. 0 only asks for bezel contact (a corner counts); ignored under the
+   /// corner-crossing algorithm, which can cross a corner.
+   /// </summary>
+   double MinimalEdgeOverlap { get; set; }
 
    /// <summary>
    /// Allow for discontinuities between monitors.

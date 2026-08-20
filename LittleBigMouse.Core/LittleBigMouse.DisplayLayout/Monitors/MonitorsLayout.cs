@@ -277,13 +277,20 @@ public class MonitorsLayout : SavableReactiveModel, IMonitorsLayout
       var snapshot = monitors
           .Select(m => new CompactionMonitor(
               m.Id,
+              m.DepthProjection.Bounds,
               m.DepthProjection.OutsideBounds,
               ReferenceEquals(m, primaryMonitor)))
           .ToList();
 
+      // The corridor requirement only exists where the cursor cannot cross a corner:
+      // the corner-crossing algorithm can, so compaction demands bare contact there.
+      var minimalEdgeOverlap = Options.Algorithm == "CornerCrossing"
+          ? 0
+          : Options.MinimalEdgeOverlap;
+
       var offsets = CompactionSolver.Solve(
           snapshot,
-          new CompactionOptions(Options.AllowOverlaps, Options.AllowDiscontinuity));
+          new CompactionOptions(Options.AllowOverlaps, Options.AllowDiscontinuity, minimalEdgeOverlap));
 
       foreach (var monitor in monitors)
       {

@@ -50,6 +50,7 @@ public static class LayoutDtoMapper
         o.AllowOverlaps = dto.AllowOverlaps ?? o.AllowOverlaps;
         o.AllowDiscontinuity = dto.AllowDiscontinuity ?? o.AllowDiscontinuity;
         o.Algorithm = dto.Algorithm ?? o.Algorithm;
+        o.MinimalEdgeOverlap = dto.MinimalEdgeOverlap ?? o.MinimalEdgeOverlap;
         o.MaxTravelDistance = dto.MaxTravelDistance ?? o.MaxTravelDistance;
         o.FreelookCheckInterval = dto.FreelookCheckInterval ?? o.FreelookCheckInterval;
         o.FreelookEnabled = dto.FreelookEnabled ?? o.FreelookEnabled;
@@ -209,6 +210,7 @@ public static class LayoutDtoMapper
         AllowOverlaps = o.AllowOverlaps,
         AllowDiscontinuity = o.AllowDiscontinuity,
         Algorithm = o.Algorithm,
+        MinimalEdgeOverlap = o.MinimalEdgeOverlap,
         MaxTravelDistance = o.MaxTravelDistance,
         FreelookCheckInterval = o.FreelookCheckInterval,
         FreelookEnabled = o.FreelookEnabled,

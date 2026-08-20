@@ -100,6 +100,7 @@ public static class VirtualLayoutFactory
             AllowOverlaps = imported.AllowOverlaps,
             AllowDiscontinuity = imported.AllowDiscontinuity,
             Algorithm = imported.Algorithm,
+            MinimalEdgeOverlap = imported.MinimalEdgeOverlap,
             MaxTravelDistance = imported.MaxTravelDistance,
             MinimalMaxTravelDistance = imported.MinimalMaxTravelDistance,
             FreelookCheckInterval = imported.FreelookCheckInterval,

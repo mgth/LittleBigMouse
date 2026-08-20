@@ -7,15 +7,24 @@ using HLab.Geo;
 namespace LittleBigMouse.DisplayLayout.Monitors.Extensions;
 
 /// <summary>
-/// Solver input: one monitor reduced to what placement actually depends on — its
-/// identity and its mm outside bounds (panel plus bezels, i.e.
-/// <c>DepthProjection.OutsideBounds</c>). Plain record so the geometry stays testable
-/// without the reactive model graph, same contract as <see cref="PixelPlacementMonitor"/>.
+/// Solver input: one monitor reduced to what placement actually depends on — its identity,
+/// its mm panel bounds (display surface, <c>DepthProjection.Bounds</c>) and its mm outside
+/// bounds (panel plus bezels, <c>DepthProjection.OutsideBounds</c>). Plain record so the
+/// geometry stays testable without the reactive model graph, same contract as
+/// <see cref="PixelPlacementMonitor"/>.
 /// </summary>
-public sealed record CompactionMonitor(string Id, Rect OutsideBounds, bool Primary);
+public sealed record CompactionMonitor(string Id, Rect Bounds, Rect OutsideBounds, bool Primary);
 
-/// <summary>The two layout options compaction obeys, snapshotted so the solve is a pure function.</summary>
-public readonly record struct CompactionOptions(bool AllowOverlaps, bool AllowDiscontinuity);
+/// <summary>
+/// The layout options compaction obeys, snapshotted so the solve is a pure function.
+/// <see cref="MinimalEdgeOverlap"/> is the corridor requirement in mm — see the class docs of
+/// <see cref="CompactionSolver"/>; the caller derives it from the user option and the
+/// crossing algorithm (corner crossing needs none).
+/// </summary>
+public readonly record struct CompactionOptions(
+    bool AllowOverlaps,
+    bool AllowDiscontinuity,
+    double MinimalEdgeOverlap = 0);
 
 /// <summary>
 /// Pure geometry behind <see cref="MonitorsLayout.ForceCompact"/>: resolve overlaps, group
@@ -24,18 +33,16 @@ public readonly record struct CompactionOptions(bool AllowOverlaps, bool AllowDi
 ///
 /// Works on immutable inputs and returns translations, never absolute positions: every
 /// caller applies them to a reactive <c>DepthProjection</c> whose X/Y are panel coordinates
-/// while the solver reasons in outside (bezel) coordinates. The two differ by a constant
-/// border offset, so a translation transfers between them unchanged.
+/// while the solver reasons on rects that all translate together, so a translation transfers
+/// between the two coordinate systems unchanged.
 ///
-/// Contact means a shared edge of non-zero length. Two monitors meeting at a single corner
-/// are NOT connected: the cursor cannot cross a point, so a corner-only meeting is a hole in
-/// the layout rather than a link, and compaction has to keep pulling until a real edge is
-/// shared.
-///
-/// <see cref="PixelLocationSolver"/> reaches the same requirement by another route: it calls
-/// <c>DistanceToTouch</c> with <c>zero: true</c>, which counts a zero-length perpendicular
-/// overlap as a gap and so falls through to its slide-then-touch branch. This solver takes the
-/// requirement from the connectivity rule itself, which is what its cluster phase needs.
+/// Contact is bezel against bezel (outside bounds touching), with corner-to-corner included.
+/// On top of that, <see cref="CompactionOptions.MinimalEdgeOverlap"/> demands a crossing
+/// corridor: at least that many mm of DISPLAY SURFACE (panels, bezels excluded) shared along
+/// the contact. Bezels cannot carry the cursor, so two monitors whose outside rects overlap
+/// only bezel-on-bezel are as uncrossable in strait mode as a corner-only meeting — which is
+/// why the requirement is measured on the panels. Zero keeps the bare contact rule: corner
+/// crossing can cross a corner, so the caller passes 0 there.
 /// </summary>
 public static class CompactionSolver
 {
@@ -50,6 +57,17 @@ public static class CompactionSolver
     /// on generated layouts is one; this is only a termination guarantee.
     /// </summary>
     const int SettlePasses = 8;
+
+    /// <summary>The working copy of one monitor: both rects move together.</summary>
+    readonly struct Body(Rect outside, Rect panel)
+    {
+        public Rect Outside { get; } = outside;
+        public Rect Panel { get; } = panel;
+
+        public Body Translate(double dx, double dy) => new(
+            new Rect(new Point(Outside.X + dx, Outside.Y + dy), Outside.Size),
+            new Rect(new Point(Panel.X + dx, Panel.Y + dy), Panel.Size));
+    }
 
     /// <summary>
     /// Translations to apply, keyed by monitor id. Monitors that must not move are absent
@@ -75,16 +93,19 @@ public static class CompactionSolver
         var primary = IndexOfPrimary(ordered);
         if (primary < 0) return result;
 
-        // Working copy: the solve mutates these rects the way the reactive model used to be
-        // mutated in place, so each step sees the results of the previous one.
-        var bounds = new Rect[ordered.Count];
-        for (var i = 0; i < ordered.Count; i++) bounds[i] = ordered[i].OutsideBounds;
+        var req = options.MinimalEdgeOverlap;
 
-        if (!options.AllowOverlaps) ResolveOverlaps(bounds, primary);
+        // Working copy: the solve mutates these bodies the way the reactive model used to be
+        // mutated in place, so each step sees the results of the previous one.
+        var bodies = new Body[ordered.Count];
+        for (var i = 0; i < ordered.Count; i++)
+            bodies[i] = new Body(ordered[i].OutsideBounds, ordered[i].Bounds);
+
+        if (!options.AllowOverlaps) ResolveOverlaps(bodies, primary);
 
         if (!options.AllowDiscontinuity)
         {
-            PullClustersTogether(bounds, primary);
+            PullClustersTogether(bodies, primary, req);
 
             // A cluster is pulled against the monitors anchored SO FAR — the clusters still
             // queued behind it are invisible obstacles, so it can land straight on top of
@@ -94,18 +115,18 @@ public static class CompactionSolver
             // layout is settled. Real layouts need at most one extra pass; the bound only
             // guards against pathological inputs.
             if (!options.AllowOverlaps)
-                for (var pass = 0; pass < SettlePasses && !IsSettled(bounds); pass++)
+                for (var pass = 0; pass < SettlePasses && !IsSettled(bodies, req); pass++)
                 {
-                    ResolveOverlaps(bounds, primary);
-                    PullClustersTogether(bounds, primary);
+                    ResolveOverlaps(bodies, primary);
+                    PullClustersTogether(bodies, primary, req);
                 }
         }
 
         for (var i = 0; i < ordered.Count; i++)
         {
             var offset = new Vector(
-                bounds[i].X - ordered[i].OutsideBounds.X,
-                bounds[i].Y - ordered[i].OutsideBounds.Y);
+                bodies[i].Outside.X - ordered[i].OutsideBounds.X,
+                bodies[i].Outside.Y - ordered[i].OutsideBounds.Y);
 
             if (offset.X != 0 || offset.Y != 0) result[ordered[i].Id] = offset;
         }
@@ -126,9 +147,9 @@ public static class CompactionSolver
     /// preserves the relative arrangement: after a primary drag the whole translated group
     /// comes back as one block instead of each monitor grabbing the first free edge.
     /// </summary>
-    static void PullClustersTogether(Rect[] bounds, int primary)
+    static void PullClustersTogether(Body[] bodies, int primary, double req)
     {
-        var clusters = BuildClusters(bounds);
+        var clusters = BuildClusters(bodies, req);
 
         // Primary monitor anchors everything: its cluster never moves.
         var anchored = clusters.First(c => c.Contains(primary));
@@ -137,42 +158,57 @@ public static class CompactionSolver
         while (todo.Count > 0)
         {
             var cluster = todo
-                .OrderBy(c => PullCost(bounds, c, anchored))
+                .OrderBy(c => PullCost(bodies, c, anchored, req))
                 .First();
             todo.Remove(cluster);
 
-            var (dx, dy) = ClusterPull(bounds, cluster, anchored);
+            var (dx, dy) = ClusterPull(bodies, cluster, anchored, req);
             if (dx != 0 || dy != 0)
-                foreach (var i in cluster) bounds[i] = Translate(bounds[i], dx, dy);
+                foreach (var i in cluster) bodies[i] = bodies[i].Translate(dx, dy);
 
             anchored.AddRange(cluster);
         }
     }
 
     /// <summary>
-    /// Cheapest way to park <paramref name="m"/> against <paramref name="a"/> so the two share
-    /// a real edge — one of the four sides, plus whatever slide the perpendicular axis needs.
-    ///
-    /// That perpendicular coordinate is kept as it is when it already spans a real part of the
-    /// anchor, because that is the arrangement the user built. It is only recentred when the
-    /// two share nothing on that axis, which is the case that used to produce corner contacts:
-    /// closing both gaps then left the monitor meeting the anchor at a single point.
+    /// Smallest displacement of the span <paramref name="lo"/>..<paramref name="lo"/>+<paramref name="size"/>
+    /// so that it overlaps the anchor span by at least <paramref name="required"/> (clamped to
+    /// what the two sizes allow). Zero when the current position already satisfies it — the
+    /// arrangement the user built is preserved, never recentred.
     /// </summary>
-    static (double Cost, double Dx, double Dy) BestDock(Rect m, Rect a)
+    static double SlideInto(double lo, double size, double anchorLo, double anchorSize, double required)
     {
-        var overlapX = Math.Min(m.Right, a.Right) - Math.Max(m.X, a.X);
-        var overlapY = Math.Min(m.Bottom, a.Bottom) - Math.Max(m.Y, a.Y);
+        var r = Math.Min(required, Math.Min(size, anchorSize));
 
-        var slideX = overlapX > ContactEpsilon ? 0 : a.X + a.Width / 2 - (m.X + m.Width / 2);
-        var slideY = overlapY > ContactEpsilon ? 0 : a.Y + a.Height / 2 - (m.Y + m.Height / 2);
+        var min = anchorLo + r - (lo + size);
+        var max = anchorLo + anchorSize - r - lo;
+
+        return Math.Max(min, Math.Min(0.0, max));
+    }
+
+    /// <summary>
+    /// Cheapest way to park <paramref name="m"/> against <paramref name="a"/>: one of the four
+    /// sides, bezels flush, plus the minimal perpendicular slide that yields the required
+    /// corridor — on the panels when a corridor is demanded, on the outside bounds (touch,
+    /// corner included) when it is not.
+    /// </summary>
+    static (double Cost, double Dx, double Dy) BestDock(Body m, Body a, double req)
+    {
+        var slideY = req > 0
+            ? SlideInto(m.Panel.Y, m.Panel.Height, a.Panel.Y, a.Panel.Height, req)
+            : SlideInto(m.Outside.Y, m.Outside.Height, a.Outside.Y, a.Outside.Height, 0);
+
+        var slideX = req > 0
+            ? SlideInto(m.Panel.X, m.Panel.Width, a.Panel.X, a.Panel.Width, req)
+            : SlideInto(m.Outside.X, m.Outside.Width, a.Outside.X, a.Outside.Width, 0);
 
         // Right of, left of, below, above the anchor.
         Span<(double Dx, double Dy)> options =
         [
-            (a.Right - m.X, slideY),
-            (a.X - m.Right, slideY),
-            (slideX, a.Bottom - m.Y),
-            (slideX, a.Y - m.Bottom)
+            (a.Outside.Right - m.Outside.X, slideY),
+            (a.Outside.X - m.Outside.Right, slideY),
+            (slideX, a.Outside.Bottom - m.Outside.Y),
+            (slideX, a.Outside.Y - m.Outside.Bottom)
         ];
 
         var best = (Cost: double.PositiveInfinity, Dx: 0.0, Dy: 0.0);
@@ -195,14 +231,14 @@ public static class CompactionSolver
     /// the cheapest docking over every (cluster monitor, anchored monitor) pair. The whole
     /// cluster then moves by it, so its internal arrangement is preserved.
     /// </summary>
-    static (double Dx, double Dy) ClusterPull(Rect[] bounds, List<int> cluster, List<int> anchored)
+    static (double Dx, double Dy) ClusterPull(Body[] bodies, List<int> cluster, List<int> anchored, double req)
     {
         var best = (Cost: double.PositiveInfinity, Dx: 0.0, Dy: 0.0);
 
         foreach (var m in cluster)
         foreach (var a in anchored)
         {
-            var dock = BestDock(bounds[m], bounds[a]);
+            var dock = BestDock(bodies[m], bodies[a], req);
             if (dock.Cost >= best.Cost) continue;
 
             best = dock;
@@ -212,13 +248,13 @@ public static class CompactionSolver
     }
 
     /// <summary>How far this cluster has to travel to dock — the "nearest first" ordering key.</summary>
-    static double PullCost(Rect[] bounds, List<int> cluster, List<int> anchored)
+    static double PullCost(Body[] bodies, List<int> cluster, List<int> anchored, double req)
     {
         var best = double.PositiveInfinity;
 
         foreach (var m in cluster)
         foreach (var a in anchored)
-            best = Math.Min(best, BestDock(bounds[m], bounds[a]).Cost);
+            best = Math.Min(best, BestDock(bodies[m], bodies[a], req).Cost);
 
         return best;
     }
@@ -229,19 +265,19 @@ public static class CompactionSolver
     /// (a blind least-penetration push can bounce between two neighbours forever); fall back
     /// to the shortest push when every direction is occupied, and iterate until stable.
     /// </summary>
-    static void ResolveOverlaps(Rect[] bounds, int primary)
+    static void ResolveOverlaps(Body[] bodies, int primary)
     {
-        for (var pass = 0; pass < bounds.Length + 4; pass++)
+        for (var pass = 0; pass < bodies.Length + 4; pass++)
         {
             var moved = false;
-            for (var i = 0; i < bounds.Length; i++)
+            for (var i = 0; i < bodies.Length; i++)
             {
                 if (i == primary) continue;
 
-                var overlapped = FirstOverlapping(bounds, bounds[i], i);
+                var overlapped = FirstOverlapping(bodies, bodies[i].Outside, i);
                 if (overlapped < 0) continue;
 
-                var d = bounds[i].Distance(bounds[overlapped]);
+                var d = bodies[i].Outside.Distance(bodies[overlapped].Outside);
 
                 // Right, left, below, above — as (dx, dy) displacements, shortest first.
                 // OrderBy is stable, so equal-length pushes keep this order.
@@ -256,10 +292,10 @@ public static class CompactionSolver
                     .ToList();
 
                 var free = candidates.FirstOrDefault(
-                    c => FirstOverlapping(bounds, Translate(bounds[i], c.dx, c.dy), i) < 0,
+                    c => FirstOverlapping(bodies, Translate(bodies[i].Outside, c.dx, c.dy), i) < 0,
                     candidates[0]);
 
-                bounds[i] = Translate(bounds[i], free.dx, free.dy);
+                bodies[i] = bodies[i].Translate(free.dx, free.dy);
                 moved = true;
             }
             if (!moved) return;
@@ -267,12 +303,12 @@ public static class CompactionSolver
     }
 
     /// <summary>Index of the first monitor <paramref name="rect"/> overlaps, ignoring <paramref name="self"/>.</summary>
-    static int FirstOverlapping(Rect[] bounds, Rect rect, int self)
+    static int FirstOverlapping(Body[] bodies, Rect rect, int self)
     {
-        for (var i = 0; i < bounds.Length; i++)
+        for (var i = 0; i < bodies.Length; i++)
         {
             if (i == self) continue;
-            if (Overlap(rect, bounds[i])) return i;
+            if (Overlap(rect, bodies[i].Outside)) return i;
         }
         return -1;
     }
@@ -288,30 +324,41 @@ public static class CompactionSolver
     }
 
     /// <summary>
-    /// Connected means touching (or overlapping) on both axes AND sharing a segment of
-    /// non-zero length on at least one of them. A corner-only meeting is deliberately not
-    /// connected — the cursor cannot cross a single point.
+    /// Connected means bezels in contact (outside bounds touching or overlapping on both
+    /// axes, a corner counts) AND, when a corridor is required, at least that many mm of
+    /// panel shared on one axis — the span the cursor can actually cross.
     /// </summary>
-    static bool AreConnected(Rect a, Rect b)
+    static bool AreConnected(Body a, Body b, double req)
     {
-        var d = a.Distance(b);
+        var d = a.Outside.Distance(b.Outside);
 
-        // Positive = gap on that axis; negative = length the two actually share.
-        var gapX = Math.Max(d.Left, d.Right);
-        var gapY = Math.Max(d.Top, d.Bottom);
+        if (Math.Max(d.Left, d.Right) > ContactEpsilon
+            || Math.Max(d.Top, d.Bottom) > ContactEpsilon) return false;
 
-        if (gapX > ContactEpsilon || gapY > ContactEpsilon) return false;
+        if (req <= 0) return true;
 
-        return Math.Min(gapX, gapY) < -ContactEpsilon;
+        var corridorX = Math.Min(a.Panel.Right, b.Panel.Right) - Math.Max(a.Panel.X, b.Panel.X);
+        var corridorY = Math.Min(a.Panel.Bottom, b.Panel.Bottom) - Math.Max(a.Panel.Y, b.Panel.Y);
+
+        return Math.Max(corridorX, corridorY) >= req - ContactEpsilon;
+    }
+
+    /// <summary>What compaction is meant to produce: no overlap left, and one single block.</summary>
+    static bool IsSettled(Body[] bodies, double req)
+    {
+        for (var i = 0; i < bodies.Length; i++)
+            if (FirstOverlapping(bodies, bodies[i].Outside, i) >= 0) return false;
+
+        return BuildClusters(bodies, req).Count == 1;
     }
 
     /// <summary>
     /// Connected components over the "touches or overlaps" relation, as index lists.
     /// </summary>
-    static List<List<int>> BuildClusters(Rect[] bounds)
+    static List<List<int>> BuildClusters(Body[] bodies, double req)
     {
         var clusters = new List<List<int>>();
-        var remaining = new List<int>(Enumerable.Range(0, bounds.Length));
+        var remaining = new List<int>(Enumerable.Range(0, bodies.Length));
 
         while (remaining.Count > 0)
         {
@@ -324,7 +371,7 @@ public static class CompactionSolver
                 grown = false;
                 for (var i = remaining.Count - 1; i >= 0; i--)
                 {
-                    if (!cluster.Any(m => AreConnected(bounds[m], bounds[remaining[i]]))) continue;
+                    if (!cluster.Any(m => AreConnected(bodies[m], bodies[remaining[i]], req))) continue;
                     cluster.Add(remaining[i]);
                     remaining.RemoveAt(i);
                     grown = true;
@@ -333,14 +380,5 @@ public static class CompactionSolver
             clusters.Add(cluster);
         }
         return clusters;
-    }
-
-    /// <summary>What compaction is meant to produce: no overlap left, and one single block.</summary>
-    static bool IsSettled(Rect[] bounds)
-    {
-        for (var i = 0; i < bounds.Length; i++)
-            if (FirstOverlapping(bounds, bounds[i], i) >= 0) return false;
-
-        return BuildClusters(bounds).Count == 1;
     }
 }

@@ -208,6 +208,32 @@ public class ForceCompactTests
     }
 
     /// <summary>
+    /// The corridor option flows algorithm-aware through the live model: under strait a
+    /// corner-only meeting is slid until the panels share the required span, while under
+    /// corner crossing — which can cross a corner — the exact same layout is left alone.
+    /// </summary>
+    [Theory]
+    [InlineData("Strait", 380.0)]
+    [InlineData("CornerCrossing", 400.0)]
+    public void MinimalEdgeOverlap_IsConditionedOnTheAlgorithm(string algorithm, double expectedY)
+    {
+        var layout = new MonitorsLayout(new ILayoutOptions.Design
+        {
+            Algorithm = algorithm,
+            MinimalEdgeOverlap = 20,
+        });
+
+        AddMonitor(layout, "P", "PHL0001", 700, 400, 0, 0, primary: true);
+        var corner = AddMonitor(layout, "S", "SAM0001", 600, 340, 700, 400);
+
+        layout.UpdatePhysicalMonitors();
+        layout.ForceCompact();
+
+        Assert.Equal(700, corner.DepthProjection.X, 2);
+        Assert.Equal(expectedY, corner.DepthProjection.Y, 2);
+    }
+
+    /// <summary>
     /// Same layout, monitors declared in a different order: the compacted result must be
     /// identical. This goes through the live model rather than the solver, so it also covers
     /// the snapshot/apply bridge — PhysicalMonitors is bound from an unkeyed SourceCache, so

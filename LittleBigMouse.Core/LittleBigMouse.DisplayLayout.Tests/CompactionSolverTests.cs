@@ -11,46 +11,60 @@ namespace LittleBigMouse.DisplayLayout.Tests;
 /// </summary>
 public class CompactionSolverTests
 {
-    static readonly CompactionOptions Compacting = new(AllowOverlaps: false, AllowDiscontinuity: false);
+    /// <summary>Suite-wide corridor requirement, mirroring the option's default.</summary>
+    const double Req = 20.0;
 
-    static CompactionMonitor M(string id, double x, double y, double w, double h, bool primary = false)
-        => new(id, new Rect(x, y, w, h), primary);
+    static readonly CompactionOptions Compacting =
+        new(AllowOverlaps: false, AllowDiscontinuity: false, MinimalEdgeOverlap: Req);
 
-    /// <summary>Apply the solved translations, so assertions read as final positions.</summary>
+    /// <summary>
+    /// Zero bezel by default, so panel and outside bounds coincide and position assertions
+    /// stay readable; pass a bezel to exercise the panel/outside distinction.
+    /// </summary>
+    static CompactionMonitor M(string id, double x, double y, double w, double h,
+        bool primary = false, double bezel = 0)
+        => new(id,
+            new Rect(x, y, w, h),
+            new Rect(x - bezel, y - bezel, w + 2 * bezel, h + 2 * bezel),
+            primary);
+
+    /// <summary>Apply the solved translations, so assertions read as final PANEL positions.</summary>
     static Dictionary<string, Rect> Place(IReadOnlyList<CompactionMonitor> monitors, CompactionOptions? options = null)
     {
         var offsets = CompactionSolver.Solve(monitors, options ?? Compacting);
         return monitors.ToDictionary(
             m => m.Id,
             m => offsets.TryGetValue(m.Id, out var d)
-                ? new Rect(m.OutsideBounds.X + d.X, m.OutsideBounds.Y + d.Y,
-                           m.OutsideBounds.Width, m.OutsideBounds.Height)
-                : m.OutsideBounds);
+                ? new Rect(m.Bounds.X + d.X, m.Bounds.Y + d.Y, m.Bounds.Width, m.Bounds.Height)
+                : m.Bounds);
     }
 
     static bool Overlaps(Rect a, Rect b)
         => Math.Min(a.Right, b.Right) - Math.Max(a.X, b.X) > CompactionSolver.ContactEpsilon
         && Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Y, b.Y) > CompactionSolver.ContactEpsilon;
 
+    /// <summary>Length of display surface the two share along their contact, mm.</summary>
+    static double Corridor(Rect a, Rect b) => Math.Max(
+        Math.Min(a.Right, b.Right) - Math.Max(a.X, b.X),
+        Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Y, b.Y));
+
     /// <summary>
-    /// Contact requires a shared edge of non-zero length — meeting at a corner is not a link,
-    /// because the cursor cannot cross a single point. Mirrors CompactionSolver.AreConnected.
+    /// Mirrors CompactionSolver.AreConnected on zero-bezel rects: bezel contact (a corner
+    /// counts) plus, when required, the crossing corridor on the panels.
     /// </summary>
-    static bool Touches(Rect a, Rect b)
+    static bool Touches(Rect a, Rect b, double req = Req)
     {
         var d = a.Distance(b);
 
-        var gapX = Math.Max(d.Left, d.Right);
-        var gapY = Math.Max(d.Top, d.Bottom);
-
-        if (gapX > CompactionSolver.ContactEpsilon || gapY > CompactionSolver.ContactEpsilon)
+        if (Math.Max(d.Left, d.Right) > CompactionSolver.ContactEpsilon
+            || Math.Max(d.Top, d.Bottom) > CompactionSolver.ContactEpsilon)
             return false;
 
-        return Math.Min(gapX, gapY) < -CompactionSolver.ContactEpsilon;
+        return req <= 0 || Corridor(a, b) >= req - CompactionSolver.ContactEpsilon;
     }
 
     /// <summary>True when every monitor is reachable from every other through contacts.</summary>
-    static bool IsConnected(ICollection<Rect> rects)
+    static bool IsConnected(ICollection<Rect> rects, double req = Req)
     {
         if (rects.Count == 0) return true;
         var all = rects.ToList();
@@ -62,7 +76,7 @@ public class CompactionSolverTests
             grown = false;
             for (var i = todo.Count - 1; i >= 0; i--)
             {
-                if (!seen.Any(s => Touches(s, todo[i]))) continue;
+                if (!seen.Any(s => Touches(s, todo[i], req))) continue;
                 seen.Add(todo[i]);
                 todo.RemoveAt(i);
                 grown = true;
@@ -138,7 +152,8 @@ public class CompactionSolverTests
             M("B", 300, 100, 700, 400),
         };
 
-        var placed = Place(monitors, new CompactionOptions(AllowOverlaps: true, AllowDiscontinuity: false));
+        var placed = Place(monitors,
+            new CompactionOptions(AllowOverlaps: true, AllowDiscontinuity: false, MinimalEdgeOverlap: Req));
 
         // Already one cluster (they touch), so the compaction phase has nothing to pull.
         Assert.Equal(new Rect(300, 100, 700, 400), placed["B"]);
@@ -246,7 +261,7 @@ public class CompactionSolverTests
         };
 
         var placed = Place(monitors);
-        var again = monitors.Select(m => m with { OutsideBounds = placed[m.Id] }).ToList();
+        var again = monitors.Select(m => m with { Bounds = placed[m.Id], OutsideBounds = placed[m.Id] }).ToList();
 
         Assert.Empty(CompactionSolver.Solve(again, Compacting));
     }
@@ -261,7 +276,8 @@ public class CompactionSolverTests
             M("C", 5000, 0, 700, 400),   // far away
         };
 
-        var placed = Place(monitors, new CompactionOptions(AllowOverlaps: false, AllowDiscontinuity: true));
+        var placed = Place(monitors,
+            new CompactionOptions(AllowOverlaps: false, AllowDiscontinuity: true, MinimalEdgeOverlap: Req));
 
         Assert.False(Overlaps(placed["A"], placed["B"]));
         Assert.Equal(new Rect(5000, 0, 700, 400), placed["C"]);
@@ -381,22 +397,26 @@ public class CompactionSolverTests
     }
 
     /// <summary>
-    /// The post-conditions of a compaction, over the whole generated spread: nothing overlaps
-    /// and everything forms a single connected block. The spread is deliberately harsher than
-    /// real desktops — monitors scattered over 4m with no relation to one another.
-    ///
-    /// These used to fail on 11 and 55 of the 200 layouts respectively; see
-    /// <see cref="PulledClusterLandingOnAQueuedOne_IsRepaired"/> and
-    /// <see cref="DiagonalPull_LandsInContact_NotBetweenTwoMonitors"/> for the two mechanisms.
+    /// The post-conditions of a compaction, over the whole generated spread and in both
+    /// regimes — bare contact (0, the corner-crossing case) and a demanded corridor: nothing
+    /// overlaps and everything forms one block connected at that requirement. The spread is
+    /// deliberately harsher than real desktops — monitors scattered over 4m with no relation
+    /// to one another. Under the loose regime these used to fail on 11 and 55 of the 200
+    /// layouts; see <see cref="PulledClusterLandingOnAQueuedOne_IsRepaired"/> and
+    /// <see cref="DiagonalPull_LandsInContact_NotBetweenTwoMonitors"/> for the mechanisms.
     /// </summary>
-    [Fact]
-    public void GeneratedLayouts_EndUpOverlapFree_AndConnected()
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(20.0)]
+    [InlineData(40.0)]
+    public void GeneratedLayouts_EndUpOverlapFree_AndConnected(double req)
     {
+        var options = Compacting with { MinimalEdgeOverlap = req };
         var total = 0;
 
         foreach (var (c, monitors, _) in GeneratedLayouts())
         {
-            var placed = Place(monitors);
+            var placed = Place(monitors, options);
             var rects = placed.Values.ToList();
             total++;
 
@@ -405,11 +425,11 @@ public class CompactionSolverTests
                     Assert.False(Overlaps(rects[i], rects[j]),
                         $"case {c}: overlap left in {Signature(placed)}");
 
-            Assert.True(IsConnected(rects), $"case {c}: still disjoint: {Signature(placed)}");
+            Assert.True(IsConnected(rects, req), $"case {c}: still disjoint: {Signature(placed)}");
 
             // Settling must reach a fixed point: compacting the result changes nothing.
-            var again = monitors.Select(m => m with { OutsideBounds = placed[m.Id] }).ToList();
-            Assert.Empty(CompactionSolver.Solve(again, Compacting));
+            var again = monitors.Select(m => m with { Bounds = placed[m.Id], OutsideBounds = placed[m.Id] }).ToList();
+            Assert.Empty(CompactionSolver.Solve(again, options));
         }
 
         Assert.Equal(200, total);
@@ -465,12 +485,13 @@ public class CompactionSolverTests
     }
 
     /// <summary>
-    /// A monitor parked diagonally, meeting the primary at exactly one corner, is NOT
-    /// connected: the cursor cannot cross a point. Compaction has to slide it onto a real
-    /// edge instead of declaring the layout done.
+    /// With a corridor demanded, a monitor meeting the primary at exactly one corner is not
+    /// done: it must slide — by the MINIMUM, not to the centre — until the panels share the
+    /// required span. With no requirement (corner-crossing can cross a corner), the very same
+    /// layout is left untouched.
     /// </summary>
     [Fact]
-    public void CornerOnlyContact_IsNotAccepted_AsAConnection()
+    public void CornerOnlyContact_SlidesMinimally_OrIsAcceptedAtZero()
     {
         var monitors = new[]
         {
@@ -478,12 +499,58 @@ public class CompactionSolverTests
             M("B", 700, 400, 600, 340), // touches A at the single point (700,400)
         };
 
-        Assert.False(Touches(monitors[0].OutsideBounds, monitors[1].OutsideBounds));
+        // req = 20: slide up by exactly the missing 20mm, nothing more.
+        var placed = Place(monitors);
+        Assert.Equal(new Rect(700, 380, 600, 340), placed["B"]);
+        Assert.Equal(Req, Corridor(placed["A"], placed["B"]), 6);
+
+        // req = 0: the corner is a valid contact, B stays where the user put it.
+        var loose = Place(monitors, Compacting with { MinimalEdgeOverlap = 0 });
+        Assert.Equal(new Rect(700, 400, 600, 340), loose["B"]);
+    }
+
+    /// <summary>
+    /// Bezels cannot carry the cursor: two monitors whose OUTSIDE rects overlap comfortably
+    /// while their panels share nothing must still be slid into a real corridor. With
+    /// req = 0 the same bezel-on-bezel contact is accepted as is.
+    /// </summary>
+    [Fact]
+    public void BezelOnlyContact_IsNotACorridor()
+    {
+        // 20mm bezels: outside rects overlap 30mm vertically, panels are 10mm apart.
+        var monitors = new[]
+        {
+            M("A", 0, 0, 700, 400, primary: true, bezel: 20),
+            M("B", 740, 410, 600, 340, bezel: 20),
+        };
 
         var placed = Place(monitors);
 
-        Assert.True(Touches(placed["A"], placed["B"]), $"still corner-only: {Signature(placed)}");
-        Assert.Equal(new Rect(0, 0, 700, 400), placed["A"]);
+        // Slid up 30mm: 20mm of PANELS shared, measured on the display surface.
+        Assert.Equal(Req, Corridor(placed["A"], placed["B"]), 6);
+        Assert.Equal(new Rect(740, 380, 600, 340), placed["B"]);
+
+        var loose = Place(monitors, Compacting with { MinimalEdgeOverlap = 0 });
+        Assert.Equal(new Rect(740, 410, 600, 340), loose["B"]);
+    }
+
+    /// <summary>
+    /// The slide is the minimal displacement into the valid band, never a recentring: B could
+    /// reach a 20mm corridor by moving 220mm up, so it must not travel the 570mm to A's centre.
+    /// </summary>
+    [Fact]
+    public void Slide_IsMinimal_NotACentring()
+    {
+        var monitors = new[]
+        {
+            M("A", 0, 0, 700, 400, primary: true),
+            M("B", 1200, 600, 600, 340),
+        };
+
+        var placed = Place(monitors);
+
+        Assert.Equal(new Rect(700, 380, 600, 340), placed["B"]);
+        Assert.Equal(Req, Corridor(placed["A"], placed["B"]), 6);
     }
 
     [Fact]

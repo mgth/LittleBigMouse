@@ -52,6 +52,7 @@ public class LayoutOptionsDto
     public bool? AllowOverlaps { get; set; }
     public bool? AllowDiscontinuity { get; set; }
     public string? Algorithm { get; set; }
+    public double? MinimalEdgeOverlap { get; set; }
     public double? MaxTravelDistance { get; set; }
     public double? FreelookCheckInterval { get; set; }
     public bool? FreelookEnabled { get; set; }

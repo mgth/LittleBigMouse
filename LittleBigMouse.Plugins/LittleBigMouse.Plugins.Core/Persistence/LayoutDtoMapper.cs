@@ -35,6 +35,7 @@ public static class LayoutDtoMapper
         o.StartMinimized = dto.StartMinimized ?? o.StartMinimized;
         o.StartElevated = dto.StartElevated ?? o.StartElevated;
         o.DebugTools = dto.DebugTools ?? o.DebugTools;
+        o.ExperimentalFeatures = dto.ExperimentalFeatures ?? o.ExperimentalFeatures;
         o.VcpControl = dto.VcpControl ?? o.VcpControl;
         o.ShowMonitorActionWarning = dto.ShowMonitorActionWarning ?? o.ShowMonitorActionWarning;
         o.BorderValues = dto.BorderValues ?? o.BorderValues;
@@ -179,6 +180,7 @@ public static class LayoutDtoMapper
         StartMinimized = o.StartMinimized,
         StartElevated = o.StartElevated,
         DebugTools = o.DebugTools,
+        ExperimentalFeatures = o.ExperimentalFeatures,
         VcpControl = o.VcpControl,
         ShowMonitorActionWarning = o.ShowMonitorActionWarning,
         BorderValues = o.BorderValues,

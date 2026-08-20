@@ -26,6 +26,7 @@ public class GlobalOptionsDto
     public bool? StartMinimized { get; set; }
     public bool? StartElevated { get; set; }
     public bool? DebugTools { get; set; }
+    public bool? ExperimentalFeatures { get; set; }
     public bool? ShowMonitorActionWarning { get; set; }
     public string? BorderValues { get; set; }
     public string? RescueShortcut { get; set; }

@@ -66,6 +66,7 @@ public class RegistryLayoutStore : ILayoutStore
         // "ShowAttachDetachWarning" is the former name of the option, read as fallback.
         ShowMonitorActionWarning = root.TryGetBool("ShowMonitorActionWarning") ?? root.TryGetBool("ShowAttachDetachWarning"),
         BorderValues = root.TryGetString("BorderValues"),
+        RescueShortcut = root.TryGetString("RescueShortcut"),
         HideTrayIcon = root.TryGetBool("HideTrayIcon"),
         ExcludedDefaultsVersion = root.TryGetInt("ExcludedDefaultsVersion")
     };
@@ -263,6 +264,7 @@ public class RegistryLayoutStore : ILayoutStore
         Set(root, "VcpControl", o.VcpControl);
         Set(root, "ShowMonitorActionWarning", o.ShowMonitorActionWarning);
         Set(root, "BorderValues", o.BorderValues);
+        Set(root, "RescueShortcut", o.RescueShortcut);
         Set(root, "HideTrayIcon", o.HideTrayIcon);
         Set(root, "ExcludedDefaultsVersion", o.ExcludedDefaultsVersion);
     }

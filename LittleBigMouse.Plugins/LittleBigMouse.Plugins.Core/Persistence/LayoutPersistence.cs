@@ -210,6 +210,13 @@ public abstract class LayoutPersistence : ILayoutPersistence
         var dto = _store.Read(layout.Id, []).Layout ?? new LayoutDto();
         dto.Options ??= new LayoutOptionsDto();
         dto.Options.Enabled = layout.Options.Enabled;
+
+        // Everything else read is written back as-is, EXCEPT the two app-level options a
+        // layout may still carry: re-emitting them here would put back what a full save
+        // just migrated away (see LayoutDtoMapper.ToDto).
+        dto.Options.Priority = null;
+        dto.Options.PriorityUnhooked = null;
+
         _store.WriteLayout(layout.Id, dto);
 
         SetAutostart(layout, layout.Options.LoadAtStartup, layout.Options.StartElevated);

@@ -288,8 +288,13 @@ public class RegistryLayoutStore : ILayoutStore
             Set(key, "Enabled", o.Enabled);
             Set(key, "AdjustPointer", o.AdjustPointer);
             Set(key, "AdjustSpeed", o.AdjustSpeed);
-            Set(key, "Priority", o.Priority);
-            Set(key, "PriorityUnhooked", o.PriorityUnhooked);
+
+            // Priority/PriorityUnhooked belong to the root key. Deleting is what ends the
+            // migration ReadGlobalOptions has been half-doing for versions: Set() skips a
+            // null but never removes, so a value left here would go on overriding the root
+            // one at every load. Same reason WriteSide deletes the pre-split edge value.
+            key.DeleteValue("Priority", throwOnMissingValue: false);
+            key.DeleteValue("PriorityUnhooked", throwOnMissingValue: false);
         }
 
         foreach (var (id, monitor) in layout.Monitors)

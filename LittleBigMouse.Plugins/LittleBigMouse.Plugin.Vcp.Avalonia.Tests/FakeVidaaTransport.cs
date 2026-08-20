@@ -24,9 +24,32 @@ sealed class FakeVidaaConnection : IVidaaConnection
 
     public event Action<string, byte[], bool>? MessageReceived;
 
-    /// <summary>Publishes a message to the session, as the device does.</summary>
+    /// <summary>
+    /// Publishes a message to the session, as the device does — and, as a broker does, only to a
+    /// session that subscribed a filter matching it. A session listening on the wrong topic
+    /// therefore hears nothing, which is the failure this fake exists to reproduce.
+    /// </summary>
     public void Receive(string topic, string payload, bool retained = false)
-        => MessageReceived?.Invoke(topic, Encoding.UTF8.GetBytes(payload), retained);
+    {
+        if (!Subscribed.Any(filter => Matches(filter, topic))) return;
+        MessageReceived?.Invoke(topic, Encoding.UTF8.GetBytes(payload), retained);
+    }
+
+    /// <summary>Matches an MQTT 3.1.1 topic filter, wildcards included, against a topic name.</summary>
+    internal static bool Matches(string filter, string topic)
+    {
+        var filterLevels = filter.Split('/');
+        var topicLevels = topic.Split('/');
+        for (var level = 0; level < filterLevels.Length; level++)
+        {
+            if (filterLevels[level] == "#") return true;
+            if (level >= topicLevels.Length) return false;
+            if (filterLevels[level] == "+") continue;
+            if (!string.Equals(filterLevels[level], topicLevels[level], StringComparison.Ordinal))
+                return false;
+        }
+        return filterLevels.Length == topicLevels.Length;
+    }
 
     public Task SubscribeAsync(IEnumerable<string> topics, CancellationToken cancellationToken)
     {

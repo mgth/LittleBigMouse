@@ -1,0 +1,13 @@
+{
+  "TST1234": {
+    "Width": 338,
+    "Height": 598,
+    "Borders": {
+      "Left": 8,
+      "Top": 9,
+      "Right": 8,
+      "Bottom": 14
+    },
+    "PnpName": "Test Monitor 24"
+  }
+}

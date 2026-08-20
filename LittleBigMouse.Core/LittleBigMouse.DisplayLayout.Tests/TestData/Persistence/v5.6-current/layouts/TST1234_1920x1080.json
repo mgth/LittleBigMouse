@@ -1,0 +1,81 @@
+{
+  "Options": {
+    "AllowOverlaps": false,
+    "AllowDiscontinuity": true,
+    "Algorithm": "CornerCrossing",
+    "MaxTravelDistance": 150,
+    "FreelookCheckInterval": 100,
+    "FreelookEnabled": true,
+    "LoopX": true,
+    "LoopY": false,
+    "Enabled": true,
+    "AdjustPointer": false,
+    "AdjustSpeed": false,
+    "Priority": "Realtime",
+    "PriorityUnhooked": "Idle"
+  },
+  "Monitors": {
+    "TST1234_0": {
+      "XLocationInMm": 320.5,
+      "YLocationInMm": -12,
+      "PhysicalRatioX": 1,
+      "PhysicalRatioY": 1,
+      "BorderResistance": {
+        "Left": {
+          "Sections": [
+            {
+              "From": 0,
+              "To": 120,
+              "Move": 20,
+              "MoveBlock": false,
+              "Drag": 20,
+              "DragBlock": false
+            },
+            {
+              "From": 120,
+              "To": 338,
+              "Move": 0,
+              "MoveBlock": true,
+              "Drag": 0,
+              "DragBlock": true
+            }
+          ]
+        },
+        "Top": {},
+        "Right": {
+          "Sections": [
+            {
+              "From": 50,
+              "To": 150,
+              "Move": 5,
+              "MoveBlock": false,
+              "Drag": 0,
+              "DragBlock": true
+            }
+          ]
+        },
+        "Bottom": {}
+      },
+      "Borders": {
+        "Left": 5,
+        "Top": 6,
+        "Right": 7,
+        "Bottom": 8
+      },
+      "ActiveSource": "DISPLAY1",
+      "SerialNumber": "SN-0001",
+      "ExcludedFromLayout": false,
+      "Sources": {
+        "DISPLAY1": {
+          "PixelX": 0,
+          "PixelY": 0,
+          "PixelWidth": 1920,
+          "PixelHeight": 1080,
+          "Orientation": 0,
+          "DisplayName": "\\\\.\\DISPLAY1",
+          "Primary": true
+        }
+      }
+    }
+  }
+}

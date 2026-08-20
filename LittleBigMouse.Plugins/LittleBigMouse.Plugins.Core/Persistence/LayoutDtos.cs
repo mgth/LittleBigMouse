@@ -11,7 +11,7 @@ namespace LittleBigMouse.Plugins.Persistence;
 // renaming one is a data migration, not a refactoring.
 //
 // Adding a persisted field = one property here + its Apply/ToDto lines in
-// LayoutPersistence. No per-OS code.
+// LayoutDtoMapper. No per-OS code.
 
 /// <summary>App-level options, stored once (registry root key / options.json).</summary>
 public class GlobalOptionsDto
@@ -33,7 +33,7 @@ public class GlobalOptionsDto
 
     /// <summary>
     /// Version of the excluded-defaults top-up already applied (see
-    /// <c>LayoutPersistence.MigrateExcludedDefaults</c>). Not mapped to the options model.
+    /// <c>ExcludedListPersistence.MigrateDefaults</c>). Not mapped to the options model.
     /// </summary>
     public int? ExcludedDefaultsVersion { get; set; }
 }

@@ -496,7 +496,7 @@ public class LayoutPersistenceTests
         double intrinsicW, double intrinsicH, double storedW, double storedH,
         double expectedW, double expectedH)
     {
-        var (w, h) = LayoutPersistence.NormalizeStoredSize(intrinsicW, intrinsicH, storedW, storedH);
+        var (w, h) = LayoutMigrations.NormalizeStoredSize(intrinsicW, intrinsicH, storedW, storedH);
         Assert.Equal(expectedW, w);
         Assert.Equal(expectedH, h);
     }

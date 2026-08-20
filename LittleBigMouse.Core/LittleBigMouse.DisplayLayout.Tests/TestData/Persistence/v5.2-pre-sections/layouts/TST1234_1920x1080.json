@@ -1,0 +1,40 @@
+{
+  "Options": {
+    "AllowOverlaps": false,
+    "AllowDiscontinuity": false,
+    "Algorithm": "Strait",
+    "MaxTravelDistance": 200,
+    "LoopX": false,
+    "LoopY": false,
+    "Enabled": true,
+    "AdjustPointer": false,
+    "AdjustSpeed": false
+  },
+  "Monitors": {
+    "TST1234_0": {
+      "XLocationInMm": 320.5,
+      "YLocationInMm": -12,
+      "PhysicalRatioX": 1,
+      "PhysicalRatioY": 1,
+      "BorderResistance": {
+        "Left": 20,
+        "Top": 0,
+        "Right": 20,
+        "Bottom": 0
+      },
+      "ActiveSource": "DISPLAY1",
+      "SerialNumber": "SN-0001",
+      "Sources": {
+        "DISPLAY1": {
+          "PixelX": 0,
+          "PixelY": 0,
+          "PixelWidth": 1920,
+          "PixelHeight": 1080,
+          "Orientation": 0,
+          "DisplayName": "\\\\.\\DISPLAY1",
+          "Primary": true
+        }
+      }
+    }
+  }
+}

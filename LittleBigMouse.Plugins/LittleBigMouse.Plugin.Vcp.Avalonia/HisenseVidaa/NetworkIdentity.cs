@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 
@@ -9,7 +10,7 @@ static class NetworkIdentity
 {
     public static string ControllerMacFor(string remoteAddress)
     {
-        if (!IPAddress.TryParse(remoteAddress, out var remote) || remote.AddressFamily != AddressFamily.InterNetwork)
+        if (!Ipv4Address.TryParse(remoteAddress, out var remote))
             throw new ArgumentException("Enter a valid projector IPv4 address.", nameof(remoteAddress));
 
         using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);

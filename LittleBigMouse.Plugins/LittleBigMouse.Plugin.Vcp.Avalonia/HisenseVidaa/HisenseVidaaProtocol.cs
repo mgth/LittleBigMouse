@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 
@@ -80,8 +81,7 @@ public static class HisenseVidaaProtocol
 
     public static HisenseVidaaDevice ParseDescriptor(string ipAddress, string xml)
     {
-        if (!HisenseVidaaDevice.IsValidAddress(ipAddress))
-            throw new ArgumentException("Enter a valid IPv4 address.", nameof(ipAddress));
+        ipAddress = Ipv4Address.Require(ipAddress, nameof(ipAddress));
 
         var document = XDocument.Parse(xml);
         string Element(string name) => document.Descendants()

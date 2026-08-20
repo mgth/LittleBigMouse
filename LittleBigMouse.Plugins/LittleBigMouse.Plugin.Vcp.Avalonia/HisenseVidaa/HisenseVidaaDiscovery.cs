@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 
@@ -15,8 +16,7 @@ public sealed class HisenseVidaaDiscovery(HttpClient httpClient)
         string ipAddress,
         CancellationToken cancellationToken = default)
     {
-        if (!HisenseVidaaDevice.IsValidAddress(ipAddress))
-            throw new ArgumentException("Enter a valid IPv4 address.", nameof(ipAddress));
+        ipAddress = Ipv4Address.Require(ipAddress, nameof(ipAddress));
 
         Exception? lastError = null;
         foreach (var port in HisenseVidaaProtocol.DescriptorPorts)
@@ -49,8 +49,7 @@ public sealed class HisenseVidaaDiscovery(HttpClient httpClient)
         string lastKnownAddress,
         CancellationToken cancellationToken = default)
     {
-        if (!IPAddress.TryParse(lastKnownAddress, out var seed)
-            || seed.AddressFamily != AddressFamily.InterNetwork)
+        if (!Ipv4Address.TryParse(lastKnownAddress, out var seed))
             throw new ArgumentException("Enter a valid projector IPv4 address.", nameof(lastKnownAddress));
 
         try

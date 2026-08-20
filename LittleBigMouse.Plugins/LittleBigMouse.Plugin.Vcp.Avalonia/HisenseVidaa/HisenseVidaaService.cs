@@ -1,5 +1,4 @@
 #nullable enable
-using System.Net;
 using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
@@ -36,9 +35,9 @@ public sealed class HisenseVidaaService : IHisenseVidaaService, IAsyncDisposable
         => _discovery.FindAsync(ipAddress.Trim(), cancellationToken);
     public void SaveAddress(string id, string ip, string mac, string uuid, string certificatePath)
     {
-        if (!IPAddress.TryParse(ip.Trim(), out var address) || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) throw new ArgumentException("Enter a valid IPv4 address.");
+        var address = Ipv4Address.Require(ip, nameof(ip));
         var c=_store.Get(id) ?? new HisenseVidaaConfiguration { MonitorId=id };
-        c.IpAddress=ip.Trim(); c.MacAddress=mac.Trim(); c.DeviceUuid=uuid.Trim();
+        c.IpAddress=address; c.MacAddress=mac.Trim(); c.DeviceUuid=uuid.Trim();
         c.ClientCertificatePath = VidaaCertificate.Resolve(certificatePath);
         if (string.IsNullOrWhiteSpace(c.ClientCertificatePassword)) c.ClientCertificatePassword = VidaaCertificate.DefaultPassword;
         c.ControllerMacAddress = NetworkIdentity.ControllerMacFor(c.IpAddress);

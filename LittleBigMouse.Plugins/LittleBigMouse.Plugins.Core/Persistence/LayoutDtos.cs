@@ -79,7 +79,16 @@ public class MonitorDto
     public BordersDto? Borders { get; set; }
 
     public string? ActiveSource { get; set; }
+
+    /// <summary>
+    /// WRITE-ONLY: saved from the live model, never applied back. The running value comes
+    /// from the EDID at every start, so applying a stored one could only put a stale
+    /// serial on a monitor that has since been replaced. It is kept in the store because
+    /// it is what makes a dumped configuration readable in a bug report — it says which
+    /// physical panel was behind which id.
+    /// </summary>
     public string? SerialNumber { get; set; }
+
     public bool? ExcludedFromLayout { get; set; }
     public Dictionary<string, SourceDto>? Sources { get; set; }
 }
@@ -95,7 +104,17 @@ public class SourceDto
     public double? PixelWidth { get; set; }
     public double? PixelHeight { get; set; }
     public int? Orientation { get; set; }
+
+    /// <summary>
+    /// WRITE-ONLY, like <see cref="MonitorDto.SerialNumber"/>: both come from the OS at
+    /// every start and are saved for what they say about a stored configuration, not to
+    /// be restored. Which display is primary is the desktop's business, not ours —
+    /// applying a stored value would be LBM deciding it, and a stored device name would
+    /// point at whatever slot the OS happened to use last time.
+    /// </summary>
     public string? DisplayName { get; set; }
+
+    /// <inheritdoc cref="DisplayName"/>
     public bool? Primary { get; set; }
 }
 

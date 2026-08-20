@@ -10,9 +10,7 @@
     "LoopY": false,
     "Enabled": true,
     "AdjustPointer": false,
-    "AdjustSpeed": false,
-    "Priority": "High",
-    "PriorityUnhooked": "Idle"
+    "AdjustSpeed": false
   },
   "Monitors": {
     "TST1234_0": {

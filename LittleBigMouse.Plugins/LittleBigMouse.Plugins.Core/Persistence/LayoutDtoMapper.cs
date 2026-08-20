@@ -57,6 +57,10 @@ public static class LayoutDtoMapper
         o.Enabled = dto.Enabled ?? o.Enabled;
         o.AdjustPointer = dto.AdjustPointer ?? o.AdjustPointer;
         o.AdjustSpeed = dto.AdjustSpeed ?? o.AdjustSpeed;
+
+        // READ-ONLY legacy: the app-level values are applied first, and a layout that
+        // still carries its own overrides them so nobody's priority changes on upgrade.
+        // Nothing writes them back (see ToDto below), so this ends at the first save.
         o.Priority = dto.Priority ?? o.Priority;
         o.PriorityUnhooked = dto.PriorityUnhooked ?? o.PriorityUnhooked;
     }
@@ -193,6 +197,11 @@ public static class LayoutDtoMapper
         Monitors = layout.PhysicalMonitors.ToDictionary(m => m.Id, ToDto)
     };
 
+    // Priority/PriorityUnhooked are deliberately absent: they are app-level options that
+    // once lived here too, and both locations load into the SAME options property. Writing
+    // the property back to both made a layout's leftover value the app-level one at the
+    // next save, and gave a copy of it to every other layout after that. They are written
+    // to the app level only; the layout copy is read as a fallback and then dropped.
     public static LayoutOptionsDto ToDto(ILayoutOptions o) => new()
     {
         AllowOverlaps = o.AllowOverlaps,
@@ -205,9 +214,7 @@ public static class LayoutDtoMapper
         LoopY = o.LoopY,
         Enabled = o.Enabled,
         AdjustPointer = o.AdjustPointer,
-        AdjustSpeed = o.AdjustSpeed,
-        Priority = o.Priority,
-        PriorityUnhooked = o.PriorityUnhooked
+        AdjustSpeed = o.AdjustSpeed
     };
 
     // Sections only: the per-edge resistance is gone, and writing it back would

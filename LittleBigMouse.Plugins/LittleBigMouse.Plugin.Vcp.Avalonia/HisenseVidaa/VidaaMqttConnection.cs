@@ -9,7 +9,7 @@ using System.Text;
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 
 /// <summary>Small MQTT 3.1.1/QoS-0 transport for the VIDAA broker.</summary>
-internal sealed class VidaaMqttConnection : IAsyncDisposable
+internal sealed class VidaaMqttConnection : IVidaaConnection
 {
     readonly SemaphoreSlim _writeLock = new(1, 1);
     TcpClient? _tcpClient;

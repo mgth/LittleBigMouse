@@ -128,6 +128,15 @@ public class HisenseVidaaProtocolTests
     }
 
     [Fact]
+    public void AsksForAFirstPairOfTokensOnTheDataTopic()
+    {
+        Assert.Equal(
+            "/remoteapp/tv/platform_service/56:b8:88:4e:f7:19$his$256DBF_vidaacommon_001/data/gettoken",
+            HisenseVidaaProtocol.TokenRequestTopic("56:b8:88:4e:f7:19$his$256DBF_vidaacommon_001"));
+        Assert.Equal("{\"refreshtoken\":\"\"}", HisenseVidaaProtocol.TokenRequestPayload());
+    }
+
+    [Fact]
     public void GeneratesAbsoluteVolumeCommand()
         => Assert.Equal("37", HisenseVidaaProtocol.VolumePayload(37));
 

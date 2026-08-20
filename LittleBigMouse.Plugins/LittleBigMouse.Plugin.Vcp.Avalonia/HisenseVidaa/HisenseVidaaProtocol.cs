@@ -124,6 +124,16 @@ public static class HisenseVidaaProtocol
     public static string Topic(string service, string clientId, string action)
         => $"/remoteapp/tv/{service}/{clientId}/actions/{action}";
 
+    /// <summary>
+    /// The token exchange is asked for on a <c>data</c> topic rather than through
+    /// <see cref="Topic"/>'s <c>actions</c> namespace.
+    /// </summary>
+    public static string TokenRequestTopic(string clientId)
+        => $"/remoteapp/tv/platform_service/{clientId}/data/gettoken";
+
+    /// <summary>An empty refresh token asks for a first pair of tokens.</summary>
+    public static string TokenRequestPayload() => "{\"refreshtoken\":\"\"}";
+
     public static string PictureSettingPayload(int menuId, int value)
     {
         if (menuId is < 1 or > 999)

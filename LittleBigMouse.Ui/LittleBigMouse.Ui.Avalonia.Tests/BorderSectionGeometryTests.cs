@@ -1,6 +1,9 @@
 using LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
 using Xunit;
 
+// The band's outline is in the UI's coordinates, so it speaks Avalonia's Point.
+using Point = global::Avalonia.Point;
+
 namespace LittleBigMouse.Ui.Avalonia.Tests;
 
 public sealed class BorderSectionGeometryTests
@@ -298,5 +301,60 @@ public sealed class FacingEdgeResolverTests
 
         Assert.Null(FacingEdgeResolver.FindNearest(
             BorderSideKind.Right, Source, 20, candidates));
+    }
+
+    //==================//
+    // The band's shape //
+    //==================//
+
+    // A 200 px edge with 16 px bands: each corner square is 16 by 16, and the two
+    // bands meeting there take half of it each.
+
+    [Fact]
+    public void AVerticalBandKeepsHalfOfEachCornerSquare()
+    {
+        Assert.Equal(
+            new[] { new Point(0, 0), new Point(16, 16), new Point(16, 184), new Point(0, 200) },
+            BorderBandShape.For(BorderSideKind.Left, 16, 200, 16));
+
+        // The mirror of it: the outer edge is on the right, so the mitre leans the
+        // other way.
+        Assert.Equal(
+            new[] { new Point(16, 0), new Point(16, 200), new Point(0, 184), new Point(0, 16) },
+            BorderBandShape.For(BorderSideKind.Right, 16, 200, 16));
+    }
+
+    [Fact]
+    public void AHorizontalBandKeepsTheOtherHalf()
+    {
+        Assert.Equal(
+            new[] { new Point(0, 0), new Point(200, 0), new Point(184, 16), new Point(16, 16) },
+            BorderBandShape.For(BorderSideKind.Top, 200, 16, 16));
+
+        Assert.Equal(
+            new[] { new Point(0, 16), new Point(16, 0), new Point(184, 0), new Point(200, 16) },
+            BorderBandShape.For(BorderSideKind.Bottom, 200, 16, 16));
+    }
+
+    [Fact]
+    public void TheTwoBandsOfACornerMeetOnItsDiagonal()
+    {
+        // The top-left square of a 300x200 monitor with 16 px bands. Both bands
+        // reaching into it end on the square's diagonal — (0,0) to (16,16) — so each
+        // keeps the triangle on its own side of it and a click there lands on exactly
+        // one of them.
+        var left = BorderBandShape.For(BorderSideKind.Left, 16, 200, 16);
+        var top = BorderBandShape.For(BorderSideKind.Top, 300, 16, 16);
+
+        foreach (var end in new[] { new Point(0, 0), new Point(16, 16) })
+        {
+            Assert.Contains(end, left);
+            Assert.Contains(end, top);
+        }
+
+        // And neither turns the corner the band on the other side of the diagonal
+        // has, which is what squaring one of them off would look like.
+        Assert.DoesNotContain(new Point(16, 0), left);
+        Assert.DoesNotContain(new Point(0, 16), top);
     }
 }

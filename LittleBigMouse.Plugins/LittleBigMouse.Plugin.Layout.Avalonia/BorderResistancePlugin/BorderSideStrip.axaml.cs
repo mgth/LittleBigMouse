@@ -117,6 +117,17 @@ public partial class BorderSideStrip : UserControl
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.Escape)
+        {
+            // Only while something is going on: otherwise Escape belongs to whatever
+            // is above, which may want to close the overlay it is shown in.
+            if (_gesture is not { Active: true }) return;
+
+            CancelGesture();
+            e.Handled = true;
+            return;
+        }
+
         var vm = ViewModel;
         if (e.Key != Key.Delete || vm == null) return;
 
@@ -141,9 +152,8 @@ public partial class BorderSideStrip : UserControl
     /// <para>
     /// The band spans its edge end to end, so its length IS the edge length — which
     /// is why the millimetre scale is taken from here rather than from the parent
-    /// overlay. The four bands therefore overlap in the corner squares; each one
-    /// keeps the triangle on its own side of the square's diagonal, so the corners
-    /// meet like a picture frame and a click there reaches exactly one band.
+    /// overlay. The corner squares the four bands share out are cut by
+    /// <see cref="BorderBandShape"/>.
     /// </para>
     /// </summary>
     void UpdateGeometry()
@@ -158,13 +168,7 @@ public partial class BorderSideStrip : UserControl
         vm.PixelLength = vm.IsVertical ? h : w;
         vm.PixelThickness = vm.IsVertical ? w : h;
 
-        // Thickness of the bands meeting this one at right angles; they are all the
-        // same width, so the corner square is t by t.
-        var t = vm.PixelThickness;
-
-        var points = vm.IsVertical
-            ? Corners(vm, w, h, t)
-            : Horizontal(vm, w, h, t);
+        var points = BorderBandShape.For(vm.Kind, w, h, vm.PixelThickness);
 
         // Backdrop.Data drives hit testing; Clip additionally trims a section drawn
         // right up to a corner so it follows the mitre instead of squaring it off.
@@ -180,18 +184,6 @@ public partial class BorderSideStrip : UserControl
 
         foreach (var section in vm.Sections) section.Refresh();
     }
-
-    static Points Corners(BorderSideViewModel vm, double w, double h, double t) =>
-        vm.Kind == BorderSideKind.Left
-            // Outer edge on the left: keep the lower-left half of each corner square.
-            ? [new Point(0, 0), new Point(t, t), new Point(t, h - t), new Point(0, h)]
-            // Outer edge on the right.
-            : [new Point(w, 0), new Point(w, h), new Point(0, h - t), new Point(0, t)];
-
-    static Points Horizontal(BorderSideViewModel vm, double w, double h, double t) =>
-        vm.Kind == BorderSideKind.Top
-            ? [new Point(0, 0), new Point(w, 0), new Point(w - t, t), new Point(t, t)]
-            : [new Point(0, h), new Point(t, 0), new Point(w - t, 0), new Point(w, h)];
 
     /// <summary>Position along the edge, in millimetres from its starting corner.</summary>
     double AlongMm(PointerEventArgs e) => AlongMm(e.GetPosition(this));
@@ -230,19 +222,46 @@ public partial class BorderSideStrip : UserControl
         if (vm == null || _gesture is not { Active: true } gesture) return;
         if (e.Pointer.Captured != this) return;
 
-        var snap = SnapEnabled(e.KeyModifiers);
-
-        Render(vm, gesture.Move(AlongMm(e), snap), snap);
+        Render(vm, gesture.Move(AlongMm(e), SnapEnabled(e.KeyModifiers)));
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// The pointer was taken away mid-gesture — another window came up, or the device
+    /// went. The section goes back where it was found: losing the pointer is not a
+    /// decision to keep it wherever it happened to be at that instant.
+    /// <para>
+    /// Every ordinary release comes through here too, since letting go of the button
+    /// drops the capture — but only after the release itself: Avalonia raises
+    /// PointerReleased and clears the capture in that call's finally, in that order.
+    /// So the gesture has already ended by then, and cancelling an ended gesture does
+    /// nothing. Were it the other way round, this would undo every drag ever made.
+    /// </para>
+    /// </summary>
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        CancelGesture();
+        base.OnPointerCaptureLost(e);
+    }
+
+    /// <summary>
+    /// Drop the gesture and take back what it was showing. The edge is left exactly
+    /// as the press found it, so there is nothing to compact or push.
+    /// </summary>
+    void CancelGesture()
+    {
+        if (_gesture is not { Active: true } gesture) return;
+
+        gesture.Cancel();
+        ClearFeedback();
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         var vm = ViewModel;
 
-        Overlay.Children.Clear();
-        BorderSectionGuide.Clear();
+        ClearFeedback();
 
         var created = _gesture?.Release(AlongMm(e), SnapEnabled(e.KeyModifiers));
 
@@ -276,44 +295,33 @@ public partial class BorderSideStrip : UserControl
 
     /// <summary>
     /// Turn what the gesture reports into the outline, and publish the guide. The
-    /// gesture has already applied its edit; this only says so on screen.
+    /// gesture has already applied its edit and already decided which boundary — if
+    /// any — caught a target; this only says so on screen.
+    /// <para>
+    /// The guide is published rather than drawn here: every band showing this edge
+    /// draws it from that notification, this one included.
+    /// </para>
     /// </summary>
-    void Render(BorderSideViewModel vm, BorderGestureFeedback feedback, bool snap)
+    void Render(BorderSideViewModel vm, BorderGestureFeedback feedback)
     {
-        if (feedback is { PreviewFromMm: { } from, PreviewToMm: { } to })
+        if (feedback.Preview is { } preview) DrawPreview(vm, preview);
+
+        if (feedback.Guide is not { } guide)
         {
-            DrawPreview(vm, from, to);
-            // A section is swept out from a fixed anchor, so only the moving end
-            // can catch anything.
-            PublishGuide(vm, snap, to);
+            BorderSectionGuide.Clear();
             return;
         }
 
-        // A moved section keeps its length, so at most one of its ends can have
-        // caught a target; the far one is tried when the near one found nothing.
-        PublishGuide(vm, snap, feedback.GuideMm, feedback.SecondGuideMm);
+        // Also in layout coordinates: the bands match this guide by their own edge,
+        // the screens by where it falls across them.
+        BorderSectionGuide.Show(
+            vm.Side, guide.Mm, guide.Kind, vm.OriginMm + guide.Mm, vm.IsVertical);
     }
 
-    /// <summary>
-    /// Say where the boundary caught something, for every band showing this edge —
-    /// this one included, which draws it from the same notification as the others.
-    /// </summary>
-    void PublishGuide(BorderSideViewModel vm, bool snap, params double?[] candidates)
+    /// <summary>Take back everything a gesture in progress was showing.</summary>
+    void ClearFeedback()
     {
-        if (snap)
-        {
-            foreach (var candidate in candidates)
-            {
-                if (candidate is not { } mm) continue;
-                if (vm.MatchedTarget(mm, _gesture?.Target) is not { } target) continue;
-
-                // Also in layout coordinates: the bands match this guide by their
-                // own edge, the screens by where it falls across them.
-                BorderSectionGuide.Show(vm.Side, mm, target.Kind, vm.OriginMm + mm, vm.IsVertical);
-                return;
-            }
-        }
-
+        Overlay.Children.Clear();
         BorderSectionGuide.Clear();
     }
 
@@ -329,12 +337,14 @@ public partial class BorderSideStrip : UserControl
         DrawGuide(vm, g.Mm, g.Kind);
     }
 
-    void DrawPreview(BorderSideViewModel vm, double fromMm, double toMm)
+    void DrawPreview(BorderSideViewModel vm, BorderSpan span)
     {
         Overlay.Children.Clear();
 
-        var from = vm.ToPixels(System.Math.Min(fromMm, toMm));
-        var length = vm.ToPixels(System.Math.Abs(toMm - fromMm));
+        // The span runs from the anchor towards the pointer, so it may well be
+        // backwards.
+        var from = vm.ToPixels(System.Math.Min(span.From, span.To));
+        var length = vm.ToPixels(System.Math.Abs(span.Length));
 
         var preview = new Rectangle
         {

@@ -1,5 +1,6 @@
 #nullable enable
 using System.Net.Http;
+using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 
@@ -118,12 +119,21 @@ public sealed class SamsungTizenService : ISamsungTizenService, IAsyncDisposable
         }
     }
 
+    /// <summary>Tizen wakes on the first packet it hears; the repeats cover Wi-Fi loss.</summary>
+    static readonly WakeOnLanOptions WakeOnLanBurst = new()
+    {
+        PacketCount = 3,
+        Port = 9,
+        DelayBetweenPackets = TimeSpan.FromMilliseconds(100),
+    };
+
     public Task PowerOnAsync(string monitorId, CancellationToken cancellationToken = default)
     {
         var configuration = RequiredConfiguration(monitorId);
         if (string.IsNullOrWhiteSpace(configuration.MacAddress))
             throw new InvalidOperationException("Enter the monitor Wi-Fi MAC address before using Wake-on-LAN.");
-        return WakeOnLan.SendAsync(configuration.MacAddress, cancellationToken);
+        return WakeOnLan.SendAsync(
+            configuration.MacAddress, WakeOnLanBurst, cancellationToken: cancellationToken);
     }
 
     SamsungTizenConfiguration RequiredConfiguration(string monitorId)

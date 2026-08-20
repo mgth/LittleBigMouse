@@ -8,7 +8,7 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) : IAsyncDisposable
 {
     readonly HisenseVidaaConfiguration _configuration = configuration;
-    readonly SemaphoreSlim _gate = new(1, 1);
+    readonly DeviceCommandGate _commands = new();
     VidaaMqttConnection? _connection;
     TaskCompletionSource<bool>? _pinAccepted;
     TaskCompletionSource<bool>? _tokenIssued;
@@ -131,65 +131,33 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
         await _tokenIssued.Task.WaitAsync(TimeSpan.FromSeconds(12), cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task SendKeyAsync(string key, CancellationToken cancellationToken)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+    public Task SendKeyAsync(string key, CancellationToken cancellationToken)
+        => _commands.RunExclusiveAsync(async commandToken =>
         {
             var topic = HisenseVidaaProtocol.Topic("remote_service", _configuration.ClientId, "sendkey");
             var payload = HisenseVidaaProtocol.TranslateKey(key);
-            await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception e) when (IsConnectionFailure(e))
-            {
-                // TcpClient.Connected can remain true until the first failed write.
-                // Reopen the persistent MQTT session and retry this key once.
-                await ResetConnectionAsync().ConfigureAwait(false);
-                await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-                await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
+            await EnsurePairedConnectionAsync(commandToken).ConfigureAwait(false);
+            await SendWithRetryAsync(
+                token => _connection!.PublishAsync(topic, payload, token), commandToken).ConfigureAwait(false);
+        }, cancellationToken);
 
-    public async Task SetPictureSettingAsync(int menuId, int value, CancellationToken cancellationToken)
+    public Task SetPictureSettingAsync(int menuId, int value, CancellationToken cancellationToken)
     {
         var topic = HisenseVidaaProtocol.Topic("platform_service", _configuration.ClientId, "picturesetting");
         var payload = HisenseVidaaProtocol.PictureSettingPayload(menuId, value);
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        return _commands.RunExclusiveAsync(async commandToken =>
         {
-            await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception e) when (IsConnectionFailure(e))
-            {
-                await ResetConnectionAsync().ConfigureAwait(false);
-                await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-                await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            await EnsurePairedConnectionAsync(commandToken).ConfigureAwait(false);
+            await SendWithRetryAsync(
+                token => _connection!.PublishAsync(topic, payload, token), commandToken).ConfigureAwait(false);
+        }, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<VidaaPictureSetting>> GetPictureSettingsAsync(
+    public Task<IReadOnlyList<VidaaPictureSetting>> GetPictureSettingsAsync(
         CancellationToken cancellationToken)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        => _commands.RunExclusiveAsync(async commandToken =>
         {
-            await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await EnsurePairedConnectionAsync(commandToken).ConfigureAwait(false);
             var signal = new TaskCompletionSource<IReadOnlyList<VidaaPictureSetting>>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             _pictureSettingsReceived = signal;
@@ -197,35 +165,18 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
                 "platform_service", _configuration.ClientId, "picturesetting");
             try
             {
-                try
-                {
-                    await _connection!.PublishAsync(
-                        topic,
-                        HisenseVidaaProtocol.PictureSettingsRequestPayload(),
-                        cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception e) when (IsConnectionFailure(e))
-                {
-                    await ResetConnectionAsync().ConfigureAwait(false);
-                    await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-                    await _connection!.PublishAsync(
-                        topic,
-                        HisenseVidaaProtocol.PictureSettingsRequestPayload(),
-                        cancellationToken).ConfigureAwait(false);
-                }
-                return await signal.Task.WaitAsync(TimeSpan.FromSeconds(6), cancellationToken)
+                await SendWithRetryAsync(
+                    token => _connection!.PublishAsync(
+                        topic, HisenseVidaaProtocol.PictureSettingsRequestPayload(), token),
+                    commandToken).ConfigureAwait(false);
+                return await signal.Task.WaitAsync(TimeSpan.FromSeconds(6), commandToken)
                     .ConfigureAwait(false);
             }
             finally
             {
                 if (ReferenceEquals(_pictureSettingsReceived, signal)) _pictureSettingsReceived = null;
             }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
+        }, cancellationToken);
 
     public Task<int> GetVolumeAsync(CancellationToken cancellationToken)
         => SendVolumeActionAsync("getvolume", "0", cancellationToken);
@@ -233,67 +184,39 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
     public Task<int> SetVolumeAsync(int volume, CancellationToken cancellationToken)
         => SendVolumeActionAsync("changevolume", HisenseVidaaProtocol.VolumePayload(volume), cancellationToken);
 
-    public async Task SendPlatformActionAsync(string action, int value, CancellationToken cancellationToken)
+    public Task SendPlatformActionAsync(string action, int value, CancellationToken cancellationToken)
     {
         var topic = HisenseVidaaProtocol.Topic(
             "platform_service",
             _configuration.ClientId,
             HisenseVidaaProtocol.PlatformActionName(action));
         var payload = HisenseVidaaProtocol.ExperimentalLevelPayload(value);
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        return _commands.RunExclusiveAsync(async commandToken =>
         {
-            await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception e) when (IsConnectionFailure(e))
-            {
-                await ResetConnectionAsync().ConfigureAwait(false);
-                await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-                await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            await EnsurePairedConnectionAsync(commandToken).ConfigureAwait(false);
+            await SendWithRetryAsync(
+                token => _connection!.PublishAsync(topic, payload, token), commandToken).ConfigureAwait(false);
+        }, cancellationToken);
     }
 
-    async Task<int> SendVolumeActionAsync(string action, string payload, CancellationToken cancellationToken)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+    Task<int> SendVolumeActionAsync(string action, string payload, CancellationToken cancellationToken)
+        => _commands.RunExclusiveAsync(async commandToken =>
         {
-            await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await EnsurePairedConnectionAsync(commandToken).ConfigureAwait(false);
             var signal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             _volumeReceived = signal;
             var topic = HisenseVidaaProtocol.Topic("platform_service", _configuration.ClientId, action);
             try
             {
-                try
-                {
-                    await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception e) when (IsConnectionFailure(e))
-                {
-                    await ResetConnectionAsync().ConfigureAwait(false);
-                    await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-                    await _connection!.PublishAsync(topic, payload, cancellationToken).ConfigureAwait(false);
-                }
-                return await signal.Task.WaitAsync(TimeSpan.FromSeconds(4), cancellationToken).ConfigureAwait(false);
+                await SendWithRetryAsync(
+                    token => _connection!.PublishAsync(topic, payload, token), commandToken).ConfigureAwait(false);
+                return await signal.Task.WaitAsync(TimeSpan.FromSeconds(4), commandToken).ConfigureAwait(false);
             }
             finally
             {
                 if (ReferenceEquals(_volumeReceived, signal)) _volumeReceived = null;
             }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
+        }, cancellationToken);
 
     public async Task<IReadOnlyList<VidaaTrafficMessage>> CaptureTrafficAsync(
         TimeSpan duration,
@@ -321,7 +244,6 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(onMessage);
-        VidaaMqttConnection connection;
         var recentMessages = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
 
         void Capture(string topic, byte[] bytes, bool retained)
@@ -346,26 +268,22 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
             onMessage(new VidaaTrafficMessage(now, topic, payload));
         }
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var connection = await _commands.RunExclusiveAsync(async commandToken =>
         {
-            await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
-            connection = _connection!;
-            connection.MessageReceived += Capture;
+            await EnsurePairedConnectionAsync(commandToken).ConfigureAwait(false);
+            var opened = _connection!;
+            opened.MessageReceived += Capture;
             try
             {
-                await connection.SubscribeAsync(["#"], cancellationToken).ConfigureAwait(false);
+                await opened.SubscribeAsync(["#"], commandToken).ConfigureAwait(false);
             }
             catch
             {
-                connection.MessageReceived -= Capture;
+                opened.MessageReceived -= Capture;
                 throw;
             }
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            return opened;
+        }, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -430,6 +348,20 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
         await _connection.SubscribeAsync(
             topics, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Binds <see cref="StaleConnectionRetry"/> to what a dead MQTT session means here: the
+    /// broker only accepts the persistent session once, so it has to be dropped before a new
+    /// one can be opened with the stored pairing.
+    /// </summary>
+    Task SendWithRetryAsync(Func<CancellationToken, Task> send, CancellationToken cancellationToken)
+        => StaleConnectionRetry.SendAsync(send, ReopenAsync, IsConnectionFailure, cancellationToken);
+
+    async Task ReopenAsync(CancellationToken cancellationToken)
+    {
+        await ResetConnectionAsync().ConfigureAwait(false);
+        await EnsurePairedConnectionAsync(cancellationToken).ConfigureAwait(false);
     }
 
     async Task ResetConnectionAsync()
@@ -529,16 +461,5 @@ public sealed class HisenseVidaaClient(HisenseVidaaConfiguration configuration) 
             : fallback;
 
     public async ValueTask DisposeAsync()
-    {
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            await ResetConnectionAsync().ConfigureAwait(false);
-        }
-        finally
-        {
-            _gate.Release();
-            _gate.Dispose();
-        }
-    }
+        => await _commands.CloseAsync(ResetConnectionAsync).ConfigureAwait(false);
 }

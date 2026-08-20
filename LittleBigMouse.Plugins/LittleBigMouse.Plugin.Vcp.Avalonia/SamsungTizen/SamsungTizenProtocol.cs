@@ -1,5 +1,6 @@
 #nullable enable
 using System.Text.Json;
+using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 
@@ -9,15 +10,14 @@ public static class SamsungTizenProtocol
 
     public static Uri RemoteUri(string ipAddress, string? token)
     {
-        if (!SamsungTizenDevice.IsValidAddress(ipAddress))
-            throw new ArgumentException("A valid IPv4 address is required.", nameof(ipAddress));
+        var address = Ipv4Address.Require(ipAddress, nameof(ipAddress), "A valid IPv4 address is required.");
 
         var name = Uri.EscapeDataString(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(AppName)));
         var tokenQuery = string.IsNullOrWhiteSpace(token)
             ? ""
             : $"&token={Uri.EscapeDataString(token)}";
 
-        return new Uri($"wss://{ipAddress}:8002/api/v2/channels/samsung.remote.control?name={name}{tokenQuery}");
+        return new Uri($"wss://{address}:8002/api/v2/channels/samsung.remote.control?name={name}{tokenQuery}");
     }
 
     public static string RemoteKeyPayload(string key, string command = "Click")

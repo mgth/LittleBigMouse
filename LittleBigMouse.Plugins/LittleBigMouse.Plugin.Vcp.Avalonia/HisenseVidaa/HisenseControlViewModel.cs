@@ -9,6 +9,7 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
 {
     readonly IHisenseVidaaService? _service;
+    readonly ExclusiveOperationRunner _operations;
     readonly Queue<VidaaTrafficMessage> _trafficMessages = new();
     CancellationTokenSource? _trafficCancellation;
     CancellationTokenSource? _volumeSetCancellation;
@@ -206,6 +207,11 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
     public HisenseControlViewModel(IHisenseVidaaService? service)
     {
         _service = service;
+        _operations = new ExclusiveOperationRunner(
+            busy => Busy = busy,
+            status => Status = status,
+            "Timed out while contacting the projector. Check that it is awake and still reachable at the configured IP address.",
+            TimeSpan.FromSeconds(15));
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
         PowerOnCommand = ReactiveCommand.CreateFromTask(WakeAsync);
         PowerOffCommand = ReactiveCommand.CreateFromTask(() => KeyAsync("KEY_POWER"));
@@ -284,7 +290,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             _service.SaveAddress(_monitor.Id, IpAddress, MacAddress, DeviceUuid, CertificatePath);
             var configuration = _service.GetConfiguration(_monitor.Id);
@@ -301,7 +307,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             Status = "Searching the configured /24 for the VIDAA projector…";
             var discoveredDevice = await _service.FindAsync(IpAddress, cancellationToken);
@@ -329,7 +335,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
         }
 
         var monitorId = _monitor.Id;
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             await _service.SendKeyAsync(monitorId, key, cancellationToken);
             Status = $"Sent {key}.";
@@ -351,7 +357,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             await _service.RequestPinAsync(_monitor.Id, cancellationToken);
             var configuration = _service.GetConfiguration(_monitor.Id);
@@ -369,7 +375,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
         }
 
         var monitorId = _monitor.Id;
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             await _service.PairAsync(monitorId, Pin, cancellationToken);
             var configuration = _service.GetConfiguration(monitorId);
@@ -392,7 +398,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             var keySequence = RemoteMacro.Parse(KeyMacro);
             _service.SaveKeyMacro(_monitor.Id, KeyMacro);
@@ -408,7 +414,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             await _service.SetPictureSettingAsync(
                 _monitor.Id,
@@ -427,7 +433,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
         }
 
         PictureSettingsCatalog = "Requesting the VIDAA picture-setting catalogue…";
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             var settings = await _service.GetPictureSettingsAsync(_monitor.Id, cancellationToken);
             PictureSettingsCatalog = string.Join("\n", settings
@@ -502,7 +508,7 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
         var monitorId = _monitor.Id;
         var action = LaserAction;
         var level = (int)LaserLevel;
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             await _service.SendPlatformActionAsync(monitorId, action, level, cancellationToken);
             Status = $"Sent {action.Trim()} = {level} (unconfirmed).";
@@ -760,39 +766,12 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await Run(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             _service.SaveAddress(_monitor.Id, IpAddress, MacAddress, DeviceUuid, CertificatePath);
             await _service.PowerOnAsync(_monitor.Id, cancellationToken);
             Status = "Wake-on-LAN sent.";
         });
-    }
-
-    async Task Run(Func<CancellationToken, Task> action, TimeSpan? timeout = null)
-    {
-        if (Busy)
-        {
-            return;
-        }
-
-        Busy = true;
-        using var cancellation = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(15));
-        try
-        {
-            await action(cancellation.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            Status = "Timed out while contacting the projector. Check that it is awake and still reachable at the configured IP address.";
-        }
-        catch (Exception exception)
-        {
-            Status = exception.Message;
-        }
-        finally
-        {
-            Busy = false;
-        }
     }
 
     public void Dispose()

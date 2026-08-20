@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using LittleBigMouse.Plugin.Vcp.Networking;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 
@@ -14,14 +15,13 @@ public sealed class SamsungTizenDiscovery(HttpClient httpClient)
         string ipAddress,
         CancellationToken cancellationToken = default)
     {
-        if (!SamsungTizenDevice.IsValidAddress(ipAddress))
-            throw new ArgumentException("Enter a valid IPv4 address.", nameof(ipAddress));
+        var address = Ipv4Address.Require(ipAddress, nameof(ipAddress));
 
         using var response = await httpClient.GetAsync(
-            $"http://{ipAddress}:8001/api/v2/", cancellationToken).ConfigureAwait(false);
+            $"http://{address}:8001/api/v2/", cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        return SamsungTizenProtocol.ParseDevice(ipAddress, json);
+        return SamsungTizenProtocol.ParseDevice(address, json);
     }
 
     public async Task<IReadOnlyList<SamsungTizenDevice>> DiscoverAsync(

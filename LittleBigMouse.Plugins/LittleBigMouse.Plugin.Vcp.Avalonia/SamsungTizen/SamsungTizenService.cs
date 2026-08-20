@@ -75,12 +75,11 @@ public sealed class SamsungTizenService : ISamsungTizenService, IAsyncDisposable
 
     public void SaveManualAddress(string monitorId, string ipAddress, string macAddress)
     {
-        if (!SamsungTizenDevice.IsValidAddress(ipAddress))
-            throw new ArgumentException("Enter a valid IPv4 address.", nameof(ipAddress));
+        var address = Ipv4Address.Require(ipAddress, nameof(ipAddress));
 
         var configuration = _store.Get(monitorId) ?? new SamsungTizenConfiguration { MonitorId = monitorId };
-        if (!configuration.IpAddress.Equals(ipAddress.Trim(), StringComparison.Ordinal)) configuration.Token = "";
-        configuration.IpAddress = ipAddress.Trim();
+        if (!configuration.IpAddress.Equals(address, StringComparison.Ordinal)) configuration.Token = "";
+        configuration.IpAddress = address;
         configuration.MacAddress = macAddress.Trim();
         _store.Save(configuration);
     }

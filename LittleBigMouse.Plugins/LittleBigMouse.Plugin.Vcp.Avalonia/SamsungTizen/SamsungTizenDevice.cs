@@ -1,5 +1,4 @@
 #nullable enable
-using System.Net;
 using LittleBigMouse.Plugins;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
@@ -15,10 +14,6 @@ public sealed record SamsungTizenDevice(
     public string Label => string.IsNullOrWhiteSpace(ModelName)
         ? $"{Name} — {IpAddress}"
         : $"{Name} ({ModelName}) — {IpAddress}";
-
-    public static bool IsValidAddress(string? value)
-        => IPAddress.TryParse(value, out var address)
-           && address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
 }
 
 /// <summary>Persisted association between an EDID monitor and one Tizen network device.</summary>

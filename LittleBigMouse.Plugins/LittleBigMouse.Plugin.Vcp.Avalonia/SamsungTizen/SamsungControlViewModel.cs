@@ -9,11 +9,17 @@ namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 public sealed class SamsungControlViewModel : ReactiveObject
 {
     readonly ISamsungTizenService? _service;
+    readonly ExclusiveOperationRunner _operations;
     PhysicalMonitor? _monitor;
 
     public SamsungControlViewModel(ISamsungTizenService? service)
     {
         _service = service;
+        _operations = new ExclusiveOperationRunner(
+            busy => Busy = busy,
+            status => Status = status,
+            "The Samsung display did not answer in time.",
+            TimeSpan.FromSeconds(15));
         DiscoverCommand = ReactiveCommand.CreateFromTask(DiscoverAsync);
         PairCommand = ReactiveCommand.CreateFromTask(PairAsync);
         PowerOnCommand = ReactiveCommand.CreateFromTask(PowerOnAsync);
@@ -158,7 +164,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
     async Task DiscoverAsync()
     {
         if (_service is null) return;
-        await RunAsync(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             Status = "Searching the local network…";
             var devices = await _service.DiscoverAsync(cancellationToken);
@@ -178,7 +184,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
     async Task PairAsync()
     {
         if (_service is null || _monitor is null) return;
-        await RunAsync(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             Status = "Allow LittleBigMouse on the Samsung display…";
             var configuration = await _service.PairAsync(
@@ -191,7 +197,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
     async Task PowerOnAsync()
     {
         if (_service is null || _monitor is null) return;
-        await RunAsync(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             _service.SaveManualAddress(_monitor.Id, IpAddress, MacAddress);
             await _service.PowerOnAsync(_monitor.Id, cancellationToken);
@@ -202,7 +208,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
     async Task SendKeyAsync(string key, string success)
     {
         if (_service is null || _monitor is null) return;
-        await RunAsync(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             await _service.SendKeyAsync(_monitor.Id, key, cancellationToken);
             Paired = true;
@@ -214,36 +220,13 @@ public sealed class SamsungControlViewModel : ReactiveObject
     async Task RunMacroAsync()
     {
         if (_service is null || _monitor is null) return;
-        await RunAsync(async cancellationToken =>
+        await _operations.RunAsync(async cancellationToken =>
         {
             var sequence = SamsungTizenProtocol.ParseSequence(PictureMacro);
             _service.SavePictureMacro(_monitor.Id, PictureMacro);
             await _service.SendSequenceAsync(_monitor.Id, sequence, cancellationToken);
             Status = $"Macro completed ({sequence.Count} keys).";
         }, TimeSpan.FromSeconds(45));
-    }
-
-    async Task RunAsync(Func<CancellationToken, Task> action, TimeSpan timeout)
-    {
-        if (Busy) return;
-        Busy = true;
-        using var cancellation = new CancellationTokenSource(timeout);
-        try
-        {
-            await action(cancellation.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            Status = "The Samsung display did not answer in time.";
-        }
-        catch (Exception e)
-        {
-            Status = e.Message;
-        }
-        finally
-        {
-            Busy = false;
-        }
     }
 
     void Apply(SamsungTizenConfiguration configuration)

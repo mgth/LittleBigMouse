@@ -183,6 +183,24 @@ public class HisenseVidaaClientTests
             Assert.Single(transport.Current.Published));
     }
 
+    /// <summary>
+    /// A device answers the pairing exchange on the topics of the identity the session was opened
+    /// with. A first pairing has none in its configuration yet, so taking them from there would
+    /// leave the session listening on an empty client identifier and lose every answer.
+    /// </summary>
+    [Fact]
+    public async Task ListensOnTheTopicsOfTheCredentialsThePairingIsTrying()
+    {
+        var configuration = Unpaired(3290);
+        var transport = new FakeVidaaTransport();
+        await using var client = new HisenseVidaaClient(configuration, transport.OpenAsync);
+
+        await client.StartPairingAsync(default);
+
+        Assert.Equal(DeviceClientId, Assert.Single(transport.Requests).ClientId);
+        Assert.Equal(HisenseVidaaProtocol.ResponseTopics(DeviceClientId), transport.Current.Subscribed);
+    }
+
     [Fact]
     public async Task ReportsThatTheDeviceRejectedEveryCredentialVariant()
     {

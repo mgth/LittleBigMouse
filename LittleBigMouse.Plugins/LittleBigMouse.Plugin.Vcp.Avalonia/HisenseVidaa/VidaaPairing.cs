@@ -125,12 +125,12 @@ internal sealed class VidaaPairing(
                 {
                     using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     attempt.CancelAfter(AttemptTimeout);
-                    // The response topics still come from the configuration: a device keeps the same
-                    // client identifier across pairings, so this subscribes to the topics of the
-                    // pairing being replaced.
+                    // The answers come back addressed to the candidate being tried, not to whatever
+                    // an earlier pairing left in the configuration: a first pairing has no client
+                    // identifier there at all, and would otherwise listen on an empty one.
                     await session.OpenAsync(
                         credentials,
-                        VidaaConnectionProfile.ResponseTopics(configuration),
+                        HisenseVidaaProtocol.ResponseTopics(credentials.ClientId),
                         attempt.Token).ConfigureAwait(false);
                 }
                 catch (UnauthorizedAccessException e)

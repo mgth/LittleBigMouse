@@ -1,0 +1,13 @@
+{
+  "DaemonPort": 25196,
+  "Priority": "High",
+  "PriorityUnhooked": "Idle",
+  "HomeCinema": false,
+  "Pinned": true,
+  "AutoUpdate": true,
+  "StartMinimized": false,
+  "StartElevated": false,
+  "DebugTools": false,
+  "ShowMonitorActionWarning": true,
+  "BorderValues": "PerModel"
+}

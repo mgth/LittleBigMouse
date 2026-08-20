@@ -1,0 +1,17 @@
+{
+  "DaemonPort": 25196,
+  "Priority": "High",
+  "PriorityUnhooked": "Idle",
+  "HomeCinema": false,
+  "VcpControl": true,
+  "Pinned": true,
+  "AutoUpdate": false,
+  "StartMinimized": true,
+  "StartElevated": false,
+  "DebugTools": false,
+  "ShowMonitorActionWarning": false,
+  "BorderValues": "PerMonitor",
+  "RescueShortcut": "Ctrl+Alt+Shift+M",
+  "HideTrayIcon": true,
+  "ExcludedDefaultsVersion": 2
+}

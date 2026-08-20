@@ -1,0 +1,33 @@
+{
+  "Options": {
+    "Enabled": false
+  },
+  "Monitors": {
+    "TST1234_0": {
+      "XLocationInMm": 12.5,
+      "BorderResistance": {
+        "Right": {
+          "Sections": []
+        },
+        "Bottom": {
+          "Move": 0,
+          "Drag": 0
+        }
+      },
+      "Borders": {
+        "Left": 5
+      },
+      "UnknownFutureField": 42,
+      "Sources": {
+        "GONE-DISPLAY9": {
+          "PixelX": 999,
+          "PixelY": 999
+        }
+      }
+    },
+    "GHOST_7": {
+      "XLocationInMm": 999,
+      "YLocationInMm": 999
+    }
+  }
+}

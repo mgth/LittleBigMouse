@@ -89,30 +89,68 @@ public sealed class EngineController(
     public Task StartIfEnabledAsync() => Enabled ? StartAsync() : Task.CompletedTask;
 
     /// <summary>
-    /// The tray's Start. Persists Enabled=true first: the recovery guards all test
+    /// The user's Start — the tray entry and the window's apply button are the same gesture,
+    /// and this is it. Persists Enabled=true first: the recovery guards all test
     /// <c>Options.Enabled</c>, so a start that doesn't record itself is one they will keep
     /// undoing.
     /// </summary>
-    public async Task StartFromUserAsync()
+    /// <param name="keepLayout">
+    /// What the window's button adds over the tray's: "Apply and start" also keeps the geometry
+    /// being edited, not merely the fact that the engine was asked for. The tray has no editor
+    /// behind it — it hands over whatever the layout currently is and writes nothing else.
+    /// </param>
+    public async Task StartFromUserAsync(bool keepLayout = false)
     {
         if (currentLayout() is not { } layout) return;
 
+        // A foreign layout is simulated, never adopted: the client sends Load without Run, so
+        // the daemon validates the zones and reports on them with the input hook left down.
+        // Enabled stays false — VirtualLayoutFactory sets it that way on purpose — so that no
+        // recovery path (a rebuild, a re-hook, the resume watchdog) can mistake a foreign
+        // geometry for something the user asked to run. Nothing is persisted either; the store
+        // refuses a virtual layout anyway.
+        if (layout.IsVirtual)
+        {
+            await StartAsync();
+            return;
+        }
+
         layout.Options.Enabled = true;
-        persistence.SaveEnabled(layout);
+        await PersistStartAsync(layout, keepLayout);
         await StartAsync();
     }
 
-    /// <summary>The tray's Stop, symmetric to <see cref="StartFromUserAsync"/>.</summary>
+    /// <summary>
+    /// The user's Stop, symmetric to <see cref="StartFromUserAsync"/> — and with no virtual
+    /// branch, on purpose: Enabled=false is the right value for a foreign layout anyway, and
+    /// the store's own guard is what turns the write into a no-op. That guard exists for this
+    /// exact call.
+    /// </summary>
     public async Task StopFromUserAsync()
     {
         if (currentLayout() is { } layout)
         {
             layout.Options.Enabled = false;
-            persistence.SaveEnabled(layout);
+            await Task.Run(() => persistence.SaveEnabled(layout));
         }
 
         await client.StopAsync();
     }
+
+    /// <summary>
+    /// Write the start down. Off the calling thread: both user Starts are clicks, and this
+    /// reaches the store (registry, JSON file) and the autostart scheduling behind it.
+    /// </summary>
+    Task PersistStartAsync(IMonitorsLayout layout, bool keepLayout) =>
+        Task.Run(() =>
+        {
+            // A full save writes Enabled too, so it stands in for the narrow one — but only an
+            // edited layout is worth it, and only a MonitorsLayout can be saved whole at all.
+            if (keepLayout && layout is MonitorsLayout { Saved: false } edited)
+                persistence.Save(edited);
+            else
+                persistence.SaveEnabled(layout);
+        });
 
     /// <summary>
     /// Re-hook if the engine should be running but is not — WITHOUT rebuilding the layout.

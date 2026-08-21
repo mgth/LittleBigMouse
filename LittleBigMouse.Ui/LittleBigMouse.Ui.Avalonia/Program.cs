@@ -164,6 +164,16 @@ internal class Program
 
             services.AddSingleton<IMainService, MainService>();
 
+            // Shared, not owned by MainService: the window's Start/Stop buttons and the tray's
+            // menu entries are the same gesture, so they have to reach the same controller —
+            // two instances would be two answers to "should the engine be hooked". The layout
+            // accessor resolves IMainService lazily, inside the lambda, so that MainService can
+            // still take the controller in its own constructor.
+            services.AddSingleton(sp => new EngineController(
+                sp.GetRequiredService<ILittleBigMouseClientService>(),
+                sp.GetRequiredService<ILayoutPersistence>(),
+                () => sp.GetRequiredService<IMainService>().MonitorsLayout));
+
             // The MVVM locator: registered services come from the container, anything
             // else (views, view-models, MonitorsLayout…) is built by ActivatorUtilities.
             // Instances created that way are transient and NOT tracked by the root

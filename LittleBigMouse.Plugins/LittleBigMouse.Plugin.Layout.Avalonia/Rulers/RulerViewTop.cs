@@ -1,6 +1,4 @@
-﻿#define TIMING
-
-using System.Globalization;
+﻿using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -58,6 +56,12 @@ abstract class RulerOrientation
 
     public abstract Point TextTransform(Point p, double size, double length);
 
+    /// <summary>
+    /// The ruler's outline: a trapezoid whose narrow side is the one facing the monitor, so two
+    /// rulers meeting at a corner mitre into each other instead of overlapping.
+    /// </summary>
+    public abstract IReadOnlyList<Point> ClipOutline();
+
     public Brush GetBackground(Color color)
     {
         var c = color.ToColor<double>().ToHSL().Darken(0.7).ToAvaloniaColor();
@@ -103,6 +107,14 @@ class RulerOrientationTop : RulerOrientation
     public override Point TextTransform(Point p, double size, double length)
         => Transform(p) + (new Vector(size * 0.1, -size * 1.1));
 
+    public override IReadOnlyList<Point> ClipOutline() =>
+    [
+        new Point(Bounds.Left, Bounds.Top),
+        new Point(Bounds.Left + Bounds.Height, Bounds.Bottom),
+        new Point(Bounds.Right - Bounds.Height, Bounds.Bottom),
+        new Point(Bounds.Right, Bounds.Top),
+    ];
+
     protected override Brush GetBrush(Color color) => RulerOrientation.GetBrush(0, 0, 0, 1, color);
 
     public RulerOrientationTop(double size, double length, Rect bounds) : base(size, length, bounds)
@@ -127,6 +139,14 @@ class RulerOrientationRight : RulerOrientation
 
     public override Point TextTransform(Point p, double size, double length) => Transform(p);
 
+    public override IReadOnlyList<Point> ClipOutline() =>
+    [
+        new Point(Bounds.Right, Bounds.Top),
+        new Point(Bounds.Left, Bounds.Top + Bounds.Width),
+        new Point(Bounds.Left, Bounds.Bottom - Bounds.Width),
+        new Point(Bounds.Right, Bounds.Bottom),
+    ];
+
     protected override Brush GetBrush(Color color) => RulerOrientation.GetBrush(1, 0, 0, 0, color);
 
     public RulerOrientationRight(double size, double length, Rect bounds) : base(size, length, bounds)
@@ -150,6 +170,15 @@ class RulerOrientationBottom : RulerOrientation
 
     public override Point TextTransform(Point p, double size, double length)
         => Transform(p) + new Vector(size * 0.1, -size * 0.3);
+
+    public override IReadOnlyList<Point> ClipOutline() =>
+    [
+        new Point(Bounds.Left, Bounds.Bottom),
+        new Point(Bounds.Left + Bounds.Height, Bounds.Top),
+        new Point(Bounds.Right - Bounds.Height, Bounds.Top),
+        new Point(Bounds.Right, Bounds.Bottom),
+    ];
+
     protected override Brush GetBrush(Color color) => RulerOrientation.GetBrush(0, 1, 0, 0, color);
 
     public RulerOrientationBottom(double size, double length, Rect bounds) : base(size, length, bounds)
@@ -171,6 +200,14 @@ class RulerOrientationLeft : RulerOrientation
 
     public override Point TextTransform(Point p, double size, double length)
         => Transform(p) + new Vector(-length, 0);
+
+    public override IReadOnlyList<Point> ClipOutline() =>
+    [
+        new Point(Bounds.Left, Bounds.Top),
+        new Point(Bounds.Right, Bounds.Top + Bounds.Width),
+        new Point(Bounds.Right, Bounds.Bottom - Bounds.Width),
+        new Point(Bounds.Left, Bounds.Bottom),
+    ];
 
     protected override Brush GetBrush(Color color) => RulerOrientation.GetBrush(0, 0, 1, 0, color);
 
@@ -284,12 +321,7 @@ public class RulerViewTop : Control
     readonly Pen _penIn = new(Brushes.WhiteSmoke, 1);
     readonly Pen _penOut = new(new SolidColorBrush(HLabColors.RGB(0.7, 0.7, 0.7, 0.7).ToAvaloniaColor()), 1);
 
-    protected void Render()
-    {
-        InvalidateVisual();
-        return;
-
-    }
+    protected void Render() => InvalidateVisual();
 
     public override void Render(DrawingContext dc)
     {
@@ -305,157 +337,52 @@ public class RulerViewTop : Control
         var background = o.GetBackground(Selected ? Colors.DarkGreen : Colors.DarkBlue);
         var backgroundOut = o.GetBackground(Colors.Black);
 
-        //dc.PushClip(new RoundedRect(
-        //    new Rect(
-        //        new Point(7, 7),
-        //        new Size(Bounds.Width - 13, Bounds.Height - 13))));
-        switch (Orientation)
-        {
-            case 0:
-                dc.PushGeometryClip(new PolylineGeometry(
-                    new List<Point>()
-                    {
-                        new Point(Bounds.Left, Bounds.Top),
-                        new Point(Bounds.Left + Bounds.Height, Bounds.Bottom), 
-                        new Point(Bounds.Right - Bounds.Height, Bounds.Bottom), 
-                        new Point(Bounds.Right, Bounds.Top), 
-                    }, true));
-                break;
-            case 1:
-                dc.PushGeometryClip(new PolylineGeometry(
-                    new List<Point>()
-                    {
-                        new Point(Bounds.Right, Bounds.Top), 
-                        new Point(Bounds.Left, Bounds.Top + Bounds.Width), 
-                        new Point(Bounds.Left, Bounds.Bottom - Bounds.Width), 
-                        new Point(Bounds.Right, Bounds.Bottom), 
-                    }, true));
-                break;
-            case 2:
-                dc.PushGeometryClip(new PolylineGeometry(
-                    new List<Point>()
-                    {
-                        new Point(Bounds.Left, Bounds.Bottom), 
-                        new Point(Bounds.Left + Bounds.Height, Bounds.Top), 
-                        new Point(Bounds.Right - Bounds.Height, Bounds.Top), 
-                        new Point(Bounds.Right, Bounds.Bottom), 
-                    }, true));
-                break;
-            case 3:
-                dc.PushGeometryClip(new PolylineGeometry(
-                    new List<Point>()
-                    {
-                        new Point(Bounds.Left, Bounds.Top), 
-                        new Point(Bounds.Right, Bounds.Top + Bounds.Width), 
-                        new Point(Bounds.Right, Bounds.Bottom - Bounds.Width), 
-                        new Point(Bounds.Left, Bounds.Bottom), 
-                    }, true));
-                break;
-        }
-
-
-        var rulerLength = RulerLength;
-        var rulerStart = RulerStart;
-        var zero = Zero;
-
-        //var pixelsPerDip = 96 / 185;
+        dc.PushGeometryClip(new PolylineGeometry(o.ClipOutline(), true));
 
         //   neg     0 actual ruler    L    outside positive
         // |---------|-----------------|----------|
-        // r0        r1                r2         r3
 
-        const double r0 = 0.0;
-        var r1 = zero;
-        var r2 = (zero + rulerLength);
-        var r3 = o.Length;
+        var geometry = new RulerGeometry(o.Length, RulerStart, RulerLength, Zero, o.Ratio);
 
-        var v100 = new Vector(0, 20); // size of 10cm graduations
-        var v050 = new Vector(0, 15); // size of 5cm graduations
-        var v010 = new Vector(0, 10); // size of 1cm graduations
-        var v005 = new Vector(0, 5);  // size of 5mm graduations
-        var v001 = new Vector(0, 2.5); // size of 1mm graduations
+        if (geometry.OutsideBefore is { } before)
+            dc.DrawRectangle(backgroundOut, null, o.Transform(before.Start, before.End));
 
-        var sizeT100 = 5.0 * o.Ratio;
-        var sizeT050 = 4.0 * o.Ratio;
-        var sizeT010 = 3.0 * o.Ratio;
+        if (geometry.OutsideAfter is { } after)
+            dc.DrawRectangle(backgroundOut, null, o.Transform(after.Start, after.End));
 
-        //draw outside background negative part
-        if (r0 < r3 && r1 > r0)
-            dc.DrawRectangle(backgroundOut, null,
-                o.Transform(r0, Math.Min(r1, r3)));
+        if (geometry.Inside is { } inside)
+            dc.DrawRectangle(background, null, o.Transform(inside.Start, inside.End));
 
-        //draw outside background positive part
-        if (r2 < r3)
-            dc.DrawRectangle(backgroundOut, null,
-                o.Transform(Math.Max(r2, r0), r3));
-
-        // draw inside background
-        if (r1 < r3 && r2 > r0)
-            dc.DrawRectangle(background, null,
-                o.Transform(Math.Max(r1, r0), Math.Min(r2, r3)));
-
-        var mm = (int)rulerStart - 10;
-
-        var pos = (zero + mm);
-
-        while (pos < o.Length)
-        {
-            var pen = mm < 0 || mm > rulerLength ? _penOut : _penIn;
-
-            var p0 = new Point(pos, r0);
-
-            if (mm % 5 == 0)
-            {
-                if (mm % 10 == 0)
-                {
-                    if (mm % 50 == 0)
-                    {
-                        if (mm % 100 == 0)
-                        {
-
-                            var t = mm / 100;
-                            var txt = new FormattedText(t.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                            new Typeface("Segoe UI"), sizeT100, pen.Brush/*, pixelsPerDip*/);
-
-                            dc.DrawText(txt, o.TextTransform(p0 + v100, sizeT100, txt.Width));
-                            dc.DrawLine(pen, o.Transform(p0), o.Transform(p0 + v100));
-
-                        }
-                        else
-                        {
-                            var txt = new FormattedText("5", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                                new Typeface("Segoe UI"), sizeT050, _penIn.Brush/*, pixelsPerDip*/);
-
-                            dc.DrawText(txt, o.TextTransform(p0 + v050, sizeT050, txt.Width));
-                            dc.DrawLine(pen, o.Transform(p0), o.Transform(p0 + v050));
-                        }
-                    }
-                    else
-                    {
-                        var t = mm % 100 / 10;
-                        var txt = new FormattedText(
-                            t.ToString(),
-                            CultureInfo.CurrentCulture,
-                            FlowDirection.LeftToRight,
-                            new Typeface("Segoe UI"),
-                            sizeT010,
-                            pen.Brush/*, pixelsPerDip*/);
-
-                        dc.DrawText(txt, o.TextTransform(p0 + v010, sizeT010, txt.Width));
-                        dc.DrawLine(pen, o.Transform(p0), o.Transform(p0 + v010));
-                    }
-                }
-                else
-                    dc.DrawLine(pen, o.Transform(p0), o.Transform(p0 + v005));
-            }
-            else
-                dc.DrawLine(pen, o.Transform(p0), o.Transform(p0 + v001));
-
-            mm++;
-            pos += 1.0;
-        }
+        foreach (var graduation in geometry.Graduations())
+            Draw(dc, o, graduation);
 
         base.Render(dc);
+    }
+
+    void Draw(DrawingContext dc, RulerOrientation o, RulerGraduation graduation)
+    {
+        var pen = graduation.Inside ? _penIn : _penOut;
+
+        var origin = new Point(graduation.Position, 0);
+        var tip = origin + new Vector(0, graduation.TickLength);
+
+        if (graduation.Label is { } label)
+        {
+            // A label belongs to its tick: both dim together outside the measured edge. The 5 cm
+            // label used to be the exception, drawn with the inside brush whatever its tick did,
+            // which left it glaring in the middle of a dimmed overhang.
+            var text = new FormattedText(
+                label,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Segoe UI"),
+                graduation.LabelSize,
+                pen.Brush);
+
+            dc.DrawText(text, o.TextTransform(tip, graduation.LabelSize, text.Width));
+        }
+
+        dc.DrawLine(pen, o.Transform(origin), o.Transform(tip));
     }
 
 }

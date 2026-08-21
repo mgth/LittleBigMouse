@@ -25,7 +25,6 @@
     <ProjectReference Include="..\..\HLab.Avalonia\HLab.Mvvm.Avalonia\HLab.Mvvm.Avalonia.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Base\HLab.Base.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Mvvm.ReactiveUI\HLab.Mvvm.ReactiveUI.csproj" />
-    <ProjectReference Include="..\..\HLab.Core\HLab.Remote\HLab.Remote.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
     <ProjectReference Include="..\..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />
     <ProjectReference Include="..\..\HLab.Sys\HLab.Sys.Windows.MonitorVcp.Avalonia\HLab.Sys.Windows.MonitorVcp.Avalonia.csproj" />

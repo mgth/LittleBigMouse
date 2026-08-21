@@ -340,11 +340,12 @@ public class RegistryLayoutStoreTests : IDisposable
         CultureInfo.CurrentCulture = new CultureInfo("fr-FR");
         try
         {
-            Store.WriteGlobalOptions(new GlobalOptionsDto { DaemonPort = 25196, Pinned = true, HomeCinema = false });
+            Store.WriteGlobalOptions(new GlobalOptionsDto
+                { ExcludedDefaultsVersion = 3, Pinned = true, HomeCinema = false });
             WriteMonitor(new MonitorDto { XLocationInMm = 12.5 });
 
             using var root = Registry.CurrentUser.OpenSubKey(_root)!;
-            Assert.Equal("25196", root.GetValue("DaemonPort"));
+            Assert.Equal("3", root.GetValue("ExcludedDefaultsVersion"));
             Assert.Equal("1", root.GetValue("Pinned"));
             Assert.Equal("0", root.GetValue("HomeCinema"));
             Assert.Equal(RegistryValueKind.String, root.GetValueKind("Pinned"));

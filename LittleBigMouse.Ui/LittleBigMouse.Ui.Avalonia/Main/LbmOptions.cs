@@ -97,15 +97,6 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     }
     bool _showMonitorActionWarning = true;
 
-    // Compatibility-only value for settings written by TCP-era releases.
-    // The current daemon uses authenticated local IPC and ignores this value.
-    public int DaemonPort
-    { 
-        get => _daemonPort; 
-        set => this.SetAndRaise(ref _daemonPort, value); 
-    }
-    int _daemonPort = 25196;
-
     [DataMember]
     public string Priority 
     {

@@ -63,8 +63,10 @@ public class JsonLayoutStoreTests : IDisposable
         var store = new JsonLayoutStore(_dir);
         var data = store.Read("LAYOUT1", ["TST1234"]);
 
-        Assert.Equal(25196, data.GlobalOptions!.DaemonPort);
-        Assert.Equal("Normal", data.GlobalOptions.Priority);
+        // "DaemonPort" is still in the document above on purpose: the TCP transport it
+        // configured is gone, so it is now an unknown property, and a user's existing
+        // options.json must keep reading cleanly rather than throwing.
+        Assert.Equal("Normal", data.GlobalOptions!.Priority);
         Assert.True(data.GlobalOptions.ShowMonitorActionWarning);
 
         Assert.Equal(600, data.Models["TST1234"].Width);

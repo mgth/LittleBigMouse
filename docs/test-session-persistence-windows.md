@@ -30,7 +30,7 @@ Avec le registre actuel déjà peuplé :
 - [ ] Les options layout sont restaurées : Enabled, Algorithm, MaxTravelDistance, Freelook*, LoopX/Y,
   AdjustPointer/Speed, AllowOverlaps/Discontinuity
 - [ ] Les options globales sont restaurées : Pinned, AutoUpdate, StartMinimized, StartElevated,
-  DebugTools, ShowMonitorActionWarning, BorderValues, HideTrayIcon, DaemonPort
+  DebugTools, ShowMonitorActionWarning, BorderValues, HideTrayIcon
 - [ ] **Lecture pure** : `reg export` avant/après lancement (sans sauvegarder) → diff vide, à une
   exception près : `ExcludedDefaultsVersion` peut être écrit une fois si absent (migration top-up).
   L'ancien code seedait le registre au chargement (`GetOrSet`) ; le nouveau ne doit RIEN écrire d'autre.
@@ -123,8 +123,9 @@ Simuler un vieux profil dans regedit :
 
 - [ ] Changer la topologie (débrancher/rebrancher un écran, dock) → chaque combinaison garde sa propre
   clé `Layouts\{id}` avec ses valeurs, sans contamination croisée
-- [ ] `DaemonPort` personnalisé dans le registre → toujours honoré (il n'est plus seedé au chargement,
-  mais il est maintenant écrit à la sauvegarde)
+- [ ] `DaemonPort` présent dans le registre d'un utilisateur existant → ignoré sans erreur, et la
+  valeur résiduelle est laissée en place (le transport TCP qu'elle configurait n'existe plus depuis
+  la 5.6 ; l'IPC local n'utilise pas de port)
 - [ ] Lancement en admin → `Elevated` détecté, UI cohérente
 - [ ] Exclusion process : lancer un jeu sous un chemin exclu → LBM ne traverse pas (le daemon lit
   toujours le même `Excluded.txt`, chemin inchangé)

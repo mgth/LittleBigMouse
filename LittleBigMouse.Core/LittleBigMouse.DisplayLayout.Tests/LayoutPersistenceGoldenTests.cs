@@ -55,7 +55,6 @@ public class LayoutPersistenceGoldenTests : IDisposable
         var (layout, monitor, _) = Load("v5.2-pre-sections");
 
         // Options that lived in the store before 5.5 arrive unchanged...
-        Assert.Equal(25196, layout.Options.DaemonPort);
         Assert.Equal("High", layout.Options.Priority);
         Assert.Equal("Idle", layout.Options.PriorityUnhooked);
         Assert.True(layout.Options.Pinned);
@@ -296,7 +295,6 @@ public class LayoutPersistenceGoldenTests : IDisposable
         var (layout, monitor, source) = Load("incomplete-empty");
 
         // "{}" everywhere is indistinguishable from a missing file: the live model wins.
-        Assert.Equal(25196, layout.Options.DaemonPort);
         Assert.Equal("Normal", layout.Options.Priority);
         Assert.Equal("Strait", layout.Options.Algorithm);
         Assert.True(layout.Options.Enabled);
@@ -390,7 +388,6 @@ public class LayoutPersistenceGoldenTests : IDisposable
         Assert.True(options.VcpControl);
         Assert.True(options.StartMinimized);
         Assert.Equal("PerMonitor", options.BorderValues);
-        Assert.Equal(25196, options.DaemonPort);
 
         foreach (var entry in ExcludedProcessDefaults.All)
         {

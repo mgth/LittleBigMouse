@@ -60,7 +60,6 @@ public class RegistryLayoutStore : ILayoutStore
 
     static GlobalOptionsDto ReadGlobalOptions(RegistryKey root, RegistryKey? layoutKey) => new()
     {
-        DaemonPort = root.TryGetInt("DaemonPort"),
         // These options historically lived in the layout key: fall back to it so old
         // configs keep their values (they reach the root key at the next save).
         Priority = root.TryGetString("Priority") ?? layoutKey?.TryGetString("Priority"),
@@ -263,7 +262,6 @@ public class RegistryLayoutStore : ILayoutStore
         using var root = OpenRoot(create: true);
         if (root == null) return;
 
-        Set(root, "DaemonPort", o.DaemonPort);
         Set(root, "Priority", o.Priority);
         Set(root, "PriorityUnhooked", o.PriorityUnhooked);
         Set(root, "HomeCinema", o.HomeCinema);

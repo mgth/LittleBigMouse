@@ -23,6 +23,7 @@
 
 using System;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -61,6 +62,26 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         _persistence = persistence;
 
         _monitorsService = monitorsService;
+
+        // What the daemon says about itself — see DaemonStatusTracker. Built before the commands
+        // below, whose canExecute reads Running and Dead through the helpers wired here.
+        _status = new DaemonStatusTracker(
+            run => Dispatcher.UIThread.Invoke(run),
+            () => LiveUpdate,
+            wasPreviewing =>
+            {
+                LiveUpdate = false;
+                if (wasPreviewing) _ = AbandonPreviewAsync();
+            });
+
+        _running = _status.WhenAnyValue(e => e.Running)
+            .ToProperty(this, e => e.Running, scheduler: Scheduler.Immediate);
+
+        _dead = _status.WhenAnyValue(e => e.Dead)
+            .ToProperty(this, e => e.Dead, scheduler: Scheduler.Immediate);
+
+        _daemonLayoutInfo = _status.WhenAnyValue(e => e.LayoutInfo)
+            .ToProperty(this, e => e.DaemonLayoutInfo, scheduler: Scheduler.Immediate);
 
         SaveCommand = ReactiveCommand.CreateFromTask(
             SaveAsync, 
@@ -184,99 +205,17 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
         this.UnsavedOn(e => e.Model);
 
-        service.DaemonEventReceived += StateChanged;
-        StateChanged(this,new LittleBigMouseServiceEventArgs(service.State,""));
+        service.DaemonEventReceived += (_, e) => _status.Apply(e);
+        _status.Apply(new LittleBigMouseServiceEventArgs(service.State, ""));
     }
 
-    void StateChanged(object? sender, LittleBigMouseServiceEventArgs e)
-    {
-        try
-        {
-            switch (e.Event)
-            {
-                case LittleBigMouseEvent.Running:
-                    Dispatcher.UIThread.Invoke(() =>
-                    {
-                        Dead = false;
-                        Running = true;
-                    });
-                    break;
-                case LittleBigMouseEvent.Stopped:
-                    Dispatcher.UIThread.Invoke(() =>
-                    {
-                        Dead = false;
-                        Running = false;
-                    });
-                    break;
-                case LittleBigMouseEvent.Dead:
-                    Dispatcher.UIThread.Invoke(() =>
-                    {
-                        Dead = true;
-                        Running = false;
-                    });
-                    break;
-                case LittleBigMouseEvent.Loaded:
-                    Dispatcher.UIThread.Invoke(() => DaemonLayoutInfo = e.Payload);
-                    break;
-                case LittleBigMouseEvent.LoadFailed:
-                    Dispatcher.UIThread.Invoke(() =>
-                        DaemonLayoutInfo = string.IsNullOrEmpty(e.Payload) ? "load failed" : e.Payload);
-                    break;
-                // The panic shortcut ran. Ending live preview is not cosmetic: the pump
-                // would otherwise hand the daemon back, within its next tick, the very
-                // geometry the user just escaped from.
-                // The panic shortcut ran: the daemon has freed the cursor and is coming
-                // down. That is all it can decide knowing nothing — and it deliberately
-                // knows nothing, because it must work with no UI reachable at all.
-                //
-                // What it means is ours. Previewing? Then there is an experiment to
-                // throw away: drop it, go back to the saved layout and start again.
-                // Not previewing? Then what trapped the user is what they committed to,
-                // and leaving the engine down is the right answer — no second press.
-                case LittleBigMouseEvent.Rescued:
-                    Dispatcher.UIThread.Invoke(() =>
-                    {
-                        var wasPreviewing = LiveUpdate;
-                        LiveUpdate = false;
-                        DaemonLayoutInfo = wasPreviewing
-                            ? "rescued: back to the saved layout"
-                            : "rescued: engine stopped";
-                        if (wasPreviewing) _ = AbandonPreviewAsync();
-                    });
-                    break;
-                case LittleBigMouseEvent.SettingsChanged:
-                case LittleBigMouseEvent.DisplayChanged:
-                case LittleBigMouseEvent.DesktopChanged:
-                case LittleBigMouseEvent.FocusChanged:
-                case LittleBigMouseEvent.Paused:
-                case LittleBigMouseEvent.Connected:
-                    break;
-                // Anything else — including events a newer daemon knows about and this
-                // build does not — is not ours to react to. This used to throw, which
-                // made every Suspended, Resumed and Probed fault the handler.
-                default:
-                    break;
-            }
-            //Dispatcher.UIThread.Invoke(new Action(() =>
-            //    Running = e.Event switch
-            //    {
-            //        LittleBigMouseEvent.Running => true,
-            //        LittleBigMouseEvent.Stopped => false,
-            //        LittleBigMouseEvent.Dead => false,
-            //        _ => Running
-            //    }
-            //));
-        }
-        catch(TaskCanceledException)
-        {
-             
-        }
-    }
+    readonly DaemonStatusTracker _status;
 
     protected override MonitorsLayout? OnModelChanging(MonitorsLayout? oldModel, MonitorsLayout? newModel)
     {
-        // The last Load outcome belongs to the previous layout generation.
-        Dispatcher.UIThread.Post(() => DaemonLayoutInfo = "");
+        // The last Load outcome belongs to the previous layout generation. Runs before the
+        // field is assigned on the very first model, where there is nothing to forget.
+        Dispatcher.UIThread.Post(() => _status?.ForgetLayoutInfo());
 
         // A rebuild (display change, refresh, virtual layout opened) goes through
         // MainService, which feeds the daemon itself: what we believe it holds no longer
@@ -423,19 +362,11 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
 
 
-    public bool Running
-    {
-        get => _running;
-        private set => this.RaiseAndSetIfChanged(ref _running,value);
-    }
-    bool _running;
+    public bool Running => _running.Value;
+    readonly ObservableAsPropertyHelper<bool> _running;
 
-    public bool Dead
-    {
-        get => _dead;
-        private set => this.RaiseAndSetIfChanged(ref _dead,value);
-    }
-    bool _dead;
+    public bool Dead => _dead.Value;
+    readonly ObservableAsPropertyHelper<bool> _dead;
 
     /// <summary>
     /// How the apply button delivers: on click, or continuously. While it is on, every
@@ -469,12 +400,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     /// message). This is the only feedback a Load-without-Run produces — the virtual
     /// layout badge displays it as the simulation status.
     /// </summary>
-    public string DaemonLayoutInfo
-    {
-        get => _daemonLayoutInfo;
-        private set => this.RaiseAndSetIfChanged(ref _daemonLayoutInfo, value);
-    }
-    string _daemonLayoutInfo = "";
+    public string DaemonLayoutInfo => _daemonLayoutInfo.Value;
+    readonly ObservableAsPropertyHelper<string> _daemonLayoutInfo;
 
     public bool IsVirtualLayout => _isVirtualLayout.Value;
     readonly ObservableAsPropertyHelper<bool> _isVirtualLayout;

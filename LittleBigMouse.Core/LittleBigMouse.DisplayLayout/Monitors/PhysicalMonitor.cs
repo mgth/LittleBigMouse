@@ -23,7 +23,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Reactive.Concurrency;
 using System.Linq;
 using System.Reactive.Linq;
@@ -88,43 +87,31 @@ public class PhysicalMonitor : SavableReactiveModel
             .Do(ParseDisplaySources)
             .Subscribe().DisposeWith(this);
 
-        // Per-monitor border source, seeded from the model so "PerMonitor" starts matching "PerModel".
-        Borders = new DisplayBorders
-        {
-            Left = model.PhysicalSize.LeftBorder,
-            Top = model.PhysicalSize.TopBorder,
-            Right = model.PhysicalSize.RightBorder,
-            Bottom = model.PhysicalSize.BottomBorder,
-        };
-        _borderOverride = new DisplayBorderOverride(model.PhysicalSize, Borders);
+        // Which borders the geometry is built from, and how this monitor comes to own them:
+        // see MonitorBorderPolicy. The whole rotation / projection / zones chain below just
+        // follows the size it publishes, and never asks which mode produced it.
+        _borderPolicy = new MonitorBorderPolicy(model.PhysicalSize, layout.Options).DisposeWith(this);
+        Borders = _borderPolicy.Borders;
 
-        // Observe BorderValues directly via ILayoutOptions.PropertyChanged — WhenAnyValue through
-        // IMonitorsLayout (which declares no INotifyPropertyChanged) loses the innermost subscription.
-        var borderValuesObs = Observable
-            .FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
-                h => Layout.Options.PropertyChanged += h,
-                h => Layout.Options.PropertyChanged -= h)
-            .Where(e => e.EventArgs.PropertyName == nameof(ILayoutOptions.BorderValues))
-            .Select(_ => Layout.Options.BorderValues)
-            .StartWith(Layout.Options.BorderValues)
-            .DistinctUntilChanged();
+        // Republish the policy's ownership flag as this monitor's own property change:
+        // persistence and the UI watch PhysicalMonitor, not the policy behind it.
+        _borderPolicy.Changing
+            .Where(e => e.PropertyName == nameof(MonitorBorderPolicy.Customized))
+            .Subscribe(_ => this.RaisePropertyChanging(nameof(BordersCustomized)))
+            .DisposeWith(this);
 
-        // The size the geometry is built from: the shared per-model size, or — when "Border values"
-        // is "PerMonitor" — the same size with this monitor's own borders substituted. Reactive so a
-        // mode switch rewires rotation / projection / zones live.
-        // Shared, replayed stream — Replay(1) ensures _physicalRotated and _depthProjectionUnrotated
-        // receive the current value when they subscribe, without missing the StartWith emission that
-        // already fired for _effectivePhysicalSize. Direct subscription also avoids the
-        // WhenAnyValue(e => e.EffectivePhysicalSize) OAPH-PropertyChanged round-trip that breaks
-        // in Avalonia's synchronous reentrancy model (mode-change event → OAPH fires → inner
-        // PropertyChanged → WhenAnyValue chain stops).
-        IMutableDisplaySize EffectiveSizeFor(string mode) =>
-            mode == "PerMonitor" ? _borderOverride : Model.PhysicalSize;
+        _borderPolicy.Changed
+            .Where(e => e.PropertyName == nameof(MonitorBorderPolicy.Customized))
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(BordersCustomized)))
+            .DisposeWith(this);
 
-        var effectiveSizeObs = borderValuesObs
-            .Select(EffectiveSizeFor)
-            .Replay(1)
-            .RefCount();
+        // DisplayBorders is not ISavable so UnsavedOn cannot track it.
+        // Load() resets Saved=true at its end, so loading does not leave a dirty flag.
+        _borderPolicy.BordersChanged
+            .Subscribe(_ => Saved = false)
+            .DisposeWith(this);
+
+        var effectiveSizeObs = _borderPolicy.EffectiveSize;
 
         _effectivePhysicalSize = effectiveSizeObs
             .ToProperty(this, e => e.EffectivePhysicalSize, initialValue: model.PhysicalSize, scheduler: Scheduler.Immediate)
@@ -174,63 +161,9 @@ public class PhysicalMonitor : SavableReactiveModel
             e => e.DepthRatio,
             e => e.BorderResistance
         );
-
-        // Keep the per-monitor borders following the shared model values until this
-        // monitor owns some (loaded from the store, or edited in PerMonitor mode):
-        // the first switch to PerMonitor must start from the monitor's CURRENT model
-        // borders, not from a seed frozen at an earlier launch. Once customized the
-        // mirror stops for good and the stored values win.
-        this.WhenAnyValue(
-                e => e.Model.PhysicalSize.LeftBorder,
-                e => e.Model.PhysicalSize.TopBorder,
-                e => e.Model.PhysicalSize.RightBorder,
-                e => e.Model.PhysicalSize.BottomBorder)
-            .Where(_ => !BordersCustomized)
-            .Subscribe(_ =>
-            {
-                // Flag the copy so the customization detector below ignores it: a
-                // mirror write is never a user edit. Without this, the first model
-                // border applied while the mode is already PerMonitor (e.g. during
-                // Load) marks the monitor customized and cuts the mirror mid-copy.
-                _mirroringModelBorders = true;
-                try
-                {
-                    Borders.Left = Model.PhysicalSize.LeftBorder;
-                    Borders.Top = Model.PhysicalSize.TopBorder;
-                    Borders.Right = Model.PhysicalSize.RightBorder;
-                    Borders.Bottom = Model.PhysicalSize.BottomBorder;
-                }
-                finally
-                {
-                    _mirroringModelBorders = false;
-                }
-            })
-            .DisposeWith(this);
-
-        // DisplayBorders is not ISavable so UnsavedOn cannot track it.
-        // Skip(1) drops the initial combined emission at subscription time.
-        // Load() resets Saved=true at its end, so loading does not leave a dirty flag.
-        // A change landing while in PerMonitor mode is a user edit of this monitor's
-        // own borders: from then on the monitor keeps them (mirror above stops).
-        this.WhenAnyValue(
-                e => e.Borders.Left,
-                e => e.Borders.Top,
-                e => e.Borders.Right,
-                e => e.Borders.Bottom,
-                (l, t, r, b) => (l, t, r, b))
-            .Skip(1)
-            .Subscribe(_ =>
-            {
-                if (!_mirroringModelBorders && Layout.Options.BorderValues == "PerMonitor")
-                    BordersCustomized = true;
-                Saved = false;
-            })
-            .DisposeWith(this);
     }
 
-    // True while the mirror above copies model borders into Borders, so the
-    // customization detector can tell mirror writes from user edits.
-    bool _mirroringModelBorders;
+    readonly MonitorBorderPolicy _borderPolicy;
 
     void ParseDisplaySources(IReadOnlyCollection<PhysicalSource> obj)
     {
@@ -301,10 +234,10 @@ public class PhysicalMonitor : SavableReactiveModel
 
     /// <summary>
     /// The physical size (with bezel borders) this monitor's geometry is built from — the whole
-    /// rotation / depth-projection / zones chain reads through here. Today it always returns the
-    /// shared per-model <see cref="PhysicalMonitorModel.PhysicalSize"/>, so behaviour is unchanged.
-    /// It exists as the single seam where a future "Border values: per monitor" option can substitute
-    /// a per-monitor border source, without touching any geometry consumer. See the border-values plan.
+    /// rotation / depth-projection / zones chain reads through here. Either the shared per-model
+    /// <see cref="PhysicalMonitorModel.PhysicalSize"/> or, when "Border values" is "PerMonitor",
+    /// the same size with this monitor's own borders substituted; <see cref="MonitorBorderPolicy"/>
+    /// decides which and re-publishes on a mode switch, so no geometry consumer sees the option.
     /// </summary>
     public IMutableDisplaySize EffectivePhysicalSize => _effectivePhysicalSize.Value;
     readonly ObservableAsPropertyHelper<IMutableDisplaySize> _effectivePhysicalSize;
@@ -314,18 +247,21 @@ public class PhysicalMonitor : SavableReactiveModel
     /// "PerMonitor". Seeded from the model at construction; loaded from / saved to the monitor's own
     /// registry key. In "PerModel" mode the geometry ignores these and uses the shared model borders.
     /// </summary>
+    /// <remarks>Held by <see cref="MonitorBorderPolicy"/>; kept in a field here so consumers still
+    /// observe it through a plain get-only property on the monitor.</remarks>
     public DisplayBorders Borders { get; }
-    readonly DisplayBorderOverride _borderOverride;
 
     /// <summary>
     /// True once this monitor owns its bezel borders (persisted values were loaded,
     /// or a border was edited in "PerMonitor" mode). Until then <see cref="Borders"/>
     /// mirrors the shared model values, and nothing per-monitor is persisted.
     /// </summary>
+    /// <remarks>The state lives in <see cref="MonitorBorderPolicy"/>, which also sets it on its
+    /// own when it detects a user edit; the constructor republishes those changes here.</remarks>
     public bool BordersCustomized
     {
-       get;
-       set => this.RaiseAndSetIfChanged(ref field, value);
+       get => _borderPolicy.Customized;
+       set => _borderPolicy.Customized = value;
     }
 
     /// <summary>

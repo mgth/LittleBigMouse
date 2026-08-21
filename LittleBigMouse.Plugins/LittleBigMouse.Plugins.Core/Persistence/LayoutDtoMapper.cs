@@ -26,7 +26,6 @@ public static class LayoutDtoMapper
     {
         if (dto == null) return;
 
-        o.DaemonPort = dto.DaemonPort ?? o.DaemonPort;
         o.Priority = dto.Priority ?? o.Priority;
         o.PriorityUnhooked = dto.PriorityUnhooked ?? o.PriorityUnhooked;
         o.HomeCinema = dto.HomeCinema ?? o.HomeCinema;
@@ -176,7 +175,6 @@ public static class LayoutDtoMapper
     /// </summary>
     public static GlobalOptionsDto ToGlobalOptionsDto(ILayoutOptions o, int? excludedDefaultsVersion) => new()
     {
-        DaemonPort = o.DaemonPort,
         Priority = o.Priority,
         PriorityUnhooked = o.PriorityUnhooked,
         HomeCinema = o.HomeCinema,

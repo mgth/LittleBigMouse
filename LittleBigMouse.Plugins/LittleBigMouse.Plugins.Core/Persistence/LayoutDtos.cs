@@ -16,7 +16,6 @@ namespace LittleBigMouse.Plugins.Persistence;
 /// <summary>App-level options, stored once (registry root key / options.json).</summary>
 public class GlobalOptionsDto
 {
-    public int? DaemonPort { get; set; }
     public string? Priority { get; set; }
     public string? PriorityUnhooked { get; set; }
     public bool? HomeCinema { get; set; }

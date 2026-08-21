@@ -51,7 +51,6 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool ExperimentalFeatures { get; set; } = false;
       public bool VcpControl { get; set; } = false;
       public bool ShowMonitorActionWarning { get; set; } = true;
-      public int DaemonPort { get; set; } = 25196;
 
       public bool AdjustSpeedAllowed { get; } = false;
       public ObservableCollection<string> ExcludedList { get; } = new ObservableCollection<string> { "/game/", "/another/game/" };
@@ -241,12 +240,6 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// detaching, or making a monitor the primary display
    /// </summary>
    bool ShowMonitorActionWarning { get; set; }
-
-   /// <summary>
-   /// Legacy persisted setting retained so older layouts still deserialize.
-   /// Local IPC does not use a TCP port.
-   /// </summary>
-   public int DaemonPort { get; set; }
 
    public bool LoopAllowed { get; }
    public ObservableCollection<string> ExcludedList { get; }

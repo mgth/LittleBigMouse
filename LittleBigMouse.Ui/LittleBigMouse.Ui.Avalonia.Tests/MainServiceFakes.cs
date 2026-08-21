@@ -23,9 +23,10 @@ static class MainServiceFakes
     /// A layout that is real — <c>ComputeZones</c> walks it for every Start — but minimal: one
     /// monitor, one source, attached.
     /// </summary>
-    public static MonitorsLayout NewLayout(ILayoutOptions options, bool enabled = true)
+    public static MonitorsLayout NewLayout(
+        ILayoutOptions options, bool enabled = true, LayoutSource source = LayoutSource.System)
     {
-        var layout = new MonitorsLayout(options) { Id = "TESTMON1", Source = LayoutSource.System };
+        var layout = new MonitorsLayout(options) { Id = "TESTMON1", Source = source };
         layout.Options.Enabled = enabled;
 
         var model = new PhysicalMonitorModel("TST1234");
@@ -109,9 +110,16 @@ sealed class FakePersistence : ILayoutPersistence
     public bool? LastEnabledWritten { get; private set; }
     public int LiveOptionWrites { get; private set; }
 
+    /// <summary>Full layout saves — the geometry, not just the engine's on/off.</summary>
+    public int LayoutWrites { get; private set; }
+
     public void Load(MonitorsLayout layout) { }
 
-    public bool Save(MonitorsLayout layout) => true;
+    public bool Save(MonitorsLayout layout)
+    {
+        LayoutWrites++;
+        return true;
+    }
 
     public bool SaveEnabled(IMonitorsLayout layout)
     {

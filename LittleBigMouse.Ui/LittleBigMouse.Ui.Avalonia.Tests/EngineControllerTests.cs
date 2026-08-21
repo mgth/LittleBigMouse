@@ -24,9 +24,13 @@ public sealed class EngineControllerTests
         public MonitorsLayout Layout { get; }
         public EngineController Engine { get; }
 
-        public Fixture(bool enabled = true, bool withLayout = true, ResumeWatchdogTimings? timings = null)
+        public Fixture(
+            bool enabled = true,
+            bool withLayout = true,
+            ResumeWatchdogTimings? timings = null,
+            LayoutSource source = LayoutSource.System)
         {
-            Layout = MainServiceFakes.NewLayout(new LbmOptions(), enabled);
+            Layout = MainServiceFakes.NewLayout(new LbmOptions(), enabled, source);
             var layout = withLayout ? Layout : null;
             Engine = new EngineController(Daemon, Persistence, () => layout, timings ?? Fast);
         }
@@ -43,6 +47,57 @@ public sealed class EngineControllerTests
 
         Assert.True(f.Layout.Options.Enabled);
         Assert.Equal(true, f.Persistence.LastEnabledWritten);
+        Assert.Equal(new[] { "Start" }, f.Daemon.Commands);
+
+        // ...and nothing more: the tray has no editor behind it, so an unsaved geometry is
+        // handed to the engine without being adopted. Only the apply button keeps it.
+        Assert.Equal(0, f.Persistence.LayoutWrites);
+    }
+
+    [Fact]
+    public async Task AStartFromTheEditorKeepsTheGeometryItStarts()
+    {
+        // "Apply and start": the window's button comes from an editor, so the layout being
+        // started is also the layout being kept. A full save writes Enabled too — one write,
+        // not two.
+        var f = new Fixture(enabled: false);
+        f.Layout.Saved = false;
+
+        await f.Engine.StartFromUserAsync(keepLayout: true);
+
+        Assert.True(f.Layout.Options.Enabled);
+        Assert.Equal(1, f.Persistence.LayoutWrites);
+        Assert.Equal(0, f.Persistence.EnabledWrites);
+        Assert.Equal(new[] { "Start" }, f.Daemon.Commands);
+    }
+
+    [Fact]
+    public async Task AStartFromTheEditorWithNothingToKeepWritesOnlyEnabled()
+    {
+        var f = new Fixture(enabled: false);
+        f.Layout.Saved = true;
+
+        await f.Engine.StartFromUserAsync(keepLayout: true);
+
+        Assert.Equal(0, f.Persistence.LayoutWrites);
+        Assert.Equal(true, f.Persistence.LastEnabledWritten);
+        Assert.Equal(new[] { "Start" }, f.Daemon.Commands);
+    }
+
+    [Fact]
+    public async Task StartingAForeignLayoutSimulatesItWithoutAdoptingIt()
+    {
+        // A virtual layout is sent for validation — the client turns that into a Load without
+        // a Run — but nothing about it is adopted: Enabled stays false, so no recovery path
+        // can later mistake a foreign geometry for something the user asked to run, and
+        // nothing is written (the store would refuse it anyway, loudly).
+        var f = new Fixture(enabled: false, source: LayoutSource.VirtualImport);
+
+        await f.Engine.StartFromUserAsync(keepLayout: true);
+
+        Assert.False(f.Layout.Options.Enabled);
+        Assert.Equal(0, f.Persistence.EnabledWrites);
+        Assert.Equal(0, f.Persistence.LayoutWrites);
         Assert.Equal(new[] { "Start" }, f.Daemon.Commands);
     }
 

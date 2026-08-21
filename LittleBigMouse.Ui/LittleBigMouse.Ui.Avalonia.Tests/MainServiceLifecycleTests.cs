@@ -62,7 +62,8 @@ public sealed class MainServiceLifecycleTests
                 layoutPersistence: Persistence,
                 processesCollector: new ProcessesCollector(),
                 updaterLocator: () => throw new NotSupportedException(),
-                options: Options);
+                options: Options,
+                engine: new EngineController(Daemon, Persistence, () => Service?.MonitorsLayout));
         }
     }
 

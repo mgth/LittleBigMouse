@@ -46,14 +46,19 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 /// the platform report, and decides what those reports <em>mean</em> — but it performs none of
 /// it itself.
 /// <para>
-/// Five collaborators do the performing, and this class <em>owns</em> them rather than
-/// resolving them: <see cref="DisplayChangeCoordinator"/> decides when a display change
-/// deserves a rebuild, <see cref="EngineController"/> decides whether the mouse engine should
-/// be hooked, <see cref="MainWindowManager"/> and <see cref="TrayIconController"/> put that
-/// state in front of the user, and <see cref="WallpaperRefresher"/> keeps the drawn desktop
-/// current. They are constructed here, wired to each other here, and released here, because
-/// the wiring — a display change may rebuild, or may only re-hook; a resume must do both, in
-/// that order — is the decision this class exists to make.
+/// Five collaborators do the performing, and this class <em>owns</em> four of them rather
+/// than resolving them: <see cref="DisplayChangeCoordinator"/> decides when a display change
+/// deserves a rebuild, <see cref="MainWindowManager"/> and <see cref="TrayIconController"/>
+/// put that state in front of the user, and <see cref="WallpaperRefresher"/> keeps the drawn
+/// desktop current. They are constructed here, wired to each other here, and released here,
+/// because the wiring — a display change may rebuild, or may only re-hook; a resume must do
+/// both, in that order — is the decision this class exists to make.
+/// </para>
+/// <para>
+/// The fifth, <see cref="EngineController"/>, is the exception: it decides whether the mouse
+/// engine should be hooked, and the window's Start/Stop buttons ask that same question as the
+/// tray's menu entries. It is injected rather than built here so that both sides go through
+/// one instance — two would be two answers.
 /// </para>
 /// </summary>
 public class MainService : ReactiveModel, IMainService
@@ -86,7 +91,8 @@ public class MainService : ReactiveModel, IMainService
         ILayoutPersistence layoutPersistence,
         IProcessesCollector processesCollector,
         Func<ApplicationUpdaterViewModel> updaterLocator,
-        ILayoutOptions options)
+        ILayoutOptions options,
+        EngineController engine)
     {
         _layoutFactory = layoutFactory;
         _layoutPersistence = layoutPersistence;
@@ -94,8 +100,7 @@ public class MainService : ReactiveModel, IMainService
         _processesCollector = processesCollector;
         _updaterLocator = updaterLocator;
 
-        _engine = new EngineController(
-            littleBigMouseClientService, layoutPersistence, () => MonitorsLayout);
+        _engine = engine;
 
         _displayChanges = new DisplayChangeCoordinator(
             layoutFactory.DisplaySignature,
@@ -250,7 +255,9 @@ public class MainService : ReactiveModel, IMainService
                 ? () => _updaterLocator().CheckUpdateAsync(true)
                 : null,
             OpenAsync: ShowControlAsync,
-            StartAsync: _engine.StartFromUserAsync,
+            // The tray starts the layout as it stands; keeping the geometry is the window
+            // apply button's business, and there is no editor behind a menu entry.
+            StartAsync: () => _engine.StartFromUserAsync(keepLayout: false),
             StopAsync: _engine.StopFromUserAsync,
             RefreshAsync: _displayChanges.RefreshAsync,
             QuitAsync: QuitAsync));

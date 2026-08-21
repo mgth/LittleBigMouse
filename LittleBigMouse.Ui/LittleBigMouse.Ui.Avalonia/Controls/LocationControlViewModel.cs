@@ -52,14 +52,16 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     readonly ISystemMonitorsService _monitorsService;
     readonly IMainService _mainService;
     readonly ILayoutPersistence _persistence;
+    readonly EngineController _engine;
 
     readonly ILittleBigMouseClientService _service;
 
-    public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService, ILayoutPersistence persistence)
+    public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService, ILayoutPersistence persistence, EngineController engine)
     {
         _service = service;
         _mainService = main;
         _persistence = persistence;
+        _engine = engine;
 
         _monitorsService = monitorsService;
 
@@ -290,41 +292,23 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     public ReactiveCommand<Unit, Unit> StartCommand { get; }
     public ReactiveCommand<Unit, Unit> StopCommand { get; }
 
-    async Task StartAsync()
-    {
-        if(Model == null) return;
-
-        // Virtual layout: "simulate" — hand the zones to the daemon for validation
-        // (the client service sends Load without Run). Nothing is persisted, and
-        // Enabled stays false so a layout rebuild can never auto-engage a foreign
-        // geometry.
-        if (Model.IsVirtual)
-        {
-            await _service.StartAsync(Model.ComputeZones());
-            return;
-        }
-
-        Model.Options.Enabled = true;
-
-        if (!Model.Saved)
-            await SaveAsync();
-        else
-            await SaveEnabledAsync();
-
-        await _service.StartAsync(_mainService.MonitorsLayout.ComputeZones());
-    }
+    /// <summary>
+    /// "Apply and start" — the same gesture as the tray's Start, so it is the same code:
+    /// <see cref="EngineController"/> owns what starting means (the virtual-layout
+    /// simulation, recording Enabled, handing the zones over). What the button adds is
+    /// <c>keepLayout</c>: this one comes from an editor, so the geometry on screen is kept
+    /// too.
+    /// </summary>
+    Task StartAsync() => _engine.StartFromUserAsync(keepLayout: true);
 
     async Task StopAsync()
     {
-        if(Model == null) return;
-
         // Asking for the engine to stop outranks previewing into it — otherwise the
-        // next tick would hook it straight back up.
+        // next tick would hook it straight back up. The rest of stopping is the tray's
+        // Stop, unchanged.
         LiveUpdate = false;
 
-        Model.Options.Enabled = false;
-        await Task.Run(() => _persistence.SaveEnabled(Model));
-        await _service.StopAsync();
+        await _engine.StopFromUserAsync();
     }
 
     Task SaveAsync() =>
@@ -332,12 +316,6 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         {
             if (!(Model?.Saved??true))
                 _persistence.Save(Model);
-        });
-
-    Task SaveEnabledAsync() =>
-        Task.Run(() =>
-        {
-            if (Model != null) _persistence.SaveEnabled(Model);
         });
 
     /// <summary>

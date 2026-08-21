@@ -24,7 +24,6 @@
       "HLab.Core/HLab.Mvvm.ReactiveUI/HLab.Mvvm.ReactiveUI.csproj",
       "HLab.Core/HLab.Mvvm/HLab.Mvvm.csproj",
       "HLab.Core/HLab.Options/HLab.Options.csproj",
-      "HLab.Core/HLab.Remote/HLab.Remote.csproj",
       "HLab.Core/HLab.Sys.Windows.API/HLab.Sys.Windows.API.csproj",
       "HLab.Core/HLab.UserNotification/HLab.UserNotification.csproj",
       "HLab.Sys/HLab.Sys.Argyll/HLab.Sys.Argyll.csproj",

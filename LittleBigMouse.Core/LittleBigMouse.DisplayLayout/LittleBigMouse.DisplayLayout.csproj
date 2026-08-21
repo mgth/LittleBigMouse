@@ -17,7 +17,6 @@
     <ProjectReference Include="..\..\HLab.Core\HLab.Base.ReactiveUI\HLab.Base.ReactiveUI.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.ColorTools\HLab.ColorTools.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
-    <ProjectReference Include="..\..\HLab.Core\HLab.Remote\HLab.Remote.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Zones\LittleBigMouse.Zoning.csproj" />
   </ItemGroup>
 

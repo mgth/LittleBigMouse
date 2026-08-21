@@ -22,6 +22,12 @@ sealed class LocalIpcClient : IDisposable
     const string WindowsPipePrefix = @"\\.\pipe\";
 
     readonly CancellationTokenSource _stopping = new();
+
+    // The event listener alone, so it can be shut down while the send path stays
+    // open: a Quit is delivered through this very client, and the listener must
+    // already be gone when the daemon it kills closes the socket.
+    readonly CancellationTokenSource _listening;
+
     readonly SemaphoreSlim _sendGate = new(1, 1);
     readonly string _windowsPipeName;
     readonly string? _unixSocketPath;
@@ -32,8 +38,13 @@ sealed class LocalIpcClient : IDisposable
     // Windows, the socket path elsewhere): a launched daemon inherits the
     // variable, so a test pair runs side by side with the production pair.
     public LocalIpcClient()
+        : this(Environment.GetEnvironmentVariable("LBM_HOOK_ENDPOINT"))
     {
-        var endpoint = Environment.GetEnvironmentVariable("LBM_HOOK_ENDPOINT");
+    }
+
+    internal LocalIpcClient(string? endpoint)
+    {
+        _listening = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
         if (OperatingSystem.IsWindows())
         {
             _windowsPipeName = endpoint is null
@@ -45,11 +56,6 @@ sealed class LocalIpcClient : IDisposable
             _windowsPipeName = string.Empty;
             _unixSocketPath = endpoint;
         }
-    }
-
-    internal LocalIpcClient(string windowsPipeName)
-    {
-        _windowsPipeName = windowsPipeName;
     }
 
     // NamedPipeClientStream wants the bare pipe name while the daemon binds the
@@ -65,23 +71,31 @@ sealed class LocalIpcClient : IDisposable
 
     public void Listen() => _listener ??= Task.Run(ListenAsync);
 
+    /// <summary>
+    /// Give up on the daemon for good: no reconnect, and so no
+    /// <see cref="ConnectionFailed"/> from the listener. Sends keep working — the
+    /// caller still has a Quit to deliver, and it is exactly the daemon answering
+    /// it whose disappearance must stop being reported as something to recover from.
+    /// </summary>
+    public void StopListening() => _listening.Cancel();
+
     async Task ListenAsync()
     {
-        while (!_stopping.IsCancellationRequested)
+        while (!_listening.IsCancellationRequested)
         {
             try
             {
-                await using var stream = await ConnectWithRetryAsync(_stopping.Token);
+                await using var stream = await ConnectWithRetryAsync(_listening.Token);
                 Connected?.Invoke(this, EventArgs.Empty);
                 await WriteFrameAsync(stream,
-                    "<CommandMessage Command=\"Listen\" Payload=\"\"/>", _stopping.Token);
-                while (!_stopping.IsCancellationRequested)
+                    "<CommandMessage Command=\"Listen\" Payload=\"\"/>", _listening.Token);
+                while (!_listening.IsCancellationRequested)
                 {
-                    var message = await ReadFrameAsync(stream, _stopping.Token);
+                    var message = await ReadFrameAsync(stream, _listening.Token);
                     MessageReceived?.Invoke(this, message);
                 }
             }
-            catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+            catch (OperationCanceledException) when (_listening.IsCancellationRequested)
             {
                 break;
             }
@@ -93,7 +107,7 @@ sealed class LocalIpcClient : IDisposable
                 // exception here would kill the listener silently forever.
                 MessageReceived?.Invoke(this,
                     "<DaemonMessage><Event>Dead</Event></DaemonMessage>");
-                try { await Task.Delay(RetryDelay, _stopping.Token); }
+                try { await Task.Delay(RetryDelay, _listening.Token); }
                 catch (OperationCanceledException) { break; }
             }
         }

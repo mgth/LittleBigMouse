@@ -42,6 +42,11 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
 
         _client.ConnectionFailed += (sender, args) =>
         {
+            // Not after a Quit. The daemon we just asked to exit closes the socket on
+            // its way out, which is a connection failure like any other — and launching
+            // its replacement here is what left an orphan `lbm-hook` behind every UI
+            // Exit: the successor outlives the process that spawned it.
+            if (_quitting) return;
             Debug.WriteLine($"ConnectionFailed : Launch daemon");
             LaunchDaemon();
         };
@@ -145,12 +150,65 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
 
     public async Task QuitAsync(CancellationToken token = default)
     {
-        await SendAsync(token);
+        // Both before a single byte is sent: the daemon can be gone before the send
+        // even completes. `_quitting` closes the relaunch path for good (the send has
+        // its own ConnectionFailed to raise), and StopListening takes down the
+        // reconnect loop that would otherwise spend the rest of the shutdown
+        // rediscovering a daemon that is meant to be dead.
+        _quitting = true;
+        _client.StopListening();
+
+        try
+        {
+            await SendAsync(token);
+        }
+        catch (Exception error) when (error is IOException
+                                      or OperationCanceledException
+                                      or UnauthorizedAccessException)
+        {
+            // Nothing answered: there is no daemon left to ask to exit, which is the
+            // outcome Quit wanted. Never fault the shutdown over it — an unobserved
+            // throw here is what makes QuitAsync "sometimes not return".
+            Debug.WriteLine($"Quit IPC failed, continuing shutdown: {error}");
+        }
+
+        await EnsureLaunchedDaemonExitedAsync();
         await Task.Run(_displayController.RestoreAfterEngine, token);
     }
 
+    /// <summary>
+    /// The Quit command is the polite ask; this is the guarantee an Exit owes the user.
+    /// Scoped to the daemon this UI launched for the same reason as
+    /// <see cref="ForceStopCurrentSessionDaemons"/>: on Unix a standalone or autostart
+    /// `lbm-hook` is not ours to kill.
+    /// </summary>
+    async Task EnsureLaunchedDaemonExitedAsync()
+    {
+        if (_daemonProcess is not { } daemon) return;
+        try
+        {
+            using var grace = new CancellationTokenSource(QuitGrace);
+            await daemon.WaitForExitAsync(grace.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("Daemon still alive after Quit; stopping it.");
+            TryStopProcess(daemon);
+        }
+        catch (Exception error) when (error is InvalidOperationException
+                                      or System.ComponentModel.Win32Exception)
+        {
+            Debug.WriteLine($"Could not wait on the daemon: {error.Message}");
+        }
+    }
+
+    static readonly TimeSpan QuitGrace = TimeSpan.FromSeconds(2);
+
     readonly object _daemonLaunchGate = new();
     Process? _daemonProcess;
+
+    /// <summary>Set once, on the way out: see the ConnectionFailed handler.</summary>
+    volatile bool _quitting;
 
     bool ForceStopCurrentSessionDaemons()
     {

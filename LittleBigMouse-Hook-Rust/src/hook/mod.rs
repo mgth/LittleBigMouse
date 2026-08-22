@@ -112,10 +112,9 @@ pub(crate) fn on_resume(shared: &Shared) {
     if !shared.suspended.swap(false, Ordering::SeqCst) {
         return; // was not suspended
     }
-    // Never come back from sleep with the cursor still confined: if a clip lingered across the
-    // suspend (or the OS set one during the display transition), a leftover sub-virtual-screen clip
-    // makes the engine read "freelook" and stop crossing. Release it before the UI re-Starts us.
-    crate::platform::cursor::release_clip();
+    // The suspend-side unhook already restores a clip LBM still owns. Do not call
+    // ClipCursor(NULL) here: a game or remote-control app may legitimately have
+    // installed a new confinement while the display/session was transitioning.
     shared.broadcast(protocol::RESUMED);
 }
 

@@ -46,6 +46,12 @@
 //! mice. We additionally ungrab on unhook, on quit, and on drop; `LBM_EVDEV_
 //! AUTORELEASE_SECS` force-unhooks after N seconds for cautious first runs.
 //!
+//! Freeing the devices is not enough on its own: a button held at that moment
+//! was pressed on the *virtual* pointer, so it must be released there before the
+//! device disappears, or the seat keeps it down and the user loses that button.
+//! `Drop for Router` pays that debt, and the mask it reads is seeded at arm time
+//! from `EVIOCGKEY` — a press that predates the grab never reached the pump.
+//!
 //! Ctrl-override reads the modifier from keyboards WITHOUT grabbing them (evdev
 //! nodes are multi-reader; the compositor keeps them), plus the ctrl usages of
 //! the grabbed combined nodes. Hot-plug is handled by a periodic rescan (new
@@ -385,6 +391,14 @@ impl Router {
             });
         }
 
+        // Buttons already held when the grab lands: the press went to the
+        // compositor from the real device, and from here on the release comes
+        // out of the virtual one. Starting from the real state keeps
+        // `buttons_down()` honest for the drag detection, and makes the
+        // teardown release cover a button that was held across the whole
+        // session.
+        let buttons = held_buttons_of(&devices);
+
         let mut router = Router {
             devices,
             keyboards,
@@ -399,7 +413,7 @@ impl Router {
                 started: Instant::now(),
                 ctrl_left: false,
                 ctrl_right: false,
-                buttons: 0,
+                buttons,
             },
             sens,
             debug,
@@ -697,12 +711,43 @@ impl Router {
 impl Drop for Router {
     fn drop(&mut self) {
         self.scan_stop.store(true, Ordering::Relaxed);
+        // A button still held here is one the compositor saw pressed on the
+        // virtual pointer and would never see released: the device is about to
+        // disappear, and whatever release follows lands on the real device the
+        // ungrab below hands back. The seat keeps the button down, and the user
+        // loses that button until something resets the state — the failure
+        // reads as "I have no left click any more". Pay the releases while the
+        // virtual device is still alive.
+        let releases = self.env.release_frame();
+        if !releases.is_empty() {
+            let _ = self.virt.emit(&releases);
+            self.env.buttons = 0;
+        }
         for (_, d, _) in &mut self.devices {
             let _ = d.ungrab();
         }
         // Keyboards were never grabbed; closing their fds is enough. The scanner
         // thread exits on the flag (or on its next send, once scan_rx is gone).
     }
+}
+
+/// The [`BTN_MOUSE_RANGE`] buttons held on the freshly grabbed devices, as an
+/// [`EvdevCursor::buttons`] mask. EVIOCGKEY is the only way to learn about a
+/// press that happened *before* the grab: the event itself went to the
+/// compositor, and the pump would otherwise start out believing nothing is down.
+fn held_buttons_of(devices: &[(std::path::PathBuf, Device, super::accel::PointerAccel)]) -> u8 {
+    let mut mask = 0u8;
+    for (_, d, _) in devices {
+        let Ok(state) = d.get_key_state() else {
+            continue;
+        };
+        for code in BTN_MOUSE_RANGE {
+            if state.contains(KeyCode::new(code)) {
+                mask |= 1u8 << (code - BTN_MOUSE_RANGE.start());
+            }
+        }
+    }
+    mask
 }
 
 /// An absolute virtual pointer whose ABS range equals the desktop size, plus
@@ -952,6 +997,23 @@ impl EvdevCursor {
         }
     }
 
+    /// The [`BTN_MOUSE_RANGE`] codes currently held, lowest code first.
+    fn held_buttons(&self) -> impl Iterator<Item = u16> + '_ {
+        let start = *BTN_MOUSE_RANGE.start();
+        (0..=(BTN_MOUSE_RANGE.end() - BTN_MOUSE_RANGE.start()) as u8)
+            .filter(move |i| self.buttons & (1u8 << i) != 0)
+            .map(move |i| start + i as u16)
+    }
+
+    /// The frame the compositor is still owed when the virtual pointer goes
+    /// away: one release per button left held. Empty in the ordinary case, which
+    /// is why `Drop` can emit it unconditionally.
+    fn release_frame(&self) -> Vec<InputEvent> {
+        self.held_buttons()
+            .map(|code| InputEvent::new(EventType::KEY.0, code, 0))
+            .collect()
+    }
+
     fn track_button(&mut self, code: u16, value: i32) {
         if !BTN_MOUSE_RANGE.contains(&code) {
             return;
@@ -1013,5 +1075,121 @@ impl CursorEnv for EvdevCursor {
 
     fn tick_count(&self) -> u64 {
         self.started.elapsed().as_millis() as u64
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cursor() -> EvdevCursor {
+        EvdevCursor {
+            virtual_pos: Point::new(0, 0),
+            clip: None,
+            desktop: Rect::new(0, 0, 1920, 1080),
+            started: Instant::now(),
+            ctrl_left: false,
+            ctrl_right: false,
+            buttons: 0,
+        }
+    }
+
+    #[test]
+    fn nothing_held_owes_no_release() {
+        assert_eq!(cursor().held_buttons().count(), 0);
+    }
+
+    #[test]
+    fn a_held_button_is_owed_a_release() {
+        let mut c = cursor();
+        c.track_button(KeyCode::BTN_LEFT.0, 1);
+        assert_eq!(
+            c.held_buttons().collect::<Vec<_>>(),
+            vec![KeyCode::BTN_LEFT.0]
+        );
+    }
+
+    #[test]
+    fn releasing_clears_the_debt() {
+        let mut c = cursor();
+        c.track_button(KeyCode::BTN_LEFT.0, 1);
+        c.track_button(KeyCode::BTN_LEFT.0, 0);
+        assert_eq!(c.held_buttons().count(), 0);
+    }
+
+    /// The regression this module's `Drop` exists for: dropping the router
+    /// mid-press owes exactly the buttons still down, and only those.
+    #[test]
+    fn only_the_still_held_buttons_are_owed() {
+        let mut c = cursor();
+        c.track_button(KeyCode::BTN_LEFT.0, 1);
+        c.track_button(KeyCode::BTN_RIGHT.0, 1);
+        c.track_button(KeyCode::BTN_LEFT.0, 0);
+        assert_eq!(
+            c.held_buttons().collect::<Vec<_>>(),
+            vec![KeyCode::BTN_RIGHT.0]
+        );
+    }
+
+    /// What `Drop` actually hands to uinput: EV_KEY, the held code, value 0.
+    /// A press (or a wrong event type) here would leave the seat exactly as
+    /// stuck as emitting nothing.
+    #[test]
+    fn the_owed_frame_is_a_key_release() {
+        let mut c = cursor();
+        c.track_button(KeyCode::BTN_LEFT.0, 1);
+
+        let frame = c.release_frame();
+
+        assert_eq!(frame.len(), 1);
+        assert_eq!(frame[0].event_type(), EventType::KEY);
+        assert_eq!(frame[0].code(), KeyCode::BTN_LEFT.0);
+        assert_eq!(frame[0].value(), 0, "a press would not unstick the button");
+    }
+
+    /// The ordinary teardown: nothing held, nothing emitted. `Drop` skips the
+    /// uinput write entirely on an empty frame.
+    #[test]
+    fn an_idle_teardown_owes_an_empty_frame() {
+        assert!(cursor().release_frame().is_empty());
+    }
+
+    /// Autorepeat (value 2) is a press, not a second one: the mask must not
+    /// double-count it, and the button must still be owed a single release.
+    #[test]
+    fn autorepeat_still_counts_as_held() {
+        let mut c = cursor();
+        c.track_button(KeyCode::BTN_LEFT.0, 1);
+        c.track_button(KeyCode::BTN_LEFT.0, 2);
+        assert_eq!(
+            c.held_buttons().collect::<Vec<_>>(),
+            vec![KeyCode::BTN_LEFT.0]
+        );
+    }
+
+    /// Every code the virtual pointer declares must round-trip through the
+    /// bitmask: BTN_TASK is bit 7, so a narrower mask would silently drop it.
+    #[test]
+    fn the_whole_declared_range_round_trips() {
+        for code in BTN_MOUSE_RANGE {
+            let mut c = cursor();
+            c.track_button(code, 1);
+            assert_eq!(
+                c.held_buttons().collect::<Vec<_>>(),
+                vec![code],
+                "code {code:#x} did not round-trip"
+            );
+        }
+    }
+
+    /// Codes outside the pointer's declared set (tablet/touch, joystick) must
+    /// not touch the mask — shifting by their offset would overflow the u8.
+    #[test]
+    fn codes_outside_the_range_are_ignored() {
+        let mut c = cursor();
+        c.track_button(KeyCode::BTN_TOOL_PEN.0, 1);
+        c.track_button(KeyCode::BTN_TOUCH.0, 1);
+        c.track_button(KeyCode::BTN_0.0, 1);
+        assert_eq!(c.held_buttons().count(), 0);
     }
 }

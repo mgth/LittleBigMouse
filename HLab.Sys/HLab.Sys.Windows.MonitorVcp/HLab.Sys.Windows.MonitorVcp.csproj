@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
     <PackageReference Include="OneOf" Version="3.0.271" />
   </ItemGroup>
 

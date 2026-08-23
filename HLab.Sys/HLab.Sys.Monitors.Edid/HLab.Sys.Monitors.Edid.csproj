@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <TargetFrameworks>net10.0</TargetFrameworks>
-    <LangVersion>preview</LangVersion>
     <Platforms>x64</Platforms>
     <Nullable>disable</Nullable>
   </PropertyGroup>

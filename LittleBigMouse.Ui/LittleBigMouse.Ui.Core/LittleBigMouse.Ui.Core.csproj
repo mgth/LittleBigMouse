@@ -3,9 +3,7 @@
   <PropertyGroup>
 	<TargetFrameworks>net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <Platforms>x64</Platforms>
-    <LangVersion>preview</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,0 +1,14 @@
+<DaemonMessage><Event>Running</Event></DaemonMessage>
+<DaemonMessage><Event>Stopped</Event></DaemonMessage>
+<DaemonMessage><Event>Paused</Event></DaemonMessage>
+<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>
+<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>
+<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>
+<DaemonMessage><Event>Suspended</Event></DaemonMessage>
+<DaemonMessage><Event>Resumed</Event></DaemonMessage>
+<DaemonMessage><Event>Rescued</Event></DaemonMessage>
+<DaemonMessage><Event>LoadFailed</Event><Payload>the layout could not be parsed</Payload></DaemonMessage>
+<DaemonMessage><Event>Loaded</Event><Payload>2 zones (2 main)</Payload></DaemonMessage>
+<DaemonMessage><Event>ShortcutUnavailable</Event><Payload>Ctrl+Alt+Shift+M</Payload></DaemonMessage>
+<DaemonMessage><Event>FocusChanged</Event><Payload>C:\Games\A&amp;B\&lt;Stopped DisplayChanged&gt;.exe</Payload></DaemonMessage>
+<DaemonMessage><Event>Probed</Event><Payload>&lt;ProbeReport Algorithm=&quot;Cross&quot; LoopX=&quot;False&quot; LoopY=&quot;False&quot; Virtual=&quot;False&quot;&gt;&lt;Zone Id=&quot;0&quot; Name=&quot;Left &amp;amp; &amp;quot;Main&amp;quot;&quot; DeviceId=&quot;DISPLAY1&quot;&gt;&lt;Edge Side=&quot;Left&quot;&gt;&lt;Run From=&quot;0&quot; To=&quot;1079&quot; Target=&quot;-1&quot;/&gt;&lt;/Edge&gt;&lt;Edge Side=&quot;Right&quot;&gt;&lt;Run From=&quot;0&quot; To=&quot;1079&quot; Target=&quot;1&quot;/&gt;&lt;/Edge&gt;&lt;Edge Side=&quot;Top&quot;&gt;&lt;Run From=&quot;-1920&quot; To=&quot;-1&quot; Target=&quot;-1&quot;/&gt;&lt;/Edge&gt;&lt;Edge Side=&quot;Bottom&quot;&gt;&lt;Run From=&quot;-1920&quot; To=&quot;-1&quot; Target=&quot;-1&quot;/&gt;&lt;/Edge&gt;&lt;/Zone&gt;&lt;Zone Id=&quot;1&quot; Name=&quot;Right&quot; DeviceId=&quot;DISPLAY2&quot;&gt;&lt;Edge Side=&quot;Left&quot;&gt;&lt;Run From=&quot;0&quot; To=&quot;1079&quot; Target=&quot;0&quot;/&gt;&lt;/Edge&gt;&lt;Edge Side=&quot;Right&quot;&gt;&lt;Run From=&quot;0&quot; To=&quot;1079&quot; Target=&quot;-1&quot;/&gt;&lt;/Edge&gt;&lt;Edge Side=&quot;Top&quot;&gt;&lt;Run From=&quot;0&quot; To=&quot;1919&quot; Target=&quot;-1&quot;/&gt;&lt;/Edge&gt;&lt;Edge Side=&quot;Bottom&quot;&gt;&lt;Run From=&quot;0&quot; To=&quot;1919&quot; Target=&quot;-1&quot;/&gt;&lt;/Edge&gt;&lt;/Zone&gt;&lt;/ProbeReport&gt;</Payload></DaemonMessage>

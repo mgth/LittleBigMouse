@@ -73,7 +73,7 @@ public partial class MonitorWarningDialog : Window
         dialog.HeadingText.Text = "Apply this layout to the system configuration?";
         dialog.BodyText.Text = "Monitor positions will be recomputed from the physical layout and applied to the system immediately. The system cannot represent bezels or gaps: adjacent monitors become edge-to-edge, aligned on their physical crossing point.";
         dialog.RecoveryTitle.Text = "If the result looks wrong:";
-        dialog.Step1.Text = "1. Rearrange the monitors in the system display settings, or use 'Place from windows config' to re-import the system layout into LittleBigMouse.";
+        dialog.Step1.Text = "1. Rearrange the monitors in the system display settings, or use 'Place from system config' to re-import the system layout into LittleBigMouse.";
         dialog.Step2.IsVisible = false;
         dialog.Step3.IsVisible = false;
         dialog.DontShowAgainCheckBox.IsVisible = false;

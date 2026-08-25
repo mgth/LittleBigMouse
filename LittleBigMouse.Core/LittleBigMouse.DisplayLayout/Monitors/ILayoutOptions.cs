@@ -139,6 +139,14 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// algorithm to be used for mouse movements
    /// - Strait
    /// - CornerCrossing
+   /// <para>
+   /// "Strait" is a misspelling of "Straight" kept on purpose: the value is written verbatim
+   /// into the saved layouts (layouts/*.json) and into the <c>Algorithm</c> attribute of the
+   /// ZonesLayout XML sent to the daemon, which parses it in
+   /// <c>LittleBigMouse-Hook-Rust/src/zones/layout.rs</c>. Renaming it would silently reset the
+   /// algorithm of every existing configuration, so it stays until a migration exists on both
+   /// sides. Only the internal Rust mode is spelled correctly (<c>Mode::Straight</c>).
+   /// </para>
    /// </summary>
    string Algorithm { get; set; }
 

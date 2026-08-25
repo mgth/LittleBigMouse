@@ -1044,7 +1044,10 @@ mod tests {
         env.clip = game_clip;
         eng.restore_managed_clip(&mut env);
 
-        assert_eq!(env.clip, game_clip, "LBM must not overwrite a newer game clip");
+        assert_eq!(
+            env.clip, game_clip,
+            "LBM must not overwrite a newer game clip"
+        );
         assert!(eng.old_clip_rect.is_empty());
         assert!(eng.managed_clip_rect.is_empty());
     }
@@ -1059,7 +1062,10 @@ mod tests {
         env.clip = Rect::new(700, 300, 1920, 1080);
         env.clipped_sub = true;
 
-        assert_eq!(eng.freelook_reason(&env), Some(FreelookReason::ExternalClip));
+        assert_eq!(
+            eng.freelook_reason(&env),
+            Some(FreelookReason::ExternalClip)
+        );
     }
 
     #[test]

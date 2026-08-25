@@ -245,7 +245,7 @@ public class LayoutPersistenceTests
         var persistence = NewPersistence(store);
 
         var layout = NewLayout(out _, out _);
-        layout.Options.Algorithm = "CornerCrossing";
+        layout.Options.Algorithm = "Cross";
         layout.Options.Enabled = true;
         persistence.Save(layout);
 
@@ -254,7 +254,7 @@ public class LayoutPersistenceTests
 
         var dto = store.Layouts[LayoutId];
         Assert.False(dto.Options!.Enabled);
-        Assert.Equal("CornerCrossing", dto.Options.Algorithm);
+        Assert.Equal("Cross", dto.Options.Algorithm);
         Assert.True(dto.Monitors.ContainsKey("MON1"));
     }
 

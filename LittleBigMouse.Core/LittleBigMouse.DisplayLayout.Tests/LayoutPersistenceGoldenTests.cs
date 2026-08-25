@@ -113,7 +113,7 @@ public class LayoutPersistenceGoldenTests : IDisposable
         // The layout document overrides the app-level priorities, and only those.
         Assert.Equal("Realtime", layout.Options.Priority);
         Assert.Equal("Idle", layout.Options.PriorityUnhooked);
-        Assert.Equal("CornerCrossing", layout.Options.Algorithm);
+        Assert.Equal("Cross", layout.Options.Algorithm);
         Assert.Equal(150, layout.Options.MaxTravelDistance);
         Assert.True(layout.Options.LoopX);
 
@@ -278,7 +278,7 @@ public class LayoutPersistenceGoldenTests : IDisposable
         Assert.False(saved.Options!.Enabled);
         Assert.Null(saved.Options.Priority);
         // Everything else the document held is still there.
-        Assert.Equal("CornerCrossing", saved.Options.Algorithm);
+        Assert.Equal("Cross", saved.Options.Algorithm);
         Assert.True(saved.Monitors.ContainsKey(MonitorId));
     }
 

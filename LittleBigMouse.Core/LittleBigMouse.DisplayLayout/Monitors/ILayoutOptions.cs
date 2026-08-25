@@ -138,14 +138,23 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// <summary>
    /// algorithm to be used for mouse movements
    /// - Strait
-   /// - CornerCrossing
+   /// - Cross
    /// <para>
-   /// "Strait" is a misspelling of "Straight" kept on purpose: the value is written verbatim
-   /// into the saved layouts (layouts/*.json) and into the <c>Algorithm</c> attribute of the
-   /// ZonesLayout XML sent to the daemon, which parses it in
-   /// <c>LittleBigMouse-Hook-Rust/src/zones/layout.rs</c>. Renaming it would silently reset the
-   /// algorithm of every existing configuration, so it stays until a migration exists on both
-   /// sides. Only the internal Rust mode is spelled correctly (<c>Mode::Straight</c>).
+   /// These two strings are the WIRE values, and the only ones that mean anything. They are
+   /// written verbatim into the saved layouts (layouts/*.json) and into the <c>Algorithm</c>
+   /// attribute of the ZonesLayout XML sent to the daemon, which parses them in
+   /// <c>LittleBigMouse-Hook-Rust/src/zones/layout.rs</c>. Anything else the daemon reads as
+   /// "Strait", silently — an unknown algorithm is not an error.
+   /// </para>
+   /// <para>
+   /// This list used to say "CornerCrossing", which no version has ever written and the daemon
+   /// has never understood. Keep it in step with <c>LbmOptionsViewModel.AlgorithmList</c> (the
+   /// only thing that produces these values) and with <c>wire-contract/README.md</c>.
+   /// </para>
+   /// <para>
+   /// "Strait" is a misspelling of "Straight" kept on purpose: renaming it would silently reset
+   /// the algorithm of every existing configuration, so it stays until a migration exists on
+   /// both sides. Only the internal Rust mode is spelled correctly (<c>Mode::Straight</c>).
    /// </para>
    /// </summary>
    string Algorithm { get; set; }

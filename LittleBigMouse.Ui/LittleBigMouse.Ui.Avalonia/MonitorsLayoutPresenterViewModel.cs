@@ -101,15 +101,7 @@ public class MonitorsLayoutPresenterViewModel
             .ToProperty(this, e => e.Height);
 
         ResetLocationsFromSystem = ReactiveCommand.Create(() => Model?.SetLocationsFromSystemConfiguration());
-        ResetSizesFromSystem = ReactiveCommand.Create(() => Model?.SetSizesFromSystemConfiguration());
         ApplyLocationsToSystem = ReactiveCommand.CreateFromTask<Window?>(ApplyLocationsToSystemAsync);
-
-        RefreshCommand = ReactiveCommand.Create(test);
-    }
-
-    void test()
-    {
-
     }
 
     /// <summary>
@@ -163,9 +155,7 @@ public class MonitorsLayoutPresenterViewModel
     }
 
     public ICommand ResetLocationsFromSystem { get; }
-    public ICommand ResetSizesFromSystem { get; }
     public ICommand ApplyLocationsToSystem { get; }
-    public ICommand RefreshCommand { get; }
 
     public void ConfigureMvvmContext(IMvvmContext ctx)
     {

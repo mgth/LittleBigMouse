@@ -82,3 +82,28 @@ dotnet format LittleBigMouse.sln --verify-no-changes --no-restore
 dotnet build LittleBigMouse.sln --no-restore
 (cd LittleBigMouse-Hook-Rust && cargo fmt --check)
 ```
+
+## Misspellings kept for compatibility
+
+Two kinds of misspelling exist in the tree, and they are not treated the same way.
+
+Purely internal ones get fixed. On 2026-08-25 the files `RectExtentions.cs`,
+`MonitorExtentions.cs`, `WinApiExtentions.cs` and `DrawingContextExtention.cs` were
+renamed to `Extension(s)`; only the file names were wrong, every class inside already
+used the correct spelling, and the projects glob their sources, so nothing referenced
+the old names. Five more remain in the `HLab.Core` submodule — `GeoExtentions.cs`
+(twice), `TaskExtentions.cs`, `TextExtentions.cs`, and `StringExtentions.cs` in its
+test project — and must be renamed there, in their own repository.
+
+One is kept on purpose: the layout option `Algorithm` takes the value **`Strait`**,
+a misspelling of *Straight*. The string is not an internal name. It is written verbatim
+into the saved layouts (`layouts/*.json`) and into the `Algorithm` attribute of the
+`ZonesLayout` XML the UI sends to the daemon, which parses it in
+`LittleBigMouse-Hook-Rust/src/zones/layout.rs`. Renaming it would silently reset the
+mouse-movement algorithm of every existing configuration and break the wire contract
+with any daemon that was not upgraded in the same step. It stays until a migration
+exists on both sides, accepting the old value on read and covered by tests. Only the
+daemon's internal mode is spelled correctly (`Mode::Straight`), mapped from `Strait`
+at parse time. The current value is pinned by `LayoutPersistenceGoldenTests`,
+`DaemonProtocolTests` and `VirtualLayoutGuardTests` on the C# side and by
+`tests/wire_contract.rs` on the Rust side.

@@ -45,15 +45,6 @@ public partial class MonitorFrameView : UserControl, IView<DefaultViewMode, Moni
             viewModel.MonitorsPresenter = parent?.DataContext as IMonitorsLayoutPresenterViewModel;
     }
 
-
-    void ResetSize_Click(object sender, RoutedEventArgs e) {
-        if (DataContext is IMonitorFrameViewModel vm)
-        {
-            // TODO Avalonia
-            // vm.Model?.Model.InitSize(vm.Model.ActiveSource.Source.Device);
-        }
-    }
-
     public IMonitorFrameViewModel? ViewModel => DataContext as IMonitorFrameViewModel;
 }
 

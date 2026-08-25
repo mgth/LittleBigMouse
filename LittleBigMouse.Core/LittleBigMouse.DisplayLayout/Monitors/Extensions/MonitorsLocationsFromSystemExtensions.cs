@@ -44,11 +44,6 @@ public static class MonitorsLocationsFromSystemExtensions
         layout.UpdatePhysicalMonitors();
     }
 
-    public static void SetSizesFromSystemConfiguration(this IMonitorsLayout layout, bool placeAll = true)
-    {
-        // TODO
-    }
-
     /// <summary>
     /// Try to place monitors according to the system's pixel configuration.
     /// <para>

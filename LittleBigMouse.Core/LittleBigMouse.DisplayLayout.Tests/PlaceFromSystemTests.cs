@@ -11,7 +11,7 @@ namespace LittleBigMouse.DisplayLayout.Tests;
 /// Placing monitors from the system's pixel configuration.
 /// <para>
 /// Two ways in, and they had better agree: a first run with nothing stored places
-/// everything from scratch, and the "Place from windows config" menu item does the
+/// everything from scratch, and the "Place from system config" menu item does the
 /// same thing on demand. A user who does not recognize their desktop on first launch,
 /// clicks the button, and gets something better has been shown a worse answer for no
 /// reason they can see.

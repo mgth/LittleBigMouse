@@ -23,7 +23,6 @@ public interface IMonitorsLayoutPresenterViewModel : INotifyPropertyChanged
     ProbeReport? ProbeReport { get; }
 
     public ICommand ResetLocationsFromSystem { get; }
-    public ICommand ResetSizesFromSystem { get; }
     public ICommand ApplyLocationsToSystem { get; }
 
 }

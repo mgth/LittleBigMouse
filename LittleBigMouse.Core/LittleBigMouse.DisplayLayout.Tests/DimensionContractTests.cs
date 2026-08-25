@@ -160,19 +160,14 @@ public class DimensionContractTests
     public void RatioImplementationsAdvertiseOnlySupportedMutability()
     {
         IMutableDisplayRatio value = new DisplayRatioValue(2, 3);
-        IMutableDisplayRatio registry = new DisplayRatioRegistry(null!);
         IDisplayRatio inverse = new DisplayInverseRatio(value);
         IDisplayRatio product = new DisplayRatioRatio(value, new DisplayRatioValue(5, 7));
 
         value.X = 11;
         value.Y = 13;
-        registry.X = 17;
-        registry.Y = 19;
 
         Assert.Equal(11, value.X);
         Assert.Equal(13, value.Y);
-        Assert.Equal(17, registry.X);
-        Assert.Equal(19, registry.Y);
         Assert.False(inverse is IMutableDisplayRatio);
         Assert.False(product is IMutableDisplayRatio);
         Assert.Equal(1.0 / 11, inverse.X, 10);

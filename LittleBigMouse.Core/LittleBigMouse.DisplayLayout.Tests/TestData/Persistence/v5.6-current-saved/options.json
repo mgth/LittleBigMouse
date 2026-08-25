@@ -1,5 +1,4 @@
 {
-  "DaemonPort": 25196,
   "Priority": "Realtime",
   "PriorityUnhooked": "Idle",
   "HomeCinema": false,

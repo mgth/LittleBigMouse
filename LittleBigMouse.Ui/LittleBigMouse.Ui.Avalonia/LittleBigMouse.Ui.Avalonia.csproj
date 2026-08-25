@@ -1,11 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<TargetFrameworks>net10.0</TargetFrameworks>
-		<Nullable>enable</Nullable>
 		<Platforms>x64</Platforms>
 		<OutputType>WinExe</OutputType>
 		<ApplicationIcon>Assets\lbm-logo.ico</ApplicationIcon>
-		<LangVersion>preview</LangVersion>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<Copyright>Mathieu GRENET</Copyright>
 		<PackageProjectUrl>https://github.com/mgth/LittleBigMouse/wiki</PackageProjectUrl>
@@ -16,25 +14,6 @@
 		<StartupObject>LittleBigMouse.Ui.Avalonia.Program</StartupObject>
 		<Title>Little Big Mouse</Title>
 	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|x64'">
-		<DebugType>full</DebugType>
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|x86'">
-		<DebugType>full</DebugType>
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|AnyCPU'">
-		<DebugType>full</DebugType>
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0|x64'">
-		<DebugType>full</DebugType>
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0|x86'">
-		<DebugType>full</DebugType>
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0|AnyCPU'">
-		<DebugType>full</DebugType>
-	</PropertyGroup>
-
 	<ItemGroup>
 		<None Remove="Assets\**" />
 	</ItemGroup>
@@ -50,10 +29,12 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="H.Pipes" Version="15.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageReference Include="MessageBox.Avalonia" Version="12.0.0" />
-    <PackageReference Include="Microsoft.NETCore.Platforms" Version="8.0.0-preview.7.23375.6" />
+    <PackageReference Include="ReactiveUI.Avalonia" Version="12.0.3" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="System.Resources.Extensions" Version="9.0.8" />
     <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="12.0.0.13" />

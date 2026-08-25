@@ -3,8 +3,6 @@
   <PropertyGroup>
 	<TargetFrameworks>net10.0</TargetFrameworks>
     <Platforms>x64;x86;AnyCpu</Platforms>
-    <Nullable>enable</Nullable>
-    <RootNamespace>HLab.Sys.Windows.Monitors</RootNamespace>
     <Configurations>Debug;Release</Configurations>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	<LangVersion>12</LangVersion>
@@ -13,7 +11,6 @@
 
   <ItemGroup>
     <PackageReference Include="DynamicData" Version="9.4.1" />
-    <PackageReference Include="System.Management" Version="9.0.8" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,27 +18,6 @@
     <ProjectReference Include="..\..\HLab.Core\HLab.ColorTools\HLab.ColorTools.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
     <ProjectReference Include="..\..\HLab.Core\HLab.Sys.Windows.API\HLab.Sys.Windows.API.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="Properties\Settings.Designer.cs">
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-    </Compile>
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Page Update="DisplayChangesView.xaml">
-      <SubType>Designer</SubType>
-    </Page>
   </ItemGroup>
 
 </Project>

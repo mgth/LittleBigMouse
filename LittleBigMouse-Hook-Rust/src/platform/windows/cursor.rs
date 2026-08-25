@@ -14,12 +14,20 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::engine::cursor::CursorEnv;
 use crate::geometry::{Point, Rect};
 
-/// Release any cursor confinement (`ClipCursor(NULL)`). Called on unhook so a
-/// stopped daemon never leaves the cursor clipped to a sub-region.
-pub fn release_clip() {
+/// Force-release every cursor confinement (`ClipCursor(NULL)`). This deliberately
+/// ignores ownership and is therefore reserved for the explicit rescue shortcut.
+pub fn force_release_clip() {
     unsafe {
         let _ = ClipCursor(None);
     }
+}
+
+/// Restore the confinement saved by the engine when it is still the active LBM
+/// rect. Kept platform-side so shared daemon code does not construct a Win32
+/// cursor environment on other targets.
+pub fn restore_managed_clip(engine: &mut crate::engine::MouseEngine) {
+    let mut env = Win32Cursor;
+    engine.restore_managed_clip(&mut env);
 }
 
 pub struct Win32Cursor;

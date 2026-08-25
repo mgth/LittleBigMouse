@@ -114,10 +114,16 @@ impl ZonesLayout {
         // Absent on layouts from older UIs -> false: only a UI that actually
         // flags virtual layouts can produce one.
         layout.virtual_layout = get_bool(el, "Virtual", false);
-        layout.algorithm = if get_string(el, "Algorithm") == "Cross" {
-            Algorithm::CornerCrossing
-        } else {
-            Algorithm::Strait
+        // "Cross" is the wire value: it is what every shipped UI writes, and the only
+        // spelling this parser used to accept. "CornerCrossing" is tolerated as an alias
+        // because it is what the C# doc comment and the persistence fixtures said for a
+        // long time — no release ever wrote it, but a hand-edited config or a migration
+        // that trusted the documentation would, and silently getting Strait instead is
+        // exactly the kind of thing nobody thinks to report. Anything else is still
+        // Strait: an unknown algorithm must not be an error.
+        layout.algorithm = match get_string(el, "Algorithm").as_str() {
+            "Cross" | "CornerCrossing" => Algorithm::CornerCrossing,
+            _ => Algorithm::Strait,
         };
         layout.priority = Priority::parse(&get_string(el, "Priority"));
         layout.priority_unhooked = Priority::parse(&get_string(el, "PriorityUnhooked"));

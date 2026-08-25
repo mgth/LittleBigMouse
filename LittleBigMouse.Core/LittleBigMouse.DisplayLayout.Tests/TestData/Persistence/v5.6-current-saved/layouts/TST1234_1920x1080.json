@@ -2,7 +2,7 @@
   "Options": {
     "AllowOverlaps": false,
     "AllowDiscontinuity": true,
-    "Algorithm": "CornerCrossing",
+    "Algorithm": "Cross",
     "MinimalEdgeOverlap": 20,
     "MaxTravelDistance": 150,
     "FreelookCheckInterval": 100,

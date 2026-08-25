@@ -251,7 +251,12 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     /// <summary>
     /// algorithm to be used for mouse movements
     /// - Strait
-    /// - CornerCrossing
+    /// - Cross
+    /// <para>
+    /// The wire values, and the only ones the daemon understands — see
+    /// <see cref="LittleBigMouse.DisplayLayout.Monitors.ILayoutOptions.Algorithm"/> and
+    /// <c>wire-contract/README.md</c>. Produced by <c>LbmOptionsViewModel.AlgorithmList</c>.
+    /// </para>
     /// </summary>
     [DataMember]
     public string Algorithm

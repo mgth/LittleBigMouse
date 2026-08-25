@@ -215,7 +215,7 @@ public class ForceCompactTests
     /// </summary>
     [Theory]
     [InlineData("Strait")]
-    [InlineData("CornerCrossing")]
+    [InlineData("Cross")]
     public void MinimalEdgeOverlap_IsIndependentOfTheAlgorithm(string algorithm)
     {
         var layout = new MonitorsLayout(new ILayoutOptions.Design

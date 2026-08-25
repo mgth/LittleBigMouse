@@ -145,7 +145,11 @@ has already drifted once.
 > lowercase `strait`. None of those were accepted by the daemon: they all landed on
 > `Strait`, silently, since an unknown algorithm is not an error.
 >
-> All five now agree on `Strait`/`Cross`, and the daemon additionally **tolerates
+> Four now agree on `Strait`/`Cross`; the fifth is gone, because
+> `LocationControlViewModelDesign`'s list turned out to be dead — nothing bound it and its
+> runtime counterpart never declared it — so it was deleted rather than kept in step. The
+> single remaining producer is `LbmOptionsViewModel.AlgorithmList`, pinned by
+> `AlgorithmChoiceTests`. The daemon additionally **tolerates
 > `CornerCrossing` as an alias** for `Cross`, so a hand-edited config or a migration that
 > trusts an old doc comment does what it says instead of silently degrading. The alias is
 > a safety net, not a second blessed name — the UI must keep emitting `Cross`.

@@ -4,16 +4,18 @@ using LittleBigMouse.Ui.Avalonia.Options;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
+/// <summary>
+/// Design-time stand-in for <see cref="LocationControlViewModel"/>, used only by
+/// <c>LocationControlView.axaml</c>'s <c>Design.DataContext</c>.
+/// <para>
+/// It used to carry an <c>AlgorithmList</c> and a <c>SelectedAlgorithm</c>, left behind when
+/// the crossing-algorithm picker moved to the options page. Nothing bound them: the view
+/// compiles its bindings against <see cref="LocationControlViewModel"/>
+/// (<c>x:CompileBindings="True"</c>), which declares neither, and the view has no Algorithm
+/// binding at all. They were a fourth spelling of a value that already had too many — see
+/// <c>wire-contract/README.md</c> — so they are gone rather than kept in step.
+/// </para>
+/// </summary>
 public class LocationControlViewModelDesign : IDesignViewModel
 {
-    // Ids match LbmOptionsViewModel.AlgorithmList exactly, case included: they are the wire
-    // values the daemon matches on, and SelectedAlgorithm binds by Id.
-    public List<ListItem> AlgorithmList { get; } = new()
-    {
-        new ("Strait","Strait","Simple and highly CPU-efficient transition."),
-        new ("Cross","Corner crossing","In direction-friendly manner, allows traversal through corners."),
-
-    };
-
-    public object SelectedAlgorithm { get; set; } = "Strait";
 }

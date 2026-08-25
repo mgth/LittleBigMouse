@@ -10,10 +10,6 @@
              x:DataType="controls:LocationControlViewModel"
              x:CompileBindings="True"
              >
-	<Design.DataContext>
-		<controls:LocationControlViewModelDesign/>
-	</Design.DataContext>
-
 	<Grid Margin="14,0">
 		<StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Opacity="0.051" OpacityMask="Gray">
 			<icons:IconView

@@ -256,8 +256,10 @@ public class WireContractGoldenTests
     {
         string[] understood = ["Strait", "Cross"];
 
+        // Exact, not case-insensitive: the daemon's match is case-sensitive, so a default
+        // that differs only in case is a default it silently reads as Strait.
         Assert.Contains(new ILayoutOptions.Design().Algorithm, understood);
-        Assert.Contains(new ZonesLayout().Algorithm, understood, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(new ZonesLayout().Algorithm, understood);
 
         var golden = System.Xml.Linq.XDocument.Parse(
             ReadGolden("ui-to-daemon/layout-v5.6-current.xml")).Root!;

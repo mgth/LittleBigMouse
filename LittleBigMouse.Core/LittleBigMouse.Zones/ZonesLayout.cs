@@ -26,7 +26,14 @@ namespace LittleBigMouse.Zoning
         public string Priority {get; set;}
         public string PriorityUnhooked {get; set;}
 
-        public string Algorithm { get; set; } = "strait";
+        /// <summary>
+        /// The wire value, spelled as the daemon matches it. Always overwritten by
+        /// <c>ZonesLayoutFactory.ComputeZones</c> in production, so the initialiser only
+        /// shows up in tests — but it used to be the lowercase "strait", which is a fifth
+        /// spelling of a value that already had too many, and the daemon reads anything it
+        /// does not recognise as Strait without complaining.
+        /// </summary>
+        public string Algorithm { get; set; } = "Strait";
         public double MaxTravelDistance { get; set; } = 200.0;
         public double FreelookCheckInterval { get; set; } = 100.0;
         public bool FreelookEnabled { get; set; } = true;

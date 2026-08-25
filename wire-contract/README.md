@@ -135,16 +135,17 @@ has already drifted once.
 | `Event` | `Running`, `Stopped`, `Paused`, `Dead`, `SettingChanged`, `DesktopChanged`, `DisplayChanged`, `FocusChanged`, `Suspended`, `Resumed`, `Loaded`, `LoadFailed`, `Probed`, `Rescued`, `ShortcutUnavailable` | `SettingsChanged` accepted as a legacy alias; `<State>` accepted in place of `<Event>` |
 | `ProbeEdge/@Side` | `Left`, `Top`, `Right`, `Bottom` | |
 
-> **`Algorithm` used to be spelled four different ways in this repository.** The wire
+> **`Algorithm` used to be spelled five different ways in this repository.** The wire
 > value is `Cross` — that is what every shipped release offers in
 > `LbmOptionsViewModel.AlgorithmList`, so it is the only spelling a real user
 > configuration has ever contained. But the doc comments on `ILayoutOptions.Algorithm` and
 > `LbmOptions.Algorithm` said `CornerCrossing`, the persistence fixtures under
-> `TestData/Persistence/` stored `CornerCrossing`, and `LocationControlViewModelDesign`
-> used lowercase `strait`/`cross`. None of those three were accepted by the daemon: they
-> all landed on `Strait`, silently, since an unknown algorithm is not an error.
+> `TestData/Persistence/` stored `CornerCrossing`, `LocationControlViewModelDesign` used
+> lowercase `strait`/`cross`, and `ZonesLayout.Algorithm`'s own initialiser was the
+> lowercase `strait`. None of those were accepted by the daemon: they all landed on
+> `Strait`, silently, since an unknown algorithm is not an error.
 >
-> All four now agree on `Strait`/`Cross`, and the daemon additionally **tolerates
+> All five now agree on `Strait`/`Cross`, and the daemon additionally **tolerates
 > `CornerCrossing` as an alias** for `Cross`, so a hand-edited config or a migration that
 > trusts an old doc comment does what it says instead of silently degrading. The alias is
 > a safety net, not a second blessed name — the UI must keep emitting `Cross`.

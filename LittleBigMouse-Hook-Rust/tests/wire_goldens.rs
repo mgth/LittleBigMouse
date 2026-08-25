@@ -32,10 +32,19 @@ fn goldens() -> PathBuf {
         .join("wire-contract/goldens")
 }
 
+/// Read a golden, normalised to LF.
+///
+/// `.gitattributes` pins this corpus to `eol=lf` so the bytes on disk are the bytes
+/// that go over the socket. The normalisation here is the belt to that braces: the
+/// repository's blanket `* text=auto` rewrote these files to CRLF on the Windows CI
+/// runner, and the comparison then failed against a daemon that emits LF. A checkout
+/// configured differently must not be able to break a byte-exact comparison whose
+/// subject has nothing to do with line endings. Mirrors the C# reader.
 fn read(relative: &str) -> String {
     let path = goldens().join(relative);
     std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("missing golden {}: {e}", path.display()))
+        .replace("\r\n", "\n")
         .trim_end_matches('\n')
         .to_string()
 }

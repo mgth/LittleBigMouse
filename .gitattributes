@@ -4,6 +4,16 @@
 * text=auto
 
 ###############################################################################
+# Wire-contract goldens: byte-exact payloads, LF everywhere.
+#
+# These are not source, they are a recording of what goes over the socket,
+# compared byte for byte by tests in two languages. Under `* text=auto` a Windows
+# checkout rewrites them to CRLF and the comparison fails against a daemon that
+# emits LF — which is exactly what CI caught. Pin them.
+###############################################################################
+wire-contract/goldens/** text eol=lf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

@@ -77,15 +77,74 @@ warn() { echo -e "${Y}!!  $*${N}"; }
 #    of them and the old instance survives, the relaunch dies on the
 #    single-instance lock, and you are left looking at the stale app with an empty
 #    log. EVIOCGRAB releases on process exit, so this also frees any grabbed mice.
+#
+#    ORDER AND WAITING BOTH MATTER, and for the same reason: the UI relaunches the
+#    daemon whenever it loses the connection. That contract is only suspended for a
+#    clean tray Exit (`_quitting`, see "Stop relaunching the daemon the UI is
+#    quitting"); a signal does not go through QuitAsync, so a SIGTERM'd UI keeps its
+#    reconnect loop running while it winds down. Kill the daemon while any UI is
+#    still breathing and it spawns a REPLACEMENT, which survives into the launch
+#    below still holding the mice — and with a different PID, so it reads as a kill
+#    that failed rather than a spawn that should not have happened.
+#
+#    pkill only delivers the signal, it does not wait. So: signal the UI, wait for
+#    it to actually be gone, and only then take the daemon.
 step "Stopping running instance(s)"
-UI_STOPPED=0
-pkill -f "LittleBigMouse.Ui.Avalonia.dl[l]" 2>/dev/null && UI_STOPPED=1
-pkill -f "LittleBigMouse.Ui.Avaloni[a]$" 2>/dev/null && UI_STOPPED=1
-# Anchored: /usr/lib/littlebigmouse/lbm-hook must stay for the daemon pkill below.
-pkill -f "littlebigmous[e]$" 2>/dev/null && UI_STOPPED=1
-[[ "$UI_STOPPED" -eq 1 ]] && note "UI stopped" || note "no UI running"
-pkill -x lbm-hook 2>/dev/null && note "daemon stopped" || note "no daemon running"
-sleep 1
+
+# Anchored patterns: /usr/lib/littlebigmouse/lbm-hook must survive these and be left
+# to the daemon pkill below. The bracketed letter keeps pkill off its own command line.
+UI_PATTERNS=(
+    "LittleBigMouse.Ui.Avalonia.dl[l]"
+    "LittleBigMouse.Ui.Avaloni[a]$"
+    "littlebigmous[e]$"
+)
+
+ui_running() {
+    local pattern
+    for pattern in "${UI_PATTERNS[@]}"; do
+        pgrep -f "$pattern" >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+
+wait_gone() {  # wait_gone <deciseconds> <predicate>
+    local tries="$1" predicate="$2"
+    while (( tries-- > 0 )); do
+        "$predicate" || return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+if ui_running; then
+    for pattern in "${UI_PATTERNS[@]}"; do pkill -f "$pattern" 2>/dev/null; done
+    if wait_gone 50 ui_running; then
+        note "UI stopped"
+    else
+        warn "UI still up 5s after SIGTERM — forcing"
+        for pattern in "${UI_PATTERNS[@]}"; do pkill -9 -f "$pattern" 2>/dev/null; done
+        wait_gone 20 ui_running || warn "UI survived SIGKILL — it may respawn the daemon below"
+    fi
+else
+    note "no UI running"
+fi
+
+# Nothing is left to respawn it now.
+hook_running() { pgrep -x lbm-hook >/dev/null 2>&1; }
+if hook_running; then
+    pkill -x lbm-hook 2>/dev/null
+    wait_gone 30 hook_running && note "daemon stopped" || warn "daemon did not exit"
+else
+    note "no daemon running"
+fi
+
+# A daemon back from the dead means something outside this script relaunched it.
+# Say so loudly: it is holding the mice, and building on top of it is how you end up
+# debugging the previous build's grab.
+sleep 0.5
+if hook_running; then
+    warn "a daemon reappeared after the kill (pid $(pgrep -x lbm-hook | tr '\n' ' ')) — it holds the mice"
+fi
 
 # 2. build the Rust daemon (non-fatal: stage whatever already exists on failure).
 if [[ "$NO_BUILD" -eq 0 && "$SKIP_DAEMON" -eq 0 ]]; then

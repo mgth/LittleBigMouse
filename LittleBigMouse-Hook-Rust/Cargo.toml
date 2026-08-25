@@ -65,6 +65,24 @@ features = [
     "Win32_System_Power",
 ]
 
+# Benchmarks only. `default-features = false` drops plotters/rayon and the HTML
+# report generator: the baseline this repo keeps is the textual one, and the
+# daemon has no use for a heavier dev tree.
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+# The traversal engine's hot path, measured against a fake cursor.
+[[bench]]
+name = "mouse_engine"
+harness = false
+
+# Allocation counts for the same scenarios. A plain binary rather than a
+# criterion harness: allocation counts are deterministic, so they are reported
+# as exact figures instead of being sampled.
+[[bench]]
+name = "alloc_profile"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1

@@ -42,6 +42,70 @@ cargo test
 cargo clippy --all-targets
 ```
 
+## Benchmarks
+
+```
+cargo bench --bench mouse_engine -- --quick   # timings, short mode (~1 min)
+cargo bench --bench mouse_engine              # timings, full statistics
+cargo bench --bench alloc_profile             # allocation counts
+cargo bench --bench mouse_engine -- --test    # run every scenario once, no timing
+```
+
+`benches/mouse_engine.rs` times the traversal core, `benches/alloc_profile.rs`
+counts its allocations, and `benches/support/` holds the fixtures both share.
+Nothing installs a hook, opens a device or moves the real pointer: the engine
+talks to a `CursorEnv` whose every method is a field read, so what is measured is
+the algorithm and not the OS. Layouts are generated as the XML the C# UI would
+send (2, 6 and 16 monitors, mixed DPI; plus a 4x4 wall), which is why there is no
+16-monitor fixture file in the tree.
+
+Each scenario is a closed loop of mouse events, and `Scenario::verify` replays it
+eight times asserting that every event still takes the branch the benchmark is
+named after — a crossing benchmark that quietly decayed into interior moves would
+fail rather than report a great number.
+
+### Reading the results
+
+**Timings are machine-dependent.** They move with the CPU, the clock governor,
+the allocator and the build flags, so only compare runs made on the same machine,
+ideally back to back — `cargo bench` keeps a baseline per benchmark id under
+`target/criterion/` and prints the change automatically. The figures below are a
+reference point, not a threshold; nothing in the suite fails on a timing.
+
+Measured on an AMD Ryzen 9 9950X, Linux 7.2 (CachyOS), rustc 1.94.0, `--quick`:
+
+| scenario | 2 zones | 6 zones | 16 zones |
+|---|---|---|---|
+| `interior` (Strait / Cross) | 11.7 / 11.5 ns | — | — |
+| `crossing/Strait` | 66 ns | 68 ns | 67 ns |
+| `crossing/Cross` | 91 ns | 253 ns | 660 ns |
+| `no_target/Strait` | 7.0 ns | 7.0 ns | 7.1 ns |
+| `no_target/Cross` | 27 ns | 107 ns | 296 ns |
+| `intersection/cross_4x4_diagonal` | | | 545 ns |
+| `travel_pixels/cached` | 15 ns | 15 ns | 15 ns |
+| `travel_pixels/compute` | | row_16 11 ns | grid_4x4 2.07 µs |
+| `load_layout` | 10.4 µs | 34.2 µs | 93.3 µs |
+
+**Allocation counts are not machine-dependent** — they are exact and identical on
+any host for a given build, which makes them the half of the baseline worth
+diffing:
+
+| scenario | allocations |
+|---|---|
+| `interior`, both algorithms | **0 per event** |
+| `crossing/Strait`, any zone count | 1 per event (the cached travel-path `Vec` clone) |
+| `crossing/Cross` | 1 / 5 / 15 per event at 2 / 6 / 16 zones |
+| `no_target/Cross` | 1 / 5 / 15 per event at 2 / 6 / 16 zones |
+| `travel_pixels/compute/grid_4x4` | 460 per call |
+| `load_layout/16` | 552 per call, 357 kB |
+
+Two shapes fall out of this, both expected from the code rather than surprises:
+Strait resolves one link on one side and is flat in the zone count, while Cross
+scans every zone per event and costs one `Rect::intersect` `Vec` for each.
+Neither is currently a problem — 660 ns leaves a wide margin at a 1 kHz report
+rate — and this task deliberately changed no algorithm; the point is to have the
+numbers before anyone does.
+
 ## The exe name
 
 Cargo rejects a target named with a `.`, so the binary builds as **`lbm-hook.exe`**

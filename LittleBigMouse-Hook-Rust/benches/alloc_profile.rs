@@ -13,18 +13,15 @@
 //! Why a plain binary instead of a criterion harness: criterion's own sampling,
 //! reporting and `Vec` bookkeeping allocate heavily, and separating its
 //! allocations from the code under test is more machinery than the answer is
-//! worth. A counting [`GlobalAlloc`] over a bare loop gives exact numbers in
-//! twenty lines. It is registered for this bench binary only, so nothing about
-//! the daemon's allocator changes.
+//! worth. A counting [`GlobalAlloc`] (`support::alloc`) over a bare loop gives
+//! exact numbers in twenty lines. It is registered for this bench binary only,
+//! so nothing about the daemon's allocator changes.
 //!
 //! No assertion, no threshold: this records a baseline, and thresholds on
 //! allocation counts would fail on an unrelated `std` change. Read the numbers,
 //! compare them to the README table, investigate a difference.
 
 mod support;
-
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use littlebigmouse_hook::geometry::{Point, Rect, Segment};
 use littlebigmouse_hook::zones::travel::travel;
@@ -34,46 +31,8 @@ use support::{
     Scenario,
 };
 
-// --- counting allocator ------------------------------------------------------
-
-static ALLOCS: AtomicU64 = AtomicU64::new(0);
-static BYTES: AtomicU64 = AtomicU64::new(0);
-
-struct Counting;
-
-/// Delegates everything to the system allocator, counting on the way through.
-/// `realloc` and `alloc_zeroed` are forwarded rather than left to the trait's
-/// default implementations so the allocator behaves exactly like the real one —
-/// the defaults would turn every `realloc` into an alloc/copy/free.
-unsafe impl GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        ALLOCS.fetch_add(1, Ordering::Relaxed);
-        BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
-        unsafe { System.alloc(layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        ALLOCS.fetch_add(1, Ordering::Relaxed);
-        BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
-        unsafe { System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        ALLOCS.fetch_add(1, Ordering::Relaxed);
-        BYTES.fetch_add(
-            new_size.saturating_sub(layout.size()) as u64,
-            Ordering::Relaxed,
-        );
-        unsafe { System.realloc(ptr, layout, new_size) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        unsafe { System.dealloc(ptr, layout) }
-    }
-}
-
 #[global_allocator]
-static ALLOCATOR: Counting = Counting;
+static ALLOCATOR: support::alloc::Counting = support::alloc::Counting;
 
 // --- measurement -------------------------------------------------------------
 
@@ -100,13 +59,11 @@ fn measure(
         f();
     }
 
-    ALLOCS.store(0, Ordering::Relaxed);
-    BYTES.store(0, Ordering::Relaxed);
+    support::alloc::reset();
     for _ in 0..iters {
         f();
     }
-    let allocs = ALLOCS.load(Ordering::Relaxed);
-    let bytes = BYTES.load(Ordering::Relaxed);
+    let (allocs, bytes) = support::alloc::counts();
 
     let units = (iters * units_per_iter) as f64;
     Row {

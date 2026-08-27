@@ -49,10 +49,12 @@ cargo bench --bench mouse_engine -- --quick   # timings, short mode (~1 min)
 cargo bench --bench mouse_engine              # timings, full statistics
 cargo bench --bench alloc_profile             # allocation counts
 cargo bench --bench mouse_engine -- --test    # run every scenario once, no timing
+cargo bench --bench evdev_pump                # Linux pump: allocations + timings
 ```
 
 `benches/mouse_engine.rs` times the traversal core, `benches/alloc_profile.rs`
-counts its allocations, and `benches/support/` holds the fixtures both share.
+counts its allocations, `benches/evdev_pump.rs` measures the Linux input
+plumbing around them, and `benches/support/` holds the fixtures they share.
 Nothing installs a hook, opens a device or moves the real pointer: the engine
 talks to a `CursorEnv` whose every method is a field read, so what is measured is
 the algorithm and not the OS. Layouts are generated as the XML the C# UI would
@@ -105,6 +107,43 @@ scans every zone per event and costs one `Rect::intersect` `Vec` for each.
 Neither is currently a problem — 660 ns leaves a wide margin at a 1 kHz report
 rate — and this task deliberately changed no algorithm; the point is to have the
 numbers before anyone does.
+
+### The evdev pump (Linux)
+
+`benches/evdev_pump.rs` measures what surrounds the engine on Linux: one pump
+cycle — rebuild the `poll` set, drain a device's events, route each of them to
+the pointer or the keyboard batch, compose the uinput frames. No device, no
+`/dev/uinput`, no grab; it runs unprivileged and never touches the real mice. Off
+Linux it prints a line and exits.
+
+The two modes are the same routing code over the same events, differing only in
+where the buffers live: **owned**, the current pump, whose buffers belong to the
+`Router` and are reused cycle after cycle, and **per-cycle**, a frozen copy of
+the pump body from before that (poll set, `fetch_events` drain, pending batches
+and emitted frame all allocated as locals, every cycle).
+
+| scenario | allocs/cycle (owned → per-cycle) | ns/cycle (owned → per-cycle) |
+|---|---|---|
+| `motion` — the 1 kHz report | **0** → 3 (144 B) | 8.4 → 35.8 ns |
+| `motion+wheel` | **0** → 5 (336 B) | 13.6 → 68.3 ns |
+| `button` | **0** → 5 (264 B) | 9.3 → 61.9 ns |
+| `keyboard` — a macro key on a combined node | **0** → 6 (384 B) | 11.4 → 77.0 ns |
+| `combined` — mouse and keyboard in one report | **0** → 6 (456 B) | 13.7 → 76.4 ns |
+| `partial` — one report split across two reads | **0** → 3 (108 B) | 6.3 → 34.6 ns |
+| `burst/8` — eight reports in one drain | **0** → 10 (984 B) | 38.1 → 123.2 ns |
+
+Same machine and toolchain as the table above. The allocation columns are exact;
+the timings are indicative, and slightly pessimistic for the per-cycle mode,
+which pays the counting allocator's two relaxed atomics on every allocation it
+makes. The engine's own cost is *not* in these numbers — add the `interior` or
+`crossing` line above for a whole frame.
+
+What matters here is the zero, not the nanoseconds: at 1 kHz per device the pump
+used to call into the global allocator three to ten times per report, on the
+thread that owns the user's grabbed mice, where a slow path through the allocator
+is a visible stall. `a_steady_stream_stops_allocating` (in `hook/linux/evdev.rs`)
+guards it from the test suite, by asserting no buffer grows again once the first
+frames have sized it.
 
 ## The exe name
 

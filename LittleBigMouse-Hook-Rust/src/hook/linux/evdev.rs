@@ -30,6 +30,10 @@
 //!   pump only drains its channel and grabs (a cheap ioctl);
 //! - no blocking locks — the engine is accessed with `try_lock` (a contended
 //!   frame emits raw / keeps cached bounds for one cycle);
+//! - no allocation per report — every buffer the cycle needs lives in
+//!   [`PumpBuffers`], owned by the `Router` and reused; a call into the global
+//!   allocator a thousand times a second is a stall waiting to happen. Measured
+//!   by `benches/evdev_pump.rs`;
 //! - no synchronous IPC/DBus — the KWin cursor probe runs at arm time, BEFORE
 //!   the grabs;
 //! - no unbounded writes — state broadcasts go to sockets with a write
@@ -61,7 +65,7 @@
 //! by the [`super::focus`] watcher, common to all backends: it flips
 //! `want_hook`, and the reconcile below ungrabs/regrabs accordingly.
 
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
@@ -248,6 +252,237 @@ pub fn run(shared: &'static Shared) -> bool {
     }
 }
 
+/// Whether an event closed the frame being accumulated.
+///
+/// `SYN_REPORT` is the kernel's frame delimiter: everything read before it
+/// belongs to one atomic report (a REL_X and a REL_Y are one motion, not two),
+/// so the pump only runs the engine and writes to uinput on a `Complete`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub enum Frame {
+    Pending,
+    Complete,
+}
+
+/// Every buffer the pump reuses, owned by the [`Router`] for the whole hooked
+/// session instead of being recreated per cycle.
+///
+/// The pump runs once per readable batch — up to one cycle per mouse report, so
+/// ~1000/s per grabbed device at a 1 kHz polling rate. Each cycle used to build
+/// a `Vec` for the poll set, one per `fetch_events` drain, one for the pending
+/// pointer events, one for the pending keyboard events and one per uinput frame;
+/// at steady state those are all the same sizes over and over. Holding them here
+/// makes the routing path allocation-free once the capacities have settled,
+/// which is what the module's "nothing potentially blocking" rule is really
+/// after: an allocation is a call into the global allocator, and a slow path
+/// through it is a stall with the user's mice grabbed.
+///
+/// Public (with private fields) so `benches/evdev_pump.rs` can drive the
+/// classification and frame composition without a device or `/dev/uinput`.
+pub struct PumpBuffers {
+    /// `poll(2)` set: the grabbed mice first, then the observed keyboards. The
+    /// split point is the mouse count, which is how a slot maps back to a list.
+    fds: Vec<libc::pollfd>,
+    /// One device's `fetch_events` drain. Collected rather than iterated because
+    /// processing a frame needs `&mut Router`, which the iterator borrows from.
+    events: Vec<InputEvent>,
+    /// Poll slots that reported POLLERR/POLLHUP/POLLNVAL, ascending.
+    dead: Vec<usize>,
+    /// Raw REL_X/REL_Y counts accumulated since the last frame.
+    acc: (i64, i64),
+    /// Wheels, buttons and MSC_SCAN waiting to ride the frame's pointer write.
+    passthrough: Vec<InputEvent>,
+    /// Keyboard usages of grabbed mice, waiting for the virtual keyboard's own
+    /// frame.
+    kbd: Vec<InputEvent>,
+    /// The composed uinput pointer frame: the absolute point, then
+    /// `passthrough`.
+    batch: Vec<InputEvent>,
+    /// Index (into `Router::devices`) of the mouse that produced the motion
+    /// being accumulated — its accelerator gets fed at flush time.
+    last_motion_dev: usize,
+}
+
+impl Default for PumpBuffers {
+    fn default() -> Self {
+        PumpBuffers::new()
+    }
+}
+
+impl PumpBuffers {
+    /// Capacities sized for the ordinary session — a couple of mice and
+    /// keyboards, a frame or two of events — so the steady state never grows
+    /// them. They are a starting point, not a limit: a burst reallocates once
+    /// and the larger capacity is then kept for the rest of the session.
+    pub fn new() -> PumpBuffers {
+        PumpBuffers {
+            fds: Vec::with_capacity(8),
+            events: Vec::with_capacity(64),
+            dead: Vec::with_capacity(4),
+            acc: (0, 0),
+            passthrough: Vec::with_capacity(16),
+            kbd: Vec::with_capacity(16),
+            batch: Vec::with_capacity(16),
+            last_motion_dev: 0,
+        }
+    }
+
+    /// Rebuild the poll set from the current devices. Called every cycle: the
+    /// device list changes on hot-plug, and `poll` writes `revents` in place, so
+    /// the set has to be reset even when the fds are the same.
+    pub fn fill_poll_set(&mut self, fds: impl Iterator<Item = RawFd>) {
+        self.fds.clear();
+        self.fds.extend(fds.map(|fd| libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        }));
+    }
+
+    /// Replace the pending drain with one device's events.
+    pub fn refill_events(&mut self, events: impl Iterator<Item = InputEvent>) {
+        self.events.clear();
+        self.events.extend(events);
+    }
+
+    /// How many events the last [`refill_events`](Self::refill_events) holds.
+    pub fn event_count(&self) -> usize {
+        self.events.len()
+    }
+
+    /// The `k`th event of the drain, by value: routing one needs `&mut Router`,
+    /// which a reference into the buffer would hold hostage. `InputEvent` is 24
+    /// bytes of `Copy`, so this is a load, not a lifetime problem.
+    pub fn event(&self, k: usize) -> InputEvent {
+        self.events[k]
+    }
+
+    /// Route one event of the frame being accumulated. `dev` is the poll slot of
+    /// the mouse it came from, remembered for the acceleration curve.
+    ///
+    /// Order is the contract here: motion accumulates, everything else queues in
+    /// arrival order in the buffer that matches its destination device, and
+    /// `SYN_REPORT` closes the frame.
+    pub fn push(&mut self, ev: InputEvent, env: &mut EvdevCursor, dev: usize) -> Frame {
+        match ev.event_type() {
+            EventType::SYNCHRONIZATION => return Frame::Complete,
+            EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_X.0 => {
+                self.acc.0 += ev.value() as i64;
+                self.last_motion_dev = dev;
+            }
+            EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_Y.0 => {
+                self.acc.1 += ev.value() as i64;
+                self.last_motion_dev = dev;
+            }
+            // Wheels and any other relative axis: pass through verbatim.
+            EventType::RELATIVE => self.passthrough.push(ev),
+            // Buttons stay with the pointer; every other EV_KEY code is a
+            // keyboard usage (onboard macros on combined receiver nodes) and goes
+            // to the virtual keyboard, which declares it.
+            EventType::KEY
+                if BTN_RANGE.contains(&ev.code())
+                    || BTN_TRIGGER_HAPPY_RANGE.contains(&ev.code()) =>
+            {
+                env.track_button(ev.code(), ev.value());
+                self.passthrough.push(ev);
+            }
+            EventType::KEY => {
+                // Combined receiver nodes carry the modifier too.
+                env.track_ctrl(ev.code(), ev.value());
+                self.kbd.push(ev);
+            }
+            // MSC_SCAN scancodes stay with the pointer frame: losing the
+            // scancode of a routed key is inconsequential.
+            EventType::MISC => self.passthrough.push(ev),
+            _ => {}
+        }
+        Frame::Pending
+    }
+
+    /// Whether anything is waiting to be emitted. False right after a flush, and
+    /// for a cycle that read only events the pump ignores.
+    pub fn frame_pending(&self) -> bool {
+        self.acc != (0, 0) || !self.passthrough.is_empty() || !self.kbd.is_empty()
+    }
+
+    /// The raw counts accumulated since the last frame, reset to zero. Taken
+    /// rather than read: a delta the engine has been run over must not be
+    /// applied twice, on any path out of the flush.
+    pub fn take_motion(&mut self) -> (i64, i64) {
+        std::mem::take(&mut self.acc)
+    }
+
+    /// Compose the pointer frame: the absolute point first, then the pending
+    /// buttons/wheels/scancodes in arrival order. Drains `passthrough` — those
+    /// events are now the caller's to write — and leaves its capacity behind.
+    ///
+    /// uinput appends the closing `SYN_REPORT` itself, so the emitted frame is
+    /// ABS_X, ABS_Y, passthrough…, SYN_REPORT.
+    pub fn pointer_frame(&mut self, ax: i32, ay: i32) -> &[InputEvent] {
+        self.batch.clear();
+        self.batch.push(InputEvent::new(
+            EventType::ABSOLUTE.0,
+            AbsoluteAxisCode::ABS_X.0,
+            ax,
+        ));
+        self.batch.push(InputEvent::new(
+            EventType::ABSOLUTE.0,
+            AbsoluteAxisCode::ABS_Y.0,
+            ay,
+        ));
+        self.batch.append(&mut self.passthrough);
+        &self.batch
+    }
+
+    /// Hand the pending keyboard usages to `write` as one frame, then drop them.
+    /// A no-op when none are pending, which is the ordinary case: only combined
+    /// receiver nodes emit KEY_* codes through a grabbed mouse.
+    pub fn take_keyboard_frame(&mut self, write: impl FnOnce(&[InputEvent])) {
+        if self.kbd.is_empty() {
+            return;
+        }
+        write(&self.kbd);
+        self.kbd.clear();
+    }
+}
+
+/// A poll slot the kernel will never make readable again: the node was removed
+/// (or was never valid). It reports its error forever, so leaving it in the set
+/// turns `poll` into a no-wait call and the pump into a busy loop.
+fn slot_is_dead(revents: i16) -> bool {
+    revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0
+}
+
+/// A device removed from the pump's lists by [`purge_dead`].
+enum Gone<M, K> {
+    Mouse(M),
+    Keyboard(K),
+}
+
+/// Drop the dead poll slots from the two device lists, handing each removed
+/// entry to `gone` (the caller owns the reporting, and the value it needs to
+/// report — the path — is inside the entry).
+///
+/// `dead` is ascending, so the removal walks it backwards: taking the highest
+/// index first keeps the lower ones pointing at the same entries. Generic over
+/// the entry types purely so the slot arithmetic can be tested without opening a
+/// device.
+fn purge_dead<M, K>(
+    dead: &[usize],
+    n_mice: usize,
+    mice: &mut Vec<M>,
+    keyboards: &mut Vec<K>,
+    mut gone: impl FnMut(Gone<M, K>),
+) {
+    for &slot in dead.iter().rev() {
+        if slot >= n_mice {
+            gone(Gone::Keyboard(keyboards.remove(slot - n_mice)));
+        } else {
+            gone(Gone::Mouse(mice.remove(slot)));
+        }
+    }
+}
+
 /// The grabbed devices, the virtual pointer + keyboard, and the authoritative cursor.
 struct Router {
     /// Each grabbed mouse carries its own acceleration state: velocities must
@@ -272,9 +507,9 @@ struct Router {
     /// kcminputrc + env overrides, resolved per device at grab time (arm and
     /// hot-plug rescan) — the pump itself never touches the filesystem.
     accel_cfg: super::accel::AccelConfig,
-    /// Index (into `devices`) of the mouse that produced the motion being
-    /// accumulated — its accelerator gets fed at flush time.
-    last_motion_dev: usize,
+    /// Poll set, event drains and pending frames — reused cycle after cycle so
+    /// the routing path does not allocate.
+    bufs: PumpBuffers,
 }
 
 impl Router {
@@ -397,7 +632,8 @@ impl Router {
         // `buttons_down()` honest for the drag detection, and makes the
         // teardown release cover a button that was held across the whole
         // session.
-        let buttons = held_buttons_of(&devices);
+        let mut env = EvdevCursor::new(desktop, start);
+        env.buttons = held_buttons_of(&devices);
 
         let mut router = Router {
             devices,
@@ -406,24 +642,16 @@ impl Router {
             scan_stop,
             virt,
             virt_kbd,
-            env: EvdevCursor {
-                virtual_pos: start,
-                clip: None,
-                desktop,
-                started: Instant::now(),
-                ctrl_left: false,
-                ctrl_right: false,
-                buttons,
-            },
+            env,
             sens,
             debug,
             rem: (0.0, 0.0),
             accel_cfg,
-            last_motion_dev: 0,
+            bufs: PumpBuffers::new(),
         };
 
         // Place the cursor at the start point and prime the engine there.
-        router.emit_absolute(&mut Vec::new());
+        router.emit_absolute();
         let mut engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
         let mut e = MouseEventArg::new(start);
         engine.on_mouse_move(&mut router.env, &mut e);
@@ -444,7 +672,7 @@ impl Router {
                     self.virt = v;
                     self.env.desktop = current;
                     self.env.virtual_pos = self.env.clamp(self.env.virtual_pos);
-                    self.emit_absolute(&mut Vec::new());
+                    self.emit_absolute();
                 }
             }
         }
@@ -452,118 +680,110 @@ impl Router {
         self.rescan();
 
         let n_mice = self.devices.len();
-        let mut fds: Vec<libc::pollfd> = self
-            .devices
-            .iter()
-            .map(|(_, d, _)| d.as_raw_fd())
-            .chain(self.keyboards.iter().map(|(_, d)| d.as_raw_fd()))
-            .map(|fd| libc::pollfd {
-                fd,
-                events: libc::POLLIN,
-                revents: 0,
-            })
-            .collect();
-        if fds.is_empty() {
+        {
+            let Router {
+                bufs,
+                devices,
+                keyboards,
+                ..
+            } = self;
+            bufs.fill_poll_set(
+                devices
+                    .iter()
+                    .map(|(_, d, _)| d.as_raw_fd())
+                    .chain(keyboards.iter().map(|(_, d)| d.as_raw_fd())),
+            );
+        }
+        if self.bufs.fds.is_empty() {
             // Every device vanished: keep the cadence (poll(0 fds) returns
             // immediately) and let the rescan pick devices back up.
             std::thread::sleep(Duration::from_millis(100));
             return;
         }
         unsafe {
-            libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 100);
+            libc::poll(
+                self.bufs.fds.as_mut_ptr(),
+                self.bufs.fds.len() as libc::nfds_t,
+                100,
+            );
         }
 
-        let mut acc = (0i64, 0i64);
-        let mut passthrough: Vec<InputEvent> = Vec::new();
-        let mut kbd: Vec<InputEvent> = Vec::new();
-        // A removed node reports POLLERR/POLLHUP forever: it must leave the set,
-        // or poll() returns instantly and the pump becomes a busy loop.
-        let mut dead: Vec<usize> = Vec::new();
-
-        for (i, pfd) in fds.iter().enumerate() {
-            if pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
-                dead.push(i);
+        // Indexed rather than iterated: processing an event needs `&mut self`,
+        // which an iterator borrowed from `self.bufs` would hold hostage. Both
+        // `pollfd` and `InputEvent` are `Copy`, so a slot is read out and the
+        // borrow ends there.
+        for slot in 0..self.bufs.fds.len() {
+            let revents = self.bufs.fds[slot].revents;
+            if slot_is_dead(revents) {
+                self.bufs.dead.push(slot);
                 continue;
             }
-            if pfd.revents & libc::POLLIN == 0 {
+            if revents & libc::POLLIN == 0 {
                 continue;
             }
-            if i >= n_mice {
-                self.track_ctrl_from_keyboard(i - n_mice);
+            if slot >= n_mice {
+                self.track_ctrl_from_keyboard(slot - n_mice);
                 continue;
             }
-            let events: Vec<InputEvent> = match self.devices[i].1.fetch_events() {
-                Ok(it) => it.collect(),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(_) => {
-                    // Dropping the Device closes the fd, which also releases the
-                    // grab — if the node was actually alive the compositor gets
-                    // it back rather than the user losing the mouse.
-                    dead.push(i);
-                    continue;
+            {
+                let Router { bufs, devices, .. } = self;
+                match devices[slot].1.fetch_events() {
+                    Ok(it) => bufs.refill_events(it),
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                    Err(_) => {
+                        // Dropping the Device closes the fd, which also releases
+                        // the grab — if the node was actually alive the
+                        // compositor gets it back rather than the user losing
+                        // the mouse.
+                        bufs.dead.push(slot);
+                        continue;
+                    }
                 }
-            };
-            for ev in events {
-                match ev.event_type() {
-                    EventType::SYNCHRONIZATION => {
-                        self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd)
-                    }
-                    EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_X.0 => {
-                        acc.0 += ev.value() as i64;
-                        self.last_motion_dev = i;
-                    }
-                    EventType::RELATIVE if ev.code() == RelativeAxisCode::REL_Y.0 => {
-                        acc.1 += ev.value() as i64;
-                        self.last_motion_dev = i;
-                    }
-                    // Wheels and any other relative axis: pass through verbatim.
-                    EventType::RELATIVE => passthrough.push(ev),
-                    // Buttons stay with the pointer; every other EV_KEY code is a
-                    // keyboard usage (onboard macros on combined receiver nodes)
-                    // and goes to the virtual keyboard, which declares it.
-                    EventType::KEY
-                        if BTN_RANGE.contains(&ev.code())
-                            || BTN_TRIGGER_HAPPY_RANGE.contains(&ev.code()) =>
-                    {
-                        self.env.track_button(ev.code(), ev.value());
-                        passthrough.push(ev)
-                    }
-                    EventType::KEY => {
-                        // Combined receiver nodes carry the modifier too.
-                        self.env.track_ctrl(ev.code(), ev.value());
-                        kbd.push(ev);
-                    }
-                    // MSC_SCAN scancodes stay with the pointer frame: losing the
-                    // scancode of a routed key is inconsequential.
-                    EventType::MISC => passthrough.push(ev),
-                    _ => {}
+            }
+            for k in 0..self.bufs.event_count() {
+                let ev = self.bufs.event(k);
+                if self.bufs.push(ev, &mut self.env, slot) == Frame::Complete {
+                    self.flush_frame(shared);
                 }
             }
         }
-        if acc != (0, 0) || !passthrough.is_empty() || !kbd.is_empty() {
-            self.flush_frame(shared, &mut acc, &mut passthrough, &mut kbd);
-        }
+        // A frame split across two reads (or a device that stopped mid-report)
+        // leaves events with no SYN behind them: emit what is pending rather
+        // than hold the motion until the next one. A no-op when nothing is.
+        self.flush_frame(shared);
 
-        for i in dead.into_iter().rev() {
-            let (path, kind) = if i >= n_mice {
-                (self.keyboards.remove(i - n_mice).0, "keyboard")
-            } else {
-                (self.devices.remove(i).0, "device")
-            };
-            eprintln!("[LittleBigMouse.Hook] evdev: {kind} gone {path:?}");
+        if !self.bufs.dead.is_empty() {
+            let Router {
+                bufs,
+                devices,
+                keyboards,
+                ..
+            } = self;
+            purge_dead(&bufs.dead, n_mice, devices, keyboards, |gone| {
+                let (path, kind) = match &gone {
+                    Gone::Mouse((path, _, _)) => (path, "device"),
+                    Gone::Keyboard((path, _)) => (path, "keyboard"),
+                };
+                eprintln!("[LittleBigMouse.Hook] evdev: {kind} gone {path:?}");
+            });
+            bufs.dead.clear();
         }
     }
 
     /// Drain a (non-grabbed) keyboard, keeping only the ctrl state: the
     /// compositor still owns these devices, we just observe the modifier.
+    ///
+    /// Nothing here needs `&mut Router`, only the cursor's modifier state, so
+    /// the drain is consumed as it comes: `keyboards` and `env` are distinct
+    /// fields, and the events never have to be collected anywhere.
     fn track_ctrl_from_keyboard(&mut self, k: usize) {
-        let events: Vec<InputEvent> = match self.keyboards[k].1.fetch_events() {
-            Ok(it) => it.collect(),
-            Err(_) => return, // dead nodes are purged via POLLERR next cycle
+        let Router { keyboards, env, .. } = self;
+        let Ok(events) = keyboards[k].1.fetch_events() else {
+            return; // dead nodes are purged via POLLERR next cycle
         };
         for ev in events {
             if ev.event_type() == EventType::KEY {
-                self.env.track_ctrl(ev.code(), ev.value());
+                env.track_ctrl(ev.code(), ev.value());
             }
         }
     }
@@ -614,24 +834,20 @@ impl Router {
 
     /// Run the engine over the accumulated motion and place the cursor at the
     /// resulting absolute position, forwarding buttons/wheels in the same frame.
-    fn flush_frame(
-        &mut self,
-        shared: &Shared,
-        acc: &mut (i64, i64),
-        passthrough: &mut Vec<InputEvent>,
-        kbd: &mut Vec<InputEvent>,
-    ) {
-        if *acc == (0, 0) && passthrough.is_empty() && kbd.is_empty() {
+    fn flush_frame(&mut self, shared: &Shared) {
+        if !self.bufs.frame_pending() {
             return;
         }
 
-        if *acc != (0, 0) {
+        let acc = self.bufs.take_motion();
+        if acc != (0, 0) {
             // Reproduce the pointer acceleration libinput would have applied had
             // we not grabbed the device (the ABS virtual pointer bypasses it):
             // per-device curve on the raw frame delta, THEN the user's flat
             // LBM_EVDEV_SENS multiplier. Sub-pixel remainders carry over frames.
             let now = self.env.started.elapsed().as_micros() as u64;
             let idx = self
+                .bufs
                 .last_motion_dev
                 .min(self.devices.len().saturating_sub(1));
             let (ax, ay) = match self.devices.get_mut(idx) {
@@ -654,8 +870,7 @@ impl Router {
                 Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
                 Err(std::sync::TryLockError::WouldBlock) => {
                     self.env.virtual_pos = self.env.clamp(candidate);
-                    self.emit_absolute(passthrough);
-                    *acc = (0, 0);
+                    self.emit_absolute();
                     return;
                 }
             };
@@ -679,32 +894,27 @@ impl Router {
                     if e.handled { " CROSS" } else { "" },
                     if self.env.ctrl_down() { " ctrl" } else { "" });
             }
-            *acc = (0, 0);
         }
 
-        self.emit_absolute(passthrough);
+        self.emit_absolute();
 
         // Keyboard usages get their own atomic frame on the virtual keyboard
         // (emit appends the SYN_REPORT), mirroring the per-device framing of the
         // pointer batch above.
-        if !kbd.is_empty() {
-            let _ = self.virt_kbd.emit(kbd);
-            kbd.clear();
-        }
+        let Router { bufs, virt_kbd, .. } = self;
+        bufs.take_keyboard_frame(|frame| {
+            let _ = virt_kbd.emit(frame);
+        });
     }
 
     /// Emit the current absolute position plus any pending buttons/wheels as one
     /// atomic uinput frame. ABS values are desktop-relative (the ABS range starts
     /// at 0), so the compositor's 1:1 mapping lands the cursor exactly.
-    fn emit_absolute(&mut self, passthrough: &mut Vec<InputEvent>) {
+    fn emit_absolute(&mut self) {
         let ax = self.env.virtual_pos.x() - self.env.desktop.left();
         let ay = self.env.virtual_pos.y() - self.env.desktop.top();
-        let mut batch = vec![
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_X.0, ax),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, ay),
-        ];
-        batch.append(passthrough);
-        let _ = self.virt.emit(&batch);
+        let frame = self.bufs.pointer_frame(ax, ay);
+        let _ = self.virt.emit(frame);
     }
 }
 
@@ -973,7 +1183,11 @@ fn first_zone_center(shared: &Shared) -> Option<Point<i32>> {
 /// CursorEnv over the authoritative virtual position. `set_mouse_location` is a
 /// pure state update (the caller emits the absolute point afterwards); the clip
 /// is the emulated Win32 ClipCursor the engine's travel path relies on.
-struct EvdevCursor {
+///
+/// Public (with private fields) for the same reason as [`PumpBuffers`]: the
+/// classification benchmark tracks buttons and modifiers through the real
+/// cursor rather than a stand-in.
+pub struct EvdevCursor {
     virtual_pos: Point<i32>,
     clip: Option<Rect<i32>>,
     desktop: Rect<i32>,
@@ -988,6 +1202,21 @@ struct EvdevCursor {
 }
 
 impl EvdevCursor {
+    /// A cursor sitting at `start` on `desktop`, nothing held. The grabbed
+    /// devices' real button state is seeded by the caller (`EVIOCGKEY` at arm
+    /// time — a press that predates the grab never reached the pump).
+    pub fn new(desktop: Rect<i32>, start: Point<i32>) -> EvdevCursor {
+        EvdevCursor {
+            virtual_pos: start,
+            clip: None,
+            desktop,
+            started: Instant::now(),
+            ctrl_left: false,
+            ctrl_right: false,
+            buttons: 0,
+        }
+    }
+
     fn track_ctrl(&mut self, code: u16, value: i32) {
         // value: 1 press, 2 autorepeat, 0 release.
         if code == KeyCode::KEY_LEFTCTRL.0 {
@@ -1083,15 +1312,416 @@ mod tests {
     use super::*;
 
     fn cursor() -> EvdevCursor {
-        EvdevCursor {
-            virtual_pos: Point::new(0, 0),
-            clip: None,
-            desktop: Rect::new(0, 0, 1920, 1080),
-            started: Instant::now(),
-            ctrl_left: false,
-            ctrl_right: false,
-            buttons: 0,
+        EvdevCursor::new(Rect::new(0, 0, 1920, 1080), Point::new(0, 0))
+    }
+
+    // --- event constructors, in the shape the kernel delivers them ------------
+
+    fn rel(axis: RelativeAxisCode, value: i32) -> InputEvent {
+        InputEvent::new(EventType::RELATIVE.0, axis.0, value)
+    }
+
+    fn key(code: u16, value: i32) -> InputEvent {
+        InputEvent::new(EventType::KEY.0, code, value)
+    }
+
+    fn misc(value: i32) -> InputEvent {
+        InputEvent::new(EventType::MISC.0, 4 /* MSC_SCAN */, value)
+    }
+
+    fn syn() -> InputEvent {
+        InputEvent::new(EventType::SYNCHRONIZATION.0, 0 /* SYN_REPORT */, 0)
+    }
+
+    /// `(type, code, value)` of each event — what a uinput frame really is, and
+    /// comparable with `assert_eq!` (`InputEvent`'s own equality includes the
+    /// timestamp).
+    fn shape(events: &[InputEvent]) -> Vec<(u16, u16, i32)> {
+        events
+            .iter()
+            .map(|e| (e.event_type().0, e.code(), e.value()))
+            .collect()
+    }
+
+    /// Feed events that do not close a frame — asserting they don't, which is
+    /// half of what every routing test below is checking.
+    fn feed(bufs: &mut PumpBuffers, env: &mut EvdevCursor, events: &[InputEvent]) {
+        for &ev in events {
+            assert_eq!(
+                bufs.push(ev, env, 0),
+                Frame::Pending,
+                "only SYN_REPORT closes a frame"
+            );
         }
+    }
+
+    /// Feed a whole report, whose trailing SYN_REPORT must be what closes it.
+    fn feed_frame(bufs: &mut PumpBuffers, env: &mut EvdevCursor, events: &[InputEvent]) {
+        let (syn, rest) = events.split_last().expect("a report ends with SYN_REPORT");
+        feed(bufs, env, rest);
+        assert_eq!(bufs.push(*syn, env, 0), Frame::Complete);
+    }
+
+    // --- frame accumulation ---------------------------------------------------
+
+    /// The two axes of one report are one motion, and only SYN_REPORT closes it.
+    #[test]
+    fn a_motion_frame_accumulates_until_syn() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed(
+            &mut bufs,
+            &mut env,
+            &[
+                rel(RelativeAxisCode::REL_X, 3),
+                rel(RelativeAxisCode::REL_Y, -2),
+            ],
+        );
+
+        assert_eq!(bufs.acc, (3, -2));
+        assert!(bufs.frame_pending());
+        assert_eq!(bufs.push(syn(), &mut env, 0), Frame::Complete);
+    }
+
+    /// A report split across two reads — the kernel ring buffer filled up, or the
+    /// device stopped mid-frame. The deltas must survive the cycle boundary and
+    /// add up, not be flushed as two half-motions or dropped.
+    #[test]
+    fn a_partial_frame_survives_the_cycle_boundary() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed(
+            &mut bufs,
+            &mut env,
+            &[
+                rel(RelativeAxisCode::REL_X, 5),
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+            ],
+        );
+        // ... pump returns, polls again, the rest of the report arrives ...
+        feed_frame(
+            &mut bufs,
+            &mut env,
+            &[rel(RelativeAxisCode::REL_Y, 7), syn()],
+        );
+
+        assert_eq!(bufs.acc, (5, 7));
+        assert_eq!(
+            shape(&bufs.passthrough),
+            shape(&[rel(RelativeAxisCode::REL_WHEEL, 1)]),
+            "the wheel of the first half must still ride this frame"
+        );
+    }
+
+    /// Nothing pending, nothing to emit: what lets the pump call `flush_frame`
+    /// unconditionally at the end of a cycle.
+    #[test]
+    fn an_empty_frame_is_not_pending() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+        assert!(!bufs.frame_pending());
+        assert_eq!(bufs.push(syn(), &mut env, 0), Frame::Complete);
+        assert!(!bufs.frame_pending(), "a bare SYN carries nothing");
+    }
+
+    // --- routing --------------------------------------------------------------
+
+    /// Wheels are relative axes the engine has no opinion about: they ride the
+    /// pointer frame verbatim, in arrival order.
+    #[test]
+    fn wheels_ride_the_pointer_frame() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed(
+            &mut bufs,
+            &mut env,
+            &[
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
+            ],
+        );
+
+        assert_eq!(
+            shape(&bufs.passthrough),
+            shape(&[
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
+            ])
+        );
+        assert!(bufs.kbd.is_empty());
+    }
+
+    /// Mouse buttons stay on the pointer AND update the held mask the drag
+    /// detection and the teardown release read.
+    #[test]
+    fn buttons_stay_on_the_pointer_and_update_the_mask() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed(&mut bufs, &mut env, &[key(KeyCode::BTN_LEFT.0, 1)]);
+
+        assert_eq!(
+            shape(&bufs.passthrough),
+            shape(&[key(KeyCode::BTN_LEFT.0, 1)])
+        );
+        assert!(bufs.kbd.is_empty());
+        assert!(env.buttons_down());
+    }
+
+    /// The BTN_TRIGGER_HAPPY block is buttons, not keyboard usages: routing them
+    /// to the virtual keyboard would emit codes the pointer never declared.
+    #[test]
+    fn trigger_happy_buttons_are_pointer_buttons() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed(&mut bufs, &mut env, &[key(0x2c0, 1)]);
+
+        assert_eq!(bufs.passthrough.len(), 1);
+        assert!(bufs.kbd.is_empty());
+    }
+
+    /// The reason the virtual keyboard exists: a combined receiver node emits
+    /// KEY_* codes the ABS pointer does not declare, and the kernel drops
+    /// undeclared codes silently.
+    #[test]
+    fn keyboard_usages_leave_the_pointer_frame() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed(&mut bufs, &mut env, &[key(KeyCode::KEY_LEFTCTRL.0, 1)]);
+
+        assert!(bufs.passthrough.is_empty());
+        assert_eq!(shape(&bufs.kbd), shape(&[key(KeyCode::KEY_LEFTCTRL.0, 1)]));
+        assert!(env.ctrl_down(), "the modifier feeds the ctrl-override");
+    }
+
+    /// One frame off a combined kbd+mouse node: motion accumulates, buttons and
+    /// scancodes queue for the pointer, key usages queue for the keyboard — each
+    /// buffer keeping arrival order, and neither leaking into the other.
+    #[test]
+    fn a_combined_device_splits_one_frame_in_two() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed_frame(
+            &mut bufs,
+            &mut env,
+            &[
+                misc(0x90001),
+                key(KeyCode::KEY_A.0, 1),
+                rel(RelativeAxisCode::REL_X, 4),
+                key(KeyCode::BTN_RIGHT.0, 1),
+                rel(RelativeAxisCode::REL_Y, -1),
+                key(KeyCode::KEY_A.0, 0),
+                rel(RelativeAxisCode::REL_HWHEEL, -1),
+                syn(),
+            ],
+        );
+
+        assert_eq!(bufs.acc, (4, -1));
+        assert_eq!(
+            shape(&bufs.passthrough),
+            shape(&[
+                misc(0x90001),
+                key(KeyCode::BTN_RIGHT.0, 1),
+                rel(RelativeAxisCode::REL_HWHEEL, -1),
+            ])
+        );
+        assert_eq!(
+            shape(&bufs.kbd),
+            shape(&[key(KeyCode::KEY_A.0, 1), key(KeyCode::KEY_A.0, 0)])
+        );
+        assert!(env.buttons_down());
+    }
+
+    /// LEDs, sounds, force feedback and the rest: read off the grabbed device,
+    /// deliberately not re-emitted.
+    #[test]
+    fn unrouted_event_types_are_dropped() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+
+        feed(
+            &mut bufs,
+            &mut env,
+            &[InputEvent::new(EventType::LED.0, 0, 1)],
+        );
+
+        assert!(!bufs.frame_pending());
+    }
+
+    // --- frame composition ----------------------------------------------------
+
+    /// The uinput frame the compositor sees: absolute point first (it is the
+    /// position, not a delta), then the buttons/wheels of the same report.
+    /// uinput appends the SYN_REPORT itself.
+    #[test]
+    fn the_pointer_frame_puts_the_absolute_point_first() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+        feed(
+            &mut bufs,
+            &mut env,
+            &[
+                key(KeyCode::BTN_LEFT.0, 1),
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+            ],
+        );
+
+        let frame = shape(bufs.pointer_frame(100, 200));
+
+        assert_eq!(
+            frame,
+            shape(&[
+                InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_X.0, 100),
+                InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, 200),
+                key(KeyCode::BTN_LEFT.0, 1),
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+            ])
+        );
+        assert!(
+            bufs.passthrough.is_empty(),
+            "composing the frame hands those events over"
+        );
+    }
+
+    /// The overwhelmingly common frame: a move and nothing else.
+    #[test]
+    fn an_idle_frame_is_just_the_absolute_point() {
+        let mut bufs = PumpBuffers::new();
+        assert_eq!(bufs.pointer_frame(1, 2).len(), 2);
+    }
+
+    // --- poll set and device errors -------------------------------------------
+
+    /// Slot order IS the mapping back to a device list: mice first, then the
+    /// observed keyboards. Getting it wrong would drain a keyboard as a mouse.
+    #[test]
+    fn the_poll_set_lists_mice_before_keyboards() {
+        let mut bufs = PumpBuffers::new();
+
+        bufs.fill_poll_set([7, 8].into_iter().chain([9]));
+
+        assert_eq!(
+            bufs.fds.iter().map(|p| p.fd).collect::<Vec<_>>(),
+            vec![7, 8, 9]
+        );
+        assert!(bufs.fds.iter().all(|p| p.events == libc::POLLIN));
+        assert!(bufs.fds.iter().all(|p| p.revents == 0));
+    }
+
+    /// Refilling is a reset, not an append: `poll` writes `revents` in place, and
+    /// a hot-plug changes the list under us.
+    #[test]
+    fn refilling_the_poll_set_forgets_the_previous_one() {
+        let mut bufs = PumpBuffers::new();
+        bufs.fill_poll_set([7, 8].into_iter());
+        bufs.fds[0].revents = libc::POLLIN;
+
+        bufs.fill_poll_set([9].into_iter());
+
+        assert_eq!(bufs.fds.len(), 1);
+        assert_eq!(bufs.fds[0].fd, 9);
+        assert_eq!(bufs.fds[0].revents, 0);
+    }
+
+    /// A removed node reports its error forever. Missing one of these flags turns
+    /// the pump into a busy loop (`poll` returns instantly, every cycle).
+    #[test]
+    fn every_error_flag_condemns_the_slot() {
+        for flag in [libc::POLLERR, libc::POLLHUP, libc::POLLNVAL] {
+            assert!(slot_is_dead(flag), "flag {flag:#x} must condemn the slot");
+            assert!(
+                slot_is_dead(flag | libc::POLLIN),
+                "readable *and* broken is still broken"
+            );
+        }
+        assert!(!slot_is_dead(libc::POLLIN));
+        assert!(!slot_is_dead(0));
+    }
+
+    /// Purging walks the slots from the highest down, so the indices it has not
+    /// reached yet still point at the entries they were computed for.
+    #[test]
+    fn purging_removes_exactly_the_dead_slots() {
+        let mut mice = vec!["m0", "m1", "m2"];
+        let mut keyboards = vec!["k0", "k1"];
+        let mut gone = Vec::new();
+
+        // Slots 0 and 3: the first mouse and the first keyboard.
+        purge_dead(&[0, 3], 3, &mut mice, &mut keyboards, |g| {
+            gone.push(match g {
+                Gone::Mouse(m) => format!("mouse {m}"),
+                Gone::Keyboard(k) => format!("keyboard {k}"),
+            })
+        });
+
+        assert_eq!(mice, vec!["m1", "m2"]);
+        assert_eq!(keyboards, vec!["k1"]);
+        assert_eq!(gone, vec!["keyboard k0", "mouse m0"]);
+    }
+
+    /// Every device gone at once — a receiver unplugged with its combined nodes.
+    /// The pump then polls an empty set and waits for the scanner.
+    #[test]
+    fn purging_can_empty_both_lists() {
+        let mut mice = vec!["m0", "m1"];
+        let mut keyboards = vec!["k0"];
+
+        purge_dead(&[0, 1, 2], 2, &mut mice, &mut keyboards, |_| {});
+
+        assert!(mice.is_empty());
+        assert!(keyboards.is_empty());
+    }
+
+    // --- allocation behaviour -------------------------------------------------
+
+    /// The point of owning the buffers: a steady stream of reports must stop
+    /// touching the allocator. Capacity is the observable proxy — a `Vec` only
+    /// allocates when it grows — and it must not move once the first frames have
+    /// sized it.
+    #[test]
+    fn a_steady_stream_stops_allocating() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+        let frame = [
+            rel(RelativeAxisCode::REL_X, 2),
+            rel(RelativeAxisCode::REL_Y, -1),
+            key(KeyCode::BTN_LEFT.0, 1),
+            key(KeyCode::KEY_A.0, 1),
+            syn(),
+        ];
+        // The shape of one pump cycle, minus the devices and the uinput writes.
+        let cycle = |bufs: &mut PumpBuffers, env: &mut EvdevCursor| {
+            bufs.fill_poll_set([3, 4, 5].into_iter());
+            bufs.events.clear();
+            bufs.events.extend(frame);
+            for k in 0..bufs.events.len() {
+                let ev = bufs.events[k];
+                if bufs.push(ev, env, 0) == Frame::Complete {
+                    bufs.acc = (0, 0);
+                    bufs.pointer_frame(0, 0);
+                    bufs.kbd.clear();
+                }
+            }
+        };
+
+        cycle(&mut bufs, &mut env);
+        let settled = (
+            bufs.fds.capacity(),
+            bufs.events.capacity(),
+            bufs.passthrough.capacity(),
+            bufs.kbd.capacity(),
+            bufs.batch.capacity(),
+        );
+        for _ in 0..10_000 {
+            cycle(&mut bufs, &mut env);
+        }
+
+        assert_eq!(
+            settled,
+            (
+                bufs.fds.capacity(),
+                bufs.events.capacity(),
+                bufs.passthrough.capacity(),
+                bufs.kbd.capacity(),
+                bufs.batch.capacity(),
+            ),
+            "a settled pump must not grow a buffer again"
+        );
     }
 
     #[test]

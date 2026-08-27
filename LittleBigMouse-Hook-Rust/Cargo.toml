@@ -83,6 +83,14 @@ harness = false
 name = "alloc_profile"
 harness = false
 
+# The Linux evdev pump's per-report plumbing: poll set, event drain, routing and
+# frame composition, with the buffers the Router owns and against the per-cycle
+# allocation that preceded them. No device, no /dev/uinput; prints a line and
+# exits off Linux.
+[[bench]]
+name = "evdev_pump"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1

@@ -24,9 +24,11 @@
 //! [`link_attrs`] reproduces their attributes exactly, which is what makes these
 //! generated layouts credible stand-ins for real ones.
 
-// Each bench target uses a subset of this module; both would otherwise report
-// the other's helpers as dead code.
+// Each bench target uses a subset of this module; the others would otherwise
+// report its helpers as dead code.
 #![allow(dead_code)]
+
+pub mod alloc;
 
 use littlebigmouse_hook::engine::cursor::CursorEnv;
 use littlebigmouse_hook::engine::event::MouseEventArg;

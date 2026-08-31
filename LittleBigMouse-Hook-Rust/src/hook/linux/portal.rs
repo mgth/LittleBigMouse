@@ -33,6 +33,7 @@ use reis::event::{DeviceCapability, EiEvent};
 use crate::engine::cursor::CursorEnv;
 use crate::engine::event::MouseEventArg;
 use crate::geometry::{Point, Rect};
+use crate::hook::hot_path::{count_event, route_move};
 use crate::ipc::protocol;
 use crate::shared::Shared;
 
@@ -241,7 +242,6 @@ async fn run_async(shared: &'static Shared) -> bool {
                 // barrier at its own (uncorrected) position, so deferring the warp
                 // to the next motion frame is the "correction one pixel too late".
                 if let Some(target) = env.pending_warp.take() {
-                    crate::hook::CROSSINGS.fetch_add(1, Ordering::Relaxed);
                     eprintln!("[LittleBigMouse.Hook] portal: crossing on activation -> release at ({},{})",
                         target.x(), target.y());
                     if let Some(c) = capture.take() {
@@ -309,7 +309,7 @@ async fn run_async(shared: &'static Shared) -> bool {
                         let position = Point::new(env.virtual_pos.x() + dx, env.virtual_pos.y() + dy);
                         env.virtual_pos = position;
 
-                        crate::hook::MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
+                        count_event();
                         let handled = feed_engine(shared, &mut env, position);
 
                         // Re-pin into the emulated clip: the next frame's delta must
@@ -321,7 +321,6 @@ async fn run_async(shared: &'static Shared) -> bool {
                         if let Some(target) = env.pending_warp.take() {
                             // The engine crossed: release the capture, placing the
                             // cursor at the computed target — this is the warp.
-                            crate::hook::CROSSINGS.fetch_add(1, Ordering::Relaxed);
                             eprintln!("[LittleBigMouse.Hook] portal: crossing -> release at ({},{})", target.x(), target.y());
                             let c = capture.take().unwrap();
                             release(&input_capture, &session, c.activation_id, Some(target)).await;
@@ -482,15 +481,14 @@ fn layout_barriers(
     barriers
 }
 
+/// One report through the shared non-blocking route (contended → not handled).
+/// `Routed::Crossed` — counted as a crossing by the core — coincides exactly
+/// with `env.pending_warp` being set: the engine's only cursor write
+/// (`move_cursor`) sets `handled` and calls `set_mouse_location` together, so
+/// the callers keep reading the warp *target* from `pending_warp` while the
+/// *counting* lives in `hot_path` like every other backend.
 fn feed_engine(shared: &Shared, env: &mut PortalCursor, position: Point<i32>) -> bool {
-    let mut engine = match shared.engine.try_lock() {
-        Ok(g) => g,
-        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-        Err(std::sync::TryLockError::WouldBlock) => return false,
-    };
-    let mut e = MouseEventArg::new(position);
-    engine.on_mouse_move(env, &mut e);
-    e.handled
+    route_move(&shared.engine, env, position).handled()
 }
 
 /// The main zone whose bounds are closest to `position` (squared distance to the

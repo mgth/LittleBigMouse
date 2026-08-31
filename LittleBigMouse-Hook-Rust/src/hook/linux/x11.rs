@@ -28,6 +28,7 @@ use x11rb::rust_connection::RustConnection;
 use crate::engine::cursor::CursorEnv;
 use crate::engine::event::MouseEventArg;
 use crate::geometry::{Point, Rect};
+use crate::hook::hot_path::{count_event, route_move, MoveDedup, Routed};
 use crate::ipc::protocol;
 use crate::shared::Shared;
 
@@ -61,7 +62,7 @@ pub fn run(shared: &'static Shared) {
     };
 
     let mut selected = false;
-    let mut prev: Option<(i32, i32)> = None;
+    let mut dedup = MoveDedup::new();
 
     eprintln!("[LittleBigMouse.Hook] x11 backend running");
 
@@ -86,7 +87,7 @@ pub fn run(shared: &'static Shared) {
                     engine.on_mouse_move(&mut env, &mut e);
                     drop(engine);
                     env.clip = None;
-                    prev = None;
+                    dedup.reset();
                     crate::platform::set_process_priority(crate::priority::Priority::from_u8(
                         shared.priority_unhooked.load(Ordering::SeqCst),
                     ));
@@ -128,22 +129,14 @@ pub fn run(shared: &'static Shared) {
                 }
             }
 
-            let loc = (pos.x(), pos.y());
-            if prev != Some(loc) {
-                prev = Some(loc);
-                crate::hook::MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
-
-                let mut engine = match shared.engine.try_lock() {
-                    Ok(g) => g,
-                    Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-                    Err(std::sync::TryLockError::WouldBlock) => continue,
-                };
-                let mut e = MouseEventArg::new(pos);
-                engine.on_mouse_move(&mut env, &mut e);
-                if e.handled {
-                    crate::hook::CROSSINGS.fetch_add(1, Ordering::Relaxed);
-                    // The engine warped the cursor: resync the dedup state.
-                    prev = None;
+            if dedup.accept((pos.x(), pos.y())) {
+                count_event();
+                if route_move(&shared.engine, &mut env, pos) == Routed::Crossed {
+                    // The engine warped the cursor, and the warp is observed by
+                    // the next QueryPointer poll — not by a hook re-entry of its
+                    // own as on Windows. Resync so the next polled position
+                    // always reaches the engine (variants table in `hot_path`).
+                    dedup.reset();
                 }
             }
         }

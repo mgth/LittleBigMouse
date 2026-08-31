@@ -55,20 +55,38 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     readonly EngineController _engine;
 
     readonly ILittleBigMouseClientService _service;
+    readonly Action<Action> _postToUi;
 
     public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService, ILayoutPersistence persistence, EngineController engine)
+        : this(service, main, monitorsService, persistence, engine,
+            run => Dispatcher.UIThread.Invoke(run),
+            post => Dispatcher.UIThread.Post(() => post()),
+            tick => new DispatcherLiveTicker(tick))
+    {
+    }
+
+    /// <summary>
+    /// The dispatcher seams, injectable for the same reason <see cref="DaemonStatusTracker"/>
+    /// takes its <c>onUiThread</c>: tests have no UI thread, and without a platform Avalonia's
+    /// dispatcher belongs to whichever thread reaches it first — a blocking Invoke from any
+    /// other one waits forever on a loop nobody pumps.
+    /// </summary>
+    internal LocationControlViewModel(ILittleBigMouseClientService service, IMainService main,
+        ISystemMonitorsService monitorsService, ILayoutPersistence persistence, EngineController engine,
+        Action<Action> onUiThread, Action<Action> postToUi, Func<Func<Task>, ILiveTicker> liveTicker)
     {
         _service = service;
         _mainService = main;
         _persistence = persistence;
         _engine = engine;
+        _postToUi = postToUi;
 
         _monitorsService = monitorsService;
 
         // What the daemon says about itself — see DaemonStatusTracker. Built before the commands
         // below, whose canExecute reads Running and Dead through the helpers wired here.
         _status = new DaemonStatusTracker(
-            run => Dispatcher.UIThread.Invoke(run),
+            onUiThread,
             () => LiveUpdate,
             wasPreviewing =>
             {
@@ -185,8 +203,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
             () => Model?.ComputeZones(),
             (zones, token) => _service.SendLiveAsync(zones, token));
 
-        _liveTimer = new DispatcherTimer { Interval = LiveLayoutUpdater.Interval };
-        _liveTimer.Tick += async (_, _) => await _live.TickAsync();
+        _liveTimer = liveTicker(() => _live.TickAsync());
 
         this.WhenAnyValue(e => e.LiveUpdate).Subscribe(live =>
         {
@@ -207,8 +224,30 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
         this.UnsavedOn(e => e.Model);
 
-        service.DaemonEventReceived += (_, e) => _status.Apply(e);
+        // The service is a process-lifetime singleton: a bare += would keep every
+        // generation of this view model alive for as long as the app runs. Disposal
+        // happens when the owning view leaves the logical tree (HLab.Mvvm's LinkDispose).
+        OwnedSubscription.Create<EventHandler<LittleBigMouseServiceEventArgs>>(
+                (_, e) => _status.Apply(e),
+                h => service.DaemonEventReceived += h,
+                h => service.DaemonEventReceived -= h)
+            .DisposeWith(this);
+
         _status.Apply(new LittleBigMouseServiceEventArgs(service.State, ""));
+    }
+
+    public override void OnDispose()
+    {
+        // Ends a live preview with its owner: LivePreview goes back to the service and
+        // the timer stops — a running DispatcherTimer is rooted by the dispatcher, and
+        // its tick reaches the daemon through this view model.
+        LiveUpdate = false;
+        _liveTimer.Stop();
+
+        // Every WhenAnyValue chain watching through Model (command canExecute, UnsavedOn)
+        // is subscribed to the layout itself, which lives on MainService: letting go of
+        // the model is what unhooks them.
+        Model = null;
     }
 
     readonly DaemonStatusTracker _status;
@@ -217,7 +256,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         // The last Load outcome belongs to the previous layout generation. Runs before the
         // field is assigned on the very first model, where there is nothing to forget.
-        Dispatcher.UIThread.Post(() => _status?.ForgetLayoutInfo());
+        _postToUi?.Invoke(() => _status?.ForgetLayoutInfo());
 
         // A rebuild (display change, refresh, virtual layout opened) goes through
         // MainService, which feeds the daemon itself: what we believe it holds no longer
@@ -371,7 +410,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     public ReactiveCommand<Unit, Unit> LiveUpdateCommand { get; }
 
     readonly LiveLayoutUpdater _live;
-    readonly DispatcherTimer _liveTimer;
+    readonly ILiveTicker _liveTimer;
 
     /// <summary>
     /// Last Load outcome reported by the daemon ("3 zones (3 main), virtual" / a failure
@@ -401,4 +440,30 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
       set => this.RaiseAndSetIfChanged(ref _saved, value);
    }
    bool _saved;
+}
+
+/// <summary>The live pump's clock, started and stopped with the preview switch.</summary>
+internal interface ILiveTicker
+{
+    void Start();
+    void Stop();
+}
+
+/// <summary>
+/// The production clock: a <see cref="DispatcherTimer"/>, built and driven on the UI thread.
+/// While running it is rooted by the dispatcher — one more reason stopping it belongs to the
+/// view model's disposal.
+/// </summary>
+sealed class DispatcherLiveTicker : ILiveTicker
+{
+    readonly DispatcherTimer _timer;
+
+    public DispatcherLiveTicker(Func<Task> tick)
+    {
+        _timer = new DispatcherTimer { Interval = LiveLayoutUpdater.Interval };
+        _timer.Tick += async (_, _) => await tick();
+    }
+
+    public void Start() => _timer.Start();
+    public void Stop() => _timer.Stop();
 }

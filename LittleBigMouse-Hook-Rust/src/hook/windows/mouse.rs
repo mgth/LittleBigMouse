@@ -9,23 +9,22 @@
 
 use std::cell::Cell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::Ordering;
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, HHOOK, MSLLHOOKSTRUCT, WM_MOUSEMOVE,
 };
 
-use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;
-use crate::hook::{CROSSINGS, MOUSE_EVENTS};
+use crate::hook::hot_path::{count_event, route_move, MoveDedup};
 use crate::platform::cursor::Win32Cursor;
 use crate::shared::SHARED;
 
 thread_local! {
     /// C++ `static previousLocation`. Thread-local because the callback only ever
-    /// runs on the pump thread.
-    static PREV: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
+    /// runs on the pump thread. The dedup logic itself lives in the neutral
+    /// `hot_path` core, so the branch below is exactly what the benchmark measures.
+    static PREV: Cell<MoveDedup> = const { Cell::new(MoveDedup::new()) };
 }
 
 /// # Safety
@@ -51,39 +50,25 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     let loc = (ms.pt.x, ms.pt.y);
 
     let changed = PREV.with(|prev| {
-        if prev.get() != Some(loc) {
-            prev.set(Some(loc));
-            true
-        } else {
-            false
-        }
+        let mut dedup = prev.get();
+        let changed = dedup.accept(loc);
+        prev.set(dedup);
+        changed
     });
     if !changed {
         return false;
     }
-    MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
+    count_event();
 
     let Some(shared) = SHARED.get() else {
         return false;
     };
-    // Non-blocking: a contended lock (Load in progress) just passes the event on. Recover from a
-    // POISONED lock instead of giving up forever: if `on_mouse_move` ever panics (e.g. a debug-build
-    // arithmetic overflow at extreme corner coordinates), the guard drops and poisons the mutex —
-    // and without recovery every later event would fail this lock and crossing would stay dead until
-    // a restart (exactly the "touch a corner -> no more crossing, only restart fixes it" bug).
-    let mut engine = match shared.engine.try_lock() {
-        Ok(g) => g,
-        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-        Err(std::sync::TryLockError::WouldBlock) => return false,
-    };
 
+    // The whole non-blocking route — contended lock passes through, poisoned lock
+    // is recovered, crossing counted — lives in the neutral `hot_path` core, so
+    // the Windows callback and the benchmark exercise the same decision.
     let mut env = Win32Cursor;
-    let mut e = MouseEventArg::new(Point::new(loc.0, loc.1));
-    engine.on_mouse_move(&mut env, &mut e);
-    if e.handled {
-        CROSSINGS.fetch_add(1, Ordering::Relaxed);
-    }
-    e.handled
+    route_move(&shared.engine, &mut env, Point::new(loc.0, loc.1)).handled()
 }
 
 // The C++ hook filtered with `(wParam & WM_MOUSEMOVE) != 0`, but every mouse

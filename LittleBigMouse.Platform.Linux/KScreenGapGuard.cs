@@ -30,7 +30,7 @@ public static class KScreenGapGuard
     // Gaps only matter for the Wayland portal backend: under X11 the daemon emulates
     // ClipCursor directly (no barriers), and without kscreen there is nothing to drive.
     static bool IsWaylandKde
-        => Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")?.Contains("KDE", StringComparison.OrdinalIgnoreCase) == true
+        => LinuxDesktopEnvironment.Current.IsKde
            && (Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") == "wayland"
                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
 
@@ -126,7 +126,7 @@ public static class KScreenGapGuard
     /// boundary moves +1 in x — cumulative, so relative alignment elsewhere is preserved
     /// and each shared edge opens by exactly one pixel. Same on the y axis for stacks.
     /// </summary>
-    static Dictionary<string, (int Dx, int Dy)> ComputeShifts(List<LinuxMonitor> monitors)
+    internal static Dictionary<string, (int Dx, int Dy)> ComputeShifts(IReadOnlyList<LinuxMonitor> monitors)
     {
         var xCuts = new SortedSet<int>();
         var yCuts = new SortedSet<int>();

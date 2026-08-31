@@ -91,6 +91,15 @@ harness = false
 name = "evdev_pump"
 harness = false
 
+# The mouse-hook hot path: dedup, non-blocking try_lock route, dispatch — the
+# neutral core (hook::hot_path) the Windows callback is a shim over, measured
+# per branch (dedup / passthrough / crossing / contended). A plain binary, like
+# alloc_profile: the per-event allocation counts are exact and asserted to be 0
+# on the ordinary paths. No hook, no device, no real cursor.
+[[bench]]
+name = "mouse_hook"
+harness = false
+
 # The whole Linux pipeline end to end: the evdev plumbing AND the traversal engine
 # it feeds, driven by realistic report streams at 125/500/1000 Hz (ordinary
 # motion, border crossings, partial frames, simultaneous keyboard). No device, no

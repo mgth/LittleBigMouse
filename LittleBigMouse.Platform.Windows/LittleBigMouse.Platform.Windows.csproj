@@ -13,6 +13,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Win32->model mapping components are internal; the DisplayLayout test project
+         exercises the pure mapping (physical size, orientation, source fields) from simulated
+         Win32 snapshots — the parts that run on a Linux workstation without the real device tree. -->
+    <InternalsVisibleTo Include="LittleBigMouse.DisplayLayout.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Core\LittleBigMouse.Plugins.csproj" />
     <ProjectReference Include="..\HLab.Sys\HLab.Sys.Windows.Monitors\HLab.Sys.Windows.Monitors.csproj" />

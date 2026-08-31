@@ -42,6 +42,22 @@ cargo test
 cargo clippy --all-targets
 ```
 
+Most of the daemon — the engine, zones, geometry, IPC and the neutral hook core
+(`hook::hot_path`) — builds and tests on any host. The Win32 pieces behind
+`#[cfg(windows)]` (the `WH_MOUSE_LL` callback in `hook/windows/mouse.rs`, the
+message pump, the rescue-key listener) only compile for a Windows target, so CI
+builds them there:
+
+```
+cargo build  --target x86_64-pc-windows-msvc          # or run on a Windows host
+cargo test   --target x86_64-pc-windows-msvc
+cargo clippy --target x86_64-pc-windows-msvc --all-targets
+```
+
+The `mouse_hook` benchmark deliberately does **not** need that target: the
+callback is a thin shim over `hook::hot_path`, and it is that core the benchmark
+and its tests exercise — on Linux CI like every other bench.
+
 ## Benchmarks
 
 ```
@@ -50,14 +66,18 @@ cargo bench --bench mouse_engine              # timings, full statistics
 cargo bench --bench alloc_profile             # allocation counts
 cargo bench --bench mouse_engine -- --test    # run every scenario once, no timing
 cargo bench --bench evdev_pump                # Linux pump: allocations + timings
+cargo bench --bench mouse_hook                # hook hot path: allocations + timings
+cargo bench --bench mouse_hook -- --test      # hook hot path: each mode once, no timing
 cargo bench --bench linux_pipeline            # Linux end-to-end: engine + plumbing
 cargo bench --bench linux_pipeline -- --quick # same, short mode (fewer iterations)
 ```
 
 `benches/mouse_engine.rs` times the traversal core, `benches/alloc_profile.rs`
-counts its allocations, `benches/evdev_pump.rs` measures the Linux input
-plumbing around them, `benches/linux_pipeline.rs` drives the two together as one
-end-to-end pipeline, and `benches/support/` holds the fixtures they share.
+counts its allocations, `benches/mouse_hook.rs` measures the per-report hook code
+that wraps it (dedup + non-blocking route), `benches/evdev_pump.rs` measures the
+Linux input plumbing around them, `benches/linux_pipeline.rs` drives the plumbing
+and the engine together as one end-to-end pipeline, and `benches/support/` holds
+the fixtures they share.
 Nothing installs a hook, opens a device or moves the real pointer: the engine
 talks to a `CursorEnv` whose every method is a field read, so what is measured is
 the algorithm and not the OS. Layouts are generated as the XML the C# UI would
@@ -147,6 +167,40 @@ thread that owns the user's grabbed mice, where a slow path through the allocato
 is a visible stall. `a_steady_stream_stops_allocating` (in `hook/linux/evdev.rs`)
 guards it from the test suite, by asserting no buffer grows again once the first
 frames have sized it.
+
+### The hook hot path
+
+`benches/mouse_hook.rs` measures the layer *above* the engine: the per-report
+code every backend's callback runs before and around `on_mouse_move` — dedup the
+report against the last location, take the engine under a non-blocking `try_lock`,
+act on the outcome. It exercises the neutral core in `hook::hot_path`, which the
+Windows `WH_MOUSE_LL` callback (`hook/windows/mouse.rs`) is now a thin `unsafe`
+shim over, so a regression on the hot path shows up here on any host — the Win32
+callback itself only compiles on Windows, but the code it delegates to does not.
+No hook is installed, no device opened, the real pointer never moves; the engine
+talks to `support::BenchCursor`, whose every method is a field read.
+
+Four modes are reported, each the branch it names, and `Mode::verify` replays
+each loop eight times asserting the outcome so a mode cannot quietly decay into a
+cheaper path:
+
+| mode | what it is | allocs/event | ns/event |
+|---|---|---|---|
+| `dedup` | a report at the unchanged pixel, dropped before the lock | **0** | 1.9 ns |
+| `passthrough` | an interior move: dedup passes, engine runs, nothing crosses | **0** | 14.8 ns |
+| `crossing` | the report steps over a border; the engine warps the cursor | 1 (32 B) | 43.7 ns |
+| `contended` | a `Load` holds the engine lock; `try_lock` fails, event passes through | **0** | 13.2 ns |
+
+Same machine and toolchain as the tables above (AMD Ryzen 9 9950X, Linux 7.2
+CachyOS, rustc 1.94.0), two zones, Strait. The allocation column is exact and
+identical on every machine; the timings are indicative and machine-dependent.
+The three ordinary paths (`dedup`, `passthrough`, `contended`) must read **0**
+allocations — the bench asserts it, so a change that starts allocating or logging
+on the per-report path fails the run rather than just reporting a larger number.
+`crossing`'s single allocation is the cached travel-path `Vec` clone already seen
+in the engine's own profile (`crossing/Strait`, 1 per event); it is the same
+number, because a crossing here *is* one `on_mouse_move` crossing plus the dedup
+and lock around it.
 
 ### The whole pipeline (Linux)
 

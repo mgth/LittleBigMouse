@@ -91,6 +91,14 @@ harness = false
 name = "evdev_pump"
 harness = false
 
+# The whole Linux pipeline end to end: the evdev plumbing AND the traversal engine
+# it feeds, driven by realistic report streams at 125/500/1000 Hz (ordinary
+# motion, border crossings, partial frames, simultaneous keyboard). No device, no
+# /dev/uinput, no root; prints a line and exits off Linux.
+[[bench]]
+name = "linux_pipeline"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1

@@ -126,7 +126,7 @@ public static class KScreenGapGuard
     /// boundary moves +1 in x — cumulative, so relative alignment elsewhere is preserved
     /// and each shared edge opens by exactly one pixel. Same on the y axis for stacks.
     /// </summary>
-    static Dictionary<string, (int Dx, int Dy)> ComputeShifts(List<LinuxMonitor> monitors)
+    internal static Dictionary<string, (int Dx, int Dy)> ComputeShifts(IReadOnlyList<LinuxMonitor> monitors)
     {
         var xCuts = new SortedSet<int>();
         var yCuts = new SortedSet<int>();

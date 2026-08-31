@@ -8,6 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Expose ComputeShifts to the test project (KScreenGapGuardTests) so the gap-shift
+         algorithm is exercised directly, without duplicating it. -->
+    <InternalsVisibleTo Include="LittleBigMouse.DisplayLayout.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
     <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Core\LittleBigMouse.Plugins.csproj" />
     <ProjectReference Include="..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />

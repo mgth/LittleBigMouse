@@ -38,6 +38,7 @@ file sealed class WindowsSingleInstanceGuard : SingleInstanceGuard
     readonly Mutex _mutex;
     readonly EventWaitHandle _showEvent;
     readonly RegisteredWaitHandle _wait;
+    int _disposed;
 
     WindowsSingleInstanceGuard(Mutex mutex)
     {
@@ -74,6 +75,10 @@ file sealed class WindowsSingleInstanceGuard : SingleInstanceGuard
 
     public override void Dispose()
     {
+        // Idempotent: a second call must not reach ReleaseMutex() again — the mutex would no longer
+        // be owned and it would throw ApplicationException.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
         _wait.Unregister(null);
         _showEvent.Dispose();
         _mutex.ReleaseMutex();
@@ -87,6 +92,7 @@ file sealed class UnixSingleInstanceGuard : SingleInstanceGuard
     readonly FileStream _lock;
     readonly Socket _listener;
     readonly string _socketPath;
+    int _disposed;
 
     UnixSingleInstanceGuard(FileStream fileLock, Socket listener, string socketPath)
     {
@@ -157,6 +163,10 @@ file sealed class UnixSingleInstanceGuard : SingleInstanceGuard
 
     public override void Dispose()
     {
+        // Idempotent, to match the Windows guard: disposing the socket/lock twice is harmless, but
+        // deleting the socket/lock files twice could race a fresh instance that just re-created them.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
         _listener.Dispose();
         try { File.Delete(_socketPath); } catch { }
         _lock.Dispose();

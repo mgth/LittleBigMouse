@@ -43,12 +43,8 @@ using LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 using LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 using LittleBigMouse.Plugin.Vcp.Calibration;
 using LiveChartsCore;
-using LiveChartsCore.Kernel;
 using LiveChartsCore.SkiaSharpView;
-using LiveChartsCore.SkiaSharpView.Painting;
-using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using ReactiveUI;
-using SkiaSharp;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia;
 
@@ -329,148 +325,24 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
           .DisposeWith(this);
 
 
+      // series and axes construction lives in CalibrationChartModel: a pure
+      // presentation factory that preserves the exact colours, labels, mappings
+      // and axis settings. The view model only wires the reactive bindings.
       _series = this.WhenAnyValue(
             e => e.ProbeLut)
-            .Select(lut => new ISeries[]
-            {
-               new LineSeries<Tune>
-               {
-                     Values = lut?.SmoothLut,
-                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Y),
-
-                     Stroke = new SolidColorPaint(SKColors.White),
-                     GeometryStroke = null,
-                     GeometryFill = null,
-                     Fill = null,
-
-               },
-
-               new LineSeries<Tune>
-               {
-                     Values = lut?.SmoothLut,
-                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Red),
-
-                     Stroke = new SolidColorPaint(SKColors.Red),
-                     GeometryStroke = null,
-                     GeometryFill = null,
-                     Fill = null,
-                     ScalesYAt = 1
-               },
-               new LineSeries<Tune>
-               {
-                     Values = lut?.SmoothLut,
-                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Green),
-
-                     Stroke = new SolidColorPaint(SKColors.Green),
-                     GeometryStroke = null,
-                     GeometryFill = null,
-                     Fill = null,
-                     ScalesYAt = 1
-               },
-               new LineSeries<Tune>
-               {
-                     Values = lut?.SmoothLut,
-                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.Blue),
-
-                     Stroke = new SolidColorPaint(SKColors.Blue),
-                     GeometryStroke = null,
-                     GeometryFill = null,
-                     Fill = null,
-                     ScalesYAt = 1
-               },
-
-               // measured ΔE00 after tuning, one point per brightness step
-               new LineSeries<Tune>
-               {
-                     Values = lut?.SortedLut,
-                     Mapping = (tune, index) => new Coordinate(tune.Brightness, tune.DeltaE),
-
-                     Stroke = new SolidColorPaint(SKColors.Orange),
-                     GeometryStroke = null,
-                     GeometryFill = new SolidColorPaint(SKColors.Orange),
-                     GeometrySize = 6,
-                     Fill = null,
-                     ScalesYAt = 2
-               },
-
-            })
+            .Select(CalibrationChartModel.BuildSeries)
             .ToProperty(this, e => e.Series)
             .DisposeWith(this);
 
       _xAxes = this.WhenAnyValue(
-            e => e.ProbeLut,
-            selector: e => e?.SortedLut)
-            .Select(lut => new Axis[]
-            {
-               new Axis
-               {
-                  Name = "Brightness",
-                  NamePaint = new SolidColorPaint(SKColors.Black),
-
-                  LabelsPaint = new SolidColorPaint(SKColors.Blue),
-                  TextSize = 10,
-
-                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) { StrokeThickness = 2 }  ,
-                  // no MaxLimit: autoscale follows the points as they land
-                  MinLimit = 0,
-
-               },
-            })
+            e => e.ProbeLut)
+            .Select(CalibrationChartModel.BuildXAxes)
             .ToProperty(this, e => e.XAxes)
             .DisposeWith(this);
 
       _yAxes = this.WhenAnyValue(
-            e => e.ProbeLut,
-            selector: e => e?.SortedLut)
-            .Select(lut => new Axis[]
-            {
-               new Axis
-               {
-                  Name = "nits",
-                  NamePaint = new SolidColorPaint(SKColors.Red), 
-
-                  LabelsPaint = new SolidColorPaint(SKColors.Green), 
-                  TextSize = 20,
-
-                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray)
-                  {
-                     StrokeThickness = 2,
-                     PathEffect = new DashEffect([3, 3])
-                  }            ,
-                  // no MaxLimit: autoscale follows the points as they land
-                  MinLimit = 0,
-
-
-               },
-
-               new Axis
-               {
-                  Name = "Gain",
-                  NamePaint = new SolidColorPaint(SKColors.Black), 
-
-                  LabelsPaint = new SolidColorPaint(SKColors.Blue), 
-                  TextSize = 10,
-
-                  SeparatorsPaint = new SolidColorPaint(SKColors.LightSlateGray) { StrokeThickness = 2 }  ,
-                  // autoscale: fixed limits computed at bind time went stale
-                  // (and threw on an empty lut) once live measurements landed
-                  Position = LiveChartsCore.Measure.AxisPosition.End
-               },
-
-               new Axis
-               {
-                  Name = "ΔE00",
-                  NamePaint = new SolidColorPaint(SKColors.Orange),
-
-                  LabelsPaint = new SolidColorPaint(SKColors.Orange),
-                  TextSize = 10,
-
-                  SeparatorsPaint = null,
-                  MinLimit = 0,
-                  Position = LiveChartsCore.Measure.AxisPosition.End
-               }
-
-            })
+            e => e.ProbeLut)
+            .Select(CalibrationChartModel.BuildYAxes)
             .ToProperty(this, e => e.YAxes)
             .DisposeWith(this);
    }

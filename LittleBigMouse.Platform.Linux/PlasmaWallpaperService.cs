@@ -20,7 +20,7 @@ public class PlasmaWallpaperService : IWallpaperService
     bool? _isSupported;
 
     public bool IsSupported => _isSupported ??=
-        Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")?.Contains("KDE", StringComparison.OrdinalIgnoreCase) == true
+        LinuxDesktopEnvironment.Current.IsKde
         && PlasmaWallpaper.EvaluateScript("print(\"ok\")") == "ok";
 
     public Task ApplyAsync(IReadOnlyList<ScreenWallpaper> screens)

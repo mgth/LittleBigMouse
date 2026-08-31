@@ -16,8 +16,9 @@ namespace LittleBigMouse.Platform.Windows;
 /// <para>
 /// The class is only the construction façade and the wallpaper-polling gate: the Win32
 /// collect-and-assemble is <see cref="WindowsLayoutBuilder"/>, the per-monitor field mapping
-/// <see cref="WindowsSourceMapper"/>, the physical-size inference <see cref="WindowsPhysicalSize"/>
-/// and the wallpaper reading <see cref="WindowsWallpaperMapping"/>.
+/// <see cref="WindowsSourceMapper"/>, the physical-size inference <see cref="WindowsPhysicalSize"/>,
+/// the wallpaper copy into the model <see cref="WindowsWallpaperMapping"/> and the registry/file
+/// read behind it <see cref="WindowsWallpaperReader"/>.
 /// </para>
 /// </summary>
 public class WindowsLayoutFactory : ILayoutFactory, IDisposable
@@ -63,7 +64,7 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
         // lets the UI poll this method frequently (while the config window is open) at near-zero
         // cost, which is the reliable trigger — the daemon's WM_SETTINGCHANGE broadcast is missed
         // intermittently (shared message pump), so it is only a best-effort fast path.
-        var signature = WindowsWallpaperMapping.WallpaperSignature();
+        var signature = WindowsWallpaperReader.ReadSignature();
         if (signature == _lastWallpaperSignature) return;
         _lastWallpaperSignature = signature;
 

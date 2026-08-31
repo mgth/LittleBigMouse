@@ -57,8 +57,7 @@ public class LinuxDisplayController : IDisplayController
             _factory.NotifyDisplayChanged();
     }
 
-    static bool UseKScreen
-        => Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")?.Contains("KDE", StringComparison.OrdinalIgnoreCase) == true;
+    static bool UseKScreen => LinuxDesktopEnvironment.Current.IsKde;
 
     public bool SetPrimary(DisplaySource source)
         => Notify(UseKScreen

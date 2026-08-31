@@ -30,7 +30,7 @@ public static class KScreenGapGuard
     // Gaps only matter for the Wayland portal backend: under X11 the daemon emulates
     // ClipCursor directly (no barriers), and without kscreen there is nothing to drive.
     static bool IsWaylandKde
-        => Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")?.Contains("KDE", StringComparison.OrdinalIgnoreCase) == true
+        => LinuxDesktopEnvironment.Current.IsKde
            && (Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") == "wayland"
                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
 

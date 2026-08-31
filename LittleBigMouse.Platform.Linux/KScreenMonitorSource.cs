@@ -19,7 +19,7 @@ public class KScreenMonitorSource : ILinuxMonitorSource
     public string Name => "kscreen";
 
     public bool IsAvailable()
-        => Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")?.Contains("KDE", StringComparison.OrdinalIgnoreCase) == true
+        => LinuxDesktopEnvironment.Current.IsKde
            && RunKScreenDoctor() != null;
 
     public List<LinuxMonitor> Query()

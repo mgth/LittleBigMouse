@@ -45,6 +45,8 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
 
     public event EventHandler? WallpaperChanged;
 
+    // Idempotent through the watcher's own guard; the factory is a DI singleton disposed once at
+    // container teardown, but hardening here keeps a double-dispose from ever reaching a handle.
     public void Dispose() => _wallpaperWatcher.Dispose();
 
     public MonitorsLayout Create()

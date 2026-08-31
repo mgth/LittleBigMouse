@@ -20,6 +20,7 @@ use evdev::{uinput::VirtualDevice, EventType};
 use crate::engine::cursor::CursorEnv;
 use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;
+use crate::hook::hot_path::{count_event, route_move, Routed};
 use crate::hook::linux::accel::{AccelConfig, PointerAccel};
 use crate::ipc::protocol;
 use crate::shared::Shared;
@@ -486,25 +487,25 @@ impl Router {
             // drains border resistance. Only the committed position gets clamped.
             let candidate = Point::new(old.x().saturating_add(dx), old.y().saturating_add(dy));
 
-            let mut engine = match shared.engine.try_lock() {
-                Ok(g) => g,
-                Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-                Err(std::sync::TryLockError::WouldBlock) => {
+            // The evdev variants around the shared route (see the table in
+            // `hot_path`): the cursor is authoritative, so someone must always
+            // commit a position — the engine's verdict on a crossing, our own
+            // clamp otherwise. A contended route therefore cannot just pass: it
+            // commits the clamped candidate and emits right here (and that frame
+            // has never been counted as an event — the early return skips the
+            // pending keyboard frame too, exactly as before).
+            let routed = route_move(&shared.engine, &mut self.env, candidate);
+            match routed {
+                Routed::Contended => {
                     self.env.virtual_pos = self.env.clamp(candidate);
                     self.emit_absolute();
                     return;
                 }
-            };
-            let mut e = MouseEventArg::new(candidate);
-            engine.on_mouse_move(&mut self.env, &mut e);
-            drop(engine);
-
-            if !e.handled {
-                self.env.virtual_pos = self.env.clamp(candidate);
-            }
-            crate::hook::MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
-            if e.handled {
-                crate::hook::CROSSINGS.fetch_add(1, Ordering::Relaxed);
+                Routed::Passed => {
+                    self.env.virtual_pos = self.env.clamp(candidate);
+                    count_event();
+                }
+                Routed::Crossed => count_event(),
             }
             if self.debug {
                 // Per-frame trace: raw delta, engine input, emitted position. The
@@ -512,7 +513,7 @@ impl Router {
                 // sent it" investigation (compare against what KWin displays).
                 eprintln!("[LittleBigMouse.Hook] evdev: frame d=({dx},{dy}) cand=({},{}) -> emit ({},{}){}{}",
                     candidate.x(), candidate.y(), self.env.virtual_pos.x(), self.env.virtual_pos.y(),
-                    if e.handled { " CROSS" } else { "" },
+                    if routed.handled() { " CROSS" } else { "" },
                     if self.env.ctrl_down() { " ctrl" } else { "" });
             }
         }

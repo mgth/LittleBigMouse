@@ -1,19 +1,40 @@
 //! Platform-neutral core of the mouse-hook hot path.
 //!
 //! Every backend's per-report callback (`hook/windows/mouse.rs`,
-//! `hook/linux/x11.rs`, `hook/linux/evdev.rs`, `hook/linux/portal.rs`) is built
-//! from the same three moving parts: **dedup** the report against the last
-//! location, take the engine under a **non-blocking `try_lock`** (a contended
-//! lock — a `Load` swapping the layout — passes the event straight through), and
-//! **dispatch** it to `MouseEngine::on_mouse_move`. That shape runs up to
-//! 1000×/s per device with the user's input captured, so it must never block and
-//! must not allocate or log on the ordinary (no-crossing) path.
+//! `hook/linux/x11.rs`, `hook/linux/evdev/router.rs`, `hook/linux/portal.rs`)
+//! is built from the same moving parts: **dedup** the report against the last
+//! location (where positions repeat at all), take the engine under a
+//! **non-blocking `try_lock`** (a contended lock — a `Load` swapping the layout
+//! — passes the event straight through), and **dispatch** it to
+//! `MouseEngine::on_mouse_move`. That shape runs up to 1000×/s per device with
+//! the user's input captured, so it must never block and must not allocate or
+//! log on the ordinary (no-crossing) path.
 //!
 //! Those parts are extracted here, free of any Win32 / evdev / X11 type, for two
 //! reasons: the Windows callback that cannot compile off Windows is reduced to a
 //! thin `unsafe` shim over code that can, and that same code is then exercised
 //! directly by `benches/mouse_hook.rs` and by the tests below on any host — no
 //! hook installed, no device opened, the real pointer never touched.
+//!
+//! The lock-and-dispatch decision ([`route_move`]) is byte-for-byte the same in
+//! all four backends. What differs around it is deliberate, and each variant is
+//! an explicit choice at the call site, not an accident to be flattened:
+//!
+//! | backend | dedup                       | after a crossing        | contended report          |
+//! |---------|-----------------------------|-------------------------|---------------------------|
+//! | Windows | [`MoveDedup`] on OS reports | dedup kept (C++ parity) | counted, passed to the OS |
+//! | X11     | [`MoveDedup`] on polled `QueryPointer` | [`MoveDedup::reset`]    | counted, cursor already moved |
+//! | evdev   | none — relative deltas, empty frames skipped upstream | nothing to resync | **not counted**; backend commits the clamped candidate itself |
+//! | portal  | none — zero-delta frames skipped upstream | capture released at the warp target | counted, treated as not-handled |
+//!
+//! The crossing column: on Windows the `SetCursorPos` warp re-enters the hook
+//! with its own event, so the stale `prev` (the swallowed position) resolves
+//! itself — and when the warp lands exactly on the swallowed pixel (adjacent
+//! same-DPI border at distance 1) dropping that synthetic event is correct, the
+//! cursor is already there. X11 observes the warp by *polling*, not by an event,
+//! so it resets the dedup to guarantee the next polled position reaches the
+//! engine. The two absolute-position backends own their cursor outright and
+//! never see a repeated position to begin with.
 
 use std::sync::Mutex;
 
@@ -30,9 +51,10 @@ use crate::hook::{CROSSINGS, MOUSE_EVENTS};
 /// reaches the engine — otherwise a stationary pointer would burn a lock and a
 /// full traversal pass on every timer tick.
 ///
-/// Not itself thread-safe: each backend owns one from the single thread its
-/// callback runs on (the Windows pump keeps it in a `thread_local`). Splitting it
-/// out of that `thread_local` is what makes the dedup decision testable.
+/// Not itself thread-safe: the backends that see repeatable positions (Windows,
+/// X11) each own one from the single thread their callback runs on (the Windows
+/// pump keeps it in a `thread_local`). Splitting it out of that `thread_local`
+/// is what makes the dedup decision testable.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MoveDedup {
     prev: Option<(i32, i32)>,
@@ -74,9 +96,11 @@ pub enum Routed {
     /// The engine ran and left the cursor where it was — an interior move. The
     /// backend forwards the event.
     Passed,
-    /// The engine repositioned the cursor across a border. The backend swallows
-    /// the event (Win32 `LRESULT(1)`) and should reset its dedup, since the warp
-    /// it just performed is itself a position change.
+    /// The engine repositioned the cursor across a border. What the backend does
+    /// next is its own, documented in the module-level variants table: Windows
+    /// swallows the OS event (`LRESULT(1)`) and keeps its dedup, X11 resets its
+    /// dedup, portal releases the capture at the warp target, evdev emits the
+    /// engine-written position.
     Crossed,
 }
 
@@ -130,7 +154,9 @@ pub fn route_move<E: CursorEnv>(
 
 /// Count one accepted (deduped) report. Kept next to [`route_move`] so a backend
 /// pairs the two and the "event seen" counter means the same thing everywhere:
-/// every report that survived dedup, contended or not.
+/// every report that survived dedup, contended or not. (evdev is the documented
+/// exception — see the module-level variants table: its contended arm commits a
+/// position itself and has always left that frame uncounted.)
 #[inline]
 pub fn count_event() {
     MOUSE_EVENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

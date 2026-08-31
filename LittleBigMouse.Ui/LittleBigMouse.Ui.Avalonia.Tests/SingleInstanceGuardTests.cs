@@ -35,6 +35,12 @@ public sealed class SingleInstanceGuardTests
     [Fact]
     public void SecondAcquire_WhileFirstHeld_ReportsAlreadyRunning_ThenReleases()
     {
+        // A named Mutex is re-entrant on the thread that owns it: a same-thread second acquire
+        // succeeds instead of reporting "already running", so on Windows this contract is only
+        // observable across processes. In-process it is provable on the Unix guard alone (the
+        // FileShare.None lock refuses a second open regardless of who holds it).
+        if (OperatingSystem.IsWindows()) return;
+
         var first = SingleInstanceGuard.TryAcquire();
         if (first is null) return; // another instance owns it; nothing to assert about our own
 

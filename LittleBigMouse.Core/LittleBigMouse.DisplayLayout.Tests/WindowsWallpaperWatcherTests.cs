@@ -33,9 +33,19 @@ public class WindowsWallpaperWatcherTests
     [Fact]
     public void RaisesChanged_ForEachObservedChange()
     {
+        // Hold the first change until the subscription below exists: the watcher thread starts
+        // in the constructor, and a Changed fired before `+=` runs is simply lost — on a busy
+        // runner the thread reliably won that race and all three events evaporated.
+        var subscribed = new ManualResetEventSlim(false);
+        var changes = ChangeThenBlock(3);
         var fired = new CountdownEvent(3);
-        using var watcher = new WindowsWallpaperWatcher(ChangeThenBlock(3));
+        using var watcher = new WindowsWallpaperWatcher(stop =>
+        {
+            subscribed.Wait();
+            return changes(stop);
+        });
         watcher.Changed += (_, _) => fired.Signal();
+        subscribed.Set();
 
         Assert.True(fired.Wait(TimeSpan.FromSeconds(2)), "expected three Changed events");
     }

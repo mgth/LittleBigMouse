@@ -1,0 +1,7 @@
+[toolchain]
+# The version the hook's test suite is validated against. CI runners ship
+# whatever stable is current; without this pin the hook builds with a
+# different compiler than the one used for local validation.
+channel = "1.94.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

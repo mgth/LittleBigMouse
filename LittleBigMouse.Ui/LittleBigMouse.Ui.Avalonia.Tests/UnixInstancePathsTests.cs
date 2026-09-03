@@ -10,7 +10,13 @@ namespace LittleBigMouse.Ui.Avalonia.Tests;
 /// </summary>
 public sealed class UnixInstancePathsTests : IDisposable
 {
-    readonly string _root = Path.Combine(Path.GetTempPath(), "lbm-guard-tests", Guid.NewGuid().ToString("N"));
+    // Short, so the fallback socket path fits whatever the user name (Linux, where the
+    // end-to-end tests create files here).
+    readonly string _root = Path.Combine(Path.GetTempPath(), "lbm-guard-tests", Guid.NewGuid().ToString("N")[..8]);
+
+    // An existing directory short enough for a socket on every platform. The temp path is
+    // not: on the Windows CI runner it alone is longer than a socket path may be.
+    readonly string _short = Path.GetPathRoot(Path.GetTempPath())!;
 
     public UnixInstancePathsTests() => Directory.CreateDirectory(_root);
 
@@ -30,12 +36,10 @@ public sealed class UnixInstancePathsTests : IDisposable
     [Fact]
     public void ShortRuntimeDir_HoldsBoth()
     {
-        var runtime = DirOfLength(60);
+        var (lockPath, socketPath) = UnixInstancePaths.Resolve(_short, _root, "me");
 
-        var (lockPath, socketPath) = UnixInstancePaths.Resolve(runtime, _root, "me");
-
-        Assert.Equal(Path.Combine(runtime, "littlebigmouse.lock"), lockPath);
-        Assert.Equal(Path.Combine(runtime, "littlebigmouse-show.sock"), socketPath);
+        Assert.Equal(Path.Combine(_short, "littlebigmouse.lock"), lockPath);
+        Assert.Equal(Path.Combine(_short, "littlebigmouse-show.sock"), socketPath);
     }
 
     [Fact]
@@ -43,10 +47,10 @@ public sealed class UnixInstancePathsTests : IDisposable
     {
         var runtime = DirOfLength(120);
 
-        var (lockPath, socketPath) = UnixInstancePaths.Resolve(runtime, _root, "me");
+        var (lockPath, socketPath) = UnixInstancePaths.Resolve(runtime, _short, "me");
 
         Assert.Equal(Path.Combine(runtime, "littlebigmouse.lock"), lockPath);
-        Assert.Equal(Path.Combine(_root, "littlebigmouse-me", "littlebigmouse-show.sock"), socketPath);
+        Assert.Equal(Path.Combine(_short, "littlebigmouse-me", "littlebigmouse-show.sock"), socketPath);
         Assert.True(UnixInstancePaths.Fits(socketPath!));
     }
 
@@ -65,12 +69,12 @@ public sealed class UnixInstancePathsTests : IDisposable
     [Fact]
     public void MissingRuntimeDir_FallsBackToTemp()
     {
-        var expectedLock = Path.Combine(_root, "littlebigmouse.lock");
+        var expectedLock = Path.Combine(_short, "littlebigmouse.lock");
 
-        Assert.Equal(expectedLock, UnixInstancePaths.Resolve(null, _root, "me").LockPath);
-        Assert.Equal(expectedLock, UnixInstancePaths.Resolve("", _root, "me").LockPath);
-        Assert.Equal(expectedLock, UnixInstancePaths.Resolve(Path.Combine(_root, "missing"), _root, "me").LockPath);
-        Assert.Equal(Path.Combine(_root, "littlebigmouse-show.sock"), UnixInstancePaths.Resolve(null, _root, "me").SocketPath);
+        Assert.Equal(expectedLock, UnixInstancePaths.Resolve(null, _short, "me").LockPath);
+        Assert.Equal(expectedLock, UnixInstancePaths.Resolve("", _short, "me").LockPath);
+        Assert.Equal(expectedLock, UnixInstancePaths.Resolve(Path.Combine(_root, "missing"), _short, "me").LockPath);
+        Assert.Equal(Path.Combine(_short, "littlebigmouse-show.sock"), UnixInstancePaths.Resolve(null, _short, "me").SocketPath);
     }
 
     [Fact]

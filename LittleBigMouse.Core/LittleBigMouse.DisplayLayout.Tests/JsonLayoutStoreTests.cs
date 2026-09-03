@@ -190,6 +190,20 @@ public class JsonLayoutStoreTests : IDisposable
     }
 
     [Fact]
+    public void WriteThenRead_NineMonitorId_RoundTrips()
+    {
+        // #589: nine monitor ids join into a name longer than a file name may be (255
+        // bytes). WriteJson swallows the IOException, so this silently stored nothing.
+        var id = LayoutStoreKeyTests.LayoutId(9);
+        Assert.True(id.Length > 255);
+
+        var store = new JsonLayoutStore(_dir);
+        store.WriteLayout(id, new LayoutDto { Options = new LayoutOptionsDto { Enabled = true } });
+
+        Assert.True(store.Read(id, []).Layout!.Options!.Enabled);
+    }
+
+    [Fact]
     public void WriteModels_UpsertsWithoutDroppingOthers()
     {
         var store = new JsonLayoutStore(_dir);

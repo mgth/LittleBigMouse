@@ -378,8 +378,10 @@ public class MainService : ReactiveModel, IMainService
         }
         catch (Exception error)
         {
-            // One failed notification must not stop later daemon events.
-            Debug.WriteLine($"Daemon event handler failed: {error}");
+            // One failed notification must not stop later daemon events — but its reason
+            // has to reach ui.log: a layout rebuild throwing on hot-plug (#589) was
+            // invisible in Release, Debug.WriteLine being compiled out.
+            Console.Error.WriteLine($"Daemon event handler failed: {error}");
         }
     }
 }

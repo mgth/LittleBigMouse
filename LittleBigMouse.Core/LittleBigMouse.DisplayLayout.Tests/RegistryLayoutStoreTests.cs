@@ -107,6 +107,19 @@ public class RegistryLayoutStoreTests : IDisposable
     }
 
     [WindowsFact]
+    public void WriteThenRead_NineMonitorId_RoundTrips()
+    {
+        // #589: the joined id of nine monitors exceeds the 255-character registry key
+        // name limit; OpenSubKey threw ArgumentException and the UI never booted.
+        var id = LayoutStoreKeyTests.LayoutId(9);
+        Assert.True(id.Length > 255);
+
+        Store.WriteLayout(id, new LayoutDto { Options = new LayoutOptionsDto { Enabled = true } });
+
+        Assert.True(Store.Read(id, []).Layout!.Options!.Enabled);
+    }
+
+    [WindowsFact]
     public void Model_RoundTripsSizeBordersAndName()
     {
         var borders = Filled<BordersDto>();

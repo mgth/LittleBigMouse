@@ -33,10 +33,15 @@ public class JsonLayoutStore : ILayoutStore
     string OptionsPath => Path.Combine(_configDir, "options.json");
     string ModelsPath => Path.Combine(_configDir, "models.json");
 
+    const string LayoutExtension = ".json";
+
     string LayoutPath(string layoutId)
     {
         var id = string.Join("_", layoutId.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
-        return Path.Combine(_configDir, "layouts", $"{id}.json");
+        // A file name is capped at 255 bytes on every common filesystem, extension
+        // included, and a nine-monitor id is longer (#589): same rule as the registry.
+        var name = LayoutStoreKey.For(id, LayoutStoreKey.MaxLength - LayoutExtension.Length);
+        return Path.Combine(_configDir, "layouts", name + LayoutExtension);
     }
 
     public LayoutStoreData Read(string layoutId, IReadOnlyCollection<string> pnpCodes) => new()
@@ -76,7 +81,9 @@ public class JsonLayoutStore : ILayoutStore
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var temp = path + ".tmp";
+            // Same length as the final name, not longer: a layout name may already sit at
+            // the 255-byte cap, and a longer temp twin fails right here (#589).
+            var temp = Path.ChangeExtension(path, ".tmp");
             File.WriteAllText(temp, JsonSerializer.Serialize(value, JsonOptions));
             File.Move(temp, path, overwrite: true);
         }

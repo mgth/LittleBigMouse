@@ -39,6 +39,25 @@ public class LayoutPersistenceTests
         }
     }
 
+    /// <summary>
+    /// The #589 store: the id-based operations throw, as the registry did on a key name
+    /// over 255 characters.
+    /// </summary>
+    sealed class ThrowingStore : ILayoutStore
+    {
+        const string Message = "Registry key names should not be greater than 255 characters.";
+
+        public LayoutStoreData Read(string layoutId, IReadOnlyCollection<string> pnpCodes)
+            => throw new ArgumentException(Message);
+
+        public void WriteGlobalOptions(GlobalOptionsDto options) { }
+
+        public void WriteLayout(string layoutId, LayoutDto layout)
+            => throw new ArgumentException(Message);
+
+        public void WriteModels(IReadOnlyDictionary<string, ModelDto> models) { }
+    }
+
     sealed class TestPersistence(ILayoutStore store, string excludedFile) : LayoutPersistence(store)
     {
         protected override string ExcludedListFile() => excludedFile;
@@ -115,6 +134,22 @@ public class LayoutPersistenceTests
         Assert.True(restoredMonitor.Placed);
         Assert.True(restoredMonitor.Saved);
         Assert.True(restored.Saved);
+    }
+
+    [Fact]
+    public void Load_StoreReadFailure_DoesNotThrowAndLoadsAsAFirstRun()
+    {
+        // #589: nine monitors made the layout id longer than a registry key name may be,
+        // the read threw through Load, and the UI never booted. Whatever the store does,
+        // Load has to come back with a usable layout, marked saved as on a first run.
+        var persistence = new TestPersistence(new ThrowingStore(), TempExcludedFile());
+        var layout = NewLayout(out var monitor, out _);
+
+        persistence.Load(layout);
+
+        Assert.True(layout.Saved);
+        Assert.True(monitor.Saved);
+        Assert.False(persistence.IsLoading);
     }
 
     [Fact]

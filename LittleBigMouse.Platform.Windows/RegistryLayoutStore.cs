@@ -33,6 +33,12 @@ public class RegistryLayoutStore : ILayoutStore
     RegistryKey? OpenRoot(bool create)
         => create ? Registry.CurrentUser.CreateSubKey(_rootKey) : Registry.CurrentUser.OpenSubKey(_rootKey);
 
+    /// <summary>
+    /// A registry key name is capped at 255 characters and a nine-monitor id is longer
+    /// (#589): the key is derived from the id, and is the id itself whenever it fits.
+    /// </summary>
+    static string LayoutKeyPath(string layoutId) => @$"Layouts\{LayoutStoreKey.For(layoutId)}";
+
     //==================//
     // Read             //
     //==================//
@@ -44,7 +50,7 @@ public class RegistryLayoutStore : ILayoutStore
         using var root = OpenRoot(create: false);
         if (root == null) return data;
 
-        using var layoutKey = root.OpenSubKey(@$"Layouts\{layoutId}");
+        using var layoutKey = root.OpenSubKey(LayoutKeyPath(layoutId));
 
         data.GlobalOptions = ReadGlobalOptions(root, layoutKey);
         if (layoutKey != null) data.Layout = ReadLayout(layoutKey);
@@ -282,7 +288,7 @@ public class RegistryLayoutStore : ILayoutStore
     public void WriteLayout(string layoutId, LayoutDto layout)
     {
         using var root = OpenRoot(create: true);
-        using var key = root?.CreateSubKey(@$"Layouts\{layoutId}");
+        using var key = root?.CreateSubKey(LayoutKeyPath(layoutId));
         if (key == null) return;
 
         if (layout.Options is { } o)

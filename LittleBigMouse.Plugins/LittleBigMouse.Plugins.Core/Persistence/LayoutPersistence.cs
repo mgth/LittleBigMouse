@@ -96,9 +96,7 @@ public abstract class LayoutPersistence : ILayoutPersistence
         IsLoading = true;
         try
         {
-            var data = _store.Read(
-                layout.Id,
-                layout.PhysicalMonitors.Select(m => m.Model.PnpCode).Distinct().ToList());
+            var data = ReadStore(layout);
 
             layout.Options.LoadAtStartup = IsAutostartScheduled(layout);
             layout.Options.Elevated = IsElevated;
@@ -171,6 +169,28 @@ public abstract class LayoutPersistence : ILayoutPersistence
         }
 
         monitor.Saved = true;
+    }
+
+    /// <summary>
+    /// The store read, with its failure contained: a store that cannot be read must not
+    /// keep the app from starting. Nine monitors made a layout id longer than a registry
+    /// key name may be, the read threw through Load, and the UI never came up (#589). The
+    /// layout then loads as on a first run — placed from the system configuration, nothing
+    /// saved — and the failure is in ui.log.
+    /// </summary>
+    LayoutStoreData ReadStore(MonitorsLayout layout)
+    {
+        try
+        {
+            return _store.Read(
+                layout.Id,
+                layout.PhysicalMonitors.Select(m => m.Model.PnpCode).Distinct().ToList());
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"[LittleBigMouse] Layout store read failed for '{layout.Id}': {error}");
+            return new LayoutStoreData();
+        }
     }
 
     //==================//

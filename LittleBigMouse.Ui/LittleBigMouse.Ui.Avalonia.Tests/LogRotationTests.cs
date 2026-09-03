@@ -105,12 +105,18 @@ public sealed class LogRotationTests : IDisposable
 
         Run("run 1");
         Run("run 2");
-        using var held = new FileStream(Log, FileMode.Open, FileAccess.Write, FileShare.Read);
 
-        Assert.ThrowsAny<IOException>(() => LogRotation.Rotate(Log));
+        using (new FileStream(Log, FileMode.Open, FileAccess.Write, FileShare.Read))
+        {
+            Assert.ThrowsAny<IOException>(() => LogRotation.Rotate(Log));
+
+            // Still in place, and the chain behind it did not move. (ui.log itself is only
+            // readable once the handle is gone: the holder's write access excludes a reader.)
+            Assert.True(File.Exists(Log));
+            Assert.Equal("run 1", Previous(1));
+            Assert.False(File.Exists(LogRotation.PreviousPath(Log, 2)));
+        }
 
         Assert.Equal("run 2", File.ReadAllText(Log));
-        Assert.Equal("run 1", Previous(1));
-        Assert.False(File.Exists(LogRotation.PreviousPath(Log, 2)));
     }
 }

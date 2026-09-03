@@ -12,8 +12,9 @@ namespace LittleBigMouse.Ui.Avalonia;
 /// (boot failures, unhandled dispatcher exceptions, ViewLocator diagnostics…) is
 /// silently discarded — "the app does nothing and there are no logs anywhere"
 /// (#448, #510). When stderr has no backing handle, console output is routed to
-/// %LOCALAPPDATA%\Mgth\LittleBigMouse\ui.log instead (previous run kept as
-/// ui.prev.log). A real console or an explicit `2&gt; file` redirection provides a
+/// %LOCALAPPDATA%\Mgth\LittleBigMouse\ui.log instead (the previous runs kept as
+/// ui.prev.log, ui.prev.2.log … see <see cref="LogRotation"/>). A real console or an
+/// explicit `2&gt; file` redirection provides a
 /// valid handle and wins over the file. Linux keeps plain stderr (run-lbm.sh and
 /// the desktop session already capture it).
 /// </summary>
@@ -41,11 +42,10 @@ internal static class StartupLog
 
             Directory.CreateDirectory(LbmPaths.DataDir);
             var path = Path.Combine(LbmPaths.DataDir, "ui.log");
-            var prev = Path.Combine(LbmPaths.DataDir, "ui.prev.log");
 
             // Throws while another instance holds ui.log open: that instance owns
             // the log and this one is about to exit on the single-instance guard.
-            if (File.Exists(path)) File.Move(path, prev, overwrite: true);
+            LogRotation.Rotate(path);
 
             var writer = new StreamWriter(
                 new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))

@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LittleBigMouse.Ui.Avalonia.Main.BootFailureView"
+        Title="LittleBigMouse could not start"
+        Width="620"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Lbm.Brushes.Pane.Background}">
+
+	<StackPanel Margin="24,20" Spacing="14">
+
+		<StackPanel Orientation="Horizontal" Spacing="12">
+			<Path Data="{StaticResource Lbm.Icon.Warning}"
+			      Fill="#E0A030" Width="26" Height="26" Stretch="Uniform"
+			      VerticalAlignment="Center"/>
+			<TextBlock Text="LittleBigMouse could not start"
+			           FontSize="16" FontWeight="SemiBold"
+			           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+			           VerticalAlignment="Center" TextWrapping="Wrap"/>
+		</StackPanel>
+
+		<TextBlock TextWrapping="Wrap" FontSize="13"
+		           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
+		           Text="An error stopped LittleBigMouse while it was starting. It will close when you dismiss this window. Your saved layouts are untouched."/>
+
+		<Border Background="{DynamicResource Lbm.Brushes.Card.Background}"
+		        BorderBrush="{DynamicResource Lbm.Brushes.Card.Border}"
+		        BorderThickness="1" CornerRadius="6" Padding="14,10">
+			<StackPanel Spacing="6">
+				<TextBlock Text="Details" FontSize="13" FontWeight="SemiBold"
+				           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"/>
+				<TextBox x:Name="DetailsText" IsReadOnly="True" AcceptsReturn="True"
+				         TextWrapping="Wrap" FontFamily="Consolas, Courier New, monospace" FontSize="11"
+				         MaxHeight="220"/>
+			</StackPanel>
+		</Border>
+
+		<TextBlock x:Name="LogText" TextWrapping="Wrap" FontSize="12"
+		           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"/>
+
+		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+			<Button x:Name="CopyButton" MinWidth="110" HorizontalContentAlignment="Center"
+			        Click="OnCopyClick" Content="Copy details"/>
+			<Button x:Name="OpenLogButton" MinWidth="110" HorizontalContentAlignment="Center"
+			        Click="OnOpenLogClick" Content="Open log folder"/>
+			<Button x:Name="CloseButton" IsDefault="True" IsCancel="True"
+			        MinWidth="90" HorizontalContentAlignment="Center"
+			        Click="OnCloseClick" Content="Close"/>
+		</StackPanel>
+
+	</StackPanel>
+</Window>

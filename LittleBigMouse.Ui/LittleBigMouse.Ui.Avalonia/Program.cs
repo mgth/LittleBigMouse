@@ -283,11 +283,20 @@ internal class Program
 
             var task = boot.BootAsync();
 
-            // A bootloader failure would otherwise stay invisible until shutdown (the task is
-            // only awaited after app.Run returns) — leaving the app alive with no window and
-            // no tray icon, and nothing to diagnose it with.
+            // A bootloader failure is only awaited after app.Run returns, i.e. never while the
+            // app lives. Logging it was not enough: the process stayed up with no window, no
+            // tray icon (wired after the layout is built) and the single-instance lock held,
+            // so every relaunch signaled it and exited — "the GUI will no longer launch" while
+            // "the process is running" (#589). Tell the user, then leave, like Exit does.
+            var failure = new BootFailureHandler(
+                log: Console.Error.WriteLine,
+                showAsync: error => global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                    () => BootFailureView.ShowAsync(error, StartupLog.LogFile)),
+                shutdown: () => global::Avalonia.Threading.Dispatcher.UIThread.BeginInvokeShutdown(
+                    global::Avalonia.Threading.DispatcherPriority.Normal));
+
             task.ContinueWith(
-                t => Console.Error.WriteLine($"Boot failed: {t.Exception?.Flatten().InnerException}"),
+                t => failure.HandleAsync(t.Exception?.Flatten().InnerException ?? t.Exception!),
                 TaskContinuationOptions.OnlyOnFaulted);
 
             try
@@ -299,12 +308,18 @@ internal class Program
                 cts.Cancel();
             }
 
-            try
+            // A faulted boot has been reported and has shut the app down by the time app.Run
+            // returns: waiting on it again would only rethrow into the catch below and put a
+            // crash window on a dispatcher that is gone.
+            if (!task.IsFaulted)
             {
-                task.Wait(cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
+                try
+                {
+                    task.Wait(cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                }
             }
         }
         catch (Exception ex)

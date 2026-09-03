@@ -21,6 +21,12 @@ internal static class StartupLog
 {
     const int STD_ERROR_HANDLE = -12;
 
+    /// <summary>
+    /// Where console output goes while detached; null when a real console or a redirection
+    /// has it. What the boot failure window points the user to.
+    /// </summary>
+    public static string? LogFile { get; private set; }
+
     [DllImport("kernel32.dll")]
     static extern IntPtr GetStdHandle(int nStdHandle);
 
@@ -47,6 +53,7 @@ internal static class StartupLog
 
             Console.SetOut(writer);
             Console.SetError(writer);
+            LogFile = path;
 
             var version = Assembly.GetExecutingAssembly()
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";

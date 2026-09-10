@@ -1,6 +1,7 @@
 //! Linux platform helpers — the counterpart of [`crate::platform::windows`].
 
 pub mod cursor;
+pub mod display;
 pub mod paths;
 pub mod process;
 

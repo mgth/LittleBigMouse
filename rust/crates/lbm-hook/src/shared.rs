@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8};
 use std::sync::{Mutex, OnceLock};
 
 use crate::engine::MouseEngine;
+use crate::geometry::Rect;
 use crate::ipc::server::ServerHandle;
 use crate::priority::Priority;
 
@@ -65,6 +66,11 @@ pub struct Shared {
     pub last_layout_xml: Mutex<String>,
     /// The IPC server handle, published once the listener is up.
     pub server: OnceLock<ServerHandle>,
+    /// What the desktop is made of right now, asked at `Run` time so a layout drawn
+    /// for monitors that have since been unplugged is never hooked (#607). `None`
+    /// means the platform does not know, which leaves the layout unjudged. A plain
+    /// function pointer so a test can answer with a desktop of its own.
+    pub monitors_now: fn() -> Option<Vec<Rect<i32>>>,
 }
 
 impl Shared {
@@ -87,6 +93,7 @@ impl Shared {
             excluded: Mutex::new(Vec::new()),
             last_layout_xml: Mutex::new(String::new()),
             server: OnceLock::new(),
+            monitors_now: crate::platform::display::monitors_now,
         }
     }
 

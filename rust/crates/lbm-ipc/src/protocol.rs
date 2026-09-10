@@ -128,6 +128,18 @@ pub fn shortcut_unavailable(shortcut: &str) -> String {
 pub const LOAD_FAILED: &str =
     "<DaemonMessage><Event>LoadFailed</Event><Payload>the layout could not be parsed</Payload></DaemonMessage>\n";
 
+/// A `Run` the daemon would not honour, and why. Distinct from `LoadFailed`: the layout
+/// parsed fine, it is the desktop that does not match it — monitors unplugged since it
+/// was drawn (#607) — or a layout that must never be hooked (a virtual one). Said out
+/// loud because the alternative was the bug itself: an engine quietly confining the
+/// cursor to the edges of displays that are no longer there.
+pub fn run_refused(reason: &str) -> String {
+    format!(
+        "<DaemonMessage><Event>RunRefused</Event><Payload>{}</Payload></DaemonMessage>\n",
+        escape_xml(reason)
+    )
+}
+
 /// Build a `Loaded` event: the outcome of a `Load` command. The payload is an
 /// informative summary only — the event itself is the success signal. This is
 /// what makes a Load-without-Run observable (the virtual-layout "simulate" flow

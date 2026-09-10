@@ -81,6 +81,15 @@ impl<T: Coord> Rect<T> {
             && point.y() - self.height < self.top
     }
 
+    /// Do the two rectangles share any area? Touching edges do not count: a monitor
+    /// placed exactly beside another shares a border, not a pixel.
+    pub fn intersects(&self, other: &Rect<T>) -> bool {
+        self.left < other.right()
+            && other.left < self.right()
+            && self.top < other.bottom()
+            && other.top < self.bottom()
+    }
+
     /// C++ `Rect::Intersect(const Line&)` — intersection points with the four edges.
     pub fn intersect(&self, l: &Line<T>) -> Vec<Point<T>> {
         let mut result = Vec::new();

@@ -96,6 +96,20 @@ public sealed class DaemonStatusTrackerTests
     }
 
     [Fact]
+    public void ARefusedRunShowsTheDaemonsReason()
+    {
+        var f = new Fixture();
+
+        f.Raise(LittleBigMouseEvent.RunRefused,
+            "the layout does not match the attached displays: no display under Dock");
+        Assert.Equal("the layout does not match the attached displays: no display under Dock",
+            f.Tracker.LayoutInfo);
+
+        f.Raise(LittleBigMouseEvent.RunRefused);
+        Assert.Equal("run refused", f.Tracker.LayoutInfo);
+    }
+
+    [Fact]
     public void ARescueThatInterruptedAPreviewSaysTheExperimentWasThrownAway()
     {
         var f = new Fixture { Previewing = true };

@@ -10,6 +10,7 @@ public class DaemonProtocolTests
     [InlineData("SettingsChanged", LittleBigMouseEvent.SettingsChanged)]
     [InlineData("Loaded", LittleBigMouseEvent.Loaded)]
     [InlineData("LoadFailed", LittleBigMouseEvent.LoadFailed)]
+    [InlineData("RunRefused", LittleBigMouseEvent.RunRefused)]
     public void ParserMapsExactEventElement(string name, LittleBigMouseEvent expected)
     {
         Assert.True(DaemonMessage.TryParse(

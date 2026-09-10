@@ -132,7 +132,7 @@ has already drifted once.
 | `Algorithm` | `Strait`, `Cross` | Case-sensitive. `CornerCrossing` accepted as an alias for `Cross`. See below. |
 | `Priority` / `PriorityUnhooked` | `Idle`, `Below`, `Normal`, `Above`, `High`, `Realtime` | Unknown → `Normal` |
 | `Command` | `Listen`, `Load`, `LoadFromFile`, `Run`, `Stop`, `State`, `Probe`, `Shortcut`, `Quit` | |
-| `Event` | `Running`, `Stopped`, `Paused`, `Dead`, `SettingChanged`, `DesktopChanged`, `DisplayChanged`, `FocusChanged`, `Suspended`, `Resumed`, `Loaded`, `LoadFailed`, `Probed`, `Rescued`, `ShortcutUnavailable` | `SettingsChanged` accepted as a legacy alias; `<State>` accepted in place of `<Event>` |
+| `Event` | `Running`, `Stopped`, `Paused`, `Dead`, `SettingChanged`, `DesktopChanged`, `DisplayChanged`, `FocusChanged`, `Suspended`, `Resumed`, `Loaded`, `LoadFailed`, `Probed`, `Rescued`, `ShortcutUnavailable`, `RunRefused` | `SettingsChanged` accepted as a legacy alias; `<State>` accepted in place of `<Event>` |
 | `ProbeEdge/@Side` | `Left`, `Top`, `Right`, `Bottom` | |
 
 > **`Algorithm` used to be spelled five different ways in this repository.** The wire

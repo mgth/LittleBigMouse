@@ -127,15 +127,26 @@ public sealed class EngineControllerTests
     }
 
     [Fact]
-    public async Task AFreshLayoutIsOnlyHandedOverWhenTheUserWantsTheEngine()
+    public async Task AFreshLayoutIsHookedWhenTheUserWantsTheEngineAndUnhookedOtherwise()
     {
         var enabled = new Fixture();
-        await enabled.Engine.StartIfEnabledAsync();
+        await enabled.Engine.ReconcileFreshLayoutAsync();
         Assert.Equal(new[] { "Start" }, enabled.Daemon.Commands);
 
+        // Enabled is per layout: the desktop can change into one the user turned off. The
+        // daemon must not be left running the previous layout, nor be reached by a Start
+        // still in flight for it (#607) — an explicit Stop covers both.
         var disabled = new Fixture(enabled: false);
-        await disabled.Engine.StartIfEnabledAsync();
-        Assert.Empty(disabled.Daemon.Commands);
+        await disabled.Engine.ReconcileFreshLayoutAsync();
+        Assert.Equal(new[] { "Stop" }, disabled.Daemon.Commands);
+    }
+
+    [Fact]
+    public async Task AFreshLayoutThatDoesNotExistYetIsLeftAlone()
+    {
+        var f = new Fixture(withLayout: false);
+        await f.Engine.ReconcileFreshLayoutAsync();
+        Assert.Empty(f.Daemon.Commands);
     }
 
     [Fact]

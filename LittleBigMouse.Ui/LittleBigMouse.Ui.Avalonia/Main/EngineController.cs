@@ -36,7 +36,7 @@ public sealed record ResumeWatchdogTimings(
 /// user who turned it off, or over an exclusion the daemon is honouring.
 /// </para>
 /// <para>
-/// The three ways back in, weakest first: <see cref="StartIfEnabledAsync"/> after a rebuild,
+/// The three ways back in, weakest first: <see cref="ReconcileFreshLayoutAsync"/> after a rebuild,
 /// <see cref="EnsureHookedAsync"/> when a display change settled to nothing, and
 /// <see cref="EnsureRunningAfterResumeAsync"/>, which is the only one that retries — a wake
 /// from sleep is the one case where a single Start reliably loses a race.
@@ -85,8 +85,19 @@ public sealed class EngineController(
         return layout is null ? Task.CompletedTask : client.StartAsync(layout.ComputeZones());
     }
 
-    /// <summary>What a fresh layout generation does with itself: hook, if the user wants it hooked.</summary>
-    public Task StartIfEnabledAsync() => Enabled ? StartAsync() : Task.CompletedTask;
+    /// <summary>
+    /// What a fresh layout generation does with itself: hook, if the user wants it hooked —
+    /// and make sure nothing stays hooked if they do not. Enabled is stored per layout, so a
+    /// display change can land on a layout the user turned off; leaving the daemon alone
+    /// then would leave it running whatever it was last given, which is the layout of the
+    /// desktop that just went away (#607). The Stop also outranks any Start still on its
+    /// way to the daemon.
+    /// </summary>
+    public Task ReconcileFreshLayoutAsync()
+    {
+        if (currentLayout() is null) return Task.CompletedTask;
+        return Enabled ? StartAsync() : client.StopAsync();
+    }
 
     /// <summary>
     /// The user's Start — the tray entry and the window's apply button are the same gesture,

@@ -394,6 +394,9 @@ fn daemon_event_frames_match_the_golden() {
         protocol::RESUMED.to_string(),
         protocol::RESCUED.to_string(),
         protocol::LOAD_FAILED.to_string(),
+        protocol::run_refused(
+            "the layout does not match the attached displays: no display under Dock",
+        ),
         protocol::loaded(2, 2, false),
         protocol::shortcut_unavailable("Ctrl+Alt+Shift+M"),
         // A path carrying XML metacharacters: the case a substring parser gets wrong.

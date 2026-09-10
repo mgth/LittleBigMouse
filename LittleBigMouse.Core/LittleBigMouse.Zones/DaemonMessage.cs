@@ -43,6 +43,7 @@ public readonly record struct DaemonMessage(LittleBigMouseEvent Event, string Pa
                 "Probed" => LittleBigMouseEvent.Probed,
                 "Rescued" => LittleBigMouseEvent.Rescued,
                 "ShortcutUnavailable" => LittleBigMouseEvent.ShortcutUnavailable,
+                "RunRefused" => LittleBigMouseEvent.RunRefused,
                 _ => (LittleBigMouseEvent?)null,
             };
             if (daemonEvent is null) return false;

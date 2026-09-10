@@ -63,6 +63,14 @@ impl ServerHandle {
         }
     }
 
+    /// A handle nobody listens on, for driving `daemon::receive_message` from a unit
+    /// test: broadcasts go to an empty registry, replies to a client that is not there.
+    #[cfg(test)]
+    pub(crate) fn detached() -> Self {
+        let (commands, _dropped) = mpsc::channel(1);
+        Self::new(commands)
+    }
+
     fn insert(&self, client: Arc<ClientHandle>) -> bool {
         let mut registry = self.registry.lock().unwrap_or_else(|p| p.into_inner());
         if registry.len() >= MAX_CLIENTS {

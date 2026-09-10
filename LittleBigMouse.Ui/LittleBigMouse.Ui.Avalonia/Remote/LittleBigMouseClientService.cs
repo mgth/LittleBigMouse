@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using LittleBigMouse.Plugins;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,6 +29,14 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
     readonly LocalIpcClient _client;
     readonly DaemonProcessManager _processManager;
     readonly RecoveryStateStore _recovery;
+
+    /// <summary>
+    /// Every request that decides what the engine runs — a Start, a live-preview frame,
+    /// a Stop — passes here, so the daemon only ever receives the newest of them and in
+    /// the order they were made. See <see cref="LatestRequestGate"/> for the race this
+    /// closes (#607).
+    /// </summary>
+    readonly LatestRequestGate _engineRequests = new();
 
     protected void OnStateChanged(LittleBigMouseEvent evt, string payload = "")
     {
@@ -83,13 +90,20 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
 
     public async Task StartAsync(ZonesLayout zonesLayout, CancellationToken token = default)
     {
+        // The ticket comes first, before anything is awaited: what gets ordered is the
+        // moment the request was made — the moment its zones were computed — not the
+        // moment it got round to sending.
+        var ticket = _engineRequests.Claim();
+
         // Virtual layout: inspection only. Send Load WITHOUT Run — the daemon parses the
         // zones into its engine and reports Loaded/LoadFailed, but the input hook stays
         // down (it would refuse anyway). No topology prologue either: PrepareForEngine
         // MUTATES the local outputs, which a foreign layout must never cause.
         if (zonesLayout.Virtual)
         {
-            await SendMessagesAsync([new CommandMessage(LittleBigMouseCommand.Load, zonesLayout)], token);
+            await _engineRequests.SendIfLatestAsync(ticket,
+                () => SendMessagesAsync([new CommandMessage(LittleBigMouseCommand.Load, zonesLayout)], token),
+                token);
             return;
         }
 
@@ -110,7 +124,7 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
             new(LittleBigMouseCommand.Run)
         };
 
-        await SendMessagesAsync(commands, token);
+        await _engineRequests.SendIfLatestAsync(ticket, () => SendMessagesAsync(commands, token), token);
     }
 
     /// <summary>
@@ -125,9 +139,12 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
         // A foreign layout is inspection-only; the daemon refuses to hook it anyway.
         if (zonesLayout.Virtual) return Task.CompletedTask;
 
-        return SendMessagesAsync(
-            [new(LittleBigMouseCommand.Load, zonesLayout), new(LittleBigMouseCommand.Run)],
-            token, persist: false);
+        var ticket = _engineRequests.Claim();
+        return _engineRequests.SendIfLatestAsync(ticket,
+            () => SendMessagesAsync(
+                [new(LittleBigMouseCommand.Load, zonesLayout), new(LittleBigMouseCommand.Run)],
+                token, persist: false),
+            token);
     }
 
 
@@ -142,9 +159,11 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
     // that stays dead is covered by RecoverStale at next startup.
     public async Task StopAsync(CancellationToken token = default)
     {
+        // A Stop outranks every Start still on its way, and is never dropped itself.
+        _engineRequests.Claim();
         try
         {
-            await SendAsync(token);
+            await _engineRequests.SendAsync(() => StopDaemon(token), token);
         }
         catch (Exception error) when (error is IOException
                                       or OperationCanceledException
@@ -162,7 +181,10 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
 
     public async Task QuitAsync(CancellationToken token = default)
     {
-        await SendAsync(token);
+        _engineRequests.Claim();
+        await _engineRequests.SendAsync(
+            () => SendMessageAsync(new CommandMessage(LittleBigMouseCommand.Quit, null), _timeout, token),
+            token);
         await Task.Run(_displayController.RestoreAfterEngine, token);
     }
 
@@ -174,14 +196,6 @@ public class LittleBigMouseClientService : ILittleBigMouseClientService, IDispos
     }
 
     readonly int _timeout = 5000;
-
-    Task SendAsync(CancellationToken token = default, [CallerMemberName]string name = null)
-    {
-        if(name==null) throw new ArgumentNullException(nameof(name));
-        if (name.EndsWith("Async")) name = name[..^5];
-        return Enum.TryParse<LittleBigMouseCommand>(name, out var command) ? SendMessageAsync(
-            new CommandMessage(command,null),_timeout,token) : Task.CompletedTask;
-    }
 
     Task SendMessageAsync(CommandMessage message, int timeout,
         CancellationToken token = default)

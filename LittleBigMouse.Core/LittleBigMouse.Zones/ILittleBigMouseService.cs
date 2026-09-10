@@ -57,6 +57,11 @@ public enum LittleBigMouseEvent
     // Reported rather than logged: a rescue that silently does not exist is worse than
     // none, because the user only finds out when they need it.
     ShortcutUnavailable,
+    // The daemon declined a Run, and the payload says why: the layout it was handed no
+    // longer matches the attached displays (a dock unplugged, a laptop woken alone —
+    // #607), or it is a virtual layout that must never be hooked. The engine is left, or
+    // taken, down. Older daemons hooked whatever they were given.
+    RunRefused,
 }
 public enum LittleBigMouseCommand
 {

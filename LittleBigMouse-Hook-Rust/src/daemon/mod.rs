@@ -7,6 +7,7 @@
 
 use std::sync::atomic::Ordering;
 
+use crate::geometry::Rect;
 use crate::hook;
 use crate::ipc::protocol::{self, Command};
 use crate::ipc::server::{ClientId, ServerHandle};
@@ -30,6 +31,10 @@ pub fn receive_message(
     }
 
     let mut became_listening = false;
+    // A `Load` in this frame did not parse. The `Run` behind it would hook the layout
+    // the Load was meant to replace — the one the UI no longer believes in — so it is
+    // refused, exactly as the startup replay refuses it (see `replay`).
+    let mut load_failed = false;
 
     let commands = protocol::parse(line);
     let rehooks = frame_rehooks(&commands);
@@ -41,7 +46,11 @@ pub fn receive_message(
                 send_state(server, Some(client_id), shared);
                 became_listening = true;
             }
-            Command::Run => run(shared),
+            Command::Run => {
+                if !load_failed {
+                    run(shared);
+                }
+            }
             Command::Stop => {
                 // C++ Stop: unhook and clear the pause flag. `Stopped` is
                 // broadcast from the unhook path.
@@ -68,7 +77,10 @@ pub fn receive_message(
                             probe_loaded(shared, server);
                         }
                     }
-                    None => server.broadcast(protocol::LOAD_FAILED),
+                    None => {
+                        load_failed = true;
+                        server.broadcast(protocol::LOAD_FAILED);
+                    }
                 }
             }
             Command::Probe => probe_loaded(shared, server),
@@ -234,6 +246,14 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
         Some(info)
     } else {
         eprintln!("[LittleBigMouse.Hook] layout load FAILED to parse");
+        // The engine still holds the layout this Load was meant to replace. A frame
+        // carrying a Run kept the hook up for a swap that is not going to happen:
+        // take it down rather than keep confining the cursor to a geometry the UI
+        // has already moved on from (#607).
+        if keep_hooked && shared.hooked.load(Ordering::SeqCst) {
+            shared.unhook_requests.fetch_add(1, Ordering::SeqCst);
+            hook::request_unhook(shared);
+        }
         None
     }
 }
@@ -249,19 +269,40 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
 /// (the router never observes the transient false) or at worst a quick
 /// re-arm — both correct.
 fn run(shared: &Shared) {
+    // Ask the desktop before taking the engine lock: enumerating monitors is an OS
+    // round-trip, and the hook callback is waiting on a `try_lock` of that engine.
+    let monitors = (shared.monitors_now)();
+
+    let (virtual_layout, phantom) = {
+        let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
+        let phantom = match &monitors {
+            Some(monitors) => phantom_zones(&engine.layout, monitors),
+            None => Vec::new(),
+        };
+        (engine.layout.virtual_layout, phantom)
+    };
+
     // A virtual (foreign) layout is loaded for inspection only: hooking it would
     // confine the local mouse inside a geometry that does not exist on this
     // machine. The refusal lives daemon-side, keyed on the wire flag, so no UI
     // path — present or future — can capture the mouse with a client's layout.
-    let virtual_layout = shared
-        .engine
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .layout
-        .virtual_layout;
     if virtual_layout {
-        eprintln!(
-            "[LittleBigMouse.Hook] Run refused: the loaded layout is virtual (inspection only)"
+        refuse_run(shared, "the loaded layout is virtual (inspection only)");
+        return;
+    }
+
+    // The same refusal for a local layout the desktop has moved out from under: a
+    // dock unplugged, a laptop woken alone (#607). Hooking it would clip the cursor
+    // to the edges of monitors that are no longer there — the exact trap reported —
+    // and the daemon is the last place that can tell, whichever path the layout
+    // arrived by (a late Start, the startup replay, a UI that lost the race).
+    if !phantom.is_empty() {
+        refuse_run(
+            shared,
+            &format!(
+                "the layout does not match the attached displays: no display under {}",
+                phantom.join(", ")
+            ),
         );
         return;
     }
@@ -282,6 +323,34 @@ fn run(shared: &Shared) {
     }
 
     hook::request_hook(shared);
+}
+
+/// Decline a `Run`, out loud. Whatever the reason, an engine that is up is running a
+/// layout that was just judged unfit — a `Load`+`Run` frame swaps the layout in place
+/// and keeps the hook alive for the Run — so it comes down as well.
+fn refuse_run(shared: &Shared, reason: &str) {
+    eprintln!("[LittleBigMouse.Hook] Run refused: {reason}");
+    if shared.hooked.load(Ordering::SeqCst) {
+        hook::request_unhook(shared);
+    }
+    shared.broadcast(&protocol::run_refused(reason));
+}
+
+/// The main zones whose pixels lie on none of `monitors`: a layout drawn for a
+/// desktop other than the one in front of the user. Overlap is the test, not
+/// equality — the UI and the daemon read the same OS rectangles, but a stricter
+/// match would turn any rounding into a refusal, and a refused Run is LBM not working.
+pub(crate) fn phantom_zones(layout: &ZonesLayout, monitors: &[Rect<i32>]) -> Vec<String> {
+    layout
+        .main_zones
+        .iter()
+        .map(|id| &layout.arena[*id])
+        .filter(|zone| {
+            let bounds = zone.pixels_bounds();
+            !monitors.iter().any(|monitor| monitor.intersects(&bounds))
+        })
+        .map(|zone| zone.name.clone())
+        .collect()
 }
 
 /// C++ `LoadExcluded`: read `Excluded.txt`, skipping blank lines and `:` comments.
@@ -525,6 +594,155 @@ mod tests {
             *shared.rescue_shortcut.lock().unwrap(),
             crate::shortcut::DEFAULT
         );
+    }
+
+    // Two monitors side by side, as a docked laptop sees them.
+    const DOCKED_XML: &str = concat!(
+        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
+        r#"<Zone Id="0" Name="Laptop"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="344" Height="194"></Rect></PhysicalBounds></Zone>"#,
+        r#"<Zone Id="1" Name="Dock"><PixelsBounds><Rect Left="1920" Top="0" Width="2560" Height="1440"></Rect></PixelsBounds><PhysicalBounds><Rect Left="344" Top="0" Width="597" Height="336"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+
+    fn docked_frame() -> String {
+        format!(
+            "<Messages><CommandMessage Command=\"Load\"><Payload>{DOCKED_XML}</Payload></CommandMessage><CommandMessage Command=\"Run\" Payload=\"\"/></Messages>"
+        )
+    }
+
+    fn laptop_alone() -> Option<Vec<Rect<i32>>> {
+        Some(vec![Rect::new(0, 0, 1920, 1080)])
+    }
+
+    fn laptop_docked() -> Option<Vec<Rect<i32>>> {
+        Some(vec![
+            Rect::new(0, 0, 1920, 1080),
+            Rect::new(1920, 0, 2560, 1440),
+        ])
+    }
+
+    fn desktop_unknown() -> Option<Vec<Rect<i32>>> {
+        None
+    }
+
+    fn receive(shared: &Shared, frame: &str) {
+        receive_message(frame, 1, &ServerHandle::detached(), shared);
+    }
+
+    #[test]
+    fn a_layout_drawn_for_an_unplugged_display_is_not_hooked() {
+        // #607: the dock is gone, the laptop woke alone, and the layout that arrives
+        // still has a zone where the dock's monitor used to be. Hooking it would clip
+        // the cursor to the edge of a display that is not there.
+        let mut shared = Shared::new();
+        shared.monitors_now = laptop_alone;
+
+        receive(&shared, &docked_frame());
+
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "a Run over a layout the desktop no longer matches must be refused"
+        );
+        // The layout itself is loaded — it parsed — only the Run is declined.
+        assert_eq!(shared.engine.lock().unwrap().layout.main_zones.len(), 2);
+    }
+
+    #[test]
+    fn a_layout_matching_the_attached_displays_is_hooked() {
+        let mut shared = Shared::new();
+        shared.monitors_now = laptop_docked;
+
+        receive(&shared, &docked_frame());
+
+        assert!(shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn a_desktop_the_platform_cannot_describe_leaves_the_layout_unjudged() {
+        // Linux today: no monitor enumeration, so nothing is refused on its account.
+        let mut shared = Shared::new();
+        shared.monitors_now = desktop_unknown;
+
+        receive(&shared, &docked_frame());
+
+        assert!(shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn a_stale_layout_loaded_over_a_hooked_engine_takes_the_hook_down() {
+        // A Load+Run frame keeps the hook alive across the swap. When the swapped-in
+        // layout is then refused, the engine must not be left running it.
+        let mut shared = Shared::new();
+        shared.monitors_now = laptop_alone;
+        shared.hooked.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+
+        receive(&shared, &docked_frame());
+
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "the hook must be asked down along with the refusal"
+        );
+    }
+
+    #[test]
+    fn phantom_zones_are_the_main_zones_on_no_display() {
+        let layout = ZonesLayout::from_xml(DOCKED_XML).unwrap();
+
+        assert!(phantom_zones(&layout, &laptop_docked().unwrap()).is_empty());
+        assert_eq!(
+            phantom_zones(&layout, &laptop_alone().unwrap()),
+            vec!["Dock".to_string()]
+        );
+        // The desktop reshaped rather than shrank: the remaining monitor moved to the
+        // origin, so the stale laptop zone now sits on nothing at all.
+        assert_eq!(
+            phantom_zones(&layout, &[Rect::new(-1920, 0, 1920, 1080)]),
+            vec!["Laptop".to_string(), "Dock".to_string()]
+        );
+        // Overlap, not equality: a monitor reporting a slightly different rectangle
+        // (a mode change the UI has not rebuilt for yet) is still a display under
+        // the zone, not a phantom.
+        assert!(phantom_zones(
+            &layout,
+            &[Rect::new(0, 0, 1600, 900), Rect::new(1600, 0, 3840, 2160)]
+        )
+        .is_empty());
+        // A shared border is not shared area.
+        assert_eq!(
+            phantom_zones(&layout, &[Rect::new(4480, 0, 1920, 1080)]),
+            vec!["Laptop".to_string(), "Dock".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_run_behind_a_failed_load_does_not_hook_the_previous_layout() {
+        // The live-frame twin of `run_without_a_successful_load_is_ignored`: the UI
+        // sent a layout the daemon could not parse, then Run. The engine still holds
+        // the previous layout, which is not what the UI believes is running.
+        let mut shared = Shared::new();
+        shared.monitors_now = laptop_docked;
+        receive(&shared, &docked_frame());
+        assert!(shared.want_hook.load(Ordering::SeqCst));
+        shared.hooked.store(true, Ordering::SeqCst);
+
+        receive(
+            &shared,
+            // Well-formed as a frame, so both commands are seen; not a layout at all.
+            "<Messages><CommandMessage Command=\"Load\"><Payload><NotALayout/></Payload></CommandMessage><CommandMessage Command=\"Run\" Payload=\"\"/></Messages>",
+        );
+
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "a Run behind a Load that did not parse must not re-hook the old layout"
+        );
+        assert_eq!(
+            shared.unhook_requests.load(Ordering::SeqCst),
+            1,
+            "and the hook that was kept up for the swap must come down"
+        );
+        // The previous layout is still what the engine holds — only the hook is gone.
+        assert_eq!(shared.engine.lock().unwrap().layout.main_zones.len(), 2);
     }
 
     #[test]

@@ -10,6 +10,7 @@
 //! or height; here that is a debug assertion, and a release build keeps the
 //! value (a negative width then reads as empty, like HLab.Geo's own test).
 
+pub mod dotnet;
 mod point;
 mod rect;
 mod size;

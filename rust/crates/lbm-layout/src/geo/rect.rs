@@ -1,3 +1,4 @@
+use super::dotnet::{max, min};
 use super::{Point, Size, Vector};
 
 /// `HLab.Geo.Rect`: a location and a size, in doubles.
@@ -51,13 +52,13 @@ impl Rect {
     /// `new Rect(Point, Point)`: the bounds of two points. The width is clamped
     /// to zero "to prevent double weirdness from causing us to be (-epsilon..0)".
     pub fn from_points(p1: Point, p2: Point) -> Self {
-        let x = p1.x.min(p2.x);
-        let y = p1.y.min(p2.y);
+        let x = min(p1.x, p2.x);
+        let y = min(p1.y, p2.y);
         Self::new(
             x,
             y,
-            (p1.x.max(p2.x) - x).max(0.0),
-            (p1.y.max(p2.y) - y).max(0.0),
+            max(max(p1.x, p2.x) - x, 0.0),
+            max(max(p1.y, p2.y) - y, 0.0),
         )
     }
 
@@ -171,13 +172,13 @@ impl Rect {
         if !self.intersects_with(r) {
             return Rect::EMPTY;
         }
-        let left = self.left().max(r.left());
-        let top = self.top().max(r.top());
+        let left = max(self.left(), r.left());
+        let top = max(self.top(), r.top());
         Rect {
             x: left,
             y: top,
-            width: (self.right().min(r.right()) - left).max(0.0),
-            height: (self.bottom().min(r.bottom()) - top).max(0.0),
+            width: max(min(self.right(), r.right()) - left, 0.0),
+            height: max(min(self.bottom(), r.bottom()) - top, 0.0),
         }
     }
 
@@ -195,18 +196,18 @@ impl Rect {
         if r.is_empty() {
             return *r;
         }
-        let left = self.left().min(r.left());
-        let top = self.top().min(r.top());
+        let left = min(self.left(), r.left());
+        let top = min(self.top(), r.top());
         // "We need this check so that the math does not result in NaN."
         let width = if r.width == f64::INFINITY || self.width == f64::INFINITY {
             f64::INFINITY
         } else {
-            (self.right().max(r.right()) - left).max(0.0)
+            max(max(self.right(), r.right()) - left, 0.0)
         };
         let height = if r.height == f64::INFINITY || self.height == f64::INFINITY {
             f64::INFINITY
         } else {
-            (self.bottom().max(r.bottom()) - top).max(0.0)
+            max(max(self.bottom(), r.bottom()) - top, 0.0)
         };
         Rect::new(left, top, width, height)
     }

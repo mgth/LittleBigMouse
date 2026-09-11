@@ -1,0 +1,57 @@
+{
+  "description": "A 27\" QHD rotated a quarter turn left (orientation 1) next to a landscape primary. The source reports the mode and the millimetres already oriented, the EDID never rotates, and the model must end up holding the intrinsic landscape panel (#511) with the rotation applied downstream. The orientation is part of the layout id, so the two orientations of the same monitor set are stored apart.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 1440,
+      "LogicalHeight": 2560,
+      "PixelWidth": 1440,
+      "PixelHeight": 2560,
+      "Scale": 1.0,
+      "WidthMm": 336,
+      "HeightMm": 597,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 1,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "ACI",
+        "ProductCode": "27A3",
+        "Serial": "4D5E6F70",
+        "SerialNumber": "FAKE27A00001",
+        "Model": "ASUS PB278",
+        "PhysicalWidth": 597,
+        "PhysicalHeight": 336,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-2",
+      "LogicalX": 1440,
+      "LogicalY": 560,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 2560,
+      "PixelHeight": 1440,
+      "Scale": 1.0,
+      "WidthMm": 596,
+      "HeightMm": 335,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 165,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D177",
+        "Serial": "3C4D5E6F",
+        "SerialNumber": "FAKE27D00001",
+        "Model": "DELL_G2724D",
+        "PhysicalWidth": 596,
+        "PhysicalHeight": 335,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ]
+}

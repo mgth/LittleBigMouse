@@ -1,0 +1,31 @@
+{
+  "description": "One 1920x1080 output on a fresh install: nothing stored, every option at its LbmOptions default. The baseline every other scenario deviates from.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D0D9",
+        "Serial": "0102A3B4",
+        "SerialNumber": "FAKE24H00001",
+        "Model": "DELL P2419H",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ]
+}

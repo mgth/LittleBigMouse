@@ -1,0 +1,83 @@
+{
+  "description": "The primary sits at the bottom right of the desktop, so every other output is at negative coordinates relative to it: the monitor above the primary, and a 1080p above-left touching only that one. Placement walks out from the primary and AnchorOnPrimary then puts it back at 0,0 mm, which is where the rest of the code expects it.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D0D9",
+        "Serial": "B1000001",
+        "SerialNumber": "FAKE24H0N001",
+        "Model": "DELL P2419H",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-2",
+      "LogicalX": 1920,
+      "LogicalY": 0,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 2560,
+      "PixelHeight": 1440,
+      "Scale": 1.0,
+      "WidthMm": 597,
+      "HeightMm": 336,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "ACI",
+        "ProductCode": "27A3",
+        "Serial": "4D5E6F70",
+        "SerialNumber": "FAKE27A00001",
+        "Model": "ASUS PB278",
+        "PhysicalWidth": 597,
+        "PhysicalHeight": 336,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-3",
+      "LogicalX": 1920,
+      "LogicalY": 1440,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 2560,
+      "PixelHeight": 1440,
+      "Scale": 1.0,
+      "WidthMm": 596,
+      "HeightMm": 335,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 165,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D177",
+        "Serial": "3C4D5E6F",
+        "SerialNumber": "FAKE27D00001",
+        "Model": "DELL_G2724D",
+        "PhysicalWidth": 596,
+        "PhysicalHeight": 335,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ]
+}

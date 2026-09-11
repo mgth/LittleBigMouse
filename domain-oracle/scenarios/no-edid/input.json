@@ -1,0 +1,82 @@
+{
+  "description": "An X11 session whose xrandr output names do not match the sysfs connectors (the NVIDIA driver's DP-0 / HDMI-0), so no EDID is matched: identity falls back to the connector name, the model name with it, and the physical size to whatever the source reported — including the 0x0 of an output nothing knows the size of, which leaves a monitor with no surface and the infinities that come out of dividing by it. xrandr reports no refresh rate either. The store holds the 0x0 an older version persisted for such a monitor (#419): it must not override the size computed for the one that does have millimetres.",
+  "displays": [
+    {
+      "ConnectorName": "DP-0",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 2560,
+      "PixelHeight": 1440,
+      "Scale": 1.0,
+      "WidthMm": 597,
+      "HeightMm": 336,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 0,
+      "Edid": null
+    },
+    {
+      "ConnectorName": "HDMI-0",
+      "LogicalX": 2560,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 0,
+      "HeightMm": 0,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 0,
+      "Edid": null
+    }
+  ],
+  "store": {
+    "options.json": {
+      "Priority": "Normal",
+      "PriorityUnhooked": "Below",
+      "HomeCinema": false,
+      "VcpControl": false,
+      "Pinned": false,
+      "AutoUpdate": false,
+      "StartMinimized": false,
+      "StartElevated": false,
+      "DebugTools": false,
+      "ExperimentalFeatures": false,
+      "ShowMonitorActionWarning": true,
+      "BorderValues": "PerModel",
+      "RescueShortcut": "Ctrl+Alt+Shift+M",
+      "HideTrayIcon": false,
+      "ExcludedDefaultsVersion": 2
+    },
+    "models.json": {
+      "DP-0": {
+        "Width": 0,
+        "Height": 0,
+        "Borders": {
+          "Left": 20,
+          "Top": 20,
+          "Right": 20,
+          "Bottom": 20
+        },
+        "PnpName": "DP-0"
+      },
+      "HDMI-0": {
+        "Width": 0,
+        "Height": 0,
+        "Borders": {
+          "Left": 20,
+          "Top": 20,
+          "Right": 20,
+          "Bottom": 20
+        },
+        "PnpName": "HDMI-0"
+      }
+    }
+  }
+}

@@ -1,0 +1,271 @@
+{
+  "description": "The same three screens, with the layout a user had saved: millimetre positions that are not the ones placement would compute (and a primary stored away from the origin, so AnchorOnPrimary has to translate everything), per-model borders, and border resistance sections on the two edges the cursor crosses. Nothing is placed from the system: every monitor is stored, so the placement pass has nothing to do.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": -1969,
+      "LogicalY": 332,
+      "LogicalWidth": 1969,
+      "LogicalHeight": 1108,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.95,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "A0BE",
+        "Serial": "0A1B2C3D",
+        "SerialNumber": "FAKE24Q00001",
+        "Model": "DELL P2415Q",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-2",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.5,
+      "WidthMm": 698,
+      "HeightMm": 393,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "PHL",
+        "ProductCode": "0927",
+        "Serial": "1A2B3C4D",
+        "SerialNumber": "FAKE32P00001",
+        "Model": "PHL 328P6VU",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 393,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-3",
+      "LogicalX": 2560,
+      "LogicalY": 0,
+      "LogicalWidth": 3072,
+      "LogicalHeight": 1728,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.25,
+      "WidthMm": 697,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 240,
+      "Edid": {
+        "ManufacturerCode": "SAM",
+        "ProductCode": "E035",
+        "Serial": "2B3C4D5E",
+        "SerialNumber": "FAKE32G00001",
+        "Model": "Odyssey G80SD",
+        "PhysicalWidth": 697,
+        "PhysicalHeight": 392,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ],
+  "store": {
+    "options.json": {
+      "Priority": "Normal",
+      "PriorityUnhooked": "Below",
+      "HomeCinema": false,
+      "VcpControl": true,
+      "Pinned": false,
+      "AutoUpdate": false,
+      "StartMinimized": true,
+      "StartElevated": false,
+      "DebugTools": false,
+      "ExperimentalFeatures": false,
+      "ShowMonitorActionWarning": true,
+      "BorderValues": "PerModel",
+      "RescueShortcut": "Ctrl+Alt+Shift+M",
+      "HideTrayIcon": false,
+      "ExcludedDefaultsVersion": 2
+    },
+    "models.json": {
+      "DELA0BE": {
+        "Width": 527,
+        "Height": 296,
+        "Borders": {
+          "Left": 8,
+          "Top": 8,
+          "Right": 8,
+          "Bottom": 12
+        },
+        "PnpName": "DELL P2415Q"
+      },
+      "PHL0927": {
+        "Width": 698,
+        "Height": 393,
+        "Borders": {
+          "Left": 10,
+          "Top": 10,
+          "Right": 10,
+          "Bottom": 14
+        },
+        "PnpName": "PHL 328P6VU"
+      },
+      "SAME035": {
+        "Width": 697,
+        "Height": 392,
+        "Borders": {
+          "Left": 6,
+          "Top": 6,
+          "Right": 6,
+          "Bottom": 10
+        },
+        "PnpName": "Odyssey G80SD"
+      }
+    },
+    "layouts/DELA0BE_FAKE24Q00001+PHL0927_FAKE32P00001+SAME035_FAKE32G00001.json": {
+      "Options": {
+        "AllowOverlaps": false,
+        "AllowDiscontinuity": false,
+        "Algorithm": "Strait",
+        "MinimalEdgeOverlap": 20,
+        "MaxTravelDistance": 200,
+        "FreelookCheckInterval": 100,
+        "FreelookEnabled": true,
+        "LoopX": false,
+        "LoopY": false,
+        "Enabled": true,
+        "AdjustPointer": false,
+        "AdjustSpeed": false
+      },
+      "Monitors": {
+        "DELA0BE_FAKE24Q00001": {
+          "XLocationInMm": -655,
+          "YLocationInMm": 130,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "BorderResistance": {
+            "Left": {
+              "Sections": [
+                {
+                  "From": 0,
+                  "To": 296,
+                  "Move": 15,
+                  "MoveBlock": false,
+                  "Drag": 15,
+                  "DragBlock": false
+                }
+              ]
+            },
+            "Top": {},
+            "Right": {},
+            "Bottom": {}
+          },
+          "ActiveSource": "DP-1",
+          "SerialNumber": "FAKE24Q00001",
+          "Sources": {
+            "DP-1": {
+              "PixelX": -1969,
+              "PixelY": 332,
+              "PixelWidth": 1969,
+              "PixelHeight": 1108,
+              "Orientation": 0,
+              "DisplayName": "DP-1",
+              "Primary": false
+            }
+          }
+        },
+        "PHL0927_FAKE32P00001": {
+          "XLocationInMm": 110,
+          "YLocationInMm": 30,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "BorderResistance": {
+            "Left": {},
+            "Top": {},
+            "Right": {
+              "Sections": [
+                {
+                  "From": 0,
+                  "To": 190,
+                  "Move": 10,
+                  "MoveBlock": false,
+                  "Drag": 0,
+                  "DragBlock": true
+                },
+                {
+                  "From": 190,
+                  "To": 393,
+                  "Move": 0,
+                  "MoveBlock": false,
+                  "Drag": 0,
+                  "DragBlock": false
+                }
+              ]
+            },
+            "Bottom": {}
+          },
+          "ActiveSource": "DP-2",
+          "SerialNumber": "FAKE32P00001",
+          "Sources": {
+            "DP-2": {
+              "PixelX": 0,
+              "PixelY": 0,
+              "PixelWidth": 2560,
+              "PixelHeight": 1440,
+              "Orientation": 0,
+              "DisplayName": "DP-2",
+              "Primary": true
+            }
+          }
+        },
+        "SAME035_FAKE32G00001": {
+          "XLocationInMm": 828,
+          "YLocationInMm": 24,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "BorderResistance": {
+            "Left": {
+              "Sections": [
+                {
+                  "From": 0,
+                  "To": 392,
+                  "Move": 5,
+                  "MoveBlock": true,
+                  "Drag": 5,
+                  "DragBlock": true
+                }
+              ]
+            },
+            "Top": {},
+            "Right": {},
+            "Bottom": {}
+          },
+          "ActiveSource": "DP-3",
+          "SerialNumber": "FAKE32G00001",
+          "Sources": {
+            "DP-3": {
+              "PixelX": 2560,
+              "PixelY": 0,
+              "PixelWidth": 3072,
+              "PixelHeight": 1728,
+              "Orientation": 0,
+              "DisplayName": "DP-3",
+              "Primary": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

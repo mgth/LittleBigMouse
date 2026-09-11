@@ -1,0 +1,156 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "HEC0030_00000001",
+        "X": 0,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-1",
+        "X": 1920,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-2",
+        "X": 3840,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-3",
+        "X": 0,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-4",
+        "X": 1920,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-5",
+        "X": 3840,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-6",
+        "X": 0,
+        "Y": 2160,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-7",
+        "X": 1920,
+        "Y": 2160,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-8",
+        "X": 3840,
+        "Y": 2160,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "HEC0030_00000001",
+        "X": 0,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-1",
+        "X": 1920,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-2",
+        "X": 3840,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-3",
+        "X": 0,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-4",
+        "X": 1920,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-5",
+        "X": 3840,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-6",
+        "X": 0,
+        "Y": 2160,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-7",
+        "X": 1920,
+        "Y": 2160,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "HEC0030_00000001@DisplayPort-8",
+        "X": 3840,
+        "Y": 2160,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      }
+    ]
+  }
+]

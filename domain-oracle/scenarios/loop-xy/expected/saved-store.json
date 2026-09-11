@@ -1,0 +1,113 @@
+{
+  "layouts/PHL0927_FAKE32P00001+SAME035_FAKE32G00001.json": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": true,
+      "LoopY": true,
+      "Enabled": true,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "PHL0927_FAKE32P00001": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "PHL0927_FAKE32P00001",
+        "SerialNumber": "FAKE32P00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "PHL0927_FAKE32P00001": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-1",
+            "Primary": true
+          }
+        }
+      },
+      "SAME035_FAKE32G00001": {
+        "XLocationInMm": 718,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "SAME035_FAKE32G00001",
+        "SerialNumber": "FAKE32G00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "SAME035_FAKE32G00001": {
+            "PixelX": 2560,
+            "PixelY": 0,
+            "PixelWidth": 3072,
+            "PixelHeight": 1728,
+            "Orientation": 0,
+            "DisplayName": "DP-2",
+            "Primary": false
+          }
+        }
+      }
+    }
+  },
+  "models.json": {
+    "PHL0927": {
+      "Width": 698,
+      "Height": 393,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "PHL 328P6VU"
+    },
+    "SAME035": {
+      "Width": 697,
+      "Height": 392,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "Odyssey G80SD"
+    }
+  },
+  "options.json": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": false,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false,
+    "ExcludedDefaultsVersion": 2
+  }
+}

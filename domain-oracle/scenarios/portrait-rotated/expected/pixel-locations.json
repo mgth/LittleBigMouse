@@ -1,0 +1,44 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "ACI27A3_FAKE27A00001",
+        "X": -1440,
+        "Y": -560,
+        "Width": 1440,
+        "Height": 2560,
+        "Scale": null
+      },
+      {
+        "Source": "DELD177_FAKE27D00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "ACI27A3_FAKE27A00001",
+        "X": -1440,
+        "Y": -560,
+        "Width": 1440,
+        "Height": 2560,
+        "Scale": null
+      },
+      {
+        "Source": "DELD177_FAKE27D00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      }
+    ]
+  }
+]

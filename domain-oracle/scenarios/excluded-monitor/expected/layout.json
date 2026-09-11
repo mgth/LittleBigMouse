@@ -1,0 +1,534 @@
+{
+  "Id": "DELA0BE_FAKE24Q00001+PHL0927_FAKE32P00001+SAME035_FAKE32G00001",
+  "StoreKey": "DELA0BE_FAKE24Q00001+PHL0927_FAKE32P00001+SAME035_FAKE32G00001",
+  "StoreFile": "layouts/DELA0BE_FAKE24Q00001+PHL0927_FAKE32P00001+SAME035_FAKE32G00001.json",
+  "Saved": true,
+  "PrimaryMonitor": "PHL0927_FAKE32P00001",
+  "PrimarySource": "PHL0927_FAKE32P00001",
+  "PhysicalBounds": {
+    "X": -575,
+    "Y": -20,
+    "Width": 2010,
+    "Height": 466
+  },
+  "MaxEffectiveDpiX": 187.2,
+  "MaxEffectiveDpiY": 187.2,
+  "Options": {
+    "Enabled": true,
+    "AllowOverlaps": false,
+    "AllowDiscontinuity": false,
+    "Algorithm": "Strait",
+    "MinimalEdgeOverlap": 20,
+    "MaxTravelDistance": 200,
+    "MinimalMaxTravelDistance": 28,
+    "FreelookCheckInterval": 100,
+    "FreelookEnabled": true,
+    "LoopX": false,
+    "LoopY": false,
+    "AdjustPointer": false,
+    "AdjustSpeed": false,
+    "IsUnaryRatio": false,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "AutoUpdate": false,
+    "HomeCinema": false,
+    "Pinned": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "HideTrayIcon": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "VcpControl": false,
+    "ShowMonitorActionWarning": true
+  },
+  "Monitors": [
+    {
+      "Id": "DELA0BE_FAKE24Q00001",
+      "DeviceId": "DP-1",
+      "SerialNumber": "FAKE24Q00001",
+      "Model": {
+        "PnpCode": "DELA0BE",
+        "PnpDeviceName": "DELL P2415Q",
+        "Logo": "icon/Pnp/DEL?icon/Pnp/LBM",
+        "PhysicalSize": {
+          "X": 0,
+          "Y": 0,
+          "Width": 527,
+          "Height": 296,
+          "LeftBorder": 20,
+          "TopBorder": 20,
+          "RightBorder": 20,
+          "BottomBorder": 20
+        }
+      },
+      "Placed": true,
+      "ExcludedFromLayout": true,
+      "BordersCustomized": false,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "EffectivePhysicalSize": {
+        "X": 0,
+        "Y": 0,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "PhysicalRotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthRatio": {
+        "X": 1,
+        "Y": 1
+      },
+      "DepthProjectionUnrotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthProjection": {
+        "X": -555,
+        "Y": 130,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20,
+        "Bounds": {
+          "X": -555,
+          "Y": 130,
+          "Width": 527,
+          "Height": 296
+        },
+        "OutsideBounds": {
+          "X": -575,
+          "Y": 110,
+          "Width": 567,
+          "Height": 336
+        }
+      },
+      "Diagonal": 604.4377552734442,
+      "ActiveSource": "DELA0BE_FAKE24Q00001",
+      "BorderResistance": {
+        "Left": [],
+        "Top": [],
+        "Right": [],
+        "Bottom": []
+      },
+      "Sources": [
+        {
+          "Id": "DELA0BE_FAKE24Q00001",
+          "DeviceId": "DP-1",
+          "DeviceName": "DP-1",
+          "DisplayName": "DP-1",
+          "SourceName": "DisplayPort:DP-1",
+          "InterfacePath": "DP-1",
+          "SourceNumber": "1",
+          "Primary": false,
+          "AttachedToDesktop": true,
+          "Orientation": 0,
+          "DisplayFrequency": 60,
+          "InPixel": {
+            "X": -1969,
+            "Y": 332,
+            "Width": 1969,
+            "Height": 1108
+          },
+          "EffectiveDpi": {
+            "X": 187.2,
+            "Y": 187.2
+          },
+          "DpiAwareAngularDpi": {
+            "X": 187.2,
+            "Y": 187.2
+          },
+          "RawDpi": {
+            "X": 185.07779886148006,
+            "Y": 185.35135135135135
+          },
+          "InDip": {
+            "X": -1009.7435897435898,
+            "Y": 170.25641025641028,
+            "Width": 1009.7435897435898,
+            "Height": 568.2051282051283
+          },
+          "RealPitch": {
+            "X": 0.2676485525647537,
+            "Y": 0.26714801444043323
+          },
+          "Pitch": {
+            "X": 0.2676485525647537,
+            "Y": 0.26714801444043323
+          },
+          "RealDpi": {
+            "X": 94.90056925996204,
+            "Y": 95.07837837837836
+          },
+          "Dpi": {
+            "X": 94.90056925996204,
+            "Y": 95.07837837837836
+          },
+          "DipToPixelRatio": null,
+          "PixelToDipRatio": {
+            "X": 0,
+            "Y": 0
+          },
+          "PhysicalToPixelRatio": {
+            "X": 3.7362428842504745,
+            "Y": 3.743243243243243
+          },
+          "MmToDipRatio": {
+            "X": 0,
+            "Y": 0
+          }
+        }
+      ]
+    },
+    {
+      "Id": "PHL0927_FAKE32P00001",
+      "DeviceId": "DP-2",
+      "SerialNumber": "FAKE32P00001",
+      "Model": {
+        "PnpCode": "PHL0927",
+        "PnpDeviceName": "PHL 328P6VU",
+        "Logo": "icon/Pnp/PHL?icon/Pnp/LBM",
+        "PhysicalSize": {
+          "X": 0,
+          "Y": 0,
+          "Width": 698,
+          "Height": 393,
+          "LeftBorder": 20,
+          "TopBorder": 20,
+          "RightBorder": 20,
+          "BottomBorder": 20
+        }
+      },
+      "Placed": true,
+      "ExcludedFromLayout": false,
+      "BordersCustomized": false,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "EffectivePhysicalSize": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "PhysicalRotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthRatio": {
+        "X": 1,
+        "Y": 1
+      },
+      "DepthProjectionUnrotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthProjection": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20,
+        "Bounds": {
+          "X": 0,
+          "Y": 0,
+          "Width": 698,
+          "Height": 393
+        },
+        "OutsideBounds": {
+          "X": -20,
+          "Y": -20,
+          "Width": 738,
+          "Height": 433
+        }
+      },
+      "Diagonal": 801.0324587680576,
+      "ActiveSource": "PHL0927_FAKE32P00001",
+      "BorderResistance": {
+        "Left": [],
+        "Top": [],
+        "Right": [],
+        "Bottom": []
+      },
+      "Sources": [
+        {
+          "Id": "PHL0927_FAKE32P00001",
+          "DeviceId": "DP-2",
+          "DeviceName": "DP-2",
+          "DisplayName": "DP-2",
+          "SourceName": "DisplayPort:DP-2",
+          "InterfacePath": "DP-2",
+          "SourceNumber": "2",
+          "Primary": true,
+          "AttachedToDesktop": true,
+          "Orientation": 0,
+          "DisplayFrequency": 60,
+          "InPixel": {
+            "X": 0,
+            "Y": 0,
+            "Width": 2560,
+            "Height": 1440
+          },
+          "EffectiveDpi": {
+            "X": 144,
+            "Y": 144
+          },
+          "DpiAwareAngularDpi": {
+            "X": 144,
+            "Y": 144
+          },
+          "RawDpi": {
+            "X": 139.73638968481376,
+            "Y": 139.6030534351145
+          },
+          "InDip": {
+            "X": 0,
+            "Y": 0,
+            "Width": 1706.6666666666665,
+            "Height": 960
+          },
+          "RealPitch": {
+            "X": 0.27265625,
+            "Y": 0.27291666666666664
+          },
+          "Pitch": {
+            "X": 0.27265625,
+            "Y": 0.27291666666666664
+          },
+          "RealDpi": {
+            "X": 93.15759312320917,
+            "Y": 93.06870229007635
+          },
+          "Dpi": {
+            "X": 93.15759312320917,
+            "Y": 93.06870229007635
+          },
+          "DipToPixelRatio": null,
+          "PixelToDipRatio": {
+            "X": 0,
+            "Y": 0
+          },
+          "PhysicalToPixelRatio": {
+            "X": 3.667621776504298,
+            "Y": 3.6641221374045805
+          },
+          "MmToDipRatio": {
+            "X": 0,
+            "Y": 0
+          }
+        }
+      ]
+    },
+    {
+      "Id": "SAME035_FAKE32G00001",
+      "DeviceId": "DP-3",
+      "SerialNumber": "FAKE32G00001",
+      "Model": {
+        "PnpCode": "SAME035",
+        "PnpDeviceName": "Odyssey G80SD",
+        "Logo": "icon/Pnp/SAM?icon/Pnp/LBM",
+        "PhysicalSize": {
+          "X": 0,
+          "Y": 0,
+          "Width": 697,
+          "Height": 392,
+          "LeftBorder": 20,
+          "TopBorder": 20,
+          "RightBorder": 20,
+          "BottomBorder": 20
+        }
+      },
+      "Placed": true,
+      "ExcludedFromLayout": false,
+      "BordersCustomized": false,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "EffectivePhysicalSize": {
+        "X": 0,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "PhysicalRotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthRatio": {
+        "X": 1,
+        "Y": 1
+      },
+      "DepthProjectionUnrotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthProjection": {
+        "X": 718,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20,
+        "Bounds": {
+          "X": 718,
+          "Y": 0,
+          "Width": 697,
+          "Height": 392
+        },
+        "OutsideBounds": {
+          "X": 698,
+          "Y": -20,
+          "Width": 737,
+          "Height": 432
+        }
+      },
+      "Diagonal": 799.6705571671374,
+      "ActiveSource": "SAME035_FAKE32G00001",
+      "BorderResistance": {
+        "Left": [],
+        "Top": [],
+        "Right": [],
+        "Bottom": []
+      },
+      "Sources": [
+        {
+          "Id": "SAME035_FAKE32G00001",
+          "DeviceId": "DP-3",
+          "DeviceName": "DP-3",
+          "DisplayName": "DP-3",
+          "SourceName": "DisplayPort:DP-3",
+          "InterfacePath": "DP-3",
+          "SourceNumber": "3",
+          "Primary": false,
+          "AttachedToDesktop": true,
+          "Orientation": 0,
+          "DisplayFrequency": 240,
+          "InPixel": {
+            "X": 2560,
+            "Y": 0,
+            "Width": 3072,
+            "Height": 1728
+          },
+          "EffectiveDpi": {
+            "X": 120,
+            "Y": 120
+          },
+          "DpiAwareAngularDpi": {
+            "X": 120,
+            "Y": 120
+          },
+          "RawDpi": {
+            "X": 139.93687230989957,
+            "Y": 139.9591836734694
+          },
+          "InDip": {
+            "X": 2048,
+            "Y": 0,
+            "Width": 2457.6000000000004,
+            "Height": 1382.4
+          },
+          "RealPitch": {
+            "X": 0.22688802083333334,
+            "Y": 0.22685185185185186
+          },
+          "Pitch": {
+            "X": 0.22688802083333334,
+            "Y": 0.22685185185185186
+          },
+          "RealDpi": {
+            "X": 111.94949784791964,
+            "Y": 111.96734693877549
+          },
+          "Dpi": {
+            "X": 111.94949784791964,
+            "Y": 111.96734693877549
+          },
+          "DipToPixelRatio": {
+            "X": 1.25,
+            "Y": 1.25
+          },
+          "PixelToDipRatio": {
+            "X": 0.8,
+            "Y": 0.8
+          },
+          "PhysicalToPixelRatio": {
+            "X": 4.407460545193687,
+            "Y": 4.408163265306122
+          },
+          "MmToDipRatio": {
+            "X": 3.5259684361549497,
+            "Y": 3.5265306122448976
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "No output at all: no discovery backend is available (no Plasma, no X11) or every one of them came back empty. Rather than an empty editor the factory invents a plausible 1920x1080 monitor on a connector named FALLBACK, and everything downstream runs on it.",
+  "displays": []
+}

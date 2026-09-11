@@ -12,6 +12,9 @@
 # emits LF — which is exactly what CI caught. Pin them.
 ###############################################################################
 wire-contract/goldens/** text eol=lf
+# Same for the domain oracle: recorded outputs, compared byte for byte, read by
+# the C# suite now and by the Rust port later.
+domain-oracle/** text eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

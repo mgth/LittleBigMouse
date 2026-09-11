@@ -172,6 +172,14 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   celle de l'utilisateur, ou masque celle du système par `Hidden=true`. Avec `--config-dir`,
   l'entrée va sous ce répertoire, jamais dans celui de l'utilisateur.
 
+- Fond d'écran (début) : `lbm_store::wallpaper_settings` lit et écrit `wallpaper.json` du
+  plugin C# (une entrée par mise en page : mode, image « span », réglages par écran), au
+  membre près — y compris les énumérations écrites en chaîne (`Mode`, `Style`) et celle
+  écrite en nombre (`Kind`). Le découpage en millimètres est déjà porté
+  (`lbm_layout::wallpaper`, phase 1). Restent le rendu des tranches et l'application
+  (Plasma par zbus, `IDesktopWallpaper` sous Windows), puis la ré-application après
+  reconstruction.
+
 ## Suite
 
 1. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent

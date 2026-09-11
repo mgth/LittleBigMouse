@@ -13,6 +13,8 @@
 //! - [`excluded_process_defaults`] and [`excluded_list_persistence`]: the
 //!   `Excluded.txt` file the daemon reads, its defaults and their one-time top-up;
 //! - [`lbm_paths`]: the per-user directories;
+//! - [`wallpaper_settings`]: what the user asked of their wallpaper, per layout
+//!   (`wallpaper.json`, the C# plugin's file);
 //! - [`registry_layout_store`] and [`registry_import`]: the v5 Windows registry store,
 //!   read and imported once into the JSON store (decision D2), over the real registry
 //!   (`windows_registry`, Windows only) or a regedit export ([`reg_file`]).
@@ -67,6 +69,7 @@ pub mod lbm_paths;
 pub mod reg_file;
 pub mod registry_import;
 pub mod registry_layout_store;
+pub mod wallpaper_settings;
 #[cfg(windows)]
 pub mod windows_registry;
 

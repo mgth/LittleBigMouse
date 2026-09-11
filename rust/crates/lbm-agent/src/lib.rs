@@ -13,6 +13,7 @@
 //! - [`runtime`]: the event loop tying them together.
 //! - [`instance`] and [`log`]: one agent per session, and its log over five runs.
 //! - [`api`]: the frontends' way in (JSON over a local socket, D6).
+//! - `sleep` (Linux): system sleep from logind.
 
 pub mod api;
 pub mod fake_hook;
@@ -22,6 +23,8 @@ pub mod instance;
 pub mod log;
 pub mod reconcile;
 pub mod runtime;
+#[cfg(target_os = "linux")]
+pub mod sleep;
 pub mod supervise;
 pub mod watch;
 pub mod world;

@@ -212,8 +212,16 @@ fn run(options: Options) -> ExitCode {
         let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
         #[cfg(target_os = "linux")]
         tokio::spawn(lbm_agent::watch::watch_displays(inputs.clone()));
+        #[cfg(target_os = "linux")]
+        let (sleep, sleep_rx) = tokio::sync::mpsc::unbounded_channel();
+        #[cfg(target_os = "linux")]
+        tokio::spawn(lbm_agent::sleep::watch(sleep));
 
         let mut agent = Agent::new(world, Timings::default(), hook, inputs);
+        #[cfg(target_os = "linux")]
+        {
+            agent = agent.with_sleep(sleep_rx);
+        }
 
         // The frontends' endpoint (the instance lock is held: any socket there is stale).
         #[cfg(unix)]

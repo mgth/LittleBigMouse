@@ -13,6 +13,15 @@ use crate::reconcile::{Effect, EngineState, HookEvent, Input, Reconciler, Timing
 use crate::supervise::{HookLauncher, Launch};
 use crate::world::AgentWorld;
 
+/// What the system is doing (see `sleep`, on Linux).
+#[derive(Debug)]
+pub enum SleepSignal {
+    /// About to sleep: take the hook down, then answer (the machine waits for it).
+    Starting(tokio::sync::oneshot::Sender<()>),
+    /// Awake again.
+    Ended,
+}
+
 /// A daemon event as the reconciler knows it.
 fn hook_event(message: DaemonMessage) -> HookEvent {
     match message.event {
@@ -50,6 +59,8 @@ pub struct Agent<W> {
     /// A frontend asked the agent to leave.
     quitting: bool,
     seen: api::SeenProcesses,
+    /// System sleep, where the platform reports it to the agent (Linux: logind).
+    sleep: Option<UnboundedReceiver<SleepSignal>>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -73,7 +84,24 @@ impl<W: AgentWorld> Agent<W> {
             hook_connected: false,
             quitting: false,
             seen: api::SeenProcesses::default(),
+            sleep: None,
         }
+    }
+
+    /// Follows system sleep from `signals` (Linux: `sleep::watch`).
+    pub fn with_sleep(mut self, signals: UnboundedReceiver<SleepSignal>) -> Self {
+        self.sleep = Some(signals);
+        self
+    }
+
+    /// The system is about to sleep. What the Windows hook does on its own when the
+    /// display goes off: the hook is taken down (the frame written before the machine
+    /// is let go), and the agent stands down until the wake (`Suspended`).
+    async fn sleep_starting(&mut self) {
+        eprintln!("[lbm-agent] the system is going to sleep: -> Stop");
+        self.hook.send(client::messages(&[client::stop()]));
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), self.hook.flush()).await;
+        self.handle(Input::Hook(HookEvent::Suspended));
     }
 
     /// Serves the frontends' requests coming out of `calls` (see [`api`]).
@@ -197,6 +225,7 @@ impl<W: AgentWorld> Agent<W> {
         self.handle(Input::Boot);
         tokio::pin!(shutdown);
         let mut calls = self.calls.take();
+        let mut sleep = self.sleep.take();
         loop {
             self.publish();
             if self.quitting {
@@ -217,6 +246,25 @@ impl<W: AgentWorld> Agent<W> {
                         Some(call) => self.call(call),
                         // The endpoint is gone: serve no more, but keep running.
                         None => calls = None,
+                    }
+                    continue;
+                },
+                signal = async {
+                    match &mut sleep {
+                        Some(sleep) => sleep.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match signal {
+                        Some(SleepSignal::Starting(done)) => {
+                            self.sleep_starting().await;
+                            let _ = done.send(());
+                        }
+                        Some(SleepSignal::Ended) => {
+                            eprintln!("[lbm-agent] the system woke up");
+                            self.handle(Input::Hook(HookEvent::Resumed));
+                        }
+                        None => sleep = None,
                     }
                     continue;
                 },

@@ -119,10 +119,17 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 - Repli du Stop (C# : `StopCurrentSessionDaemons`) : un Stop émis sans connexion au hook
   termine le hook que cet agent a lancé (le noyau libère alors grab et barrières) ; jamais
   un autre, qui pourrait être celui de n'importe qui.
+- Veille sous Linux (`sleep`) : jusqu'ici seul le hook Windows réagissait (écran éteint →
+  `Suspended`, puis `Resumed`). logind annonce `PrepareForSleep(true)` ; l'agent tient un
+  verrou d'inhibition *delay* tant que la machine est éveillée, ce qui lui laisse le temps
+  d'envoyer Stop au hook (trame écrite) et de se mettre en `Suspended` avant de relâcher le
+  verrou. Au réveil (`PrepareForSleep(false)`), `Resumed` : même chemin que sous Windows
+  (stabilisation, puis chien de garde), et le verrou est repris. Rien n'est enregistré :
+  l'utilisateur n'a rien arrêté. Sans bus système ni logind, la veille passe inaperçue,
+  comme avant.
 
 ## Suite
 
-1. Veille sous Linux : `PrepareForSleep` de logind.
-2. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent
+1. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent
    transmet au hook), `Preview`/`EndPreview` ; tray, autostart ; Windows (points de
    terminaison par session, élévation, sources).

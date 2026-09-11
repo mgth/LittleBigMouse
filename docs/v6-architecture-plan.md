@@ -2,7 +2,8 @@
 
 > **État** : plan du 2026-09-11, établi sur `master` `e3e7fba` et la branche
 > `fix/607-stale-layout-hook`. Décisions D1 à D10 tranchées le 2026-09-11, dont D5 amendée
-> (le hook survit à l'agent) ; D11 à l'étude (mode service sous Windows). Phase 0 engagée.
+> (le hook survit à l'agent) ; D11 (mode service sous Windows) reportée à après la phase 0.
+> Phase 0 engagée.
 
 Frontend en Rust/egui qui ne reste pas chargé, processus résident qui surveille le système
 et charge les profils, hook réduit au pilotage de la souris. Ce document donne l'avis sur ces
@@ -148,7 +149,7 @@ traiter en spike avant d'écrire les écrans concernés.
 
 ## Décisions
 
-Tranchées le 2026-09-11 par le mainteneur, sauf D11.
+Tranchées le 2026-09-11 par le mainteneur, sauf D11, reportée.
 
 | # | Question | Décision |
 |---|---|---|
@@ -162,9 +163,9 @@ Tranchées le 2026-09-11 par le mainteneur, sauf D11.
 | D8 | Formats d'échange | JSON entre frontend et agent (l'UI C# intérim sait le parler). Agent → hook : XML actuel en phase 3, puis types serde partagés en phase 5. |
 | D9 | Train de livraison | A : agent d'abord, UI C# devenue non résidente en intérim, puis egui. |
 | D10 | Périmètre de la première version egui | Carte, modes, options, résistance, règles d'abord ; VCP, calibration et télécommandes TV ensuite. L'UI C# les couvre entre-temps. |
-| D11 | Élévation et démarrage sous Windows | **À l'étude : mode service**, voir ci-dessous. En attendant la conclusion du spike, la cible de la phase 3 reste la parité (tâche planifiée, relance élevée, hook qui hérite). |
+| D11 | Élévation et démarrage sous Windows | **Reportée** le 2026-09-11 : le mode service sera repris après la phase 0, les notes ci-dessous servent de point de départ. La cible de la phase 3 est la parité (tâche planifiée, relance élevée, hook qui hérite). |
 
-## Étude D11 : mode service sous Windows
+## Notes pour D11 (reportée) : mode service sous Windows
 
 ### Pourquoi le hook refuse de tourner dans un service
 
@@ -205,10 +206,9 @@ droits :
   rattachées à `graphical-session.target`) ; un service système n'a pas accès à la session
   graphique.
 
-### Spike
+### Spike, quand D11 sera reprise
 
-Sur machine Windows réelle, avant la phase 3, avec le hook actuel lancé par un service
-prototype :
+Sur machine Windows réelle, avec le hook actuel lancé par un service prototype :
 
 1. Variantes a, b et c : le hook reçoit-il les mouvements ? Route-t-il au-dessus d'une fenêtre
    élevée (Gestionnaire des tâches) ? Que se passe-t-il pendant une invite UAC ?
@@ -267,11 +267,9 @@ fige le comportement à reproduire tant que le C# existe.
   positions pixel, compaction). Corpus : fixtures `TestData/Persistence`, `virtual-layouts/`,
   les layouts réels du mainteneur, et des cas construits (grille 2×2, neuf écrans #589, portrait
   #507, sans EDID #419, boucles, clones).
-- En parallèle, sur machine Windows : le spike D11 (service prototype qui lance le hook actuel
-  dans la session). Il doit conclure avant la phase 3.
 
-**Sortie** : 139 tests et 5 benches du hook verts, `cargo check` Windows OK, corpus de l'oracle
-commité, spike D11 lancé. **Taille** : S, réorganisation.
+**Sortie** : 131 tests et 5 benches du hook verts, `cargo check` Windows OK, corpus de l'oracle
+commité. **Taille** : S, réorganisation.
 
 ### Phase 1 — Cœur métier en Rust · `master`, tests seulement
 
@@ -345,7 +343,7 @@ Objectif : `lbm-agent` pilote le hook actuel, sans l'UI.
   paused ; menu Ouvrir, Start, Stop, Rafraîchir, Mise à jour, Quitter.
 - Autostart : la tâche planifiée pointe l'agent, et la tâche 5.x qui lance
   `LittleBigMouse.Ui.Avalonia.exe` est migrée ; autostart XDG sous Linux, qui n'existe pas
-  aujourd'hui. Relance élevée. Si le spike D11 retient le service, il remplace ce lot.
+  aujourd'hui. Relance élevée. Si D11, reprise plus tard, retient le service, il remplacera ce lot.
 - Exclusion (si D4) : `SetWinEventHook`, veilleur EWMH repris de `focus.rs`, résolution Wine,
   historique des processus vus.
 - Veille sous Linux : `PrepareForSleep` de logind. Le code actuel ne gère le réveil que sous

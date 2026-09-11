@@ -27,4 +27,6 @@ pub mod runtime;
 pub mod sleep;
 pub mod supervise;
 pub mod watch;
+#[cfg(windows)]
+pub mod winwatch;
 pub mod world;

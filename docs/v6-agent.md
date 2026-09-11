@@ -81,6 +81,13 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   le répertoire des fichiers de sortie (et celui de leur cible s'ils sont des liens). Tant
   qu'une source manque, sondage de 2 s comme le C# ; les deux en place, filet de 30 s. Un
   événement ne fait qu'avancer la vérification, qui décide toujours.
+- `winwatch` (Windows) : le hook signale les changements d'écran, mais seulement quand il
+  tourne ; un changement sans hook connecté laisserait la mise en page périmée, remise telle
+  quelle au hook suivant. L'agent tient donc sa propre fenêtre cachée **top-level** (celle
+  du hook, `WM_DISPLAYCHANGE` et `SPI_SETWORKAREA` n'atteignent pas une fenêtre message-only)
+  et suit la session (WTS) : retour de l'écran de verrouillage ou du bureau sécurisé,
+  reconnexion à la console. Chacun est un `DisplayChanged`, que l'anti-rebond fond avec le
+  signalement du hook.
 - `fake_hook` et `--fake-hook` : un hook qui n'accroche rien, sur un point de terminaison
   privé ; `--config-dir`/`--data-dir` isolent les profils. Tout essai hors session réelle
   doit passer les trois.

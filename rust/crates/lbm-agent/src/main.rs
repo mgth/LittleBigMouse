@@ -212,6 +212,8 @@ fn run(options: Options) -> ExitCode {
         let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
         #[cfg(target_os = "linux")]
         tokio::spawn(lbm_agent::watch::watch_displays(inputs.clone()));
+        #[cfg(windows)]
+        let _ = lbm_agent::winwatch::spawn(inputs.clone());
         #[cfg(target_os = "linux")]
         let (sleep, sleep_rx) = tokio::sync::mpsc::unbounded_channel();
         #[cfg(target_os = "linux")]

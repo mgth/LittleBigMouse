@@ -1,3 +1,4 @@
+use crate::collation::invariant_compare;
 use crate::geo::dotnet;
 use crate::geo::{Rect, Thickness};
 
@@ -169,6 +170,31 @@ impl Layout {
             None => self.sources.push(source),
         }
         self.parse_display_sources();
+    }
+
+    /// `MonitorsLayout.PhysicalSources`: the sources sorted by device id with
+    /// the invariant-culture comparer (stable, like DynamicData's insertion).
+    pub fn sorted_sources(&self) -> Vec<&PhysicalSource> {
+        let mut sorted: Vec<&PhysicalSource> = self.sources.iter().collect();
+        sorted.sort_by(|a, b| invariant_compare(&a.device_id, &b.device_id));
+        sorted
+    }
+
+    /// `LayoutIdExtensions.ComputeId`: every monitor's id, suffixed `_<n>` when
+    /// its active source is turned `n` quarter turns, sorted with the
+    /// invariant-culture comparer (stable), joined with `+`. This is the key the
+    /// layout is stored under.
+    pub fn compute_id(&self) -> String {
+        let mut ids: Vec<String> = self
+            .monitors
+            .iter()
+            .map(|m| match self.orientation(m).unwrap_or(0) {
+                0 => m.id.clone(),
+                o => format!("{}_{o}", m.id),
+            })
+            .collect();
+        ids.sort_by(|a, b| invariant_compare(a, b));
+        ids.join("+")
     }
 
     //==================//
@@ -435,10 +461,6 @@ impl Layout {
     /// `MonitorsLayout.Saved`.
     pub fn saved(&self) -> bool {
         self.saved
-    }
-
-    pub(crate) fn mark_unsaved(&mut self) {
-        self.saved = false;
     }
 }
 

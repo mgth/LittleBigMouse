@@ -11,3 +11,4 @@ pub mod geo;
 pub mod model;
 pub mod solve;
 pub mod wallpaper;
+pub mod zoning;

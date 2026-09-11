@@ -263,19 +263,49 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     }
 }
 
+/// Starting with the session: the XDG autostart entry (Linux), the scheduled task
+/// (Windows).
+pub trait SessionStart: Send + Sync + std::fmt::Debug {
+    /// Whether the session starts the agent (C#: `IsAutostartScheduled`).
+    fn scheduled(&self) -> bool;
+    /// Aligns it on the options (C#: `SetAutostart`).
+    fn schedule(&self, enabled: bool, elevated: bool) -> io::Result<()>;
+}
+
+impl SessionStart for XdgAutostart {
+    fn scheduled(&self) -> bool {
+        self.is_scheduled()
+    }
+
+    /// Elevation is Windows' business.
+    fn schedule(&self, enabled: bool, _elevated: bool) -> io::Result<()> {
+        self.set(enabled)
+    }
+}
+
+#[cfg(windows)]
+impl SessionStart for crate::schtask::ScheduledTask {
+    fn scheduled(&self) -> bool {
+        self.is_scheduled()
+    }
+
+    fn schedule(&self, enabled: bool, elevated: bool) -> io::Result<()> {
+        self.set(enabled, elevated)
+    }
+}
+
 /// The persistence platform hooks on this machine: elevation (root / administrator), and
-/// starting with the session — the XDG autostart entry under Linux; none without one
-/// (Windows' scheduled task comes with the Windows agent).
+/// starting with the session ([`SessionStart`]); none without one.
 #[derive(Debug, Default)]
 pub struct Platform {
-    autostart: Option<XdgAutostart>,
+    autostart: Option<Box<dyn SessionStart>>,
 }
 
 impl Platform {
     /// Starting with the session through `autostart`.
-    pub fn with_autostart(autostart: XdgAutostart) -> Self {
+    pub fn with_autostart(autostart: impl SessionStart + 'static) -> Self {
         Platform {
-            autostart: Some(autostart),
+            autostart: Some(Box::new(autostart)),
         }
     }
 }
@@ -293,15 +323,13 @@ impl PersistencePlatform for Platform {
     }
 
     fn is_autostart_scheduled(&self, _layout: &Layout) -> bool {
-        self.autostart
-            .as_ref()
-            .is_some_and(XdgAutostart::is_scheduled)
+        self.autostart.as_ref().is_some_and(|a| a.scheduled())
     }
 
-    /// Every save aligns it (C#: `SetAutostart`); elevation is Windows' business.
-    fn set_autostart(&self, _layout: &Layout, enabled: bool, _elevated: bool) {
+    /// Every save aligns it (C#: `SetAutostart`).
+    fn set_autostart(&self, _layout: &Layout, enabled: bool, elevated: bool) {
         if let Some(autostart) = &self.autostart {
-            if let Err(error) = autostart.set(enabled) {
+            if let Err(error) = autostart.schedule(enabled, elevated) {
                 eprintln!("[lbm-agent] cannot set the session autostart: {error}");
             }
         }

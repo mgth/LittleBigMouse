@@ -211,7 +211,7 @@ fn run(options: Options) -> ExitCode {
         let (hook, signals) = HookClient::spawn(endpoint);
         let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
         #[cfg(target_os = "linux")]
-        tokio::spawn(lbm_agent::watch::poll_displays(inputs.clone()));
+        tokio::spawn(lbm_agent::watch::watch_displays(inputs.clone()));
 
         let mut agent = Agent::new(world, Timings::default(), hook, inputs);
 

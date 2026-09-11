@@ -14,7 +14,9 @@
 //!   executable). It is launched detached, so it outlives the agent (D5).
 //! - `--config-dir` / `--data-dir`: where the profiles (`options.json`, `layouts/`)
 //!   and `Excluded.txt` live, instead of the user's own — a load can write there
-//!   (the excluded-list top-up), so anything but a real session should pass both.
+//!   (the excluded-list top-up), so anything but a real session should pass both. The
+//!   session autostart entry goes under `--config-dir` too (`autostart/`), never into the
+//!   user's.
 //! - `--no-tray`: no tray icon (a headless run).
 //! - `--ui PATH`: the frontend the tray opens. None by default until the UI is a frontend
 //!   of the agent (phase 4): today's UI still drives the hook itself.
@@ -28,6 +30,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use lbm_agent::autostart::XdgAutostart;
 use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::gap_guard::GapGuard;
 use lbm_agent::hook::HookClient;
@@ -178,12 +181,22 @@ fn run(options: Options) -> ExitCode {
         }
     };
     runtime.block_on(async move {
+        // Every save aligns the session autostart on the options: a run on a scratch
+        // configuration keeps its entry there too.
+        let autostart = match &options.config_dir {
+            Some(dir) => std::env::current_exe()
+                .ok()
+                .map(|exe| XdgAutostart::new(dir.join("autostart"), Vec::new(), exe)),
+            None if cfg!(windows) => None,
+            None => XdgAutostart::for_session(),
+        };
+        let platform = autostart.map_or_else(Platform::default, Platform::with_autostart);
         let store = JsonLayoutStore::new(options.config_dir.unwrap_or_else(lbm_paths::config_dir));
         let persistence = match options.data_dir {
-            Some(dir) => LayoutPersistence::with_excluded_list_file(store, Platform, move || {
+            Some(dir) => LayoutPersistence::with_excluded_list_file(store, platform, move || {
                 dir.join("Excluded.txt")
             }),
-            None => LayoutPersistence::new(store, Platform),
+            None => LayoutPersistence::new(store, platform),
         };
         let mut world = SystemWorld::new(Backend::detect(), persistence);
         // The KWin gaps move the user's outputs: a real session only, never beside a

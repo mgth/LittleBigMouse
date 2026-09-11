@@ -14,6 +14,7 @@ use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_layout::zoning::compute_zones;
 use lbm_store::{LayoutPersistence, LayoutStore, PersistencePlatform};
 
+use crate::autostart::XdgAutostart;
 use crate::gap_guard::{run_kscreen_doctor, GapGuard};
 use crate::reconcile::{LayoutState, World};
 
@@ -172,9 +173,22 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     }
 }
 
-/// The persistence platform hooks on this machine: elevation (root / administrator);
-/// autostart keeps the engine's no-ops, which is what Linux ships.
-pub struct Platform;
+/// The persistence platform hooks on this machine: elevation (root / administrator), and
+/// starting with the session — the XDG autostart entry under Linux; none without one
+/// (Windows' scheduled task comes with the Windows agent).
+#[derive(Debug, Default)]
+pub struct Platform {
+    autostart: Option<XdgAutostart>,
+}
+
+impl Platform {
+    /// Starting with the session through `autostart`.
+    pub fn with_autostart(autostart: XdgAutostart) -> Self {
+        Platform {
+            autostart: Some(autostart),
+        }
+    }
+}
 
 impl PersistencePlatform for Platform {
     #[cfg(unix)]
@@ -187,5 +201,20 @@ impl PersistencePlatform for Platform {
     fn is_elevated(&self) -> bool {
         // The Windows platform (elevation, autostart task) comes with the Windows agent.
         false
+    }
+
+    fn is_autostart_scheduled(&self, _layout: &Layout) -> bool {
+        self.autostart
+            .as_ref()
+            .is_some_and(XdgAutostart::is_scheduled)
+    }
+
+    /// Every save aligns it (C#: `SetAutostart`); elevation is Windows' business.
+    fn set_autostart(&self, _layout: &Layout, enabled: bool, _elevated: bool) {
+        if let Some(autostart) = &self.autostart {
+            if let Err(error) = autostart.set(enabled) {
+                eprintln!("[lbm-agent] cannot set the session autostart: {error}");
+            }
+        }
     }
 }

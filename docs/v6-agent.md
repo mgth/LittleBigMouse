@@ -64,7 +64,6 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   drapeau reste celui du plus récent.
 
 ## Runtime (fait)
-
 - `runtime::Agent` : la boucle d'événements. Chaque entrée (hook, sondage des écrans,
   minuteurs) passe par le réconciliateur ; ses effets sont exécutés dans l'ordre. Start
   calcule les zones à l'envoi et envoie Load+Run dans une seule trame `<Messages>`, comme le
@@ -84,7 +83,6 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 - `fake_hook` et `--fake-hook` : un hook qui n'accroche rien, sur un point de terminaison
   privé ; `--config-dir`/`--data-dir` isolent les profils. Tout essai hors session réelle
   doit passer les trois.
-
 - `supervise::HookLauncher` (D5) : sur `Unreachable`, lance le hook posé à côté de l'agent
   (ou `--hook`), **détaché** (nouvelle session, `hook.log` à lui) pour qu'il survive à
   l'agent, avec `LBM_HOOK_UI=1` (le hook ne peut plus deviner d'après le chemin de son
@@ -92,7 +90,6 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   cet utilisateur tourne ; backoff pour un hook qui meurt en boucle. Testé au niveau
   processus avec le binaire de l'agent en faux hook (`--serve-fake-hook`) : lancé, il
   reçoit la mise en page ; l'agent tué, il tourne toujours.
-
 - `gap_guard` (D7, `KScreenGapGuard`) : sous Plasma Wayland, quand le hook passe par le
   portail (pas par evdev), les sorties sont écartées d'un pixel logique pendant que le moteur
   tourne, pour que les barrières passent le validateur. Positions d'origine journalisées
@@ -102,7 +99,6 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   touchée. Un Start qui déplace les sorties est abandonné : le changement d'écran qui suit
   reconstruit et envoie les zones dans la nouvelle géométrie. **Jamais en `--fake-hook`** : il
   déplacerait les vraies sorties.
-
 - `api` (D6) : l'entrée des frontends. Trames à préfixe de longueur (celles du hook), JSON
   en PascalCase, socket 0600 `lbm-agent.sock` à côté du verrou d'instance (nom partagé dans
   `lbm_ipc::endpoint`). Version 1 : `Hello`, `Snapshot`, `Subscribe` (état puis un événement
@@ -127,7 +123,6 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   (stabilisation, puis chien de garde), et le verrou est repris. Rien n'est enregistré :
   l'utilisateur n'a rien arrêté. Sans bus système ni logind, la veille passe inaperçue,
   comme avant.
-
 - Tray sous Linux (`tray`, `ksni`, sans GTK ; C# `TrayIconController`) : un frontend comme les
   autres, dans le processus. Il suit l'état de l'agent par l'API (`Subscribe`) et son menu
   envoie les mêmes requêtes (Ouvrir, Start, Stop, Rafraîchir, Quitter ; pas de mise à jour :
@@ -136,9 +131,18 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   lance le frontend donné par `--ui`, aucun par défaut tant que l'UI pilote encore le hook
   elle-même (phase 4). `--no-tray` pour une exécution sans tray. Sans hôte de tray
   (StatusNotifierWatcher absent), l'agent le dit et continue sans.
+- Démarrage avec la session sous Linux (`autostart`, qui n'existait pas) : une entrée XDG
+  autostart `littlebigmouse-agent.desktop` lançant l'agent, tenue par les crochets de
+  persistance du C# (`IsAutostartScheduled` au chargement donne `LoadAtStartup`,
+  `SetAutostart` à chaque enregistrement l'aligne). Spécification XDG suivie : l'entrée de
+  l'utilisateur décide quand elle existe (éteinte par `Hidden=true` ou
+  `X-GNOME-Autostart-enabled=false`), sinon une entrée système (paquet) ; l'éteindre retire
+  celle de l'utilisateur, ou masque celle du système par `Hidden=true`. Avec `--config-dir`,
+  l'entrée va sous ce répertoire, jamais dans celui de l'utilisateur.
 
 ## Suite
 
 1. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent
-   transmet au hook), `Preview`/`EndPreview` ; option « masquer l'icône » suivie par le
-   tray ; autostart ; Windows (tray, points de terminaison par session, élévation, sources).
+   transmet au hook, et `LoadAtStartup`), `Preview`/`EndPreview` ; option « masquer
+   l'icône » suivie par le tray ; Windows (tray, tâche planifiée et sa migration, points de
+   terminaison par session, élévation, sources).

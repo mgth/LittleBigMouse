@@ -463,6 +463,19 @@ mod tests {
     }
 
     #[test]
+    fn doubles_are_read_correctly_rounded() {
+        // System.Text.Json reads the nearest double; serde_json's default
+        // parser can land one ulp off, and a re-save would then change the
+        // stored digits (this one came back as ...74005).
+        let dto: MonitorDto = from_slice(br#"{ "XLocationInMm": 92.53889943074003 }"#).unwrap();
+        assert_eq!(dto.x_location_in_mm, Some(92.53889943074003));
+        assert_eq!(
+            format_double(dto.x_location_in_mm.unwrap()),
+            "92.53889943074003"
+        );
+    }
+
+    #[test]
     fn invalid_utf8_is_replaced_not_fatal() {
         let dto: GlobalOptionsDto = from_slice(b"{ \"Priority\": \"a\xFFb\" }").unwrap();
         assert_eq!(dto.priority.as_deref(), Some("a\u{FFFD}b"));

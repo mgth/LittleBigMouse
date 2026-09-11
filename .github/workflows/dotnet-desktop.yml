@@ -31,9 +31,8 @@ jobs:
   # The Rust workspace on Linux: the only place the hook's evdev/uinput, portal
   # and X11 backends are compiled, and the target most of its day-to-day testing
   # happens on. None of its tests need a display, /dev/input or /dev/uinput. The
-  # toolchain comes from rust-toolchain.toml. Clippy is a gate, for Linux and for
-  # the Windows target alike: the Windows job builds the hook natively but never
-  # lints it, and `clippy` only type-checks, so cross-linting needs no linker.
+  # toolchain comes from rust-toolchain.toml. Clippy is a gate here and in the
+  # Windows job, each on the code its platform compiles.
   rust-linux:
     runs-on: ubuntu-latest
     defaults:
@@ -56,11 +55,6 @@ jobs:
 
     - name: Clippy
       run: cargo clippy --all-targets -- -D warnings
-
-    - name: Clippy (Windows target)
-      run: |
-        rustup target add x86_64-pc-windows-gnu
-        cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
 
   build:
     runs-on: windows-latest
@@ -94,6 +88,12 @@ jobs:
 
     - name: Test (Rust hook)
       run: cargo test --manifest-path $env:HOOK_RUST_PROJECT
+
+    # The Win32 half of the hook only compiles here. Linted natively rather than
+    # cross-linted from the Linux job: `--all-targets` builds criterion's C
+    # dependencies, which want a MinGW compiler the Linux runner does not have.
+    - name: Clippy (Rust, Windows)
+      run: cargo clippy --manifest-path $env:HOOK_RUST_PROJECT --all-targets -- -D warnings
 
     - name: Build UI (net10, x64 Release)
       run: |

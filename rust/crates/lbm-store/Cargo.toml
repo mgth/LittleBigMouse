@@ -1,0 +1,23 @@
+[package]
+name = "lbm-store"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "LittleBigMouse persistence storage: the layout DTOs, the JSON store shared with the C# UI, store keys, the excluded-processes file"
+
+[dependencies]
+# The C# stores keep a Dictionary's insertion order, and so must a round trip
+# through this crate (IndexMap here, `preserve_order` for the unknown members):
+# a re-save then produces the bytes the C# writer would have. Both are already
+# in the workspace's lock file (toml pulls indexmap in).
+indexmap = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+# float_roundtrip: System.Text.Json reads the nearest double; serde_json's
+# default parser may be one ulp off, which a re-save would write back.
+serde_json = { workspace = true, features = ["preserve_order", "float_roundtrip"] }
+# LayoutStoreKey: the digest ending a store name too long for the backends (#589).
+sha2 = "0.11"
+
+[dev-dependencies]
+tempfile.workspace = true

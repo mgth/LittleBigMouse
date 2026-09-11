@@ -83,6 +83,22 @@ impl Rect {
         self.height
     }
 
+    /// The `X` setter. C# throws on the empty rectangle; it is left unchanged.
+    pub fn set_x(&mut self, x: f64) {
+        debug_assert!(!self.is_empty(), "HLab.Geo cannot modify the empty rect");
+        if !self.is_empty() {
+            self.x = x;
+        }
+    }
+
+    /// The `Y` setter. C# throws on the empty rectangle; it is left unchanged.
+    pub fn set_y(&mut self, y: f64) {
+        debug_assert!(!self.is_empty(), "HLab.Geo cannot modify the empty rect");
+        if !self.is_empty() {
+            self.y = y;
+        }
+    }
+
     pub fn left(&self) -> f64 {
         self.x
     }
@@ -289,6 +305,14 @@ mod tests {
         assert!(a.intersects_with(&b));
         assert_eq!(a.intersect(&b), r(10.0, 0.0, 0.0, 10.0));
         assert!(a.intersect(&r(11.0, 0.0, 1.0, 1.0)).is_empty());
+    }
+
+    #[test]
+    fn setters_move_the_location_only() {
+        let mut a = r(1.0, 2.0, 3.0, 4.0);
+        a.set_x(10.0);
+        a.set_y(-20.0);
+        assert_eq!(a, r(10.0, -20.0, 3.0, 4.0));
     }
 
     #[test]

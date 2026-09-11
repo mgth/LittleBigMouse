@@ -142,7 +142,7 @@ async fn a_frontend_sees_the_agent_and_drives_it() {
         .ask(json!({ "Method": "Hello", "Client": "test" }))
         .await;
     assert_eq!(hello["Result"]["Agent"], "lbm-agent");
-    assert_eq!(hello["Result"]["Protocol"], 2);
+    assert_eq!(hello["Result"]["Protocol"], 3);
 
     // Subscribed: the state now, then every change — here, the hook taking the layout.
     let subscribed = frontend.ask(json!({ "Method": "Subscribe" })).await;
@@ -240,4 +240,153 @@ async fn a_subscriber_hears_the_hook_and_what_it_saw() {
     frontend.hook("Dead").await;
     let refused = frontend.ask(json!({ "Method": "Probe" })).await;
     assert_eq!(refused["Error"], "no hook is connected");
+}
+
+/// The real world over a store in `dir`: no display backend, so one fallback output.
+fn system_world(
+    dir: &std::path::Path,
+) -> lbm_agent::world::SystemWorld<lbm_store::JsonLayoutStore, lbm_agent::world::Platform> {
+    lbm_agent::world::SystemWorld::new(None, persistence(dir))
+}
+
+fn persistence(
+    dir: &std::path::Path,
+) -> lbm_store::LayoutPersistence<lbm_store::JsonLayoutStore, lbm_agent::world::Platform> {
+    let excluded = dir.join("Excluded.txt");
+    lbm_store::LayoutPersistence::with_excluded_list_file(
+        lbm_store::JsonLayoutStore::new(dir.join("config")),
+        lbm_agent::world::Platform,
+        move || excluded.clone(),
+    )
+}
+
+/// What a frontend holds: the same layout, built from the same displays and store.
+fn frontend_layout(dir: &std::path::Path) -> lbm_layout::model::Layout {
+    let mut layout = lbm_layout::model::Layout::new(lbm_layout::model::LayoutOptions::default());
+    let mut persistence = persistence(dir);
+    lbm_layout::linux::populate(&mut layout, &[], |l| persistence.load(l)).unwrap();
+    layout
+}
+
+fn stored_layout(dir: &std::path::Path) -> Value {
+    let layouts = dir.join("config").join("layouts");
+    let file = std::fs::read_dir(&layouts)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+}
+
+fn loads(fake: &FakeHook) -> usize {
+    fake.received()
+        .iter()
+        .filter(|c| matches!(c, Command::Load(_)))
+        .count()
+}
+
+#[tokio::test]
+async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let hook_endpoint = dir.path().join("hook.sock").to_string_lossy().into_owned();
+    let api_endpoint = dir
+        .path()
+        .join("lbm-agent.sock")
+        .to_string_lossy()
+        .into_owned();
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = lbm_agent::api::listen(&api_endpoint).unwrap();
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    // A first run: the layout exists, the engine is off.
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({ "Method": "Subscribe" })).await["Result"].clone();
+    let layout_id = state["LayoutId"].as_str().unwrap().to_owned();
+    assert_eq!(state["Enabled"], false);
+    assert_eq!(state["Previewing"], false);
+
+    // The editor moves the monitor and turns LoopX on.
+    let mut edited = frontend_layout(dir.path());
+    assert_eq!(edited.id, layout_id);
+    let monitor = edited.monitors()[0].id.clone();
+    edited.set_location(&monitor, lbm_layout::geo::Point::new(40.0, 20.0));
+    edited.edit_options(|o| o.loop_x = true);
+    let document = serde_json::to_value(lbm_store::LayoutDocument::of(&edited)).unwrap();
+
+    // Live preview: the hook runs the edit, nothing is saved.
+    let preview = json!({ "Method": "Preview", "LayoutId": layout_id, "Document": document });
+    assert_eq!(frontend.ask(preview.clone()).await["Result"], Value::Null);
+    frontend
+        .state(|s| s["Previewing"] == true && s["Engine"] == "Running")
+        .await;
+    assert!(fake.hooked());
+    assert_eq!(loads(&fake), 1);
+    assert!(!dir.path().join("config").join("layouts").exists());
+
+    // The same edit again: the hook is not made to swap a layout for itself.
+    frontend.ask(preview).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(loads(&fake), 1);
+
+    // The preview ends: the engine was off, it goes back off.
+    frontend.ask(json!({ "Method": "EndPreview" })).await;
+    frontend
+        .state(|s| s["Previewing"] == false && s["Engine"] == "Stopped")
+        .await;
+    assert!(!fake.hooked());
+
+    // Saved by the agent, for the layout the editor edits only.
+    let elsewhere = frontend
+        .ask(json!({ "Method": "SaveLayout", "LayoutId": "SOMEONE_ELSE", "Document": document }))
+        .await;
+    assert!(elsewhere["Error"]
+        .as_str()
+        .unwrap()
+        .contains("not the current one"));
+    let saved = frontend
+        .ask(json!({ "Method": "SaveLayout", "LayoutId": layout_id, "Document": document }))
+        .await;
+    assert_eq!(saved["Result"], Value::Null);
+    assert_eq!(stored_layout(dir.path())["Options"]["LoopX"], true);
+    let snapshot = frontend.ask(json!({ "Method": "Snapshot" })).await;
+    assert_eq!(snapshot["Result"]["Saved"], true);
+
+    // Apply and start: the next edit is saved, recorded Enabled, and hooked.
+    edited.edit_options(|o| o.loop_y = true);
+    let document = serde_json::to_value(lbm_store::LayoutDocument::of(&edited)).unwrap();
+    let start = frontend
+        .ask(json!({ "Method": "Start", "LayoutId": layout_id, "Document": document }))
+        .await;
+    assert_eq!(start["Result"], Value::Null);
+    frontend
+        .state(|s| s["Engine"] == "Running" && s["Enabled"] == true)
+        .await;
+    let stored = stored_layout(dir.path());
+    assert_eq!(stored["Options"]["LoopY"], true);
+    assert_eq!(stored["Options"]["Enabled"], true);
+
+    // The app-level options and the excluded list, written at once.
+    let options = frontend
+        .ask(json!({
+            "Method": "SaveOptions",
+            "Options": { "RescueShortcut": "Ctrl+Alt+F11" },
+            "Excluded": ["/usr/bin/steam"],
+        }))
+        .await;
+    assert_eq!(options["Result"], Value::Null);
+    let global: Value = serde_json::from_str(
+        &std::fs::read_to_string(dir.path().join("config").join("options.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(global["RescueShortcut"], "Ctrl+Alt+F11");
+    let excluded = std::fs::read_to_string(dir.path().join("Excluded.txt")).unwrap();
+    assert!(excluded.lines().any(|l| l == "/usr/bin/steam"));
 }

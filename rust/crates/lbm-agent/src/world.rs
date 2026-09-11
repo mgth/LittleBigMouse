@@ -12,7 +12,10 @@ use lbm_display::linux::{display_signature, Backend};
 use lbm_layout::linux::populate;
 use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_layout::zoning::compute_zones;
-use lbm_store::{LayoutPersistence, LayoutStore, PersistencePlatform};
+use lbm_store::layout_dto_mapper::apply_global_options;
+use lbm_store::{
+    GlobalOptionsDto, LayoutDocument, LayoutPersistence, LayoutStore, PersistencePlatform,
+};
 
 use crate::autostart::XdgAutostart;
 use crate::gap_guard::{run_kscreen_doctor, GapGuard};
@@ -20,8 +23,9 @@ use crate::reconcile::{LayoutState, World};
 
 /// The world the runtime drives.
 pub trait AgentWorld: World {
-    /// The current layout's zones, serialized for the hook, and whether the layout is
-    /// foreign (simulated: loaded, never run). `None` before the first layout.
+    /// The zones to hand the hook — the previewed layout's while there is one, else the
+    /// current layout's — serialized, and whether the layout is foreign (simulated:
+    /// loaded, never run). `None` before the first layout.
     fn zones(&self) -> Option<(String, bool)>;
 
     /// Persists the current layout's Enabled alone.
@@ -32,6 +36,33 @@ pub trait AgentWorld: World {
 
     /// The current layout's id, for the frontends.
     fn layout_id(&self) -> Option<String> {
+        None
+    }
+
+    /// Applies a frontend's edit to the current layout (not saved). Refused for another
+    /// layout than the current one — the displays changed under the editor — and for a
+    /// foreign one.
+    fn edit(&mut self, _layout_id: &str, _document: &LayoutDocument) -> Result<(), String> {
+        Err("this agent takes no edits".to_owned())
+    }
+
+    /// The layout to preview: the current one with the edit applied, the current one
+    /// left as it is. Refused as [`edit`](Self::edit) is.
+    fn set_preview(&mut self, _layout_id: &str, _document: &LayoutDocument) -> Result<(), String> {
+        Err("this agent takes no previews".to_owned())
+    }
+
+    /// Records the app-level options and the excluded list (C#: `SaveLive`).
+    fn save_options(
+        &mut self,
+        _options: Option<&GlobalOptionsDto>,
+        _excluded: Option<&[String]>,
+    ) -> Result<(), String> {
+        Err("this agent keeps no options".to_owned())
+    }
+
+    /// The rescue shortcut the options name.
+    fn rescue_shortcut(&self) -> Option<String> {
         None
     }
 
@@ -58,6 +89,8 @@ pub struct SystemWorld<S, P> {
     backend: Option<Backend>,
     persistence: LayoutPersistence<S, P>,
     layout: Option<Layout>,
+    /// A frontend's edit of `layout`, being previewed.
+    preview: Option<Layout>,
     gaps: Option<GapGuard>,
 }
 
@@ -69,6 +102,7 @@ impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
             backend,
             persistence,
             layout: None,
+            preview: None,
             gaps: None,
         }
     }
@@ -82,6 +116,21 @@ impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
 
     pub fn layout(&self) -> Option<&Layout> {
         self.layout.as_ref()
+    }
+
+    /// The current layout, if `layout_id` names it and it takes edits.
+    fn editable(&mut self, layout_id: &str) -> Result<&mut Layout, String> {
+        let layout = self.layout.as_mut().ok_or("no layout yet")?;
+        if layout.id != layout_id {
+            return Err(format!(
+                "the layout {layout_id} is not the current one ({}): the displays changed",
+                layout.id
+            ));
+        }
+        if layout.is_virtual() {
+            return Err("a foreign layout is shown, never edited".to_owned());
+        }
+        Ok(layout)
     }
 
     fn outputs(&self) -> Vec<lbm_layout::linux::LinuxMonitor> {
@@ -102,6 +151,7 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
     }
 
     fn rebuild_layout(&mut self) {
+        self.preview = None;
         let outputs = self.outputs();
         let mut layout = Layout::new(LayoutOptions::default());
         match populate(&mut layout, &outputs, |l| self.persistence.load(l)) {
@@ -124,12 +174,17 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
             layout.edit_options(|o| o.enabled = enabled);
         }
     }
+
+    fn end_preview(&mut self) {
+        self.preview = None;
+    }
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     fn zones(&self) -> Option<(String, bool)> {
-        self.layout
+        self.preview
             .as_ref()
+            .or(self.layout.as_ref())
             .map(|l| (compute_zones(l).serialize(), l.is_virtual()))
     }
 
@@ -149,6 +204,41 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
 
     fn layout_id(&self) -> Option<String> {
         self.layout.as_ref().map(|l| l.id.clone())
+    }
+
+    fn edit(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {
+        document.apply(self.editable(layout_id)?);
+        Ok(())
+    }
+
+    fn set_preview(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {
+        let mut preview = self.editable(layout_id)?.clone();
+        document.apply(&mut preview);
+        self.preview = Some(preview);
+        Ok(())
+    }
+
+    fn save_options(
+        &mut self,
+        options: Option<&GlobalOptionsDto>,
+        excluded: Option<&[String]>,
+    ) -> Result<(), String> {
+        let layout = self.layout.as_mut().ok_or("no layout yet")?;
+        layout.edit_options(|o| {
+            apply_global_options(o, options);
+            if let Some(excluded) = excluded {
+                o.excluded_list = excluded.to_vec();
+            }
+        });
+        self.persistence
+            .save_live(&layout.options)
+            .map_err(|e| e.to_string())
+    }
+
+    fn rescue_shortcut(&self) -> Option<String> {
+        self.layout
+            .as_ref()
+            .map(|l| l.options.rescue_shortcut.clone())
     }
 
     fn prepare_for_engine(&mut self) -> bool {

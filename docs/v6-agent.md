@@ -62,6 +62,12 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 - **Chiens de garde successifs** : en C#, l'ancien chien de garde, en constatant qu'il est
   remplacé, remet le drapeau « actif » à faux alors que le nouveau tourne encore ; ici, le
   drapeau reste celui du plus récent.
+- **Fin d'aperçu** : le C# laissait le hook sur la dernière géométrie prévisualisée, même
+  jamais enregistrée (couper l'aperçu, annuler, quitter sans enregistrer). Ici un hook encore
+  accroché revient à la mise en page courante, ou s'arrête si l'utilisateur ne la veut pas
+  accrochée.
+- **Secours pendant un aperçu** : le C# relançait le moteur sur la mise en page enregistrée
+  sans regarder Enabled ; ici il n'est relancé que si l'utilisateur le veut accroché.
 
 ## Runtime (fait)
 - `runtime::Agent` : la boucle d'événements. Chaque entrée (hook, sondage des écrans,
@@ -116,6 +122,20 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   les suiveurs de l'UI lisent aujourd'hui (issue du Load, rapport de sonde, secours) ;
   `Probe` (le rapport revient en `Probed`) ; `SeenProcesses` (C# `ProcessesCollector` :
   processus vus au premier plan dans la session, chacun une fois, `Contains` compris).
+  Version 3 : l'agent devient le seul écrivain. Un frontend envoie ce qu'il aurait
+  enregistré, un `LayoutDocument` (`lbm-store` : options globales, document de la mise en
+  page, modèles, liste d'exclusion — les formes du store), pour la mise en page qu'il édite
+  (`LayoutId`, refusé si les écrans ont changé sous l'éditeur ou pour une mise en page
+  étrangère). Appliqué à la copie de l'agent, il donne ce qu'un enregistrement puis un
+  chargement auraient donné, et l'agent écrit ce que le frontend aurait écrit (testé octet
+  pour octet sur le store). `SaveLayout` (le bouton Enregistrer, sans ré-envoi au hook,
+  comme en C# où l'UI et le moteur partageaient le modèle), `Start` avec le document
+  (« appliquer et démarrer » : appliqué, enregistré, démarré), `Preview` à chaque tick
+  (Load+Run sans prologue ni écriture, jamais une mise en page identique à celle que le hook
+  tient s'il tourne) et `EndPreview`, `SaveOptions` (C# `SaveLive`, plus le raccourci de
+  secours dit au hook sous Windows). Le réconciliateur tient l'aperçu : Start ou Stop de
+  l'utilisateur, reconstruction, perte du hook et secours y mettent fin ; un ré-accrochage
+  pendant l'aperçu garde l'aperçu. `Previewing` et `Saved` dans l'état.
   Windows (tube par session, DACL du hook) viendra avec l'agent Windows.
 - Instance unique (`instance`, verrou `flock` / mutex nommé) prise avant tout, puis journal
   `agent.log` sur cinq générations (`log`) quand la sortie d'erreur n'est pas un terminal.

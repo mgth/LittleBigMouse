@@ -79,6 +79,10 @@ pub trait World {
 
     /// Records the user's choice in the current layout (`Options.Enabled = enabled`).
     fn set_enabled(&mut self, enabled: bool);
+
+    /// Drops the layout being previewed, if any: what the hook is handed next is the
+    /// current layout again.
+    fn end_preview(&mut self) {}
 }
 
 /// What the hook reports, as far as reconciling goes (the wire events of
@@ -146,6 +150,11 @@ pub enum Input {
     UserStart { keep_layout: bool },
     /// The user's Stop.
     UserStop,
+    /// A frontend's live preview: the world holds the layout being edited, the hook is
+    /// handed it as it stands, nothing is recorded (C#: `LiveLayoutUpdater`).
+    Preview,
+    /// The preview is over: the hook goes back to the current layout.
+    EndPreview,
     /// A timer the reconciler asked for.
     Wake(Wake),
 }
@@ -156,6 +165,9 @@ pub enum Effect {
     /// Hand the current layout to the hook and hook it: the topology prologue, then
     /// Load and Run — Load only for a virtual layout. The zones are computed at send.
     Start,
+    /// Hand the layout being previewed to the hook: Load and Run, without the prologue
+    /// and without persisting anything (C#: `SendLiveAsync`).
+    Preview,
     /// Unhook.
     Stop,
     /// Persist the current layout's Enabled alone (C# `SaveEnabled`).
@@ -210,6 +222,8 @@ pub struct Reconciler {
     rebuild_count: u64,
     watchdog_generation: u64,
     watchdog: Watchdog,
+    /// A frontend's edit is what the hook runs.
+    previewing: bool,
 }
 
 impl Reconciler {
@@ -226,7 +240,13 @@ impl Reconciler {
             rebuild_count: 0,
             watchdog_generation: 0,
             watchdog: Watchdog::default(),
+            previewing: false,
         }
+    }
+
+    /// A frontend's live preview is what the hook runs.
+    pub fn previewing(&self) -> bool {
+        self.previewing
     }
 
     /// The display is off.
@@ -269,6 +289,8 @@ impl Reconciler {
             Input::Refresh => self.refresh(world, &mut out),
             Input::UserStart { keep_layout } => self.user_start(keep_layout, world, &mut out),
             Input::UserStop => self.user_stop(world, &mut out),
+            Input::Preview => self.preview(world, &mut out),
+            Input::EndPreview => self.end_preview(world, &mut out),
             Input::Wake(Wake::Display(generation)) => {
                 self.display_step(generation, world, &mut out)
             }
@@ -323,6 +345,14 @@ impl Reconciler {
                 }
             }
             HookEvent::FocusChanged(process) => out.push(Effect::ProcessSeen(process)),
+            // The hook is gone: the one that comes back is handed the current layout.
+            HookEvent::Dead => self.stop_previewing(world),
+            // The panic shortcut interrupted a preview: the experiment is thrown away and
+            // the engine goes back on the current layout (C#: `AbandonPreviewAsync`).
+            HookEvent::Rescued if self.previewing => {
+                self.stop_previewing(world);
+                self.reconcile_fresh_layout(world, out);
+            }
             // Consumed by the frontend (badge, status, rescue); nothing to reconcile.
             _ => {}
         }
@@ -391,6 +421,8 @@ impl Reconciler {
                 // so put it back.
                 self.ensure_hooked(world, out);
             } else {
+                // The edit was of the desktop that just went away.
+                self.stop_previewing(world);
                 world.rebuild_layout();
                 self.rebuild_count += 1;
                 self.last_built_signature = settled;
@@ -427,6 +459,7 @@ impl Reconciler {
         if self.suspended {
             return;
         }
+        self.stop_previewing(world);
         world.rebuild_layout();
         self.rebuild_count += 1;
         self.last_built_signature = world.display_signature();
@@ -480,6 +513,8 @@ impl Reconciler {
     /// they keep undoing. A foreign layout is simulated, never adopted: nothing is
     /// recorded, so no recovery path can mistake it for something the user asked to run.
     fn user_start(&mut self, keep_layout: bool, world: &mut impl World, out: &mut Vec<Effect>) {
+        // What is started is the current layout (an editor's edit is applied to it first).
+        self.stop_previewing(world);
         let Some(layout) = world.layout() else { return };
         if layout.is_virtual {
             out.push(Effect::Start);
@@ -498,11 +533,50 @@ impl Reconciler {
     /// C# `StopFromUserAsync`: recorded, then unhooked — the unhook always, a layout or
     /// not.
     fn user_stop(&mut self, world: &mut impl World, out: &mut Vec<Effect>) {
+        // Stopping outranks previewing (C#: `StopAsync` turns live update off first).
+        self.stop_previewing(world);
         if world.layout().is_some() {
             world.set_enabled(false);
             out.push(Effect::SaveEnabled);
         }
         out.push(Effect::Stop);
+    }
+
+    //==================//
+    // Live preview     //
+    //==================//
+
+    /// A preview tick. Not while the display is off (the hook unhooked itself), nor for
+    /// a foreign layout, which the hook refuses to hook (C#: `SendLiveAsync` sends
+    /// nothing then). Turning it on over a stopped engine is a legitimate way to start:
+    /// Enabled is not read, and not recorded.
+    fn preview(&mut self, world: &mut impl World, out: &mut Vec<Effect>) {
+        if self.suspended || world.layout().is_none_or(|l| l.is_virtual) {
+            self.stop_previewing(world);
+            return;
+        }
+        self.previewing = true;
+        out.push(Effect::Preview);
+    }
+
+    /// The frontend ends its preview. C# left the daemon on the last previewed geometry,
+    /// saved or not; here a hook still up goes back on the current layout — or down, if
+    /// the user does not want this layout hooked. A hook already down stays down.
+    fn end_preview(&mut self, world: &mut impl World, out: &mut Vec<Effect>) {
+        if !self.previewing {
+            world.end_preview();
+            return;
+        }
+        self.stop_previewing(world);
+        if matches!(self.engine, EngineState::Running | EngineState::Paused) {
+            self.reconcile_fresh_layout(world, out);
+        }
+    }
+
+    /// The preview ends, without a word to the hook: what replaces it follows.
+    fn stop_previewing(&mut self, world: &mut impl World) {
+        self.previewing = false;
+        world.end_preview();
     }
 
     //==================//

@@ -61,6 +61,10 @@ pub struct Agent<W> {
     seen: api::SeenProcesses,
     /// System sleep, where the platform reports it to the agent (Linux: logind).
     sleep: Option<UnboundedReceiver<SleepSignal>>,
+    /// The zones the hook was last handed; `None`: unknown.
+    on_the_wire: Option<String>,
+    /// The rescue shortcut the hook was last told (Windows).
+    shortcut: Option<String>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -85,6 +89,8 @@ impl<W: AgentWorld> Agent<W> {
             quitting: false,
             seen: api::SeenProcesses::default(),
             sleep: None,
+            on_the_wire: None,
+            shortcut: None,
         }
     }
 
@@ -126,6 +132,8 @@ impl<W: AgentWorld> Agent<W> {
             suspended: self.reconciler.suspended(),
             layout_id: self.world.layout_id(),
             enabled: layout.map(|l| l.enabled),
+            saved: layout.map(|l| l.saved),
+            previewing: self.reconciler.previewing(),
         }
     }
 
@@ -159,10 +167,47 @@ impl<W: AgentWorld> Agent<W> {
                 self.subscribers.push(client.clone());
                 snapshot
             }
-            Request::Start { keep_layout } => {
-                self.handle(Input::UserStart { keep_layout });
+            // "Apply and start" sends the edit along: it becomes the current layout first.
+            Request::Start {
+                keep_layout,
+                layout_id,
+                document,
+            } => match document {
+                Some(document) => self
+                    .edit(layout_id.as_deref(), &document)
+                    .map(|()| self.handle(Input::UserStart { keep_layout: true })),
+                None => {
+                    self.handle(Input::UserStart { keep_layout });
+                    Ok(())
+                }
+            }
+            .map(|()| serde_json::Value::Null),
+            // The agent is the only writer: the frontend sends what it would have saved.
+            Request::SaveLayout {
+                layout_id,
+                document,
+            } => self
+                .edit(Some(&layout_id), &document)
+                .and_then(|()| self.world.save_layout().map_err(|e| e.to_string()))
+                .map(|()| serde_json::Value::Null),
+            Request::Preview {
+                layout_id,
+                document,
+            } => self.world.set_preview(&layout_id, &document).map(|()| {
+                self.handle(Input::Preview);
+                serde_json::Value::Null
+            }),
+            Request::EndPreview => {
+                self.handle(Input::EndPreview);
                 Ok(serde_json::Value::Null)
             }
+            Request::SaveOptions { options, excluded } => self
+                .world
+                .save_options(options.as_ref(), excluded.as_deref())
+                .map(|()| {
+                    self.tell_shortcut();
+                    serde_json::Value::Null
+                }),
             Request::Stop => {
                 self.handle(Input::UserStop);
                 Ok(serde_json::Value::Null)
@@ -187,6 +232,34 @@ impl<W: AgentWorld> Agent<W> {
             Request::SeenProcesses => Ok(serde_json::json!(self.seen.list())),
         };
         client.send(api::answer(id, result));
+    }
+
+    /// Applies a frontend's edit to the current layout.
+    fn edit(
+        &mut self,
+        layout_id: Option<&str>,
+        document: &lbm_store::LayoutDocument,
+    ) -> Result<(), String> {
+        let layout_id = layout_id.ok_or("a document comes with the LayoutId it edits")?;
+        self.world.edit(layout_id, document)
+    }
+
+    /// C# `SendShortcutAsync`, when the options change it: the hook registers the
+    /// rescue shortcut at once and says if it cannot. Windows only, as in C#: nothing
+    /// registers one elsewhere (and every Load carries it anyway).
+    fn tell_shortcut(&mut self) {
+        if !cfg!(windows) {
+            return;
+        }
+        let Some(shortcut) = self.world.rescue_shortcut() else {
+            return;
+        };
+        if shortcut.trim().is_empty() || self.shortcut.as_ref() == Some(&shortcut) {
+            return;
+        }
+        self.hook
+            .send(client::messages(&[client::shortcut(&shortcut)]));
+        self.shortcut = Some(shortcut);
     }
 
     /// Forwards what the hook said to the subscribers (see [`api`]).
@@ -273,6 +346,7 @@ impl<W: AgentWorld> Agent<W> {
                         eprintln!("[lbm-agent] hook connected");
                         self.forward("Connected", "");
                         self.hook_connected = true;
+                        self.on_the_wire = None;
                         if let Some(launcher) = &mut self.launcher {
                             launcher.on_connected();
                         }
@@ -289,6 +363,7 @@ impl<W: AgentWorld> Agent<W> {
                         eprintln!("[lbm-agent] hook connection lost");
                         self.forward("Dead", "");
                         self.hook_connected = false;
+                        self.on_the_wire = None;
                         Input::Hook(HookEvent::Dead)
                     }
                     Some(HookSignal::Unreachable) => {
@@ -366,7 +441,27 @@ impl<W: AgentWorld> Agent<W> {
                         zones.matches("<Zone ").count()
                     );
                     self.hook.send(frame);
+                    self.on_the_wire = Some(zones);
                 }
+            }
+            Effect::Preview => {
+                let Some((zones, false)) = self.world.zones() else {
+                    return;
+                };
+                // C# `LiveLayoutUpdater`: the hook is never made to swap a layout for an
+                // identical one — unless it is down, when the preview is what puts it up.
+                if self.reconciler.engine() == EngineState::Running
+                    && self.on_the_wire.as_ref() == Some(&zones)
+                {
+                    return;
+                }
+                eprintln!(
+                    "[lbm-agent] -> Preview ({} zones)",
+                    zones.matches("<Zone ").count()
+                );
+                self.hook
+                    .send(client::messages(&[client::load(&zones), client::run()]));
+                self.on_the_wire = Some(zones);
             }
             Effect::Stop => {
                 eprintln!("[lbm-agent] -> Stop");

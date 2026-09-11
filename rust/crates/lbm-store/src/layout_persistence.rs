@@ -154,24 +154,7 @@ impl<S: LayoutStore, P: PersistencePlatform> LayoutPersistence<S, P> {
         layout.edit_options(|o| o.excluded_list = excluded);
         read?;
 
-        let layout_options = data.layout.as_ref().and_then(|l| l.options.as_ref());
-        layout.edit_options(|o| mapper::apply_layout_options(o, layout_options));
-
-        let monitors: Vec<(String, String)> = layout
-            .monitors()
-            .iter()
-            .map(|m| (m.id.clone(), m.model.clone()))
-            .collect();
-        for (id, model) in &monitors {
-            // Model before monitor: the monitor mapping reads the physical size the
-            // model just restored (edge lengths, whole-edge resistance migration).
-            if let Some(dto) = data.models.get(model) {
-                mapper::apply_model(layout, model, dto);
-            }
-            if let Some(dto) = data.layout.as_ref().and_then(|l| l.monitors.get(id)) {
-                mapper::apply_monitor(layout, id, dto);
-            }
-        }
+        mapper::apply_layout(layout, data.layout.as_ref(), &data.models);
 
         // Everything saved, even on a first run with no stored data, so that the next
         // edit is a change from a saved state (C#: MarkSaved on every monitor, then the

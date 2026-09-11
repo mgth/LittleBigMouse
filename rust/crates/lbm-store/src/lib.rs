@@ -20,6 +20,8 @@
 //! The engine half loads the `lbm-layout` model from a store and saves it back:
 //!
 //! - [`layout_persistence`]: the engine (`LayoutPersistence`) and its platform hooks;
+//! - [`layout_document`]: a layout as a frontend hands it to the agent — what a save
+//!   would write, in one document (v6);
 //! - [`layout_dto_mapper`]: the model↔DTO mapping (`LayoutDtoMapper`);
 //! - [`layout_migrations`]: how values written by older versions are read
 //!   (`LayoutMigrations`).
@@ -54,6 +56,7 @@ pub mod excluded_list_persistence;
 pub mod excluded_process_defaults;
 pub mod json_format;
 pub mod json_layout_store;
+pub mod layout_document;
 pub mod layout_dto_mapper;
 pub mod layout_dtos;
 pub mod layout_migrations;
@@ -69,6 +72,7 @@ pub mod windows_registry;
 
 pub use excluded_list_persistence::ExcludedListPersistence;
 pub use json_layout_store::JsonLayoutStore;
+pub use layout_document::LayoutDocument;
 pub use layout_dtos::{
     BorderResistanceDto, BorderSectionDto, BorderSideDto, BordersDto, GlobalOptionsDto, LayoutDto,
     LayoutOptionsDto, ModelDto, MonitorDto, SourceDto, UnknownMembers,

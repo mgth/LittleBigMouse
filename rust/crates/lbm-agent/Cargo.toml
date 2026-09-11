@@ -19,6 +19,11 @@ tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "signa
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# System sleep from logind (sleep.rs), with the hook's zbus build.
+[target.'cfg(target_os = "linux")'.dependencies]
+futures-util = { version = "0.3", default-features = false }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 features = [

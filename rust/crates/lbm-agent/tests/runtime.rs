@@ -8,7 +8,7 @@ use std::time::Duration;
 use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::hook::HookClient;
 use lbm_agent::reconcile::{Input, LayoutState, Timings, World};
-use lbm_agent::runtime::Agent;
+use lbm_agent::runtime::{Agent, SleepSignal};
 use lbm_agent::world::AgentWorld;
 use lbm_ipc::protocol::{self, Command};
 
@@ -212,6 +212,54 @@ async fn a_hook_that_comes_late_or_comes_back_gets_the_layout() {
     drop(fake);
     let fake = rebind(&endpoint).await;
     until("the new hook runs the layout", || fake.hooked()).await;
+
+    stop.send(()).unwrap();
+    agent.await.unwrap();
+}
+
+#[tokio::test]
+async fn the_hook_is_let_go_before_the_system_sleeps_and_taken_back_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let record = Arc::new(Mutex::new(Record::default()));
+    let world = FakeWorld {
+        layout: None,
+        record: record.clone(),
+    };
+
+    let (hook, signals) = HookClient::spawn(endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (sleep, sleep_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let agent = tokio::spawn(async move {
+        let mut agent = Agent::new(world, quick(), hook, inputs).with_sleep(sleep_rx);
+        agent
+            .run(signals, inputs_rx, async {
+                let _ = stopped.await;
+            })
+            .await;
+    });
+    until("the first layout is running", || fake.hooked()).await;
+
+    // logind waits for the answer: by then, the hook is down.
+    let (done, done_rx) = tokio::sync::oneshot::channel();
+    sleep.send(SleepSignal::Starting(done)).unwrap();
+    done_rx.await.unwrap();
+    until("unhooked", || !fake.hooked()).await;
+    assert!(matches!(fake.received().last(), Some(Command::Stop)));
+
+    // A display change while asleep is left to the wake.
+    fake.broadcast(protocol::DISPLAY_CHANGED);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!fake.hooked());
+
+    // Awake: the wake goes through the display flow (the first one after boot rebuilds,
+    // as above) and the hook is back. Nothing was recorded: the user stopped nothing.
+    sleep.send(SleepSignal::Ended).unwrap();
+    until("re-hooked after the wake", || fake.hooked()).await;
+    assert_eq!(record.lock().unwrap().rebuilds, 2);
+    assert!(record.lock().unwrap().enabled_saves.is_empty());
 
     stop.send(()).unwrap();
     agent.await.unwrap();

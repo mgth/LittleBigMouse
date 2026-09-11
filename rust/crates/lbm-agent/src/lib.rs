@@ -15,8 +15,10 @@
 //! - [`api`]: the frontends' way in (JSON over a local socket, D6).
 //! - `sleep` (Linux): system sleep from logind.
 //! - `tray` and `icons` (Linux): the tray, a frontend in process.
+//! - [`autostart`]: starting with the session (XDG autostart).
 
 pub mod api;
+pub mod autostart;
 pub mod fake_hook;
 pub mod gap_guard;
 pub mod hook;

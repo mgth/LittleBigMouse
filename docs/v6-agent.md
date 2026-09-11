@@ -108,6 +108,11 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   `lbm_ipc::endpoint`). Version 1 : `Hello`, `Snapshot`, `Subscribe` (état puis un événement
   `State` à chaque changement), `Start`, `Stop`, `Refresh`, `Quit` (le hook d'abord : l'agent
   attend que le Quit soit écrit avant de partir). Méthode inconnue : erreur, jamais devinée.
+  Version 2 : un abonné reçoit aussi chaque événement du hook tel quel (événement `Hook`,
+  noms de `LittleBigMouseEvent`, `Connected`/`Dead` à la connexion et à la perte), ce que
+  les suiveurs de l'UI lisent aujourd'hui (issue du Load, rapport de sonde, secours) ;
+  `Probe` (le rapport revient en `Probed`) ; `SeenProcesses` (C# `ProcessesCollector` :
+  processus vus au premier plan dans la session, chacun une fois, `Contains` compris).
   Windows (tube par session, DACL du hook) viendra avec l'agent Windows.
 - Instance unique (`instance`, verrou `flock` / mutex nommé) prise avant tout, puis journal
   `agent.log` sur cinq générations (`log`) quand la sortie d'erreur n'est pas un terminal.
@@ -118,6 +123,6 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 ## Suite
 
 1. Veille sous Linux : `PrepareForSleep` de logind.
-2. API, suite : `SaveLayout`, `SaveOptions`, `Preview`/`EndPreview`, `Probe`,
-   `SeenProcesses` ; tray, autostart ; Windows (points de terminaison par session, élévation,
-   sources).
+2. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent
+   transmet au hook), `Preview`/`EndPreview` ; tray, autostart ; Windows (points de
+   terminaison par session, élévation, sources).

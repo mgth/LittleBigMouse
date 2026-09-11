@@ -49,6 +49,7 @@ pub struct Agent<W> {
     hook_connected: bool,
     /// A frontend asked the agent to leave.
     quitting: bool,
+    seen: api::SeenProcesses,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -71,6 +72,7 @@ impl<W: AgentWorld> Agent<W> {
             published: None,
             hook_connected: false,
             quitting: false,
+            seen: api::SeenProcesses::default(),
         }
     }
 
@@ -148,8 +150,24 @@ impl<W: AgentWorld> Agent<W> {
                 self.quitting = true;
                 Ok(serde_json::Value::Null)
             }
+            // A command, not a question: the report comes back as a Probed event.
+            Request::Probe if self.hook_connected => {
+                self.hook.send(client::messages(&[client::probe()]));
+                Ok(serde_json::Value::Null)
+            }
+            Request::Probe => Err("no hook is connected".to_owned()),
+            Request::SeenProcesses => Ok(serde_json::json!(self.seen.list())),
         };
         client.send(api::answer(id, result));
+    }
+
+    /// Forwards what the hook said to the subscribers (see [`api`]).
+    fn forward(&mut self, name: &str, payload: &str) {
+        if self.subscribers.is_empty() {
+            return;
+        }
+        let event = api::hook_event(name, payload);
+        self.subscribers.retain(|s| s.send(event.clone()));
     }
 
     /// Launches a hook when none answers (D5); without one, the agent waits for a hook.
@@ -205,6 +223,7 @@ impl<W: AgentWorld> Agent<W> {
                 signal = signals.recv() => match signal {
                     Some(HookSignal::Connected) => {
                         eprintln!("[lbm-agent] hook connected");
+                        self.forward("Connected", "");
                         self.hook_connected = true;
                         if let Some(launcher) = &mut self.launcher {
                             launcher.on_connected();
@@ -214,11 +233,13 @@ impl<W: AgentWorld> Agent<W> {
                     Some(HookSignal::Message(message)) => {
                         // C#: DaemonEventTrace.
                         eprintln!("[lbm-agent] hook: {:?}", message.event);
+                        self.forward(api::hook_event_name(message.event), &message.payload);
                         Input::Hook(hook_event(message))
                     }
                     // C#: the client synthesizes Dead when the connection drops.
                     Some(HookSignal::Lost) => {
                         eprintln!("[lbm-agent] hook connection lost");
+                        self.forward("Dead", "");
                         self.hook_connected = false;
                         Input::Hook(HookEvent::Dead)
                     }
@@ -333,7 +354,11 @@ impl<W: AgentWorld> Agent<W> {
                     let _ = inputs.send(Input::Wake(wake));
                 });
             }
-            Effect::ProcessSeen(process) => eprintln!("[lbm-agent] focused: {process}"),
+            Effect::ProcessSeen(process) => {
+                if self.seen.add(&process) {
+                    eprintln!("[lbm-agent] seen: {process}");
+                }
+            }
         }
     }
 }

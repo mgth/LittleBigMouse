@@ -10,7 +10,7 @@ use lbm_agent::reconcile::{LayoutState, Timings, World};
 use lbm_agent::runtime::Agent;
 use lbm_agent::world::AgentWorld;
 use lbm_ipc::framing::{read_frame, write_frame};
-use lbm_ipc::protocol::Command;
+use lbm_ipc::protocol::{self, Command};
 use serde_json::{json, Value};
 use tokio::net::UnixStream;
 
@@ -97,6 +97,16 @@ impl Frontend {
         }
     }
 
+    /// The next `Hook` event named `name`: its payload.
+    async fn hook(&mut self, name: &str) -> String {
+        loop {
+            let frame = self.receive().await;
+            if frame["Event"] == "Hook" && frame["Hook"] == name {
+                return frame["Payload"].as_str().unwrap().to_owned();
+            }
+        }
+    }
+
     /// The next `State` event whose snapshot satisfies `want`.
     async fn state(&mut self, want: impl Fn(&Value) -> bool) -> Value {
         loop {
@@ -132,7 +142,7 @@ async fn a_frontend_sees_the_agent_and_drives_it() {
         .ask(json!({ "Method": "Hello", "Client": "test" }))
         .await;
     assert_eq!(hello["Result"]["Agent"], "lbm-agent");
-    assert_eq!(hello["Result"]["Protocol"], 1);
+    assert_eq!(hello["Result"]["Protocol"], 2);
 
     // Subscribed: the state now, then every change — here, the hook taking the layout.
     let subscribed = frontend.ask(json!({ "Method": "Subscribe" })).await;
@@ -176,4 +186,58 @@ async fn a_frontend_sees_the_agent_and_drives_it() {
     })
     .await
     .expect("the hook was told to quit");
+}
+
+#[tokio::test]
+async fn a_subscriber_hears_the_hook_and_what_it_saw() {
+    let dir = tempfile::tempdir().unwrap();
+    let hook_endpoint = dir.path().join("hook.sock").to_string_lossy().into_owned();
+    let api_endpoint = dir
+        .path()
+        .join("lbm-agent.sock")
+        .to_string_lossy()
+        .into_owned();
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = lbm_agent::api::listen(&api_endpoint).unwrap();
+    tokio::spawn(async move {
+        let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    // Subscribed before the hook takes the layout: its own words come through.
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    frontend.ask(json!({ "Method": "Subscribe" })).await;
+    frontend
+        .state(|s| s["Engine"] == "Running" && s["HookConnected"] == true)
+        .await;
+    assert!(fake.hooked());
+
+    // The probe report comes back as the hook sent it.
+    let probe = frontend.ask(json!({ "Method": "Probe" })).await;
+    assert_eq!(probe["Result"], Value::Null);
+    assert_eq!(
+        frontend.hook("Probed").await,
+        lbm_agent::fake_hook::PROBE_REPORT
+    );
+    assert!(fake.received().contains(&Command::Probe));
+
+    // The foreground processes: each forwarded, each remembered once.
+    for process in ["/usr/bin/kate", "/usr/bin/firefox", "/usr/bin/kate", ""] {
+        fake.broadcast(&protocol::focus_changed(process));
+    }
+    assert_eq!(frontend.hook("FocusChanged").await, "/usr/bin/kate");
+    assert_eq!(frontend.hook("FocusChanged").await, "/usr/bin/firefox");
+    assert_eq!(frontend.hook("FocusChanged").await, "/usr/bin/kate");
+    assert_eq!(frontend.hook("FocusChanged").await, "");
+    let seen = frontend.ask(json!({ "Method": "SeenProcesses" })).await;
+    assert_eq!(seen["Result"], json!(["/usr/bin/kate", "/usr/bin/firefox"]));
+
+    // The hook goes away: said as C# says it, and a probe is refused.
+    drop(fake);
+    frontend.hook("Dead").await;
+    let refused = frontend.ask(json!({ "Method": "Probe" })).await;
+    assert_eq!(refused["Error"], "no hook is connected");
 }

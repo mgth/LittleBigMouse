@@ -12,18 +12,26 @@
 //! -> {"Id": 2, "Method": "Subscribe"}
 //! <- {"Id": 2, "Result": {"AgentVersion": …, "Engine": "Stopped", …}}
 //! <- {"Event": "State", "State": {… the snapshot, whenever it changes …}}
+//! <- {"Event": "Hook", "Hook": "Loaded", "Payload": "2 zones (2 main)"}
 //! -> {"Id": 3, "Method": "Start", "KeepLayout": false}
 //! <- {"Id": 3, "Result": null}
 //! ```
 //!
-//! Version 1: `Hello`, `Snapshot`, `Subscribe`, `Start`, `Stop`, `Refresh`, `Quit`. The
-//! plan's `SaveLayout`, `SaveOptions`, `Preview`/`EndPreview`, `Probe` and
-//! `SeenProcesses` come next. An unknown method is answered with an error, never
-//! guessed at.
+//! A subscriber also gets every hook event as the hook said it, under the names of C#'s
+//! `LittleBigMouseEvent` (`Connected` and `Dead` when the connection comes and goes):
+//! the frontends' trackers — the load outcome, the probe report, the rescue — read
+//! them as they read the hook before.
+//!
+//! Version 1: `Hello`, `Snapshot`, `Subscribe`, `Start`, `Stop`, `Refresh`, `Quit`.
+//! Version 2: the hook events, `Probe` (the report comes as a `Probed` event) and
+//! `SeenProcesses` (the processes seen in the foreground this session). The plan's
+//! `SaveLayout`, `SaveOptions` and `Preview`/`EndPreview` come next. An unknown method
+//! is answered with an error, never guessed at.
 
 #[cfg(unix)]
 use std::io;
 
+use lbm_ipc::client::DaemonEvent;
 #[cfg(unix)]
 use lbm_ipc::framing::{read_frame, write_frame};
 use serde::{Deserialize, Serialize};
@@ -34,7 +42,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 /// Bumped on any change a client must know about.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 //==================//
 // The contract     //
@@ -64,6 +72,11 @@ pub enum Request {
     Refresh,
     /// Leave: the hook, then the agent.
     Quit,
+    /// Ask the hook for its edge report on the loaded layout (a `Probed` event).
+    Probe,
+    /// The processes seen in the foreground this session, oldest first — what the
+    /// exclusion list is picked from.
+    SeenProcesses,
 }
 
 /// A request with the id its answer carries back.
@@ -104,6 +117,52 @@ pub fn answer(id: u64, result: Result<Value, String>) -> String {
 /// The `State` event.
 pub fn state_event(snapshot: &Snapshot) -> String {
     json!({ "Event": "State", "State": snapshot }).to_string()
+}
+
+/// The `Hook` event: what the hook said, forwarded.
+pub fn hook_event(name: &str, payload: &str) -> String {
+    json!({ "Event": "Hook", "Hook": name, "Payload": payload }).to_string()
+}
+
+/// A hook event's name on this API: C#'s `LittleBigMouseEvent`.
+pub fn hook_event_name(event: DaemonEvent) -> &'static str {
+    match event {
+        DaemonEvent::Running => "Running",
+        DaemonEvent::Stopped => "Stopped",
+        DaemonEvent::Paused => "Paused",
+        DaemonEvent::Dead => "Dead",
+        DaemonEvent::SettingsChanged => "SettingsChanged",
+        DaemonEvent::DisplayChanged => "DisplayChanged",
+        DaemonEvent::DesktopChanged => "DesktopChanged",
+        DaemonEvent::FocusChanged => "FocusChanged",
+        DaemonEvent::Suspended => "Suspended",
+        DaemonEvent::Resumed => "Resumed",
+        DaemonEvent::Loaded => "Loaded",
+        DaemonEvent::LoadFailed => "LoadFailed",
+        DaemonEvent::Probed => "Probed",
+        DaemonEvent::Rescued => "Rescued",
+        DaemonEvent::ShortcutUnavailable => "ShortcutUnavailable",
+    }
+}
+
+/// C# `ProcessesCollector`: the processes seen in the foreground, in order, each once.
+#[derive(Debug, Default)]
+pub struct SeenProcesses(Vec<String>);
+
+impl SeenProcesses {
+    /// C# `AddProcess`: nothing for an empty name, nor for one a seen entry already
+    /// contains. Returns whether it was added.
+    pub fn add(&mut self, process: &str) -> bool {
+        if process.is_empty() || self.0.iter().any(|seen| seen.contains(process)) {
+            return false;
+        }
+        self.0.push(process.to_owned());
+        true
+    }
+
+    pub fn list(&self) -> &[String] {
+        &self.0
+    }
 }
 
 //==================//
@@ -215,4 +274,34 @@ where
     // Subscribers hold clones of this client: stop the writer outright, and their next
     // send fails, which is how the agent learns the frontend left.
     writing.abort();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_process_is_seen_once_and_never_empty() {
+        let mut seen = SeenProcesses::default();
+        assert!(!seen.add(""));
+        assert!(seen.add("/usr/bin/firefox"));
+        assert!(seen.add("/usr/bin/kate"));
+        assert!(!seen.add("/usr/bin/firefox"));
+        // C#: `Contains`, so a name a seen entry holds is taken as seen.
+        assert!(!seen.add("firefox"));
+        assert_eq!(seen.list(), ["/usr/bin/firefox", "/usr/bin/kate"]);
+    }
+
+    #[test]
+    fn a_hook_event_keeps_its_csharp_name_and_payload() {
+        let event: Value = serde_json::from_str(&hook_event(
+            hook_event_name(DaemonEvent::Probed),
+            "<ProbeReport />",
+        ))
+        .unwrap();
+        assert_eq!(
+            event,
+            json!({ "Event": "Hook", "Hook": "Probed", "Payload": "<ProbeReport />" })
+        );
+    }
 }

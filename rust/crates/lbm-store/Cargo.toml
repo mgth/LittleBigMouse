@@ -21,5 +21,20 @@ serde_json = { workspace = true, features = ["preserve_order", "float_roundtrip"
 # LayoutStoreKey: the digest ending a store name too long for the backends (#589).
 sha2 = "0.11"
 
+# The v5 registry store, read once at the first launch (registry_import).
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Environment",
+    "Win32_System_Registry",
+]
+
 [dev-dependencies]
 tempfile.workspace = true
+
+# The real-registry test writes its throwaway tree (RegCreateKeyExW takes security
+# attributes).
+[target.'cfg(windows)'.dev-dependencies.windows]
+version = "0.58"
+features = ["Win32_Security"]

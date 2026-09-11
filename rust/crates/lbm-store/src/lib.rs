@@ -12,7 +12,10 @@
 //! - [`layout_store_key`]: the name a layout is stored under (`LayoutStoreKey`, #589);
 //! - [`excluded_process_defaults`] and [`excluded_list_persistence`]: the
 //!   `Excluded.txt` file the daemon reads, its defaults and their one-time top-up;
-//! - [`lbm_paths`]: the per-user directories.
+//! - [`lbm_paths`]: the per-user directories;
+//! - [`registry_layout_store`] and [`registry_import`]: the v5 Windows registry store,
+//!   read and imported once into the JSON store (decision D2), over the real registry
+//!   (`windows_registry`, Windows only) or a regedit export ([`reg_file`]).
 //!
 //! The engine half loads the `lbm-layout` model from a store and saves it back:
 //!
@@ -58,6 +61,11 @@ pub mod layout_persistence;
 pub mod layout_store;
 pub mod layout_store_key;
 pub mod lbm_paths;
+pub mod reg_file;
+pub mod registry_import;
+pub mod registry_layout_store;
+#[cfg(windows)]
+pub mod windows_registry;
 
 pub use excluded_list_persistence::ExcludedListPersistence;
 pub use json_layout_store::JsonLayoutStore;

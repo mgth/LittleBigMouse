@@ -52,12 +52,14 @@ pub fn round(x: f64) -> f64 {
     x.round_ties_even()
 }
 
-/// `double.ToString(CultureInfo.InvariantCulture)` since .NET Core 3.0: the
-/// shortest string that reads back as the same double, in fixed notation
-/// unless the decimal point would sit more than `max(digits, 15)` places right
-/// of the first digit or more than three left of it; then `d.dddE+XX`, with
-/// at least two exponent digits. `NaN`, `Infinity`, `-Infinity`, and `-0` for
-/// negative zero.
+/// `double.ToString(CultureInfo.InvariantCulture)` since .NET Core 3.0 (also
+/// what `"R"` and `System.Text.Json` write): the shortest digits that read
+/// back as the same double, laid out by `Number.Formatting.FormatGeneral` with
+/// `nMaxDigits = max(digit count, 17)`. Fixed notation while the decimal point
+/// sits at most that many places right of the first digit and at most three
+/// left of it (`10000000000000000`, `0.0001`), `d.dddE+XX` beyond (`1E+17`,
+/// `1E-05`), with at least two exponent digits. `NaN`, `Infinity`,
+/// `-Infinity`, and `-0` for negative zero.
 pub fn format_double(x: f64) -> String {
     if x.is_nan() {
         return "NaN".to_owned();
@@ -68,13 +70,16 @@ pub fn format_double(x: f64) -> String {
     if x == 0.0 {
         return if x.is_sign_negative() { "-0" } else { "0" }.to_owned();
     }
-    // Rust's `{:e}` prints the same shortest round-trip digits: "d.ddde±x".
+    // Rust's `{:e}` prints the same shortest round-trip digits, "d.ddde±x",
+    // save for the tie-break.
     let sci = format!("{:e}", x.abs());
     let (mantissa, exponent) = sci.split_once('e').expect("{:e} has an exponent");
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let mut digits: String = mantissa.chars().filter(|c| *c != '.').collect();
     let exponent: i32 = exponent.parse().expect("{:e} exponent is an integer");
+    break_tie_to_even(x.abs(), &mut digits, exponent);
+    // .NET's NumberBuffer.Scale: the decimal point sits after `point` digits.
     let point = exponent + 1;
-    let max_digits = (digits.len() as i32).max(15);
+    let max_digits = (digits.len() as i32).max(17);
     let mut out = String::new();
     if x < 0.0 {
         out.push('-');
@@ -101,6 +106,47 @@ pub fn format_double(x: f64) -> String {
         out.push_str(&digits[point as usize..]);
     }
     out
+}
+
+/// When the value lies exactly half-way between two shortest candidates,
+/// Rust's shortest formatting takes the upper one and .NET's Dragon4 the even
+/// one, as long as it reads back as the same double too
+/// (`2049285864339844.25` gives `2049285864339844.2` in .NET, `...844.3` in
+/// Rust). A tie needs two n-digit candidates one unit of the n-th digit apart
+/// inside one ulp (at most 2^-52 of the value): n > 52 log10(2), about 15.65,
+/// so shorter forms are skipped before computing the exact expansion.
+///
+/// `positive` is the absolute value, `digits` its shortest digits, the first
+/// one weighing `10^exponent`.
+fn break_tie_to_even(positive: f64, digits: &mut String, exponent: i32) {
+    if digits.len() < 16 {
+        return;
+    }
+    let last = digits.as_bytes()[digits.len() - 1];
+    if (last - b'0').is_multiple_of(2) {
+        return;
+    }
+    let mut lower = digits.clone();
+    lower.pop();
+    lower.push(char::from(last - 1));
+
+    // The exact decimal expansion: a double never has more than 767
+    // significant digits.
+    let exact = format!("{positive:.800e}");
+    let (mantissa, exact_exponent) = exact.split_once('e').expect("{:e} has an exponent");
+    let exact_digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let tie = exact_exponent.parse() == Ok(exponent)
+        && exact_digits
+            .trim_end_matches('0')
+            .strip_prefix(lower.as_str())
+            == Some("5");
+    if !tie {
+        return;
+    }
+    let candidate = format!("{}.{}e{exponent}", &lower[..1], &lower[1..]);
+    if candidate.parse::<f64>() == Ok(positive) {
+        *digits = lower.trim_end_matches('0').to_owned();
+    }
 }
 
 /// `double.CompareTo(double)`, which is what `Comparer<double>.Default` hands to
@@ -227,7 +273,13 @@ mod tests {
             (0.0001, "0.0001"),
             (0.00001, "1E-05"),
             (1e14, "100000000000000"),
-            (1e15, "1E+15"),
+            (1e15, "1000000000000000"),
+            (1e16, "10000000000000000"),
+            (1e17, "1E+17"),
+            (99999999999999990.0, "99999999999999980"),
+            // Exactly representable (one ulp is 0.25 here), a tie between ...844.2 and ...844.3.
+            (2049285864339844.0 + 0.25, "2049285864339844.2"),
+            (1234567890123456.5, "1234567890123456.5"),
             (123456789012345.6, "123456789012345.6"),
             (12345678901234567.0, "12345678901234568"),
             (1.2345678901234568e17, "1.2345678901234568E+17"),

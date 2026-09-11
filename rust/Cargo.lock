@@ -645,8 +645,11 @@ name = "lbm-agent"
 version = "0.1.0"
 dependencies = [
  "lbm-display",
+ "lbm-ipc",
  "lbm-layout",
  "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

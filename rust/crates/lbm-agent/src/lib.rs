@@ -12,10 +12,11 @@
 //! - [`gap_guard`]: the 1 px gaps KWin's barriers need while the engine runs (D7).
 //! - [`runtime`]: the event loop tying them together.
 //! - [`instance`] and [`log`]: one agent per session, and its log over five runs.
-//! - [`api`]: the frontends' way in (JSON over a local socket, D6).
+//! - [`api`]: the frontends' way in (JSON over a local socket or pipe, D6).
 //! - `sleep` (Linux): system sleep from logind.
 //! - `tray` and `icons` (Linux): the tray, a frontend in process.
 //! - [`autostart`]: starting with the session (XDG autostart).
+//! - `winpipe` (Windows): the per-session pipes, the hook's and the agent's.
 
 pub mod api;
 pub mod autostart;
@@ -34,6 +35,8 @@ pub mod supervise;
 #[cfg(target_os = "linux")]
 pub mod tray;
 pub mod watch;
+#[cfg(windows)]
+pub mod winpipe;
 #[cfg(windows)]
 pub mod winwatch;
 pub mod world;

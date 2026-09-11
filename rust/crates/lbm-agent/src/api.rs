@@ -3,7 +3,8 @@
 //! it; the tray drives the agent the same way.
 //!
 //! The transport is the hook's: length-prefixed UTF-8 frames (`lbm_ipc::framing`) over a
-//! per-user endpoint (a 0600 Unix socket beside the instance lock). The payloads are
+//! per-user endpoint — a 0600 Unix socket beside the instance lock, or on Windows a pipe
+//! per logon session secured as the hook's (`winpipe`). The payloads are
 //! JSON, PascalCase like the rest of the C# contracts:
 //!
 //! ```text
@@ -41,16 +42,13 @@
 //! rescue, the hook going away): `Previewing` in the state says which is the case.
 //! An unknown method is answered with an error, never guessed at.
 
-#[cfg(unix)]
 use std::io;
 
 use lbm_ipc::client::DaemonEvent;
-#[cfg(unix)]
 use lbm_ipc::framing::{read_frame, write_frame};
 use lbm_store::{GlobalOptionsDto, LayoutDocument};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-#[cfg(unix)]
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -286,8 +284,48 @@ pub fn listen_into(endpoint: &str, calls: mpsc::UnboundedSender<Call>) -> io::Re
     })
 }
 
-// Unix only until the Windows endpoint (a per-session pipe with the hook's DACL) exists.
-#[cfg(unix)]
+/// Listens on the agent's pipe `name` (`winpipe::agent_pipe` for this session), as
+/// [`listen`] does on a socket. The first instance claims the name: the caller holds
+/// the instance lock, so a refusal means someone else holds it — an error, not a retry.
+#[cfg(windows)]
+pub fn listen_pipe(name: &str) -> io::Result<(mpsc::UnboundedReceiver<Call>, Listener)> {
+    let (calls, calls_rx) = mpsc::unbounded_channel();
+    Ok((calls_rx, listen_pipe_into(name, calls)?))
+}
+
+/// [`listen_pipe`], the requests going into `calls` — which the in-process frontends (the
+/// tray) send into too.
+#[cfg(windows)]
+pub fn listen_pipe_into(name: &str, calls: mpsc::UnboundedSender<Call>) -> io::Result<Listener> {
+    use crate::winpipe;
+
+    let mut pipe = winpipe::create_pipe(name, true)?;
+    let name = name.to_owned();
+    let accepting = tokio::spawn(async move {
+        loop {
+            if pipe.connect().await.is_err() {
+                return;
+            }
+            // The next instance before this one is handed over: a frontend connecting
+            // meanwhile finds the pipe waiting.
+            let next = loop {
+                match winpipe::create_pipe(&name, false) {
+                    Ok(next) => break next,
+                    Err(error) => {
+                        eprintln!("[lbm-agent] frontend pipe: {error}; retrying");
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    }
+                }
+            };
+            let connected = std::mem::replace(&mut pipe, next);
+            if winpipe::client_is_current_session(&connected) {
+                tokio::spawn(connection(connected, calls.clone()));
+            }
+        }
+    });
+    Ok(Listener { accepting })
+}
+
 async fn connection<S>(stream: S, calls: mpsc::UnboundedSender<Call>)
 where
     S: AsyncRead + AsyncWrite + Send + 'static,

@@ -1,5 +1,5 @@
-//! The frontends' API over a real socket, against an agent driving the fake hook.
-#![cfg(unix)]
+//! The frontends' API over a real endpoint (a Unix socket, a Windows pipe), against an
+//! agent driving the fake hook.
 
 use std::io;
 use std::time::Duration;
@@ -12,7 +12,7 @@ use lbm_agent::world::AgentWorld;
 use lbm_ipc::framing::{read_frame, write_frame};
 use lbm_ipc::protocol::{self, Command};
 use serde_json::{json, Value};
-use tokio::net::UnixStream;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones></ZonesLayout>"#;
 
@@ -55,16 +55,77 @@ impl AgentWorld for Enabled {
     }
 }
 
+/// The hook's and the agent's endpoints for one test: in its directory, or pipes named
+/// after it on Windows.
+#[cfg(unix)]
+fn endpoints(dir: &tempfile::TempDir) -> (String, String) {
+    let at = |name: &str| dir.path().join(name).to_string_lossy().into_owned();
+    (at("hook.sock"), at("lbm-agent.sock"))
+}
+
+#[cfg(windows)]
+fn endpoints(_dir: &tempfile::TempDir) -> (String, String) {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static N: AtomicU32 = AtomicU32::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    (
+        format!(r"\\.\pipe\lbm-agent-api-test-hook-{pid}-{n}"),
+        format!(r"\\.\pipe\lbm-agent-api-test-{pid}-{n}"),
+    )
+}
+
+#[cfg(unix)]
+fn listen(
+    endpoint: &str,
+) -> (
+    tokio::sync::mpsc::UnboundedReceiver<lbm_agent::api::Call>,
+    lbm_agent::api::Listener,
+) {
+    lbm_agent::api::listen(endpoint).unwrap()
+}
+
+#[cfg(windows)]
+fn listen(
+    endpoint: &str,
+) -> (
+    tokio::sync::mpsc::UnboundedReceiver<lbm_agent::api::Call>,
+    lbm_agent::api::Listener,
+) {
+    lbm_agent::api::listen_pipe(endpoint).unwrap()
+}
+
+trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<S: AsyncRead + AsyncWrite + Unpin + Send> Stream for S {}
+
+#[cfg(unix)]
+async fn open(endpoint: &str) -> Box<dyn Stream> {
+    Box::new(tokio::net::UnixStream::connect(endpoint).await.unwrap())
+}
+
+/// A pipe busy with the previous client is waited for, as clients do.
+#[cfg(windows)]
+async fn open(endpoint: &str) -> Box<dyn Stream> {
+    use tokio::net::windows::named_pipe::ClientOptions;
+    for _ in 0..250 {
+        match ClientOptions::new().open(endpoint) {
+            Ok(pipe) => return Box::new(pipe),
+            Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+        }
+    }
+    panic!("the pipe {endpoint} never opened");
+}
+
 /// A frontend: requests out, answers and events in.
 struct Frontend {
-    stream: UnixStream,
+    stream: Box<dyn Stream>,
     next: u64,
 }
 
 impl Frontend {
-    async fn connect(path: &str) -> Frontend {
+    async fn connect(endpoint: &str) -> Frontend {
         Frontend {
-            stream: UnixStream::connect(path).await.unwrap(),
+            stream: open(endpoint).await,
             next: 0,
         }
     }
@@ -121,17 +182,12 @@ impl Frontend {
 #[tokio::test]
 async fn a_frontend_sees_the_agent_and_drives_it() {
     let dir = tempfile::tempdir().unwrap();
-    let hook_endpoint = dir.path().join("hook.sock").to_string_lossy().into_owned();
-    let api_endpoint = dir
-        .path()
-        .join("lbm-agent.sock")
-        .to_string_lossy()
-        .into_owned();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
     let fake = FakeHook::bind(&hook_endpoint).unwrap();
 
     let (hook, signals) = HookClient::spawn(hook_endpoint);
     let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
-    let (calls, _listener) = lbm_agent::api::listen(&api_endpoint).unwrap();
+    let (calls, _listener) = listen(&api_endpoint);
     let agent = tokio::spawn(async move {
         let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs).with_api(calls);
         agent.run(signals, inputs_rx, std::future::pending()).await;
@@ -191,17 +247,12 @@ async fn a_frontend_sees_the_agent_and_drives_it() {
 #[tokio::test]
 async fn a_subscriber_hears_the_hook_and_what_it_saw() {
     let dir = tempfile::tempdir().unwrap();
-    let hook_endpoint = dir.path().join("hook.sock").to_string_lossy().into_owned();
-    let api_endpoint = dir
-        .path()
-        .join("lbm-agent.sock")
-        .to_string_lossy()
-        .into_owned();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
     let fake = FakeHook::bind(&hook_endpoint).unwrap();
 
     let (hook, signals) = HookClient::spawn(hook_endpoint);
     let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
-    let (calls, _listener) = lbm_agent::api::listen(&api_endpoint).unwrap();
+    let (calls, _listener) = listen(&api_endpoint);
     tokio::spawn(async move {
         let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs).with_api(calls);
         agent.run(signals, inputs_rx, std::future::pending()).await;
@@ -255,7 +306,8 @@ fn persistence(
     let excluded = dir.join("Excluded.txt");
     lbm_store::LayoutPersistence::with_excluded_list_file(
         lbm_store::JsonLayoutStore::new(dir.join("config")),
-        lbm_agent::world::Platform,
+        // No session autostart: this test never touches the user's.
+        lbm_agent::world::Platform::default(),
         move || excluded.clone(),
     )
 }
@@ -289,17 +341,12 @@ fn loads(fake: &FakeHook) -> usize {
 #[tokio::test]
 async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
     let dir = tempfile::tempdir().unwrap();
-    let hook_endpoint = dir.path().join("hook.sock").to_string_lossy().into_owned();
-    let api_endpoint = dir
-        .path()
-        .join("lbm-agent.sock")
-        .to_string_lossy()
-        .into_owned();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
     let fake = FakeHook::bind(&hook_endpoint).unwrap();
 
     let (hook, signals) = HookClient::spawn(hook_endpoint);
     let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
-    let (calls, _listener) = lbm_agent::api::listen(&api_endpoint).unwrap();
+    let (calls, _listener) = listen(&api_endpoint);
     let world = system_world(dir.path());
     tokio::spawn(async move {
         let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);

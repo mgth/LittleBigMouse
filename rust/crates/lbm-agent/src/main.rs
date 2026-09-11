@@ -113,13 +113,14 @@ fn hook_endpoint() -> Option<String> {
     if let Some(endpoint) = lbm_ipc::endpoint::from_environment() {
         return Some(endpoint);
     }
-    if cfg!(windows) {
-        // The per-session pipe name needs the session id: comes with the Windows agent.
-        return None;
+    #[cfg(windows)]
+    return lbm_agent::winpipe::hook_pipe().ok();
+    #[cfg(not(windows))]
+    {
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+        lbm_ipc::endpoint::socket_path(runtime.as_deref(), Some(&lbm_paths::data_dir()))
+            .map(|p| p.to_string_lossy().into_owned())
     }
-    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
-    lbm_ipc::endpoint::socket_path(runtime.as_deref(), Some(&lbm_paths::data_dir()))
-        .map(|p| p.to_string_lossy().into_owned())
 }
 
 /// `yyyy-mm-dd hh:mm:ss` UTC, for the log header.
@@ -268,6 +269,19 @@ fn run(options: Options) -> ExitCode {
                     }
                 },
                 None => None,
+            }
+        };
+        #[cfg(windows)]
+        let _api = match lbm_agent::winpipe::agent_pipe().and_then(|name| {
+            lbm_agent::api::listen_pipe_into(&name, calls.clone()).map(|l| (name, l))
+        }) {
+            Ok((name, listener)) => {
+                eprintln!("[lbm-agent] frontends: {name}");
+                Some(listener)
+            }
+            Err(error) => {
+                eprintln!("[lbm-agent] no frontend pipe: {error}");
+                None
             }
         };
         #[cfg(target_os = "linux")]

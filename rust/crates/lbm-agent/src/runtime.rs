@@ -9,6 +9,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::hook::{HookClient, HookSignal};
 use crate::reconcile::{Effect, HookEvent, Input, Reconciler, Timings};
+use crate::supervise::{HookLauncher, Launch};
 use crate::world::AgentWorld;
 
 /// A daemon event as the reconciler knows it.
@@ -38,6 +39,7 @@ pub struct Agent<W> {
     world: W,
     hook: HookClient,
     inputs: UnboundedSender<Input>,
+    launcher: Option<HookLauncher>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -54,7 +56,14 @@ impl<W: AgentWorld> Agent<W> {
             world,
             hook,
             inputs,
+            launcher: None,
         }
+    }
+
+    /// Launches a hook when none answers (D5); without one, the agent waits for a hook.
+    pub fn with_launcher(mut self, launcher: HookLauncher) -> Self {
+        self.launcher = Some(launcher);
+        self
     }
 
     pub fn world(&self) -> &W {
@@ -77,6 +86,9 @@ impl<W: AgentWorld> Agent<W> {
                 signal = signals.recv() => match signal {
                     Some(HookSignal::Connected) => {
                         eprintln!("[lbm-agent] hook connected");
+                        if let Some(launcher) = &mut self.launcher {
+                            launcher.on_connected();
+                        }
                         Input::Hook(HookEvent::Connected)
                     }
                     Some(HookSignal::Message(message)) => {
@@ -90,7 +102,7 @@ impl<W: AgentWorld> Agent<W> {
                         Input::Hook(HookEvent::Dead)
                     }
                     Some(HookSignal::Unreachable) => {
-                        eprintln!("[lbm-agent] no hook answers");
+                        self.unreachable();
                         continue;
                     }
                     None => return,
@@ -101,6 +113,31 @@ impl<W: AgentWorld> Agent<W> {
                 },
             };
             self.handle(input);
+        }
+    }
+
+    /// No hook answers: launch one, if this agent launches hooks.
+    fn unreachable(&mut self) {
+        let Some(launcher) = &mut self.launcher else {
+            eprintln!("[lbm-agent] no hook answers");
+            return;
+        };
+        match launcher.on_unreachable(std::time::Instant::now()) {
+            Launch::Started(pid) => {
+                eprintln!(
+                    "[lbm-agent] started {} ({pid})",
+                    launcher.program().display()
+                )
+            }
+            Launch::Starting => eprintln!("[lbm-agent] the hook started is not answering yet"),
+            Launch::AlreadyRunning => {
+                eprintln!("[lbm-agent] a hook runs but does not answer at the endpoint")
+            }
+            Launch::Waiting => {}
+            Launch::Failed(error) => eprintln!(
+                "[lbm-agent] could not start {}: {error}",
+                launcher.program().display()
+            ),
         }
     }
 

@@ -81,10 +81,18 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   privé ; `--config-dir`/`--data-dir` isolent les profils. Tout essai hors session réelle
   doit passer les trois.
 
+- `supervise::HookLauncher` (D5) : sur `Unreachable`, lance le hook posé à côté de l'agent
+  (ou `--hook`), **détaché** (nouvelle session, `hook.log` à lui) pour qu'il survive à
+  l'agent, avec `LBM_HOOK_UI=1` (le hook ne peut plus deviner d'après le chemin de son
+  parent). Pas de doublon : ni pendant que le hook lancé démarre, ni si un autre hook de
+  cet utilisateur tourne ; backoff pour un hook qui meurt en boucle. Testé au niveau
+  processus avec le binaire de l'agent en faux hook (`--serve-fake-hook`) : lancé, il
+  reçoit la mise en page ; l'agent tué, il tourne toujours.
+
 ## Suite
 
-1. Supervision du hook (D5) : lancement détaché qui survit à un plantage de l'agent,
-   relance avec backoff sur `Unreachable`, instance unique, journaux.
+1. Instance unique de l'agent, journaux sur cinq générations ; repli sur l'arrêt du
+   processus quand un Stop ne peut pas être livré (le C# le faisait).
 2. `KScreenGapGuard` (D7) : prologue et épilogue autour du hook sous KWin.
 3. Sources Linux : inotify et uevents DRM à la place du sondage, veille par
    `PrepareForSleep` de logind.

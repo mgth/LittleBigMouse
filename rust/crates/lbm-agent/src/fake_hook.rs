@@ -41,6 +41,7 @@ impl State {
 /// A fake hook listening on an endpoint until dropped.
 pub struct FakeHook {
     state: Arc<Mutex<State>>,
+    quit: Arc<tokio::sync::Notify>,
     accepting: JoinHandle<()>,
     /// Every connection's task, closed with the fake.
     connections: Arc<Mutex<Vec<AbortHandle>>>,
@@ -53,10 +54,12 @@ impl FakeHook {
     /// current tokio runtime.
     pub fn bind(endpoint: &str) -> io::Result<FakeHook> {
         let state = Arc::new(Mutex::new(State::default()));
+        let quit = Arc::new(tokio::sync::Notify::new());
         let connections = Arc::new(Mutex::new(Vec::new()));
-        let accepting = accept(endpoint, state.clone(), connections.clone())?;
+        let accepting = accept(endpoint, state.clone(), quit.clone(), connections.clone())?;
         Ok(FakeHook {
             state,
+            quit,
             accepting,
             connections,
             #[cfg(unix)]
@@ -72,6 +75,11 @@ impl FakeHook {
     /// Whether the last answer was to hook.
     pub fn hooked(&self) -> bool {
         self.state.lock().unwrap().hooked
+    }
+
+    /// Completes once a client sent `Quit`.
+    pub async fn quit_requested(&self) {
+        self.quit.notified().await;
     }
 
     /// Sends an event frame (see [`lbm_ipc::protocol`]) to every subscriber, as the real
@@ -99,13 +107,14 @@ type Connections = Arc<Mutex<Vec<AbortHandle>>>;
 fn accept(
     endpoint: &str,
     state: Arc<Mutex<State>>,
+    quit: Arc<tokio::sync::Notify>,
     connections: Connections,
 ) -> io::Result<JoinHandle<()>> {
     let _ = std::fs::remove_file(endpoint);
     let listener = tokio::net::UnixListener::bind(endpoint)?;
     Ok(tokio::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
-            let task = tokio::spawn(connection(stream, state.clone()));
+            let task = tokio::spawn(connection(stream, state.clone(), quit.clone()));
             connections.lock().unwrap().push(task.abort_handle());
         }
     }))
@@ -115,6 +124,7 @@ fn accept(
 fn accept(
     endpoint: &str,
     state: Arc<Mutex<State>>,
+    quit: Arc<tokio::sync::Notify>,
     connections: Connections,
 ) -> io::Result<JoinHandle<()>> {
     use tokio::net::windows::named_pipe::ServerOptions;
@@ -133,14 +143,17 @@ fn accept(
                 Err(_) => break,
             };
             let connected = std::mem::replace(&mut server, next);
-            let task = tokio::spawn(connection(connected, state.clone()));
+            let task = tokio::spawn(connection(connected, state.clone(), quit.clone()));
             connections.lock().unwrap().push(task.abort_handle());
         }
     }))
 }
 
-async fn connection<S>(stream: S, state: Arc<Mutex<State>>)
-where
+async fn connection<S>(
+    stream: S,
+    state: Arc<Mutex<State>>,
+    quit_requested: Arc<tokio::sync::Notify>,
+) where
     S: AsyncRead + AsyncWrite + Send + 'static,
 {
     let (mut reader, mut writer) = tokio::io::split(stream);
@@ -200,6 +213,7 @@ where
             }
         }
         if quit {
+            quit_requested.notify_one();
             break;
         }
     }

@@ -3,12 +3,14 @@
 //! branch, phase 3; `docs/v6-agent.md`).
 //!
 //! ```text
-//! lbm-agent [--fake-hook] [--config-dir DIR] [--data-dir DIR]
+//! lbm-agent [--fake-hook | --hook PATH] [--config-dir DIR] [--data-dir DIR]
 //! lbm-agent --dump-displays
 //! ```
 //!
 //! - `--fake-hook`: drive a hook that hooks nothing (`fake_hook`), on a private
 //!   endpoint, instead of the real one — to develop without capturing the mice.
+//! - `--hook PATH`: the hook to launch when none answers (default: the one beside this
+//!   executable). It is launched detached, so it outlives the agent (D5).
 //! - `--config-dir` / `--data-dir`: where the profiles (`options.json`, `layouts/`)
 //!   and `Excluded.txt` live, instead of the user's own — a load can write there
 //!   (the excluded-list top-up), so anything but a real session should pass both.
@@ -16,8 +18,8 @@
 //!   ids and layout id the model gives them); its C# twin is `DisplayDump` in the C#
 //!   test project, and on the same machine both must print the same values.
 //!
-//! The agent does not launch a hook yet: without `--fake-hook` it waits for one at the
-//! usual endpoint (or `LBM_HOOK_ENDPOINT`).
+//! Without `--fake-hook` the agent drives the hook at the usual endpoint (or
+//! `LBM_HOOK_ENDPOINT`), launching it when none answers.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -26,6 +28,7 @@ use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::hook::HookClient;
 use lbm_agent::reconcile::Timings;
 use lbm_agent::runtime::Agent;
+use lbm_agent::supervise::HookLauncher;
 use lbm_agent::world::{Platform, SystemWorld};
 use lbm_display::linux::{display_json, display_signature, drm, Backend};
 use lbm_layout::linux::add_monitor;
@@ -33,12 +36,16 @@ use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_store::{lbm_paths, JsonLayoutStore, LayoutPersistence};
 use serde_json::json;
 
-const USAGE: &str = "usage: lbm-agent [--fake-hook] [--config-dir DIR] [--data-dir DIR]\n       lbm-agent --dump-displays";
+const USAGE: &str = "usage: lbm-agent [--fake-hook | --hook PATH] [--config-dir DIR] [--data-dir DIR]\n       lbm-agent --dump-displays";
 
 #[derive(Default)]
 struct Options {
     dump_displays: bool,
     fake_hook: bool,
+    hook: Option<PathBuf>,
+    /// Hidden: run a fake hook at this endpoint until a client sends Quit (the
+    /// supervision tests launch the agent binary this way instead of a real hook).
+    serve_fake_hook: Option<String>,
     config_dir: Option<PathBuf>,
     data_dir: Option<PathBuf>,
 }
@@ -50,6 +57,8 @@ fn options() -> Option<Options> {
         match arg.as_str() {
             "--dump-displays" => options.dump_displays = true,
             "--fake-hook" => options.fake_hook = true,
+            "--hook" => options.hook = Some(args.next()?.into()),
+            "--serve-fake-hook" => options.serve_fake_hook = Some(args.next()?),
             "--config-dir" => options.config_dir = Some(args.next()?.into()),
             "--data-dir" => options.data_dir = Some(args.next()?.into()),
             _ => return None,
@@ -65,6 +74,9 @@ fn main() -> ExitCode {
     };
     if options.dump_displays {
         return dump_displays();
+    }
+    if let Some(endpoint) = options.serve_fake_hook {
+        return serve_fake_hook(endpoint);
     }
     run(options)
 }
@@ -112,6 +124,7 @@ fn run(options: Options) -> ExitCode {
     };
     runtime.block_on(async move {
         let store = JsonLayoutStore::new(options.config_dir.unwrap_or_else(lbm_paths::config_dir));
+        let data_dir = options.data_dir.clone().unwrap_or_else(lbm_paths::data_dir);
         let persistence = match options.data_dir {
             Some(dir) => LayoutPersistence::with_excluded_list_file(store, Platform, move || {
                 dir.join("Excluded.txt")
@@ -149,12 +162,46 @@ fn run(options: Options) -> ExitCode {
         tokio::spawn(lbm_agent::watch::poll_displays(inputs.clone()));
 
         let mut agent = Agent::new(world, Timings::default(), hook, inputs);
+        if !options.fake_hook {
+            let log = Some(data_dir.join("hook.log"));
+            let launcher = match options.hook {
+                Some(program) => Some(HookLauncher::new(program, Vec::new(), log)),
+                None => HookLauncher::beside_agent(log),
+            };
+            match launcher {
+                Some(launcher) => agent = agent.with_launcher(launcher),
+                None => eprintln!("[lbm-agent] no hook beside the agent: waiting for one"),
+            }
+        }
         agent
             .run(signals, inputs_rx, async {
                 let _ = tokio::signal::ctrl_c().await;
             })
             .await;
         ExitCode::SUCCESS
+    })
+}
+
+/// A fake hook as a process of its own, until a client sends `Quit`.
+fn serve_fake_hook(endpoint: String) -> ExitCode {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => return ExitCode::FAILURE,
+    };
+    runtime.block_on(async move {
+        match FakeHook::bind(&endpoint) {
+            Ok(fake) => {
+                fake.quit_requested().await;
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("lbm-agent: cannot serve a fake hook at {endpoint}: {error}");
+                ExitCode::FAILURE
+            }
+        }
     })
 }
 

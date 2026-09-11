@@ -255,7 +255,8 @@ fn persistence(
     let excluded = dir.join("Excluded.txt");
     lbm_store::LayoutPersistence::with_excluded_list_file(
         lbm_store::JsonLayoutStore::new(dir.join("config")),
-        lbm_agent::world::Platform,
+        // No session autostart: this test never touches the user's.
+        lbm_agent::world::Platform::default(),
         move || excluded.clone(),
     )
 }

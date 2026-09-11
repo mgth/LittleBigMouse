@@ -4,9 +4,11 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 publish = false
-description = "LittleBigMouse persistence storage: the layout DTOs, the JSON store shared with the C# UI, store keys, the excluded-processes file"
+description = "LittleBigMouse persistence: the layout DTOs, the JSON store shared with the C# UI, store keys, the excluded-processes file, and the engine loading the layout model from them"
 
 [dependencies]
+# The model the engine loads into and saves from.
+lbm-layout = { path = "../lbm-layout" }
 # The C# stores keep a Dictionary's insertion order, and so must a round trip
 # through this crate (IndexMap here, `preserve_order` for the unknown members):
 # a re-save then produces the bytes the C# writer would have. Both are already

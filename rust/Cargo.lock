@@ -706,6 +706,7 @@ name = "lbm-store"
 version = "0.1.0"
 dependencies = [
  "indexmap",
+ "lbm-layout",
  "serde",
  "serde_json",
  "sha2",

@@ -1,13 +1,17 @@
-//! The domain oracle (`domain-oracle/` at the repository root) for the
-//! scenarios that need no store: the Rust pipeline must produce what the C#
-//! recorded. `zones.xml` must match byte for byte; `layout.json` and
-//! `pixel-locations.json` must hold the same values, doubles bit for bit.
+//! The domain oracle (`domain-oracle/` at the repository root), end to end: every
+//! scenario goes through the Rust pipeline — the Linux outputs mapped into an
+//! `lbm-layout` model, the store loaded by the persistence engine, the monitors placed
+//! and anchored, then a save — and must produce what the C# recorded (`OracleRun`):
+//! `zones.xml` byte for byte; `layout.json`, `pixel-locations.json` and
+//! `saved-store.json` value for value, doubles bit for bit.
 //!
-//! Loading with nothing stored is the C# `LayoutPersistence.Load` reduced to
-//! what it does then: mark everything saved and republish. The scenarios with a
-//! store, `saved-store.json`, and the store key and file name recorded in
-//! `layout.json` need the persistence layer, and are checked by lbm-store.
+//! Like `OracleRun`, the store is a JSON store in a scratch directory seeded from
+//! `input.json`, the excluded-processes file lives there too, and the process counts
+//! as not elevated.
 
+mod common;
+
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use lbm_layout::geo::Rect;
@@ -16,15 +20,9 @@ use lbm_layout::model::{
     BorderSide, DisplaySize, Layout, LayoutOptions, Monitor, PhysicalSource, Ratio,
 };
 use lbm_layout::zoning::compute_zones;
-use serde_json::{json, Value};
-
-fn corpus() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .expect("crate lives at rust/crates/lbm-layout")
-        .join("domain-oracle/scenarios")
-}
+use lbm_store::layout_store_key::key_for;
+use lbm_store::{JsonLayoutStore, LayoutPersistence, PersistencePlatform};
+use serde_json::{json, Map, Value};
 
 fn read(path: &Path) -> String {
     std::fs::read_to_string(path)
@@ -242,7 +240,7 @@ fn options(layout: &Layout) -> Value {
     })
 }
 
-/// `OracleRun.Layout`, without the store key and file (see the module doc).
+/// `OracleRun.Layout`, without the store key and file (added by `run`).
 fn layout_json(layout: &Layout) -> Value {
     let mut monitors: Vec<&Monitor> = layout.monitors().iter().collect();
     monitors.sort_by(|a, b| a.id.cmp(&b.id));
@@ -325,77 +323,175 @@ fn diff(path: &str, expected: &Value, actual: &Value, out: &mut Vec<String>) {
     }
 }
 
-fn without(mut v: Value, keys: &[&str]) -> Value {
-    if let Value::Object(map) = &mut v {
-        for k in keys {
-            map.remove(*k);
-        }
-    }
-    v
-}
-
 fn parse(path: &Path) -> Value {
     serde_json::from_str(&read(path)).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
+//==================//
+// Store directory  //
+//==================//
+
+/// `OracleRun.OraclePersistence`: the base hooks, with the process not elevated.
+struct OraclePlatform;
+
+impl PersistencePlatform for OraclePlatform {
+    fn is_elevated(&self) -> bool {
+        false
+    }
+}
+
+/// `OracleRun.SeedStore`: every file of `input.json`'s `store`, a JSON string standing
+/// for raw file text.
+fn seed_store(input: &Value, config: &Path) {
+    let Some(files) = input.get("store").and_then(Value::as_object) else {
+        return;
+    };
+    for (relative, content) in files {
+        assert!(
+            !relative.starts_with('/') && !relative.split('/').any(|p| p == ".."),
+            "store path must stay inside the store: {relative}"
+        );
+        let path = config.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let text = match content {
+            Value::String(raw) => raw.clone(),
+            document => serde_json::to_string_pretty(document).unwrap(),
+        };
+        fs::write(path, text).unwrap();
+    }
+}
+
+fn relative_store_path(config: &Path, path: &Path) -> String {
+    let relative = path.strip_prefix(config).unwrap();
+    relative
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn files(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
+}
+
+/// `OracleRun.SavedStore`: every file of the store directory, ordinal order, parsed
+/// when it is JSON and as raw text otherwise.
+fn saved_store(config: &Path) -> Value {
+    let mut paths = Vec::new();
+    files(config, &mut paths);
+    let mut entries: Vec<(String, Value)> = paths
+        .iter()
+        .map(|path| {
+            let text = fs::read_to_string(path).unwrap();
+            let content = serde_json::from_str(&text).unwrap_or(Value::String(text));
+            (relative_store_path(config, path), content)
+        })
+        .collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    Value::Object(entries.into_iter().collect::<Map<_, _>>())
+}
+
+//==================//
+// Scenarios        //
+//==================//
+
+/// Every difference between one scenario's recorded outputs and the Rust ones.
+fn run(dir: &Path) -> Vec<String> {
+    let input = parse(&dir.join("input.json"));
+    let work = tempfile::tempdir().unwrap();
+    let config = work.path().join("config");
+    let data = work.path().join("data");
+    fs::create_dir_all(&config).unwrap();
+    fs::create_dir_all(&data).unwrap();
+
+    seed_store(&input, &config);
+    let excluded_file = data.join("Excluded.txt");
+    if let Some(lines) = input.get("excluded").and_then(Value::as_array) {
+        // File.WriteAllLines: every line ended by the platform's new line.
+        let text: String = lines
+            .iter()
+            .map(|l| format!("{}\n", l.as_str().unwrap()))
+            .collect();
+        fs::write(&excluded_file, text).unwrap();
+    }
+
+    let store = JsonLayoutStore::new(&config);
+    let mut persistence =
+        LayoutPersistence::with_excluded_list_file(store, OraclePlatform, move || {
+            excluded_file.clone()
+        });
+
+    let monitors: Vec<LinuxMonitor> = input["displays"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(linux_monitor)
+        .collect();
+    let mut layout = Layout::new(LayoutOptions::default());
+    populate(&mut layout, &monitors, |l| persistence.load(l)).unwrap();
+
+    let mut out = Vec::new();
+
+    let expected_zones = read(&dir.join("expected/zones.xml"));
+    let zones = compute_zones(&layout).serialize() + "\n";
+    if zones != expected_zones {
+        out.push(format!(
+            "zones.xml differs:\n  rust: {zones}  c#:   {expected_zones}"
+        ));
+    }
+
+    let mut actual_layout = layout_json(&layout);
+    actual_layout["StoreKey"] = json!(key_for(&layout.id));
+    actual_layout["StoreFile"] = json!(relative_store_path(
+        &config,
+        &persistence.store().layout_path(&layout.id)
+    ));
+    diff(
+        "layout",
+        &parse(&dir.join("expected/layout.json")),
+        &actual_layout,
+        &mut out,
+    );
+    diff(
+        "pixel-locations",
+        &parse(&dir.join("expected/pixel-locations.json")),
+        &pixel_locations_json(&layout),
+        &mut out,
+    );
+
+    // Last, as in OracleRun: a save only flips saved flags on the model.
+    assert!(persistence.save(&mut layout).unwrap());
+    diff(
+        "saved-store",
+        &parse(&dir.join("expected/saved-store.json")),
+        &saved_store(&config),
+        &mut out,
+    );
+    out
+}
+
 #[test]
-fn scenarios_without_a_store_reproduce_the_recorded_outputs() {
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(corpus())
+fn every_scenario_reproduces_the_recorded_outputs() {
+    let mut dirs: Vec<PathBuf> = fs::read_dir(common::oracle_scenarios())
         .expect("domain-oracle/scenarios")
         .map(|e| e.unwrap().path())
         .filter(|p| p.is_dir())
         .collect();
     dirs.sort();
+    assert!(dirs.len() >= 21, "only {} scenarios found", dirs.len());
 
-    let mut checked = 0;
     let mut failures = Vec::new();
     for dir in &dirs {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
-        let input = parse(&dir.join("input.json"));
-        if !matches!(input.get("store"), None | Some(Value::Null)) {
-            continue;
-        }
-        checked += 1;
-        let monitors: Vec<LinuxMonitor> = input["displays"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(linux_monitor)
-            .collect();
-        let mut layout = Layout::new(LayoutOptions::default());
-        populate(&mut layout, &monitors, |l| {
-            // LayoutPersistence.Load with nothing stored.
-            l.mark_saved();
-            l.parse_physical_monitors();
-        });
-
-        let expected_zones = read(&dir.join("expected/zones.xml"));
-        let zones = compute_zones(&layout).serialize() + "\n";
-        if zones != expected_zones {
-            failures.push(format!(
-                "{name}/zones.xml differs:\n  rust: {zones}  c#:   {expected_zones}"
-            ));
-        }
-
-        let mut out = Vec::new();
-        diff(
-            "layout",
-            &without(
-                parse(&dir.join("expected/layout.json")),
-                &["StoreKey", "StoreFile"],
-            ),
-            &layout_json(&layout),
-            &mut out,
-        );
-        diff(
-            "pixel-locations",
-            &parse(&dir.join("expected/pixel-locations.json")),
-            &pixel_locations_json(&layout),
-            &mut out,
-        );
-        failures.extend(out.into_iter().map(|d| format!("{name}: {d}")));
+        failures.extend(run(dir).into_iter().map(|d| format!("{name}: {d}")));
     }
-    assert!(checked >= 9, "only {checked} store-less scenarios found");
     assert!(
         failures.is_empty(),
         "{} differences:\n{}",

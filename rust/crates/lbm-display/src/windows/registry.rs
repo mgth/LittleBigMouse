@@ -95,8 +95,10 @@ pub fn decode_key_name_information(buffer: &[u8]) -> Result<String, InvalidKeyNa
         return Err(InvalidKeyName);
     }
     let units: Vec<u16> = rest[..name_length]
-        .chunks_exact(2)
-        .map(|unit| u16::from_le_bytes([unit[0], unit[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&unit| u16::from_le_bytes(unit))
         .collect();
     Ok(String::from_utf16_lossy(&units))
 }

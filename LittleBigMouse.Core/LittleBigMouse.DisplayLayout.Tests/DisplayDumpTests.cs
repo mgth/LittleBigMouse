@@ -10,6 +10,10 @@ namespace LittleBigMouse.DisplayLayout.Tests;
 /// <code>
 /// LBM_DUMP_DISPLAYS=/tmp/cs.json dotnet test LittleBigMouse.Core/LittleBigMouse.DisplayLayout.Tests --filter DumpDisplays
 /// </code>
+/// On Windows (PowerShell):
+/// <code>
+/// $env:LBM_DUMP_DISPLAYS="$env:TEMP\cs.json"; dotnet test LittleBigMouse.Core/LittleBigMouse.DisplayLayout.Tests --filter DumpDisplays
+/// </code>
 /// </summary>
 public class DisplayDumpTests
 {
@@ -18,8 +22,8 @@ public class DisplayDumpTests
     {
         var path = Environment.GetEnvironmentVariable("LBM_DUMP_DISPLAYS");
         if (string.IsNullOrEmpty(path)) return;
-        if (!OperatingSystem.IsLinux()) return; // the Windows twin comes with the Windows discovery
 
-        File.WriteAllText(path, DisplayDump.Linux());
+        if (OperatingSystem.IsWindows()) File.WriteAllText(path, DisplayDump.Windows());
+        else if (OperatingSystem.IsLinux()) File.WriteAllText(path, DisplayDump.Linux());
     }
 }

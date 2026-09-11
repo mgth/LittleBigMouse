@@ -480,8 +480,10 @@ fn query_value(key: &Key, name: &[u16], size: u32) -> (Vec<u8>, bool) {
 
 fn utf16(bytes: &[u8]) -> Vec<u16> {
     bytes
-        .chunks_exact(2)
-        .map(|unit| u16::from_le_bytes([unit[0], unit[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&unit| u16::from_le_bytes(unit))
         .collect()
 }
 

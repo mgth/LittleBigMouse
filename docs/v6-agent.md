@@ -63,14 +63,38 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   remplacé, remet le drapeau « actif » à faux alors que le nouveau tourne encore ; ici, le
   drapeau reste celui du plus récent.
 
+## Runtime (fait)
+
+- `runtime::Agent` : la boucle d'événements. Chaque entrée (hook, sondage des écrans,
+  minuteurs) passe par le réconciliateur ; ses effets sont exécutés dans l'ordre. Start
+  calcule les zones à l'envoi et envoie Load+Run dans une seule trame `<Messages>`, comme le
+  C# (le hook reste accroché d'une ré-application à l'autre).
+- **Démarrage** (`Input::Boot`) : la première mise en page est construite, rien n'est
+  envoyé ; le hook la reçoit quand il la demande (Connected puis Stopped). Un hook qui a
+  survécu à l'agent précédent (D5) répond Running : il garde sa mise en page, rien n'est
+  ré-accroché.
+- `hook::HookClient` : une seule connexion pour les deux sens, maintenue ; commandes données
+  hors connexion jetées (jamais rejouées périmées).
+- `world::SystemWorld` : découverte (`lbm-display`), profil (`lbm-store`), zones.
+- `watch` : sondage Linux de 2 s (signature sysfs, fichiers de sortie KWin/mutter).
+- `fake_hook` et `--fake-hook` : un hook qui n'accroche rien, sur un point de terminaison
+  privé ; `--config-dir`/`--data-dir` isolent les profils. Tout essai hors session réelle
+  doit passer les trois.
+
+- `supervise::HookLauncher` (D5) : sur `Unreachable`, lance le hook posé à côté de l'agent
+  (ou `--hook`), **détaché** (nouvelle session, `hook.log` à lui) pour qu'il survive à
+  l'agent, avec `LBM_HOOK_UI=1` (le hook ne peut plus deviner d'après le chemin de son
+  parent). Pas de doublon : ni pendant que le hook lancé démarre, ni si un autre hook de
+  cet utilisateur tourne ; backoff pour un hook qui meurt en boucle. Testé au niveau
+  processus avec le binaire de l'agent en faux hook (`--serve-fake-hook`) : lancé, il
+  reçoit la mise en page ; l'agent tué, il tourne toujours.
+
 ## Suite
 
-1. Runtime : boucle d'événements, connexion au hook (`lbm_ipc::client`), `--fake-hook` pour
-   développer sans capturer les souris, instance unique, journaux.
-2. Supervision du hook (D5) : lancement détaché qui survit à un plantage de l'agent,
-   rattachement à un hook déjà présent au démarrage, relance avec backoff.
-3. Monde réel : découverte (`lbm-display`), chargement du profil (`lbm-store`,
-   `lbm_layout::linux::populate`), zones (`lbm_layout::zoning`), `KScreenGapGuard` (D7).
-4. Sources Linux : changements d'écran (sysfs, fichiers de sortie KWin/mutter, puis inotify
-   et uevents DRM), veille par `PrepareForSleep` de logind.
-5. API du frontend (JSON, D6), tray, autostart.
+1. Instance unique de l'agent, journaux sur cinq générations ; repli sur l'arrêt du
+   processus quand un Stop ne peut pas être livré (le C# le faisait).
+2. `KScreenGapGuard` (D7) : prologue et épilogue autour du hook sous KWin.
+3. Sources Linux : inotify et uevents DRM à la place du sondage, veille par
+   `PrepareForSleep` de logind.
+4. API du frontend (JSON, D6), tray, autostart ; Windows (point de terminaison par session,
+   élévation, sources).

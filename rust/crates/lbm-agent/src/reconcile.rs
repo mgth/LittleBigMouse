@@ -130,6 +130,11 @@ pub enum Wake {
 /// What the reconciler is told.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Input {
+    /// The agent starts: build the first layout (C#: `MainService.UpdateLayout` at
+    /// startup). Nothing is sent: the hook is handed the layout when it asks for one
+    /// (`Connected`, then `Stopped`) — and a hook that survived the previous agent
+    /// (D5) answers `Running` instead, so it keeps its layout and is not re-grabbed.
+    Boot,
     /// The platform saw a display change (the hook's are [`HookEvent`]s).
     DisplayChanged,
     /// The hook reported something.
@@ -253,6 +258,10 @@ impl Reconciler {
     pub fn handle(&mut self, input: Input, world: &mut impl World) -> Vec<Effect> {
         let mut out = Vec::new();
         match input {
+            Input::Boot => {
+                world.rebuild_layout();
+                self.rebuild_count += 1;
+            }
             Input::DisplayChanged => {
                 self.display_changed(&mut out);
             }

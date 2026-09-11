@@ -214,6 +214,28 @@ fn run(options: Options) -> ExitCode {
         tokio::spawn(lbm_agent::watch::poll_displays(inputs.clone()));
 
         let mut agent = Agent::new(world, Timings::default(), hook, inputs);
+
+        // The frontends' endpoint (the instance lock is held: any socket there is stale).
+        #[cfg(unix)]
+        let _api = {
+            let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+            let endpoint =
+                lbm_ipc::endpoint::agent_socket_path(runtime.as_deref(), Some(&data_dir));
+            match endpoint.map(|p| p.to_string_lossy().into_owned()) {
+                Some(endpoint) => match lbm_agent::api::listen(&endpoint) {
+                    Ok((calls, listener)) => {
+                        eprintln!("[lbm-agent] frontends: {endpoint}");
+                        agent = agent.with_api(calls);
+                        Some(listener)
+                    }
+                    Err(error) => {
+                        eprintln!("[lbm-agent] no frontend endpoint at {endpoint}: {error}");
+                        None
+                    }
+                },
+                None => None,
+            }
+        };
         if !options.fake_hook {
             let log = Some(data_dir.join("hook.log"));
             let launcher = match options.hook {

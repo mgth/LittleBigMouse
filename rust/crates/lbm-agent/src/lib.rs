@@ -11,7 +11,9 @@
 //! - [`gap_guard`]: the 1 px gaps KWin's barriers need while the engine runs (D7).
 //! - [`runtime`]: the event loop tying them together.
 //! - [`instance`] and [`log`]: one agent per session, and its log over five runs.
+//! - [`api`]: the frontends' way in (JSON over a local socket, D6).
 
+pub mod api;
 pub mod fake_hook;
 pub mod gap_guard;
 pub mod hook;

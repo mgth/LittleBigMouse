@@ -99,11 +99,20 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   reconstruit et envoie les zones dans la nouvelle géométrie. **Jamais en `--fake-hook`** : il
   déplacerait les vraies sorties.
 
+- `api` (D6) : l'entrée des frontends. Trames à préfixe de longueur (celles du hook), JSON
+  en PascalCase, socket 0600 `lbm-agent.sock` à côté du verrou d'instance (nom partagé dans
+  `lbm_ipc::endpoint`). Version 1 : `Hello`, `Snapshot`, `Subscribe` (état puis un événement
+  `State` à chaque changement), `Start`, `Stop`, `Refresh`, `Quit` (le hook d'abord : l'agent
+  attend que le Quit soit écrit avant de partir). Méthode inconnue : erreur, jamais devinée.
+  Windows (tube par session, DACL du hook) viendra avec l'agent Windows.
+- Instance unique (`instance`, verrou `flock` / mutex nommé) prise avant tout, puis journal
+  `agent.log` sur cinq générations (`log`) quand la sortie d'erreur n'est pas un terminal.
+
 ## Suite
 
-1. Instance unique de l'agent, journaux sur cinq générations ; repli sur l'arrêt du
-   processus quand un Stop ne peut pas être livré (le C# le faisait).
+1. Repli sur l'arrêt du processus quand un Stop ne peut pas être livré (le C# le faisait).
 2. Sources Linux : inotify et uevents DRM à la place du sondage, veille par
    `PrepareForSleep` de logind.
-3. API du frontend (JSON, D6), tray, autostart ; Windows (point de terminaison par session,
-   élévation, sources).
+3. API, suite : `SaveLayout`, `SaveOptions`, `Preview`/`EndPreview`, `Probe`,
+   `SeenProcesses` ; tray, autostart ; Windows (points de terminaison par session, élévation,
+   sources).

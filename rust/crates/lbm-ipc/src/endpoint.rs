@@ -23,6 +23,17 @@ pub fn socket_path(runtime_dir: Option<&Path>, data_dir: Option<&Path>) -> Optio
         .map(|dir| dir.join(SOCKET_NAME))
 }
 
+/// The agent's frontend socket's file name (v6), beside the hook's.
+pub const AGENT_SOCKET_NAME: &str = "lbm-agent.sock";
+
+/// The agent's frontend socket, placed as [`socket_path`] places the hook's.
+pub fn agent_socket_path(runtime_dir: Option<&Path>, data_dir: Option<&Path>) -> Option<PathBuf> {
+    runtime_dir
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .or(data_dir)
+        .map(|dir| dir.join(AGENT_SOCKET_NAME))
+}
+
 /// The Windows pipe of a logon session.
 pub fn pipe_name(session: u32) -> String {
     format!(r"\\.\pipe\LittleBigMouse-v1-session-{session}")

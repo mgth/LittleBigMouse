@@ -6,6 +6,8 @@
 //! does something surprising, the Rust does it too, and says so: the oracle is
 //! the specification until the C# is gone.
 
+pub mod collation;
 pub mod geo;
+pub mod model;
 pub mod solve;
 pub mod wallpaper;

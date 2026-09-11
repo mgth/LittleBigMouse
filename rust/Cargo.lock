@@ -632,6 +632,9 @@ dependencies = [
 [[package]]
 name = "lbm-layout"
 version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "lbm-pattern"

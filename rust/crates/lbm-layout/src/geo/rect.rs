@@ -228,6 +228,11 @@ impl Rect {
         Rect::new(left, top, width, height)
     }
 
+    /// `Rect.Translate(Vector)`: `new Rect(X + v.X, Y + v.Y, Width, Height)`.
+    pub fn translate(&self, v: Vector) -> Rect {
+        Rect::new(self.x + v.x, self.y + v.y, self.width, self.height)
+    }
+
     /// `Rect.Offset`. C# throws on the empty rectangle; it is returned unchanged.
     pub fn offset(&self, v: Vector) -> Rect {
         debug_assert!(!self.is_empty(), "HLab.Geo cannot offset the empty rect");

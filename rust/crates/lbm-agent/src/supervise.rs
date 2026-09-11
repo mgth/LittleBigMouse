@@ -89,6 +89,24 @@ impl HookLauncher {
         &self.program
     }
 
+    /// The last resort when a Stop cannot be delivered (C#: `StopCurrentSessionDaemons`):
+    /// end the hook this agent launched, if it is still alive. Stopping is the safety
+    /// operation — a lost connection must not leave the mice captured — and the kernel
+    /// releases a dead process's grabs and barriers. Only the instance this agent
+    /// started: another one could be anyone's. Returns whether one was ended.
+    pub fn stop_launched(&mut self) -> bool {
+        let Some(child) = &mut self.child else {
+            return false;
+        };
+        if !matches!(child.try_wait(), Ok(None)) {
+            self.child = None;
+            return false;
+        }
+        let ended = child.kill().is_ok() && child.wait().is_ok();
+        self.child = None;
+        ended
+    }
+
     /// The hook answered: whatever was launched worked, the backoff starts over.
     pub fn on_connected(&mut self) {
         self.failures = 0;
@@ -237,6 +255,33 @@ mod tests {
             format!("Name:\t{comm}\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n"),
         )
         .unwrap();
+    }
+
+    /// A stand-in "hook" that would run for a minute: the fallback ends it. Named
+    /// uniquely (a link to `sleep`), or any `sleep` of this user would count as "another
+    /// hook running".
+    #[cfg(unix)]
+    #[test]
+    fn a_stop_that_cannot_be_delivered_ends_the_hook_this_agent_launched() {
+        let dir = tempfile::tempdir().unwrap();
+        let hook = dir.path().join(format!("lbmhook{}", std::process::id()));
+        let sleep = ["/usr/bin/sleep", "/bin/sleep"]
+            .into_iter()
+            .find(|p| Path::new(p).exists())
+            .expect("a sleep binary");
+        std::os::unix::fs::symlink(sleep, &hook).unwrap();
+        let mut launcher = HookLauncher::new(hook, vec!["60".into()], None);
+        assert!(!launcher.stop_launched(), "nothing launched yet");
+        let Launch::Started(pid) = launcher.on_unreachable(Instant::now()) else {
+            panic!("launched");
+        };
+        assert!(std::path::Path::new(&format!("/proc/{pid}")).exists());
+        assert!(launcher.stop_launched());
+        assert!(
+            !std::path::Path::new(&format!("/proc/{pid}")).exists(),
+            "ended and reaped"
+        );
+        assert!(!launcher.stop_launched(), "nothing left to end");
     }
 
     #[test]

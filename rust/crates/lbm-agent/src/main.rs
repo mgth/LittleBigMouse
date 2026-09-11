@@ -293,7 +293,7 @@ fn run(options: Options) -> ExitCode {
                 None
             }
         };
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         if !options.no_tray {
             tokio::spawn(lbm_agent::tray::run(
                 calls.clone(),
@@ -322,7 +322,7 @@ fn run(options: Options) -> ExitCode {
 }
 
 /// What the tray's Open does: launch the frontend, if there is one to launch.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 fn opener(ui: Option<PathBuf>) -> std::sync::Arc<dyn Fn() + Send + Sync> {
     std::sync::Arc::new(move || {
         let Some(ui) = &ui else {

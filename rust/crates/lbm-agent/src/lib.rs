@@ -14,7 +14,8 @@
 //! - [`instance`] and [`log`]: one agent per session, and its log over five runs.
 //! - [`api`]: the frontends' way in (JSON over a local socket or pipe, D6).
 //! - `sleep` (Linux): system sleep from logind.
-//! - `tray` and `icons` (Linux): the tray, a frontend in process.
+//! - [`tray`] and [`icons`]: the tray, a frontend in process (Linux: `ksni`; Windows:
+//!   the notification area).
 //! - [`autostart`] and [`schtask`]: starting with the session (XDG autostart, the
 //!   Windows scheduled task).
 //! - `winpipe` (Windows): the per-session pipes, the hook's and the agent's.
@@ -24,7 +25,7 @@ pub mod autostart;
 pub mod fake_hook;
 pub mod gap_guard;
 pub mod hook;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 pub mod icons;
 pub mod instance;
 pub mod log;
@@ -34,7 +35,7 @@ pub mod schtask;
 #[cfg(target_os = "linux")]
 pub mod sleep;
 pub mod supervise;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 pub mod tray;
 pub mod watch;
 #[cfg(windows)]

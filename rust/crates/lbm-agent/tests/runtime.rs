@@ -102,6 +102,20 @@ async fn until(what: &str, mut done: impl FnMut() -> bool) {
     panic!("never: {what}");
 }
 
+/// A new hook at the endpoint of one that just went away. On Windows the pipe is
+/// created as its first instance, which is refused ("access denied") while any instance
+/// of the old one remains — until its tasks are dropped and the agent has let go of its
+/// end — so the new hook retries, as a hook started right after a crash would.
+async fn rebind(endpoint: &str) -> FakeHook {
+    for _ in 0..250 {
+        match FakeHook::bind(endpoint) {
+            Ok(fake) => return fake,
+            Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+        }
+    }
+    panic!("the endpoint {endpoint} never came free");
+}
+
 fn runs(fake: &FakeHook) -> usize {
     fake.received()
         .iter()
@@ -196,7 +210,7 @@ async fn a_hook_that_comes_late_or_comes_back_gets_the_layout() {
 
     // It goes away (a crash) and a new one takes its place.
     drop(fake);
-    let fake = FakeHook::bind(&endpoint).unwrap();
+    let fake = rebind(&endpoint).await;
     until("the new hook runs the layout", || fake.hooked()).await;
 
     stop.send(()).unwrap();

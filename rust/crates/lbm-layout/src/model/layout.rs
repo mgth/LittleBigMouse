@@ -2,9 +2,9 @@ use crate::collation::invariant_compare;
 use crate::geo::dotnet;
 use crate::geo::{Rect, Thickness};
 
-use super::distance::{distance, distance_hv};
 use super::ratio::inverse_of;
 use super::{DisplaySize, LayoutOptions, Monitor, MonitorModel, PhysicalSource, Ratio};
+use crate::solve::distance::{RectDistance, ThicknessDistance};
 
 /// Where a layout comes from: C#'s `LayoutSource`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -494,7 +494,7 @@ fn minimal_max_travel_distance(primary: usize, primary_bounds: Rect, bounds: &[R
         .map(|(i, b)| Hop {
             source: primary,
             target: i,
-            distance: distance_hv(distance(primary_bounds, *b)),
+            distance: primary_bounds.distance(b).distance_hv(),
         })
         .collect();
 
@@ -520,10 +520,9 @@ fn minimal_max_travel_distance(primary: usize, primary_bounds: Rect, bounds: &[R
             if d.target == hops[last].target {
                 continue;
             }
-            let candidate = distance_hv(distance(
-                bounds[hops[last].target],
-                bounds[hops[other].target],
-            ));
+            let candidate = bounds[hops[last].target]
+                .distance(&bounds[hops[other].target])
+                .distance_hv();
             if candidate >= hops[last].distance {
                 continue;
             }
@@ -532,5 +531,5 @@ fn minimal_max_travel_distance(primary: usize, primary_bounds: Rect, bounds: &[R
             progress = true;
         }
     }
-    dotnet::linq_max(hops.iter().map(|h| h.distance)).unwrap_or(0.0)
+    dotnet::enumerable_max(hops.iter().map(|h| h.distance)).unwrap_or(0.0)
 }

@@ -33,6 +33,8 @@ struct FakeWorld {
     signature_reads: u32,
     rebuilds: u32,
     layout: Option<LayoutState>,
+    /// A preview is held (set by the test, as the runtime does before `Input::Preview`).
+    preview: bool,
 }
 
 impl World for FakeWorld {
@@ -53,6 +55,10 @@ impl World for FakeWorld {
         if let Some(layout) = &mut self.layout {
             layout.enabled = enabled;
         }
+    }
+
+    fn end_preview(&mut self) {
+        self.preview = false;
     }
 }
 
@@ -78,6 +84,7 @@ impl Harness {
                 signature_reads: 0,
                 rebuilds: 0,
                 layout,
+                preview: false,
             },
             now: Duration::ZERO,
             timers: Vec::new(),
@@ -115,6 +122,11 @@ impl Harness {
                     if self.starts() >= self.starts_before_it_sticks as usize {
                         self.send(Input::Hook(HookEvent::Running));
                     }
+                }
+                Effect::Preview => {
+                    // Load+Run in one frame: the hook ends up hooked.
+                    self.commands.push("Preview");
+                    self.send(Input::Hook(HookEvent::Running));
                 }
                 Effect::Stop => {
                     self.commands.push("Stop");
@@ -700,6 +712,7 @@ fn focused_processes_are_reported() {
         signature_reads: 0,
         rebuilds: 0,
         layout: None,
+        preview: false,
     };
     let effects = r.handle(
         Input::Hook(HookEvent::FocusChanged("/usr/bin/game".into())),
@@ -729,4 +742,141 @@ fn at_boot_the_first_layout_waits_for_the_hook_to_ask() {
     survivor.send(Input::Hook(HookEvent::Connected));
     survivor.send(Input::Hook(HookEvent::Running));
     assert!(survivor.commands.is_empty());
+}
+
+//==================//
+// Live preview     //
+//==================//
+
+impl Harness {
+    /// A frontend's preview tick: the runtime sets the preview in the world, then says so.
+    fn preview(&mut self) {
+        self.world.preview = true;
+        self.send(Input::Preview);
+    }
+}
+
+/// Every tick hands the edit over, Enabled neither read nor recorded; ending it puts the
+/// hook back on the current layout. (C# left the daemon on the last previewed geometry.)
+#[test]
+fn a_preview_runs_the_edit_and_its_end_goes_back_to_the_layout() {
+    let mut h = Harness::enabled();
+    h.send(Input::DisplayChanged);
+    h.settle();
+    h.commands.clear();
+
+    h.preview();
+    h.preview();
+    assert_eq!(h.commands, ["Preview", "Preview"]);
+    assert!(h.reconciler.previewing());
+    assert!(h.enabled_writes.is_empty() && h.layout_writes == 0);
+
+    h.send(Input::EndPreview);
+    assert_eq!(h.commands.last(), Some(&"Start"));
+    assert!(!h.reconciler.previewing());
+    assert!(!h.world.preview, "the world let the edit go");
+}
+
+/// Previewing over a stopped engine starts it for the preview; ending it takes it back
+/// down, as the user left it.
+#[test]
+fn a_preview_over_a_stopped_engine_ends_with_the_engine_stopped() {
+    let mut h = Harness::new(fast(), Some(layout(false)));
+    h.preview();
+    assert_eq!(h.commands, ["Preview"]);
+    h.send(Input::EndPreview);
+    assert_eq!(h.commands, ["Preview", "Stop"]);
+    assert!(h.enabled_writes.is_empty());
+}
+
+/// A hook already down when the preview ends (it unhooked itself) is left down.
+#[test]
+fn ending_a_preview_leaves_a_hook_that_is_down_alone() {
+    let mut h = Harness::enabled();
+    h.preview();
+    h.send(Input::Hook(HookEvent::Stopped));
+    h.commands.clear();
+    h.send(Input::EndPreview);
+    assert!(h.commands.is_empty());
+    assert!(!h.world.preview);
+}
+
+/// The user's Stop, the user's Start, a rebuild and the hook going away each end the
+/// preview; the rescue ends it and puts the engine back on the current layout (C#:
+/// `AbandonPreviewAsync`).
+#[test]
+fn a_preview_ends_with_whatever_outranks_it() {
+    let mut stop = Harness::enabled();
+    stop.preview();
+    stop.send(Input::UserStop);
+    assert!(!stop.reconciler.previewing() && !stop.world.preview);
+    assert_eq!(stop.commands.last(), Some(&"Stop"));
+
+    let mut start = Harness::enabled();
+    start.preview();
+    start.send(Input::UserStart { keep_layout: true });
+    assert!(!start.reconciler.previewing() && !start.world.preview);
+    assert_eq!(start.commands.last(), Some(&"Start"));
+
+    let mut rebuild = Harness::enabled();
+    rebuild.preview();
+    rebuild.send(Input::DisplayChanged);
+    rebuild.settle();
+    assert_eq!(rebuild.world.rebuilds, 1);
+    assert!(!rebuild.reconciler.previewing() && !rebuild.world.preview);
+
+    let mut refresh = Harness::enabled();
+    refresh.preview();
+    refresh.send(Input::Refresh);
+    assert!(!refresh.reconciler.previewing() && !refresh.world.preview);
+
+    let mut gone = Harness::enabled();
+    gone.preview();
+    gone.send(Input::Hook(HookEvent::Dead));
+    assert!(!gone.reconciler.previewing() && !gone.world.preview);
+
+    let mut rescued = Harness::enabled();
+    rescued.preview();
+    rescued.commands.clear();
+    rescued.send(Input::Hook(HookEvent::Rescued));
+    rescued.send(Input::Hook(HookEvent::Stopped));
+    assert!(!rescued.reconciler.previewing() && !rescued.world.preview);
+    assert_eq!(rescued.commands, ["Start"]);
+}
+
+/// A re-hook while previewing (a display blink the configuration settles back from)
+/// keeps previewing: the runtime hands over the preview's zones.
+#[test]
+fn a_re_hook_during_a_preview_keeps_the_preview() {
+    let mut h = Harness::enabled();
+    h.send(Input::DisplayChanged);
+    h.settle();
+    h.preview();
+    h.send(Input::Hook(HookEvent::DisplayChanged));
+    h.send(Input::Hook(HookEvent::Stopped));
+    h.settle();
+    assert_eq!(h.world.rebuilds, 1);
+    assert_eq!(h.commands.last(), Some(&"Start"));
+    assert!(h.reconciler.previewing() && h.world.preview);
+}
+
+/// Nothing is previewed while the display is off, nor for a foreign layout.
+#[test]
+fn no_preview_while_the_display_is_off_or_of_a_foreign_layout() {
+    let mut off = Harness::enabled();
+    off.send(Input::Hook(HookEvent::Suspended));
+    off.preview();
+    assert!(off.commands.is_empty());
+    assert!(!off.reconciler.previewing() && !off.world.preview);
+
+    let mut foreign = Harness::new(
+        fast(),
+        Some(LayoutState {
+            is_virtual: true,
+            ..layout(true)
+        }),
+    );
+    foreign.preview();
+    assert!(foreign.commands.is_empty());
+    assert!(!foreign.reconciler.previewing());
 }

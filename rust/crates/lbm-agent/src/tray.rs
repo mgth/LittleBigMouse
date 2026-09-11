@@ -219,7 +219,14 @@ mod tests {
         assert_eq!(
             sent,
             [
-                (1, Request::Start { keep_layout: false }),
+                (
+                    1,
+                    Request::Start {
+                        keep_layout: false,
+                        layout_id: None,
+                        document: None,
+                    },
+                ),
                 (2, Request::Stop),
                 (3, Request::Refresh),
                 (4, Request::Quit)

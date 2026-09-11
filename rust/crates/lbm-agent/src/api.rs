@@ -24,9 +24,22 @@
 //!
 //! Version 1: `Hello`, `Snapshot`, `Subscribe`, `Start`, `Stop`, `Refresh`, `Quit`.
 //! Version 2: the hook events, `Probe` (the report comes as a `Probed` event) and
-//! `SeenProcesses` (the processes seen in the foreground this session). The plan's
-//! `SaveLayout`, `SaveOptions` and `Preview`/`EndPreview` come next. An unknown method
-//! is answered with an error, never guessed at.
+//! `SeenProcesses` (the processes seen in the foreground this session).
+//! Version 3: the agent becomes the only writer. A frontend sends what it would have
+//! saved — a [`LayoutDocument`], the store's own documents in one object — for the
+//! layout it edits (`LayoutId`, refused if the displays changed under it):
+//!
+//! ```text
+//! -> {"Id": 4, "Method": "SaveLayout", "LayoutId": "…", "Document": {…}}
+//! -> {"Id": 5, "Method": "Start", "LayoutId": "…", "Document": {…}}    // apply and start
+//! -> {"Id": 6, "Method": "Preview", "LayoutId": "…", "Document": {…}}  // every tick
+//! -> {"Id": 7, "Method": "EndPreview"}
+//! -> {"Id": 8, "Method": "SaveOptions", "Options": {…}, "Excluded": ["…"]}
+//! ```
+//!
+//! A preview is ended by the agent too (the user's Start or Stop, a rebuild, the
+//! rescue, the hook going away): `Previewing` in the state says which is the case.
+//! An unknown method is answered with an error, never guessed at.
 
 #[cfg(unix)]
 use std::io;
@@ -34,6 +47,7 @@ use std::io;
 use lbm_ipc::client::DaemonEvent;
 #[cfg(unix)]
 use lbm_ipc::framing::{read_frame, write_frame};
+use lbm_store::{GlobalOptionsDto, LayoutDocument};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 #[cfg(unix)]
@@ -42,14 +56,14 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 /// Bumped on any change a client must know about.
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 //==================//
 // The contract     //
 //==================//
 
 /// What a frontend asks.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "Method")]
 pub enum Request {
     /// Who is there: answered with the agent's name, version and protocol.
@@ -61,10 +75,38 @@ pub enum Request {
     Snapshot,
     /// The state now, then a `State` event whenever it changes.
     Subscribe,
-    /// The user's Start; `KeepLayout` from an editor's "apply and start".
+    /// The user's Start; `KeepLayout` from an editor's "apply and start", which sends
+    /// its edit along (`LayoutId` and `Document`): applied, saved, started.
     Start {
         #[serde(rename = "KeepLayout", default)]
         keep_layout: bool,
+        #[serde(rename = "LayoutId", default, skip_serializing_if = "Option::is_none")]
+        layout_id: Option<String>,
+        #[serde(rename = "Document", default, skip_serializing_if = "Option::is_none")]
+        document: Option<Box<LayoutDocument>>,
+    },
+    /// Apply an edit to the current layout and save it (C#: the Save button).
+    SaveLayout {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "Document")]
+        document: Box<LayoutDocument>,
+    },
+    /// A live-preview tick: the hook runs the edit, nothing is saved.
+    Preview {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "Document")]
+        document: Box<LayoutDocument>,
+    },
+    /// The preview is over: the hook goes back to the current layout.
+    EndPreview,
+    /// The app-level options and the excluded list, saved at once (C#: `SaveLive`).
+    SaveOptions {
+        #[serde(rename = "Options", default, skip_serializing_if = "Option::is_none")]
+        options: Option<GlobalOptionsDto>,
+        #[serde(rename = "Excluded", default, skip_serializing_if = "Option::is_none")]
+        excluded: Option<Vec<String>>,
     },
     /// The user's Stop.
     Stop,
@@ -80,7 +122,7 @@ pub enum Request {
 }
 
 /// A request with the id its answer carries back.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RequestFrame {
     #[serde(rename = "Id")]
     pub id: u64,
@@ -103,6 +145,10 @@ pub struct Snapshot {
     pub layout_id: Option<String>,
     /// Whether the user wants the engine on this layout.
     pub enabled: Option<bool>,
+    /// Nothing edited since the layout was last saved.
+    pub saved: Option<bool>,
+    /// A frontend's live preview is what the hook runs.
+    pub previewing: bool,
 }
 
 /// An answer to request `id`.

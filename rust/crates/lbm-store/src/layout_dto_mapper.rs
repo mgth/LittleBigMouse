@@ -82,6 +82,34 @@ pub fn apply_layout_options(o: &mut LayoutOptions, dto: Option<&LayoutOptionsDto
     keep(&mut o.priority_unhooked, &dto.priority_unhooked);
 }
 
+/// What a load applies of a layout's stored data once the app-level options and the
+/// excluded list are in (C# `LayoutPersistence.Load`, its second half): the per-layout
+/// options, then per monitor its model and its own state — the model first, the monitor
+/// mapping reads the physical size the model just restored (edge lengths, whole-edge
+/// resistance migration).
+pub fn apply_layout(
+    layout: &mut Layout,
+    stored: Option<&LayoutDto>,
+    models: &IndexMap<String, ModelDto>,
+) {
+    let layout_options = stored.and_then(|l| l.options.as_ref());
+    layout.edit_options(|o| apply_layout_options(o, layout_options));
+
+    let monitors: Vec<(String, String)> = layout
+        .monitors()
+        .iter()
+        .map(|m| (m.id.clone(), m.model.clone()))
+        .collect();
+    for (id, model) in &monitors {
+        if let Some(dto) = models.get(model) {
+            apply_model(layout, model, dto);
+        }
+        if let Some(dto) = stored.and_then(|l| l.monitors.get(id)) {
+            apply_monitor(layout, id, dto);
+        }
+    }
+}
+
 /// C# `Apply(PhysicalMonitorModel, ModelDto)`: a model's stored size, borders and name.
 pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
     layout.edit_model(pnp_code, |size, name| {

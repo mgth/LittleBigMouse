@@ -175,6 +175,12 @@ pub struct Client {
     out: mpsc::UnboundedSender<String>,
 }
 
+/// A frontend in the agent's own process (the tray): a client, and the frames sent to it.
+pub fn in_process() -> (Client, mpsc::UnboundedReceiver<String>) {
+    let (out, frames) = mpsc::unbounded_channel();
+    (Client { out }, frames)
+}
+
 impl Client {
     /// Sends a frame; `false` once the frontend is gone.
     pub fn send(&self, frame: String) -> bool {
@@ -210,24 +216,28 @@ impl Drop for Listener {
 /// at that path is a dead agent's and is replaced.
 #[cfg(unix)]
 pub fn listen(endpoint: &str) -> io::Result<(mpsc::UnboundedReceiver<Call>, Listener)> {
+    let (calls, calls_rx) = mpsc::unbounded_channel();
+    Ok((calls_rx, listen_into(endpoint, calls)?))
+}
+
+/// [`listen`], the requests going into `calls` — which the in-process frontends (the
+/// tray) send into too.
+#[cfg(unix)]
+pub fn listen_into(endpoint: &str, calls: mpsc::UnboundedSender<Call>) -> io::Result<Listener> {
     use std::os::unix::fs::PermissionsExt;
 
     let _ = std::fs::remove_file(endpoint);
     let listener = tokio::net::UnixListener::bind(endpoint)?;
     std::fs::set_permissions(endpoint, std::fs::Permissions::from_mode(0o600))?;
-    let (calls, calls_rx) = mpsc::unbounded_channel();
     let accepting = tokio::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
             tokio::spawn(connection(stream, calls.clone()));
         }
     });
-    Ok((
-        calls_rx,
-        Listener {
-            accepting,
-            path: endpoint.into(),
-        },
-    ))
+    Ok(Listener {
+        accepting,
+        path: endpoint.into(),
+    })
 }
 
 // Unix only until the Windows endpoint (a per-session pipe with the hook's DACL) exists.

@@ -14,11 +14,14 @@
 //! - [`instance`] and [`log`]: one agent per session, and its log over five runs.
 //! - [`api`]: the frontends' way in (JSON over a local socket, D6).
 //! - `sleep` (Linux): system sleep from logind.
+//! - `tray` and `icons` (Linux): the tray, a frontend in process.
 
 pub mod api;
 pub mod fake_hook;
 pub mod gap_guard;
 pub mod hook;
+#[cfg(target_os = "linux")]
+pub mod icons;
 pub mod instance;
 pub mod log;
 pub mod reconcile;
@@ -26,5 +29,7 @@ pub mod runtime;
 #[cfg(target_os = "linux")]
 pub mod sleep;
 pub mod supervise;
+#[cfg(target_os = "linux")]
+pub mod tray;
 pub mod watch;
 pub mod world;

@@ -14,14 +14,18 @@ lbm-layout = { path = "../lbm-layout" }
 lbm-store = { path = "../lbm-store" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+# The tray icons, rendered once from the UI's SVGs (icons/).
+png = "0.17"
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "signal", "sync", "time"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-# System sleep from logind (sleep.rs), with the hook's zbus build.
 [target.'cfg(target_os = "linux")'.dependencies]
 futures-util = { version = "0.3", default-features = false }
+# The tray (tray.rs): a StatusNotifierItem over D-Bus, no GTK.
+ksni = { version = "0.3.6", default-features = false, features = ["tokio"] }
+# System sleep from logind (sleep.rs), with the hook's zbus build.
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [target.'cfg(windows)'.dependencies.windows]

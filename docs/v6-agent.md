@@ -89,12 +89,21 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   processus avec le binaire de l'agent en faux hook (`--serve-fake-hook`) : lancé, il
   reçoit la mise en page ; l'agent tué, il tourne toujours.
 
+- `gap_guard` (D7, `KScreenGapGuard`) : sous Plasma Wayland, quand le hook passe par le
+  portail (pas par evdev), les sorties sont écartées d'un pixel logique pendant que le moteur
+  tourne, pour que les barrières passent le validateur. Positions d'origine journalisées
+  avant de toucher au compositeur (`kscreen-restore.json`, même forme que le C# : chacun
+  récupère le journal de l'autre), restauration à l'arrêt, récupération au démarrage d'un
+  journal laissé par un plantage ; une sortie déplacée par l'utilisateur entre-temps n'est pas
+  touchée. Un Start qui déplace les sorties est abandonné : le changement d'écran qui suit
+  reconstruit et envoie les zones dans la nouvelle géométrie. **Jamais en `--fake-hook`** : il
+  déplacerait les vraies sorties.
+
 ## Suite
 
 1. Instance unique de l'agent, journaux sur cinq générations ; repli sur l'arrêt du
    processus quand un Stop ne peut pas être livré (le C# le faisait).
-2. `KScreenGapGuard` (D7) : prologue et épilogue autour du hook sous KWin.
-3. Sources Linux : inotify et uevents DRM à la place du sondage, veille par
+2. Sources Linux : inotify et uevents DRM à la place du sondage, veille par
    `PrepareForSleep` de logind.
-4. API du frontend (JSON, D6), tray, autostart ; Windows (point de terminaison par session,
+3. API du frontend (JSON, D6), tray, autostart ; Windows (point de terminaison par session,
    élévation, sources).

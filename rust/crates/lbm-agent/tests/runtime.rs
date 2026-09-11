@@ -216,3 +216,109 @@ async fn a_hook_that_comes_late_or_comes_back_gets_the_layout() {
     stop.send(()).unwrap();
     agent.await.unwrap();
 }
+
+/// A world whose engine prologue opens gaps once (as the KWin gap guard does), which
+/// changes the display signature; the epilogue closes them.
+struct GappingWorld {
+    layout: Option<LayoutState>,
+    gapped: bool,
+    rebuilds: Arc<Mutex<u32>>,
+    restores: Arc<Mutex<u32>>,
+}
+
+impl World for GappingWorld {
+    fn display_signature(&mut self) -> String {
+        if self.gapped { "gapped" } else { "one-monitor" }.into()
+    }
+
+    fn rebuild_layout(&mut self) {
+        *self.rebuilds.lock().unwrap() += 1;
+        self.layout.get_or_insert(LayoutState {
+            enabled: true,
+            is_virtual: false,
+            saved: true,
+        });
+    }
+
+    fn layout(&self) -> Option<LayoutState> {
+        self.layout
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        if let Some(layout) = &mut self.layout {
+            layout.enabled = enabled;
+        }
+    }
+}
+
+impl AgentWorld for GappingWorld {
+    fn zones(&self) -> Option<(String, bool)> {
+        self.layout.map(|_| (ZONES.to_owned(), false))
+    }
+
+    fn save_enabled(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn save_layout(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn prepare_for_engine(&mut self) -> bool {
+        !std::mem::replace(&mut self.gapped, true)
+    }
+
+    fn restore_after_engine(&mut self) -> bool {
+        let moved = std::mem::replace(&mut self.gapped, false);
+        if moved {
+            *self.restores.lock().unwrap() += 1;
+        }
+        moved
+    }
+}
+
+#[tokio::test]
+async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let rebuilds = Arc::new(Mutex::new(0));
+    let restores = Arc::new(Mutex::new(0));
+    let world = GappingWorld {
+        layout: None,
+        gapped: false,
+        rebuilds: rebuilds.clone(),
+        restores: restores.clone(),
+    };
+
+    let (hook, signals) = HookClient::spawn(endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let control = inputs.clone();
+    let agent = tokio::spawn(async move {
+        let mut agent = Agent::new(world, quick(), hook, inputs);
+        agent
+            .run(signals, inputs_rx, async {
+                let _ = stopped.await;
+            })
+            .await;
+    });
+
+    // The first Start opens the gaps: its zones describe the old desktop and are never
+    // sent. The display change rebuilds, and the Start in the gapped geometry goes out.
+    until("running in the gapped geometry", || fake.hooked()).await;
+    assert_eq!(*rebuilds.lock().unwrap(), 2);
+    assert_eq!(
+        fake.received(),
+        [Command::Listen, Command::Load(ZONES.into()), Command::Run],
+        "one hand-over, the one computed after the gaps"
+    );
+
+    // Stopping closes them.
+    control.send(Input::UserStop).unwrap();
+    until("stopped", || !fake.hooked()).await;
+    until("the gaps closed", || *restores.lock().unwrap() == 1).await;
+
+    stop.send(()).unwrap();
+    agent.await.unwrap();
+}

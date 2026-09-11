@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use lbm_agent::fake_hook::FakeHook;
+use lbm_agent::gap_guard::GapGuard;
 use lbm_agent::hook::HookClient;
 use lbm_agent::reconcile::Timings;
 use lbm_agent::runtime::Agent;
@@ -131,7 +132,13 @@ fn run(options: Options) -> ExitCode {
             }),
             None => LayoutPersistence::new(store, Platform),
         };
-        let world = SystemWorld::new(Backend::detect(), persistence);
+        let mut world = SystemWorld::new(Backend::detect(), persistence);
+        // The KWin gaps move the user's outputs: a real session only, never beside a
+        // fake hook (which needs no barriers anyway).
+        if !options.fake_hook && cfg!(target_os = "linux") {
+            world =
+                world.with_gap_guard(GapGuard::for_session(data_dir.join("kscreen-restore.json")));
+        }
 
         // Kept alive for the whole run: dropping it closes its endpoint.
         let mut _fake = None;

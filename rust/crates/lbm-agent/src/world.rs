@@ -14,6 +14,7 @@ use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_layout::zoning::compute_zones;
 use lbm_store::{LayoutPersistence, LayoutStore, PersistencePlatform};
 
+use crate::gap_guard::{run_kscreen_doctor, GapGuard};
 use crate::reconcile::{LayoutState, World};
 
 /// The world the runtime drives.
@@ -27,6 +28,23 @@ pub trait AgentWorld: World {
 
     /// Persists the whole current layout.
     fn save_layout(&mut self) -> io::Result<()>;
+
+    /// The engine's topology prologue (the KWin gaps, `gap_guard`): whether it moved
+    /// outputs — then the layout at hand describes a desktop that is going away, and the
+    /// Start waits for the display change that follows.
+    fn prepare_for_engine(&mut self) -> bool {
+        false
+    }
+
+    /// The epilogue, once the engine stopped: whether it moved outputs back.
+    fn restore_after_engine(&mut self) -> bool {
+        false
+    }
+
+    /// At startup: put back what a previous run left gapped; whether it moved outputs.
+    fn recover_stale(&mut self) -> bool {
+        false
+    }
 }
 
 /// The real world on Linux: discovery, profiles, the layout.
@@ -34,6 +52,7 @@ pub struct SystemWorld<S, P> {
     backend: Option<Backend>,
     persistence: LayoutPersistence<S, P>,
     layout: Option<Layout>,
+    gaps: Option<GapGuard>,
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
@@ -44,7 +63,15 @@ impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
             backend,
             persistence,
             layout: None,
+            gaps: None,
         }
+    }
+
+    /// Opens the KWin gaps around the engine (a real session only: they move the
+    /// user's outputs).
+    pub fn with_gap_guard(mut self, gaps: GapGuard) -> Self {
+        self.gaps = Some(gaps);
+        self
     }
 
     pub fn layout(&self) -> Option<&Layout> {
@@ -111,6 +138,27 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         match &mut self.layout {
             Some(layout) => self.persistence.save(layout).map(|_| ()),
             None => Ok(()),
+        }
+    }
+
+    fn prepare_for_engine(&mut self) -> bool {
+        match &self.gaps {
+            Some(gaps) => gaps.apply(&self.outputs(), run_kscreen_doctor),
+            None => false,
+        }
+    }
+
+    fn restore_after_engine(&mut self) -> bool {
+        match &self.gaps {
+            Some(gaps) => gaps.restore(&self.outputs(), run_kscreen_doctor),
+            None => false,
+        }
+    }
+
+    fn recover_stale(&mut self) -> bool {
+        match &self.gaps {
+            Some(gaps) => gaps.recover_stale(&self.outputs(), run_kscreen_doctor),
+            None => false,
         }
     }
 }

@@ -8,6 +8,11 @@ pub mod cursor;
 pub mod event;
 pub mod probe;
 
+// The engine was a module of the hook crate; its code still names its siblings
+// `crate::geometry` and `crate::zones`.
+use lbm_geom as geometry;
+use lbm_zones as zones;
+
 use cursor::CursorEnv;
 use event::MouseEventArg;
 
@@ -120,7 +125,7 @@ impl MouseEngine {
     /// `ClipCursor` is process-global. A game may replace our temporary zone
     /// clip before the next mouse event; in that case its new rect is ownership
     /// changing hands, not something LBM is allowed to overwrite or clear.
-    pub(crate) fn restore_managed_clip(&mut self, env: &mut impl CursorEnv) {
+    pub fn restore_managed_clip(&mut self, env: &mut impl CursorEnv) {
         if !self.old_clip_rect.is_empty() && self.owns_current_clip(env) {
             env.set_clip(self.old_clip_rect);
         }

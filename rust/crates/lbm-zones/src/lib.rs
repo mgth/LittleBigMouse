@@ -8,10 +8,15 @@
 //! instead of dereferencing freed memory.
 
 pub mod layout;
+pub mod priority;
 pub mod travel;
 pub mod xml;
 pub mod zone;
 pub mod zone_link;
+
+// The zones were a module of the hook crate; their code still names geometry
+// `crate::geometry`.
+use lbm_geom as geometry;
 
 pub use layout::{Algorithm, ZonesLayout};
 pub use zone::Zone;

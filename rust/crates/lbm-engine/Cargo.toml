@@ -1,0 +1,14 @@
+[package]
+name = "lbm-engine"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The LittleBigMouse traversal engine and edge prober, independent of any platform"
+
+[dependencies]
+lbm-geom = { path = "../lbm-geom" }
+lbm-zones = { path = "../lbm-zones" }
+
+[dev-dependencies]
+roxmltree.workspace = true

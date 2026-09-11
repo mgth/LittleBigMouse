@@ -1,0 +1,35 @@
+# The Rust side of LittleBigMouse, as one Cargo workspace.
+#
+# Today it holds the hook daemon (crates/lbm-hook) and the crates it is made of,
+# split so the v6 agent and egui frontend can reuse them without pulling in the
+# hook's platform layer (docs/v6-architecture-plan.md on the v6 branch):
+#
+#   lbm-geom     geometry primitives, pixels and millimetres
+#   lbm-zones    the zone graph the hook routes on, its XML form, priorities
+#   lbm-engine   the traversal engine and the edge prober, pure
+#   lbm-ipc      local IPC framing and the XML command/event protocol
+#   lbm-hook     the daemon: platform hooks, IPC server, command dispatch
+#   lbm-pattern  native-Wayland fullscreen test-pattern viewer (Linux only)
+#
+# Build from here (`cargo build`, `cargo test`) or with
+# `--manifest-path rust/Cargo.toml` from the repository root; both pick up the
+# repository's .cargo/config.toml and rust-toolchain.toml.
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+license = "GPL-3.0-only"
+
+[workspace.dependencies]
+roxmltree = "0.20"
+slotmap = "1"
+tokio = "1"
+
+# Profiles are only read from the workspace root.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

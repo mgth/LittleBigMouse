@@ -1,9 +1,10 @@
 [package]
-name = "littlebigmouse-hook"
+name = "lbm-hook"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 description = "Little Big Mouse hook daemon (Rust port of LittleBigMouse.Hook)"
-license = "GPL-3.0-only"
+license.workspace = true
+publish = false
 
 # The C# UI locates and launches the daemon strictly by the exe name
 # "LittleBigMouse.Hook.exe" (LittleBigMouseClientService.FindHookPath /
@@ -14,22 +15,20 @@ license = "GPL-3.0-only"
 name = "lbm-hook"
 path = "src/main.rs"
 
-# Native-Wayland fullscreen bitmap viewer: pixel-perfect test patterns on every
-# output (the Avalonia windows go through XWayland, which KWin rescales on any
-# screen whose scale differs from the global factor). Linux-only, stub elsewhere.
-[[bin]]
-name = "lbm-pattern"
-path = "src/bin/lbm-pattern.rs"
-
+# The library keeps its historical name: tests, benches and examples import
+# `littlebigmouse_hook::…`, and the modules split out into sibling crates are
+# re-exported under their old paths (see src/lib.rs).
 [lib]
 name = "littlebigmouse_hook"
 path = "src/lib.rs"
 
 [dependencies]
-roxmltree = "0.20"
-slotmap = "1"
+lbm-geom = { path = "../lbm-geom" }
+lbm-zones = { path = "../lbm-zones" }
+lbm-engine = { path = "../lbm-engine" }
+lbm-ipc = { path = "../lbm-ipc" }
 # Local IPC server (named pipe / UDS): async accept loop, bounded queues.
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
 # Embeds the VERSIONINFO resource (see build.rs). Not under a
 # [target.'cfg(windows)'] table on purpose: build-dependencies are resolved
@@ -70,6 +69,8 @@ features = [
 # daemon has no use for a heavier dev tree.
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+# tests/wire_goldens.rs reads the golden XML structurally.
+roxmltree.workspace = true
 
 # The traversal engine's hot path, measured against a fake cursor.
 [[bench]]
@@ -108,11 +109,6 @@ harness = false
 name = "linux_pipeline"
 harness = false
 
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true
-
 [target.'cfg(target_os = "linux")'.dependencies]
 # Preferred Wayland (and X11) backend: grab the physical mice and re-inject a
 # corrected stream through a uinput virtual pointer — LBM is the sole router,
@@ -130,8 +126,3 @@ futures = "0.3"
 # Portal signal diagnostics: ashpd traces every InputCapture signal it receives
 # (and, crucially, bodies it fails to deserialize and silently drops).
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
-# lbm-pattern: bare Wayland client (wl_shm buffer + xdg_toplevel fullscreen +
-# wp_viewport so the native-resolution buffer maps 1:1 to the panel).
-wayland-client = "0.31"
-wayland-protocols = { version = "0.32", features = ["client"] }
-png = "0.17"

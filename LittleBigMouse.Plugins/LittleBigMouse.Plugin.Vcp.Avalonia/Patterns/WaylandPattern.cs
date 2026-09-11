@@ -101,7 +101,7 @@ internal static class WaylandPattern
             var sep = Path.DirectorySeparatorChar;
             var config = uiDir.Contains($"{sep}Debug{sep}", StringComparison.OrdinalIgnoreCase) ? "debug" : "release";
 
-            var target = Path.Combine(root, "LittleBigMouse-Hook-Rust", "target");
+            var target = Path.Combine(root, "rust", "target");
             var candidates = new[]
             {
                 Path.Combine(target, config, HelperName),

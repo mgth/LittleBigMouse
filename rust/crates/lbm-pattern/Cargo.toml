@@ -1,0 +1,22 @@
+[package]
+name = "lbm-pattern"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Native-Wayland fullscreen bitmap viewer: pixel-perfect test patterns on every output"
+
+# The Avalonia windows go through XWayland, which KWin rescales on any screen
+# whose scale differs from the global factor. Linux-only; a stub elsewhere.
+[[bin]]
+name = "lbm-pattern"
+path = "src/main.rs"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Bare Wayland client: wl_shm buffer + xdg_toplevel fullscreen + wp_viewport so
+# the native-resolution buffer maps 1:1 to the panel.
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client"] }
+png = "0.17"
+# Shared-memory file for the wl_shm pool.
+libc = "0.2"

@@ -22,13 +22,17 @@ zones, geometry and IPC are 100% safe.
 
 ## Layout
 
-| Module | Ports the C++ |
+The daemon is a member of the Cargo workspace in `rust/`. The platform-free parts
+it was built from are sibling crates, re-exported by this crate's library under
+their historical module paths (`crate::engine`, `littlebigmouse_hook::zones`, …).
+
+| Where | Ports the C++ |
 |---|---|
-| `ipc/` | `Remote/` — local IPC server, u32-length framing, `CommandMessage`/`DaemonMessage` |
+| `ipc/` + crate `lbm-ipc` | `Remote/` — local IPC server here; u32-length framing and `CommandMessage`/`DaemonMessage` in `lbm-ipc` |
 | `hook/` | `Hook/Hooker*` — `WH_MOUSE_LL`, WinEvents, display window, message pump |
-| `geometry/` | `Geometry/*.h` — `Point`/`Rect`/`Line`/`Segment` over a `Coord` trait |
-| `zones/` | `Engine/Zone`,`ZoneLink`,`ZonesLayout` on the arena |
-| `engine/` | `Engine/MouseEngine` — Strait/Cross traversal, resistance, freelook |
+| crate `lbm-geom` | `Geometry/*.h` — `Point`/`Rect`/`Line`/`Segment` over a `Coord` trait |
+| crate `lbm-zones` | `Engine/Zone`,`ZoneLink`,`ZonesLayout` on the arena, plus `Priority` |
+| crate `lbm-engine` | `Engine/MouseEngine` — Strait/Cross traversal, resistance, freelook; the edge prober |
 | `platform/` | `MouseHelper` + process/parent detection |
 
 The engine talks to the OS only through the `CursorEnv` trait, so the whole
@@ -94,7 +98,7 @@ fail rather than report a great number.
 **Timings are machine-dependent.** They move with the CPU, the clock governor,
 the allocator and the build flags, so only compare runs made on the same machine,
 ideally back to back — `cargo bench` keeps a baseline per benchmark id under
-`target/criterion/` and prints the change automatically. The figures below are a
+the workspace's `rust/target/criterion/` and prints the change automatically. The figures below are a
 reference point, not a threshold; nothing in the suite fails on a timing.
 
 Measured on an AMD Ryzen 9 9950X, Linux 7.2 (CachyOS), rustc 1.94.0, `--quick`:

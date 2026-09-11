@@ -63,8 +63,9 @@ fn resolve_version() -> String {
         }
     }
 
+    // rust/crates/lbm-hook -> repository root.
     let props = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
-        .join("..")
+        .join("../../..")
         .join("Directory.Build.props");
     println!("cargo:rerun-if-changed={}", props.display());
 

@@ -63,7 +63,7 @@ prepare() {
   export NUGET_PACKAGES="$srcdir/nuget"
   dotnet restore "$_ui_project" -r linux-x64
 
-  cd "$srcdir/$pkgname/LittleBigMouse-Hook-Rust"
+  cd "$srcdir/$pkgname/rust"
   export RUSTUP_TOOLCHAIN=stable
   cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
 }
@@ -88,7 +88,7 @@ build() {
     -p:DebugType=none \
     -o "$srcdir/publish"
 
-  cd "$srcdir/$pkgname/LittleBigMouse-Hook-Rust"
+  cd "$srcdir/$pkgname/rust"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
   # lbm-hook: the routing daemon. lbm-pattern: native-Wayland fullscreen test
@@ -97,7 +97,7 @@ build() {
 }
 
 check() {
-  cd "$srcdir/$pkgname/LittleBigMouse-Hook-Rust"
+  cd "$srcdir/$pkgname/rust"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
   cargo test --frozen --release
@@ -113,9 +113,9 @@ package() {
   chmod -R u=rwX,go=rX "$pkgdir/usr/lib/$pkgname"
   chmod 755 "$pkgdir/usr/lib/$pkgname/LittleBigMouse.Ui.Avalonia"
 
-  install -Dm755 LittleBigMouse-Hook-Rust/target/release/lbm-hook \
+  install -Dm755 rust/target/release/lbm-hook \
     "$pkgdir/usr/lib/$pkgname/lbm-hook"
-  install -Dm755 LittleBigMouse-Hook-Rust/target/release/lbm-pattern \
+  install -Dm755 rust/target/release/lbm-pattern \
     "$pkgdir/usr/lib/$pkgname/lbm-pattern"
 
   # A symlink is enough: the .NET app host resolves its own location through

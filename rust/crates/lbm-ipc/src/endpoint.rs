@@ -2,7 +2,8 @@
 //!
 //! Linux: a Unix socket named [`SOCKET_NAME`] in `$XDG_RUNTIME_DIR`, or in the
 //! LittleBigMouse data directory when there is none. Windows: a named pipe per logon
-//! session ([`pipe_name`]). [`ENDPOINT_VARIABLE`] overrides both, for tests and
+//! session ([`pipe_name`]; the agent's: [`agent_pipe_name`]). [`ENDPOINT_VARIABLE`]
+//! overrides the hook's, for tests and
 //! side-by-side instances. The C# client (`LocalIpcClient`) spells the same names.
 
 use std::path::{Path, PathBuf};
@@ -39,6 +40,11 @@ pub fn pipe_name(session: u32) -> String {
     format!(r"\\.\pipe\LittleBigMouse-v1-session-{session}")
 }
 
+/// The agent's frontend pipe of a logon session (v6), beside the hook's.
+pub fn agent_pipe_name(session: u32) -> String {
+    format!(r"\\.\pipe\LittleBigMouse-Agent-v1-session-{session}")
+}
+
 /// The endpoint [`ENDPOINT_VARIABLE`] names, if it is set.
 pub fn from_environment() -> Option<String> {
     std::env::var(ENDPOINT_VARIABLE).ok()
@@ -66,5 +72,9 @@ mod tests {
         );
         assert_eq!(socket_path(None, None), None);
         assert_eq!(pipe_name(2), r"\\.\pipe\LittleBigMouse-v1-session-2");
+        assert_eq!(
+            agent_pipe_name(2),
+            r"\\.\pipe\LittleBigMouse-Agent-v1-session-2"
+        );
     }
 }

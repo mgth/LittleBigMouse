@@ -289,8 +289,7 @@ impl PersistencePlatform for Platform {
 
     #[cfg(windows)]
     fn is_elevated(&self) -> bool {
-        // The Windows platform (elevation, autostart task) comes with the Windows agent.
-        false
+        crate::winpipe::is_elevated()
     }
 
     fn is_autostart_scheduled(&self, _layout: &Layout) -> bool {

@@ -136,7 +136,12 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   secours dit au hook sous Windows). Le réconciliateur tient l'aperçu : Start ou Stop de
   l'utilisateur, reconstruction, perte du hook et secours y mettent fin ; un ré-accrochage
   pendant l'aperçu garde l'aperçu. `Previewing` et `Saved` dans l'état.
-  Windows (tube par session, DACL du hook) viendra avec l'agent Windows.
+  Sous Windows (`winpipe`) : l'agent trouve le tube du hook de sa session
+  (`LittleBigMouse-v1-session-{id}`, celui du client C#) et sert l'API sur le sien
+  (`LittleBigMouse-Agent-v1-session-{id}`), sécurisé comme celui du hook : SYSTEM et
+  l'utilisateur seuls, aucun client distant ni d'une autre session ; étiqueté intégrité
+  moyenne quand l'agent est élevé, sans quoi un frontend non élevé ne pourrait pas écrire.
+  Les tests de l'API passent sur les deux plateformes (socket, tube).
 - Instance unique (`instance`, verrou `flock` / mutex nommé) prise avant tout, puis journal
   `agent.log` sur cinq générations (`log`) quand la sortie d'erreur n'est pas un terminal.
 - Repli du Stop (C# : `StopCurrentSessionDaemons`) : un Stop émis sans connexion au hook

@@ -1,6 +1,9 @@
 # Build LittleBigMouse: managed UI (net10 / Avalonia) + the hook daemon (Rust, x64).
-# - Push / PR on master: run the suites, build everything (installer included, as
-#   a smoke test), upload a portable artifact.
+# - Push / PR on master or v6 (the integration branch of the three-process
+#   architecture, docs/v6-architecture-plan.md on that branch): run the suites,
+#   build everything (installer included, as a smoke test), upload a portable
+#   artifact. The Rust hook is also checked on Linux, where its evdev, portal and
+#   X11 backends live and which the Windows job never compiles.
 # - Tag v*: additionally publish the installer as an artifact and attach it to a
 #   draft GitHub release for manual review before publishing.
 #
@@ -13,10 +16,10 @@ name: Build
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "v6" ]
     tags: [ "v*" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "v6" ]
   workflow_dispatch:
 
 env:
@@ -25,6 +28,35 @@ env:
   UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
 
 jobs:
+  # The hook on Linux: the only place its evdev/uinput, portal and X11 backends
+  # are compiled, and the target most of its day-to-day testing happens on. None
+  # of its tests need a display, /dev/input or /dev/uinput. The toolchain comes
+  # from rust-toolchain.toml. Clippy reports without failing the build: the hook
+  # still carries warnings from before this job existed, and they are cleared in
+  # their own change.
+  rust-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LittleBigMouse-Hook-Rust
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Format
+      run: cargo fmt --check
+
+    - name: Test
+      run: cargo test
+
+    # Benches are plain binaries nothing else builds; keep them compiling.
+    - name: Build benches
+      run: cargo bench --no-run
+
+    - name: Clippy (report only)
+      run: cargo clippy --all-targets
+
   build:
     runs-on: windows-latest
 

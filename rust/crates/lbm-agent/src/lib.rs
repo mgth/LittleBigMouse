@@ -3,5 +3,9 @@
 //!
 //! - [`reconcile`]: the decisions — when a display change rebuilds the layout, when the
 //!   engine is hooked — as a state machine without I/O.
+//! - [`hook`]: the connection to the hook, kept up.
+//! - [`fake_hook`]: a hook that hooks nothing, for `--fake-hook` and the tests.
 
+pub mod fake_hook;
+pub mod hook;
 pub mod reconcile;

@@ -41,9 +41,10 @@ pub fn state() -> String {
     bare("State")
 }
 
-/// `Listen`: subscribe to the daemon's events.
+/// `Listen`: subscribe to the daemon's events — written as the C# `LocalIpcClient`
+/// writes it on connecting (not through `CommandMessage`, hence the other spelling).
 pub fn listen() -> String {
-    bare("Listen")
+    r#"<CommandMessage Command="Listen" Payload=""/>"#.to_owned()
 }
 
 /// `Probe`: sweep the loaded layout's edges and report (`Probed`).
@@ -55,6 +56,13 @@ pub fn probe() -> String {
 /// document (`lbm_layout::zoning::ZonesLayout::serialize`).
 pub fn load(zones_layout: &str) -> String {
     format!(r#"<CommandMessage Command="Load"><Payload>{zones_layout}</Payload></CommandMessage>"#)
+}
+
+/// One frame holding several commands, as the C# client sends every batch
+/// (`SendMessagesAsync`): `Load` and `Run` together keep the hook up across a
+/// re-apply instead of unhooking and hooking again.
+pub fn messages(commands: &[String]) -> String {
+    format!("<Messages>{}</Messages>", commands.concat())
 }
 
 /// `Shortcut`: adopt this panic shortcut now. The text is escaped as C#'s
@@ -194,6 +202,22 @@ mod tests {
         assert_eq!(
             shortcut(r#"<A & 'B' "C">"#),
             r#"<CommandMessage Command="Shortcut" Payload="&lt;A &amp; &apos;B&apos; &quot;C&quot;&gt;"/>"#
+        );
+    }
+
+    #[test]
+    fn a_batch_is_one_messages_frame_the_hook_splits_back() {
+        let frame = messages(&[load("<ZonesLayout/>"), run()]);
+        assert_eq!(
+            frame,
+            r#"<Messages><CommandMessage Command="Load"><Payload><ZonesLayout/></Payload></CommandMessage><CommandMessage Command="Run" Payload=""></CommandMessage></Messages>"#
+        );
+        assert_eq!(
+            crate::protocol::parse(&frame),
+            [
+                crate::protocol::Command::Load("<ZonesLayout/>".into()),
+                crate::protocol::Command::Run
+            ]
         );
     }
 

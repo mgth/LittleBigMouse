@@ -158,14 +158,18 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   (stabilisation, puis chien de garde), et le verrou est repris. Rien n'est enregistré :
   l'utilisateur n'a rien arrêté. Sans bus système ni logind, la veille passe inaperçue,
   comme avant.
-- Tray sous Linux (`tray`, `ksni`, sans GTK ; C# `TrayIconController`) : un frontend comme les
-  autres, dans le processus. Il suit l'état de l'agent par l'API (`Subscribe`) et son menu
-  envoie les mêmes requêtes (Ouvrir, Start, Stop, Rafraîchir, Quitter ; pas de mise à jour :
-  le paquet de la distribution s'en charge). Icônes du C# (on / off / dead / paused, la
-  veille de l'écran comprise), rendues une fois depuis ses SVG (`icons/render.sh`). Ouvrir
-  lance le frontend donné par `--ui`, aucun par défaut tant que l'UI pilote encore le hook
-  elle-même (phase 4). `--no-tray` pour une exécution sans tray. Sans hôte de tray
-  (StatusNotifierWatcher absent), l'agent le dit et continue sans.
+- Tray (`tray`, C# `TrayIconController`) : un frontend comme les autres, dans le processus.
+  Il suit l'état de l'agent par l'API (`Subscribe`) et son menu envoie les mêmes requêtes
+  (Ouvrir, Start, Stop, Rafraîchir, Quitter ; pas de mise à jour : le paquet de la
+  distribution s'en charge). Le modèle (icône, état en mots, menu, requêtes) est commun ;
+  `ksni` le dessine sous Linux (sans GTK), la zone de notification sous Windows
+  (`Shell_NotifyIcon` : fenêtre cachée top-level sur son fil, clic gauche = Ouvrir, clic
+  droit = menu, icône remise quand l'explorateur redémarre — `TaskbarCreated`). Icônes du
+  C# (on / off / dead / paused, la veille de l'écran comprise), rendues une fois depuis ses
+  SVG (`icons/render.sh`), prises à la taille des petites icônes du système sous Windows.
+  Ouvrir lance le frontend donné par `--ui`, aucun par défaut tant que l'UI pilote encore
+  le hook elle-même (phase 4). `--no-tray` pour une exécution sans tray. Sans hôte de tray,
+  l'agent le dit et continue sans.
 - Démarrage avec la session sous Linux (`autostart`, qui n'existait pas) : une entrée XDG
   autostart `littlebigmouse-agent.desktop` lançant l'agent, tenue par les crochets de
   persistance du C# (`IsAutostartScheduled` au chargement donne `LoadAtStartup`,

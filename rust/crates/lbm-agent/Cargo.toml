@@ -19,5 +19,14 @@ tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "signa
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+]
+
 [dev-dependencies]
 tempfile.workspace = true

@@ -27,6 +27,7 @@ use std::process::ExitCode;
 use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::gap_guard::GapGuard;
 use lbm_agent::hook::HookClient;
+use lbm_agent::instance::InstanceLock;
 use lbm_agent::reconcile::Timings;
 use lbm_agent::runtime::Agent;
 use lbm_agent::supervise::HookLauncher;
@@ -110,7 +111,54 @@ fn hook_endpoint() -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// `yyyy-mm-dd hh:mm:ss` UTC, for the log header.
+fn utc_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let (days, rest) = (secs / 86_400, secs % 86_400);
+    // Howard Hinnant's civil_from_days.
+    let z = days as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02}",
+        rest / 3600,
+        rest % 3600 / 60,
+        rest % 60
+    )
+}
+
 fn run(options: Options) -> ExitCode {
+    // One agent per session, decided before anything is touched — the log included:
+    // a second launch must not rotate the running agent's log away.
+    let _instance = match InstanceLock::acquire_for_session() {
+        Ok(Some(lock)) => lock,
+        Ok(None) => {
+            eprintln!("lbm-agent: an agent already runs in this session");
+            return ExitCode::SUCCESS;
+        }
+        Err(error) => {
+            eprintln!("lbm-agent: cannot take the instance lock: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let data_dir = options.data_dir.clone().unwrap_or_else(lbm_paths::data_dir);
+    let _ = lbm_agent::log::to_file_unless_terminal(&data_dir.join("agent.log"));
+    eprintln!(
+        "[{} UTC] lbm-agent {} starting (pid {}, {})",
+        utc_now(),
+        env!("CARGO_PKG_VERSION"),
+        std::process::id(),
+        std::env::consts::OS
+    );
+
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -123,7 +171,6 @@ fn run(options: Options) -> ExitCode {
     };
     runtime.block_on(async move {
         let store = JsonLayoutStore::new(options.config_dir.unwrap_or_else(lbm_paths::config_dir));
-        let data_dir = options.data_dir.clone().unwrap_or_else(lbm_paths::data_dir);
         let persistence = match options.data_dir {
             Some(dir) => LayoutPersistence::with_excluded_list_file(store, Platform, move || {
                 dir.join("Excluded.txt")

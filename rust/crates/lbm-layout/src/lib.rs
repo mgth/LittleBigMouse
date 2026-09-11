@@ -8,6 +8,7 @@
 
 pub mod collation;
 pub mod geo;
+pub mod linux;
 pub mod model;
 pub mod solve;
 pub mod wallpaper;

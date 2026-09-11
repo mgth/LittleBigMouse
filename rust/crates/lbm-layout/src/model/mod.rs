@@ -3,6 +3,7 @@
 
 mod border_resistance;
 mod distance;
+mod edit;
 mod layout;
 mod monitor;
 mod options;

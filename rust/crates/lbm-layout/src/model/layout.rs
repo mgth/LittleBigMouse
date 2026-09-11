@@ -71,11 +71,11 @@ pub struct Layout {
     pub options: LayoutOptions,
     pub source_kind: LayoutSource,
     pub dpi_awareness: DpiAwareness,
-    models: Vec<MonitorModel>,
-    monitors: Vec<Monitor>,
-    sources: Vec<PhysicalSource>,
+    pub(crate) models: Vec<MonitorModel>,
+    pub(crate) monitors: Vec<Monitor>,
+    pub(crate) sources: Vec<PhysicalSource>,
     published: Published,
-    saved: bool,
+    pub(crate) saved: bool,
 }
 
 impl Layout {
@@ -110,8 +110,10 @@ impl Layout {
         &self.monitors
     }
 
-    pub fn sources(&self) -> &[PhysicalSource] {
-        &self.sources
+    /// `PhysicalSources`, unsorted: the sources registered with the layout, in
+    /// registration order.
+    pub fn sources(&self) -> impl Iterator<Item = &PhysicalSource> {
+        self.sources.iter().filter(|s| s.registered)
     }
 
     pub fn model(&self, pnp_code: &str) -> Option<&MonitorModel> {
@@ -122,15 +124,16 @@ impl Layout {
         self.monitors.iter().find(|m| m.id == id)
     }
 
+    /// A source by id, registered or only attached to its monitor.
     pub fn source(&self, id: &str) -> Option<&PhysicalSource> {
         self.sources.iter().find(|s| s.source.id == id)
     }
 
-    fn monitor_index(&self, id: &str) -> Option<usize> {
+    pub(crate) fn monitor_index(&self, id: &str) -> Option<usize> {
         self.monitors.iter().position(|m| m.id == id)
     }
 
-    fn source_index(&self, id: &str) -> Option<usize> {
+    pub(crate) fn source_index(&self, id: &str) -> Option<usize> {
         self.sources.iter().position(|s| s.source.id == id)
     }
 
@@ -162,9 +165,22 @@ impl Layout {
         self.parse_physical_monitors();
     }
 
-    /// `AddOrUpdatePhysicalSource`, keyed by the display source id. Republishes
-    /// the source-derived values.
-    pub fn add_or_update_source(&mut self, source: PhysicalSource) {
+    /// Makes `source` available to its monitor without registering it with
+    /// the layout (C#: `monitor.Sources.Add(physicalSource)`).
+    pub fn attach_source(&mut self, mut source: PhysicalSource) {
+        match self.source_index(&source.source.id) {
+            Some(i) => {
+                source.registered = self.sources[i].registered;
+                self.sources[i] = source;
+            }
+            None => self.sources.push(source),
+        }
+    }
+
+    /// `AddOrUpdatePhysicalSource`, keyed by the display source id: attaches
+    /// and registers the source, then republishes the source-derived values.
+    pub fn add_or_update_source(&mut self, mut source: PhysicalSource) {
+        source.registered = true;
         match self.source_index(&source.source.id) {
             Some(i) => self.sources[i] = source,
             None => self.sources.push(source),
@@ -175,7 +191,7 @@ impl Layout {
     /// `MonitorsLayout.PhysicalSources`: the sources sorted by device id with
     /// the invariant-culture comparer (stable, like DynamicData's insertion).
     pub fn sorted_sources(&self) -> Vec<&PhysicalSource> {
-        let mut sorted: Vec<&PhysicalSource> = self.sources.iter().collect();
+        let mut sorted: Vec<&PhysicalSource> = self.sources().collect();
         sorted.sort_by(|a, b| invariant_compare(&a.device_id, &b.device_id));
         sorted
     }
@@ -202,7 +218,7 @@ impl Layout {
     //==================//
 
     /// The active source's orientation, when the monitor has one.
-    fn orientation(&self, monitor: &Monitor) -> Option<i32> {
+    pub(crate) fn orientation(&self, monitor: &Monitor) -> Option<i32> {
         let id = monitor.active_source.as_deref()?;
         Some(self.source(id)?.source.orientation)
     }
@@ -225,14 +241,11 @@ impl Layout {
         }
     }
 
-    /// The borders a monitor's `DisplayBorders` hold: its own once customized,
-    /// the model's (the mirror) before.
+    /// The borders a monitor's `DisplayBorders` hold. The layout keeps them
+    /// mirroring the model's while the monitor does not own them (see
+    /// `Layout::edit_model`).
     pub fn monitor_borders(&self, monitor: &Monitor) -> Thickness {
-        if monitor.borders_customized {
-            monitor.borders
-        } else {
-            self.model_of(monitor).physical_size.borders()
-        }
+        monitor.borders
     }
 
     /// `PhysicalRotated`: the effective size turned by the active source's
@@ -408,7 +421,7 @@ impl Layout {
         let mut is_unary = true;
         let mut primary = None;
         let mut unsaved = false;
-        for source in &self.sources {
+        for source in self.sources.iter().filter(|s| s.registered) {
             if source.source.primary {
                 primary = Some(source.source.id.clone());
             }

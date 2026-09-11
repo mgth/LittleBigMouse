@@ -76,4 +76,25 @@ pub struct PhysicalSource {
     pub source: DisplaySource,
     /// C#'s `SavableReactiveModel.Saved`: false until the store marks it.
     pub saved: bool,
+    /// Whether the source is in the layout's source cache
+    /// (`AddOrUpdatePhysicalSource`). A source can belong to its monitor before
+    /// that: C#'s `AddMonitor` hands the monitor to the layout first, and the
+    /// monitor's geometry already reads its active source.
+    pub(crate) registered: bool,
+}
+
+impl PhysicalSource {
+    pub fn new(
+        device_id: impl Into<String>,
+        monitor: impl Into<String>,
+        source: DisplaySource,
+    ) -> Self {
+        Self {
+            device_id: device_id.into(),
+            monitor: monitor.into(),
+            source,
+            saved: false,
+            registered: false,
+        }
+    }
 }

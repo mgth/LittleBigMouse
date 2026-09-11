@@ -1,0 +1,20 @@
+[package]
+name = "lbm-display"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "LittleBigMouse display detection: EDID parsing and the outputs the system reports, as the neutral input of the layout model"
+
+[dependencies]
+# The neutral output description (LinuxMonitor, LinuxEdid) the layout model maps.
+lbm-layout = { path = "../lbm-layout" }
+# kscreen-doctor --json.
+serde_json.workspace = true
+# The xrandr line, with the C# pattern as it is.
+regex = "1"
+
+[dev-dependencies]
+tempfile.workspace = true
+# float_roundtrip: the vectors' doubles are compared bit for bit.
+serde_json = { workspace = true, features = ["float_roundtrip"] }

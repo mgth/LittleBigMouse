@@ -641,6 +641,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "lbm-agent"
+version = "0.1.0"
+dependencies = [
+ "lbm-display",
+ "lbm-layout",
+ "serde_json",
+]
+
+[[package]]
+name = "lbm-display"
+version = "0.1.0"
+dependencies = [
+ "lbm-layout",
+ "regex",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "lbm-engine"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Writes ../edid-vectors.json: EDID blocks and what the C# parser makes of them.
+    Run from here with `dotnet run` (the HLab.Core submodule must be initialized:
+    the parser references HLab.Geo).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../../../HLab.Sys/HLab.Sys.Monitors.Edid/HLab.Sys.Monitors.Edid.csproj" />
+  </ItemGroup>
+</Project>

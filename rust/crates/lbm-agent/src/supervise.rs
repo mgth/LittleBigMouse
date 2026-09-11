@@ -144,6 +144,17 @@ impl HookLauncher {
     }
 
     fn spawn(&self) -> io::Result<Child> {
+        let result = self.spawn_with(true);
+        // A job that forbids leaving it (Windows): launched inside it, then — the job's
+        // end would take the hook with it, but that is better than no hook.
+        #[cfg(windows)]
+        if matches!(&result, Err(e) if e.raw_os_error() == Some(ERROR_ACCESS_DENIED)) {
+            return self.spawn_with(false);
+        }
+        result
+    }
+
+    fn spawn_with(&self, leave_job: bool) -> io::Result<Child> {
         let output = |log: &Option<PathBuf>| match log {
             Some(path) => OpenOptions::new()
                 .create(true)
@@ -160,7 +171,7 @@ impl HookLauncher {
             .stdin(Stdio::null())
             .stdout(output(&self.log))
             .stderr(output(&self.log));
-        detach(&mut command);
+        detach(&mut command, leave_job);
         command.spawn()
     }
 }
@@ -168,7 +179,7 @@ impl HookLauncher {
 /// Its own session (Unix) or process group without a console (Windows): a signal or a
 /// closed terminal that ends the agent does not reach the hook.
 #[cfg(unix)]
-fn detach(command: &mut Command) {
+fn detach(command: &mut Command, _leave_job: bool) {
     use std::os::unix::process::CommandExt;
     // SAFETY: setsid is async-signal-safe and only affects the child being started.
     unsafe {
@@ -181,13 +192,26 @@ fn detach(command: &mut Command) {
     }
 }
 
+/// On Windows, also out of the agent's job when `leave_job`: an agent started by a
+/// scheduled task runs in the task's job, and a stopped task ends every process of its
+/// job — the hook would not survive the agent (D5).
 #[cfg(windows)]
-fn detach(command: &mut Command) {
+fn detach(command: &mut Command, leave_job: bool) {
     use std::os::windows::process::CommandExt;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+    let breakaway = if leave_job {
+        CREATE_BREAKAWAY_FROM_JOB
+    } else {
+        0
+    };
+    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | breakaway);
 }
+
+/// What `CreateProcess` says when the job does not let its processes leave it.
+#[cfg(windows)]
+const ERROR_ACCESS_DENIED: i32 = 5;
 
 /// Is a hook with the same executable name as `program` running for this user? (C#
 /// checked any `lbm-hook`, any user's; a hook of another user never listens on this
@@ -202,11 +226,68 @@ fn another_hook_runs(program: &Path) -> bool {
     processes_named(Path::new("/proc"), name, uid, std::process::id())
 }
 
-#[cfg(not(target_os = "linux"))]
+/// Windows: a process of that executable name in this logon session (C#'s
+/// `DaemonProcessManager` looked at any, in any session).
+#[cfg(windows)]
+fn another_hook_runs(program: &Path) -> bool {
+    let Some(name) = program.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    let Ok(session) = crate::winpipe::session_id() else {
+        return false;
+    };
+    windows_processes_named(name, session, std::process::id())
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
 fn another_hook_runs(_program: &Path) -> bool {
-    // Session-scoped process enumeration comes with the Windows agent; until then the
-    // endpoint decides (a hook of this session that answers is never "unreachable").
     false
+}
+
+/// Is a process other than `me`, in logon `session`, running the executable `name`
+/// (compared as Windows compares file names, ignoring case)?
+#[cfg(windows)]
+pub fn windows_processes_named(name: &str, session: u32, me: u32) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+
+    // SAFETY: a snapshot of the process list, closed below.
+    let Ok(snapshot) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }) else {
+        return false;
+    };
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+    let mut found = false;
+    // SAFETY: the entry is sized as the API requires, the snapshot is open.
+    let mut next = unsafe { Process32FirstW(snapshot, &mut entry) };
+    while next.is_ok() && !found {
+        let length = entry
+            .szExeFile
+            .iter()
+            .position(|c| *c == 0)
+            .unwrap_or(entry.szExeFile.len());
+        let exe = String::from_utf16_lossy(&entry.szExeFile[..length]);
+        if entry.th32ProcessID != me && exe.eq_ignore_ascii_case(name) {
+            let mut process_session = 0;
+            // SAFETY: a query on a pid, into a local.
+            found = unsafe { ProcessIdToSessionId(entry.th32ProcessID, &mut process_session) }
+                .is_ok()
+                && process_session == session;
+        }
+        // SAFETY: as above.
+        next = unsafe { Process32NextW(snapshot, &mut entry) };
+    }
+    // SAFETY: the snapshot opened above.
+    unsafe {
+        let _ = CloseHandle(snapshot);
+    }
+    found
 }
 
 /// Under a `/proc`-like `root`: is a process other than `me`, of user `uid`, running
@@ -244,6 +325,31 @@ pub fn processes_named(root: &Path, name: &str, uid: u32, me: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// The test process sees itself under its own name only when it is not `me`.
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_process_of_this_session_is_found_by_name() {
+        let exe = std::env::current_exe().unwrap();
+        let name = exe.file_name().unwrap().to_str().unwrap();
+        let session = crate::winpipe::session_id().unwrap();
+        assert!(super::windows_processes_named(name, session, 0));
+        assert!(super::windows_processes_named(
+            &name.to_uppercase(),
+            session,
+            0
+        ));
+        assert!(!super::windows_processes_named(
+            name,
+            session,
+            std::process::id()
+        ));
+        assert!(!super::windows_processes_named(
+            name,
+            session.wrapping_add(1000),
+            0
+        ));
+    }
+
     use super::*;
 
     fn process(root: &Path, pid: u32, comm: &str, uid: u32) {

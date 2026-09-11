@@ -102,7 +102,11 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   parent). Pas de doublon : ni pendant que le hook lancé démarre, ni si un autre hook de
   cet utilisateur tourne ; backoff pour un hook qui meurt en boucle. Testé au niveau
   processus avec le binaire de l'agent en faux hook (`--serve-fake-hook`) : lancé, il
-  reçoit la mise en page ; l'agent tué, il tourne toujours.
+  reçoit la mise en page ; l'agent tué, il tourne toujours. Sous Windows : « un autre hook »
+  se cherche parmi les processus de la session (ToolHelp) ; le lancement sort aussi du job
+  de l'agent (`CREATE_BREAKAWAY_FROM_JOB`) — un agent lancé par une tâche planifiée tourne
+  dans son job, et l'arrêt de la tâche finirait le hook avec lui (D5) —, sauf si le job
+  l'interdit : lancé dedans plutôt que pas du tout.
 - `gap_guard` (D7, `KScreenGapGuard`) : sous Plasma Wayland, quand le hook passe par le
   portail (pas par evdev), les sorties sont écartées d'un pixel logique pendant que le moteur
   tourne, pour que les barrières passent le validateur. Positions d'origine journalisées

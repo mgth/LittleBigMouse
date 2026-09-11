@@ -187,6 +187,14 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   plutôt que rien), sans condition de batterie ni limite de durée, pas en session distante,
   et relance sur échec (D6). Jamais avec `--config-dir`.
 
+- Fond d'écran (début) : `lbm_store::wallpaper_settings` lit et écrit `wallpaper.json` du
+  plugin C# (une entrée par mise en page : mode, image « span », réglages par écran), au
+  membre près — y compris les énumérations écrites en chaîne (`Mode`, `Style`) et celle
+  écrite en nombre (`Kind`). Le découpage en millimètres est déjà porté
+  (`lbm_layout::wallpaper`, phase 1). Restent le rendu des tranches et l'application
+  (Plasma par zbus, `IDesktopWallpaper` sous Windows), puis la ré-application après
+  reconstruction.
+
 ## Suite
 
 1. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent

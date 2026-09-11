@@ -1,0 +1,442 @@
+{
+  "Id": "PHL0927_FAKE32P00001+SAME035_FAKE32G00001",
+  "StoreKey": "PHL0927_FAKE32P00001+SAME035_FAKE32G00001",
+  "StoreFile": "layouts/PHL0927_FAKE32P00001+SAME035_FAKE32G00001.json",
+  "Saved": true,
+  "PrimaryMonitor": "PHL0927_FAKE32P00001",
+  "PrimarySource": "PHL0927_FAKE32P00001",
+  "PhysicalBounds": {
+    "X": -5,
+    "Y": -6,
+    "Width": 1418,
+    "Height": 407
+  },
+  "MaxEffectiveDpiX": 144,
+  "MaxEffectiveDpiY": 144,
+  "Options": {
+    "Enabled": true,
+    "AllowOverlaps": false,
+    "AllowDiscontinuity": false,
+    "Algorithm": "Strait",
+    "MinimalEdgeOverlap": 20,
+    "MaxTravelDistance": 200,
+    "MinimalMaxTravelDistance": 14,
+    "FreelookCheckInterval": 100,
+    "FreelookEnabled": true,
+    "LoopX": false,
+    "LoopY": false,
+    "AdjustPointer": false,
+    "AdjustSpeed": false,
+    "IsUnaryRatio": false,
+    "BorderValues": "PerMonitor",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "AutoUpdate": false,
+    "HomeCinema": false,
+    "Pinned": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "HideTrayIcon": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "VcpControl": false,
+    "ShowMonitorActionWarning": true
+  },
+  "Monitors": [
+    {
+      "Id": "PHL0927_FAKE32P00001",
+      "DeviceId": "DP-1",
+      "SerialNumber": "FAKE32P00001",
+      "Model": {
+        "PnpCode": "PHL0927",
+        "PnpDeviceName": "PHL 328P6VU",
+        "Logo": "icon/Pnp/PHL?icon/Pnp/LBM",
+        "PhysicalSize": {
+          "X": 0,
+          "Y": 0,
+          "Width": 698,
+          "Height": 393,
+          "LeftBorder": 20,
+          "TopBorder": 20,
+          "RightBorder": 20,
+          "BottomBorder": 20
+        }
+      },
+      "Placed": true,
+      "ExcludedFromLayout": false,
+      "BordersCustomized": true,
+      "Borders": {
+        "Left": 5,
+        "Top": 6,
+        "Right": 7,
+        "Bottom": 8
+      },
+      "EffectivePhysicalSize": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 5,
+        "TopBorder": 6,
+        "RightBorder": 7,
+        "BottomBorder": 8
+      },
+      "PhysicalRotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 5,
+        "TopBorder": 6,
+        "RightBorder": 7,
+        "BottomBorder": 8
+      },
+      "DepthRatio": {
+        "X": 1,
+        "Y": 1
+      },
+      "DepthProjectionUnrotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 5,
+        "TopBorder": 6,
+        "RightBorder": 7,
+        "BottomBorder": 8
+      },
+      "DepthProjection": {
+        "X": 0,
+        "Y": 0,
+        "Width": 698,
+        "Height": 393,
+        "LeftBorder": 5,
+        "TopBorder": 6,
+        "RightBorder": 7,
+        "BottomBorder": 8,
+        "Bounds": {
+          "X": 0,
+          "Y": 0,
+          "Width": 698,
+          "Height": 393
+        },
+        "OutsideBounds": {
+          "X": -5,
+          "Y": -6,
+          "Width": 710,
+          "Height": 407
+        }
+      },
+      "Diagonal": 801.0324587680576,
+      "ActiveSource": "PHL0927_FAKE32P00001",
+      "BorderResistance": {
+        "Left": [
+          {
+            "From": 0,
+            "To": 393,
+            "Move": 25,
+            "MoveBlock": false,
+            "Drag": 25,
+            "DragBlock": false
+          }
+        ],
+        "Top": [
+          {
+            "From": 100,
+            "To": 300,
+            "Move": 0,
+            "MoveBlock": true,
+            "Drag": 0,
+            "DragBlock": true
+          }
+        ],
+        "Right": [
+          {
+            "From": 0,
+            "To": 120,
+            "Move": 12.5,
+            "MoveBlock": false,
+            "Drag": 30,
+            "DragBlock": false
+          },
+          {
+            "From": 120,
+            "To": 280,
+            "Move": 12.5,
+            "MoveBlock": false,
+            "Drag": 0,
+            "DragBlock": true
+          },
+          {
+            "From": 280,
+            "To": 393,
+            "Move": 0,
+            "MoveBlock": true,
+            "Drag": 0,
+            "DragBlock": true
+          }
+        ],
+        "Bottom": []
+      },
+      "Sources": [
+        {
+          "Id": "PHL0927_FAKE32P00001",
+          "DeviceId": "DP-1",
+          "DeviceName": "DP-1",
+          "DisplayName": "DP-1",
+          "SourceName": "DisplayPort:DP-1",
+          "InterfacePath": "DP-1",
+          "SourceNumber": "1",
+          "Primary": true,
+          "AttachedToDesktop": true,
+          "Orientation": 0,
+          "DisplayFrequency": 60,
+          "InPixel": {
+            "X": 0,
+            "Y": 0,
+            "Width": 2560,
+            "Height": 1440
+          },
+          "EffectiveDpi": {
+            "X": 144,
+            "Y": 144
+          },
+          "DpiAwareAngularDpi": {
+            "X": 144,
+            "Y": 144
+          },
+          "RawDpi": {
+            "X": 139.73638968481376,
+            "Y": 139.6030534351145
+          },
+          "InDip": {
+            "X": 0,
+            "Y": 0,
+            "Width": 1706.6666666666665,
+            "Height": 960
+          },
+          "RealPitch": {
+            "X": 0.27265625,
+            "Y": 0.27291666666666664
+          },
+          "Pitch": {
+            "X": 0.27265625,
+            "Y": 0.27291666666666664
+          },
+          "RealDpi": {
+            "X": 93.15759312320917,
+            "Y": 93.06870229007635
+          },
+          "Dpi": {
+            "X": 93.15759312320917,
+            "Y": 93.06870229007635
+          },
+          "DipToPixelRatio": null,
+          "PixelToDipRatio": {
+            "X": 0,
+            "Y": 0
+          },
+          "PhysicalToPixelRatio": {
+            "X": 3.667621776504298,
+            "Y": 3.6641221374045805
+          },
+          "MmToDipRatio": {
+            "X": 0,
+            "Y": 0
+          }
+        }
+      ]
+    },
+    {
+      "Id": "SAME035_FAKE32G00001",
+      "DeviceId": "DP-2",
+      "SerialNumber": "FAKE32G00001",
+      "Model": {
+        "PnpCode": "SAME035",
+        "PnpDeviceName": "Odyssey G80SD",
+        "Logo": "icon/Pnp/SAM?icon/Pnp/LBM",
+        "PhysicalSize": {
+          "X": 0,
+          "Y": 0,
+          "Width": 697,
+          "Height": 392,
+          "LeftBorder": 20,
+          "TopBorder": 20,
+          "RightBorder": 20,
+          "BottomBorder": 20
+        }
+      },
+      "Placed": true,
+      "ExcludedFromLayout": false,
+      "BordersCustomized": true,
+      "Borders": {
+        "Left": 2,
+        "Top": 3,
+        "Right": 4,
+        "Bottom": 5
+      },
+      "EffectivePhysicalSize": {
+        "X": 0,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 2,
+        "TopBorder": 3,
+        "RightBorder": 4,
+        "BottomBorder": 5
+      },
+      "PhysicalRotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 2,
+        "TopBorder": 3,
+        "RightBorder": 4,
+        "BottomBorder": 5
+      },
+      "DepthRatio": {
+        "X": 1,
+        "Y": 1
+      },
+      "DepthProjectionUnrotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 2,
+        "TopBorder": 3,
+        "RightBorder": 4,
+        "BottomBorder": 5
+      },
+      "DepthProjection": {
+        "X": 712,
+        "Y": 0,
+        "Width": 697,
+        "Height": 392,
+        "LeftBorder": 2,
+        "TopBorder": 3,
+        "RightBorder": 4,
+        "BottomBorder": 5,
+        "Bounds": {
+          "X": 712,
+          "Y": 0,
+          "Width": 697,
+          "Height": 392
+        },
+        "OutsideBounds": {
+          "X": 710,
+          "Y": -3,
+          "Width": 703,
+          "Height": 400
+        }
+      },
+      "Diagonal": 799.6705571671374,
+      "ActiveSource": "SAME035_FAKE32G00001",
+      "BorderResistance": {
+        "Left": [
+          {
+            "From": 0,
+            "To": 200,
+            "Move": 8,
+            "MoveBlock": false,
+            "Drag": 8,
+            "DragBlock": false
+          },
+          {
+            "From": 200,
+            "To": 392,
+            "Move": 0,
+            "MoveBlock": false,
+            "Drag": 40,
+            "DragBlock": false
+          }
+        ],
+        "Top": [],
+        "Right": [
+          {
+            "From": 0,
+            "To": 392,
+            "Move": 0,
+            "MoveBlock": true,
+            "Drag": 0,
+            "DragBlock": true
+          }
+        ],
+        "Bottom": []
+      },
+      "Sources": [
+        {
+          "Id": "SAME035_FAKE32G00001",
+          "DeviceId": "DP-2",
+          "DeviceName": "DP-2",
+          "DisplayName": "DP-2",
+          "SourceName": "DisplayPort:DP-2",
+          "InterfacePath": "DP-2",
+          "SourceNumber": "2",
+          "Primary": false,
+          "AttachedToDesktop": true,
+          "Orientation": 0,
+          "DisplayFrequency": 240,
+          "InPixel": {
+            "X": 2560,
+            "Y": 0,
+            "Width": 3072,
+            "Height": 1728
+          },
+          "EffectiveDpi": {
+            "X": 120,
+            "Y": 120
+          },
+          "DpiAwareAngularDpi": {
+            "X": 120,
+            "Y": 120
+          },
+          "RawDpi": {
+            "X": 139.93687230989957,
+            "Y": 139.9591836734694
+          },
+          "InDip": {
+            "X": 2048,
+            "Y": 0,
+            "Width": 2457.6000000000004,
+            "Height": 1382.4
+          },
+          "RealPitch": {
+            "X": 0.22688802083333334,
+            "Y": 0.22685185185185186
+          },
+          "Pitch": {
+            "X": 0.22688802083333334,
+            "Y": 0.22685185185185186
+          },
+          "RealDpi": {
+            "X": 111.94949784791964,
+            "Y": 111.96734693877549
+          },
+          "Dpi": {
+            "X": 111.94949784791964,
+            "Y": 111.96734693877549
+          },
+          "DipToPixelRatio": {
+            "X": 1.25,
+            "Y": 1.25
+          },
+          "PixelToDipRatio": {
+            "X": 0.8,
+            "Y": 0.8
+          },
+          "PhysicalToPixelRatio": {
+            "X": 4.407460545193687,
+            "Y": 4.408163265306122
+          },
+          "MmToDipRatio": {
+            "X": 3.5259684361549497,
+            "Y": 3.5265306122448976
+          }
+        }
+      ]
+    }
+  ]
+}

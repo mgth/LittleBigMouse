@@ -148,7 +148,22 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
     {
         var layout = _newLayout();
 
-        var monitors = _source?.Query() ?? [];
+        Populate(layout, _source?.Query() ?? [], _persistence);
+
+        UpdateWallpaper(layout);
+
+        return layout;
+    }
+
+    /// <summary>
+    /// The domain half of <see cref="Create"/>: everything between the output enumeration
+    /// and the wallpaper read, the two steps that reach the system (kscreen-doctor, xrandr
+    /// and sysfs before; busctl and plasmashell after). Kept apart so the domain oracle
+    /// (<c>domain-oracle/</c>, <c>DomainOracleTests</c>) runs this exact sequence over
+    /// recorded outputs instead of a copy of it.
+    /// </summary>
+    internal static void Populate(MonitorsLayout layout, List<LinuxMonitor> monitors, ILayoutPersistence persistence)
+    {
         if (monitors.Count == 0)
         {
             // No discovery available: still open the UI on a plausible single monitor
@@ -172,13 +187,9 @@ public class LinuxLayoutFactory : ILayoutFactory, IDisposable
         // monitors it did not cover from the system topology (so placement runs on the
         // fully loaded state, like the "place from windows" button), then re-anchor on
         // the current primary.
-        _persistence.Load(layout);
+        persistence.Load(layout);
         layout.SetLocationsFromSystemConfiguration(placeAll: false);
         layout.AnchorOnPrimary();
-
-        UpdateWallpaper(layout);
-
-        return layout;
     }
 
     /// <inheritdoc/>

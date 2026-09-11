@@ -48,7 +48,7 @@ UI_PROJ="$ROOT/LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia"
 BIN_DIR="$UI_PROJ/bin/$CONFIG/net10.0"
 UI_DLL="$BIN_DIR/LittleBigMouse.Ui.Avalonia.dll"
 UI_APPHOST="$BIN_DIR/LittleBigMouse.Ui.Avalonia"
-RUST_DIR="$ROOT/LittleBigMouse-Hook-Rust"
+RUST_DIR="$ROOT/rust"
 # Release -> target/release, Debug -> target/debug (matches the UI's config, which
 # is what LittleBigMouseClientService.FindHookPath prefers).
 if [[ "$CONFIG" == "Release" ]]; then RUST_PROFILE_DIR="release"; else RUST_PROFILE_DIR="debug"; fi

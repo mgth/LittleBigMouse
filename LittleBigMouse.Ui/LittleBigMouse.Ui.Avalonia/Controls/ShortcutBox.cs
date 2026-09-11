@@ -15,7 +15,7 @@ namespace LittleBigMouse.Ui.Avalonia.Controls;
 /// a name it cannot map would be accepted here and fail silently over there, far from
 /// its cause. Pressing the combination cannot produce anything the keyboard cannot
 /// produce — and the writing-out is done here, once, in the grammar both sides obey
-/// (LittleBigMouse-Hook-Rust/src/shortcut.rs).
+/// (rust/crates/lbm-hook/src/shortcut.rs).
 /// </para>
 /// </summary>
 public class ShortcutBox : Button

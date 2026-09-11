@@ -1,0 +1,76 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "DELD0D9_FAKE24H0G001",
+        "X": 0,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H0G002",
+        "X": 1920,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H0G003",
+        "X": 0,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H0G004",
+        "X": 1920,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "DELD0D9_FAKE24H0G001",
+        "X": 0,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H0G002",
+        "X": 1920,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H0G003",
+        "X": 0,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H0G004",
+        "X": 1920,
+        "Y": 1080,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      }
+    ]
+  }
+]

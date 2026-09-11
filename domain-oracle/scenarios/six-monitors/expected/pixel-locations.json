@@ -1,0 +1,108 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "ACI27A3_FAKE27A00001",
+        "X": 2560,
+        "Y": -511,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "AUS28B1_5E6F7081",
+        "X": -3840,
+        "Y": -1442,
+        "Width": 3840,
+        "Height": 2160,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H00002",
+        "X": -1920,
+        "Y": 804,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD0D9_FAKE24H00003",
+        "X": 2992,
+        "Y": 929,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      },
+      {
+        "Source": "DELD177_FAKE27D00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "XEC0032_6F708192",
+        "X": 0,
+        "Y": -1440,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "ACI27A3_FAKE27A00001",
+        "X": 2560,
+        "Y": -511,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "AUS28B1_5E6F7081",
+        "X": -2664,
+        "Y": -911,
+        "Width": 2664,
+        "Height": 1498,
+        "Scale": 1.4416666666666667
+      },
+      {
+        "Source": "DELD0D9_FAKE24H00002",
+        "X": -2259,
+        "Y": 753,
+        "Width": 2259,
+        "Height": 1271,
+        "Scale": 0.85
+      },
+      {
+        "Source": "DELD0D9_FAKE24H00003",
+        "X": 2822,
+        "Y": 929,
+        "Width": 2259,
+        "Height": 1271,
+        "Scale": 0.85
+      },
+      {
+        "Source": "DELD177_FAKE27D00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "XEC0032_6F708192",
+        "X": 0,
+        "Y": -1440,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      }
+    ]
+  }
+]

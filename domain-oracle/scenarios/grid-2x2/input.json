@@ -1,0 +1,109 @@
+{
+  "description": "Four identical monitors in a 2x2 grid, nothing stored. The corner case LayoutGeometry documents: the diagonal neighbour shares a corner with the primary and no surface, so the contact must not claim it — it is placed by the two monitors it really touches.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D0D9",
+        "Serial": "A1000001",
+        "SerialNumber": "FAKE24H0G001",
+        "Model": "DELL P2419H",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-2",
+      "LogicalX": 1920,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D0D9",
+        "Serial": "A1000002",
+        "SerialNumber": "FAKE24H0G002",
+        "Model": "DELL P2419H",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-3",
+      "LogicalX": 0,
+      "LogicalY": 1080,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D0D9",
+        "Serial": "A1000003",
+        "SerialNumber": "FAKE24H0G003",
+        "Model": "DELL P2419H",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-4",
+      "LogicalX": 1920,
+      "LogicalY": 1080,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D0D9",
+        "Serial": "A1000004",
+        "SerialNumber": "FAKE24H0G004",
+        "Model": "DELL P2419H",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ]
+}

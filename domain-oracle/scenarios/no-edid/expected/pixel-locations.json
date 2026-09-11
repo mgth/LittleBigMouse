@@ -1,0 +1,44 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "DP-0",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "HDMI-0",
+        "X": 2560,
+        "Y": "NaN",
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "DP-0",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "HDMI-0",
+        "X": 2560,
+        "Y": "NaN",
+        "Width": 640,
+        "Height": 360,
+        "Scale": 3
+      }
+    ]
+  }
+]

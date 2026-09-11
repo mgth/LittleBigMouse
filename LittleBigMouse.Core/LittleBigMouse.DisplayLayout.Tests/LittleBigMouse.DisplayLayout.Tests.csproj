@@ -29,6 +29,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The domain oracle runs on the PRODUCTION options class, not on ILayoutOptions.Design:
+         its defaults differ (Enabled, AutoUpdate…) and, decisively, Design raises no
+         PropertyChanged — MonitorBorderPolicy follows "Border values" through that event, so
+         a layout stored with PerMonitor borders loads differently under the two. Compiled
+         from the UI's source rather than referenced: this core test project has no business
+         depending on the Avalonia UI, and a copy of the class here would drift. -->
+    <Compile Include="..\..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Main\LbmOptions.cs"
+             Link="DomainOracle\LbmOptions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
     <ProjectReference Include="..\..\LittleBigMouse.Platform.Linux\LittleBigMouse.Platform.Linux.csproj" />
     <ProjectReference Include="..\..\LittleBigMouse.Platform.Windows\LittleBigMouse.Platform.Windows.csproj" />

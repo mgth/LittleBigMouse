@@ -80,7 +80,7 @@ Validation commands from the repository root are:
 ```sh
 dotnet format LittleBigMouse.sln --verify-no-changes --no-restore
 dotnet build LittleBigMouse.sln --no-restore
-(cd LittleBigMouse-Hook-Rust && cargo fmt --check)
+(cd rust && cargo fmt --check)
 ```
 
 ## Misspellings kept for compatibility
@@ -99,7 +99,7 @@ One is kept on purpose: the layout option `Algorithm` takes the value **`Strait`
 a misspelling of *Straight*. The string is not an internal name. It is written verbatim
 into the saved layouts (`layouts/*.json`) and into the `Algorithm` attribute of the
 `ZonesLayout` XML the UI sends to the daemon, which parses it in
-`LittleBigMouse-Hook-Rust/src/zones/layout.rs`. Renaming it would silently reset the
+`rust/crates/lbm-zones/src/layout.rs`. Renaming it would silently reset the
 mouse-movement algorithm of every existing configuration and break the wire contract
 with any daemon that was not upgraded in the same step. It stays until a migration
 exists on both sides, accepting the old value on read and covered by tests. Only the

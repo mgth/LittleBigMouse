@@ -1,0 +1,44 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "PHL0927_FAKE32P00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "SAME035_FAKE32G00001",
+        "X": 2560,
+        "Y": -146,
+        "Width": 3072,
+        "Height": 1728,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "PHL0927_FAKE32P00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "SAME035_FAKE32G00001",
+        "X": 2560,
+        "Y": -2,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": 1.5
+      }
+    ]
+  }
+]

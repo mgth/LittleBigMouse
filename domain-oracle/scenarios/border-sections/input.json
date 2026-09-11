@@ -1,0 +1,259 @@
+{
+  "description": "The same two monitors with \"Border values\" switched to PerMonitor and borders of their own, plus several sections per edge: a plain resistance, one that blocks moves, one that blocks drags only. Sections never reach the daemon as such — they are folded into the flat link list — so this is where the fold is frozen. Note that the per-monitor borders only take effect because the options object notifies: the geometry follows BorderValues through PropertyChanged.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.5,
+      "WidthMm": 698,
+      "HeightMm": 393,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "PHL",
+        "ProductCode": "0927",
+        "Serial": "1A2B3C4D",
+        "SerialNumber": "FAKE32P00001",
+        "Model": "PHL 328P6VU",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 393,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-2",
+      "LogicalX": 2560,
+      "LogicalY": 0,
+      "LogicalWidth": 3072,
+      "LogicalHeight": 1728,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.25,
+      "WidthMm": 697,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 240,
+      "Edid": {
+        "ManufacturerCode": "SAM",
+        "ProductCode": "E035",
+        "Serial": "2B3C4D5E",
+        "SerialNumber": "FAKE32G00001",
+        "Model": "Odyssey G80SD",
+        "PhysicalWidth": 697,
+        "PhysicalHeight": 392,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ],
+  "store": {
+    "options.json": {
+      "Priority": "Normal",
+      "PriorityUnhooked": "Below",
+      "HomeCinema": false,
+      "VcpControl": false,
+      "Pinned": false,
+      "AutoUpdate": false,
+      "StartMinimized": false,
+      "StartElevated": false,
+      "DebugTools": false,
+      "ExperimentalFeatures": false,
+      "ShowMonitorActionWarning": true,
+      "BorderValues": "PerMonitor",
+      "RescueShortcut": "Ctrl+Alt+Shift+M",
+      "HideTrayIcon": false,
+      "ExcludedDefaultsVersion": 2
+    },
+    "models.json": {
+      "PHL0927": {
+        "Width": 698,
+        "Height": 393,
+        "Borders": {
+          "Left": 20,
+          "Top": 20,
+          "Right": 20,
+          "Bottom": 20
+        },
+        "PnpName": "PHL 328P6VU"
+      },
+      "SAME035": {
+        "Width": 697,
+        "Height": 392,
+        "Borders": {
+          "Left": 20,
+          "Top": 20,
+          "Right": 20,
+          "Bottom": 20
+        },
+        "PnpName": "Odyssey G80SD"
+      }
+    },
+    "layouts/PHL0927_FAKE32P00001+SAME035_FAKE32G00001.json": {
+      "Options": {
+        "AllowOverlaps": false,
+        "AllowDiscontinuity": false,
+        "Algorithm": "Strait",
+        "MinimalEdgeOverlap": 20,
+        "MaxTravelDistance": 200,
+        "FreelookCheckInterval": 100,
+        "FreelookEnabled": true,
+        "LoopX": false,
+        "LoopY": false,
+        "Enabled": true,
+        "AdjustPointer": false,
+        "AdjustSpeed": false
+      },
+      "Monitors": {
+        "PHL0927_FAKE32P00001": {
+          "XLocationInMm": 0,
+          "YLocationInMm": 0,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "BorderResistance": {
+            "Left": {
+              "Sections": [
+                {
+                  "From": 0,
+                  "To": 393,
+                  "Move": 25,
+                  "MoveBlock": false,
+                  "Drag": 25,
+                  "DragBlock": false
+                }
+              ]
+            },
+            "Top": {
+              "Sections": [
+                {
+                  "From": 100,
+                  "To": 300,
+                  "Move": 0,
+                  "MoveBlock": true,
+                  "Drag": 0,
+                  "DragBlock": true
+                }
+              ]
+            },
+            "Right": {
+              "Sections": [
+                {
+                  "From": 0,
+                  "To": 120,
+                  "Move": 12.5,
+                  "MoveBlock": false,
+                  "Drag": 30,
+                  "DragBlock": false
+                },
+                {
+                  "From": 120,
+                  "To": 280,
+                  "Move": 12.5,
+                  "MoveBlock": false,
+                  "Drag": 0,
+                  "DragBlock": true
+                },
+                {
+                  "From": 280,
+                  "To": 393,
+                  "Move": 0,
+                  "MoveBlock": true,
+                  "Drag": 0,
+                  "DragBlock": true
+                }
+              ]
+            },
+            "Bottom": {}
+          },
+          "Borders": {
+            "Left": 5,
+            "Top": 6,
+            "Right": 7,
+            "Bottom": 8
+          },
+          "ActiveSource": "DP-1",
+          "SerialNumber": "FAKE32P00001",
+          "Sources": {
+            "DP-1": {
+              "PixelX": 0,
+              "PixelY": 0,
+              "PixelWidth": 2560,
+              "PixelHeight": 1440,
+              "Orientation": 0,
+              "DisplayName": "DP-1",
+              "Primary": true
+            }
+          }
+        },
+        "SAME035_FAKE32G00001": {
+          "XLocationInMm": 712,
+          "YLocationInMm": 0,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "BorderResistance": {
+            "Left": {
+              "Sections": [
+                {
+                  "From": 0,
+                  "To": 200,
+                  "Move": 8,
+                  "MoveBlock": false,
+                  "Drag": 8,
+                  "DragBlock": false
+                },
+                {
+                  "From": 200,
+                  "To": 392,
+                  "Move": 0,
+                  "MoveBlock": false,
+                  "Drag": 40,
+                  "DragBlock": false
+                }
+              ]
+            },
+            "Top": {},
+            "Right": {
+              "Sections": [
+                {
+                  "From": 0,
+                  "To": 392,
+                  "Move": 0,
+                  "MoveBlock": true,
+                  "Drag": 0,
+                  "DragBlock": true
+                }
+              ]
+            },
+            "Bottom": {}
+          },
+          "Borders": {
+            "Left": 2,
+            "Top": 3,
+            "Right": 4,
+            "Bottom": 5
+          },
+          "ActiveSource": "DP-2",
+          "SerialNumber": "FAKE32G00001",
+          "Sources": {
+            "DP-2": {
+              "PixelX": 2560,
+              "PixelY": 0,
+              "PixelWidth": 3072,
+              "PixelHeight": 1728,
+              "Orientation": 0,
+              "DisplayName": "DP-2",
+              "Primary": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

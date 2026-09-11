@@ -12,11 +12,11 @@ One frame = a little-endian `u32` byte length, then that many bytes of UTF-8. Ma
 It is **not** line-oriented — piping a bare `<CommandMessage .../>` into the socket makes
 the daemon read `<Com` as a length and hang up. Endpoint: a named pipe per Windows
 session, a Unix socket under `$XDG_RUNTIME_DIR` on Linux; `LBM_HOOK_ENDPOINT` overrides
-both, for tests. Framing lives in `LittleBigMouse-Hook-Rust/src/ipc/framing.rs` and
+both, for tests. Framing lives in `rust/crates/lbm-ipc/src/framing.rs` and
 `LittleBigMouse.Ui.Avalonia/Remote/LocalIpcClient.cs`.
 
 Transport behaviour (duplex, reconnection, malformed frames) is tested in
-`LittleBigMouse-Hook-Rust/tests/wire_contract.rs`. This directory is about the *payloads*
+`rust/crates/lbm-hook/tests/wire_contract.rs`. This directory is about the *payloads*
 that ride it.
 
 ## Who is authoritative
@@ -44,18 +44,19 @@ So the authoritative definitions are:
 | `<ZoneLink>` | `LittleBigMouse.Zones/ZoneLink.cs` — `Serialize()` |
 | `<Rect>` | `ZoneSerializer.Serialize(Rect)` |
 
-The Rust reader (`src/zones/layout.rs`, `src/zones/xml.rs`, `src/ipc/protocol.rs`) is a
+The Rust reader (`rust/crates/lbm-zones/src/layout.rs`, `rust/crates/lbm-zones/src/xml.rs`,
+`rust/crates/lbm-ipc/src/protocol.rs`) is a
 **follower**. If it disagrees with a golden, the bug is in Rust.
 
 ### daemon→UI: Rust is the producer of record
 
 `<DaemonMessage>` frames and the `<ProbeReport>` document are produced by
-`LittleBigMouse-Hook-Rust/src/ipc/protocol.rs` and `src/engine/probe.rs`.
+`rust/crates/lbm-ipc/src/protocol.rs` and `rust/crates/lbm-engine/src/probe.rs`.
 
 | Wire element | Authoritative Rust definition |
 |---|---|
-| `<DaemonMessage>` | `src/ipc/protocol.rs` — the `pub const`s and builder fns |
-| `<ProbeReport>` | `src/engine/probe.rs` — `to_xml` |
+| `<DaemonMessage>` | `rust/crates/lbm-ipc/src/protocol.rs` — the `pub const`s and builder fns |
+| `<ProbeReport>` | `rust/crates/lbm-engine/src/probe.rs` — `to_xml` |
 
 The C# readers (`DaemonMessage.TryParse`, `ProbeReport.TryParse`) are **followers**. If
 they disagree with a golden, the bug is in C#.
@@ -82,7 +83,7 @@ goldens/
 
 Read by:
 
-* `LittleBigMouse-Hook-Rust/tests/wire_goldens.rs`
+* `rust/crates/lbm-hook/tests/wire_goldens.rs`
 * `LittleBigMouse.Core/LittleBigMouse.DisplayLayout.Tests/WireContractGoldenTests.cs`
 
 ### The version goldens are not invented
@@ -188,7 +189,7 @@ checked.
 
 ### Adding or changing an event
 
-1. Add the constant or builder in `src/ipc/protocol.rs`.
+1. Add the constant or builder in `rust/crates/lbm-ipc/src/protocol.rs`.
 2. Add the case to `DaemonMessage.TryParse` **and** the enum member in
    `LittleBigMouseEvent`. An event the UI does not know is dropped silently.
 3. Add the frame to the `frames` array in `daemon_event_frames_match_the_golden`, then:
@@ -212,7 +213,7 @@ least one release, and leave the frozen version goldens alone.
 LBM_UPDATE_GOLDEN=1 dotnet test LittleBigMouse.Core/LittleBigMouse.DisplayLayout.Tests \
     --filter FullyQualifiedName~WireContractGoldenTests
 # Rust-owned (daemon-to-ui) — cold-start safe, one pass
-cd LittleBigMouse-Hook-Rust && LBM_UPDATE_GOLDEN=1 cargo test --test wire_goldens
+cd rust && LBM_UPDATE_GOLDEN=1 cargo test -p lbm-hook --test wire_goldens
 ```
 
 Then **read the diff before committing.** A changed line in `ui-to-daemon/` is a daemon
@@ -222,7 +223,7 @@ that no longer understands what the daemon reports.
 ### Running the checks
 
 ```
-cd LittleBigMouse-Hook-Rust && cargo test
+cd rust && cargo test
 dotnet test LittleBigMouse.Core/LittleBigMouse.DisplayLayout.Tests
 ```
 

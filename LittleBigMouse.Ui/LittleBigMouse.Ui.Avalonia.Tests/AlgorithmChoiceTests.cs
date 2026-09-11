@@ -13,7 +13,7 @@ namespace LittleBigMouse.Ui.Avalonia.Tests;
 /// <para>
 /// The ids are NOT display strings — they are written into the saved layout and into the
 /// <c>Algorithm</c> attribute of the ZonesLayout XML, where the daemon matches them
-/// case-sensitively (<c>LittleBigMouse-Hook-Rust/src/zones/layout.rs</c>). Anything it does not
+/// case-sensitively (<c>rust/crates/lbm-zones/src/layout.rs</c>). Anything it does not
 /// recognise it reads as "Strait", silently, because an unknown algorithm is not an error. So a
 /// typo or a case change here does not fail, does not warn, and does not show up in the UI: it
 /// just quietly runs the wrong algorithm.

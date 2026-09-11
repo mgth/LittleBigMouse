@@ -8,8 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Expose ComputeShifts to the test project (KScreenGapGuardTests) so the gap-shift
-         algorithm is exercised directly, without duplicating it. -->
+    <!-- Expose ComputeShifts (KScreenGapGuardTests), LinuxLayoutFactory.Populate and
+         JsonLayoutStore.LayoutPath (DomainOracleTests) to the test project, so the tests
+         run the production code directly instead of a copy of it. -->
     <InternalsVisibleTo Include="LittleBigMouse.DisplayLayout.Tests" />
   </ItemGroup>
 

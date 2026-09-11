@@ -24,21 +24,20 @@ on:
 
 env:
   UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
-  HOOK_RUST_PROJECT: LittleBigMouse-Hook-Rust\Cargo.toml
+  HOOK_RUST_PROJECT: rust\Cargo.toml
   UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
 
 jobs:
-  # The hook on Linux: the only place its evdev/uinput, portal and X11 backends
-  # are compiled, and the target most of its day-to-day testing happens on. None
-  # of its tests need a display, /dev/input or /dev/uinput. The toolchain comes
-  # from rust-toolchain.toml. Clippy reports without failing the build: the hook
-  # still carries warnings from before this job existed, and they are cleared in
-  # their own change.
+  # The Rust workspace on Linux: the only place the hook's evdev/uinput, portal
+  # and X11 backends are compiled, and the target most of its day-to-day testing
+  # happens on. None of its tests need a display, /dev/input or /dev/uinput. The
+  # toolchain comes from rust-toolchain.toml. Clippy is a gate here and in the
+  # Windows job, each on the code its platform compiles.
   rust-linux:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: LittleBigMouse-Hook-Rust
+        working-directory: rust
 
     steps:
     - name: Checkout
@@ -54,8 +53,8 @@ jobs:
     - name: Build benches
       run: cargo bench --no-run
 
-    - name: Clippy (report only)
-      run: cargo clippy --all-targets
+    - name: Clippy
+      run: cargo clippy --all-targets -- -D warnings
 
   build:
     runs-on: windows-latest
@@ -90,6 +89,12 @@ jobs:
     - name: Test (Rust hook)
       run: cargo test --manifest-path $env:HOOK_RUST_PROJECT
 
+    # The Win32 half of the hook only compiles here. Linted natively rather than
+    # cross-linted from the Linux job: `--all-targets` builds criterion's C
+    # dependencies, which want a MinGW compiler the Linux runner does not have.
+    - name: Clippy (Rust, Windows)
+      run: cargo clippy --manifest-path $env:HOOK_RUST_PROJECT --all-targets -- -D warnings
+
     - name: Build UI (net10, x64 Release)
       run: |
         $buildArgs = @('-c','Release','-p:Platform=x64')
@@ -110,7 +115,7 @@ jobs:
     # and still runs. Assert on the artifact rather than trust the build script.
     - name: Verify hook version resource
       run: |
-        $exe = 'LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe'
+        $exe = 'rust\target\release\lbm-hook.exe'
         $info = (Get-Item $exe).VersionInfo
         if ($info.ProductName -ne 'Little Big Mouse') {
           throw "hook ProductName is '$($info.ProductName)', expected 'Little Big Mouse'"
@@ -134,7 +139,7 @@ jobs:
     # that; a PE names its DLLs in plain ASCII, so no toolchain is needed.
     - name: Verify hook needs no VC++ redistributable
       run: |
-        $exe = 'LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe'
+        $exe = 'rust\target\release\lbm-hook.exe'
         $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
         if ($text -match 'VCRUNTIME\d|MSVCP\d') {
           throw "hook imports the MSVC runtime: it will not start where no VC++ redistributable was ever installed (#539)"
@@ -144,7 +149,7 @@ jobs:
     - name: Stage hook next to UI output
       # Cargo can't emit a target named with a '.', so the Rust binary is built as
       # lbm-hook.exe and renamed to the contract name here.
-      run: Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
+      run: Copy-Item rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
 
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4

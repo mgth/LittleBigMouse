@@ -146,7 +146,7 @@ are submodules.
 
 ```bash
 dotnet test LittleBigMouse.sln
-cargo test --manifest-path LittleBigMouse-Hook-Rust/Cargo.toml
+cargo test --manifest-path rust/Cargo.toml
 ```
 
 Both are what CI runs, before it builds anything for shipping.

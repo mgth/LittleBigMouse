@@ -179,7 +179,7 @@ public sealed class DaemonProcessManager : IDisposable
     /// <summary>
     /// Locate the hook daemon without depending on the .NET target framework folder
     /// (net8.0, net9.0, net10.0, ...). Deployed builds keep the hook next to the UI; in the dev
-    /// tree the Rust hook is built under LittleBigMouse-Hook-Rust/target.
+    /// tree the Rust hook is built under rust/target (the Cargo workspace's target directory).
     /// Resistant to .NET version, platform (AnyCPU/x64) and configuration (Debug/Release) changes.
     /// </summary>
     static string? FindHookPath()
@@ -202,9 +202,9 @@ public sealed class DaemonProcessManager : IDisposable
             var sep = Path.DirectorySeparatorChar;
             var config = uiDir.Contains($"{sep}Debug{sep}", StringComparison.OrdinalIgnoreCase) ? "Debug" : "Release";
 
-            // Rust daemon first: LittleBigMouse-Hook-Rust/target/{debug,release}/lbm-hook[.exe].
+            // Rust daemon first: rust/target/{debug,release}/lbm-hook[.exe].
             var rustExe = OperatingSystem.IsWindows() ? "lbm-hook.exe" : "lbm-hook";
-            var target = Path.Combine(root, "LittleBigMouse-Hook-Rust", "target");
+            var target = Path.Combine(root, "rust", "target");
             var rust = new[]
                 {
                     Path.Combine(target, config.ToLowerInvariant(), rustExe),

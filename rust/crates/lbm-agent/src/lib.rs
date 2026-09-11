@@ -6,7 +6,8 @@
 //! - [`hook`]: the connection to the hook, kept up.
 //! - [`fake_hook`]: a hook that hooks nothing, for `--fake-hook` and the tests.
 //! - [`world`]: the displays, the profiles and the layout the agent acts on.
-//! - [`watch`]: the display changes the hook does not report (Linux poll).
+//! - [`watch`]: the display changes the hook does not report (Linux: uevents, inotify,
+//!   and the poll behind them).
 //! - [`supervise`]: launching a hook when none answers (D5).
 //! - [`gap_guard`]: the 1 px gaps KWin's barriers need while the engine runs (D7).
 //! - [`runtime`]: the event loop tying them together.

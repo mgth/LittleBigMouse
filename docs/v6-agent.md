@@ -76,7 +76,11 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 - `hook::HookClient` : une seule connexion pour les deux sens, maintenue ; commandes données
   hors connexion jetées (jamais rejouées périmées).
 - `world::SystemWorld` : découverte (`lbm-display`), profil (`lbm-store`), zones.
-- `watch` : sondage Linux de 2 s (signature sysfs, fichiers de sortie KWin/mutter).
+- `watch` : la vérification du C# (signature sysfs, date des fichiers de sortie KWin/mutter),
+  avancée par les événements : uevents DRM du noyau (netlink, sans privilège) et inotify sur
+  le répertoire des fichiers de sortie (et celui de leur cible s'ils sont des liens). Tant
+  qu'une source manque, sondage de 2 s comme le C# ; les deux en place, filet de 30 s. Un
+  événement ne fait qu'avancer la vérification, qui décide toujours.
 - `fake_hook` et `--fake-hook` : un hook qui n'accroche rien, sur un point de terminaison
   privé ; `--config-dir`/`--data-dir` isolent les profils. Tout essai hors session réelle
   doit passer les trois.
@@ -111,8 +115,7 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 ## Suite
 
 1. Repli sur l'arrêt du processus quand un Stop ne peut pas être livré (le C# le faisait).
-2. Sources Linux : inotify et uevents DRM à la place du sondage, veille par
-   `PrepareForSleep` de logind.
+2. Veille sous Linux : `PrepareForSleep` de logind.
 3. API, suite : `SaveLayout`, `SaveOptions`, `Preview`/`EndPreview`, `Probe`,
    `SeenProcesses` ; tray, autostart ; Windows (points de terminaison par session, élévation,
    sources).

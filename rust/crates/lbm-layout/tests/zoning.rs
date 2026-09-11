@@ -77,6 +77,7 @@ fn section(
     BorderSection::new(from, to, mv, move_block, drag, drag_block)
 }
 
+/// C#: `BorderSectionLinkTests.NoSections_LeavesTheEdgeFree`.
 #[test]
 fn no_sections_leaves_the_edge_free() {
     let links = crossing(right_links_of_left(two_monitors(
@@ -90,6 +91,7 @@ fn no_sections_leaves_the_edge_free() {
     assert!(!c.drag_block);
 }
 
+/// C#: `BorderSectionLinkTests.ASectionSpanningTheEdgeIsTheFormerPerEdgeResistance`.
 #[test]
 fn a_section_spanning_the_edge_is_the_former_per_edge_resistance() {
     let mut borders = BorderResistance::default();
@@ -104,6 +106,7 @@ fn a_section_spanning_the_edge_is_the_former_per_edge_resistance() {
     assert!(!links[0].move_block);
 }
 
+/// C#: `BorderSectionLinkTests.ASectionSplitsTheEdgeAndCarriesItsOwnResistances`.
 #[test]
 fn a_section_splits_the_edge_and_carries_its_own_resistances() {
     let mut borders = BorderResistance::default();
@@ -125,6 +128,7 @@ fn a_section_splits_the_edge_and_carries_its_own_resistances() {
     assert_eq!(c[1].source_from_pixel, 540);
 }
 
+/// C#: `BorderSectionLinkTests.AdjacentSectionsWithDifferentSettingsAreNotMerged`.
 #[test]
 fn adjacent_sections_with_different_settings_are_not_merged() {
     let mut borders = BorderResistance::default();
@@ -143,6 +147,7 @@ fn adjacent_sections_with_different_settings_are_not_merged() {
     assert_eq!(c[2].border_resistance, 0.0);
 }
 
+/// C#: `BorderSectionLinkTests.ANegativeResistanceIsRefusedRatherThanCarriedToTheDaemon`.
 #[test]
 fn a_negative_resistance_is_refused_rather_than_carried_to_the_daemon() {
     // The C# test also pins the property-change notification the editor needs;
@@ -154,6 +159,7 @@ fn a_negative_resistance_is_refused_rather_than_carried_to_the_daemon() {
     assert_eq!(s.move_resistance(), 0.0);
 }
 
+/// C#: `BorderSectionLinkTests.AdjacentSectionsWithIdenticalSettingsStillMerge`.
 #[test]
 fn adjacent_sections_with_identical_settings_still_merge() {
     let mut borders = BorderResistance::default();
@@ -171,6 +177,7 @@ fn adjacent_sections_with_identical_settings_still_merge() {
     assert_eq!(c[0].to, 180.0);
 }
 
+/// C#: `BorderSectionLinkTests.SectionsAreRelativeToTheEdgeStartCorner`.
 #[test]
 fn sections_are_relative_to_the_edge_start_corner() {
     let mut borders = BorderResistance::default();
@@ -205,6 +212,7 @@ fn sections_are_relative_to_the_edge_start_corner() {
     assert!(!c[1].move_block);
 }
 
+/// C#: `BorderSectionLinkTests.SerializedLinkKeepsTheHistoricalAttributeNames`.
 #[test]
 fn serialized_link_keeps_the_historical_attribute_names() {
     let mut borders = BorderResistance::default();
@@ -214,7 +222,18 @@ fn serialized_link_keeps_the_historical_attribute_names() {
         .push(section(0.0, EDGE_HEIGHT_MM, 3.0, false, 4.0, true));
     let mut layout = two_monitors(borders);
     layout.init();
-    let xml = layout.serialize();
+    let document = layout.serialize();
+    // C# serializes the crossing link on its own: here it is cut out of the
+    // layout's document, Left's right links (Left is zone 0), the one to zone 1.
+    let right_links = document
+        .split("<RightLinks>")
+        .nth(1)
+        .and_then(|s| s.split("</RightLinks>").next())
+        .expect("Left's right links");
+    let xml = right_links
+        .split("<ZoneLink ")
+        .find(|link| link.contains(r#"TargetId="1""#))
+        .expect("the crossing link");
     assert!(xml.contains(r#"BorderResistance="3""#), "{xml}");
     assert!(xml.contains(r#"DragResistance="4""#));
     assert!(xml.contains(r#"MoveBlock="False""#));

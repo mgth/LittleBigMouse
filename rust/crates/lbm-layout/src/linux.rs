@@ -1,11 +1,16 @@
 //! How the Linux platform layer's description of an output becomes monitors,
 //! models and sources: C#'s `LinuxLayoutMapping.AddMonitor`. Pure: the
 //! enumeration (KScreen, xrandr, sysfs EDID) is the caller's business.
+//!
+//! The way back, applying positions to the compositor, is the platform's too,
+//! all but its one pure step: [`snap_to_actual_sizes`].
 
+use crate::geo::dotnet::{compare, max, min};
 use crate::geo::{Point, Rect, Size};
 use crate::model::{
     DisplaySize, DisplaySource, Layout, Monitor, MonitorModel, PhysicalSource, Ratio,
 };
+use crate::solve::IdMap;
 
 /// One enumerated output, member for member C#'s `LinuxMonitor`.
 #[derive(Clone, Debug, PartialEq)]
@@ -232,4 +237,129 @@ pub fn populate<E>(
     layout.set_locations_from_system_configuration(false);
     layout.anchor_on_primary();
     Ok(())
+}
+
+/// One output placed by the pixel solver, on its way to the compositor: C#'s
+/// `LinuxDisplayController.PlacedOutput`. The intended position comes with the
+/// logical size the solver believed in (the *predicted* `round(native / scale)`)
+/// and the one the compositor actually settled on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlacedOutput {
+    /// The connector name.
+    pub name: String,
+    pub x: f64,
+    pub y: f64,
+    pub predicted_width: f64,
+    pub predicted_height: f64,
+    pub actual_width: f64,
+    pub actual_height: f64,
+}
+
+impl PlacedOutput {
+    /// The positional constructor
+    /// `PlacedOutput(Name, X, Y, PredictedWidth, PredictedHeight, ActualWidth, ActualHeight)`.
+    pub fn new(
+        name: impl Into<String>,
+        x: f64,
+        y: f64,
+        predicted_width: f64,
+        predicted_height: f64,
+        actual_width: f64,
+        actual_height: f64,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            x,
+            y,
+            predicted_width,
+            predicted_height,
+            actual_width,
+            actual_height,
+        }
+    }
+}
+
+/// `LinuxDisplayController.SnapToActualSizes`: rebuilds the intended edge
+/// contacts with the actual output sizes. Wherever the solver meant two outputs
+/// to touch (edge to edge within 1.5 px in its own predicted space, sharing more
+/// than half a pixel of the perpendicular span), they are chained flush with the
+/// sizes the compositor really applied, so a one-pixel rounding difference never
+/// turns a contact into a gap or an overlap. An output with no contact on an axis
+/// keeps its intended coordinate there.
+///
+/// Two passes, X then Y, each over the outputs ordered by that axis then the other
+/// (a stable sort, like LINQ's `OrderBy().ThenBy()`). A contact found replaces the
+/// intended coordinate, gaps closed as well as overlaps; with several neighbours
+/// the farthest (`Math.Max`) wins. Neighbours chain on the positions already
+/// snapped in the same pass. The result is keyed by name, in input order.
+///
+/// # Panics
+///
+/// On two outputs with the same name, where C#'s `ToDictionary` throws.
+pub fn snap_to_actual_sizes(placed: &[PlacedOutput]) -> IdMap<Point> {
+    const CONTACT_TOLERANCE: f64 = 1.5;
+
+    // Does the pair share an edge span on the perpendicular axis, in intended space?
+    fn overlap(a_lo: f64, a_length: f64, b_lo: f64, b_length: f64) -> bool {
+        min(a_lo + a_length, b_lo + b_length) - max(a_lo, b_lo) > 0.5
+    }
+
+    let mut result = IdMap::new();
+    for p in placed {
+        assert!(
+            !result.contains_key(&p.name),
+            "two placed outputs are named {:?}",
+            p.name
+        );
+        result.insert(&p.name, Point::new(p.x, p.y));
+    }
+
+    let mut by_x: Vec<&PlacedOutput> = placed.iter().collect();
+    by_x.sort_by(|a, b| compare(a.x, b.x).then_with(|| compare(a.y, b.y)));
+    for item in by_x {
+        let mut chained: Option<f64> = None;
+        for prior in placed {
+            if prior.name == item.name {
+                continue;
+            }
+            if !overlap(
+                prior.y,
+                prior.predicted_height,
+                item.y,
+                item.predicted_height,
+            ) {
+                continue;
+            }
+            if (prior.x + prior.predicted_width - item.x).abs() > CONTACT_TOLERANCE {
+                continue;
+            }
+            let x = result[prior.name.as_str()].x + prior.actual_width;
+            chained = Some(chained.map_or(x, |c| max(c, x)));
+        }
+        let y = result[item.name.as_str()].y;
+        result.insert(&item.name, Point::new(chained.unwrap_or(item.x), y));
+    }
+
+    let mut by_y: Vec<&PlacedOutput> = placed.iter().collect();
+    by_y.sort_by(|a, b| compare(a.y, b.y).then_with(|| compare(a.x, b.x)));
+    for item in by_y {
+        let mut chained: Option<f64> = None;
+        for prior in placed {
+            if prior.name == item.name {
+                continue;
+            }
+            if !overlap(prior.x, prior.predicted_width, item.x, item.predicted_width) {
+                continue;
+            }
+            if (prior.y + prior.predicted_height - item.y).abs() > CONTACT_TOLERANCE {
+                continue;
+            }
+            let y = result[prior.name.as_str()].y + prior.actual_height;
+            chained = Some(chained.map_or(y, |c| max(c, y)));
+        }
+        let x = result[item.name.as_str()].x;
+        result.insert(&item.name, Point::new(x, chained.unwrap_or(item.y)));
+    }
+
+    result
 }

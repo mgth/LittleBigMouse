@@ -264,8 +264,10 @@ mod linux {
         match info.color_type {
             png::ColorType::Rgba => {
                 for (dst, src) in out
-                    .chunks_exact_mut(4)
-                    .zip(buf[..w * h * 4].chunks_exact(4))
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(buf[..w * h * 4].as_chunks::<4>().0)
                 {
                     dst[0] = src[2];
                     dst[1] = src[1];
@@ -275,8 +277,10 @@ mod linux {
             }
             png::ColorType::Rgb => {
                 for (dst, src) in out
-                    .chunks_exact_mut(4)
-                    .zip(buf[..w * h * 3].chunks_exact(3))
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(buf[..w * h * 3].as_chunks::<3>().0)
                 {
                     dst[0] = src[2];
                     dst[1] = src[1];
@@ -285,7 +289,7 @@ mod linux {
                 }
             }
             png::ColorType::Grayscale => {
-                for (dst, src) in out.chunks_exact_mut(4).zip(buf[..w * h].iter()) {
+                for (dst, src) in out.as_chunks_mut::<4>().0.iter_mut().zip(&buf[..w * h]) {
                     dst[0] = *src;
                     dst[1] = *src;
                     dst[2] = *src;
@@ -327,15 +331,13 @@ mod linux {
             match event {
                 wl_output::Event::Name { name } => info.name = Some(name),
                 wl_output::Event::Mode {
-                    flags,
+                    flags: WEnum::Value(flags),
                     width,
                     height,
                     ..
                 } => {
-                    if let WEnum::Value(flags) = flags {
-                        if flags.contains(wl_output::Mode::Current) {
-                            info.current_mode = Some((width, height));
-                        }
+                    if flags.contains(wl_output::Mode::Current) {
+                        info.current_mode = Some((width, height));
                     }
                 }
                 wl_output::Event::Done => state.outputs_done = true,

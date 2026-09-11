@@ -115,11 +115,12 @@ pub fn run(shared: &'static Shared) -> bool {
             None => std::thread::sleep(Duration::from_millis(50)),
         }
 
-        if debug && router.is_some() && last_report.elapsed() >= Duration::from_secs(2) {
+        let report_due = debug && last_report.elapsed() >= Duration::from_secs(2);
+        if let Some(active) = router.as_ref().filter(|_| report_due) {
             let events = crate::hook::MOUSE_EVENTS.load(Ordering::Relaxed);
             let crossings = crate::hook::CROSSINGS.load(Ordering::Relaxed);
             if events != last_events {
-                let p = router.as_ref().unwrap().env.virtual_pos;
+                let p = active.env.virtual_pos;
                 eprintln!("[LittleBigMouse.Hook] evdev: {} motion events, {crossings} crossings (pos {},{})",
                     events - last_events, p.x(), p.y());
                 last_events = events;
@@ -179,7 +180,7 @@ impl Router {
         let accel_cfg = AccelConfig::load();
         let scan = devices::enumerate();
         let mut keyboards = Vec::new();
-        for (path, mut dev) in scan.keyboards {
+        for (path, dev) in scan.keyboards {
             if dev.set_nonblocking(true).is_ok() {
                 keyboards.push((path, dev));
             }
@@ -443,7 +444,7 @@ impl Router {
                     Err(_) => {}
                 }
             }
-            for (path, mut dev) in scan.keyboards {
+            for (path, dev) in scan.keyboards {
                 if self.keyboards.iter().any(|(p, _)| *p == path) {
                     continue;
                 }

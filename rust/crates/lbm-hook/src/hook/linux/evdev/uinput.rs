@@ -8,9 +8,8 @@
 //! code) a uinput device did not declare.
 
 use evdev::{
-    uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, BusType, InputId, KeyCode, RelativeAxisCode,
-    UinputAbsSetup,
+    uinput::VirtualDevice, AbsInfo, AbsoluteAxisCode, AttributeSet, BusType, InputId, KeyCode,
+    RelativeAxisCode, UinputAbsSetup,
 };
 
 use crate::geometry::Rect;
@@ -53,7 +52,7 @@ pub(super) fn build_virtual(desktop: Rect<i32>) -> std::io::Result<VirtualDevice
     let ax = UinputAbsSetup::new(AbsoluteAxisCode::ABS_X, AbsInfo::new(0, 0, w, 0, 0, 0));
     let ay = UinputAbsSetup::new(AbsoluteAxisCode::ABS_Y, AbsInfo::new(0, 0, h, 0, 0, 0));
 
-    VirtualDeviceBuilder::new()?
+    VirtualDevice::builder()?
         .name(VIRTUAL_NAME)
         .input_id(InputId::new(BusType::BUS_VIRTUAL, 0x4c42, 0x4d55, 1))
         .with_keys(&keys)?
@@ -77,7 +76,7 @@ pub(super) fn build_virtual_keyboard() -> std::io::Result<VirtualDevice> {
         keys.insert(KeyCode::new(code));
     }
 
-    VirtualDeviceBuilder::new()?
+    VirtualDevice::builder()?
         .name(VIRTUAL_KBD_NAME)
         .input_id(InputId::new(BusType::BUS_VIRTUAL, 0x4c42, 0x4d56, 1))
         .with_keys(&keys)?

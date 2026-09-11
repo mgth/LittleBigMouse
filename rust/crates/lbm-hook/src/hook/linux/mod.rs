@@ -10,6 +10,7 @@
 //!      permitted: the compositor's barrier validator forbids interior-edge
 //!      barriers and flags every crossing with a capture notification.
 //!   3. X11 (XInput2) — native fallback on an X session without evdev access.
+//!
 //! All implement the same reconcile contract as the Windows pump: watch
 //! `shared.want_hook`, install/remove their capture, feed the engine, exit on
 //! `want_quit`.

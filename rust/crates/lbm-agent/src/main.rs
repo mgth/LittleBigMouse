@@ -61,8 +61,14 @@ struct Options {
 }
 
 fn options() -> Option<Options> {
+    options_from(lbm_agent::elevation::apply_environment_arguments(
+        std::env::args().skip(1).collect(),
+    ))
+}
+
+fn options_from(args: Vec<String>) -> Option<Options> {
     let mut options = Options::default();
-    let mut args = std::env::args().skip(1);
+    let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--dump-displays" => options.dump_displays = true,
@@ -84,6 +90,11 @@ fn main() -> ExitCode {
         eprintln!("{USAGE}");
         return ExitCode::from(2);
     };
+    // Before the instance lock: the relaunched agent takes it the moment this one leaves.
+    #[cfg(windows)]
+    if !options.dump_displays && options.serve_fake_hook.is_none() && relaunch_elevated() {
+        return ExitCode::SUCCESS;
+    }
     if options.dump_displays {
         return dump_displays();
     }
@@ -377,6 +388,35 @@ fn import_registry(layout_id: &str, store: &JsonLayoutStore) {
             }
         }
         Err(error) => eprintln!("[lbm-agent] the registry import is incomplete: {error}"),
+    }
+}
+
+/// C#'s startup elevation (#512, #400): when `StartElevated` is set and this user can
+/// elevate, one UAC consent relaunches this agent elevated — and this one leaves without
+/// taking the instance lock. A refused consent keeps it running unelevated.
+#[cfg(windows)]
+fn relaunch_elevated() -> bool {
+    use lbm_agent::elevation;
+
+    let store = JsonLayoutStore::new(lbm_paths::config_dir());
+    if !elevation::should_relaunch(
+        elevation::elevation(),
+        elevation::start_elevated_requested(&store),
+    ) {
+        return false;
+    }
+    let arguments = elevation::relaunch_arguments(
+        std::env::args().skip(1),
+        std::env::vars().filter(|(name, _)| {
+            elevation::is_diagnostic_variable(std::ffi::OsStr::new(name.as_str()))
+        }),
+    );
+    if elevation::relaunch(&arguments) {
+        eprintln!("[lbm-agent] relaunched elevated");
+        true
+    } else {
+        eprintln!("[lbm-agent] elevation refused: running as this user");
+        false
     }
 }
 

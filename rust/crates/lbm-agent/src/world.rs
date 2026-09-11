@@ -29,6 +29,11 @@ pub trait AgentWorld: World {
     /// Persists the whole current layout.
     fn save_layout(&mut self) -> io::Result<()>;
 
+    /// The current layout's id, for the frontends.
+    fn layout_id(&self) -> Option<String> {
+        None
+    }
+
     /// The engine's topology prologue (the KWin gaps, `gap_guard`): whether it moved
     /// outputs — then the layout at hand describes a desktop that is going away, and the
     /// Start waits for the display change that follows.
@@ -139,6 +144,10 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             Some(layout) => self.persistence.save(layout).map(|_| ()),
             None => Ok(()),
         }
+    }
+
+    fn layout_id(&self) -> Option<String> {
+        self.layout.as_ref().map(|l| l.id.clone())
     }
 
     fn prepare_for_engine(&mut self) -> bool {

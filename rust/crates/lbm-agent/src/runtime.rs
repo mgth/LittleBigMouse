@@ -7,8 +7,9 @@ use std::future::Future;
 use lbm_ipc::client::{self, DaemonEvent, DaemonMessage};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
+use crate::api::{self, Call, Request, Snapshot};
 use crate::hook::{HookClient, HookSignal};
-use crate::reconcile::{Effect, HookEvent, Input, Reconciler, Timings};
+use crate::reconcile::{Effect, EngineState, HookEvent, Input, Reconciler, Timings};
 use crate::supervise::{HookLauncher, Launch};
 use crate::world::AgentWorld;
 
@@ -40,6 +41,14 @@ pub struct Agent<W> {
     hook: HookClient,
     inputs: UnboundedSender<Input>,
     launcher: Option<HookLauncher>,
+    /// The frontends' requests, when the agent serves them.
+    calls: Option<UnboundedReceiver<Call>>,
+    subscribers: Vec<api::Client>,
+    /// What the subscribers last saw.
+    published: Option<Snapshot>,
+    hook_connected: bool,
+    /// A frontend asked the agent to leave.
+    quitting: bool,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -57,7 +66,90 @@ impl<W: AgentWorld> Agent<W> {
             hook,
             inputs,
             launcher: None,
+            calls: None,
+            subscribers: Vec::new(),
+            published: None,
+            hook_connected: false,
+            quitting: false,
         }
+    }
+
+    /// Serves the frontends' requests coming out of `calls` (see [`api`]).
+    pub fn with_api(mut self, calls: UnboundedReceiver<Call>) -> Self {
+        self.calls = Some(calls);
+        self
+    }
+
+    /// What a frontend sees of the agent now.
+    pub fn snapshot(&self) -> Snapshot {
+        let layout = crate::reconcile::World::layout(&self.world);
+        Snapshot {
+            agent_version: env!("CARGO_PKG_VERSION").to_owned(),
+            hook_connected: self.hook_connected,
+            engine: match self.reconciler.engine() {
+                EngineState::Running => "Running",
+                EngineState::Stopped => "Stopped",
+                EngineState::Paused => "Paused",
+                EngineState::Dead => "Dead",
+            }
+            .to_owned(),
+            suspended: self.reconciler.suspended(),
+            layout_id: self.world.layout_id(),
+            enabled: layout.map(|l| l.enabled),
+        }
+    }
+
+    /// Sends the state to the subscribers when it changed since they last saw it.
+    fn publish(&mut self) {
+        let snapshot = self.snapshot();
+        if self.published.as_ref() == Some(&snapshot) {
+            return;
+        }
+        let event = api::state_event(&snapshot);
+        self.subscribers.retain(|s| s.send(event.clone()));
+        self.published = Some(snapshot);
+    }
+
+    /// One frontend request.
+    fn call(&mut self, call: Call) {
+        let Call {
+            id,
+            request,
+            client,
+        } = call;
+        let result = match request {
+            Request::Hello { .. } => Ok(serde_json::json!({
+                "Agent": "lbm-agent",
+                "Version": env!("CARGO_PKG_VERSION"),
+                "Protocol": api::PROTOCOL,
+            })),
+            Request::Snapshot => serde_json::to_value(self.snapshot()).map_err(|e| e.to_string()),
+            Request::Subscribe => {
+                let snapshot = serde_json::to_value(self.snapshot()).map_err(|e| e.to_string());
+                self.subscribers.push(client.clone());
+                snapshot
+            }
+            Request::Start { keep_layout } => {
+                self.handle(Input::UserStart { keep_layout });
+                Ok(serde_json::Value::Null)
+            }
+            Request::Stop => {
+                self.handle(Input::UserStop);
+                Ok(serde_json::Value::Null)
+            }
+            Request::Refresh => {
+                self.handle(Input::Refresh);
+                Ok(serde_json::Value::Null)
+            }
+            Request::Quit => {
+                // The tray's Quit (C#: QuitAsync): the hook leaves, then the agent.
+                eprintln!("[lbm-agent] -> Quit");
+                self.hook.send(client::messages(&[client::quit()]));
+                self.quitting = true;
+                Ok(serde_json::Value::Null)
+            }
+        };
+        client.send(api::answer(id, result));
     }
 
     /// Launches a hook when none answers (D5); without one, the agent waits for a hook.
@@ -86,12 +178,34 @@ impl<W: AgentWorld> Agent<W> {
         }
         self.handle(Input::Boot);
         tokio::pin!(shutdown);
+        let mut calls = self.calls.take();
         loop {
+            self.publish();
+            if self.quitting {
+                // The Quit must reach the hook before the process goes.
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(2), self.hook.flush())
+                    .await;
+                return;
+            }
             let input = tokio::select! {
                 _ = &mut shutdown => return,
+                call = async {
+                    match &mut calls {
+                        Some(calls) => calls.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match call {
+                        Some(call) => self.call(call),
+                        // The endpoint is gone: serve no more, but keep running.
+                        None => calls = None,
+                    }
+                    continue;
+                },
                 signal = signals.recv() => match signal {
                     Some(HookSignal::Connected) => {
                         eprintln!("[lbm-agent] hook connected");
+                        self.hook_connected = true;
                         if let Some(launcher) = &mut self.launcher {
                             launcher.on_connected();
                         }
@@ -105,6 +219,7 @@ impl<W: AgentWorld> Agent<W> {
                     // C#: the client synthesizes Dead when the connection drops.
                     Some(HookSignal::Lost) => {
                         eprintln!("[lbm-agent] hook connection lost");
+                        self.hook_connected = false;
                         Input::Hook(HookEvent::Dead)
                     }
                     Some(HookSignal::Unreachable) => {

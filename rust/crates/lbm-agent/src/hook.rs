@@ -45,10 +45,18 @@ pub enum HookSignal {
     Unreachable,
 }
 
+/// What goes to the connection task.
+#[derive(Debug)]
+enum Outgoing {
+    Frame(String),
+    /// Answered once everything queued before it is written (or dropped).
+    Flush(tokio::sync::oneshot::Sender<()>),
+}
+
 /// Sends commands to the hook over the current connection.
 #[derive(Clone, Debug)]
 pub struct HookClient {
-    commands: mpsc::UnboundedSender<String>,
+    commands: mpsc::UnboundedSender<Outgoing>,
 }
 
 impl HookClient {
@@ -64,7 +72,17 @@ impl HookClient {
 
     /// Sends a command frame (see [`lbm_ipc::client`]); dropped if not connected.
     pub fn send(&self, frame: String) {
-        let _ = self.commands.send(frame);
+        let _ = self.commands.send(Outgoing::Frame(frame));
+    }
+
+    /// Completes once every frame sent before is written to the hook, or dropped for
+    /// want of one — what a leaving agent waits for, so its last command (`Quit`)
+    /// is not lost with the process.
+    pub async fn flush(&self) {
+        let (done, done_rx) = tokio::sync::oneshot::channel();
+        if self.commands.send(Outgoing::Flush(done)).is_ok() {
+            let _ = done_rx.await;
+        }
     }
 }
 
@@ -80,7 +98,7 @@ async fn connect(endpoint: &str) -> io::Result<tokio::net::windows::named_pipe::
 
 async fn keep_connected(
     endpoint: String,
-    mut commands: mpsc::UnboundedReceiver<String>,
+    mut commands: mpsc::UnboundedReceiver<Outgoing>,
     signals: mpsc::UnboundedSender<HookSignal>,
 ) {
     let mut failures = 0u32;
@@ -99,7 +117,10 @@ async fn keep_connected(
                 tokio::time::sleep(RETRY_DELAY).await;
                 loop {
                     match commands.try_recv() {
-                        Ok(_) => continue,
+                        Ok(Outgoing::Flush(done)) => {
+                            let _ = done.send(());
+                        }
+                        Ok(Outgoing::Frame(_)) => continue,
                         Err(mpsc::error::TryRecvError::Empty) => break,
                         Err(mpsc::error::TryRecvError::Disconnected) => return,
                     }
@@ -130,7 +151,7 @@ enum Served {
 
 async fn serve<S>(
     stream: S,
-    commands: &mut mpsc::UnboundedReceiver<String>,
+    commands: &mut mpsc::UnboundedReceiver<Outgoing>,
     signals: &mpsc::UnboundedSender<HookSignal>,
 ) -> Served
 where
@@ -168,10 +189,13 @@ where
                 None => break Served::Dropped,
             },
             command = commands.recv() => match command {
-                Some(command) => {
+                Some(Outgoing::Frame(command)) => {
                     if write_frame(&mut writer, &command).await.is_err() {
                         break Served::Dropped;
                     }
+                }
+                Some(Outgoing::Flush(done)) => {
+                    let _ = done.send(());
                 }
                 None => break Served::Closed,
             },

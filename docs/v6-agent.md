@@ -145,6 +145,14 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   l'utilisateur seuls, aucun client distant ni d'une autre session ; étiqueté intégrité
   moyenne quand l'agent est élevé, sans quoi un frontend non élevé ne pourrait pas écrire.
   Les tests de l'API passent sur les deux plateformes (socket, tube).
+- Élévation au démarrage sous Windows (`elevation`, C# `WindowsElevation`, #512/#400) :
+  avant même le verrou d'instance, si `StartElevated` est demandé (store, ou registre 5.x
+  tant que l'import n'a pas eu lieu) **et** que l'utilisateur peut élever (jeton filtré
+  d'administrateur), un seul consentement UAC relance l'agent élevé et celui-ci part sans
+  prendre le verrou ; consentement refusé : il continue non élevé. Jamais d'invite pour un
+  utilisateur standard, à qui elle demanderait des identifiants qu'il n'a pas. Les variables
+  `LBM_*` sont passées en `--env:NOM=valeur` (ShellExecute donne un environnement neuf) et
+  appliquées avant toute lecture. Le hook lancé par un agent élevé hérite de son élévation.
 - Instance unique (`instance`, verrou `flock` / mutex nommé) prise avant tout, puis journal
   `agent.log` sur cinq générations (`log`) quand la sortie d'erreur n'est pas un terminal.
 - Repli du Stop (C# : `StopCurrentSessionDaemons`) : un Stop émis sans connexion au hook

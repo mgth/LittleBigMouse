@@ -19,11 +19,13 @@
 //!   the notification area).
 //! - [`autostart`] and [`schtask`]: starting with the session (XDG autostart, the
 //!   Windows scheduled task).
+//! - [`elevation`] (Windows): the one UAC consent, when it is wanted and possible.
 //! - `winpipe` (Windows): the per-session pipes, the hook's and the agent's.
 
 pub mod api;
 pub mod autostart;
 pub mod discovery;
+pub mod elevation;
 pub mod fake_hook;
 pub mod gap_guard;
 pub mod hook;

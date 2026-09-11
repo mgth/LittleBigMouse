@@ -302,6 +302,15 @@ impl<W: AgentWorld> Agent<W> {
             Effect::Stop => {
                 eprintln!("[lbm-agent] -> Stop");
                 self.hook.send(client::messages(&[client::stop()]));
+                // Nobody to deliver it to: end the hook this agent launched instead (C#:
+                // a lost IPC Stop falls back to stopping the process).
+                if !self.hook_connected {
+                    if let Some(launcher) = &mut self.launcher {
+                        if launcher.stop_launched() {
+                            eprintln!("[lbm-agent] the hook could not be told to stop: ended it");
+                        }
+                    }
+                }
                 // The epilogue: the outputs go back where they were (C#: StopAsync).
                 if self.world.restore_after_engine() {
                     let _ = self.inputs.send(Input::DisplayChanged);

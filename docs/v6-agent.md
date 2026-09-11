@@ -111,11 +111,13 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   Windows (tube par session, DACL du hook) viendra avec l'agent Windows.
 - Instance unique (`instance`, verrou `flock` / mutex nommé) prise avant tout, puis journal
   `agent.log` sur cinq générations (`log`) quand la sortie d'erreur n'est pas un terminal.
+- Repli du Stop (C# : `StopCurrentSessionDaemons`) : un Stop émis sans connexion au hook
+  termine le hook que cet agent a lancé (le noyau libère alors grab et barrières) ; jamais
+  un autre, qui pourrait être celui de n'importe qui.
 
 ## Suite
 
-1. Repli sur l'arrêt du processus quand un Stop ne peut pas être livré (le C# le faisait).
-2. Veille sous Linux : `PrepareForSleep` de logind.
-3. API, suite : `SaveLayout`, `SaveOptions`, `Preview`/`EndPreview`, `Probe`,
+1. Veille sous Linux : `PrepareForSleep` de logind.
+2. API, suite : `SaveLayout`, `SaveOptions`, `Preview`/`EndPreview`, `Probe`,
    `SeenProcesses` ; tray, autostart ; Windows (points de terminaison par session, élévation,
    sources).

@@ -10,8 +10,10 @@
 #   lbm-ipc      local IPC framing and the XML command/event protocol
 #   lbm-hook     the daemon: platform hooks, IPC server, command dispatch
 #   lbm-pattern  native-Wayland fullscreen test-pattern viewer (Linux only)
-#   lbm-store    the persistence storage: layout DTOs, the JSON store the C# UI
-#                shares, store keys, the excluded-processes file
+#   lbm-layout   the layout model: monitors in mm and pixels, placement solvers,
+#                the zone compiler
+#   lbm-store    persistence: layout DTOs, the JSON store the C# UI shares, store
+#                keys, the excluded-processes file, the engine loading the model
 #
 # Build from here (`cargo build`, `cargo test`) or with
 # `--manifest-path rust/Cargo.toml` from the repository root; both pick up the

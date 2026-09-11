@@ -1,8 +1,7 @@
-//! Persistence storage — port of the storage half of
-//! `LittleBigMouse.Plugins.Core/Persistence`, of `LittleBigMouse.Platform.Linux/JsonLayoutStore`
-//! and of `LbmPaths`.
+//! Persistence — port of `LittleBigMouse.Plugins.Core/Persistence`, of
+//! `LittleBigMouse.Platform.Linux/JsonLayoutStore` and of `LbmPaths`.
 //!
-//! What is here moves documents in and out of the user's configuration and knows
+//! The storage half moves documents in and out of the user's configuration and knows
 //! nothing about the layout model:
 //!
 //! - [`layout_dtos`]: the storage documents (`LayoutDtos.cs`), with the two shapes of
@@ -15,9 +14,12 @@
 //!   `Excluded.txt` file the daemon reads, its defaults and their one-time top-up;
 //! - [`lbm_paths`]: the per-user directories.
 //!
-//! The model mapping (`LayoutDtoMapper`), the engine (`LayoutPersistence`) and the
-//! migrations that need the model (`LayoutMigrations`) are ported on top of this
-//! crate, next to the model.
+//! The engine half loads the `lbm-layout` model from a store and saves it back:
+//!
+//! - [`layout_persistence`]: the engine (`LayoutPersistence`) and its platform hooks;
+//! - [`layout_dto_mapper`]: the model↔DTO mapping (`LayoutDtoMapper`);
+//! - [`layout_migrations`]: how values written by older versions are read
+//!   (`LayoutMigrations`).
 //!
 //! # The file format is the contract
 //!
@@ -38,14 +40,21 @@
 //! original order, after the known ones: a Rust writer never destroys what a newer C#
 //! version wrote. This only holds for a document that goes through a read-modify-write
 //! — a DTO built from scratch has nothing in `extra`, and saving it drops the unknown
-//! members exactly as the C# writer does. The mapping layer decides which applies.
+//! members exactly as the C# writer does. The engine does both, as C# does: a full
+//! [`LayoutPersistence::save`] builds its documents from the model, while
+//! [`LayoutPersistence::save_enabled`] rewrites the stored layout document with only
+//! `Enabled` changed, keeping what it does not know. The `models.json` merge keeps the
+//! unknown members of the models the save does not touch.
 
 pub mod border_side_json;
 pub mod excluded_list_persistence;
 pub mod excluded_process_defaults;
 pub mod json_format;
 pub mod json_layout_store;
+pub mod layout_dto_mapper;
 pub mod layout_dtos;
+pub mod layout_migrations;
+pub mod layout_persistence;
 pub mod layout_store;
 pub mod layout_store_key;
 pub mod lbm_paths;
@@ -56,4 +65,5 @@ pub use layout_dtos::{
     BorderResistanceDto, BorderSectionDto, BorderSideDto, BordersDto, GlobalOptionsDto, LayoutDto,
     LayoutOptionsDto, ModelDto, MonitorDto, SourceDto, UnknownMembers,
 };
+pub use layout_persistence::{LayoutPersistence, PersistencePlatform};
 pub use layout_store::{LayoutStore, LayoutStoreData};

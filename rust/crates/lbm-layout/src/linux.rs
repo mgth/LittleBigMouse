@@ -211,8 +211,12 @@ impl LinuxMonitor {
 /// the system: every output mapped (a fallback one when there is none), the
 /// id computed, the stored layout loaded by `load`, the monitors the store did
 /// not place placed from the system topology, then everything anchored on the
-/// primary.
-pub fn populate(layout: &mut Layout, monitors: &[LinuxMonitor], load: impl FnOnce(&mut Layout)) {
+/// primary. A failed load stops there, as the C# exception does.
+pub fn populate<E>(
+    layout: &mut Layout,
+    monitors: &[LinuxMonitor],
+    load: impl FnOnce(&mut Layout) -> Result<(), E>,
+) -> Result<(), E> {
     let fallback;
     let monitors = if monitors.is_empty() {
         fallback = [LinuxMonitor::fallback()];
@@ -224,7 +228,8 @@ pub fn populate(layout: &mut Layout, monitors: &[LinuxMonitor], load: impl FnOnc
         add_monitor(layout, monitor);
     }
     layout.id = layout.compute_id();
-    load(layout);
+    load(layout)?;
     layout.set_locations_from_system_configuration(false);
     layout.anchor_on_primary();
+    Ok(())
 }

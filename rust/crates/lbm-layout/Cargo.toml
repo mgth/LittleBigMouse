@@ -9,4 +9,4 @@ description = "The LittleBigMouse layout model: monitors in millimetres and pixe
 [dev-dependencies]
 # float_roundtrip: parse doubles correctly rounded, like .NET, so the oracle
 # compares bits and not the parser's best effort.
-serde_json = { version = "1", features = ["float_roundtrip"] }
+serde_json = { workspace = true, features = ["float_roundtrip"] }

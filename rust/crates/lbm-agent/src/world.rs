@@ -52,13 +52,21 @@ pub trait AgentWorld: World {
         Err("this agent takes no previews".to_owned())
     }
 
-    /// Records the app-level options and the excluded list (C#: `SaveLive`).
+    /// Records the app-level options and the excluded list (C#: `SaveLive`), and aligns
+    /// the session autostart when `load_at_startup` says so (C#: `UpdateSchedule`).
     fn save_options(
         &mut self,
         _options: Option<&GlobalOptionsDto>,
         _excluded: Option<&[String]>,
+        _load_at_startup: Option<bool>,
     ) -> Result<(), String> {
         Err("this agent keeps no options".to_owned())
+    }
+
+    /// The app-level options a frontend shows: whether the session starts the agent, and
+    /// whether the user asked for no tray icon.
+    fn app_options(&self) -> Option<(bool, bool)> {
+        None
     }
 
     /// The rescue shortcut the options name.
@@ -222,6 +230,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         &mut self,
         options: Option<&GlobalOptionsDto>,
         excluded: Option<&[String]>,
+        load_at_startup: Option<bool>,
     ) -> Result<(), String> {
         let layout = self.layout.as_mut().ok_or("no layout yet")?;
         layout.edit_options(|o| {
@@ -229,10 +238,28 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             if let Some(excluded) = excluded {
                 o.excluded_list = excluded.to_vec();
             }
+            if let Some(load_at_startup) = load_at_startup {
+                o.load_at_startup = load_at_startup;
+            }
         });
+        // C# `UpdateSchedule`: the session autostart follows the option, and the store
+        // keeps the rest.
+        if load_at_startup.is_some() {
+            self.persistence.platform().set_autostart(
+                layout,
+                layout.options.load_at_startup,
+                layout.options.start_elevated,
+            );
+        }
         self.persistence
             .save_live(&layout.options)
             .map_err(|e| e.to_string())
+    }
+
+    fn app_options(&self) -> Option<(bool, bool)> {
+        self.layout
+            .as_ref()
+            .map(|l| (l.options.load_at_startup, l.options.hide_tray_icon))
     }
 
     fn rescue_shortcut(&self) -> Option<String> {

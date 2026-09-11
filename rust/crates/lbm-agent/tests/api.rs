@@ -304,10 +304,15 @@ fn persistence(
     dir: &std::path::Path,
 ) -> lbm_store::LayoutPersistence<lbm_store::JsonLayoutStore, lbm_agent::world::Platform> {
     let excluded = dir.join("Excluded.txt");
+    // The session autostart of this test: an entry in its own directory, never the user's.
+    let autostart = lbm_agent::autostart::XdgAutostart::new(
+        dir.join("autostart"),
+        Vec::new(),
+        std::path::PathBuf::from("/usr/bin/lbm-agent"),
+    );
     lbm_store::LayoutPersistence::with_excluded_list_file(
         lbm_store::JsonLayoutStore::new(dir.join("config")),
-        // No session autostart: this test never touches the user's.
-        lbm_agent::world::Platform::default(),
+        lbm_agent::world::Platform::with_autostart(autostart),
         move || excluded.clone(),
     )
 }
@@ -426,6 +431,7 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
             "Method": "SaveOptions",
             "Options": { "RescueShortcut": "Ctrl+Alt+F11" },
             "Excluded": ["/usr/bin/steam"],
+            "LoadAtStartup": true,
         }))
         .await;
     assert_eq!(options["Result"], Value::Null);
@@ -436,4 +442,20 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
     assert_eq!(global["RescueShortcut"], "Ctrl+Alt+F11");
     let excluded = std::fs::read_to_string(dir.path().join("Excluded.txt")).unwrap();
     assert!(excluded.lines().any(|l| l == "/usr/bin/steam"));
+
+    // LoadAtStartup is the session autostart itself: the entry is there, and the state
+    // says so.
+    let entry = dir
+        .path()
+        .join("autostart")
+        .join(lbm_agent::autostart::ENTRY);
+    assert!(std::fs::read_to_string(&entry).unwrap().contains("Exec="));
+    let state = frontend.ask(json!({ "Method": "Snapshot" })).await["Result"].clone();
+    assert_eq!(state["LoadAtStartup"], true);
+    assert_eq!(state["HideTrayIcon"], false);
+
+    frontend
+        .ask(json!({ "Method": "SaveOptions", "LoadAtStartup": false }))
+        .await;
+    assert!(!entry.exists(), "the session no longer starts the agent");
 }

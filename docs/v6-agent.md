@@ -133,9 +133,12 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   (« appliquer et démarrer » : appliqué, enregistré, démarré), `Preview` à chaque tick
   (Load+Run sans prologue ni écriture, jamais une mise en page identique à celle que le hook
   tient s'il tourne) et `EndPreview`, `SaveOptions` (C# `SaveLive`, plus le raccourci de
-  secours dit au hook sous Windows). Le réconciliateur tient l'aperçu : Start ou Stop de
+  secours dit au hook sous Windows, et `LoadAtStartup`, qui n'est pas une option stockée
+  mais le démarrage avec la session lui-même : l'agent aligne l'entrée XDG ou la tâche
+  planifiée). Le réconciliateur tient l'aperçu : Start ou Stop de
   l'utilisateur, reconstruction, perte du hook et secours y mettent fin ; un ré-accrochage
-  pendant l'aperçu garde l'aperçu. `Previewing` et `Saved` dans l'état.
+  pendant l'aperçu garde l'aperçu. `Previewing`, `Saved`, `LoadAtStartup` et `HideTrayIcon`
+  dans l'état.
   Sous Windows (`winpipe`) : l'agent trouve le tube du hook de sa session
   (`LittleBigMouse-v1-session-{id}`, celui du client C#) et sert l'API sur le sien
   (`LittleBigMouse-Agent-v1-session-{id}`), sécurisé comme celui du hook : SYSTEM et

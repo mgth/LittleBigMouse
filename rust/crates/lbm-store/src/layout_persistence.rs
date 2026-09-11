@@ -104,6 +104,11 @@ impl<S: LayoutStore, P: PersistencePlatform> LayoutPersistence<S, P> {
         &self.store
     }
 
+    /// The platform hooks (elevation, the session autostart).
+    pub fn platform(&self) -> &P {
+        &self.platform
+    }
+
     /// C# `IsLoading`: true while [`load`](Self::load) runs.
     pub fn is_loading(&self) -> bool {
         self.is_loading

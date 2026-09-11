@@ -171,9 +171,13 @@ impl Layout {
         match self.source_index(&source.source.id) {
             Some(i) => {
                 source.registered = self.sources[i].registered;
+                source.observed_primary = self.sources[i].observed_primary.clone();
                 self.sources[i] = source;
             }
-            None => self.sources.push(source),
+            None => {
+                source.observed_primary = self.published.primary_source.clone();
+                self.sources.push(source);
+            }
         }
     }
 
@@ -182,8 +186,14 @@ impl Layout {
     pub fn add_or_update_source(&mut self, mut source: PhysicalSource) {
         source.registered = true;
         match self.source_index(&source.source.id) {
-            Some(i) => self.sources[i] = source,
-            None => self.sources.push(source),
+            Some(i) => {
+                source.observed_primary = self.sources[i].observed_primary.clone();
+                self.sources[i] = source;
+            }
+            None => {
+                source.observed_primary = self.published.primary_source.clone();
+                self.sources.push(source);
+            }
         }
         self.parse_display_sources();
     }
@@ -321,15 +331,34 @@ impl Layout {
         Some(Ratio::uniform(25.4).multiply(self.pitch(source)?.inverse()))
     }
 
-    /// `DipToPixelRatio`: always `None`.
+    /// `DipToPixelRatio` (`PhysicalSource.UpdateDipToPixelRatio`).
     ///
-    /// In C# it combines the source's values with the primary source's DPI,
-    /// observed through `Monitor.Layout.PrimarySource`. The layout publishes its
-    /// primary inside `SuppressChangeNotifications()`, so that observer never
-    /// hears of it and the ratio is never produced: the domain oracle records
-    /// null for every source of every scenario.
-    pub fn dip_to_pixel_ratio(&self, _source: &PhysicalSource) -> Option<Ratio> {
-        None
+    /// C# combines the source's own values with the DPI of the primary source
+    /// it observes through `Monitor.Layout.PrimarySource`. The layout publishes
+    /// its primary inside `SuppressChangeNotifications()`, so a source only ever
+    /// sees the primary published when it joined the layout (see
+    /// `PhysicalSource::observed_primary`): `None` if there was none then, and
+    /// until the source's real DPI exists (it needs the monitor's rotated size).
+    /// Then, by DPI awareness: unaware, real over angular DPI rounded to a tenth;
+    /// system aware, the observed primary's effective DPI over 96; per-monitor
+    /// aware (the default) or invalid, this source's effective DPI over 96.
+    pub fn dip_to_pixel_ratio(&self, source: &PhysicalSource) -> Option<Ratio> {
+        let primary = self.source(source.observed_primary.as_deref()?)?;
+        let real = self.real_dpi(source)?;
+        let d = &source.source;
+        Some(match self.dpi_awareness {
+            DpiAwareness::Unaware => Ratio::new(
+                dotnet::round(real.x / d.dpi_aware_angular_dpi.x * 10.0) / 10.0,
+                dotnet::round(real.y / d.dpi_aware_angular_dpi.y * 10.0) / 10.0,
+            ),
+            DpiAwareness::SystemAware => Ratio::new(
+                primary.source.effective_dpi.x / 96.0,
+                primary.source.effective_dpi.y / 96.0,
+            ),
+            DpiAwareness::PerMonitorAware | DpiAwareness::Invalid => {
+                Ratio::new(d.effective_dpi.x / 96.0, d.effective_dpi.y / 96.0)
+            }
+        })
     }
 
     /// `PixelToDipRatio`: the inverse of [`Layout::dip_to_pixel_ratio`], so

@@ -81,6 +81,13 @@ pub struct PhysicalSource {
     /// that: C#'s `AddMonitor` hands the monitor to the layout first, and the
     /// monitor's geometry already reads its active source.
     pub(crate) registered: bool,
+    /// The primary source the layout had published when this source joined
+    /// it. C# builds `DipToPixelRatio` from the primary observed through
+    /// `Monitor.Layout.PrimarySource` at the source's construction, and the
+    /// layout publishes every later primary with change notifications
+    /// suppressed: a source created before any primary never gets the ratio,
+    /// one created after keeps observing the primary it saw.
+    pub(crate) observed_primary: Option<String>,
 }
 
 impl PhysicalSource {
@@ -95,6 +102,7 @@ impl PhysicalSource {
             source,
             saved: false,
             registered: false,
+            observed_primary: None,
         }
     }
 }

@@ -10,9 +10,12 @@
 //!
 //! One deliberate difference: on a block of 69 to 125 bytes whose descriptor runs past
 //! the end, C# throws `IndexOutOfRangeException`; here the string stops at the end.
-//! The sysfs reader only accepts 128 bytes or more, where this cannot happen.
+//! The sysfs reader only accepts 128 bytes or more, where this cannot happen. The
+//! Windows reader takes whatever the registry holds, and C# catches that exception and
+//! moves on to the next device: [`csharp_throws`] tells which blocks those are.
 
 use lbm_layout::linux::LinuxEdid;
+use lbm_layout::windows::WindowsEdid;
 
 /// A parsed EDID block: C#'s `Edid`. `None` strings are members C# leaves null
 /// because the block stops before them.
@@ -185,6 +188,41 @@ pub fn parse(key: impl Into<String>, edid: &[u8]) -> Edid {
     e
 }
 
+/// Whether C#'s `EdidParser.Parse` throws `IndexOutOfRangeException` on this block: a
+/// display descriptor whose header or text runs past the end of a block of 69 to 125
+/// bytes. [`parse`] never throws; this is for the caller that must skip the block where
+/// C# does.
+pub fn csharp_throws(edid: &[u8]) -> bool {
+    edid.len() > 68 && (block_throws(0xFC, edid) || block_throws(0xFF, edid))
+}
+
+/// `Block(code, edid)` reading past the end, byte for byte as C# reads: a slot starting
+/// past the end is skipped, the header is compared one byte at a time and left at the
+/// first difference, and the text is read up to a line feed or a NUL.
+fn block_throws(code: u8, edid: &[u8]) -> bool {
+    'slots: for i in (54..=108).step_by(18) {
+        if i >= edid.len() {
+            continue;
+        }
+        for (k, expected) in [0, 0, 0, code].into_iter().enumerate() {
+            match edid.get(i + k) {
+                None => return true,
+                Some(&byte) if byte != expected => continue 'slots,
+                Some(_) => {}
+            }
+        }
+        for j in i + 5..i + 18 {
+            match edid.get(j) {
+                None => return true,
+                Some(0x0A | 0x00) => return false,
+                Some(_) => {}
+            }
+        }
+        return false;
+    }
+    false
+}
+
 /// C# `EdidParser.Block`: the text of the first display descriptor tagged `code`
 /// (`00 00 00 <code>`), in the four 18-byte slots from byte 54, as Latin-1 up to a
 /// line feed or a NUL; `""` when there is none.
@@ -214,6 +252,20 @@ impl Edid {
             physical_width: self.physical_width,
             physical_height: self.physical_height,
             video_interface: self.video_interface.clone(),
+        }
+    }
+
+    /// The members the Windows mapping reads (`WindowsSourceMapper`,
+    /// `WindowsPhysicalSize`). The ones the ids are made of (serial string, week,
+    /// year, checksum) are read by the enumeration itself.
+    pub fn to_windows(&self) -> WindowsEdid {
+        WindowsEdid {
+            manufacturer_code: self.manufacturer_code.clone(),
+            model: self.model.clone(),
+            serial_number: self.serial_number.clone(),
+            video_interface: self.video_interface.clone(),
+            physical_width: self.physical_width,
+            physical_height: self.physical_height,
         }
     }
 }

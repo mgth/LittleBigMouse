@@ -3,7 +3,7 @@
 //! `tests/data/edid-generator` (.NET 10). Every member must come out the same, doubles
 //! bit for bit.
 
-use lbm_display::edid::{parse, Edid};
+use lbm_display::edid::{csharp_throws, parse, Edid};
 use serde_json::Value;
 
 fn hex(s: &str) -> Vec<u8> {
@@ -79,12 +79,17 @@ fn check(e: &Edid, expected: &Value) -> Vec<String> {
     out
 }
 
-#[test]
-fn every_vector_parses_as_in_csharp() {
+fn vectors() -> Vec<Value> {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/edid-vectors.json");
     let text = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
     let vectors: Vec<Value> = serde_json::from_str(&text).unwrap();
     assert!(vectors.len() > 400, "{} vectors", vectors.len());
+    vectors
+}
+
+#[test]
+fn every_vector_parses_as_in_csharp() {
+    let vectors = vectors();
 
     let mut failures = Vec::new();
     let mut compared = 0;
@@ -116,4 +121,20 @@ fn a_descriptor_past_the_end_stops_there() {
     let e = parse("", &bytes);
     assert_eq!(e.model.as_deref(), Some("ABCDEFGHIJK"));
     assert_eq!(e.serial_number.as_deref(), Some(""));
+}
+
+/// The Windows reader skips the blocks C# throws on (`csharp_throws`): it must flag none
+/// the C# parser got through, and every one it threw on.
+#[test]
+fn csharp_throws_agrees_with_the_csharp_parser() {
+    for vector in vectors() {
+        let bytes = hex(vector["Edid"].as_str().unwrap());
+        assert_eq!(
+            csharp_throws(&bytes),
+            vector.get("Throws").is_some(),
+            "{} bytes {}",
+            bytes.len(),
+            vector["Edid"]
+        );
+    }
 }

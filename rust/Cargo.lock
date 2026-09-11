@@ -664,6 +664,7 @@ dependencies = [
  "regex",
  "serde_json",
  "tempfile",
+ "windows",
 ]
 
 [[package]]

@@ -31,11 +31,9 @@ use lbm_agent::reconcile::Timings;
 use lbm_agent::runtime::Agent;
 use lbm_agent::supervise::HookLauncher;
 use lbm_agent::world::{Platform, SystemWorld};
-use lbm_display::linux::{display_json, display_signature, drm, Backend};
-use lbm_layout::linux::add_monitor;
-use lbm_layout::model::{Layout, LayoutOptions};
+use lbm_display::linux::Backend;
 use lbm_store::{lbm_paths, JsonLayoutStore, LayoutPersistence};
-use serde_json::json;
+use serde_json::Value;
 
 const USAGE: &str = "usage: lbm-agent [--fake-hook | --hook PATH] [--config-dir DIR] [--data-dir DIR]\n       lbm-agent --dump-displays";
 
@@ -214,26 +212,48 @@ fn serve_fake_hook(endpoint: String) -> ExitCode {
 
 /// The display discovery as JSON, member for member what the C# `DisplayDump` writes.
 fn dump_displays() -> ExitCode {
-    if cfg!(windows) {
-        eprintln!("--dump-displays: the Windows discovery is not ported yet");
-        return ExitCode::FAILURE;
-    }
+    #[cfg(windows)]
+    let dump = windows_dump();
+    #[cfg(not(windows))]
+    let dump = linux_dump();
 
-    let backend = Backend::detect();
-    let monitors = match backend.map(Backend::query).transpose() {
-        Ok(monitors) => monitors.unwrap_or_default(),
+    match dump {
+        Ok(dump) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&dump).expect("a JSON value prints")
+            );
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             eprintln!("--dump-displays: {error}");
-            return ExitCode::FAILURE;
+            ExitCode::FAILURE
         }
-    };
+    }
+}
+
+/// `DisplayDump.Linux`: the outputs of the first backend that answers, in the domain
+/// oracle's input shape, and the monitors `LinuxLayoutMapping.AddMonitor` makes of them.
+#[cfg(not(windows))]
+fn linux_dump() -> Result<Value, String> {
+    use lbm_display::linux::{display_json, display_signature, drm, Backend};
+    use lbm_layout::linux::add_monitor;
+    use lbm_layout::model::{Layout, LayoutOptions};
+    use serde_json::json;
+
+    let backend = Backend::detect();
+    let monitors = backend
+        .map(Backend::query)
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .unwrap_or_default();
 
     let mut layout = Layout::new(LayoutOptions::default());
     for monitor in &monitors {
         add_monitor(&mut layout, monitor);
     }
 
-    let dump = json!({
+    Ok(json!({
         "Backend": backend.map(Backend::name),
         "Displays": monitors.iter().map(display_json).collect::<Vec<_>>(),
         "LayoutId": layout.compute_id(),
@@ -244,10 +264,78 @@ fn dump_displays() -> ExitCode {
         })).collect::<Vec<_>>(),
         "PlugSignature": drm::plug_signature(),
         "DisplaySignature": display_signature(&monitors),
-    });
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&dump).expect("a JSON value prints")
-    );
-    ExitCode::SUCCESS
+    }))
+}
+
+/// `DisplayDump.Windows`: the monitor devices of the Win32 tree in enumeration order,
+/// and the layout `WindowsLayoutBuilder.UpdateFrom` builds from them over an empty
+/// store — mapped, id computed, placed from the system, anchored on the primary.
+///
+/// The process is made per-monitor DPI aware first, as the C# UI's manifest makes it
+/// (the C# twin sets its thread the same way): Windows virtualizes positions, modes
+/// and DPIs for an unaware process.
+#[cfg(windows)]
+fn windows_dump() -> Result<Value, String> {
+    use lbm_display::windows;
+    use lbm_layout::model::{Layout, LayoutOptions};
+    use serde_json::json;
+
+    windows::set_process_per_monitor_dpi_aware();
+    let dpi_awareness = windows::thread_dpi_awareness();
+    let tree = windows::discover().map_err(|error| error.to_string())?;
+
+    let mut layout = Layout::new(LayoutOptions::default());
+    let loaded: Result<(), std::convert::Infallible> =
+        lbm_layout::windows::populate(&mut layout, dpi_awareness, &tree.layout_input(), |_| Ok(()));
+    let Ok(()) = loaded;
+
+    Ok(json!({
+        "DpiAwareness": format!("{:?}", layout.dpi_awareness),
+        "Displays": tree.monitors().map(|m| windows::display_json(&tree, m)).collect::<Vec<_>>(),
+        "LayoutId": layout.id,
+        "Monitors": layout.monitors().iter().map(|m| monitor_json(&layout, m)).collect::<Vec<_>>(),
+        "DisplaySignature": windows::current_display_signature(),
+    }))
+}
+
+/// A monitor of the layout: its identity, its model's size (#507, #419), its place in
+/// mm, and its sources.
+#[cfg(windows)]
+fn monitor_json(layout: &lbm_layout::model::Layout, m: &lbm_layout::model::Monitor) -> Value {
+    use serde_json::json;
+
+    let model = layout.model(&m.model);
+    let projection = layout.depth_projection(m);
+    json!({
+        "Id": m.id,
+        "PnpCode": m.model,
+        "DeviceId": m.device_id,
+        "SerialNumber": m.serial_number,
+        "PnpDeviceName": model.and_then(|model| model.pnp_device_name.clone()),
+        "Logo": model.and_then(|model| model.logo.clone()),
+        "PhysicalWidth": model.map(|model| model.physical_size.width()),
+        "PhysicalHeight": model.map(|model| model.physical_size.height()),
+        "X": projection.map(|p| p.x),
+        "Y": projection.map(|p| p.y),
+        "Sources": m.sources.iter().filter_map(|id| layout.source(id)).map(|s| {
+            let source = &s.source;
+            json!({
+                "Id": source.id,
+                "DeviceId": s.device_id,
+                "SourceNumber": source.source_number,
+                "Primary": source.primary,
+                "AttachedToDesktop": source.attached_to_desktop,
+                "Orientation": source.orientation,
+                "InPixel": {
+                    "X": source.in_pixel.x,
+                    "Y": source.in_pixel.y,
+                    "Width": source.in_pixel.width,
+                    "Height": source.in_pixel.height,
+                },
+                "EffectiveDpi": { "X": source.effective_dpi.x, "Y": source.effective_dpi.y },
+                "RawDpi": { "X": source.raw_dpi.x, "Y": source.raw_dpi.y },
+                "InterfaceName": source.interface_name,
+            })
+        }).collect::<Vec<_>>(),
+    })
 }

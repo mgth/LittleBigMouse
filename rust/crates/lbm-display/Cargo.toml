@@ -4,15 +4,30 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 publish = false
-description = "LittleBigMouse display detection: EDID parsing and the outputs the system reports, as the neutral input of the layout model"
+description = "LittleBigMouse display detection: EDID parsing, the Linux outputs and the Windows device tree, as the neutral input of the layout model"
 
 [dependencies]
-# The neutral output description (LinuxMonitor, LinuxEdid) the layout model maps.
+# The neutral output description (LinuxMonitor, WindowsMonitor) the layout model maps.
 lbm-layout = { path = "../lbm-layout" }
 # kscreen-doctor --json.
 serde_json.workspace = true
 # The xrandr line, with the C# pattern as it is.
 regex = "1"
+
+# The Win32 device tree (src/windows/sys.rs), at the workspace's version of the crate.
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = [
+    # NtQueryKey: the kernel name of a device's registry key (C#'s GetHKeyName).
+    "Wdk_System_Registry",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Display",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Environment",
+    "Win32_System_Registry",
+    "Win32_UI_HiDpi",
+]
 
 [dev-dependencies]
 tempfile.workspace = true

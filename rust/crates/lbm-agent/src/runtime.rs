@@ -133,6 +133,8 @@ impl<W: AgentWorld> Agent<W> {
             layout_id: self.world.layout_id(),
             enabled: layout.map(|l| l.enabled),
             saved: layout.map(|l| l.saved),
+            load_at_startup: self.world.app_options().map(|(startup, _)| startup),
+            hide_tray_icon: self.world.app_options().map(|(_, hidden)| hidden),
             previewing: self.reconciler.previewing(),
         }
     }
@@ -201,9 +203,13 @@ impl<W: AgentWorld> Agent<W> {
                 self.handle(Input::EndPreview);
                 Ok(serde_json::Value::Null)
             }
-            Request::SaveOptions { options, excluded } => self
+            Request::SaveOptions {
+                options,
+                excluded,
+                load_at_startup,
+            } => self
                 .world
-                .save_options(options.as_ref(), excluded.as_deref())
+                .save_options(options.as_ref(), excluded.as_deref(), load_at_startup)
                 .map(|()| {
                     self.tell_shortcut();
                     serde_json::Value::Null

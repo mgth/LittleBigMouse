@@ -100,11 +100,19 @@ pub enum Request {
     /// The preview is over: the hook goes back to the current layout.
     EndPreview,
     /// The app-level options and the excluded list, saved at once (C#: `SaveLive`).
+    /// `LoadAtStartup` is not one of the stored options: it *is* the session autostart
+    /// (the XDG entry, the scheduled task), which the agent aligns.
     SaveOptions {
         #[serde(rename = "Options", default, skip_serializing_if = "Option::is_none")]
         options: Option<GlobalOptionsDto>,
         #[serde(rename = "Excluded", default, skip_serializing_if = "Option::is_none")]
         excluded: Option<Vec<String>>,
+        #[serde(
+            rename = "LoadAtStartup",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        load_at_startup: Option<bool>,
     },
     /// The user's Stop.
     Stop,
@@ -145,6 +153,10 @@ pub struct Snapshot {
     pub enabled: Option<bool>,
     /// Nothing edited since the layout was last saved.
     pub saved: Option<bool>,
+    /// The session starts the agent (the autostart entry, the scheduled task).
+    pub load_at_startup: Option<bool>,
+    /// The user asked for no tray icon.
+    pub hide_tray_icon: Option<bool>,
     /// A frontend's live preview is what the hook runs.
     pub previewing: bool,
 }

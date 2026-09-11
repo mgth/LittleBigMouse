@@ -24,7 +24,7 @@ on:
 
 env:
   UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
-  HOOK_RUST_PROJECT: LittleBigMouse-Hook-Rust\Cargo.toml
+  HOOK_RUST_PROJECT: rust\Cargo.toml
   UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
 
 jobs:
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: LittleBigMouse-Hook-Rust
+        working-directory: rust
 
     steps:
     - name: Checkout
@@ -110,7 +110,7 @@ jobs:
     # and still runs. Assert on the artifact rather than trust the build script.
     - name: Verify hook version resource
       run: |
-        $exe = 'LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe'
+        $exe = 'rust\target\release\lbm-hook.exe'
         $info = (Get-Item $exe).VersionInfo
         if ($info.ProductName -ne 'Little Big Mouse') {
           throw "hook ProductName is '$($info.ProductName)', expected 'Little Big Mouse'"
@@ -134,7 +134,7 @@ jobs:
     # that; a PE names its DLLs in plain ASCII, so no toolchain is needed.
     - name: Verify hook needs no VC++ redistributable
       run: |
-        $exe = 'LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe'
+        $exe = 'rust\target\release\lbm-hook.exe'
         $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
         if ($text -match 'VCRUNTIME\d|MSVCP\d') {
           throw "hook imports the MSVC runtime: it will not start where no VC++ redistributable was ever installed (#539)"
@@ -144,7 +144,7 @@ jobs:
     - name: Stage hook next to UI output
       # Cargo can't emit a target named with a '.', so the Rust binary is built as
       # lbm-hook.exe and renamed to the contract name here.
-      run: Copy-Item LittleBigMouse-Hook-Rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
+      run: Copy-Item rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
 
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4

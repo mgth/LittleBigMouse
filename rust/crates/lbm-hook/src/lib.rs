@@ -9,12 +9,17 @@
 //! together replace the historical C++ daemon in distributable builds.
 
 pub mod daemon;
-pub mod engine;
-pub mod geometry;
 pub mod hook;
 pub mod ipc;
 pub mod platform;
-pub mod priority;
 pub mod shared;
 pub mod shortcut;
-pub mod zones;
+
+// Split out into sibling crates of the workspace so the v6 agent and frontend can
+// use them without the platform layer. Re-exported under their historical paths:
+// the daemon, the tests and the benches keep writing `crate::engine`,
+// `littlebigmouse_hook::zones` and so on.
+pub use lbm_engine as engine;
+pub use lbm_geom as geometry;
+pub use lbm_zones as zones;
+pub use lbm_zones::priority;

@@ -3,8 +3,9 @@
 //! Abstracting the Win32 calls (`GetCursorPos`/`SetCursorPos`/`ClipCursor`/
 //! `GetAsyncKeyState`/freelook signals/`GetTickCount64`) behind a trait keeps the
 //! traversal algorithm pure and deterministically testable — the golden-trace
-//! defense against silent parity regressions. The real implementation is
-//! [`crate::platform::cursor::Win32Cursor`]; tests use a fake.
+//! defense against silent parity regressions. The real implementations live in
+//! the hook crate (`platform::cursor::Win32Cursor`, the Linux backends' cursors);
+//! tests use a fake.
 
 use crate::geometry::{Point, Rect};
 

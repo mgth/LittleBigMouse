@@ -44,7 +44,7 @@ $root       = $PSScriptRoot
 $uiProj     = Join-Path $root 'LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj'
 $binDir     = Join-Path $root ("LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\{0}\net10.0" -f $Config)
 $uiExe      = Join-Path $binDir 'LittleBigMouse.Ui.Avalonia.exe'
-$rustDir    = Join-Path $root 'LittleBigMouse-Hook-Rust'
+$rustDir    = Join-Path $root 'rust'
 $rustExe    = Join-Path $rustDir 'target\debug\lbm-hook.exe'
 $stagedHook = Join-Path $binDir 'LittleBigMouse.Hook.exe'
 

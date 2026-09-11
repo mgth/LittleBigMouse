@@ -9,7 +9,7 @@ namespace LittleBigMouse.Ui.Avalonia.Tests;
 /// languages and different processes, so the grammar between them is a contract with
 /// no compiler behind it — these tests are that compiler.
 /// <para>
-/// The other half lives in <c>LittleBigMouse-Hook-Rust/src/shortcut.rs</c>. A key
+/// The other half lives in <c>rust/crates/lbm-hook/src/shortcut.rs</c>. A key
 /// added on one side and not the other is a shortcut the user can record and that
 /// quietly never fires, which they would discover at the worst possible moment.
 /// </para>

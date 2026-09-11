@@ -18,8 +18,8 @@
 # This file has to live at the repository root rather than next to the hook's
 # Cargo.toml: Cargo resolves .cargo/config.toml from the *working directory*
 # upwards, never from the manifest, and CI builds the hook from the root with
-# --manifest-path. A config under LittleBigMouse-Hook-Rust/ would be picked up
-# by a developer building in that directory and ignored by the build that ships
+# --manifest-path. A config under rust/ would be picked up by a developer
+# building in that directory and ignored by the build that ships
 # — the one failure mode this file exists to prevent. From the root it covers
 # both, since Cargo walks up from wherever cargo was invoked.
 [target.x86_64-pc-windows-msvc]

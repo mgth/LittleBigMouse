@@ -20,7 +20,7 @@ Only releases built by the workflow in this repository, from this repository's o
 
 ## Third-party components
 
-Little Big Mouse ships third-party binaries it does not build: the .NET runtime libraries, Avalonia, and the NuGet and crates.io dependencies listed in the project files and in `LittleBigMouse-Hook-Rust/Cargo.lock`. Those are signed as part of the packaged application where the signing policy allows it; upstream projects are encouraged to obtain their own signatures rather than rely on ours. No third-party binary is signed on behalf of its author.
+Little Big Mouse ships third-party binaries it does not build: the .NET runtime libraries, Avalonia, and the NuGet and crates.io dependencies listed in the project files and in `rust/Cargo.lock`. Those are signed as part of the packaged application where the signing policy allows it; upstream projects are encouraged to obtain their own signatures rather than rely on ours. No third-party binary is signed on behalf of its author.
 
 ## User data
 

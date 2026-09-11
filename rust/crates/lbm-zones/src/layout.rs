@@ -312,7 +312,7 @@ fn block_or(blocked: bool, resistance: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zones::zone_link::{MODE_DRAG, MODE_MOVE};
+    use crate::zone_link::{MODE_DRAG, MODE_MOVE};
 
     // Three zones: "Left", "Right", and a clone of "Left" (identical pixel
     // bounds). Exercises attribute parsing (bools, InvariantCulture doubles incl.

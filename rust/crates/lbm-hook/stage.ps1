@@ -11,12 +11,14 @@ param([string]$UiDir)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repo = Split-Path -Parent $root
 
-cargo build --release --manifest-path (Join-Path $root 'Cargo.toml')
-$src = Join-Path $root 'target\release\lbm-hook.exe'
+# The crate is a member of the workspace in rust/, whose target directory holds
+# the build output.
+$target = Join-Path $root '..\..\target'
+cargo build --release -p lbm-hook --manifest-path (Join-Path $root 'Cargo.toml')
+$src = Join-Path $target 'release\lbm-hook.exe'
 
-$binDir = Join-Path $root 'target\stage'
+$binDir = Join-Path $target 'stage'
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 Copy-Item $src (Join-Path $binDir 'LittleBigMouse.Hook.exe') -Force
 Write-Host "Staged -> $binDir\LittleBigMouse.Hook.exe"

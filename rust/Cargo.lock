@@ -586,6 +586,69 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "lbm-engine"
+version = "0.1.0"
+dependencies = [
+ "lbm-geom",
+ "lbm-zones",
+ "roxmltree",
+]
+
+[[package]]
+name = "lbm-geom"
+version = "0.1.0"
+
+[[package]]
+name = "lbm-hook"
+version = "0.1.0"
+dependencies = [
+ "ashpd",
+ "criterion",
+ "evdev",
+ "futures",
+ "lbm-engine",
+ "lbm-geom",
+ "lbm-ipc",
+ "lbm-zones",
+ "libc",
+ "reis",
+ "roxmltree",
+ "tokio",
+ "tracing-subscriber",
+ "windows",
+ "winresource",
+ "x11rb",
+ "zbus",
+]
+
+[[package]]
+name = "lbm-ipc"
+version = "0.1.0"
+dependencies = [
+ "roxmltree",
+ "tokio",
+]
+
+[[package]]
+name = "lbm-pattern"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "png",
+ "wayland-client",
+ "wayland-protocols",
+]
+
+[[package]]
+name = "lbm-zones"
+version = "0.1.0"
+dependencies = [
+ "lbm-geom",
+ "roxmltree",
+ "slotmap",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -596,29 +659,6 @@ name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
-
-[[package]]
-name = "littlebigmouse-hook"
-version = "0.1.0"
-dependencies = [
- "ashpd",
- "criterion",
- "evdev",
- "futures",
- "libc",
- "png",
- "reis",
- "roxmltree",
- "slotmap",
- "tokio",
- "tracing-subscriber",
- "wayland-client",
- "wayland-protocols",
- "windows",
- "winresource",
- "x11rb",
- "zbus",
-]
 
 [[package]]
 name = "log"

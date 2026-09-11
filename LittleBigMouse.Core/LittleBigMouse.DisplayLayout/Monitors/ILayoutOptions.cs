@@ -143,7 +143,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// These two strings are the WIRE values, and the only ones that mean anything. They are
    /// written verbatim into the saved layouts (layouts/*.json) and into the <c>Algorithm</c>
    /// attribute of the ZonesLayout XML sent to the daemon, which parses them in
-   /// <c>LittleBigMouse-Hook-Rust/src/zones/layout.rs</c>. Anything else the daemon reads as
+   /// <c>rust/crates/lbm-zones/src/layout.rs</c>. Anything else the daemon reads as
    /// "Strait", silently — an unknown algorithm is not an error.
    /// </para>
    /// <para>
@@ -169,7 +169,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// The shortcut that frees a cursor trapped where no click can reach the UI, written
    /// the way it reads: "Ctrl+Alt+Shift+M". Held for about a second rather than tapped.
    /// Travels to the daemon with the layout, which is what registers it — see
-   /// LittleBigMouse-Hook-Rust/src/shortcut.rs for the grammar both sides obey.
+   /// rust/crates/lbm-hook/src/shortcut.rs for the grammar both sides obey.
    /// </summary>
    string RescueShortcut { get; set; }
 

@@ -26,9 +26,11 @@ use littlebigmouse_hook::zones::zone_link::{MODE_DRAG, MODE_MOVE};
 use littlebigmouse_hook::zones::{Algorithm, ZonesLayout};
 
 fn goldens() -> PathBuf {
+    // rust/crates/lbm-hook -> repository root.
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("crate has a parent directory")
+        .ancestors()
+        .nth(3)
+        .expect("crate lives at rust/crates/lbm-hook")
         .join("wire-contract/goldens")
 }
 

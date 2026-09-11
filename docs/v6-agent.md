@@ -171,6 +171,14 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   `X-GNOME-Autostart-enabled=false`), sinon une entrée système (paquet) ; l'éteindre retire
   celle de l'utilisateur, ou masque celle du système par `Hidden=true`. Avec `--config-dir`,
   l'entrée va sous ce répertoire, jamais dans celui de l'utilisateur.
+- Sous Windows (`schtask`), la tâche planifiée du C# (`AutostartExtensions`), même nom
+  (`LittleBigMouse_<domaine>_<utilisateur>`) : une tâche 5.x compte comme planifiée et le
+  prochain enregistrement la réécrit sur l'agent (migration voulue par le plan ; sur une
+  machine d'essai avec la 5.x, un agent de développement la reprend donc aussi, comme le
+  faisait n'importe quel build C#). Enregistrée par `schtasks.exe` depuis une définition
+  XML : ouverture de session de cet utilisateur, niveau demandé (élevée refusée : simple
+  plutôt que rien), sans condition de batterie ni limite de durée, pas en session distante,
+  et relance sur échec (D6). Jamais avec `--config-dir`.
 
 ## Suite
 

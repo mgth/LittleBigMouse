@@ -15,7 +15,8 @@
 //! - [`api`]: the frontends' way in (JSON over a local socket or pipe, D6).
 //! - `sleep` (Linux): system sleep from logind.
 //! - `tray` and `icons` (Linux): the tray, a frontend in process.
-//! - [`autostart`]: starting with the session (XDG autostart).
+//! - [`autostart`] and [`schtask`]: starting with the session (XDG autostart, the
+//!   Windows scheduled task).
 //! - `winpipe` (Windows): the per-session pipes, the hook's and the agent's.
 
 pub mod api;
@@ -29,6 +30,7 @@ pub mod instance;
 pub mod log;
 pub mod reconcile;
 pub mod runtime;
+pub mod schtask;
 #[cfg(target_os = "linux")]
 pub mod sleep;
 pub mod supervise;

@@ -30,6 +30,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+#[cfg(not(windows))]
 use lbm_agent::autostart::XdgAutostart;
 use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::gap_guard::GapGuard;
@@ -184,14 +185,22 @@ fn run(options: Options) -> ExitCode {
     runtime.block_on(async move {
         // Every save aligns the session autostart on the options: a run on a scratch
         // configuration keeps its entry there too.
-        let autostart = match &options.config_dir {
+        #[cfg(not(windows))]
+        let platform = match &options.config_dir {
             Some(dir) => std::env::current_exe()
                 .ok()
                 .map(|exe| XdgAutostart::new(dir.join("autostart"), Vec::new(), exe)),
-            None if cfg!(windows) => None,
             None => XdgAutostart::for_session(),
-        };
-        let platform = autostart.map_or_else(Platform::default, Platform::with_autostart);
+        }
+        .map_or_else(Platform::default, Platform::with_autostart);
+        // No scheduled task beside a scratch configuration: Windows has one Task
+        // Scheduler, the user's.
+        #[cfg(windows)]
+        let platform = match &options.config_dir {
+            Some(_) => None,
+            None => lbm_agent::schtask::ScheduledTask::for_session(),
+        }
+        .map_or_else(Platform::default, Platform::with_autostart);
         let store = JsonLayoutStore::new(options.config_dir.unwrap_or_else(lbm_paths::config_dir));
         let persistence = match options.data_dir {
             Some(dir) => LayoutPersistence::with_excluded_list_file(store, platform, move || {

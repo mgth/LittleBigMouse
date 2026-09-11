@@ -6,7 +6,8 @@
 //! The answers: `Listen` subscribes and gets the current state; `Load` is reported
 //! (`Loaded`, or `LoadFailed` for an empty layout) and unhooks unless its frame also
 //! holds a `Run`; `Run` hooks (`Running`); `Stop` unhooks (`Stopped`); `State` gets the
-//! state; `Quit` unhooks and closes the endpoint. Every command is recorded.
+//! state; `Probe` gets an (empty) report; `Quit` unhooks and closes the endpoint. Every
+//! command is recorded.
 
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -16,6 +17,9 @@ use lbm_ipc::protocol::{self, Command};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 use tokio::task::{AbortHandle, JoinHandle};
+
+/// The fake's edge report: no zone, so no edge.
+pub const PROBE_REPORT: &str = "<ProbeReport />";
 
 #[derive(Default)]
 struct State {
@@ -205,10 +209,8 @@ async fn connection<S>(
                         s.broadcast(protocol::STOPPED);
                         quit = true;
                     }
-                    Command::LoadFromFile(_)
-                    | Command::Probe
-                    | Command::Shortcut(_)
-                    | Command::Unknown(_) => {}
+                    Command::Probe => s.broadcast(&protocol::probed(PROBE_REPORT)),
+                    Command::LoadFromFile(_) | Command::Shortcut(_) | Command::Unknown(_) => {}
                 }
             }
         }

@@ -205,7 +205,19 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 
 ## Suite
 
-1. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent
-   transmet au hook, et `LoadAtStartup`), `Preview`/`EndPreview` ; option « masquer
-   l'icône » suivie par le tray ; Windows (tray, tâche planifiée et sa migration, points de
-   terminaison par session, élévation, sources).
+Ce qui reste de la phase 3, par ordre de valeur :
+
+1. **Checklist Windows sur machines réelles** (`docs/v6-windows-checklist.md`) : rien de ce
+   qui suit ne remplace un passage à la main — dumps d'écran comparés au C#, import du
+   registre, tubes et élévation, tray, tâche planifiée et sa migration, veille, dock/undock
+   et #607, bureau sécurisé UAC.
+2. **Fond d'écran « span »** : les réglages (`wallpaper_settings`) et le découpage
+   (`lbm_layout::wallpaper`) sont là ; restent le rendu des tranches (fichiers adressés par
+   contenu, comme `SpanRenderer`), l'application (Plasma par zbus au lieu de `busctl`,
+   `IDesktopWallpaper` sous Windows) et la ré-application après reconstruction.
+3. **Option « masquer l'icône »** suivie par le tray (l'état la publie déjà :
+   `HideTrayIcon`).
+4. **Exclusion par focus dans l'agent (D4)** : elle touche le hook (il perdrait
+   `Excluded.txt` et la politique) — à faire avec l'allègement du hook, phase 5. L'agent
+   tient déjà l'historique des processus vus, que le hook lui envoie.
+5. `Current.xml` disparaît côté C# (phase 4 : l'arrêt utilisateur est déjà `Enabled=false`).

@@ -6,6 +6,7 @@ mod edit;
 mod layout;
 mod monitor;
 mod options;
+mod placement;
 mod ratio;
 mod size;
 mod source;
@@ -14,6 +15,7 @@ pub use border_resistance::{BorderResistance, BorderSection, BorderSide, Resista
 pub use layout::{DpiAwareness, Layout, LayoutSource};
 pub use monitor::{Monitor, MonitorModel};
 pub use options::{LayoutOptions, PER_MODEL, PER_MONITOR};
+pub use placement::SystemPlacement;
 pub use ratio::{inverse_of, Ratio};
 pub use size::{DisplaySize, MmSize};
 pub use source::{DisplaySource, PhysicalSource, WallpaperStyle};

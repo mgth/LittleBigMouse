@@ -34,4 +34,6 @@ pub mod supervise;
 #[cfg(target_os = "linux")]
 pub mod tray;
 pub mod watch;
+#[cfg(windows)]
+pub mod winwatch;
 pub mod world;

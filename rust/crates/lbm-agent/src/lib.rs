@@ -5,7 +5,8 @@
 //!   engine is hooked — as a state machine without I/O.
 //! - [`hook`]: the connection to the hook, kept up.
 //! - [`fake_hook`]: a hook that hooks nothing, for `--fake-hook` and the tests.
-//! - [`world`]: the displays, the profiles and the layout the agent acts on.
+//! - [`world`]: the displays, the profiles and the layout the agent acts on;
+//!   [`discovery`]: where the displays come from (Linux backends, the Win32 tree).
 //! - [`watch`]: the display changes the hook does not report (Linux: uevents, inotify,
 //!   and the poll behind them).
 //! - [`supervise`]: launching a hook when none answers (D5).
@@ -21,6 +22,7 @@
 
 pub mod api;
 pub mod autostart;
+pub mod discovery;
 pub mod fake_hook;
 pub mod gap_guard;
 pub mod hook;

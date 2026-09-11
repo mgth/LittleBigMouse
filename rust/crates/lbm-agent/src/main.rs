@@ -31,6 +31,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use lbm_agent::autostart::XdgAutostart;
+use lbm_agent::discovery::Discovery;
 use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::gap_guard::GapGuard;
 use lbm_agent::hook::HookClient;
@@ -39,7 +40,6 @@ use lbm_agent::reconcile::Timings;
 use lbm_agent::runtime::Agent;
 use lbm_agent::supervise::HookLauncher;
 use lbm_agent::world::{Platform, SystemWorld};
-use lbm_display::linux::Backend;
 use lbm_store::{lbm_paths, JsonLayoutStore, LayoutPersistence};
 use serde_json::Value;
 
@@ -199,7 +199,16 @@ fn run(options: Options) -> ExitCode {
             }),
             None => LayoutPersistence::new(store, platform),
         };
-        let mut world = SystemWorld::new(Backend::detect(), persistence);
+        // Windows virtualizes what the enumeration reads for a process that is not per-
+        // monitor DPI aware (the C# UI's manifest makes it so).
+        #[cfg(windows)]
+        lbm_display::windows::set_process_per_monitor_dpi_aware();
+        let mut world = SystemWorld::new(Discovery::detect(), persistence);
+        // D2: the first launch imports the 5.x registry into the JSON store.
+        #[cfg(windows)]
+        {
+            world = world.before_first_load(import_registry);
+        }
         // The KWin gaps move the user's outputs: a real session only, never beside a
         // fake hook (which needs no barriers anyway).
         if !options.fake_hook && cfg!(target_os = "linux") {
@@ -332,6 +341,34 @@ fn opener(ui: Option<PathBuf>) -> std::sync::Arc<dyn Fn() + Send + Sync> {
             Err(error) => eprintln!("[lbm-agent] cannot open {}: {error}", ui.display()),
         }
     })
+}
+
+/// D2: at the first launch — nothing in the JSON store yet — the 5.x registry is copied
+/// into it, and left as it was (going back to 5.x loses nothing).
+#[cfg(windows)]
+fn import_registry(layout_id: &str, store: &JsonLayoutStore) {
+    use lbm_store::registry_import::import_registry;
+    use lbm_store::windows_registry::WindowsKey;
+
+    if store.options_path().exists() {
+        return;
+    }
+    let Some(root) = WindowsKey::open_current_user(r"SOFTWARE\Mgth\LittleBigMouse") else {
+        return;
+    };
+    match import_registry(&root, layout_id, store) {
+        Ok(report) => {
+            eprintln!(
+                "[lbm-agent] imported the 5.x registry: {} layouts, {} models",
+                report.layouts.len(),
+                report.models.len()
+            );
+            for (name, why) in &report.skipped {
+                eprintln!("[lbm-agent] registry layout {name} not imported: {why}");
+            }
+        }
+        Err(error) => eprintln!("[lbm-agent] the registry import is incomplete: {error}"),
+    }
 }
 
 /// A fake hook as a process of its own, until a client sends `Quit`.

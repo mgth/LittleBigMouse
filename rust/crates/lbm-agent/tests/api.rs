@@ -297,7 +297,7 @@ async fn a_subscriber_hears_the_hook_and_what_it_saw() {
 fn system_world(
     dir: &std::path::Path,
 ) -> lbm_agent::world::SystemWorld<lbm_store::JsonLayoutStore, lbm_agent::world::Platform> {
-    lbm_agent::world::SystemWorld::new(None, persistence(dir))
+    lbm_agent::world::SystemWorld::new(lbm_agent::discovery::Discovery::Fallback, persistence(dir))
 }
 
 fn persistence(

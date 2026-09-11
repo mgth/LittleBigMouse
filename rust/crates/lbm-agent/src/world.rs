@@ -2,14 +2,12 @@
 //!
 //! [`AgentWorld`] is the [`World`] the reconciler reads, plus what the runtime needs to
 //! carry out its effects: the zones to hand the hook, and the two kinds of save.
-//! [`SystemWorld`] is the real one — the displays found by `lbm-display`, the layout
-//! built by `lbm_layout::linux::populate` with the profile the persistence engine
-//! loads (C#: `LinuxLayoutFactory.Create`).
+//! [`SystemWorld`] is the real one — the displays found by `lbm-display` ([`Discovery`]),
+//! the layout built from them with the profile the persistence engine loads (C#:
+//! `LinuxLayoutFactory.Create`, `WindowsLayoutBuilder`).
 
 use std::io;
 
-use lbm_display::linux::{display_signature, Backend};
-use lbm_layout::linux::populate;
 use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_layout::zoning::compute_zones;
 use lbm_store::layout_dto_mapper::apply_global_options;
@@ -18,6 +16,7 @@ use lbm_store::{
 };
 
 use crate::autostart::XdgAutostart;
+use crate::discovery::Discovery;
 use crate::gap_guard::{run_kscreen_doctor, GapGuard};
 use crate::reconcile::{LayoutState, World};
 
@@ -84,10 +83,12 @@ pub trait AgentWorld: World {
     }
 }
 
-/// The real world on Linux: discovery, profiles, the layout.
+/// The real world: discovery, profiles, the layout.
 pub struct SystemWorld<S, P> {
-    backend: Option<Backend>,
+    discovery: Discovery,
     persistence: LayoutPersistence<S, P>,
+    /// Run once, before the first profile is loaded (Windows: the registry import).
+    first_load: Option<fn(&str, &S)>,
     layout: Option<Layout>,
     /// A frontend's edit of `layout`, being previewed.
     preview: Option<Layout>,
@@ -95,16 +96,23 @@ pub struct SystemWorld<S, P> {
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
-    /// Discovery through `backend` (none: a single fallback output), profiles through
-    /// `persistence`.
-    pub fn new(backend: Option<Backend>, persistence: LayoutPersistence<S, P>) -> Self {
+    /// The displays through `discovery`, the profiles through `persistence`.
+    pub fn new(discovery: Discovery, persistence: LayoutPersistence<S, P>) -> Self {
         SystemWorld {
-            backend,
+            discovery,
             persistence,
+            first_load: None,
             layout: None,
             preview: None,
             gaps: None,
         }
+    }
+
+    /// Runs `before` once, with the id of the layout about to be loaded and the store,
+    /// before the first profile is loaded (D2: the one-time registry import).
+    pub fn before_first_load(mut self, before: fn(&str, &S)) -> Self {
+        self.first_load = Some(before);
+        self
     }
 
     /// Opens the KWin gaps around the engine (a real session only: they move the
@@ -134,27 +142,27 @@ impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
     }
 
     fn outputs(&self) -> Vec<lbm_layout::linux::LinuxMonitor> {
-        match self.backend.map(Backend::query) {
-            Some(Ok(monitors)) => monitors,
-            Some(Err(error)) => {
-                eprintln!("[lbm-agent] display discovery failed: {error}");
-                Vec::new()
-            }
-            None => Vec::new(),
-        }
+        self.discovery.outputs()
     }
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
     fn display_signature(&mut self) -> String {
-        display_signature(&self.outputs())
+        self.discovery.signature()
     }
 
     fn rebuild_layout(&mut self) {
         self.preview = None;
-        let outputs = self.outputs();
         let mut layout = Layout::new(LayoutOptions::default());
-        match populate(&mut layout, &outputs, |l| self.persistence.load(l)) {
+        let first_load = self.first_load.take();
+        let persistence = &mut self.persistence;
+        let loaded = self.discovery.populate(&mut layout, |l| {
+            if let Some(before) = first_load {
+                before(&l.id, persistence.store());
+            }
+            persistence.load(l)
+        });
+        match loaded {
             Ok(()) => self.layout = Some(layout),
             // C#: the factory throws, the handler logs, the previous layout stays.
             Err(error) => eprintln!("[lbm-agent] layout rebuild failed: {error}"),

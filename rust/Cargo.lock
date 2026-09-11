@@ -647,6 +647,8 @@ dependencies = [
  "lbm-display",
  "lbm-ipc",
  "lbm-layout",
+ "lbm-store",
+ "libc",
  "serde_json",
  "tempfile",
  "tokio",

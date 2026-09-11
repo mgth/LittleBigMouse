@@ -1,35 +1,161 @@
 //! `lbm-agent`: the resident process of LittleBigMouse v6 — it watches the system,
 //! loads the profiles and drives the hook (`docs/v6-architecture-plan.md` on the `v6`
-//! branch, phase 3).
+//! branch, phase 3; `docs/v6-agent.md`).
 //!
-//! For now it only has `--dump-displays` (phase 2): the display discovery of the
-//! machine as JSON — the outputs, and the monitor ids and layout id the layout model
-//! gives them. Its C# twin is `DisplayDump` in the C# test project; run both on the
-//! same machine and the values must be equal.
+//! ```text
+//! lbm-agent [--fake-hook] [--config-dir DIR] [--data-dir DIR]
+//! lbm-agent --dump-displays
+//! ```
+//!
+//! - `--fake-hook`: drive a hook that hooks nothing (`fake_hook`), on a private
+//!   endpoint, instead of the real one — to develop without capturing the mice.
+//! - `--config-dir` / `--data-dir`: where the profiles (`options.json`, `layouts/`)
+//!   and `Excluded.txt` live, instead of the user's own — a load can write there
+//!   (the excluded-list top-up), so anything but a real session should pass both.
+//! - `--dump-displays`: the display discovery as JSON (the outputs, and the monitor
+//!   ids and layout id the model gives them); its C# twin is `DisplayDump` in the C#
+//!   test project, and on the same machine both must print the same values.
+//!
+//! The agent does not launch a hook yet: without `--fake-hook` it waits for one at the
+//! usual endpoint (or `LBM_HOOK_ENDPOINT`).
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 
+use lbm_agent::fake_hook::FakeHook;
+use lbm_agent::hook::HookClient;
+use lbm_agent::reconcile::Timings;
+use lbm_agent::runtime::Agent;
+use lbm_agent::world::{Platform, SystemWorld};
 use lbm_display::linux::{display_json, display_signature, drm, Backend};
 use lbm_layout::linux::add_monitor;
 use lbm_layout::model::{Layout, LayoutOptions};
+use lbm_store::{lbm_paths, JsonLayoutStore, LayoutPersistence};
 use serde_json::json;
 
-const USAGE: &str = "usage: lbm-agent --dump-displays";
+const USAGE: &str = "usage: lbm-agent [--fake-hook] [--config-dir DIR] [--data-dir DIR]\n       lbm-agent --dump-displays";
 
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match args
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .as_slice()
-    {
-        ["--dump-displays"] => dump_displays(),
-        _ => {
-            eprintln!("{USAGE}");
-            ExitCode::from(2)
+#[derive(Default)]
+struct Options {
+    dump_displays: bool,
+    fake_hook: bool,
+    config_dir: Option<PathBuf>,
+    data_dir: Option<PathBuf>,
+}
+
+fn options() -> Option<Options> {
+    let mut options = Options::default();
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--dump-displays" => options.dump_displays = true,
+            "--fake-hook" => options.fake_hook = true,
+            "--config-dir" => options.config_dir = Some(args.next()?.into()),
+            "--data-dir" => options.data_dir = Some(args.next()?.into()),
+            _ => return None,
         }
     }
+    Some(options)
+}
+
+fn main() -> ExitCode {
+    let Some(options) = options() else {
+        eprintln!("{USAGE}");
+        return ExitCode::from(2);
+    };
+    if options.dump_displays {
+        return dump_displays();
+    }
+    run(options)
+}
+
+/// A private endpoint for the fake hook: never the real hook's.
+fn fake_endpoint() -> String {
+    let name = format!("lbm-agent-fake-hook-{}", std::process::id());
+    if cfg!(windows) {
+        format!(r"\\.\pipe\{name}")
+    } else {
+        let dir = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .filter(|d| !d.as_os_str().is_empty())
+            .unwrap_or_else(std::env::temp_dir);
+        dir.join(format!("{name}.sock"))
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
+/// Where the real hook listens.
+fn hook_endpoint() -> Option<String> {
+    if let Some(endpoint) = lbm_ipc::endpoint::from_environment() {
+        return Some(endpoint);
+    }
+    if cfg!(windows) {
+        // The per-session pipe name needs the session id: comes with the Windows agent.
+        return None;
+    }
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+    lbm_ipc::endpoint::socket_path(runtime.as_deref(), Some(&lbm_paths::data_dir()))
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+fn run(options: Options) -> ExitCode {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("lbm-agent: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    runtime.block_on(async move {
+        let store = JsonLayoutStore::new(options.config_dir.unwrap_or_else(lbm_paths::config_dir));
+        let persistence = match options.data_dir {
+            Some(dir) => LayoutPersistence::with_excluded_list_file(store, Platform, move || {
+                dir.join("Excluded.txt")
+            }),
+            None => LayoutPersistence::new(store, Platform),
+        };
+        let world = SystemWorld::new(Backend::detect(), persistence);
+
+        // Kept alive for the whole run: dropping it closes its endpoint.
+        let mut _fake = None;
+        let endpoint = if options.fake_hook {
+            let endpoint = fake_endpoint();
+            match FakeHook::bind(&endpoint) {
+                Ok(fake) => _fake = Some(fake),
+                Err(error) => {
+                    eprintln!("lbm-agent: cannot start the fake hook at {endpoint}: {error}");
+                    return ExitCode::FAILURE;
+                }
+            }
+            endpoint
+        } else {
+            match hook_endpoint() {
+                Some(endpoint) => endpoint,
+                None => {
+                    eprintln!("lbm-agent: no hook endpoint (set LBM_HOOK_ENDPOINT)");
+                    return ExitCode::FAILURE;
+                }
+            }
+        };
+        eprintln!("[lbm-agent] hook endpoint: {endpoint}");
+
+        let (hook, signals) = HookClient::spawn(endpoint);
+        let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+        #[cfg(target_os = "linux")]
+        tokio::spawn(lbm_agent::watch::poll_displays(inputs.clone()));
+
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs);
+        agent
+            .run(signals, inputs_rx, async {
+                let _ = tokio::signal::ctrl_c().await;
+            })
+            .await;
+        ExitCode::SUCCESS
+    })
 }
 
 /// The display discovery as JSON, member for member what the C# `DisplayDump` writes.

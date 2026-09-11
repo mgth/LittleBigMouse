@@ -707,3 +707,26 @@ fn focused_processes_are_reported() {
     );
     assert_eq!(effects, [Effect::ProcessSeen("/usr/bin/game".into())]);
 }
+
+/// C#: the boot sequence builds a layout before anything reconciles, and the hook gets it
+/// when it asks — while a hook that survived the previous agent (D5) is left alone.
+#[test]
+fn at_boot_the_first_layout_waits_for_the_hook_to_ask() {
+    let mut h = Harness::enabled();
+    h.send(Input::Boot);
+    assert_eq!(h.world.rebuilds, 1);
+    assert!(h.commands.is_empty());
+    // The guard does not know it yet: the first display change always rebuilds.
+    assert_eq!(h.reconciler.last_built_signature(), "");
+
+    h.send(Input::Hook(HookEvent::Connected));
+    h.send(Input::Hook(HookEvent::Stopped));
+    assert_eq!(h.commands, ["Start"]);
+
+    // A hook still running from before: it says so, and nothing is sent.
+    let mut survivor = Harness::enabled();
+    survivor.send(Input::Boot);
+    survivor.send(Input::Hook(HookEvent::Connected));
+    survivor.send(Input::Hook(HookEvent::Running));
+    assert!(survivor.commands.is_empty());
+}

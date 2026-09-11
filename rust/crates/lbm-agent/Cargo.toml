@@ -10,8 +10,12 @@ description = "The resident process of LittleBigMouse v6: watches the system, lo
 lbm-display = { path = "../lbm-display" }
 lbm-ipc = { path = "../lbm-ipc" }
 lbm-layout = { path = "../lbm-layout" }
+lbm-store = { path = "../lbm-store" }
 serde_json.workspace = true
-tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "signal", "sync", "time"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile.workspace = true

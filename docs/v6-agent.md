@@ -128,8 +128,17 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   l'utilisateur n'a rien arrêté. Sans bus système ni logind, la veille passe inaperçue,
   comme avant.
 
+- Tray sous Linux (`tray`, `ksni`, sans GTK ; C# `TrayIconController`) : un frontend comme les
+  autres, dans le processus. Il suit l'état de l'agent par l'API (`Subscribe`) et son menu
+  envoie les mêmes requêtes (Ouvrir, Start, Stop, Rafraîchir, Quitter ; pas de mise à jour :
+  le paquet de la distribution s'en charge). Icônes du C# (on / off / dead / paused, la
+  veille de l'écran comprise), rendues une fois depuis ses SVG (`icons/render.sh`). Ouvrir
+  lance le frontend donné par `--ui`, aucun par défaut tant que l'UI pilote encore le hook
+  elle-même (phase 4). `--no-tray` pour une exécution sans tray. Sans hôte de tray
+  (StatusNotifierWatcher absent), l'agent le dit et continue sans.
+
 ## Suite
 
 1. API, suite : `SaveLayout`, `SaveOptions` (dont le raccourci de secours, que l'agent
-   transmet au hook), `Preview`/`EndPreview` ; tray, autostart ; Windows (points de
-   terminaison par session, élévation, sources).
+   transmet au hook), `Preview`/`EndPreview` ; option « masquer l'icône » suivie par le
+   tray ; autostart ; Windows (tray, points de terminaison par session, élévation, sources).

@@ -4,6 +4,7 @@
 //!
 //! ```text
 //! lbm-agent [--fake-hook | --hook PATH] [--config-dir DIR] [--data-dir DIR]
+//!           [--no-tray] [--ui PATH]
 //! lbm-agent --dump-displays
 //! ```
 //!
@@ -14,6 +15,9 @@
 //! - `--config-dir` / `--data-dir`: where the profiles (`options.json`, `layouts/`)
 //!   and `Excluded.txt` live, instead of the user's own — a load can write there
 //!   (the excluded-list top-up), so anything but a real session should pass both.
+//! - `--no-tray`: no tray icon (a headless run).
+//! - `--ui PATH`: the frontend the tray opens. None by default until the UI is a frontend
+//!   of the agent (phase 4): today's UI still drives the hook itself.
 //! - `--dump-displays`: the display discovery as JSON (the outputs, and the monitor
 //!   ids and layout id the model gives them); its C# twin is `DisplayDump` in the C#
 //!   test project, and on the same machine both must print the same values.
@@ -36,7 +40,7 @@ use lbm_display::linux::Backend;
 use lbm_store::{lbm_paths, JsonLayoutStore, LayoutPersistence};
 use serde_json::Value;
 
-const USAGE: &str = "usage: lbm-agent [--fake-hook | --hook PATH] [--config-dir DIR] [--data-dir DIR]\n       lbm-agent --dump-displays";
+const USAGE: &str = "usage: lbm-agent [--fake-hook | --hook PATH] [--config-dir DIR] [--data-dir DIR]\n                 [--no-tray] [--ui PATH]\n       lbm-agent --dump-displays";
 
 #[derive(Default)]
 struct Options {
@@ -48,6 +52,8 @@ struct Options {
     serve_fake_hook: Option<String>,
     config_dir: Option<PathBuf>,
     data_dir: Option<PathBuf>,
+    no_tray: bool,
+    ui: Option<PathBuf>,
 }
 
 fn options() -> Option<Options> {
@@ -61,6 +67,8 @@ fn options() -> Option<Options> {
             "--serve-fake-hook" => options.serve_fake_hook = Some(args.next()?),
             "--config-dir" => options.config_dir = Some(args.next()?.into()),
             "--data-dir" => options.data_dir = Some(args.next()?.into()),
+            "--no-tray" => options.no_tray = true,
+            "--ui" => options.ui = Some(args.next()?.into()),
             _ => return None,
         }
     }
@@ -223,6 +231,10 @@ fn run(options: Options) -> ExitCode {
             agent = agent.with_sleep(sleep_rx);
         }
 
+        // The frontends' requests: the socket's, and the tray's.
+        let (calls, calls_rx) = tokio::sync::mpsc::unbounded_channel();
+        agent = agent.with_api(calls_rx);
+
         // The frontends' endpoint (the instance lock is held: any socket there is stale).
         #[cfg(unix)]
         let _api = {
@@ -230,10 +242,9 @@ fn run(options: Options) -> ExitCode {
             let endpoint =
                 lbm_ipc::endpoint::agent_socket_path(runtime.as_deref(), Some(&data_dir));
             match endpoint.map(|p| p.to_string_lossy().into_owned()) {
-                Some(endpoint) => match lbm_agent::api::listen(&endpoint) {
-                    Ok((calls, listener)) => {
+                Some(endpoint) => match lbm_agent::api::listen_into(&endpoint, calls.clone()) {
+                    Ok(listener) => {
                         eprintln!("[lbm-agent] frontends: {endpoint}");
-                        agent = agent.with_api(calls);
                         Some(listener)
                     }
                     Err(error) => {
@@ -244,6 +255,14 @@ fn run(options: Options) -> ExitCode {
                 None => None,
             }
         };
+        #[cfg(target_os = "linux")]
+        if !options.no_tray {
+            tokio::spawn(lbm_agent::tray::run(
+                calls.clone(),
+                opener(options.ui.clone()),
+            ));
+        }
+        drop(calls);
         if !options.fake_hook {
             let log = Some(data_dir.join("hook.log"));
             let launcher = match options.hook {
@@ -261,6 +280,28 @@ fn run(options: Options) -> ExitCode {
             })
             .await;
         ExitCode::SUCCESS
+    })
+}
+
+/// What the tray's Open does: launch the frontend, if there is one to launch.
+#[cfg(target_os = "linux")]
+fn opener(ui: Option<PathBuf>) -> std::sync::Arc<dyn Fn() + Send + Sync> {
+    std::sync::Arc::new(move || {
+        let Some(ui) = &ui else {
+            eprintln!("[lbm-agent] no frontend to open (--ui)");
+            return;
+        };
+        // Its own process, reaped when it leaves; it brings its window forward itself when
+        // one already runs (its single-instance guard).
+        match std::process::Command::new(ui)
+            .stdin(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(mut child) => {
+                std::thread::spawn(move || child.wait());
+            }
+            Err(error) => eprintln!("[lbm-agent] cannot open {}: {error}", ui.display()),
+        }
     })
 }
 

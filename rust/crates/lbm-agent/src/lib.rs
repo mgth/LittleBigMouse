@@ -8,9 +8,11 @@
 //! - [`world`]: the displays, the profiles and the layout the agent acts on.
 //! - [`watch`]: the display changes the hook does not report (Linux poll).
 //! - [`supervise`]: launching a hook when none answers (D5).
+//! - [`gap_guard`]: the 1 px gaps KWin's barriers need while the engine runs (D7).
 //! - [`runtime`]: the event loop tying them together.
 
 pub mod fake_hook;
+pub mod gap_guard;
 pub mod hook;
 pub mod reconcile;
 pub mod runtime;

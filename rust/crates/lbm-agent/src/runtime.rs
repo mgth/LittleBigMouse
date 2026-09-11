@@ -78,6 +78,12 @@ impl<W: AgentWorld> Agent<W> {
         mut inputs: UnboundedReceiver<Input>,
         shutdown: impl Future<Output = ()>,
     ) {
+        // A previous run died with the outputs gapped: put them back before anything is
+        // built on top (C#: LinuxDisplayController's constructor).
+        if self.world.recover_stale() {
+            eprintln!("[lbm-agent] restored the outputs a previous run left gapped");
+            let _ = self.inputs.send(Input::DisplayChanged);
+        }
         self.handle(Input::Boot);
         tokio::pin!(shutdown);
         loop {
@@ -154,6 +160,15 @@ impl<W: AgentWorld> Agent<W> {
             Effect::Start => {
                 // The zones of now: never those of the moment the Start was decided.
                 if let Some((zones, foreign)) = self.world.zones() {
+                    // The topology prologue — never for a foreign layout, which must not
+                    // move local outputs. When it moved them, these zones describe a
+                    // desktop that is going away: drop the send, the display change
+                    // rebuilds and starts again in the new geometry (C#: StartAsync).
+                    if !foreign && self.world.prepare_for_engine() {
+                        eprintln!("[lbm-agent] outputs moved for the engine: waiting for them");
+                        let _ = self.inputs.send(Input::DisplayChanged);
+                        return;
+                    }
                     let load = client::load(&zones);
                     // A foreign layout is simulated: loaded, never run.
                     let frame = if foreign {
@@ -172,6 +187,10 @@ impl<W: AgentWorld> Agent<W> {
             Effect::Stop => {
                 eprintln!("[lbm-agent] -> Stop");
                 self.hook.send(client::messages(&[client::stop()]));
+                // The epilogue: the outputs go back where they were (C#: StopAsync).
+                if self.world.restore_after_engine() {
+                    let _ = self.inputs.send(Input::DisplayChanged);
+                }
             }
             Effect::SaveEnabled => {
                 if let Err(error) = self.world.save_enabled() {

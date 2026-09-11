@@ -1,8 +1,8 @@
 # LittleBigMouse en trois processus — plan v6
 
-> **État** : proposition du 2026-09-11, établie sur `master` `e3e7fba` et la branche
-> `fix/607-stale-layout-hook`. Décision D1 tranchée le 2026-09-11 (nom : `lbm-agent`) ;
-> D2 à D11 restent ouvertes.
+> **État** : plan du 2026-09-11, établi sur `master` `e3e7fba` et la branche
+> `fix/607-stale-layout-hook`. Décisions D1 à D10 tranchées le 2026-09-11, dont D5 amendée
+> (le hook survit à l'agent) ; D11 à l'étude (mode service sous Windows). Phase 0 engagée.
 
 Frontend en Rust/egui qui ne reste pas chargé, processus résident qui surveille le système
 et charge les profils, hook réduit au pilotage de la souris. Ce document donne l'avis sur ces
@@ -35,7 +35,8 @@ classe de bugs par construction.
   d'écran, refuser des zones sans écran (#607), touche de secours, relâche des boutons. L'agent
   est à au moins 300 ms de debounce et un aller-retour IPC ; un clip périmé piège le curseur bien
   avant. Tout le reste (politique d'exclusion, rejeu de `Current.xml`, sondeur, serveur
-  multi-clients) peut partir.
+  multi-clients) peut partir. Il survit à un plantage de l'agent (D5) : il garde son dernier
+  layout et ses réflexes, et l'agent relancé s'y rattache.
 - **Ordre de migration — recommandation.** Construire l'agent avant le frontend egui. Le
   changement de comportement le plus risqué, c'est le résident sous Windows (veille, dock,
   élévation, autostart), et c'est celui que l'on peut le moins tester depuis Linux. En le livrant
@@ -65,15 +66,16 @@ flowchart LR
   E & V & F -- événements --> A
   A <-- "seul écrivain" --> S
   UI <-- "JSON · UDS / pipe" --> A5
-  A3 -- "pipe privé · zones + génération" --> H
-  H -- "état · Rescued · EOF ⇒ relâche" --> A3
+  A3 -- "pipe de session · zones + génération" --> H
+  H -- "état · Rescued" --> A3
   H <-- "grab exclusif" --> M
 ```
 
-Un seul processus décide. Le frontend peut être fermé à tout moment ; le hook ne reçoit ses
-ordres que de l'agent, sur un canal que personne d'autre ne peut ouvrir, et relâche tout si
-l'agent disparaît. Le frontend garde un accès direct au système pour ce qui est interactif
-(DDC/CI, topologie d'écrans, fonds d'écran, mires).
+Un seul processus décide. Le frontend peut être fermé à tout moment. Le hook ne reçoit ses
+ordres que de l'agent, sur un canal réservé à l'utilisateur de la session ; si l'agent plante,
+le hook continue avec son dernier layout et ses réflexes de sûreté, et l'agent relancé s'y
+rattache sans recapturer les souris. Le frontend garde un accès direct au système pour ce qui
+est interactif (DDC/CI, topologie d'écrans, fonds d'écran, mires).
 
 ### Qui fait quoi
 
@@ -83,7 +85,7 @@ l'agent disparaît. Le frontend garde un accès direct au système pour ce qui e
 | Changement d'affichage, veille, réveil | daemon détecte et décroche ; UI décide (3 chemins de Start concurrents) | agent : réconciliateur unique, génération par envoi |
 | Choix du profil, placement, calcul des zones | UI C# (`MainService`, `ZonesLayoutFactory`) | agent (crate partagé `lbm-layout`) |
 | Écriture des profils et options | UI C# (registre sous Windows, JSON sous Linux) | agent, seul écrivain |
-| Lancement et relance du hook, état de reprise | UI (`DaemonProcessManager`, `Current.xml`) | agent ; `Current.xml` supprimé |
+| Lancement et relance du hook, état de reprise | UI (`DaemonProcessManager`, `Current.xml`) | agent, ou le service Windows si D11 le retient ; `Current.xml` supprimé |
 | Tray, autostart, élévation, instance unique | UI | agent |
 | Exclusion des jeux (focus), historique des processus vus | daemon (politique + `Excluded.txt`), historique en mémoire dans l'UI | agent (D4) |
 | Fond d'écran « span » ré-appliqué après un changement d'écran | UI (`WallpaperManager`) | agent |
@@ -146,21 +148,78 @@ traiter en spike avant d'écrire les écrans concernés.
 
 ## Décisions
 
-Elles conditionnent la phase 0.
+Tranchées le 2026-09-11 par le mainteneur, sauf D11.
 
-| # | Question | État / recommandation |
+| # | Question | Décision |
 |---|---|---|
-| D1 | Nom du processus résident | **Tranché le 2026-09-11 : `lbm-agent`.** |
-| D2 | Stockage sous Windows : garder le registre, ou JSON avec import unique ? | JSON + import au premier lancement. Un seul store, plus de limite à 255 caractères (#589), fichiers lisibles pour le support. Le registre reste intact pour pouvoir revenir en 5.x. |
-| D3 | Chemins Windows | Garder `%LOCALAPPDATA%\Mgth\LittleBigMouse` (les données y sont déjà). Linux reste sans « Mgth ». |
-| D4 | Exclusion par focus : agent ou hook ? | Agent. L'historique des processus vus a besoin d'un résident, et le hook perd `Excluded.txt`, la politique et la feature `res` de x11rb. Coût : quelques millisecondes d'IPC quand un jeu prend le focus. |
-| D5 | Durée de vie du hook | Liée à l'agent : fin de flux sur son pipe ⇒ il relâche les grabs et quitte. Plus aucun `lbm-hook` orphelin possible. |
-| D6 | Qui relance l'agent s'il plante ? | Windows : tâche planifiée avec redémarrage sur échec. Linux : autostart XDG par défaut (aujourd'hui un no-op), unité systemd utilisateur en option. Le frontend relance aussi l'agent quand il s'ouvre. |
-| D7 | Backends Linux de secours (portail InputCapture, X11) et `KScreenGapGuard` | Garder X11 et portail tels quels dans le hook. Ne porter le garde de gaps dans l'agent que si le portail reste ; evdev est de toute façon le routeur. |
+| D1 | Nom du processus résident | `lbm-agent`. |
+| D2 | Stockage sous Windows | JSON + import du registre au premier lancement. Un seul store, plus de limite à 255 caractères (#589), fichiers lisibles pour le support. Le registre reste intact pour pouvoir revenir en 5.x. |
+| D3 | Chemins Windows | `%LOCALAPPDATA%\Mgth\LittleBigMouse` conservé (les données y sont déjà). Linux reste sans « Mgth ». |
+| D4 | Exclusion par focus | Dans l'agent. L'historique des processus vus a besoin d'un résident, et le hook perd `Excluded.txt`, la politique et la feature `res` de x11rb. Coût : quelques millisecondes d'IPC quand un jeu prend le focus. |
+| D5 | Durée de vie du hook | **Amendée** : le hook survit à un plantage de l'agent. Il garde son dernier layout et ses réflexes de sûreté ; l'agent relancé s'y rattache (poignée de main : état, génération, empreinte du layout) sans recapturer les souris. Le mode « lié à l'agent » (fin de connexion ⇒ relâche et sortie) devient une option. |
+| D6 | Qui relance l'agent s'il plante ? | Windows : tâche planifiée avec redémarrage sur échec, ou le service si D11 le retient. Linux : autostart XDG par défaut (aujourd'hui un no-op), unité systemd utilisateur en option. Le frontend relance aussi l'agent quand il s'ouvre. |
+| D7 | Backends Linux de secours | X11 et portail InputCapture gardés tels quels dans le hook. Le portail restant, `KScreenGapGuard` est porté dans l'agent (phase 3). |
 | D8 | Formats d'échange | JSON entre frontend et agent (l'UI C# intérim sait le parler). Agent → hook : XML actuel en phase 3, puis types serde partagés en phase 5. |
-| D9 | Train de livraison | A : agent d'abord, UI C# devenue non résidente en intérim, puis egui. B : bascule unique à parité. Recommandé : A. |
-| D10 | Périmètre de la première version egui | Carte, modes, options, résistance, règles d'abord ; VCP, calibration et télécommandes TV ensuite. En train A, l'UI C# les couvre entre-temps. |
-| D11 | Élévation sous Windows | Parité maintenant (agent élevé par la tâche planifiée, hook qui hérite). Plus tard, `uiAccess` sur le hook, qui exige des binaires signés (SignPath). |
+| D9 | Train de livraison | A : agent d'abord, UI C# devenue non résidente en intérim, puis egui. |
+| D10 | Périmètre de la première version egui | Carte, modes, options, résistance, règles d'abord ; VCP, calibration et télécommandes TV ensuite. L'UI C# les couvre entre-temps. |
+| D11 | Élévation et démarrage sous Windows | **À l'étude : mode service**, voir ci-dessous. En attendant la conclusion du spike, la cible de la phase 3 reste la parité (tâche planifiée, relance élevée, hook qui hérite). |
+
+## Étude D11 : mode service sous Windows
+
+### Pourquoi le hook refuse de tourner dans un service
+
+Un service tourne dans la session 0, isolée depuis Vista : sa station de fenêtres n'est pas
+celle de l'utilisateur et aucune entrée n'y arrive. Un `WH_MOUSE_LL` posé depuis le service ne
+voit donc jamais la souris, et `SetThreadDesktop` vers le bureau de l'utilisateur échoue d'une
+session à l'autre. Ce n'est pas contournable depuis le service lui-même.
+
+### Ce qui marche : le service lance le hook dans la session de l'utilisateur
+
+Le service (LocalSystem, qui détient `SeTcbPrivilege`) ne hooke pas : il lance `lbm-hook`
+**dans la session interactive**, sur `winsta0\default`, avec `CreateProcessAsUser`. Le hook y
+est un processus de session ordinaire et `WH_MOUSE_LL` fonctionne. Le jeton passé détermine ses
+droits :
+
+| Variante | Jeton | Au-dessus des fenêtres élevées | Pour qui | Contrepartie |
+|---|---|---|---|---|
+| a | `WTSQueryUserToken` : l'utilisateur, intégrité moyenne | non | tous | aucun droit en plus, seulement la supervision |
+| b | jeton lié élevé : `GetTokenInformation(TokenLinkedToken)`, primaire parce que le service détient SeTcb | oui | administrateurs à jeton scindé | même portée que l'actuel `StartElevated`, sans invite UAC ; à vérifier avec « Administrator Protection » de Windows 11 (compte administrateur fantôme) |
+| c | jeton SYSTEM déplacé dans la session : `DuplicateTokenEx` + `TokenSessionId` | oui, et peut suivre le bureau sécurisé (invite UAC, Ctrl+Alt+Suppr) | tous | le hook tourne en SYSTEM : un bug dans le décodage de ce que lui envoie l'agent devient une élévation de privilèges ; canal et protocole à verrouiller |
+| d | `uiAccess` : manifeste, jeton marqué `TokenUIAccess` par le service | oui (hooks bas niveau sur tous les niveaux d'intégrité) | tous | binaire signé Authenticode installé sous Program Files : attend SignPath |
+
+### Ce que ça change
+
+- Le service devient le superviseur sous Windows. Il suit les sessions
+  (`SERVICE_CONTROL_SESSIONCHANGE` : ouverture, fermeture, console, RDP), lance dans chaque
+  session interactive le hook (jeton de la variante retenue) et l'agent (jeton simple de
+  l'utilisateur), et les relance s'ils meurent. Agent et hook deviennent indépendants l'un de
+  l'autre, ce que veut D5.
+- Il remplace la tâche planifiée et la relance `runas` : plus d'invite UAC au démarrage.
+- Binaire séparé et minimal, `lbm-service` : c'est le seul code qui tourne en SYSTEM dans la
+  session 0. Plomberie SCM par le crate `windows-service`.
+- Le pipe d'un hook élevé porte une étiquette d'intégrité moyenne (sinon l'agent, non élevé, ne
+  peut pas y écrire) et une DACL réduite à SYSTEM et à l'utilisateur de la session.
+- Installeur : création du service et de ses actions de récupération, arrêt avant mise à jour,
+  suppression à la désinstallation.
+- Linux : l'équivalent est une paire d'unités systemd *utilisateur* (`Restart=on-failure`,
+  rattachées à `graphical-session.target`) ; un service système n'a pas accès à la session
+  graphique.
+
+### Spike
+
+Sur machine Windows réelle, avant la phase 3, avec le hook actuel lancé par un service
+prototype :
+
+1. Variantes a, b et c : le hook reçoit-il les mouvements ? Route-t-il au-dessus d'une fenêtre
+   élevée (Gestionnaire des tâches) ? Que se passe-t-il pendant une invite UAC ?
+2. Changement rapide d'utilisateur (deux sessions), session RDP, veille et réveil.
+3. Connexion d'un agent non élevé au pipe d'un hook élevé (étiquette d'intégrité).
+4. Machine avec Administrator Protection activé : la variante b tient-elle ?
+5. Installation, mise à jour et désinstallation par l'installeur Inno.
+
+Sortie : la variante retenue (préférence de départ : b ; c si le suivi du bureau sécurisé vaut
+son coût de sécurité ; d quand les binaires seront signés), et le statut du service (mode par
+défaut ou option).
 
 ## Plan de migration
 
@@ -208,9 +267,11 @@ fige le comportement à reproduire tant que le C# existe.
   positions pixel, compaction). Corpus : fixtures `TestData/Persistence`, `virtual-layouts/`,
   les layouts réels du mainteneur, et des cas construits (grille 2×2, neuf écrans #589, portrait
   #507, sans EDID #419, boucles, clones).
+- En parallèle, sur machine Windows : le spike D11 (service prototype qui lance le hook actuel
+  dans la session). Il doit conclure avant la phase 3.
 
 **Sortie** : 139 tests et 5 benches du hook verts, `cargo check` Windows OK, corpus de l'oracle
-commité, D2 à D11 tranchées. **Taille** : S, réorganisation.
+commité, spike D11 lancé. **Taille** : S, réorganisation.
 
 ### Phase 1 — Cœur métier en Rust · `master`, tests seulement
 
@@ -274,13 +335,17 @@ Objectif : `lbm-agent` pilote le hook actuel, sans l'UI.
   300 ms, stabilisation 100 ms × 8, garde d'idempotence, watchdog de reprise. Les scénarios de
   `DisplayChangeCoordinatorTests`, `EngineControllerTests`, `LatestRequestGateTests` et
   `MainServiceLifecycleTests` deviennent sa spécification, #607 compris.
-- Supervision du hook actuel : lancement avec `LBM_HOOK_UI=1` (fin de la détection par chemin du
-  parent), XML sur l'endpoint existant, relance avec backoff, `Rescued` qui termine l'aperçu.
+- Supervision du hook actuel : lancement détaché avec `LBM_HOOK_UI=1` (fin de la détection par
+  chemin du parent), pour qu'il survive à un plantage de l'agent (D5) ; au démarrage, l'agent se
+  rattache d'abord à un hook déjà présent. XML sur l'endpoint existant, relance avec backoff,
+  `Rescued` qui termine l'aperçu. En mode service (D11), c'est le service qui lance et relance.
+- `KScreenGapGuard` porté (D7) : journal, prologue et épilogue autour du hook, reprise au
+  démarrage.
 - Tray : Shell_NotifyIcon sous Windows, `ksni` sous Linux (sans GTK) ; icônes on / off / dead /
   paused ; menu Ouvrir, Start, Stop, Rafraîchir, Mise à jour, Quitter.
 - Autostart : la tâche planifiée pointe l'agent, et la tâche 5.x qui lance
   `LittleBigMouse.Ui.Avalonia.exe` est migrée ; autostart XDG sous Linux, qui n'existe pas
-  aujourd'hui. Relance élevée.
+  aujourd'hui. Relance élevée. Si le spike D11 retient le service, il remplace ce lot.
 - Exclusion (si D4) : `SetWinEventHook`, veilleur EWMH repris de `focus.rs`, résolution Wine,
   historique des processus vus.
 - Veille sous Linux : `PrepareForSleep` de logind. Le code actuel ne gère le réveil que sous
@@ -323,9 +388,19 @@ hook. **Taille** : M, surtout des suppressions, ≈ 1–2 k lignes C# touchées.
 
 Objectif : le hook ne connaît plus que l'agent.
 
-- Canal privé sur stdin/stdout (ou pipe anonyme hérité). Fin de flux ⇒ relâche des grabs, des
-  boutons tenus et du clip, puis sortie. Disparaissent : serveur multi-clients, endpoint nommé,
-  détection de mode par le parent, rejeu de `Current.xml`.
+- Endpoint nommé par session conservé (le hook survit à l'agent, D5), réduit à un client :
+  l'agent. DACL limitée à l'utilisateur de la session et à SYSTEM, étiquette d'intégrité si le
+  hook est élevé (D11). Verrou d'instance unique sous Linux, qui n'en a pas aujourd'hui (le
+  socket périmé est simplement effacé).
+- Rattachement : à la connexion, le hook annonce son état (accroché, en pause), la génération et
+  l'empreinte du layout qu'il applique ; si c'est celui que l'agent veut, rien n'est renvoyé et
+  les souris ne sont pas recapturées.
+- Option « lié à l'agent » : fin de connexion ⇒ relâche des grabs, des boutons tenus et du clip,
+  puis sortie.
+- Disparaissent : serveur multi-clients et diffusion, détection de mode par le parent, rejeu de
+  `Current.xml`.
+- Touche de secours sous Linux (#526) : un hook qui survit à l'agent doit pouvoir être arrêté
+  sans lui.
 - Protocole en types serde partagés : `Load` (génération, zones, options, bornes du bureau),
   `Run`, `Stop`, `Pause`/`Resume`, `Shortcut`, `Quit` ; événements Running, Stopped, RunRefused,
   Rescued, DisplayChanged, Suspended, ShortcutUnavailable. Poignée de main versionnée : en cas
@@ -337,8 +412,9 @@ Objectif : le hook ne connaît plus que l'agent.
   d'être déduites de l'union des zones.
 
 **Sortie** : tests et benches verts, toujours 0 allocation par événement. `kill -9` de l'agent ⇒
-souris relâchées en moins de 100 ms, vérifié par `fuser` et `/proc/bus/input/devices`.
-**Taille** : M, ≈ 2 k lignes retirées, 0,5 k ajoutées.
+le routage continue, et l'agent relancé se rattache sans recapturer les souris. En mode lié, les
+souris sont relâchées en moins de 100 ms, vérifié par `fuser` et `/proc/bus/input/devices`.
+**Taille** : M, ≈ 2 k lignes retirées, 1 k ajoutées.
 
 ### Phase 6 — Frontend egui · `master` tant qu'il n'est pas packagé
 
@@ -457,6 +533,8 @@ moindre test neuf.
 | Divergence entre `v6` et `master` | moyenne | Tout ce qui est neutre atterrit sur `master` ; merges réguliers. |
 | Pipe d'un agent élevé fermé à un frontend non élevé | moyenne | Étiquette d'intégrité explicite dans le descripteur de sécurité ; test dédié. |
 | Tâche d'autostart 5.x qui lance un exécutable disparu | moyenne | L'installeur et l'agent réécrivent la tâche au premier lancement. |
+| Hook qui continue sans agent et que l'utilisateur ne peut plus arrêter depuis le tray (Linux n'a pas de touche de secours) | élevée | Touche de secours Linux (#526) en phase 5 ; le frontend relance l'agent, qui se rattache et peut arrêter. |
+| Hook lancé en SYSTEM (variante c de D11) : surface d'élévation de privilèges | élevée si retenue | Protocole minimal et strictement décodé, DACL de session, fuzzing du décodeur ; sinon variante b. |
 | Pas de tray sous GNOME sans extension | faible | Le lanceur ouvre le frontend, qui démarre l'agent. |
 
 ## Ce qui disparaît
@@ -469,7 +547,8 @@ moindre test neuf.
   attribut du wire sans erreur.
 - Les trois chemins de Start concurrents de l'UI.
 - La détection du mode du daemon par le chemin de son processus parent.
-- Les `lbm-hook` orphelins qui gardent les souris.
+- Les `lbm-hook` orphelins involontaires : un hook qui survit à l'agent devient un état prévu,
+  auquel l'agent se rattache.
 - La limite de 255 caractères des clés de registre (#589), si D2 passe au JSON.
 
 ## Inventaire chiffré

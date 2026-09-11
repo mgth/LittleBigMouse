@@ -181,6 +181,22 @@ impl Layout {
         }
     }
 
+    /// [`Layout::attach_source`] for a source object built just now under an id
+    /// the layout may already hold: C#'s Windows builder adds a clone's source
+    /// that way, a new `PhysicalSource` under an existing key. Where
+    /// `attach_source` keeps what the slot's previous object observed, the new
+    /// object observes the primary published at its construction.
+    pub(crate) fn attach_new_source(&mut self, mut source: PhysicalSource) {
+        source.observed_primary = self.published.primary_source.clone();
+        match self.source_index(&source.source.id) {
+            Some(i) => {
+                source.registered = self.sources[i].registered;
+                self.sources[i] = source;
+            }
+            None => self.sources.push(source),
+        }
+    }
+
     /// `AddOrUpdatePhysicalSource`, keyed by the display source id: attaches
     /// and registers the source, then republishes the source-derived values.
     pub fn add_or_update_source(&mut self, mut source: PhysicalSource) {

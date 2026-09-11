@@ -5,8 +5,8 @@
 //! - `WH_MOUSE_LL`            → XI2 `RawMotion` on the root window (all master devices)
 //! - `SetCursorPos`           → `WarpPointer` to root coordinates
 //! - `ClipCursor(rect)`       → software clamp: setting the clip warps the cursor
-//!                              inside (Win32 does), and every later motion outside
-//!                              is warped back before the engine sees it
+//!   inside (Win32 does), and every later motion outside is warped back before the
+//!   engine sees it
 //! - `GetAsyncKeyState(CTRL)` → `QueryKeymap` against the Control modifier keycodes
 //! - `WM_DISPLAYCHANGE`       → RandR `ScreenChangeNotify` → `on_display_changed`
 //!

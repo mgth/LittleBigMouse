@@ -82,6 +82,7 @@ pub(crate) fn on_display_changed(shared: &Shared) {
 }
 
 /// The work area changed (C++ `SettingChanged`).
+#[cfg_attr(not(windows), allow(dead_code))] // raised by the Windows display/WinEvent hooks only
 pub(crate) fn on_setting_changed(shared: &Shared) {
     if shared.hooked.load(Ordering::SeqCst) {
         request_unhook(shared);
@@ -90,6 +91,7 @@ pub(crate) fn on_setting_changed(shared: &Shared) {
 }
 
 /// The system switched to/from the secure (UAC) desktop (C++ `DesktopChanged`).
+#[cfg_attr(not(windows), allow(dead_code))] // raised by the Windows display/WinEvent hooks only
 pub(crate) fn on_desktop_changed(shared: &Shared) {
     shared.broadcast(protocol::DESKTOP_CHANGED);
 }
@@ -99,6 +101,7 @@ pub(crate) fn on_desktop_changed(shared: &Shared) {
 /// and tell the UI, which then gates its rebuilds until the display comes back. Deduplicated: the
 /// display-state notification re-pushes the current state every time the listener window (and its
 /// registration) is recreated, which happens on every hook/unhook cycle.
+#[cfg_attr(not(windows), allow(dead_code))] // raised by the Windows display/WinEvent hooks only
 pub(crate) fn on_suspend(shared: &Shared) {
     if shared.suspended.swap(true, Ordering::SeqCst) {
         return; // already suspended — ignore the repeated current-state push
@@ -112,6 +115,7 @@ pub(crate) fn on_suspend(shared: &Shared) {
 /// The desktop is displayed again (wake / unlock / monitor on): tell the UI, which reconciles the
 /// layout and re-hooks us once the configuration is stable. We do NOT re-hook ourselves — the UI
 /// owns that (exactly like `on_display_changed`), so without a UI we stay safely unhooked.
+#[cfg_attr(not(windows), allow(dead_code))] // raised by the Windows display/WinEvent hooks only
 pub(crate) fn on_resume(shared: &Shared) {
     if !shared.suspended.swap(false, Ordering::SeqCst) {
         return; // was not suspended
@@ -175,6 +179,7 @@ pub(crate) fn adopt_foreground_path(shared: &Shared, path: Option<&str>) -> bool
 
 /// Run a callback body catching any panic, so it can never unwind across an
 /// `extern "system"` FFI boundary (which would be UB).
+#[cfg_attr(not(windows), allow(dead_code))] // only the Win32 callbacks cross an FFI boundary
 pub(crate) fn guard<F: FnOnce()>(body: F) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
 }

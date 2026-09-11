@@ -7,3 +7,5 @@
 //! the specification until the C# is gone.
 
 pub mod geo;
+pub mod solve;
+pub mod wallpaper;

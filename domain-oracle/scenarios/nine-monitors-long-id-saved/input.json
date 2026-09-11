@@ -1,0 +1,460 @@
+{
+  "description": "The same video wall with a stored layout, filed under the hashed store key: a port that derives the key differently finds nothing and places everything from the system instead.",
+  "displays": [
+    {
+      "ConnectorName": "DisplayPort-0",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-1",
+      "LogicalX": 1920,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-2",
+      "LogicalX": 3840,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-3",
+      "LogicalX": 0,
+      "LogicalY": 1080,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-4",
+      "LogicalX": 1920,
+      "LogicalY": 1080,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-5",
+      "LogicalX": 3840,
+      "LogicalY": 1080,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-6",
+      "LogicalX": 0,
+      "LogicalY": 2160,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-7",
+      "LogicalX": 1920,
+      "LogicalY": 2160,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    },
+    {
+      "ConnectorName": "DisplayPort-8",
+      "LogicalX": 3840,
+      "LogicalY": 2160,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 698,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "HEC",
+        "ProductCode": "0030",
+        "Serial": "00000001",
+        "SerialNumber": "",
+        "Model": "HISENSE",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 392,
+        "VideoInterface": "HDMIa"
+      }
+    }
+  ],
+  "store": {
+    "options.json": {
+      "Priority": "Normal",
+      "PriorityUnhooked": "Below",
+      "HomeCinema": false,
+      "VcpControl": false,
+      "Pinned": false,
+      "AutoUpdate": false,
+      "StartMinimized": false,
+      "StartElevated": false,
+      "DebugTools": false,
+      "ExperimentalFeatures": false,
+      "ShowMonitorActionWarning": true,
+      "BorderValues": "PerModel",
+      "RescueShortcut": "Ctrl+Alt+Shift+M",
+      "HideTrayIcon": false,
+      "ExcludedDefaultsVersion": 2
+    },
+    "models.json": {
+      "HEC0030": {
+        "Width": 698,
+        "Height": 392,
+        "Borders": {
+          "Left": 20,
+          "Top": 20,
+          "Right": 20,
+          "Bottom": 20
+        },
+        "PnpName": "HISENSE"
+      }
+    },
+    "layouts/HEC0030_00000001+HEC0030_00000001@DisplayPort-1+HEC0030_00000001@DisplayPort-2+HEC0030_00000001@DisplayPort-3+HEC0030_00000001@DisplayPort-4+HEC0030_00000001@DisplayPort-5+HEC0030_00000~0C3F80C50E361E07439E0230ED7C5C98FE873EA1B95B102DC0C6CF538001687C.json": {
+      "Options": {
+        "AllowOverlaps": false,
+        "AllowDiscontinuity": false,
+        "Algorithm": "Strait",
+        "MinimalEdgeOverlap": 20,
+        "MaxTravelDistance": 120,
+        "FreelookCheckInterval": 100,
+        "FreelookEnabled": true,
+        "LoopX": false,
+        "LoopY": false,
+        "Enabled": true,
+        "AdjustPointer": false,
+        "AdjustSpeed": false
+      },
+      "Monitors": {
+        "HEC0030_00000001": {
+          "XLocationInMm": 0,
+          "YLocationInMm": 0,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-0",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-0": {
+              "PixelX": 0,
+              "PixelY": 0,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-0",
+              "Primary": true
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-1": {
+          "XLocationInMm": 738,
+          "YLocationInMm": 0,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-1",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-1": {
+              "PixelX": 1920,
+              "PixelY": 0,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-1",
+              "Primary": false
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-2": {
+          "XLocationInMm": 1476,
+          "YLocationInMm": 0,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-2",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-2": {
+              "PixelX": 3840,
+              "PixelY": 0,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-2",
+              "Primary": false
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-3": {
+          "XLocationInMm": 0,
+          "YLocationInMm": 432,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-3",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-3": {
+              "PixelX": 0,
+              "PixelY": 1080,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-3",
+              "Primary": false
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-4": {
+          "XLocationInMm": 738,
+          "YLocationInMm": 432,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-4",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-4": {
+              "PixelX": 1920,
+              "PixelY": 1080,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-4",
+              "Primary": false
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-5": {
+          "XLocationInMm": 1476,
+          "YLocationInMm": 432,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-5",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-5": {
+              "PixelX": 3840,
+              "PixelY": 1080,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-5",
+              "Primary": false
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-6": {
+          "XLocationInMm": 0,
+          "YLocationInMm": 864,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-6",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-6": {
+              "PixelX": 0,
+              "PixelY": 2160,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-6",
+              "Primary": false
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-7": {
+          "XLocationInMm": 738,
+          "YLocationInMm": 864,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-7",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-7": {
+              "PixelX": 1920,
+              "PixelY": 2160,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-7",
+              "Primary": false
+            }
+          }
+        },
+        "HEC0030_00000001@DisplayPort-8": {
+          "XLocationInMm": 1476,
+          "YLocationInMm": 864,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DisplayPort-8",
+          "SerialNumber": "00000001",
+          "Sources": {
+            "DisplayPort-8": {
+              "PixelX": 3840,
+              "PixelY": 2160,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DisplayPort-8",
+              "Primary": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

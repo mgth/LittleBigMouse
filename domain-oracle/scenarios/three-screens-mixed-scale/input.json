@@ -1,0 +1,83 @@
+{
+  "description": "The maintainer's shape of desktop, on Wayland/KScreen: a 24\" 4K at scale 1.95 (logical 1969x1108, the mode rounded by the scale) bottom-aligned on the left, a 32\" 4K primary at 1.5, a 32\" 4K at 1.25 on the right. Three different pitches, nothing stored: this is what placing from the system topology produces.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": -1969,
+      "LogicalY": 332,
+      "LogicalWidth": 1969,
+      "LogicalHeight": 1108,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.95,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "A0BE",
+        "Serial": "0A1B2C3D",
+        "SerialNumber": "FAKE24Q00001",
+        "Model": "DELL P2415Q",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-2",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.5,
+      "WidthMm": 698,
+      "HeightMm": 393,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "PHL",
+        "ProductCode": "0927",
+        "Serial": "1A2B3C4D",
+        "SerialNumber": "FAKE32P00001",
+        "Model": "PHL 328P6VU",
+        "PhysicalWidth": 698,
+        "PhysicalHeight": 393,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-3",
+      "LogicalX": 2560,
+      "LogicalY": 0,
+      "LogicalWidth": 3072,
+      "LogicalHeight": 1728,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 1.25,
+      "WidthMm": 697,
+      "HeightMm": 392,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 240,
+      "Edid": {
+        "ManufacturerCode": "SAM",
+        "ProductCode": "E035",
+        "Serial": "2B3C4D5E",
+        "SerialNumber": "FAKE32G00001",
+        "Model": "Odyssey G80SD",
+        "PhysicalWidth": 697,
+        "PhysicalHeight": 392,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ]
+}

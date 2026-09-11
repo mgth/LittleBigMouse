@@ -1,0 +1,28 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "FALLBACK",
+        "X": 0,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "FALLBACK",
+        "X": 0,
+        "Y": 0,
+        "Width": 1920,
+        "Height": 1080,
+        "Scale": null
+      }
+    ]
+  }
+]

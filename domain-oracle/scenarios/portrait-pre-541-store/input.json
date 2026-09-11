@@ -1,0 +1,156 @@
+{
+  "description": "The same two monitors, with a store written before 5.4.1: the model size was persisted ORIENTED to the rotation of the day (336x597 for a landscape panel), and reading it as intrinsic would apply the rotation twice (#507). The stored size contradicts the computed one, so it is transposed back — and the borders that came with it are not.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 1440,
+      "LogicalHeight": 2560,
+      "PixelWidth": 1440,
+      "PixelHeight": 2560,
+      "Scale": 1.0,
+      "WidthMm": 336,
+      "HeightMm": 597,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 1,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "ACI",
+        "ProductCode": "27A3",
+        "Serial": "4D5E6F70",
+        "SerialNumber": "FAKE27A00001",
+        "Model": "ASUS PB278",
+        "PhysicalWidth": 597,
+        "PhysicalHeight": 336,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-2",
+      "LogicalX": 1440,
+      "LogicalY": 560,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 2560,
+      "PixelHeight": 1440,
+      "Scale": 1.0,
+      "WidthMm": 596,
+      "HeightMm": 335,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 165,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D177",
+        "Serial": "3C4D5E6F",
+        "SerialNumber": "FAKE27D00001",
+        "Model": "DELL_G2724D",
+        "PhysicalWidth": 596,
+        "PhysicalHeight": 335,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ],
+  "store": {
+    "options.json": {
+      "Priority": "Normal",
+      "PriorityUnhooked": "Below",
+      "HomeCinema": false,
+      "VcpControl": false,
+      "Pinned": false,
+      "AutoUpdate": false,
+      "StartMinimized": false,
+      "StartElevated": false,
+      "DebugTools": false,
+      "ExperimentalFeatures": false,
+      "ShowMonitorActionWarning": true,
+      "BorderValues": "PerModel",
+      "RescueShortcut": "Ctrl+Alt+Shift+M",
+      "HideTrayIcon": false,
+      "ExcludedDefaultsVersion": 2
+    },
+    "models.json": {
+      "ACI27A3": {
+        "Width": 336,
+        "Height": 597,
+        "Borders": {
+          "Left": 7,
+          "Top": 7,
+          "Right": 7,
+          "Bottom": 11
+        },
+        "PnpName": "ASUS PB278"
+      },
+      "DELD177": {
+        "Width": 596,
+        "Height": 335,
+        "Borders": {
+          "Left": 9,
+          "Top": 9,
+          "Right": 9,
+          "Bottom": 13
+        },
+        "PnpName": "DELL_G2724D"
+      }
+    },
+    "layouts/ACI27A3_FAKE27A00001_1+DELD177_FAKE27D00001.json": {
+      "Options": {
+        "AllowOverlaps": false,
+        "AllowDiscontinuity": false,
+        "Algorithm": "Strait",
+        "MinimalEdgeOverlap": 20,
+        "MaxTravelDistance": 200,
+        "FreelookCheckInterval": 100,
+        "FreelookEnabled": true,
+        "LoopX": false,
+        "LoopY": false,
+        "Enabled": true,
+        "AdjustPointer": false,
+        "AdjustSpeed": false
+      },
+      "Monitors": {
+        "ACI27A3_FAKE27A00001": {
+          "XLocationInMm": -350,
+          "YLocationInMm": -80,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DP-1",
+          "SerialNumber": "FAKE27A00001",
+          "Sources": {
+            "DP-1": {
+              "PixelX": 0,
+              "PixelY": 0,
+              "PixelWidth": 1440,
+              "PixelHeight": 2560,
+              "Orientation": 1,
+              "DisplayName": "DP-1",
+              "Primary": false
+            }
+          }
+        },
+        "DELD177_FAKE27D00001": {
+          "XLocationInMm": 0,
+          "YLocationInMm": 0,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DP-2",
+          "SerialNumber": "FAKE27D00001",
+          "Sources": {
+            "DP-2": {
+              "PixelX": 1440,
+              "PixelY": 560,
+              "PixelWidth": 2560,
+              "PixelHeight": 1440,
+              "Orientation": 0,
+              "DisplayName": "DP-2",
+              "Primary": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

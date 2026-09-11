@@ -1,0 +1,28 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "DEL42E2_FAKE27U00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "DEL42E2_FAKE27U00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      }
+    ]
+  }
+]

@@ -35,7 +35,11 @@ public class JsonLayoutStore : ILayoutStore
 
     const string LayoutExtension = ".json";
 
-    string LayoutPath(string layoutId)
+    /// <summary>
+    /// The file a layout is stored in. Internal for the domain oracle, which records the
+    /// name next to the layout id: the sanitising and the #589 cap are part of the format.
+    /// </summary>
+    internal string LayoutPath(string layoutId)
     {
         var id = string.Join("_", layoutId.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
         // A file name is capped at 255 bytes on every common filesystem, extension

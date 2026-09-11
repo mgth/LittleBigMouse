@@ -1,0 +1,209 @@
+{
+  "Id": "FALLBACK",
+  "StoreKey": "FALLBACK",
+  "StoreFile": "layouts/FALLBACK.json",
+  "Saved": true,
+  "PrimaryMonitor": "FALLBACK",
+  "PrimarySource": "FALLBACK",
+  "PhysicalBounds": {
+    "X": -20,
+    "Y": -20,
+    "Width": 567,
+    "Height": 336
+  },
+  "MaxEffectiveDpiX": 96,
+  "MaxEffectiveDpiY": 96,
+  "Options": {
+    "Enabled": false,
+    "AllowOverlaps": false,
+    "AllowDiscontinuity": false,
+    "Algorithm": "Strait",
+    "MinimalEdgeOverlap": 20,
+    "MaxTravelDistance": 200,
+    "MinimalMaxTravelDistance": -296,
+    "FreelookCheckInterval": 100,
+    "FreelookEnabled": true,
+    "LoopX": false,
+    "LoopY": false,
+    "AdjustPointer": false,
+    "AdjustSpeed": false,
+    "IsUnaryRatio": false,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "AutoUpdate": false,
+    "HomeCinema": false,
+    "Pinned": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "HideTrayIcon": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "VcpControl": false,
+    "ShowMonitorActionWarning": true
+  },
+  "Monitors": [
+    {
+      "Id": "FALLBACK",
+      "DeviceId": "FALLBACK",
+      "SerialNumber": "N/A",
+      "Model": {
+        "PnpCode": "FALLBACK",
+        "PnpDeviceName": "FALLBACK",
+        "Logo": null,
+        "PhysicalSize": {
+          "X": 0,
+          "Y": 0,
+          "Width": 527,
+          "Height": 296,
+          "LeftBorder": 20,
+          "TopBorder": 20,
+          "RightBorder": 20,
+          "BottomBorder": 20
+        }
+      },
+      "Placed": false,
+      "ExcludedFromLayout": false,
+      "BordersCustomized": false,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "EffectivePhysicalSize": {
+        "X": 0,
+        "Y": 0,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "PhysicalRotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthRatio": {
+        "X": 1,
+        "Y": 1
+      },
+      "DepthProjectionUnrotated": {
+        "X": 0,
+        "Y": 0,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20
+      },
+      "DepthProjection": {
+        "X": 0,
+        "Y": 0,
+        "Width": 527,
+        "Height": 296,
+        "LeftBorder": 20,
+        "TopBorder": 20,
+        "RightBorder": 20,
+        "BottomBorder": 20,
+        "Bounds": {
+          "X": 0,
+          "Y": 0,
+          "Width": 527,
+          "Height": 296
+        },
+        "OutsideBounds": {
+          "X": -20,
+          "Y": -20,
+          "Width": 567,
+          "Height": 336
+        }
+      },
+      "Diagonal": 604.4377552734442,
+      "ActiveSource": "FALLBACK",
+      "BorderResistance": {
+        "Left": [],
+        "Top": [],
+        "Right": [],
+        "Bottom": []
+      },
+      "Sources": [
+        {
+          "Id": "FALLBACK",
+          "DeviceId": "FALLBACK",
+          "DeviceName": "FALLBACK",
+          "DisplayName": "FALLBACK",
+          "SourceName": "Unknown:FALLBACK",
+          "InterfacePath": "FALLBACK",
+          "SourceNumber": "1",
+          "Primary": true,
+          "AttachedToDesktop": true,
+          "Orientation": 0,
+          "DisplayFrequency": 0,
+          "InPixel": {
+            "X": 0,
+            "Y": 0,
+            "Width": 1920,
+            "Height": 1080
+          },
+          "EffectiveDpi": {
+            "X": 96,
+            "Y": 96
+          },
+          "DpiAwareAngularDpi": {
+            "X": 96,
+            "Y": 96
+          },
+          "RawDpi": {
+            "X": 92.53889943074003,
+            "Y": 92.67567567567568
+          },
+          "InDip": {
+            "X": 0,
+            "Y": 0,
+            "Width": 1920,
+            "Height": 1080
+          },
+          "RealPitch": {
+            "X": 0.27447916666666666,
+            "Y": 0.2740740740740741
+          },
+          "Pitch": {
+            "X": 0.27447916666666666,
+            "Y": 0.2740740740740741
+          },
+          "RealDpi": {
+            "X": 92.53889943074005,
+            "Y": 92.67567567567568
+          },
+          "Dpi": {
+            "X": 92.53889943074005,
+            "Y": 92.67567567567568
+          },
+          "DipToPixelRatio": null,
+          "PixelToDipRatio": {
+            "X": 0,
+            "Y": 0
+          },
+          "PhysicalToPixelRatio": {
+            "X": 3.64326375711575,
+            "Y": 3.6486486486486487
+          },
+          "MmToDipRatio": {
+            "X": 0,
+            "Y": 0
+          }
+        }
+      ]
+    }
+  ]
+}

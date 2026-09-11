@@ -1,0 +1,250 @@
+{
+  "layouts/ACI27A3_FAKE27A00001+AUS28B1_5E6F7081+DELD0D9_FAKE24H00002+DELD0D9_FAKE24H00003+DELD177_FAKE27D00001+XEC0032_6F708192.json": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": false,
+      "LoopY": false,
+      "Enabled": false,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "DELD177_FAKE27D00001": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELD177_FAKE27D00001",
+        "SerialNumber": "FAKE27D00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELD177_FAKE27D00001": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-1",
+            "Primary": true
+          }
+        }
+      },
+      "XEC0032_6F708192": {
+        "XLocationInMm": -1,
+        "YLocationInMm": -376,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "XEC0032_6F708192",
+        "SerialNumber": "6F708192",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "XEC0032_6F708192": {
+            "PixelX": 0,
+            "PixelY": -1440,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-2",
+            "Primary": false
+          }
+        }
+      },
+      "ACI27A3_FAKE27A00001": {
+        "XLocationInMm": 637,
+        "YLocationInMm": -119.55638350720479,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "ACI27A3_FAKE27A00001",
+        "SerialNumber": "FAKE27A00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "ACI27A3_FAKE27A00001": {
+            "PixelX": 2560,
+            "PixelY": -511,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-3",
+            "Primary": false
+          }
+        }
+      },
+      "AUS28B1_5E6F7081": {
+        "XLocationInMm": -662,
+        "YLocationInMm": -205.94300970632102,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "AUS28B1_5E6F7081",
+        "SerialNumber": "5E6F7081",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "AUS28B1_5E6F7081": {
+            "PixelX": -3840,
+            "PixelY": -1442,
+            "PixelWidth": 3840,
+            "PixelHeight": 2160,
+            "Orientation": 0,
+            "DisplayName": "DP-4",
+            "Primary": false
+          }
+        }
+      },
+      "DELD0D9_FAKE24H00002": {
+        "XLocationInMm": -567,
+        "YLocationInMm": 175.05699029367898,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELD0D9_FAKE24H00002",
+        "SerialNumber": "FAKE24H00002",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELD0D9_FAKE24H00002": {
+            "PixelX": -2429,
+            "PixelY": 718,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "HDMI-A-1",
+            "Primary": false
+          }
+        }
+      },
+      "DELD0D9_FAKE24H00003": {
+        "XLocationInMm": 698.0515625,
+        "YLocationInMm": 256.44361649279523,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELD0D9_FAKE24H00003",
+        "SerialNumber": "FAKE24H00003",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELD0D9_FAKE24H00003": {
+            "PixelX": 2996,
+            "PixelY": 929,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "HDMI-A-2",
+            "Primary": false
+          }
+        }
+      }
+    }
+  },
+  "models.json": {
+    "DELD177": {
+      "Width": 596,
+      "Height": 335,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "DELL_G2724D"
+    },
+    "XEC0032": {
+      "Width": 598,
+      "Height": 336,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "ES-G27F4Q"
+    },
+    "ACI27A3": {
+      "Width": 597,
+      "Height": 336,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "ASUS PB278"
+    },
+    "AUS28B1": {
+      "Width": 621,
+      "Height": 341,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "ASUS VP28U"
+    },
+    "DELD0D9": {
+      "Width": 527,
+      "Height": 296,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "DELL P2419H"
+    }
+  },
+  "options.json": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": false,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false,
+    "ExcludedDefaultsVersion": 2
+  }
+}

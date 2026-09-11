@@ -1,0 +1,100 @@
+{
+  "description": "A layout stored with the engine off. Nothing about the geometry changes — Enabled travels to the daemon in nothing but the store — but it is what the UI reads to decide whether to hook at startup, and a full save must carry it back unchanged.",
+  "displays": [
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 1920,
+      "LogicalHeight": 1080,
+      "PixelWidth": 1920,
+      "PixelHeight": 1080,
+      "Scale": 1.0,
+      "WidthMm": 527,
+      "HeightMm": 296,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "D0D9",
+        "Serial": "0102A3B4",
+        "SerialNumber": "FAKE24H00001",
+        "Model": "DELL P2419H",
+        "PhysicalWidth": 527,
+        "PhysicalHeight": 296,
+        "VideoInterface": "DisplayPort"
+      }
+    }
+  ],
+  "store": {
+    "options.json": {
+      "Priority": "Normal",
+      "PriorityUnhooked": "Below",
+      "HomeCinema": false,
+      "VcpControl": false,
+      "Pinned": false,
+      "AutoUpdate": false,
+      "StartMinimized": false,
+      "StartElevated": false,
+      "DebugTools": false,
+      "ExperimentalFeatures": false,
+      "ShowMonitorActionWarning": true,
+      "BorderValues": "PerModel",
+      "RescueShortcut": "Ctrl+Alt+Shift+M",
+      "HideTrayIcon": false,
+      "ExcludedDefaultsVersion": 2
+    },
+    "models.json": {
+      "DELD0D9": {
+        "Width": 527,
+        "Height": 296,
+        "Borders": {
+          "Left": 20,
+          "Top": 20,
+          "Right": 20,
+          "Bottom": 20
+        },
+        "PnpName": "DELL P2419H"
+      }
+    },
+    "layouts/DELD0D9_FAKE24H00001.json": {
+      "Options": {
+        "AllowOverlaps": false,
+        "AllowDiscontinuity": false,
+        "Algorithm": "Strait",
+        "MinimalEdgeOverlap": 20,
+        "MaxTravelDistance": 200,
+        "FreelookCheckInterval": 100,
+        "FreelookEnabled": true,
+        "LoopX": false,
+        "LoopY": false,
+        "Enabled": false,
+        "AdjustPointer": false,
+        "AdjustSpeed": false
+      },
+      "Monitors": {
+        "DELD0D9_FAKE24H00001": {
+          "XLocationInMm": 0,
+          "YLocationInMm": 0,
+          "PhysicalRatioX": 1,
+          "PhysicalRatioY": 1,
+          "ActiveSource": "DP-1",
+          "SerialNumber": "FAKE24H00001",
+          "Sources": {
+            "DP-1": {
+              "PixelX": 0,
+              "PixelY": 0,
+              "PixelWidth": 1920,
+              "PixelHeight": 1080,
+              "Orientation": 0,
+              "DisplayName": "DP-1",
+              "Primary": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

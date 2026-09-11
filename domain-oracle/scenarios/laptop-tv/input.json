@@ -1,0 +1,83 @@
+{
+  "description": "A user's laptop-and-TV setup (virtual-layouts/layout-laptop-tv.json, serials anonymised) as a Wayland session would report it: a HiDPI laptop panel at scale 2 left of the primary monitor, and a 4K television at scale 3 above them both, straddling the two. Four ranks of pixel density in one layout, and the connector names that pin the source ordering (eDP-1 sorts after HDMI-A-1 ordinally but before it under the culture-aware comparison the model uses).",
+  "displays": [
+    {
+      "ConnectorName": "eDP-1",
+      "LogicalX": -1440,
+      "LogicalY": 0,
+      "LogicalWidth": 1440,
+      "LogicalHeight": 900,
+      "PixelWidth": 2880,
+      "PixelHeight": 1800,
+      "Scale": 2.0,
+      "WidthMm": 300,
+      "HeightMm": 190,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "SDC",
+        "ProductCode": "419D",
+        "Serial": "92031425",
+        "SerialNumber": "",
+        "Model": "",
+        "PhysicalWidth": 300,
+        "PhysicalHeight": 190,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "DP-1",
+      "LogicalX": 0,
+      "LogicalY": 0,
+      "LogicalWidth": 2560,
+      "LogicalHeight": 1440,
+      "PixelWidth": 2560,
+      "PixelHeight": 1440,
+      "Scale": 1.0,
+      "WidthMm": 597,
+      "HeightMm": 336,
+      "Primary": true,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 120,
+      "Edid": {
+        "ManufacturerCode": "DEL",
+        "ProductCode": "42E2",
+        "Serial": "70819203",
+        "SerialNumber": "FAKE27U00001",
+        "Model": "Dell U2724DE",
+        "PhysicalWidth": 597,
+        "PhysicalHeight": 336,
+        "VideoInterface": "DisplayPort"
+      }
+    },
+    {
+      "ConnectorName": "HDMI-A-1",
+      "LogicalX": -237,
+      "LogicalY": -720,
+      "LogicalWidth": 1280,
+      "LogicalHeight": 720,
+      "PixelWidth": 3840,
+      "PixelHeight": 2160,
+      "Scale": 3.0,
+      "WidthMm": 1110,
+      "HeightMm": 620,
+      "Primary": false,
+      "Enabled": true,
+      "Orientation": 0,
+      "Frequency": 60,
+      "Edid": {
+        "ManufacturerCode": "SAM",
+        "ProductCode": "7016",
+        "Serial": "81920314",
+        "SerialNumber": "",
+        "Model": "SAMSUNG",
+        "PhysicalWidth": 1110,
+        "PhysicalHeight": 620,
+        "VideoInterface": "HDMIa"
+      }
+    }
+  ]
+}

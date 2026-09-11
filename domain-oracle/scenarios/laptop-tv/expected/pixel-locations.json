@@ -1,0 +1,60 @@
+[
+  {
+    "AdjustScale": false,
+    "Placements": [
+      {
+        "Source": "DEL42E2_FAKE27U00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "SAM7016_81920314",
+        "X": 553,
+        "Y": -720,
+        "Width": 1280,
+        "Height": 720,
+        "Scale": null
+      },
+      {
+        "Source": "SDC419D_92031425",
+        "X": -1440,
+        "Y": 0,
+        "Width": 1440,
+        "Height": 900,
+        "Scale": null
+      }
+    ]
+  },
+  {
+    "AdjustScale": true,
+    "Placements": [
+      {
+        "Source": "DEL42E2_FAKE27U00001",
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Scale": null
+      },
+      {
+        "Source": "SAM7016_81920314",
+        "X": -1418,
+        "Y": -2672,
+        "Width": 4751,
+        "Height": 2672,
+        "Scale": 0.8083333333333333
+      },
+      {
+        "Source": "SDC419D_92031425",
+        "X": -1285,
+        "Y": 48,
+        "Width": 1285,
+        "Height": 803,
+        "Scale": 2.2416666666666667
+      }
+    ]
+  }
+]

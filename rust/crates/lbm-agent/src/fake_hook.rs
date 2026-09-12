@@ -44,6 +44,8 @@ struct State {
     applied_is_virtual: bool,
     /// The panic shortcut it was last told to adopt.
     shortcut: String,
+    /// Whether it was last told it belongs to the agent driving it.
+    bound: bool,
     received: Vec<Command>,
     listeners: Vec<mpsc::UnboundedSender<String>>,
 }
@@ -105,6 +107,11 @@ impl FakeHook {
     /// The panic shortcut it was last told to adopt; empty until it is told one.
     pub fn shortcut(&self) -> String {
         self.state.lock().unwrap().shortcut.clone()
+    }
+
+    /// Whether it was last told it belongs to the agent driving it.
+    pub fn bound(&self) -> bool {
+        self.state.lock().unwrap().bound
     }
 
     /// Completes once a client sent `Quit`.
@@ -278,6 +285,10 @@ async fn connection<S>(
                     // is kept verbatim so a test can see what the agent actually sent —
                     // a known command has no business sharing an arm with unknown ones.
                     Command::Shortcut { text } => s.shortcut = text,
+                    // Held as the daemon holds it: a test can see what the agent asked
+                    // for. What it means when the connection ends is the hook's, and
+                    // this one has no mice to let go of.
+                    Command::BindToAgent { bound } => s.bound = bound,
                     Command::Unknown => {}
                 }
             }

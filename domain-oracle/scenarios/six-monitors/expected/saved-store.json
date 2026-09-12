@@ -245,6 +245,7 @@
     "BorderValues": "PerModel",
     "RescueShortcut": "Ctrl+Alt+Shift+M",
     "HideTrayIcon": false,
+    "BoundToAgent": false,
     "ExcludedDefaultsVersion": 2
   }
 }

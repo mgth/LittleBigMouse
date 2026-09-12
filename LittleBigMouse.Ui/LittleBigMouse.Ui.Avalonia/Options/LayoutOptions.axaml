@@ -79,6 +79,12 @@
 							                     Description="Reopen the window by launching LittleBigMouse again">
 								<ToggleSwitch IsChecked="{Binding Model.HideTrayIcon, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
+							<Border Classes="SettingSeparator"/>
+							<controls:SettingRow Classes="Sub"
+							                     Header="Stop the mouse engine with LittleBigMouse"
+							                     Description="Off: the engine keeps routing the cursor if LittleBigMouse stops, and picks up again when it comes back">
+								<ToggleSwitch IsChecked="{Binding Model.BoundToAgent, FallbackValue=false, Mode=TwoWay}"/>
+							</controls:SettingRow>
 						</StackPanel>
 					</Border>
 

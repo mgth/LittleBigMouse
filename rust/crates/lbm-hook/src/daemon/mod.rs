@@ -89,6 +89,11 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                 adopt_rescue_shortcut(shared, &text);
                 hook::rescue_shortcut_changed(shared);
             }
+            // Adopted at once, and never from the layout: a hook a new agent has just
+            // taken over is told afresh what that agent wants of it.
+            Command::BindToAgent { bound } => {
+                shared.bound_to_agent.store(bound, Ordering::SeqCst);
+            }
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
                 hook::request_quit(shared);

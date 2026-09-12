@@ -396,3 +396,128 @@ async fn a_refused_run_says_what_the_engine_is_doing() {
         "got {answer:?}"
     );
 }
+
+/// "Bound to the agent": the connection ending is the hook ending.
+///
+/// Off by default — D5 is that a hook outlives its agent, so this has to be asked for.
+#[tokio::test]
+async fn a_bound_hook_leaves_when_its_client_goes_away() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut agent = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(
+        &mut agent,
+        &protocol::frame(&[
+            protocol::Command::Listen,
+            protocol::Command::BindToAgent { bound: true },
+        ]),
+    )
+    .await
+    .unwrap();
+    framing::read_frame(&mut agent).await.unwrap();
+    // As it is while it routes: the engine is wanted up.
+    shared
+        .want_hook
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+    drop(agent);
+
+    // Letting go is the part that matters and the part both platforms share; the
+    // teardown that follows the flag is what pays out the held buttons and hands the
+    // mice back. (The leaving itself is asked for differently: Linux polls
+    // `want_quit`, the Windows pump is sent WM_QUIT and never reads the flag — so
+    // only Linux can observe it here.)
+    for _ in 0..200 {
+        if !shared.want_hook.load(std::sync::atomic::Ordering::SeqCst) {
+            #[cfg(target_os = "linux")]
+            assert!(
+                shared.want_quit.load(std::sync::atomic::Ordering::SeqCst),
+                "letting go without leaving is not what was asked for"
+            );
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("a bound hook must let go of the mice when its agent goes");
+}
+
+/// And an unbound one stays, which is the default and the whole of D5: the routing
+/// continues across an agent's crash, and the agent that comes back reattaches.
+#[tokio::test]
+async fn an_unbound_hook_outlives_its_client() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut agent = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(&mut agent, &protocol::frame(&[protocol::Command::Listen]))
+        .await
+        .unwrap();
+    framing::read_frame(&mut agent).await.unwrap();
+    shared
+        .want_hook
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+    drop(agent);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    assert!(
+        shared.want_hook.load(std::sync::atomic::Ordering::SeqCst),
+        "nobody asked for this hook to be bound: it keeps routing"
+    );
+}
+
+/// The trap. A bound hook whose connection is taken by a *newer* agent must not leave:
+/// it would be killed by the very agent that just adopted it, and the mice would be
+/// handed back in the middle of the handover.
+#[tokio::test]
+async fn a_bound_hook_evicted_by_a_newer_agent_stays() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut old = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(
+        &mut old,
+        &protocol::frame(&[
+            protocol::Command::Listen,
+            protocol::Command::BindToAgent { bound: true },
+        ]),
+    )
+    .await
+    .unwrap();
+    framing::read_frame(&mut old).await.unwrap();
+    shared
+        .want_hook
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+    // The newcomer takes the connection; the old one is closed by the server.
+    let mut new = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(&mut new, &protocol::frame(&[protocol::Command::Listen]))
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut new))
+        .await
+        .expect("the newcomer is served")
+        .unwrap();
+    let ended = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut old))
+        .await
+        .expect("the evicted connection ends");
+    assert!(ended.is_err(), "got {ended:?}");
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(
+        shared.want_hook.load(std::sync::atomic::Ordering::SeqCst),
+        "an eviction is a handover, not a departure: the mice stay put"
+    );
+}

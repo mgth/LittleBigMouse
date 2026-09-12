@@ -70,6 +70,9 @@ pub struct Agent<W> {
     on_the_wire: Option<String>,
     /// The rescue shortcut the hook was last told (Windows).
     shortcut: Option<String>,
+    /// Whether the hook was last told it belongs to this agent; `None` on a fresh
+    /// connection, so a hook that just adopted us is always told.
+    bound: Option<bool>,
     /// What the desktop was last told to show; `None`: unknown, so the next apply goes.
     wallpaper_on_screen: Option<String>,
 }
@@ -98,6 +101,7 @@ impl<W: AgentWorld> Agent<W> {
             sleep: None,
             on_the_wire: None,
             shortcut: None,
+            bound: None,
             wallpaper_on_screen: None,
         }
     }
@@ -240,6 +244,7 @@ impl<W: AgentWorld> Agent<W> {
                 .save_options(options.as_ref(), excluded.as_deref(), load_at_startup)
                 .map(|()| {
                     self.tell_shortcut();
+                    self.tell_binding();
                     serde_json::Value::Null
                 }),
             Request::SaveWallpaper {
@@ -322,6 +327,27 @@ impl<W: AgentWorld> Agent<W> {
         tokio::spawn(async move {
             crate::desktop::apply(&screens).await;
         });
+    }
+
+    /// Tells the hook whether it belongs to this agent, when that is known and is not
+    /// what it was last told.
+    ///
+    /// Sent on every connection rather than carried by the layout: a hook this agent
+    /// has just taken over from another one holds whatever that other one asked for,
+    /// and a hook that outlives an agent (D5) must not inherit a binding to a process
+    /// that is gone. The cache is cleared on connecting, so "not what it was told" is
+    /// always true for a hook that has not been told yet.
+    fn tell_binding(&mut self) {
+        let Some(bound) = self.world.bound_to_agent() else {
+            return;
+        };
+        if self.bound == Some(bound) {
+            return;
+        }
+        eprintln!("[lbm-agent] -> BindToAgent({bound})");
+        self.hook
+            .send(protocol::frame(&[Command::BindToAgent { bound }]));
+        self.bound = Some(bound);
     }
 
     fn tell_shortcut(&mut self) {
@@ -425,6 +451,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.forward("Connected", "");
                         self.hook_connected = true;
                         self.on_the_wire = None;
+                        self.bound = None;
                         if let Some(launcher) = &mut self.launcher {
                             launcher.on_connected();
                         }
@@ -435,6 +462,10 @@ impl<W: AgentWorld> Agent<W> {
                             "[lbm-agent] hook greeting: layout {}",
                             if layout.is_empty() { "none" } else { &layout }
                         );
+                        // Now that it has said it is one of ours, say what we want of
+                        // it — before any layout, so a hook told to be bound is bound
+                        // for the whole of this connection and not only once it runs.
+                        self.tell_binding();
                         Input::Hook(HookEvent::Greeted(layout))
                     }
                     Some(HookSignal::Message(message)) => {

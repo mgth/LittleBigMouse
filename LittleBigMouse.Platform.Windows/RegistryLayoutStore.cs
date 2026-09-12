@@ -83,6 +83,7 @@ public class RegistryLayoutStore : ILayoutStore
         BorderValues = root.TryGetString("BorderValues"),
         RescueShortcut = root.TryGetString("RescueShortcut"),
         HideTrayIcon = root.TryGetBool("HideTrayIcon"),
+        BoundToAgent = root.TryGetBool("BoundToAgent"),
         ExcludedDefaultsVersion = root.TryGetInt("ExcludedDefaultsVersion")
     };
 
@@ -282,6 +283,7 @@ public class RegistryLayoutStore : ILayoutStore
         Set(root, "BorderValues", o.BorderValues);
         Set(root, "RescueShortcut", o.RescueShortcut);
         Set(root, "HideTrayIcon", o.HideTrayIcon);
+        Set(root, "BoundToAgent", o.BoundToAgent);
         Set(root, "ExcludedDefaultsVersion", o.ExcludedDefaultsVersion);
     }
 

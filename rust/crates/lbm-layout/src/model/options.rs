@@ -27,6 +27,11 @@ pub struct LayoutOptions {
     /// [`PER_MODEL`] or [`PER_MONITOR`].
     pub border_values: String,
     pub rescue_shortcut: String,
+    /// The hook belongs to the agent that drives it: when their connection ends it
+    /// lets go of the mice and leaves. Off by default — a hook outliving its agent is
+    /// what keeps the cursor routing across a crash (D5), and this is the option that
+    /// trades that away for no resident process.
+    pub bound_to_agent: bool,
     pub priority: String,
     pub priority_unhooked: String,
     pub auto_update: bool,
@@ -63,6 +68,7 @@ impl Default for LayoutOptions {
             adjust_speed: false,
             border_values: PER_MODEL.to_owned(),
             rescue_shortcut: "Ctrl+Alt+Shift+M".to_owned(),
+            bound_to_agent: false,
             priority: "Normal".to_owned(),
             priority_unhooked: "Below".to_owned(),
             auto_update: false,

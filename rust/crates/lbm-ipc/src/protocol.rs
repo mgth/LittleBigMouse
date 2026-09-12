@@ -57,6 +57,17 @@ pub enum Command {
         #[serde(rename = "Text")]
         text: String,
     },
+    /// Whether this hook belongs to the agent that is speaking: on `true`, the end of
+    /// this connection is the end of the hook — it lets go of the mice and leaves.
+    ///
+    /// Sent on every connection rather than carried by the layout, so it cannot go
+    /// stale and so a hook adopted by a new agent is told afresh what that agent
+    /// wants. Default (never sent) is `false`: D5 says a hook outlives its agent, and
+    /// being bound is the option.
+    BindToAgent {
+        #[serde(rename = "Bound")]
+        bound: bool,
+    },
     /// Leave.
     Quit,
     /// A command this version does not know. Kept rather than refused: a frame is
@@ -310,6 +321,20 @@ mod tests {
         };
 
         assert_eq!(back, zones);
+    }
+
+    #[test]
+    fn a_binding_reads_back_as_itself_and_its_absence_is_not_one() {
+        assert_eq!(
+            parse(&frame(&[Command::BindToAgent { bound: true }])),
+            [Command::BindToAgent { bound: true }]
+        );
+        // An agent that never says binds nothing: the hook outlives it (D5), and only
+        // an explicit `true` makes the connection's end the hook's end.
+        assert_eq!(
+            parse(&frame(&[Command::BindToAgent { bound: false }])),
+            [Command::BindToAgent { bound: false }]
+        );
     }
 
     #[test]

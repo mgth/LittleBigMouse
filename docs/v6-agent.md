@@ -240,11 +240,4 @@ Par ordre de valeur :
    course ; sous Windows il n'est installé qu'à l'accrochage, et le refus synchrone
    d'`adopt_foreground` qui corrigeait #541 disparaîtrait. À ne pas faire sans déplacer
    aussi l'installation du guetteur Windows au démarrage du processus.
-4. **Option « lié à l'agent »** (dernier item de la phase 5) : fin de connexion ⇒ relâche
-   des grabs, des boutons tenus et du clip, puis sortie. Par défaut **non**, D5 étant que
-   le hook survit à son agent. Traverse `LayoutOptions`, la persistance (dont l'oracle
-   épingle l'égalité C#/Rust), le document de mise en page et le panneau d'options.
-   *Piège* : une connexion fermée **par éviction** (un agent plus récent prend la place)
-   ne doit surtout pas la déclencher — le nouvel agent tuerait le hook qu'il vient
-   d'adopter.
-5. **`IDesktopWallpaper` sous Windows**, avec le reste des correctifs Windows.
+4. **`IDesktopWallpaper` sous Windows**, avec le reste des correctifs Windows.

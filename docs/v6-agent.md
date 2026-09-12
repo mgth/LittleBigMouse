@@ -228,16 +228,10 @@ Par ordre de valeur :
    qui suit ne remplace un passage à la main — dumps d'écran comparés au C#, import du
    registre, tubes et élévation, tray, tâche planifiée et sa migration, veille, dock/undock
    et #607, bureau sécurisé UAC.
-2. **Vérifier le mapping du périphérique absolu avec un écran exclu** (Linux, sur la
-   machine du mainteneur) : le seul morceau de la phase 5 qu'aucun test ne peut atteindre,
-   parce que le périphérique uinput n'est construit qu'au moment de la capture. Cocher
-   « exclure de la mise en page » sur un écran, démarrer le moteur, et vérifier que le
-   curseur atterrit là où on le demande — et qu'il ne va plus sur l'écran exclu. Prévoir
-   un moyen d'arrêter le hook sans la souris : sous Plasma la touche de secours peut être
-   enregistrée **sans touche** tant que l'utilisateur ne lui en donne pas une.
-3. **Exclusion par focus dans l'agent (D4)** : **en attente d'un arbitrage**. Sous Linux le
-   guetteur de focus tourne dès le démarrage du hook, donc l'agent pourrait décider sans
-   course ; sous Windows il n'est installé qu'à l'accrochage, et le refus synchrone
-   d'`adopt_foreground` qui corrigeait #541 disparaîtrait. À ne pas faire sans déplacer
-   aussi l'installation du guetteur Windows au démarrage du processus.
-4. **`IDesktopWallpaper` sous Windows**, avec le reste des correctifs Windows.
+2. **`IDesktopWallpaper` sous Windows**, avec le reste des correctifs Windows : l'agent
+   applique le fond d'écran sous Linux (Plasma, zbus) et pas encore sous Windows.
+
+**Soldé depuis** : le mapping du périphérique absolu avec un écran exclu est vérifié sur la
+machine du mainteneur (plage `ABS_X 0→6143`, le bureau entier, là où le bug déclarait
+`0→3071`) ; et D4 est livré — la liste d'exclusion vient de l'agent, la décision reste au
+daemon, seul à pouvoir demander qui est au premier plan à l'instant de la capture.

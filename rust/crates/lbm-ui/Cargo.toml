@@ -1,0 +1,13 @@
+[package]
+name = "lbm-ui"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The LittleBigMouse frontend (v7): state, actions and views, with no window of its own yet"
+
+[dependencies]
+egui = "0.36"
+
+[dev-dependencies]
+egui_kittest = "0.36"

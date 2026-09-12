@@ -444,6 +444,11 @@ Spikes, avant tout écran :
 - Icônes SVG recolorées selon le thème (resvg) et alias des 72 logos PnP.
 - Tailles proportionnelles au cadre de l'écran dessiné.
 - `egui_kittest` en CI avec un rendu wgpu logiciel ; temps de démarrage à froid et mémoire.
+  *Première moitié faite (`lbm-ui`) : l'interface se pilote et s'affirme **sans serveur graphique
+  ni GPU**, par l'arbre d'accessibilité, dans le `cargo test` ordinaire — ce que l'UI Avalonia n'a
+  jamais permis ici, `xdotool` ne pouvant pas cliquer sous KWin. Restent ouverts : le rendu wgpu
+  logiciel pour les captures de référence (régression visuelle), et le temps de démarrage à froid
+  et la mémoire, qui demandent une vraie fenêtre `eframe`.*
 
 Architecture :
 

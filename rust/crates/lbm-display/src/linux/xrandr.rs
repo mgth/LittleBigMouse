@@ -6,7 +6,6 @@
 //! the scale is 1. Under a Wayland compositor other than KWin this sees whatever
 //! XWayland exposes, which is still enough to edit a layout.
 
-use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
 use lbm_layout::linux::LinuxMonitor;
@@ -89,15 +88,9 @@ pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
 
 /// C# `RunXRandR`: `xrandr --query`'s output, when it exits successfully.
 pub fn run_xrandr() -> Option<String> {
-    let output = Command::new("xrandr")
-        .arg("--query")
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+    // Bounded, like the KScreen probe: an X server that has stopped answering must cost
+    // the agent a deadline, not its startup.
+    super::probe::run("xrandr", &["--query"], super::probe::PATIENCE)
 }
 
 /// C# `XRandRMonitorSource.IsAvailable`: an X display where `xrandr` answers.

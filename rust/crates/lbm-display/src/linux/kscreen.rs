@@ -5,7 +5,6 @@
 //! the compositor's own view: logical positions, per-output scale, priority.
 
 use std::fmt;
-use std::process::{Command, Stdio};
 
 use lbm_layout::geo::dotnet;
 use lbm_layout::linux::LinuxMonitor;
@@ -182,13 +181,10 @@ pub fn parse(json: &str, edids: &EdidMap) -> Result<Vec<LinuxMonitor>, KScreenEr
 /// C# `RunKScreenDoctor`: the document `kscreen-doctor --json` prints, when it exits
 /// successfully with something that starts like a JSON object.
 pub fn run_kscreen_doctor() -> Option<String> {
-    let output = Command::new("kscreen-doctor")
-        .arg("--json")
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    (output.status.success() && stdout.trim_start().starts_with('{')).then_some(stdout)
+    // Bounded: kscreen-doctor neither prints nor exits when it cannot reach its session,
+    // and the agent probes at startup, before it has logged anything (see `probe`).
+    let stdout = super::probe::run("kscreen-doctor", &["--json"], super::probe::PATIENCE)?;
+    stdout.trim_start().starts_with('{').then_some(stdout)
 }
 
 /// C# `KScreenMonitorSource.IsAvailable`: a KDE session where `kscreen-doctor` answers.

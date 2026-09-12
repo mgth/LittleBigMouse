@@ -34,8 +34,8 @@ use crate::engine::cursor::CursorEnv;
 use crate::engine::event::MouseEventArg;
 use crate::geometry::{Point, Rect};
 use crate::hook::hot_path::{count_event, route_move};
-use crate::ipc::protocol;
 use crate::shared::Shared;
+use lbm_ipc::protocol::Event;
 
 /// True in a Wayland session (where the portal is the only way to capture).
 pub fn available() -> bool {
@@ -159,12 +159,12 @@ async fn run_async(shared: &'static Shared) -> bool {
                         Ok(()) => {
                             enabled = true;
                             shared.hooked.store(true, Ordering::SeqCst);
-                            shared.broadcast(protocol::RUNNING);
+                            shared.broadcast(&Event::Running);
                         }
                         Err(e) => {
                             eprintln!("[LittleBigMouse.Hook] portal: arm failed: {e}");
                             shared.want_hook.store(false, Ordering::SeqCst);
-                            shared.broadcast(protocol::STOPPED);
+                            shared.broadcast(&Event::Stopped);
                         }
                     }
                 } else if !want && enabled {
@@ -179,7 +179,7 @@ async fn run_async(shared: &'static Shared) -> bool {
                     shared.engine.lock().unwrap_or_else(|p| p.into_inner()).on_mouse_move(&mut env, &mut e);
                     env.clip = None;
                     shared.hooked.store(false, Ordering::SeqCst);
-                    shared.broadcast(protocol::STOPPED);
+                    shared.broadcast(&Event::Stopped);
                 }
             }
 

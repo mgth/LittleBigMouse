@@ -1,162 +1,201 @@
-//! Wire protocol: parse incoming `CommandMessage`s and build outgoing
-//! `DaemonMessage`s.
+//! What the agent asks the hook, and what the hook says back — as types.
 //!
-//! Port of the parsing in `LittleBigMouseDaemon::ReceiveMessage` and the fixed
-//! event strings in `SendState`/`DisplayChanged`/`FocusChanged`. The C# side only
-//! substring-matches the outgoing events (`LittleBigMouseClientService`), so the
-//! event *strings* are what matters; the incoming parse must be exact.
+//! Both sides are Rust now (v6): the C# UI spoke this protocol until phase 4 moved it
+//! behind the agent's own API, and an XML envelope hand-written on one side and parsed
+//! with a DOM on the other was the price of that. The envelope is JSON and the
+//! vocabulary is an enum, so the compiler carries what a golden file used to.
+//!
+//! A frame from the agent is an **array** of commands: `Load` and `Run` travel together
+//! and the hook must not take the hook down between them. A frame from the hook is one
+//! event.
+//!
+//! The frames themselves are [`crate::framing`]'s — a length, then UTF-8 — which is
+//! what makes JSON safe to put in them without a delimiter to escape.
 
-use roxmltree::{Document, Node};
+use serde::{Deserialize, Serialize};
 
-/// A command received from the UI (`<CommandMessage Command="..."/>`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Bumped whenever the two sides must agree on something new. The agent asks for it
+/// with [`Command::Hello`] and relaunches a hook that answers something else: a hook
+/// outlives its agent (D5), so an upgrade can leave an old one holding the mice.
+pub const PROTOCOL: u32 = 1;
+
+/// What the agent asks.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "Command")]
 pub enum Command {
+    /// Who is there, and what it speaks. Answered with [`Event::Hello`].
+    Hello {
+        #[serde(rename = "Protocol")]
+        protocol: u32,
+    },
+    /// Send me every event from now on.
     Listen,
-    /// The extracted `<ZonesLayout>...</ZonesLayout>` XML (empty if absent).
-    Load(String),
+    /// Take this layout: a `<ZonesLayout>` document, as the engine reads it.
+    Load {
+        #[serde(rename = "Zones")]
+        zones: String,
+    },
+    /// Install the hook and route.
     Run,
+    /// Unhook.
     Stop,
+    /// Answer with the current state.
     State,
     /// Adopt this panic shortcut now, without waiting for a layout to carry it.
     /// Recording one in the options has to take effect there and then — and has to
     /// say so when the combination is already owned by something else.
-    Shortcut(String),
+    Shortcut {
+        #[serde(rename = "Text")]
+        text: String,
+    },
+    /// Leave.
     Quit,
-    Unknown(String),
+    /// A command this version does not know. Kept rather than refused: a frame is
+    /// ignored as a whole otherwise, and one command from a newer agent must not
+    /// silence the `Run` beside it.
+    #[serde(other)]
+    Unknown,
 }
 
-/// Parse one received line into zero or more commands.
+/// `Quit`, spelled the way a hook that predates this protocol reads it.
 ///
-/// Accepts a bare `<CommandMessage .../>` or a `<Messages>` container wrapping
-/// several of them (both handled by the C++ `ReceiveMessage`). Returns an empty
-/// vec on blank input or malformed XML — matching the C++ tolerance.
-pub fn parse(line: &str) -> Vec<Command> {
-    let text = line.trim();
-    if text.is_empty() {
-        return Vec::new();
+/// It exists for one moment: a hook outlives its agent (D5), so an upgrade can leave
+/// one running that speaks XML and understands nothing said here. The agent retires
+/// it with this and launches one of its own rather than leaving the mice held by a
+/// process nothing can talk to. Frozen: it is not a protocol, it is a farewell.
+pub const LEGACY_QUIT: &str = r#"<CommandMessage Command="Quit" Payload=""></CommandMessage>"#;
+
+/// What the hook says.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "Event")]
+pub enum Event {
+    /// The answer to [`Command::Hello`].
+    Hello {
+        #[serde(rename = "Protocol")]
+        protocol: u32,
+        #[serde(rename = "Version")]
+        version: String,
+    },
+    /// The input hook is installed.
+    Running,
+    /// The input hook is down.
+    Stopped,
+    /// Hooked but standing aside (an excluded application has the focus).
+    Paused,
+    /// Never on the wire: what a client raises for itself when the hook it was
+    /// talking to is gone. It lives here because it is the same vocabulary the rest
+    /// of the program reasons in.
+    Dead,
+    /// A system setting changed.
+    SettingsChanged,
+    DisplayChanged,
+    DesktopChanged,
+    /// The foreground application changed; empty when it cannot be resolved, which
+    /// means "unknown", not "nobody".
+    FocusChanged {
+        #[serde(rename = "Process")]
+        process: String,
+    },
+    /// The display turned off; the hook unhooked itself.
+    Suspended,
+    /// The display is back.
+    Resumed,
+    /// A `Load` was accepted. What it says about the layout is informative; the event
+    /// itself is the success signal, which is what makes a Load without a Run
+    /// observable (the foreign-layout flow gets no Running to wait for).
+    Loaded {
+        #[serde(rename = "Zones")]
+        zones: usize,
+        #[serde(rename = "Main")]
+        main: usize,
+        #[serde(rename = "Virtual")]
+        virtual_layout: bool,
+    },
+    /// A `Load` was refused: the document did not parse.
+    LoadFailed,
+    /// The panic shortcut ran.
+    Rescued,
+    /// The panic shortcut is not armed, and why is the platform's own: something else
+    /// owns the combination (Windows), or the desktop registered it with no key
+    /// (Linux). Carries the shortcut, so whoever shows it can name it.
+    ShortcutUnavailable {
+        #[serde(rename = "Shortcut")]
+        shortcut: String,
+    },
+    /// An event this version does not know. A newer hook must leave a client's idea
+    /// of the state unchanged rather than move it to the wrong one, which is what
+    /// mapping an unknown name onto a known event would do.
+    #[serde(other)]
+    Unknown,
+}
+
+impl Event {
+    /// The name this event is known by across the program — the one C#'s
+    /// `LittleBigMouseEvent` uses, and the one the agent forwards to its frontends.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Event::Hello { .. } => "Hello",
+            Event::Running => "Running",
+            Event::Stopped => "Stopped",
+            Event::Paused => "Paused",
+            Event::Dead => "Dead",
+            Event::SettingsChanged => "SettingsChanged",
+            Event::DisplayChanged => "DisplayChanged",
+            Event::DesktopChanged => "DesktopChanged",
+            Event::FocusChanged { .. } => "FocusChanged",
+            Event::Suspended => "Suspended",
+            Event::Resumed => "Resumed",
+            Event::Loaded { .. } => "Loaded",
+            Event::LoadFailed => "LoadFailed",
+            Event::Rescued => "Rescued",
+            Event::ShortcutUnavailable { .. } => "ShortcutUnavailable",
+            Event::Unknown => "Unknown",
+        }
     }
-    match Document::parse(text) {
-        Ok(doc) => collect(doc.root_element()),
-        Err(_) => Vec::new(),
+
+    /// What this event has to say in words, for whoever shows it to a user. Empty
+    /// when the event is the whole message.
+    pub fn payload(&self) -> String {
+        match self {
+            Event::FocusChanged { process } => process.clone(),
+            Event::Loaded {
+                zones,
+                main,
+                virtual_layout,
+            } => format!(
+                "{zones} zones ({main} main){}",
+                if *virtual_layout { ", virtual" } else { "" }
+            ),
+            Event::LoadFailed => "the layout could not be parsed".to_owned(),
+            Event::ShortcutUnavailable { shortcut } => shortcut.clone(),
+            _ => String::new(),
+        }
     }
 }
 
-fn collect(node: Node) -> Vec<Command> {
-    match node.tag_name().name() {
-        "CommandMessage" => command_from(node).into_iter().collect(),
-        "Messages" => node
-            .children()
-            .filter(Node::is_element)
-            .flat_map(collect)
-            .collect(),
-        _ => Vec::new(),
-    }
+/// One frame's worth of commands, as the agent writes it.
+///
+/// Always an array, even for one command: a reader that has to tell an object from an
+/// array is a reader with two shapes to get wrong.
+pub fn frame(commands: &[Command]) -> String {
+    serde_json::to_string(commands).unwrap_or_else(|_| "[]".to_owned())
 }
 
-fn command_from(node: Node) -> Option<Command> {
-    let command = node.attribute("Command")?;
-    Some(match command {
-        "Listen" => Command::Listen,
-        "Load" => Command::Load(zones_layout_xml(node)),
-        "Run" => Command::Run,
-        "Stop" => Command::Stop,
-        "State" => Command::State,
-        "Shortcut" => Command::Shortcut(payload_string(node)),
-        "Quit" => Command::Quit,
-        other => Command::Unknown(other.to_string()),
-    })
+/// The commands one frame carries. An unreadable frame carries none — the hook has
+/// never had anything better to do with one than ignore it, and a client that can
+/// make it send nonsense can make it send anything.
+pub fn parse(frame: &str) -> Vec<Command> {
+    serde_json::from_str(frame).unwrap_or_default()
 }
 
-/// Slice out the `<Payload><ZonesLayout>...</ZonesLayout></Payload>` subtree's
-/// source XML so it can be parsed on its own. Returns "" if absent.
-fn zones_layout_xml(node: Node) -> String {
-    node.children()
-        .find(|c| c.has_tag_name("Payload"))
-        .and_then(|p| p.children().find(|c| c.has_tag_name("ZonesLayout")))
-        .map(|z| z.document().input_text()[z.range()].to_string())
-        .unwrap_or_default()
+/// One event, as the hook writes it.
+pub fn event(event: &Event) -> String {
+    serde_json::to_string(event).unwrap_or_default()
 }
 
-/// Read the `Payload` for `Shortcut`, whether serialized as an attribute
-/// (`Payload="..."`) or a child element (`<Payload>...</Payload>`).
-fn payload_string(node: Node) -> String {
-    if let Some(attr) = node.attribute("Payload") {
-        return attr.to_string();
-    }
-    node.children()
-        .find(|c| c.has_tag_name("Payload"))
-        .and_then(|p| p.text())
-        .unwrap_or("")
-        .to_string()
-}
-
-// --- Outgoing daemon events (exact strings, each `\n`-terminated) ------------
-
-pub const RUNNING: &str = "<DaemonMessage><Event>Running</Event></DaemonMessage>\n";
-pub const STOPPED: &str = "<DaemonMessage><Event>Stopped</Event></DaemonMessage>\n";
-pub const PAUSED: &str = "<DaemonMessage><Event>Paused</Event></DaemonMessage>\n";
-pub const DISPLAY_CHANGED: &str = "<DaemonMessage><Event>DisplayChanged</Event></DaemonMessage>\n";
-pub const SETTING_CHANGED: &str = "<DaemonMessage><Event>SettingChanged</Event></DaemonMessage>\n";
-pub const DESKTOP_CHANGED: &str = "<DaemonMessage><Event>DesktopChanged</Event></DaemonMessage>\n";
-pub const SUSPENDED: &str = "<DaemonMessage><Event>Suspended</Event></DaemonMessage>\n";
-pub const RESUMED: &str = "<DaemonMessage><Event>Resumed</Event></DaemonMessage>\n";
-
-/// The panic shortcut ran: the cursor is free and the engine is coming down. Carries
-/// no payload on purpose — the daemon does not know what the rescue should mean, only
-/// that it happened, and knowing nothing is what lets it work with no UI reachable.
-/// Distinct from `Stopped`, which says the same thing without saying why, and why is
-/// the whole of what the UI acts on.
-pub const RESCUED: &str = "<DaemonMessage><Event>Rescued</Event></DaemonMessage>\n";
-
-/// The panic shortcut could not be registered — almost always another application
-/// already owning the combination. Said out loud rather than logged: a rescue that
-/// silently does not exist is worse than none, because the user only finds out at the
-/// moment they need it.
-pub fn shortcut_unavailable(shortcut: &str) -> String {
-    format!(
-        "<DaemonMessage><Event>ShortcutUnavailable</Event><Payload>{}</Payload></DaemonMessage>\n",
-        escape_xml(shortcut)
-    )
-}
-
-pub const LOAD_FAILED: &str =
-    "<DaemonMessage><Event>LoadFailed</Event><Payload>the layout could not be parsed</Payload></DaemonMessage>\n";
-
-/// Build a `Loaded` event: the outcome of a `Load` command. The payload is an
-/// informative summary only — the event itself is the success signal. This is
-/// what makes a Load-without-Run observable (the virtual-layout "simulate" flow
-/// gets no Running event to wait for).
-pub fn loaded(zones: usize, main: usize, virtual_layout: bool) -> String {
-    format!(
-        "<DaemonMessage><Event>Loaded</Event><Payload>{zones} zones ({main} main){}</Payload></DaemonMessage>\n",
-        if virtual_layout { ", virtual" } else { "" }
-    )
-}
-
-/// Build a `Probed` event carrying an edge-prober report (a `<ProbeReport>`
-/// document, escaped into the payload text).
-pub fn probed(report: &str) -> String {
-    format!(
-        "<DaemonMessage><Event>Probed</Event><Payload>{}</Payload></DaemonMessage>\n",
-        escape_xml(report)
-    )
-}
-
-/// Build a `FocusChanged` event carrying the foreground process path.
-pub fn focus_changed(path: &str) -> String {
-    format!(
-        "<DaemonMessage><Event>FocusChanged</Event><Payload>{}</Payload></DaemonMessage>\n",
-        escape_xml(path)
-    )
-}
-
-fn escape_xml(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
+/// The event one frame carries, if it is one.
+pub fn parse_event(frame: &str) -> Option<Event> {
+    serde_json::from_str(frame).ok()
 }
 
 #[cfg(test)]
@@ -164,60 +203,133 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_listen() {
+    fn a_frame_carries_its_commands_in_order() {
+        // Load and Run travel together: what the hook does between them is the whole
+        // reason a frame holds more than one command.
+        let sent = frame(&[
+            Command::Load {
+                zones: "<ZonesLayout/>".to_owned(),
+            },
+            Command::Run,
+        ]);
+
         assert_eq!(
-            parse(r#"<CommandMessage Command="Listen" Payload=""/>"#),
-            vec![Command::Listen]
+            parse(&sent),
+            [
+                Command::Load {
+                    zones: "<ZonesLayout/>".to_owned()
+                },
+                Command::Run
+            ]
         );
     }
 
     #[test]
-    fn tolerates_trailing_carriage_return() {
-        // .NET StreamWriter.WriteLine emits `\r\n`; framing splits on `\n`,
-        // leaving a trailing `\r` that must not break parsing.
+    fn a_zones_document_survives_the_frame_whatever_is_in_it() {
+        // It is XML inside JSON: quotes, angle brackets and newlines all have to come
+        // back exactly, or the engine reads a different layout than the agent sent.
+        let zones =
+            "<ZonesLayout Algorithm=\"Strait\">\n\t<Zone Name=\"A &amp; B\"/>\n</ZonesLayout>";
+
+        let [Command::Load { zones: back }] = &parse(&frame(&[Command::Load {
+            zones: zones.to_owned(),
+        }]))[..] else {
+            panic!("a Load came back");
+        };
+
+        assert_eq!(back, zones);
+    }
+
+    #[test]
+    fn an_unreadable_frame_carries_nothing() {
+        assert!(parse("").is_empty());
+        assert!(parse("not json").is_empty());
+        // An object is not a frame: a frame is always an array.
+        assert!(parse("{\"Command\":\"Run\"}").is_empty());
+    }
+
+    #[test]
+    fn a_command_from_a_newer_agent_does_not_silence_the_one_beside_it() {
+        // The Run has to survive the command this version has never heard of.
         assert_eq!(
-            parse("<CommandMessage Command=\"Run\" Payload=\"\"/>\r"),
-            vec![Command::Run]
+            parse("[{\"Command\":\"Rewind\"},{\"Command\":\"Run\"}]"),
+            [Command::Unknown, Command::Run]
         );
     }
 
     #[test]
-    fn parses_load_extracts_zones_layout_xml() {
-        let msg = r#"<CommandMessage Command="Load"><Payload><ZonesLayout MaxTravelDistance="200"/></Payload></CommandMessage>"#;
+    fn an_event_from_a_newer_hook_is_not_mistaken_for_a_known_one() {
+        // Unknown, not dropped and not guessed: a client's idea of the state stays
+        // where it was rather than moving to the wrong place.
         assert_eq!(
-            parse(msg),
-            vec![Command::Load(
-                r#"<ZonesLayout MaxTravelDistance="200"/>"#.to_string()
-            )]
+            parse_event("{\"Event\":\"Levitating\"}"),
+            Some(Event::Unknown)
         );
     }
 
     #[test]
-    fn parses_messages_container() {
-        let msg = concat!(
-            "<Messages>",
-            r#"<CommandMessage Command="Load"/>"#,
-            r#"<CommandMessage Command="Run"/>"#,
-            "</Messages>"
+    fn an_event_says_its_name_and_its_words() {
+        let loaded = Event::Loaded {
+            zones: 2,
+            main: 2,
+            virtual_layout: false,
+        };
+        assert_eq!(loaded.name(), "Loaded");
+        assert_eq!(loaded.payload(), "2 zones (2 main)");
+
+        let foreign = Event::Loaded {
+            zones: 1,
+            main: 1,
+            virtual_layout: true,
+        };
+        assert_eq!(foreign.payload(), "1 zones (1 main), virtual");
+
+        assert_eq!(Event::Running.payload(), "");
+        assert_eq!(
+            Event::FocusChanged {
+                process: "/usr/bin/kate".to_owned()
+            }
+            .payload(),
+            "/usr/bin/kate"
         );
-        // Load with no Payload -> empty ZonesLayout XML.
-        assert_eq!(parse(msg), vec![Command::Load(String::new()), Command::Run]);
     }
 
     #[test]
-    fn blank_and_malformed_yield_nothing() {
-        assert!(parse("   ").is_empty());
-        assert!(parse("not xml <<<").is_empty());
+    fn every_event_reads_back_as_itself() {
+        for original in [
+            Event::Hello {
+                protocol: PROTOCOL,
+                version: "0.1.0".to_owned(),
+            },
+            Event::Running,
+            Event::Stopped,
+            Event::Paused,
+            Event::SettingsChanged,
+            Event::DisplayChanged,
+            Event::DesktopChanged,
+            Event::FocusChanged {
+                process: "C:\\Program Files\\Game\\game.exe".to_owned(),
+            },
+            Event::Suspended,
+            Event::Resumed,
+            Event::Loaded {
+                zones: 3,
+                main: 2,
+                virtual_layout: true,
+            },
+            Event::LoadFailed,
+            Event::Rescued,
+            Event::ShortcutUnavailable {
+                shortcut: "Ctrl+Alt+Shift+M".to_owned(),
+            },
+        ] {
+            assert_eq!(parse_event(&event(&original)), Some(original.clone()));
+        }
     }
 
     #[test]
-    fn focus_payload_is_well_formed_xml() {
-        let message = focus_changed(r#"C:\A&B\<game>.exe"#);
-        let document = Document::parse(&message).unwrap();
-        let payload = document
-            .descendants()
-            .find(|node| node.has_tag_name("Payload"))
-            .unwrap();
-        assert_eq!(payload.text(), Some(r#"C:\A&B\<game>.exe"#));
+    fn a_frame_that_is_not_an_event_is_not_one() {
+        assert_eq!(parse_event(""), None);
+        assert_eq!(parse_event("[{\"Command\":\"Run\"}]"), None);
     }
 }

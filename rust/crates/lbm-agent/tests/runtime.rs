@@ -10,7 +10,7 @@ use lbm_agent::hook::HookClient;
 use lbm_agent::reconcile::{Input, LayoutState, Timings, World};
 use lbm_agent::runtime::{Agent, SleepSignal};
 use lbm_agent::world::AgentWorld;
-use lbm_ipc::protocol::{self, Command};
+use lbm_ipc::protocol::{self, Command, Event};
 
 const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones></ZonesLayout>"#;
 
@@ -152,21 +152,30 @@ async fn the_agent_hands_its_layout_to_the_hook_and_keeps_it_hooked() {
     assert_eq!(record.lock().unwrap().rebuilds, 1);
     assert_eq!(
         fake.received(),
-        [Command::Listen, Command::Load(ZONES.into()), Command::Run]
+        [
+            Command::Hello {
+                protocol: protocol::PROTOCOL
+            },
+            Command::Listen,
+            Command::Load {
+                zones: ZONES.into()
+            },
+            Command::Run
+        ]
     );
 
     // The hook unhooks itself over a display change and reports it. The first one after
     // boot rebuilds (as in C#, the guard does not know the configuration yet)...
-    fake.broadcast(protocol::STOPPED);
-    fake.broadcast(protocol::DISPLAY_CHANGED);
+    fake.broadcast(&Event::Stopped);
+    fake.broadcast(&Event::DisplayChanged);
     until("rebuilt and handed over again", || runs(&fake) == 2).await;
     assert!(fake.hooked());
     assert_eq!(record.lock().unwrap().rebuilds, 2);
 
     // ...then a change that settles back to the built configuration is re-hooked, not
     // rebuilt.
-    fake.broadcast(protocol::STOPPED);
-    fake.broadcast(protocol::DISPLAY_CHANGED);
+    fake.broadcast(&Event::Stopped);
+    fake.broadcast(&Event::DisplayChanged);
     until("re-hooked", || runs(&fake) == 3).await;
     assert!(fake.hooked());
     assert_eq!(record.lock().unwrap().rebuilds, 2);
@@ -250,7 +259,7 @@ async fn the_hook_is_let_go_before_the_system_sleeps_and_taken_back_after() {
     assert!(matches!(fake.received().last(), Some(Command::Stop)));
 
     // A display change while asleep is left to the wake.
-    fake.broadcast(protocol::DISPLAY_CHANGED);
+    fake.broadcast(&Event::DisplayChanged);
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(!fake.hooked());
 
@@ -358,7 +367,16 @@ async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
     assert_eq!(*rebuilds.lock().unwrap(), 2);
     assert_eq!(
         fake.received(),
-        [Command::Listen, Command::Load(ZONES.into()), Command::Run],
+        [
+            Command::Hello {
+                protocol: protocol::PROTOCOL
+            },
+            Command::Listen,
+            Command::Load {
+                zones: ZONES.into()
+            },
+            Command::Run
+        ],
         "one hand-over, the one computed after the gaps"
     );
 

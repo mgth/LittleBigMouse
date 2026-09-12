@@ -14,8 +14,8 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::ipc::protocol;
 use crate::shared::Shared;
+use lbm_ipc::protocol::Event;
 
 /// Platform-neutral core of the per-report hot path (dedup, non-blocking route),
 /// shared by the Windows callback and exercised by `benches/mouse_hook.rs`.
@@ -86,7 +86,7 @@ pub(crate) fn on_display_changed(shared: &Shared) {
     if shared.hooked.load(Ordering::SeqCst) {
         request_unhook(shared);
     }
-    shared.broadcast(protocol::DISPLAY_CHANGED);
+    shared.broadcast(&Event::DisplayChanged);
 }
 
 /// The work area changed (C++ `SettingChanged`).
@@ -95,13 +95,13 @@ pub(crate) fn on_setting_changed(shared: &Shared) {
     if shared.hooked.load(Ordering::SeqCst) {
         request_unhook(shared);
     }
-    shared.broadcast(protocol::SETTING_CHANGED);
+    shared.broadcast(&Event::SettingsChanged);
 }
 
 /// The system switched to/from the secure (UAC) desktop (C++ `DesktopChanged`).
 #[cfg_attr(not(windows), allow(dead_code))] // raised by the Windows display/WinEvent hooks only
 pub(crate) fn on_desktop_changed(shared: &Shared) {
-    shared.broadcast(protocol::DESKTOP_CHANGED);
+    shared.broadcast(&Event::DesktopChanged);
 }
 
 /// The desktop stopped being displayed (screen off: sleep, session standby, lock/idle). Like a
@@ -117,7 +117,7 @@ pub(crate) fn on_suspend(shared: &Shared) {
     if shared.hooked.load(Ordering::SeqCst) {
         request_unhook(shared);
     }
-    shared.broadcast(protocol::SUSPENDED);
+    shared.broadcast(&Event::Suspended);
 }
 
 /// The desktop is displayed again (wake / unlock / monitor on): tell the UI, which reconciles the
@@ -131,7 +131,7 @@ pub(crate) fn on_resume(shared: &Shared) {
     // The suspend-side unhook already restores a clip LBM still owns. Do not call
     // ClipCursor(NULL) here: a game or remote-control app may legitimately have
     // installed a new confinement while the display/session was transitioning.
-    shared.broadcast(protocol::RESUMED);
+    shared.broadcast(&Event::Resumed);
 }
 
 /// The foreground window changed (C++ `FocusChanged`): pause the hook while an
@@ -148,7 +148,9 @@ pub(crate) fn on_focus_changed(shared: &Shared, path: String) {
         }
         shared.paused.store(false, Ordering::SeqCst);
     }
-    shared.broadcast(&protocol::focus_changed(&path));
+    shared.broadcast(&Event::FocusChanged {
+        process: path.to_string(),
+    });
 }
 
 /// Re-decide the pause against whoever is in the foreground *right now*, and
@@ -181,7 +183,9 @@ pub(crate) fn adopt_foreground_path(shared: &Shared, path: Option<&str>) -> bool
     shared.paused.store(excluded, Ordering::SeqCst);
     // Same announcement a real focus change makes: the UI keeps its own idea of
     // what is in front, and it must not diverge just because nothing moved.
-    shared.broadcast(&protocol::focus_changed(path));
+    shared.broadcast(&Event::FocusChanged {
+        process: path.to_string(),
+    });
     excluded
 }
 

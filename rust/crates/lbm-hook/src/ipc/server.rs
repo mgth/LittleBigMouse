@@ -93,7 +93,8 @@ impl ServerHandle {
         }
     }
 
-    pub fn send_to(&self, id: ClientId, message: &str) {
+    pub fn send_to(&self, id: ClientId, event: &crate::ipc::protocol::Event) {
+        let message = &crate::ipc::protocol::event(event);
         if let Some(client) = self.get(id) {
             if client.outbound.try_send(message.to_string()).is_err() {
                 self.remove(id);
@@ -103,7 +104,8 @@ impl ServerHandle {
 
     /// Never blocks the hook/message-pump thread. Slow clients have a bounded
     /// queue and are disconnected rather than delaying input routing.
-    pub fn broadcast(&self, message: &str) {
+    pub fn broadcast(&self, event: &crate::ipc::protocol::Event) {
+        let message = &crate::ipc::protocol::event(event);
         let clients: Vec<Arc<ClientHandle>> = self
             .registry
             .lock()

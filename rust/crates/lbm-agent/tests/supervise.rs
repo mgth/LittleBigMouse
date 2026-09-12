@@ -10,7 +10,7 @@ use lbm_agent::reconcile::{LayoutState, Timings, World};
 use lbm_agent::runtime::Agent;
 use lbm_agent::supervise::HookLauncher;
 use lbm_agent::world::AgentWorld;
-use lbm_ipc::client::{self, DaemonEvent};
+use lbm_ipc::protocol::{self, Command, Event};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones></ZonesLayout>"#;
@@ -58,11 +58,11 @@ fn endpoint(_dir: &tempfile::TempDir) -> String {
 }
 
 /// Asks the hook at `endpoint` for its state until it answers `want` (up to 10 s).
-async fn until_state(endpoint: &str, want: DaemonEvent) {
+async fn until_state(endpoint: &str, want: Event) {
     let (observer, mut signals) = HookClient::spawn(endpoint.to_owned());
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     loop {
-        observer.send(client::state());
+        observer.send(protocol::frame(&[Command::State]));
         match tokio::time::timeout_at(deadline, next_state(&mut signals)).await {
             Ok(Some(state)) if state == want => return,
             Ok(_) => tokio::time::sleep(Duration::from_millis(50)).await,
@@ -73,9 +73,9 @@ async fn until_state(endpoint: &str, want: DaemonEvent) {
 
 /// The next state the hook reports; `None` for a connection signal (after a short
 /// pause, so a retry does not spin).
-async fn next_state(signals: &mut UnboundedReceiver<HookSignal>) -> Option<DaemonEvent> {
+async fn next_state(signals: &mut UnboundedReceiver<HookSignal>) -> Option<Event> {
     match signals.recv().await? {
-        HookSignal::Message(m) => Some(m.event),
+        HookSignal::Message(m) => Some(m),
         HookSignal::Connected | HookSignal::Lost | HookSignal::Unreachable => {
             tokio::time::sleep(Duration::from_millis(50)).await;
             None
@@ -101,13 +101,13 @@ async fn an_absent_hook_is_launched_detached_and_outlives_the_agent() {
             Agent::new(Enabled(None), Timings::default(), hook, inputs).with_launcher(launcher);
         agent.run(signals, inputs_rx, std::future::pending()).await;
     });
-    until_state(&endpoint, DaemonEvent::Running).await;
+    until_state(&endpoint, Event::Running).await;
 
     // The agent goes away (a crash): the hook it launched is still running its layout.
     agent.abort();
     let _ = agent.await;
     tokio::time::sleep(Duration::from_millis(200)).await;
-    until_state(&endpoint, DaemonEvent::Running).await;
+    until_state(&endpoint, Event::Running).await;
 
     // Done: the hook process leaves when told to.
     let (observer, mut signals) = HookClient::spawn(endpoint.clone());
@@ -116,7 +116,7 @@ async fn an_absent_hook_is_launched_detached_and_outlives_the_agent() {
             break;
         }
     }
-    observer.send(client::messages(&[client::quit()]));
+    observer.send(protocol::frame(&[Command::Quit]));
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             if let Some(HookSignal::Lost) = signals.recv().await {

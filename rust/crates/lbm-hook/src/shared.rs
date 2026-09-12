@@ -11,6 +11,7 @@ use std::sync::{Mutex, OnceLock};
 use crate::engine::MouseEngine;
 use crate::ipc::server::ServerHandle;
 use crate::priority::Priority;
+use lbm_ipc::protocol::Event;
 
 pub struct Shared {
     /// The low-level mouse hook is currently installed (C++ `Hooker::Hooked`).
@@ -86,9 +87,9 @@ impl Shared {
     }
 
     /// Broadcast an event to all listening clients, if the server is up.
-    pub fn broadcast(&self, msg: &str) {
+    pub fn broadcast(&self, event: &Event) {
         if let Some(server) = self.server.get() {
-            server.broadcast(msg);
+            server.broadcast(event);
         }
     }
 

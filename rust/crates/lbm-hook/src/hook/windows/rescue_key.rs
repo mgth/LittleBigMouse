@@ -34,6 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::shared::Shared;
 use crate::shortcut::{Shortcut, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN};
+use lbm_ipc::protocol::Event;
 
 /// Ask the listener to re-read the shortcut from `Shared` and re-register.
 /// Posted when a freshly loaded layout names a different one.
@@ -118,7 +119,9 @@ fn register_wanted(shared: &Shared, current: Option<Shortcut>) -> Option<Shortcu
     let Some(shortcut) = wanted else {
         if !text.trim().is_empty() {
             eprintln!("[LittleBigMouse.Hook] rescue shortcut \"{text}\" is not usable, ignored");
-            shared.broadcast(&crate::ipc::protocol::shortcut_unavailable(&text));
+            shared.broadcast(&Event::ShortcutUnavailable {
+                shortcut: text.to_string(),
+            });
         }
         shared.rescue_registered.store(false, Ordering::SeqCst);
         return None;
@@ -146,7 +149,9 @@ fn register_wanted(shared: &Shared, current: Option<Shortcut>) -> Option<Shortcu
         eprintln!(
             "[LittleBigMouse.Hook] rescue shortcut \"{text}\" is already taken, NOT registered"
         );
-        shared.broadcast(&crate::ipc::protocol::shortcut_unavailable(&text));
+        shared.broadcast(&Event::ShortcutUnavailable {
+            shortcut: text.to_string(),
+        });
         None
     }
 }

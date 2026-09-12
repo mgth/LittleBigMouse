@@ -33,6 +33,7 @@ use ashpd::desktop::global_shortcuts::{GlobalShortcuts, NewShortcut};
 use futures::StreamExt;
 
 use crate::shared::Shared;
+use lbm_ipc::protocol::Event;
 
 /// Our id for the one shortcut we bind. Also what the desktop lists it under.
 const ID: &str = "rescue";
@@ -168,7 +169,9 @@ async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::E
                     "[LittleBigMouse.Hook] rescue: registered with no key — give it one in \
                      the desktop's shortcut settings, under {DESCRIPTION:?}"
                 );
-                shared.broadcast(&crate::ipc::protocol::shortcut_unavailable(wanted));
+                shared.broadcast(&Event::ShortcutUnavailable {
+                    shortcut: wanted.to_string(),
+                });
             }
             trigger => eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}"),
         }

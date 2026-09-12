@@ -16,8 +16,8 @@
 use std::io;
 use std::time::Duration;
 
-use lbm_ipc::client::{self, DaemonMessage};
 use lbm_ipc::framing::{read_frame, write_frame};
+use lbm_ipc::protocol::{self, Command, Event};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 
@@ -38,7 +38,7 @@ pub enum HookSignal {
     /// Connected and subscribed.
     Connected,
     /// An event from the hook (unknown ones are dropped, as C# does).
-    Message(DaemonMessage),
+    Message(Event),
     /// The connection dropped; it is being re-established.
     Lost,
     /// No hook answers at the endpoint.
@@ -138,7 +138,26 @@ async fn keep_connected(
                 tokio::time::sleep(RETRY_DELAY).await;
             }
             Served::Closed => return,
+            // Say goodbye the only way it still understands, then let the supervisor
+            // find no hook and launch one from beside this agent. Leaving it alone
+            // would leave the mice held by a process nothing here can talk to.
+            Served::Foreign => {
+                retire_foreign_hook(&endpoint).await;
+                if signals.send(HookSignal::Lost).is_err() {
+                    return;
+                }
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
         }
+    }
+}
+
+/// Open a fresh connection and send the farewell a pre-JSON hook understands. Best
+/// effort by nature: a hook that ignores it is one the user will have to stop, and the
+/// panic shortcut is how.
+async fn retire_foreign_hook(endpoint: &str) {
+    if let Ok(mut stream) = connect(endpoint).await {
+        let _ = write_frame(&mut stream, protocol::LEGACY_QUIT).await;
     }
 }
 
@@ -147,6 +166,10 @@ enum Served {
     Dropped,
     /// Nobody holds a client or listens any more.
     Closed,
+    /// There is a hook there, and it is not one this agent can drive — an upgrade
+    /// left the old one running (D5: a hook outlives its agent). It is retired the
+    /// only way it still understands, and the supervisor launches one of ours.
+    Foreign,
 }
 
 async fn serve<S>(
@@ -161,7 +184,15 @@ where
     if signals.send(HookSignal::Connected).is_err() {
         return Served::Closed;
     }
-    if write_frame(&mut writer, &client::listen()).await.is_err() {
+    // Who is there, then subscribe. Both in one frame: a hook that answers the first
+    // understands the second, and one that answers neither is the case below.
+    let opening = protocol::frame(&[
+        Command::Hello {
+            protocol: protocol::PROTOCOL,
+        },
+        Command::Listen,
+    ]);
+    if write_frame(&mut writer, &opening).await.is_err() {
         return Served::Dropped;
     }
 
@@ -180,10 +211,25 @@ where
         tokio::select! {
             frame = frames_rx.recv() => match frame {
                 Some(frame) => {
-                    if let Some(message) = client::parse_event(&frame) {
-                        if signals.send(HookSignal::Message(message)).is_err() {
-                            break Served::Closed;
+                    match protocol::parse_event(&frame) {
+                        // The handshake is the connection's business: nothing above
+                        // needs to know the number, only whether it is ours.
+                        Some(Event::Hello { protocol: theirs, version }) => {
+                            if theirs != protocol::PROTOCOL {
+                                eprintln!(
+                                    "[lbm-agent] the hook speaks protocol {theirs} (version \
+                                     {version}), this agent speaks {}: retiring it",
+                                    protocol::PROTOCOL
+                                );
+                                break Served::Foreign;
+                            }
                         }
+                        Some(message) => {
+                            if signals.send(HookSignal::Message(message)).is_err() {
+                                break Served::Closed;
+                            }
+                        }
+                        None => {}
                     }
                 }
                 None => break Served::Dropped,

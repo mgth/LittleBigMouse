@@ -7,7 +7,8 @@ publish = false
 description = "LittleBigMouse local IPC: length-prefixed framing and the XML command/event protocol"
 
 [dependencies]
-roxmltree.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 tokio = { workspace = true, features = ["io-util"] }
 
 # The single-instance lock (instance.rs).

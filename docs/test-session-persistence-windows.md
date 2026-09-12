@@ -127,8 +127,10 @@ Simuler un vieux profil dans regedit :
   valeur résiduelle est laissée en place (le transport TCP qu'elle configurait n'existe plus depuis
   la 5.6 ; l'IPC local n'utilise pas de port)
 - [ ] Lancement en admin → `Elevated` détecté, UI cohérente
-- [ ] Exclusion process : lancer un jeu sous un chemin exclu → LBM ne traverse pas (le daemon lit
-  toujours le même `Excluded.txt`, chemin inchangé)
+- [ ] Exclusion process : lancer un jeu sous un chemin exclu → LBM ne traverse pas. Le fichier et
+  son chemin sont inchangés, mais **c'est l'agent qui le lit désormais** et qui passe la liste au
+  daemon ; le refus au démarrage du moteur (jeu déjà au premier plan, #541) reste décidé par le
+  daemon, seul à pouvoir demander qui est devant à l'instant où il accroche.
 
 ## Changements de comportement ASSUMÉS (ne pas les signaler comme bugs)
 

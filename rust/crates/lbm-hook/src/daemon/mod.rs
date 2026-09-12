@@ -89,6 +89,11 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                 adopt_rescue_shortcut(shared, &text);
                 hook::rescue_shortcut_changed(shared);
             }
+            // The list the hook stands aside for. Adopted whole: emptying it is a thing
+            // a user does, and it must not read as "nothing to say".
+            Command::Excluded { processes } => {
+                *shared.excluded.lock().unwrap_or_else(|p| p.into_inner()) = processes;
+            }
             // Adopted at once, and never from the layout: a hook a new agent has just
             // taken over is told afresh what that agent wants of it.
             Command::BindToAgent { bound } => {
@@ -287,12 +292,12 @@ fn run(shared: &Shared) {
         return;
     }
 
-    load_excluded(shared);
-
-    // Ask who is in front rather than wait to be told. The list was just
-    // (re)read, and `Run` is the one moment the daemon decides to hook — reading
-    // a pause flag that only a focus *change* ever sets is what let the engine
-    // hook straight over an excluded game that was already running (#541).
+    // Ask who is in front rather than wait to be told. `Run` is the one moment the
+    // daemon decides to hook — reading a pause flag that only a focus *change* ever
+    // sets is what let the engine hook straight over an excluded game that was already
+    // running (#541). This question stays here, and nowhere else: it is the only place
+    // that can ask at the instant the grab happens. The list it is answered against
+    // comes from the agent (`Command::Excluded`), which owns what the user edits.
     if hook::adopt_foreground(shared) {
         eprintln!("[LittleBigMouse.Hook] Run refused: an excluded application has the foreground");
         // An excluded app holds the foreground: do not hook over it, and let go
@@ -308,24 +313,6 @@ fn run(shared: &Shared) {
     }
 
     hook::request_hook(shared);
-}
-
-/// C++ `LoadExcluded`: read `Excluded.txt`, skipping blank lines and `:` comments.
-pub fn load_excluded(shared: &Shared) {
-    let mut list = Vec::new();
-    if let Some(path) = crate::platform::paths::lbm_data_file("Excluded.txt") {
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            for line in content.lines() {
-                if line.is_empty() || line.starts_with(':') {
-                    continue;
-                }
-                list.push(line.to_string());
-            }
-        }
-    }
-    if let Ok(mut excluded) = shared.excluded.lock() {
-        *excluded = list;
-    }
 }
 
 /// What this daemon is doing, as one event: `Running` when hooked, else `Paused`

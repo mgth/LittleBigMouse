@@ -105,6 +105,13 @@ pub trait AgentWorld: World {
         None
     }
 
+    /// The processes the engine stands aside for, as the user's list spells them.
+    /// `None` before there are options to ask — which is not the same as an empty list,
+    /// and must not be sent as one.
+    fn excluded(&self) -> Option<Vec<String>> {
+        None
+    }
+
     /// The engine's topology prologue (the KWin gaps, `gap_guard`): whether it moved
     /// outputs — then the layout at hand describes a desktop that is going away, and the
     /// Start waits for the display change that follows.
@@ -391,6 +398,12 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
 
     fn bound_to_agent(&self) -> Option<bool> {
         self.layout.as_ref().map(|l| l.options.bound_to_agent)
+    }
+
+    fn excluded(&self) -> Option<Vec<String>> {
+        self.layout
+            .as_ref()
+            .map(|l| l.options.excluded_list.clone())
     }
 
     fn prepare_for_engine(&mut self) -> bool {

@@ -73,6 +73,8 @@ pub struct Agent<W> {
     /// Whether the hook was last told it belongs to this agent; `None` on a fresh
     /// connection, so a hook that just adopted us is always told.
     bound: Option<bool>,
+    /// The exclusion list the hook was last handed; `None` on a fresh connection.
+    excluded: Option<Vec<String>>,
     /// What the desktop was last told to show; `None`: unknown, so the next apply goes.
     wallpaper_on_screen: Option<String>,
 }
@@ -102,6 +104,7 @@ impl<W: AgentWorld> Agent<W> {
             on_the_wire: None,
             shortcut: None,
             bound: None,
+            excluded: None,
             wallpaper_on_screen: None,
         }
     }
@@ -245,6 +248,7 @@ impl<W: AgentWorld> Agent<W> {
                 .map(|()| {
                     self.tell_shortcut();
                     self.tell_binding();
+                    self.tell_excluded();
                     serde_json::Value::Null
                 }),
             Request::SaveWallpaper {
@@ -337,6 +341,30 @@ impl<W: AgentWorld> Agent<W> {
     /// and a hook that outlives an agent (D5) must not inherit a binding to a process
     /// that is gone. The cache is cleared on connecting, so "not what it was told" is
     /// always true for a hook that has not been told yet.
+    /// Hands the hook the list it stands aside for, when it is known and is not what it
+    /// was last handed.
+    ///
+    /// The decision stays in the hook: it is the only one that can ask who is in front
+    /// at the instant it is about to grab, and asking then is what fixed #541. What
+    /// moves here is only the list, which the agent owns because the agent is what
+    /// writes `Excluded.txt` and what the user edits it through.
+    ///
+    /// Sent before any layout, so the first `Run` of a connection is decided against
+    /// the user's list and not against an empty one.
+    fn tell_excluded(&mut self) {
+        let Some(excluded) = self.world.excluded() else {
+            return;
+        };
+        if self.excluded.as_ref() == Some(&excluded) {
+            return;
+        }
+        eprintln!("[lbm-agent] -> Excluded ({} entries)", excluded.len());
+        self.hook.send(protocol::frame(&[Command::Excluded {
+            processes: excluded.clone(),
+        }]));
+        self.excluded = Some(excluded);
+    }
+
     fn tell_binding(&mut self) {
         let Some(bound) = self.world.bound_to_agent() else {
             return;
@@ -452,6 +480,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.hook_connected = true;
                         self.on_the_wire = None;
                         self.bound = None;
+                        self.excluded = None;
                         if let Some(launcher) = &mut self.launcher {
                             launcher.on_connected();
                         }
@@ -466,6 +495,7 @@ impl<W: AgentWorld> Agent<W> {
                         // it — before any layout, so a hook told to be bound is bound
                         // for the whole of this connection and not only once it runs.
                         self.tell_binding();
+                        self.tell_excluded();
                         Input::Hook(HookEvent::Greeted(layout))
                     }
                     Some(HookSignal::Message(message)) => {

@@ -521,3 +521,65 @@ async fn a_bound_hook_evicted_by_a_newer_agent_stays() {
         "an eviction is a handover, not a departure: the mice stay put"
     );
 }
+
+/// The exclusion list is the agent's to keep and the hook's to apply.
+///
+/// The hook stopped reading `Excluded.txt`: the agent owns the file the user edits, so
+/// a list read here would be a second reader of one document, free to disagree with the
+/// one the user sees. What stays here is the deciding — asking who is in front at the
+/// instant of the grab, which is what #541 was about and which nothing outside this
+/// process can do in time.
+#[tokio::test]
+async fn the_exclusion_list_comes_from_the_agent_and_is_applied_here() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut agent = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(&mut agent, &protocol::frame(&[protocol::Command::Listen]))
+        .await
+        .unwrap();
+    framing::read_frame(&mut agent).await.unwrap();
+
+    // Nothing excluded until the agent says so.
+    assert!(!shared.is_excluded(r"D:\SteamLibrary\steamapps\common\Game\game.exe"));
+
+    framing::write_frame(
+        &mut agent,
+        &protocol::frame(&[protocol::Command::Excluded {
+            processes: vec![r"\steamapps\".to_owned()],
+        }]),
+    )
+    .await
+    .unwrap();
+    // Answered by nothing, so wait for the effect rather than for a reply.
+    for _ in 0..200 {
+        if shared.is_excluded(r"D:\SteamLibrary\steamapps\common\Game\game.exe") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        shared.is_excluded(r"D:\SteamLibrary\steamapps\common\Game\game.exe"),
+        "the list the agent handed over is the list that filters"
+    );
+    assert!(!shared.is_excluded(r"C:\Windows\explorer.exe"));
+
+    // And emptying it is a thing a user does: it must arrive as an empty list rather
+    // than read as "nothing to say" and leave the old one in place.
+    framing::write_frame(
+        &mut agent,
+        &protocol::frame(&[protocol::Command::Excluded { processes: vec![] }]),
+    )
+    .await
+    .unwrap();
+    for _ in 0..200 {
+        if !shared.is_excluded(r"D:\SteamLibrary\steamapps\common\Game\game.exe") {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("clearing the list left the old one applied");
+}

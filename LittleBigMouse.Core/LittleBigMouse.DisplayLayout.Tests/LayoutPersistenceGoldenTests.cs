@@ -394,7 +394,7 @@ public class LayoutPersistenceGoldenTests : IDisposable
             Assert.True(ExcludedProcessDefaults.ContainsEntry(layout.Options.ExcludedList, entry),
                 $"missing default: {entry}");
             Assert.True(ExcludedProcessDefaults.ContainsEntry(File.ReadAllLines(excluded), entry),
-                $"missing default in the file the daemon reads: {entry}");
+                $"missing default in the file the agent reads: {entry}");
         }
     }
 

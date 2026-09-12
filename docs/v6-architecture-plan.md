@@ -439,6 +439,28 @@ Spikes, avant tout écran :
 - Fenêtres superposées : règles et bandes éditables sur Windows (au premier plan, transparentes,
   hors barre des tâches, au pixel près, DPI par écran), sur X11, et sous Wayland (layer-shell ou
   XWayland).
+  *Wayland/KWin répondu (`lbm-overlay`) : **layer-shell**, pas XWayland. KWin annonce
+  `zwlr_layer_shell_v1` v5 ; une surface `Overlay` ancrée à deux bords adjacents transforme les
+  marges en position, et la mesure sur capture donne **exactement** les quatre nombres attendus
+  (420×64 demandés à (160,120) sur un écran à l'échelle 1,25 ⇒ 525×80 physiques à (200,150)).
+  Le passage du pointeur au travers est déclaré (région d'entrée vide) mais **non prouvé de ce
+  côté** : le protocole Wayland ne permet pas de relire l'état d'une surface.*
+
+  *X11 répondu aussi (`lbm-overlay --x11`), et il prouve davantage. Une fenêtre override-redirect,
+  visuel 32 bits, forme d'entrée vide : le serveur **rend compte des trois** — `GetGeometry` donne
+  420×64 à (160,120) en profondeur 32, `GetWindowAttributes` confirme l'override-redirect, et
+  `ShapeGetRectangles` renvoie **zéro rectangle**, ce qui est la preuve de traversée que Wayland ne
+  peut pas donner. Sous X11 les coordonnées sont les pixels **physiques** du serveur (racine
+  7680×2160 ici) là où Wayland place en pixels **logiques** de la sortie (3072 pour un écran 3840
+  à l'échelle 1,25) : **une règle doit savoir dans laquelle des deux elle compte.***
+
+  ***Correction à ce que j'avais écrit** : j'avais affirmé XWayland « de toute façon exclu ». La
+  mesure dit autre chose — la bande X11 atterrit ici **exactement à (160,120), 420×64, sans aucun
+  rééchelonnement**. Le défaut que documente `lbm-pattern` (« KWin rééchelonne dès qu'un écran
+  diffère du facteur global ») demande des écrans à **échelles différentes**, ce que cette machine
+  n'a pas : les deux sont à 1,25. Je n'ai donc pas reproduit le défaut, et je ne peux pas
+  disqualifier XWayland par la mesure — seulement par un rapport que je n'ai pas pu éprouver. Le
+  chemin layer-shell évite la question, ce qui reste une bonne raison de le préférer.*
 - Mires plein écran natives Wayland par `with_monitor` : si le rendu est au pixel près,
   `lbm-pattern` disparaît.
 - Icônes SVG recolorées selon le thème (resvg) et alias des 72 logos PnP.

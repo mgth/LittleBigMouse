@@ -1,0 +1,23 @@
+[package]
+name = "lbm-overlay"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Overlay surfaces for the rulers and resistance bands: placed to the pixel on a chosen screen, transparent, click-through"
+
+[[bin]]
+name = "lbm-overlay-spike"
+path = "src/main.rs"
+
+# Linux-only, as lbm-pattern is: the Avalonia windows went through XWayland, which
+# KWin rescales on any screen whose scale differs from the global factor — which is
+# exactly what a ruler cannot survive. A stub elsewhere until the Windows spike.
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+# The X11 back: a placed, override-redirect, 32-bit window with an empty input shape —
+# and, unlike Wayland, a server that can be asked back what it granted.
+x11rb = { version = "0.14", features = ["shape", "randr"] }
+libc = "0.2"

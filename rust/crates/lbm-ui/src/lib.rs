@@ -13,6 +13,8 @@
 //! `egui_kittest` drives the widgets through the accessibility tree, headless, in CI —
 //! see `tests/bottom_bar.rs`.
 
+pub mod frame;
+
 /// What the engine is doing, in the agent's own words (its `Snapshot.Engine`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Engine {

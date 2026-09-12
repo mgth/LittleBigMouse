@@ -462,7 +462,10 @@ Spikes, avant tout écran :
   disqualifier XWayland par la mesure — seulement par un rapport que je n'ai pas pu éprouver. Le
   chemin layer-shell évite la question, ce qui reste une bonne raison de le préférer.*
 - Mires plein écran natives Wayland par `with_monitor` : si le rendu est au pixel près,
-  `lbm-pattern` disparaît.
+  `lbm-pattern` disparaît. *Repoussé, et pour une raison de séquencement : `lbm-pattern` est
+  lancé comme aide par le **plugin VCP en C#** (`WaylandPattern.cs`), donc il ne peut pas partir
+  avant le portage de VCP — item 8 de l'ordre des écrans ci-dessous. Faire le spike maintenant
+  demanderait `eframe` (winit + glow) pour une réponse sans consommateur avant longtemps.*
 - Icônes SVG recolorées selon le thème (resvg) et alias des 72 logos PnP.
   *Répondu (`lbm-icons`), et il en sort deux défauts de l'existant. **La table d'alias n'est
   écrite nulle part ailleurs que dans les noms de fichiers** : chaque jeton séparé par un point
@@ -476,6 +479,12 @@ Spikes, avant tout écran :
   sombre — l'équerre blanche sur blanc) n'est **pas** reprise : la couleur demandée est la
   couleur obtenue.*
 - Tailles proportionnelles au cadre de l'écran dessiné.
+  *Répondu (`lbm-ui::frame`). Plus mince que prévu : `MonitorSnapshot` porte déjà `mm_bounds`,
+  `mm_outside_bounds` et `pixel_bounds`, donc placer revient à multiplier par un rapport mm→points
+  par axe — l'arithmétique se fait à l'entrée, la vue n'a rien à décider (là où Avalonia fait
+  circuler `VisualRatio` par des liaisons). **Le seul jugement est le plancher** : sous ~7 points
+  le nom n'est plus une information mais de l'encre qui y ressemble, donc il est omis et non
+  dessiné illisible ; le cadre, lui, reste cliquable.*
 - `egui_kittest` en CI avec un rendu wgpu logiciel ; temps de démarrage à froid et mémoire.
   *Première moitié faite (`lbm-ui`) : l'interface se pilote et s'affirme **sans serveur graphique
   ni GPU**, par l'arbre d'accessibilité, dans le `cargo test` ordinaire — ce que l'UI Avalonia n'a

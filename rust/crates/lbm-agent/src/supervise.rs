@@ -7,10 +7,6 @@
 //! hook that keeps dying. The launch is **detached**: its own session, its own log, so the
 //! hook survives the agent (D5) — a crashed agent leaves the cursor as it was, and the next
 //! agent finds the hook still running (`Connected`, then `Running`) and leaves it alone.
-//!
-//! The hook is told it is driven (`LBM_HOOK_UI=1`): it waits for commands instead of
-//! loading `Current.xml` on its own, which it would otherwise decide from its parent's
-//! path — a path that named the C# UI and does not name the agent.
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
@@ -167,7 +163,6 @@ impl HookLauncher {
         let mut command = Command::new(&self.program);
         command
             .args(&self.args)
-            .env("LBM_HOOK_UI", "1")
             .stdin(Stdio::null())
             .stdout(output(&self.log))
             .stderr(output(&self.log));

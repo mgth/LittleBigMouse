@@ -3,12 +3,8 @@
 
 use windows::core::{HRESULT, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER, HANDLE, HWND};
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
-};
 use windows::Win32::System::Threading::{
-    GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
@@ -37,38 +33,6 @@ pub fn exe_path_from_window(hwnd: HWND) -> Option<String> {
         return None;
     }
     exe_path_from_pid(pid)
-}
-
-/// Full Win32 executable path of the parent process (C++ `GetParentProcess`),
-/// used to tell "launched by the UI" (path contains "LittleBigMouse") from
-/// standalone/autostart.
-pub fn parent_process_path() -> Option<String> {
-    let ppid = parent_pid(unsafe { GetCurrentProcessId() })?;
-    exe_path_from_pid(ppid)
-}
-
-fn parent_pid(pid: u32) -> Option<u32> {
-    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }.ok()?;
-    let mut entry = PROCESSENTRY32W {
-        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
-        ..Default::default()
-    };
-    let mut ppid = None;
-    unsafe {
-        if Process32FirstW(snapshot, &mut entry).is_ok() {
-            loop {
-                if entry.th32ProcessID == pid {
-                    ppid = Some(entry.th32ParentProcessID);
-                    break;
-                }
-                if Process32NextW(snapshot, &mut entry).is_err() {
-                    break;
-                }
-            }
-        }
-        let _ = CloseHandle(snapshot);
-    }
-    ppid
 }
 
 fn exe_path_from_pid(pid: u32) -> Option<String> {
@@ -114,6 +78,8 @@ fn query_process_path(handle: HANDLE) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+
     use super::*;
 
     #[test]

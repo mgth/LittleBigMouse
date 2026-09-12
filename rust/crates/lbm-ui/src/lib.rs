@@ -40,15 +40,36 @@ impl Engine {
 }
 
 /// Everything the bottom bar draws itself from.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct State {
     pub engine: Engine,
     /// The agent has a hook to drive. Without one, asking it to start is asking for
-    /// nothing to happen.
+    /// nothing to happen. The same fact as `engine == Dead`, from the other side.
     pub hook_connected: bool,
     /// A request is out and its answer has not come back. The agent is a socket away,
     /// so this is not instantaneous and the user must not be left pressing again.
     pub waiting: bool,
+    /// The layout on screen is the layout in the store. The plan settles what this
+    /// means — "the current DTO is not the saved DTO" — and that comparison belongs
+    /// upstream: by the time the bar sees it, it is a yes or a no.
+    pub saved: bool,
+    /// A foreign layout, loaded to be looked at rather than run. It can always be sent
+    /// again, because sending it changes nothing on this machine.
+    pub is_virtual: bool,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State {
+            engine: Engine::default(),
+            hook_connected: false,
+            waiting: false,
+            // Nothing has been edited yet, so there is nothing to save: a bar that
+            // opened offering Save and Undo would be offering to undo nothing.
+            saved: true,
+            is_virtual: false,
+        }
+    }
 }
 
 /// What the user did, or what the agent said. The only two ways the state moves.
@@ -69,6 +90,10 @@ pub enum Action {
 pub enum Press {
     Start,
     Stop,
+    /// Write the layout to the store.
+    Save,
+    /// Throw the edits away and load the stored layout again.
+    Undo,
 }
 
 /// What the caller has to go and do, off the UI thread.
@@ -104,20 +129,47 @@ pub fn update(state: &mut State, action: Action) -> Vec<Effect> {
 }
 
 /// Whether a press means anything in this state — which is also what greys the button.
+///
+/// These are the Avalonia rules (`LocationControlViewModel`), which are richer than
+/// they first look:
+///
+/// * **Start** is not only for a stopped engine. A layout edited since it was applied
+///   can be started again — that is how an edit reaches the engine — and a foreign
+///   layout can always be sent, because sending it simulates rather than routes.
+/// * **Stop** applies to a paused engine too. Paused is the engine standing aside for
+///   an excluded application; it is running, and the C# tracker does not even move its
+///   `Running` flag when the daemon says so.
+/// * **Save** and **Undo** are the same condition read twice: there is something to
+///   write, so there is something to throw away.
 pub fn can(state: &State, press: Press) -> bool {
-    if !state.hook_connected {
-        return false;
-    }
     match press {
-        // Paused is running, standing aside for an excluded application: starting again
-        // is not the answer to it, and the hook would refuse anyway.
-        Press::Start => matches!(state.engine, Engine::Stopped),
-        Press::Stop => matches!(state.engine, Engine::Running | Engine::Paused),
+        Press::Start => {
+            state.hook_connected && (state.is_virtual || !routing(state) || !state.saved)
+        }
+        Press::Stop => state.hook_connected && routing(state),
+        // Not the agent's business and not the hook's: the store's. An engine that is
+        // not there does not stop the user saving what they have edited.
+        Press::Save | Press::Undo => !state.saved,
     }
 }
 
-/// The engine controls, as a function of the state. Returns what the user pressed.
-pub fn engine_controls(ui: &mut egui::Ui, state: &State) -> Option<Action> {
+/// The engine has the mice, whether or not it is standing aside just now.
+fn routing(state: &State) -> bool {
+    matches!(state.engine, Engine::Running | Engine::Paused)
+}
+
+/// What a press is called on the button that makes it.
+pub fn label(press: Press) -> &'static str {
+    match press {
+        Press::Start => "Start",
+        Press::Stop => "Stop",
+        Press::Save => "Save",
+        Press::Undo => "Undo",
+    }
+}
+
+/// The bottom bar, as a function of the state. Returns what the user pressed.
+pub fn bottom_bar(ui: &mut egui::Ui, state: &State) -> Option<Action> {
     let mut pressed = None;
     ui.horizontal(|ui| {
         ui.label(match state.engine {
@@ -126,20 +178,26 @@ pub fn engine_controls(ui: &mut egui::Ui, state: &State) -> Option<Action> {
             Engine::Paused => "Paused",
             Engine::Dead => "No engine",
         });
-        if ui
-            .add_enabled(can(state, Press::Start), egui::Button::new("Start"))
-            .clicked()
-        {
-            pressed = Some(Action::Pressed(Press::Start));
-        }
-        if ui
-            .add_enabled(can(state, Press::Stop), egui::Button::new("Stop"))
-            .clicked()
-        {
-            pressed = Some(Action::Pressed(Press::Stop));
+        // Save and Undo first, as the window has them: what you do to the layout comes
+        // before what you do to the engine.
+        for press in [Press::Save, Press::Undo, Press::Start, Press::Stop] {
+            if ui
+                .add_enabled(
+                    !state.waiting && can(state, press),
+                    egui::Button::new(label(press)),
+                )
+                .clicked()
+            {
+                pressed = Some(Action::Pressed(press));
+            }
         }
     });
     pressed
+}
+
+/// The engine controls alone, kept as the name the first tests knew.
+pub fn engine_controls(ui: &mut egui::Ui, state: &State) -> Option<Action> {
+    bottom_bar(ui, state)
 }
 
 #[cfg(test)]
@@ -151,6 +209,8 @@ mod tests {
             engine: Engine::Stopped,
             hook_connected: true,
             waiting: false,
+            saved: true,
+            is_virtual: false,
         }
     }
 
@@ -183,8 +243,7 @@ mod tests {
     }
 
     /// Paused is the engine standing aside for an excluded application. It is running,
-    /// so Stop is what applies to it — pressing Start would ask the hook for something
-    /// it refuses anyway.
+    /// so Stop is what applies to it.
     #[test]
     fn paused_is_stopped_not_started() {
         let state = State {
@@ -193,6 +252,59 @@ mod tests {
         };
         assert!(!can(&state, Press::Start));
         assert!(can(&state, Press::Stop));
+    }
+
+    /// The rule that is easy to get wrong, and that I did get wrong before reading the
+    /// Avalonia one: Start is not "the engine is stopped". An edit reaches the engine by
+    /// being started again, so a running engine with unsaved changes offers Start.
+    #[test]
+    fn an_edited_layout_can_be_started_over_a_running_engine() {
+        let running = State {
+            engine: Engine::Running,
+            ..ready()
+        };
+        assert!(!can(&running, Press::Start), "nothing to re-apply");
+
+        let edited = State {
+            saved: false,
+            ..running
+        };
+        assert!(can(&edited, Press::Start), "this is how an edit is applied");
+    }
+
+    /// A foreign layout is loaded to be looked at, never run here, so sending it again
+    /// costs nothing and is always offered.
+    #[test]
+    fn a_foreign_layout_can_always_be_sent_again() {
+        let simulating = State {
+            engine: Engine::Running,
+            is_virtual: true,
+            ..ready()
+        };
+        assert!(can(&simulating, Press::Start));
+    }
+
+    /// Saving is the store's business. An agent with no hook does not stop the user
+    /// keeping what they have edited — losing an edit because a daemon is missing would
+    /// be the worst of both.
+    #[test]
+    fn what_can_be_saved_does_not_depend_on_the_engine() {
+        let edited_and_alone = State {
+            engine: Engine::Dead,
+            hook_connected: false,
+            saved: false,
+            ..ready()
+        };
+        assert!(can(&edited_and_alone, Press::Save));
+        assert!(can(&edited_and_alone, Press::Undo));
+        assert!(!can(&edited_and_alone, Press::Start), "there is no engine");
+    }
+
+    #[test]
+    fn a_bar_that_opens_offers_neither_save_nor_undo() {
+        let fresh = State::default();
+        assert!(!can(&fresh, Press::Save), "nothing has been edited");
+        assert!(!can(&fresh, Press::Undo), "nothing to throw away");
     }
 
     #[test]

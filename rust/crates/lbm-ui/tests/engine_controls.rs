@@ -38,6 +38,8 @@ fn stopped() -> State {
         engine: Engine::Stopped,
         hook_connected: true,
         waiting: false,
+        saved: true,
+        is_virtual: false,
     }
 }
 
@@ -93,6 +95,8 @@ fn an_agent_with_no_hook_offers_nothing() {
         engine: Engine::Dead,
         hook_connected: false,
         waiting: false,
+        saved: true,
+        is_virtual: false,
     };
 
     let harness = Harness::new_ui(|ui| {

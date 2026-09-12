@@ -2,7 +2,9 @@
 
 pkgname=littlebigmouse
 # Must be a tag that already contains packaging/linux (the .desktop entry and the
-# udev rule are taken from the checkout, not carried by the AUR repository).
+# udev rule are taken from the checkout, not carried by the AUR repository) and,
+# since v6, the lbm-agent crate: the recipe builds it, and an installation
+# without it has no agent for the window to talk to.
 pkgver=5.5.2
 pkgrel=1
 pkgdesc="Seamless mouse travel between monitors of different sizes, resolutions and DPI"
@@ -91,9 +93,11 @@ build() {
   cd "$srcdir/$pkgname/rust"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  # lbm-hook: the routing daemon. lbm-pattern: native-Wayland fullscreen test
-  # pattern viewer used by the monitor calibration panel.
-  cargo build --frozen --release --bin lbm-hook --bin lbm-pattern
+  # lbm-agent: the resident process — it owns the hook, the profiles and the
+  # engine, and the window is one of its frontends (v6). lbm-hook: the routing
+  # daemon it drives. lbm-pattern: native-Wayland fullscreen test pattern viewer
+  # used by the monitor calibration panel.
+  cargo build --frozen --release --bin lbm-agent --bin lbm-hook --bin lbm-pattern
 }
 
 check() {
@@ -106,13 +110,16 @@ check() {
 package() {
   cd "$srcdir/$pkgname"
 
-  # The app host locates lbm-hook / lbm-pattern next to itself
-  # (AppContext.BaseDirectory), so the whole deployment lives in one directory.
+  # The app host locates lbm-agent / lbm-pattern next to itself
+  # (AppContext.BaseDirectory) and the agent locates lbm-hook next to itself, so
+  # the whole deployment lives in one directory.
   install -dm755 "$pkgdir/usr/lib/$pkgname"
   cp -a "$srcdir/publish/." "$pkgdir/usr/lib/$pkgname/"
   chmod -R u=rwX,go=rX "$pkgdir/usr/lib/$pkgname"
   chmod 755 "$pkgdir/usr/lib/$pkgname/LittleBigMouse.Ui.Avalonia"
 
+  install -Dm755 rust/target/release/lbm-agent \
+    "$pkgdir/usr/lib/$pkgname/lbm-agent"
   install -Dm755 rust/target/release/lbm-hook \
     "$pkgdir/usr/lib/$pkgname/lbm-hook"
   install -Dm755 rust/target/release/lbm-pattern \
@@ -120,9 +127,9 @@ package() {
 
   # A symlink is enough: the .NET app host resolves its own location through
   # /proc/self/exe, which follows symlinks, so AppContext.BaseDirectory is still
-  # /usr/lib/littlebigmouse and the sibling lookup for lbm-hook holds. It also
-  # keeps the daemon's "launched by the UI" check working (it reads the resolved
-  # /proc/<ppid>/exe and looks for "LittleBigMouse" in it).
+  # /usr/lib/littlebigmouse and the sibling lookup for lbm-agent holds. It also
+  # keeps the agent's own autostart entry pointing at the real binary, since it
+  # writes the path it was started from.
   install -dm755 "$pkgdir/usr/bin"
   ln -s "../lib/$pkgname/LittleBigMouse.Ui.Avalonia" "$pkgdir/usr/bin/$pkgname"
 

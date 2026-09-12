@@ -215,10 +215,10 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   - `wallpaper::screens` décide quoi montrer par écran, avec la signature qui évite de
     réécrire un fond identique.
 
-  Reste à **brancher** : appliquer après une reconstruction, et reprendre l'écriture de
-  `wallpaper.json` au C# (aujourd'hui le plugin écrit *et* applique ; les deux côtés
-  balaieraient mutuellement leurs tranches). Sous Windows, `IDesktopWallpaper` n'est pas
-  porté.
+  **Branché** : l'agent applique après chaque reconstruction et écrit `wallpaper.json` ;
+  le plugin C# lui envoie ses réglages au lieu d'écrire et d'appliquer lui-même (les deux
+  côtés balayaient mutuellement leurs tranches). Sous Windows, `IDesktopWallpaper` n'est
+  toujours pas porté.
 
 ## Suite
 
@@ -228,12 +228,23 @@ Par ordre de valeur :
    qui suit ne remplace un passage à la main — dumps d'écran comparés au C#, import du
    registre, tubes et élévation, tray, tâche planifiée et sa migration, veille, dock/undock
    et #607, bureau sécurisé UAC.
-2. **Brancher le fond d'écran** (les trois pièces sont là, voir plus haut) : l'agent
-   applique après reconstruction et devient l'écrivain de `wallpaper.json` ; le plugin C#
-   lui envoie ses réglages au lieu d'écrire et d'appliquer lui-même.
-3. **Exclusion par focus dans l'agent (D4)** : elle touche le hook (il perdrait
-   `Excluded.txt` et la politique) — à faire avec l'allègement du hook, phase 5. L'agent
-   tient déjà l'historique des processus vus, que le hook lui envoie.
-4. **`IDesktopWallpaper` sous Windows**, avec le reste des correctifs Windows.
-5. `Current.xml` : plus personne ne l'écrit côté C# (le magasin de reprise est parti avec
-   la phase 4) ; le hook le rejoue encore, sa disparition est un travail de phase 5.
+2. **Vérifier le mapping du périphérique absolu avec un écran exclu** (Linux, sur la
+   machine du mainteneur) : le seul morceau de la phase 5 qu'aucun test ne peut atteindre,
+   parce que le périphérique uinput n'est construit qu'au moment de la capture. Cocher
+   « exclure de la mise en page » sur un écran, démarrer le moteur, et vérifier que le
+   curseur atterrit là où on le demande — et qu'il ne va plus sur l'écran exclu. Prévoir
+   un moyen d'arrêter le hook sans la souris : sous Plasma la touche de secours peut être
+   enregistrée **sans touche** tant que l'utilisateur ne lui en donne pas une.
+3. **Exclusion par focus dans l'agent (D4)** : **en attente d'un arbitrage**. Sous Linux le
+   guetteur de focus tourne dès le démarrage du hook, donc l'agent pourrait décider sans
+   course ; sous Windows il n'est installé qu'à l'accrochage, et le refus synchrone
+   d'`adopt_foreground` qui corrigeait #541 disparaîtrait. À ne pas faire sans déplacer
+   aussi l'installation du guetteur Windows au démarrage du processus.
+4. **Option « lié à l'agent »** (dernier item de la phase 5) : fin de connexion ⇒ relâche
+   des grabs, des boutons tenus et du clip, puis sortie. Par défaut **non**, D5 étant que
+   le hook survit à son agent. Traverse `LayoutOptions`, la persistance (dont l'oracle
+   épingle l'égalité C#/Rust), le document de mise en page et le panneau d'options.
+   *Piège* : une connexion fermée **par éviction** (un agent plus récent prend la place)
+   ne doit surtout pas la déclencher — le nouvel agent tuerait le hook qu'il vient
+   d'adopter.
+5. **`IDesktopWallpaper` sous Windows**, avec le reste des correctifs Windows.

@@ -5,9 +5,10 @@ use std::path::PathBuf;
 /// Path to `$XDG_DATA_HOME/LittleBigMouse/<name>` (default
 /// `~/.local/share/LittleBigMouse/<name>`).
 ///
-/// Must match the C# side (`LbmPaths.DataDir`), which writes `Current.xml` and
-/// `Excluded.txt` there. Note the Linux convention drops the `Mgth` vendor level
-/// used on Windows.
+/// Must match where the agent writes `Excluded.txt` (C#: `LbmPaths.DataDir`), which
+/// is the only file the daemon still reads from here — `Current.xml` went with the
+/// standalone mode. Note the Linux convention drops the `Mgth` vendor level used on
+/// Windows.
 pub fn lbm_data_file(name: &str) -> Option<PathBuf> {
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)

@@ -4,12 +4,14 @@ use std::path::PathBuf;
 
 /// Path to `%LOCALAPPDATA%\Mgth\LittleBigMouse\<name>`.
 ///
-/// The C# UI writes both `Current.xml` and `Excluded.txt` under
-/// `LocalApplicationData` (`LittleBigMouseClientService`), so the daemon reads
-/// them from there. This deliberately differs from the C++ daemon, which read
-/// them from `%ProgramData%` — a path nothing writes to, so its standalone load
-/// and process exclusion never saw the UI's files (a latent C++ bug). See the
-/// port plan's open decision (Pièges & décisions #6).
+/// `Excluded.txt` is written under `LocalApplicationData` (C#:
+/// `LittleBigMouseClientService`, now the agent), so the daemon reads it from there.
+/// This deliberately differs from the C++ daemon, which read from `%ProgramData%` — a
+/// path nothing writes to, so its process exclusion never saw the UI's files (a latent
+/// C++ bug). See the port plan's open decision (Pièges & décisions #6).
+///
+/// `Current.xml` used to live here too, for the daemon's standalone mode; both went
+/// with phase 5.
 pub fn lbm_data_file(name: &str) -> Option<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")?;
     let mut path = PathBuf::from(base);

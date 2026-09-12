@@ -145,12 +145,5 @@
       },
       "PnpName": "SAMSUNG"
     }
-  },
-  "Excluded": [
-    "/steamapps/",
-    "/Epic Games/",
-    "/Riot Games/",
-    "/Heroic/",
-    "/Games/"
-  ]
+  }
 }

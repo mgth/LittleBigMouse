@@ -475,7 +475,6 @@ fn perturb(layout: &mut Layout) {
         o.border_values = "Perturbed".to_owned();
         o.rescue_shortcut = "Ctrl+Alt+Perturbed".to_owned();
         o.hide_tray_icon = !o.hide_tray_icon;
-        o.excluded_list = vec!["/perturbed/".to_owned()];
     });
 
     let monitors: Vec<(String, String)> = layout
@@ -484,7 +483,9 @@ fn perturb(layout: &mut Layout) {
         .map(|m| (m.id.clone(), m.model.clone()))
         .collect();
     for (id, model) in monitors {
-        let placed = layout.depth_projection(layout.monitor(&id).unwrap()).unwrap();
+        let placed = layout
+            .depth_projection(layout.monitor(&id).unwrap())
+            .unwrap();
         layout.set_location(&id, Point::new(placed.x + 37.0, placed.y - 11.0));
         layout.set_depth_ratio(&id, Ratio::new(1.75, 2.25));
         layout.edit_border_resistance(&id, |resistance| {
@@ -492,9 +493,10 @@ fn perturb(layout: &mut Layout) {
             resistance.right.sections.clear();
             resistance.top.sections.clear();
             resistance.bottom.sections.clear();
-            resistance.left.sections.push(BorderSection::new(
-                1.0, 2.0, 3.0, true, 4.0, true,
-            ));
+            resistance
+                .left
+                .sections
+                .push(BorderSection::new(1.0, 2.0, 3.0, true, 4.0, true));
         });
         layout.edit_model(&model, |size, name| {
             // A size only where there is one: a stored non-positive size deliberately
@@ -548,7 +550,12 @@ fn run(dir: &Path) -> Vec<String> {
     // Last, as in OracleRun: a save only flips saved flags on the model.
     assert!(persistence.save(&mut layout).unwrap());
     let expected_store = parse(&dir.join("expected/saved-store.json"));
-    diff("saved-store", &expected_store, &saved_store(&config), &mut out);
+    diff(
+        "saved-store",
+        &expected_store,
+        &saved_store(&config),
+        &mut out,
+    );
 
     // The frontends' document (v6, phase 4): the UI sends what it would have saved and
     // the agent writes it. Applied to the agent's own copy of this layout, a save must
@@ -563,11 +570,16 @@ fn run(dir: &Path) -> Vec<String> {
     perturb(&mut agent_layout);
     document.apply(&mut agent_layout);
     // What the agent would send back: nothing the document carries may have been lost on
-    // the way in (the excluded list included, which the store keeps in its own file).
+    // the way in. The excluded list is left out of the corpus (the defaults are the
+    // platform's, see OracleRun); lbm-store's own document test pins that it travels.
+    let rebuilt = LayoutDocument {
+        excluded: None,
+        ..LayoutDocument::of(&agent_layout)
+    };
     diff(
         "agent document",
         &parse(&dir.join("expected/agent-document.json")),
-        &serde_json::to_value(LayoutDocument::of(&agent_layout)).unwrap(),
+        &serde_json::to_value(rebuilt).unwrap(),
         &mut out,
     );
     assert!(agent_persistence.save(&mut agent_layout).unwrap());

@@ -375,7 +375,15 @@ static class OracleRun
     /// number format.
     /// </summary>
     static JsonNode AgentDocumentNode(MonitorsLayout layout)
-        => JsonSerializer.SerializeToNode(AgentDocument.Of(layout), StoreShaped)!;
+    {
+        var document = JsonSerializer.SerializeToNode(AgentDocument.Of(layout), StoreShaped)!;
+        // The excluded list is not recorded: the defaults are the platform's
+        // ("/steamapps/" here, "\steamapps\" there) and a top-up mixes them into a
+        // pinned list, so it would make this corpus say where it was regenerated. That
+        // the document carries the list is pinned by lbm-store's own document test.
+        document.AsObject().Remove("Excluded");
+        return document;
+    }
 
     /// <summary>`JsonLayoutStore`'s: absent members for nulls.</summary>
     static readonly JsonSerializerOptions StoreShaped = new()

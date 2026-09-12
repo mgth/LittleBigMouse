@@ -279,12 +279,5 @@
       },
       "PnpName": "HISENSE"
     }
-  },
-  "Excluded": [
-    "/steamapps/",
-    "/Epic Games/",
-    "/Riot Games/",
-    "/Heroic/",
-    "/Games/"
-  ]
+  }
 }

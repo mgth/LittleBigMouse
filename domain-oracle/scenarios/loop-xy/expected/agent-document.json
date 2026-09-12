@@ -108,12 +108,5 @@
       },
       "PnpName": "Odyssey G80SD"
     }
-  },
-  "Excluded": [
-    "/steamapps/",
-    "/Epic Games/",
-    "/Riot Games/",
-    "/Heroic/",
-    "/Games/"
-  ]
+  }
 }

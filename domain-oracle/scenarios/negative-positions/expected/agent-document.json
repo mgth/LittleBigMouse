@@ -145,12 +145,5 @@
       },
       "PnpName": "DELL_G2724D"
     }
-  },
-  "Excluded": [
-    "/steamapps/",
-    "/Epic Games/",
-    "/Riot Games/",
-    "/Heroic/",
-    "/Games/"
-  ]
+  }
 }

@@ -71,12 +71,5 @@
       },
       "PnpName": "DELL P2419H"
     }
-  },
-  "Excluded": [
-    "\\Epic Games\\",
-    "\\steamapps\\",
-    "\\Riot Games\\",
-    "/Heroic/",
-    "/Games/"
-  ]
+  }
 }

@@ -210,7 +210,7 @@ async fn connection<S>(
                         quit = true;
                     }
                     Command::Probe => s.broadcast(&protocol::probed(PROBE_REPORT)),
-                    Command::LoadFromFile(_) | Command::Shortcut(_) | Command::Unknown(_) => {}
+                    Command::Shortcut(_) | Command::Unknown(_) => {}
                 }
             }
         }

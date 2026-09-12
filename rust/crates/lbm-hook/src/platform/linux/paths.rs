@@ -34,7 +34,7 @@ mod tests {
     #[test]
     fn resolves_under_data_home() {
         // Whichever env var wins, the tail must be LittleBigMouse/<name>.
-        let path = lbm_data_file("Current.xml").expect("HOME should be set in tests");
-        assert!(path.ends_with("LittleBigMouse/Current.xml"));
+        let path = lbm_data_file("Excluded.txt").expect("HOME should be set in tests");
+        assert!(path.ends_with("LittleBigMouse/Excluded.txt"));
     }
 }

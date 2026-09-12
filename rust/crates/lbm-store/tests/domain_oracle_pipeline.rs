@@ -14,14 +14,14 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use lbm_layout::geo::Rect;
+use lbm_layout::geo::{Point, Rect};
 use lbm_layout::linux::{populate, LinuxEdid, LinuxMonitor};
 use lbm_layout::model::{
-    BorderSide, DisplaySize, Layout, LayoutOptions, Monitor, PhysicalSource, Ratio,
+    BorderSection, BorderSide, DisplaySize, Layout, LayoutOptions, Monitor, PhysicalSource, Ratio,
 };
 use lbm_layout::zoning::compute_zones;
 use lbm_store::layout_store_key::key_for;
-use lbm_store::{JsonLayoutStore, LayoutPersistence, PersistencePlatform};
+use lbm_store::{JsonLayoutStore, LayoutDocument, LayoutPersistence, PersistencePlatform};
 use serde_json::{json, Map, Value};
 
 fn read(path: &Path) -> String {
@@ -402,16 +402,22 @@ fn saved_store(config: &Path) -> Value {
 // Scenarios        //
 //==================//
 
-/// Every difference between one scenario's recorded outputs and the Rust ones.
-fn run(dir: &Path) -> Vec<String> {
-    let input = parse(&dir.join("input.json"));
-    let work = tempfile::tempdir().unwrap();
-    let config = work.path().join("config");
-    let data = work.path().join("data");
+/// One scenario's world: the store seeded in a scratch directory, the engine over it, and
+/// the layout built from the inputs — what `OracleRun` sets up before it looks at anything.
+fn build(
+    input: &Value,
+    work: &Path,
+) -> (
+    PathBuf,
+    LayoutPersistence<JsonLayoutStore, OraclePlatform>,
+    Layout,
+) {
+    let config = work.join("config");
+    let data = work.join("data");
     fs::create_dir_all(&config).unwrap();
     fs::create_dir_all(&data).unwrap();
 
-    seed_store(&input, &config);
+    seed_store(input, &config);
     let excluded_file = data.join("Excluded.txt");
     if let Some(lines) = input.get("excluded").and_then(Value::as_array) {
         // File.WriteAllLines: every line ended by the platform's new line.
@@ -436,6 +442,79 @@ fn run(dir: &Path) -> Vec<String> {
         .collect();
     let mut layout = Layout::new(LayoutOptions::default());
     populate(&mut layout, &monitors, |l| persistence.load(l)).unwrap();
+    (config, persistence, layout)
+}
+
+/// Everything the agent's copy of a layout could hold differently from what the frontend
+/// edited: a document that carries less than a save writes leaves one of these behind.
+fn perturb(layout: &mut Layout) {
+    layout.edit_options(|o| {
+        o.enabled = !o.enabled;
+        o.loop_x = !o.loop_x;
+        o.loop_y = !o.loop_y;
+        o.allow_overlaps = !o.allow_overlaps;
+        o.allow_discontinuity = !o.allow_discontinuity;
+        o.adjust_pointer = !o.adjust_pointer;
+        o.adjust_speed = !o.adjust_speed;
+        o.algorithm = "Perturbed".to_owned();
+        o.minimal_edge_overlap += 7.0;
+        o.max_travel_distance += 11.0;
+        o.freelook_enabled = !o.freelook_enabled;
+        o.freelook_check_interval += 13.0;
+        o.priority = "Perturbed".to_owned();
+        o.priority_unhooked = "Perturbed".to_owned();
+        o.home_cinema = !o.home_cinema;
+        o.pinned = !o.pinned;
+        o.auto_update = !o.auto_update;
+        o.start_minimized = !o.start_minimized;
+        o.start_elevated = !o.start_elevated;
+        o.debug_tools = !o.debug_tools;
+        o.experimental_features = !o.experimental_features;
+        o.vcp_control = !o.vcp_control;
+        o.show_monitor_action_warning = !o.show_monitor_action_warning;
+        o.border_values = "Perturbed".to_owned();
+        o.rescue_shortcut = "Ctrl+Alt+Perturbed".to_owned();
+        o.hide_tray_icon = !o.hide_tray_icon;
+        o.excluded_list = vec!["/perturbed/".to_owned()];
+    });
+
+    let monitors: Vec<(String, String)> = layout
+        .monitors()
+        .iter()
+        .map(|m| (m.id.clone(), m.model.clone()))
+        .collect();
+    for (id, model) in monitors {
+        let placed = layout.depth_projection(layout.monitor(&id).unwrap()).unwrap();
+        layout.set_location(&id, Point::new(placed.x + 37.0, placed.y - 11.0));
+        layout.set_depth_ratio(&id, Ratio::new(1.75, 2.25));
+        layout.edit_border_resistance(&id, |resistance| {
+            resistance.left.sections.clear();
+            resistance.right.sections.clear();
+            resistance.top.sections.clear();
+            resistance.bottom.sections.clear();
+            resistance.left.sections.push(BorderSection::new(
+                1.0, 2.0, 3.0, true, 4.0, true,
+            ));
+        });
+        layout.edit_model(&model, |size, name| {
+            // A size only where there is one: a stored non-positive size deliberately
+            // never overrides the live one (#419), so a document carrying 0 cannot undo
+            // a perturbation to 19 — that is the rule, not a hole in the document.
+            if size.width() > 0.0 && size.height() > 0.0 {
+                size.set_width(size.width() + 19.0);
+                size.set_height(size.height() + 23.0);
+            }
+            size.set_left_border(size.borders().left + 3.0);
+            *name = Some("Perturbed".to_owned());
+        });
+    }
+}
+
+/// Every difference between one scenario's recorded outputs and the Rust ones.
+fn run(dir: &Path) -> Vec<String> {
+    let input = parse(&dir.join("input.json"));
+    let work = tempfile::tempdir().unwrap();
+    let (config, persistence, mut layout) = build(&input, work.path());
 
     let mut out = Vec::new();
 
@@ -468,10 +547,34 @@ fn run(dir: &Path) -> Vec<String> {
 
     // Last, as in OracleRun: a save only flips saved flags on the model.
     assert!(persistence.save(&mut layout).unwrap());
+    let expected_store = parse(&dir.join("expected/saved-store.json"));
+    diff("saved-store", &expected_store, &saved_store(&config), &mut out);
+
+    // The frontends' document (v6, phase 4): the UI sends what it would have saved and
+    // the agent writes it. Applied to the agent's own copy of this layout, a save must
+    // then write exactly what the C# save wrote — everything the store keeps travels.
+    let document: LayoutDocument =
+        serde_json::from_str(&read(&dir.join("expected/agent-document.json")))
+            .expect("the C# agent document");
+    let agent_work = tempfile::tempdir().unwrap();
+    let (agent_config, agent_persistence, mut agent_layout) = build(&input, agent_work.path());
+    // Moved away from what the store holds first: whatever the document fails to carry
+    // stays perturbed and the save below says so.
+    perturb(&mut agent_layout);
+    document.apply(&mut agent_layout);
+    // What the agent would send back: nothing the document carries may have been lost on
+    // the way in (the excluded list included, which the store keeps in its own file).
     diff(
-        "saved-store",
-        &parse(&dir.join("expected/saved-store.json")),
-        &saved_store(&config),
+        "agent document",
+        &parse(&dir.join("expected/agent-document.json")),
+        &serde_json::to_value(LayoutDocument::of(&agent_layout)).unwrap(),
+        &mut out,
+    );
+    assert!(agent_persistence.save(&mut agent_layout).unwrap());
+    diff(
+        "saved-store after the agent document",
+        &expected_store,
+        &saved_store(&agent_config),
         &mut out,
     );
     out

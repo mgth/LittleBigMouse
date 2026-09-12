@@ -65,6 +65,10 @@ static class OracleRun
                 ["pixel-locations.json"] = Json(PixelLocations(layout)),
             };
 
+            // What a frontend would hand the agent instead of saving it itself (v6,
+            // phase 4): taken here, where a save is about to write the same thing.
+            outputs["agent-document.json"] = Json(AgentDocumentNode(layout));
+
             // Last: a save only flips Saved flags on the model, but nothing above should
             // have to reason about that.
             persistence.Save(layout);
@@ -360,6 +364,24 @@ static class OracleRun
 
         return files;
     }
+
+    //====================//
+    // agent-document.json //
+    //====================//
+
+    /// <summary>
+    /// <see cref="AgentDocument.Of"/> as a node, so the corpus holds the very bytes the UI
+    /// will put on the wire — the store's own DTOs, absent members for nulls, the store's
+    /// number format.
+    /// </summary>
+    static JsonNode AgentDocumentNode(MonitorsLayout layout)
+        => JsonSerializer.SerializeToNode(AgentDocument.Of(layout), StoreShaped)!;
+
+    /// <summary>`JsonLayoutStore`'s: absent members for nulls.</summary>
+    static readonly JsonSerializerOptions StoreShaped = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     //==================//
     // Encoding         //

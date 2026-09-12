@@ -1,0 +1,290 @@
+{
+  "GlobalOptions": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": false,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false
+  },
+  "Layout": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": false,
+      "LoopY": false,
+      "Enabled": false,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "HEC0030_00000001": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-0",
+            "Primary": true
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-1": {
+        "XLocationInMm": 738,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-1",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-1": {
+            "PixelX": 1920,
+            "PixelY": 0,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-1",
+            "Primary": false
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-2": {
+        "XLocationInMm": 1476,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-2",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-2": {
+            "PixelX": 3840,
+            "PixelY": 0,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-2",
+            "Primary": false
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-3": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 432,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-3",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-3": {
+            "PixelX": 0,
+            "PixelY": 1080,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-3",
+            "Primary": false
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-4": {
+        "XLocationInMm": 738,
+        "YLocationInMm": 432,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-4",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-4": {
+            "PixelX": 1920,
+            "PixelY": 1080,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-4",
+            "Primary": false
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-5": {
+        "XLocationInMm": 1476,
+        "YLocationInMm": 432,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-5",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-5": {
+            "PixelX": 3840,
+            "PixelY": 1080,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-5",
+            "Primary": false
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-6": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 864,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-6",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-6": {
+            "PixelX": 0,
+            "PixelY": 2160,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-6",
+            "Primary": false
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-7": {
+        "XLocationInMm": 738,
+        "YLocationInMm": 864,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-7",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-7": {
+            "PixelX": 1920,
+            "PixelY": 2160,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-7",
+            "Primary": false
+          }
+        }
+      },
+      "HEC0030_00000001@DisplayPort-8": {
+        "XLocationInMm": 1476,
+        "YLocationInMm": 864,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HEC0030_00000001@DisplayPort-8",
+        "SerialNumber": "00000001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HEC0030_00000001@DisplayPort-8": {
+            "PixelX": 3840,
+            "PixelY": 2160,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DisplayPort-8",
+            "Primary": false
+          }
+        }
+      }
+    }
+  },
+  "Models": {
+    "HEC0030": {
+      "Width": 698,
+      "Height": 392,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "HISENSE"
+    }
+  },
+  "Excluded": [
+    "/steamapps/",
+    "/Epic Games/",
+    "/Riot Games/",
+    "/Heroic/",
+    "/Games/"
+  ]
+}

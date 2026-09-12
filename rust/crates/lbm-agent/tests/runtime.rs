@@ -56,6 +56,17 @@ impl AgentWorld for FakeWorld {
         self.layout.map(|l| (ZONES.to_owned(), l.is_virtual))
     }
 
+    /// The desktop the fixture's zones sit on. Named rather than inferred, as the real
+    /// world names it: a world that answered None would be exercising the fallback.
+    fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
+        self.layout.map(|_| lbm_ipc::protocol::Desktop {
+            left: 0,
+            top: 0,
+            width: 3840,
+            height: 1080,
+        })
+    }
+
     fn save_enabled(&mut self) -> io::Result<()> {
         let enabled = self.layout.is_some_and(|l| l.enabled);
         self.record.lock().unwrap().enabled_saves.push(enabled);
@@ -157,8 +168,16 @@ async fn the_agent_hands_its_layout_to_the_hook_and_keeps_it_hooked() {
                 protocol: protocol::PROTOCOL
             },
             Command::Listen,
+            // The desktop travels with the layout: the hook cannot work it out, and
+            // the absolute pointing device it builds has to span exactly this.
             Command::Load {
-                zones: ZONES.into()
+                zones: ZONES.into(),
+                desktop: Some(lbm_ipc::protocol::Desktop {
+                    left: 0,
+                    top: 0,
+                    width: 3840,
+                    height: 1080
+                })
             },
             Command::Run
         ]
@@ -313,6 +332,17 @@ impl AgentWorld for GappingWorld {
         self.layout.map(|_| (ZONES.to_owned(), false))
     }
 
+    /// The desktop the fixture's zones sit on. Named rather than inferred, as the real
+    /// world names it: a world that answered None would be exercising the fallback.
+    fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
+        self.layout.map(|_| lbm_ipc::protocol::Desktop {
+            left: 0,
+            top: 0,
+            width: 3840,
+            height: 1080,
+        })
+    }
+
     fn save_enabled(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -372,8 +402,16 @@ async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
                 protocol: protocol::PROTOCOL
             },
             Command::Listen,
+            // The desktop travels with the layout: the hook cannot work it out, and
+            // the absolute pointing device it builds has to span exactly this.
             Command::Load {
-                zones: ZONES.into()
+                zones: ZONES.into(),
+                desktop: Some(lbm_ipc::protocol::Desktop {
+                    left: 0,
+                    top: 0,
+                    width: 3840,
+                    height: 1080
+                })
             },
             Command::Run
         ],

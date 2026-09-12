@@ -515,6 +515,7 @@ impl<W: AgentWorld> Agent<W> {
                     }
                     let load = Command::Load {
                         zones: zones.clone(),
+                        desktop: self.world.desktop(),
                     };
                     // A foreign layout is simulated: loaded, never run.
                     let frame = if foreign {
@@ -549,6 +550,7 @@ impl<W: AgentWorld> Agent<W> {
                 self.hook.send(protocol::frame(&[
                     Command::Load {
                         zones: zones.clone(),
+                        desktop: self.world.desktop(),
                     },
                     Command::Run,
                 ]));

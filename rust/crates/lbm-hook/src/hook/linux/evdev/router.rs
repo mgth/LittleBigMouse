@@ -31,7 +31,8 @@ use super::devices::{
 };
 use super::frame::{Frame, PumpBuffers};
 use super::probe::{
-    desktop_bounds_blocking, first_zone_center, kwin_cursor_pos, try_desktop_bounds,
+    device_bounds_blocking, first_zone_center, kwin_cursor_pos, layout_bounds_blocking,
+    try_device_bounds, try_layout_bounds,
 };
 use super::uinput::{build_virtual, build_virtual_keyboard};
 
@@ -166,7 +167,10 @@ impl Router {
         debug: bool,
         resume_at: Option<Point<i32>>,
     ) -> std::io::Result<Router> {
-        let desktop = desktop_bounds_blocking(shared);
+        // Where the cursor may go, and the desktop the device has to span. The same
+        // rectangle whenever the layout covers the desktop, which is the ordinary case.
+        let bounds = layout_bounds_blocking(shared);
+        let device = device_bounds_blocking(shared, bounds);
 
         // Everything slow happens BEFORE the first grab: from EVIOCGRAB on, the
         // user's mice are captured but not routed yet, so this window must stay
@@ -185,7 +189,7 @@ impl Router {
                 keyboards.push((path, dev));
             }
         }
-        let virt = build_virtual(desktop)?;
+        let virt = build_virtual(device)?;
         let virt_kbd = build_virtual_keyboard()?;
 
         let mut devices = Vec::new();
@@ -229,21 +233,23 @@ impl Router {
                 None => (
                     first_zone_center(shared).unwrap_or_else(|| {
                         Point::new(
-                            desktop.left() + desktop.width() / 2,
-                            desktop.top() + desktop.height() / 2,
+                            bounds.left() + bounds.width() / 2,
+                            bounds.top() + bounds.height() / 2,
                         )
                     }),
                     "fallback",
                 ),
             },
         };
+        // Into the layout, not merely onto the desktop: a monitor excluded from the
+        // layout is part of the desktop and is where the cursor is not to start.
         let start = Point::new(
             start
                 .x()
-                .clamp(desktop.left(), desktop.left() + desktop.width() - 1),
+                .clamp(bounds.left(), bounds.left() + bounds.width() - 1),
             start
                 .y()
-                .clamp(desktop.top(), desktop.top() + desktop.height() - 1),
+                .clamp(bounds.top(), bounds.top() + bounds.height() - 1),
         );
         eprintln!(
             "[LittleBigMouse.Hook] evdev: starting at ({},{}) ({origin})",
@@ -261,7 +267,7 @@ impl Router {
         // `buttons_down()` honest for the drag detection, and makes the
         // teardown release cover a button that was held across the whole
         // session.
-        let mut env = EvdevCursor::new(desktop, start);
+        let mut env = EvdevCursor::new(bounds, device, start);
         env.buttons = held_buttons_of(&devices);
 
         let mut router = Router {
@@ -291,18 +297,33 @@ impl Router {
 
     /// One poll cycle: drain readable devices, process each SYN frame.
     fn pump(&mut self, shared: &'static Shared) {
-        // The desktop can change under us (a Load with a new layout). Rebuild the
-        // absolute device to the new size so the 1:1 mapping stays exact.
-        // try_desktop_bounds: never block on the engine lock here (module rule);
-        // on contention the cached bounds serve one more cycle.
-        if let Some(current) = try_desktop_bounds(shared) {
-            if current != self.env.desktop {
-                if let Ok(v) = build_virtual(current) {
+        // Both can change under us: a Load brings a new layout, and names the desktop
+        // it sits on. Both are read with `try_lock` — this is the routing thread, and
+        // a blocking lock here is a pointer frozen system-wide (the module rule). On
+        // contention nothing is updated and the next cycle asks again.
+        if let Some((bounds, device)) = try_layout_bounds(shared)
+            .and_then(|bounds| try_device_bounds(shared, bounds).map(|device| (bounds, device)))
+        {
+            let mut moved = false;
+            if device != self.env.device {
+                // Rebuilt to the new span, so the compositor's mapping stays 1:1. A
+                // build that fails leaves the old device and the old rectangle in
+                // place, and the next cycle tries again.
+                if let Ok(v) = build_virtual(device) {
                     self.virt = v;
-                    self.env.desktop = current;
-                    self.env.virtual_pos = self.env.clamp(self.env.virtual_pos);
-                    self.emit_absolute();
+                    self.env.device = device;
+                    moved = true;
                 }
+            }
+            if bounds != self.env.bounds {
+                self.env.bounds = bounds;
+                moved = true;
+            }
+            // Only when something actually moved: this runs every cycle, and an
+            // absolute frame per cycle is not a thing the compositor should be sent.
+            if moved {
+                self.env.virtual_pos = self.env.clamp(self.env.virtual_pos);
+                self.emit_absolute();
             }
         }
 
@@ -534,8 +555,8 @@ impl Router {
     /// atomic uinput frame. ABS values are desktop-relative (the ABS range starts
     /// at 0), so the compositor's 1:1 mapping lands the cursor exactly.
     fn emit_absolute(&mut self) {
-        let ax = self.env.virtual_pos.x() - self.env.desktop.left();
-        let ay = self.env.virtual_pos.y() - self.env.desktop.top();
+        let ax = self.env.virtual_pos.x() - self.env.device.left();
+        let ay = self.env.virtual_pos.y() - self.env.device.top();
         let frame = self.bufs.pointer_frame(ax, ay);
         let _ = self.virt.emit(frame);
     }

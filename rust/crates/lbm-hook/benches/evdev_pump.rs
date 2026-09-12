@@ -352,7 +352,7 @@ mod linux {
             let cycles_per_iter = scenario.cycles.len() as u64;
 
             let mut bufs = PumpBuffers::new();
-            let mut env = EvdevCursor::new(desktop, Point::new(0, 0));
+            let mut env = EvdevCursor::new(desktop, desktop, Point::new(0, 0));
             rows.push(measure(scenario.name, "owned", cycles_per_iter, || {
                 for cycle in &scenario.cycles {
                     owned_cycle(&mut bufs, &mut env, cycle);

@@ -1,5 +1,6 @@
-//! Asking the world where things are: the desktop the ABS range has to match,
-//! the cursor position to take over from, and the fallback start point.
+//! Asking the world where things are: where the cursor may go, the desktop the ABS
+//! range has to match, the cursor position to take over from, and the fallback start
+//! point.
 //!
 //! Two of these read the engine's layout under its lock, which is why they come
 //! in a blocking flavour (arm time, before the grabs — nothing is captured yet)
@@ -11,10 +12,12 @@ use std::time::Duration;
 use crate::geometry::{Point, Rect};
 use crate::shared::Shared;
 
-/// The union of the layout's main zones — the compositor's logical pixel space
-/// (kscreen coordinates), so the ABS mapping and the crossing geometry agree.
+/// Where the cursor may go: the union of the layout's main zones, in the
+/// compositor's logical pixel space (kscreen coordinates), so the crossing geometry
+/// and the positions emitted agree.
+///
 /// Arm-time variant: routing has not started, a blocking lock is fine here.
-pub(super) fn desktop_bounds_blocking(shared: &Shared) -> Rect<i32> {
+pub(super) fn layout_bounds_blocking(shared: &Shared) -> Rect<i32> {
     let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
     bounds_of(&engine)
 }
@@ -22,13 +25,43 @@ pub(super) fn desktop_bounds_blocking(shared: &Shared) -> Rect<i32> {
 /// Pump-side variant — routing-thread rule: never block. On contention (an IPC
 /// Load swapping the layout under the lock) returns None and the caller keeps
 /// its cached bounds for one cycle.
-pub(super) fn try_desktop_bounds(shared: &Shared) -> Option<Rect<i32>> {
+pub(super) fn try_layout_bounds(shared: &Shared) -> Option<Rect<i32>> {
     let engine = match shared.engine.try_lock() {
         Ok(g) => g,
         Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
         Err(std::sync::TryLockError::WouldBlock) => return None,
     };
     Some(bounds_of(&engine))
+}
+
+/// The desktop the absolute device must span: what the agent said when it handed
+/// over the layout, because only the agent enumerates the outputs. Falling back to
+/// the layout's own extent when it said nothing — an agent older than the field, or
+/// a hook driven by something else — which is what this always used to do.
+///
+/// The two differ exactly when the layout does not cover the desktop: a monitor
+/// excluded from the layout is still drawn by the compositor. Declaring the smaller
+/// rectangle does not keep the cursor off that monitor; it stretches every position
+/// by the ratio between the two, and the cursor lands somewhere else entirely.
+/// Arm-time variant: routing has not started, a blocking lock is fine here.
+pub(super) fn device_bounds_blocking(shared: &Shared, layout: Rect<i32>) -> Rect<i32> {
+    shared
+        .desktop
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .unwrap_or(layout)
+}
+
+/// Pump-side variant — routing-thread rule: never block. On contention (a `Load`
+/// recording a new desktop under the lock) returns None and the caller keeps what it
+/// has for one cycle, exactly as it does for the layout's own extent.
+pub(super) fn try_device_bounds(shared: &Shared, layout: Rect<i32>) -> Option<Rect<i32>> {
+    let desktop = match shared.desktop.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return None,
+    };
+    Some(desktop.unwrap_or(layout))
 }
 
 fn bounds_of(engine: &crate::engine::MouseEngine) -> Rect<i32> {
@@ -165,4 +198,45 @@ pub(super) fn first_zone_center(shared: &Shared) -> Option<Point<i32>> {
         b.left() + b.width() / 2,
         b.top() + b.height() / 2,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The desktop is the agent's to name. Its own extent stands in only while nobody
+    /// has said — an agent older than the field, or a hook driven by something else.
+    #[test]
+    fn the_agents_desktop_wins_over_the_layouts_extent() {
+        let shared = Shared::new();
+        let layout = Rect::new(0, 0, 1920, 1080);
+
+        assert_eq!(
+            device_bounds_blocking(&shared, layout),
+            layout,
+            "nobody has said: the layout's extent stands in"
+        );
+
+        // A second screen the layout excludes: the compositor still draws it, so the
+        // desktop is wider than the layout. Declaring the narrower one would stretch
+        // every position by the ratio between the two.
+        let desktop = Rect::new(0, 0, 3840, 1080);
+        *shared.desktop.lock().unwrap() = Some(desktop);
+        assert_eq!(device_bounds_blocking(&shared, layout), desktop);
+        assert_eq!(try_device_bounds(&shared, layout), Some(desktop));
+    }
+
+    /// An origin left of zero is what a screen placed to the left of the primary gives.
+    /// Losing it would move every position by that screen's width.
+    #[test]
+    fn a_desktop_that_starts_left_of_zero_keeps_its_origin() {
+        let shared = Shared::new();
+        let desktop = Rect::new(-1920, -120, 5760, 1200);
+        *shared.desktop.lock().unwrap() = Some(desktop);
+
+        assert_eq!(
+            device_bounds_blocking(&shared, Rect::new(0, 0, 1920, 1080)),
+            desktop
+        );
+    }
 }

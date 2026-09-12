@@ -409,7 +409,12 @@ Objectif : le hook ne connaît plus que l'agent.
 - Restent : décrochage sur écran changé ou éteint, refus des zones fantômes (Windows), touche de
   secours, autorelease, watchdog Windows, relâche des boutons au démontage.
 - Les bornes du bureau du périphérique absolu uinput viennent explicitement de l'agent, au lieu
-  d'être déduites de l'union des zones.
+  d'être déduites de l'union des zones. *Ce n'était pas qu'une question de propreté : un écran
+  exclu de la mise en page reste dessiné par le compositeur, donc l'union des zones était plus
+  étroite que le bureau, et le compositeur étirait la plage déclarée sur la totalité — chaque
+  position du curseur multipliée par le rapport des deux. Les deux notions sont désormais
+  distinctes dans le hook : où le curseur a le droit d'aller (les zones) et ce que le périphérique
+  couvre (le bureau).*
 
 **Sortie** : tests et benches verts, toujours 0 allocation par événement. `kill -9` de l'agent ⇒
 le routage continue, et l'agent relancé se rattache sans recapturer les souris. En mode lié, les

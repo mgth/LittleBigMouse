@@ -407,6 +407,45 @@ impl Layout {
         self.published.physical_bounds
     }
 
+    /// The desktop the compositor draws, in pixels: every attached, active source's
+    /// rectangle unioned. `None` when nothing is attached.
+    ///
+    /// Deliberately **not** the union of the zones. A monitor excluded from the layout
+    /// keeps its place on the desktop — excluding it says the cursor should not go
+    /// there, not that the screen stopped existing — and a consumer that needs the
+    /// desktop (the Linux hook's absolute pointing device, whose range a compositor
+    /// maps onto the whole desktop) needs the real one or it maps everything wrong.
+    pub fn desktop_pixel_bounds(&self) -> Option<Rect> {
+        let mut bounds: Option<Rect> = None;
+        for source in self.sources() {
+            let Some(monitor) = self.monitor(&source.monitor) else {
+                continue;
+            };
+            let active = monitor.active_source.as_deref() == Some(source.source.id.as_str());
+            if !(active && source.source.attached_to_desktop) {
+                continue;
+            }
+            let r = source.source.in_pixel.bounds();
+            // Min/max rather than `Rect::union`, which keeps HLab.Geo's rule that an
+            // empty operand swallows the result: a source reporting a zero-width
+            // rectangle would take the whole desktop with it.
+            bounds = Some(match bounds {
+                None => r,
+                Some(b) => {
+                    let left = b.left().min(r.left());
+                    let top = b.top().min(r.top());
+                    Rect::new(
+                        left,
+                        top,
+                        b.right().max(r.right()) - left,
+                        b.bottom().max(r.bottom()) - top,
+                    )
+                }
+            });
+        }
+        bounds
+    }
+
     /// `X0`: `-PhysicalBounds.Left`.
     pub fn x0(&self) -> f64 {
         -self.published.physical_bounds.left()

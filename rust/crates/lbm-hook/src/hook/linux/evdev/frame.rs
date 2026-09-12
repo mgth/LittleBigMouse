@@ -274,7 +274,11 @@ mod tests {
     use crate::geometry::{Point, Rect};
 
     fn cursor() -> EvdevCursor {
-        EvdevCursor::new(Rect::new(0, 0, 1920, 1080), Point::new(0, 0))
+        EvdevCursor::new(
+            Rect::new(0, 0, 1920, 1080),
+            Rect::new(0, 0, 1920, 1080),
+            Point::new(0, 0),
+        )
     }
 
     // --- event constructors, in the shape the kernel delivers them ------------

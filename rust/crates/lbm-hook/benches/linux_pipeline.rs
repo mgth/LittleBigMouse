@@ -159,7 +159,7 @@ mod linux {
             let mut engine = MouseEngine::new();
             engine.load(layout);
 
-            let mut env = EvdevCursor::new(desktop, start);
+            let mut env = EvdevCursor::new(desktop, desktop, start);
             // Two events: the first only resolves the starting zone (ExtFirst),
             // exactly as the engine benchmarks prime their harness.
             for _ in 0..2 {

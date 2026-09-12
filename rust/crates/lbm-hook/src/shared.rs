@@ -60,6 +60,11 @@ pub struct Shared {
     /// Foreground-process path substrings that pause the hook (C++
     /// `LittleBigMouseDaemon::_excluded`), loaded from `Excluded.txt` on `Run`.
     pub excluded: Mutex<Vec<String>>,
+    /// The desktop the agent named with the layout it last handed over, in pixels.
+    /// `None` until one says so: an agent older than the field, or a hook driven by
+    /// something else, and then the layout's own extent stands in. Only the agent
+    /// enumerates the outputs, so only the agent can know this.
+    pub desktop: Mutex<Option<crate::geometry::Rect<i32>>>,
     /// [`lbm_ipc::protocol::fingerprint`] of the layout last accepted by a `Load`;
     /// empty until one is. Announced in the greeting, so an agent that finds this
     /// hook already running (D5) can tell whether it is applying the layout it wants.
@@ -87,6 +92,7 @@ impl Shared {
             engine: Mutex::new(MouseEngine::new()),
             excluded: Mutex::new(Vec::new()),
             applied: Mutex::new(String::new()),
+            desktop: Mutex::new(None),
             server: OnceLock::new(),
         }
     }

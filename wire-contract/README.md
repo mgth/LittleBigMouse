@@ -1,31 +1,27 @@
-# The UI↔daemon wire contract
+# The C#↔Rust format contract
 
-The Avalonia UI (C#) and the hook daemon (Rust) are separate processes that exchange
-length-prefixed UTF-8 XML over a per-user local endpoint. Neither side generates the
-other's types: **the contract is duplicated by hand in two languages.** This directory
-holds the golden payloads that keep the two copies honest, and this file says who
-decides what, and what to do when a message changes.
+Two implementations of the same documents, in two languages, neither generated from the
+other: **the contract is duplicated by hand.** This directory holds the golden payloads
+that keep the two copies honest, and this file says who decides what.
 
-## The transport, in one paragraph
+It used to be a *wire* contract — the C# UI spoke to the hook over a local endpoint, in
+XML. It is not any more. Phase 4 put the agent between them (the UI speaks JSON to the
+agent, `LittleBigMouse.Ui.Avalonia/Remote/AgentClient.cs`), and phase 5 made the two
+Rust processes speak serde types to each other
+(`rust/crates/lbm-ipc/src/protocol.rs`) — a protocol with no second implementation to
+disagree with, and therefore nothing to pin here.
 
-One frame = a little-endian `u32` byte length, then that many bytes of UTF-8. Max 1 MiB.
-It is **not** line-oriented — piping a bare `<CommandMessage .../>` into the socket makes
-the daemon read `<Com` as a length and hang up. Endpoint: a named pipe per Windows
-session, a Unix socket under `$XDG_RUNTIME_DIR` on Linux; `LBM_HOOK_ENDPOINT` overrides
-both, for tests. Framing lives in `rust/crates/lbm-ipc/src/framing.rs` and
-`LittleBigMouse.Ui.Avalonia/Remote/LocalIpcClient.cs`.
-
-Transport behaviour (duplex, reconnection, malformed frames) is tested in
-`rust/crates/lbm-hook/tests/wire_contract.rs`. This directory is about the *payloads*
-that ride it.
+What is left is the two documents both languages still read or write, and will until the
+C# side goes: the **layout** (`<ZonesLayout>`) and the **probe report**
+(`<ProbeReport>`).
 
 ## Who is authoritative
 
-Authority runs **per direction**, and it is not symmetric.
+Authority runs **per document**, and it is not symmetric.
 
-### UI→daemon: C# is the producer of record
+### The layout: C# is the producer of record
 
-`<CommandMessage>` and its `<ZonesLayout>` payload are produced by
+`<ZonesLayout>` is produced by
 `LittleBigMouse.Core/LittleBigMouse.Zones/IXmlSerializable.cs` (`ZoneSerializer`).
 
 The critical property: **the XML element and attribute names are nowhere written down.**
@@ -36,30 +32,24 @@ reading a default. There is no schema to disagree with; the C# type *is* the sch
 
 So the authoritative definitions are:
 
-| Wire element | Authoritative C# definition |
+| Element | Authoritative C# definition |
 |---|---|
-| `<CommandMessage>` | `LittleBigMouse.Zones/CommandMessage.cs` |
 | `<ZonesLayout>` | `LittleBigMouse.Zones/ZonesLayout.cs` — `Serialize()` |
 | `<Zone>` | `LittleBigMouse.Zones/Zone.cs` — `Serialize()` |
 | `<ZoneLink>` | `LittleBigMouse.Zones/ZoneLink.cs` — `Serialize()` |
 | `<Rect>` | `ZoneSerializer.Serialize(Rect)` |
 
-The Rust reader (`rust/crates/lbm-zones/src/layout.rs`, `rust/crates/lbm-zones/src/xml.rs`,
-`rust/crates/lbm-ipc/src/protocol.rs`) is a
-**follower**. If it disagrees with a golden, the bug is in Rust.
+The Rust reader (`rust/crates/lbm-zones/src/layout.rs`, `rust/crates/lbm-zones/src/xml.rs`)
+is a **follower**. If it disagrees with a golden, the bug is in Rust.
 
-### daemon→UI: Rust is the producer of record
+### The probe report: Rust is the producer of record
 
-`<DaemonMessage>` frames and the `<ProbeReport>` document are produced by
-`rust/crates/lbm-ipc/src/protocol.rs` and `rust/crates/lbm-engine/src/probe.rs`.
-
-| Wire element | Authoritative Rust definition |
+| Element | Authoritative Rust definition |
 |---|---|
-| `<DaemonMessage>` | `rust/crates/lbm-ipc/src/protocol.rs` — the `pub const`s and builder fns |
 | `<ProbeReport>` | `rust/crates/lbm-engine/src/probe.rs` — `to_xml` |
 
-The C# readers (`DaemonMessage.TryParse`, `ProbeReport.TryParse`) are **followers**. If
-they disagree with a golden, the bug is in C#.
+The C# reader (`ProbeReport.TryParse`) is a **follower**. If it disagrees with a golden,
+the bug is in C#.
 
 ## The corpus
 
@@ -75,9 +65,7 @@ goldens/
     layout-v5.6-current.xml        generated from ZoneSerializer
     layout-future-unknown-fields.xml   unknown attrs/elements from a newer UI
     layout-unknown-enum-values.xml     unknown Priority / Algorithm
-    command-{run,stop,quit,shortcut,load}.xml
   daemon-to-ui/          owned by Rust (wire_goldens.rs)
-    events.txt                     one frame per line, every event the daemon emits
     probe-report.xml               the report for layout-v5.6-current.xml
 ```
 
@@ -119,10 +107,6 @@ configuration at all, which is strictly worse than an ignored field.
 `Algorithm` → `Strait`). Unknown *commands* are surfaced as `Command::Unknown(name)` and
 logged, never guessed at.
 
-**Unknown events go the other way: they are REJECTED.** `DaemonMessage.TryParse` returns
-false rather than mapping an unrecognised event onto a known one, so a newer daemon
-paired with an older UI degrades to "state unchanged" instead of to a wrong state.
-
 ## Enum spellings on the wire
 
 The wire spellings are not always the names used in the code, and this is the part that
@@ -132,8 +116,6 @@ has already drifted once.
 |---|---|---|
 | `Algorithm` | `Strait`, `Cross` | Case-sensitive. `CornerCrossing` accepted as an alias for `Cross`. See below. |
 | `Priority` / `PriorityUnhooked` | `Idle`, `Below`, `Normal`, `Above`, `High`, `Realtime` | Unknown → `Normal` |
-| `Command` | `Listen`, `Load`, `LoadFromFile`, `Run`, `Stop`, `State`, `Probe`, `Shortcut`, `Quit` | |
-| `Event` | `Running`, `Stopped`, `Paused`, `Dead`, `SettingChanged`, `DesktopChanged`, `DisplayChanged`, `FocusChanged`, `Suspended`, `Resumed`, `Loaded`, `LoadFailed`, `Probed`, `Rescued`, `ShortcutUnavailable` | `SettingsChanged` accepted as a legacy alias; `<State>` accepted in place of `<Event>` |
 | `ProbeEdge/@Side` | `Left`, `Top`, `Right`, `Bottom` | |
 
 > **`Algorithm` used to be spelled five different ways in this repository.** The wire
@@ -165,11 +147,14 @@ configuration. Only the daemon's internal mode is spelled correctly (`Mode::Stra
 
 ## Procedure when a message changes
 
-There is **no protocol version number** on the wire, and adding one would not help: the
-two ends are shipped together but *run* in whatever pairing the user's install leaves
-behind (a daemon survives a UI upgrade, and `Current.xml` replays commands written by an
-older UI at boot). Compatibility is therefore per-field, and the goldens are how it is
-checked.
+There is **no version number on these documents**, and adding one would not help: a
+layout written by any version has to be readable by any other. Compatibility is therefore
+per-field, and the goldens are how it is checked.
+
+(The agent↔hook protocol, which is not this, *does* carry one —
+`lbm_ipc::protocol::PROTOCOL` — because those two processes do not have to agree about a
+document, they have to agree about each other, and one of them outlives the other across
+an upgrade.)
 
 ### Adding a field (the common case)
 
@@ -187,50 +172,11 @@ checked.
    had to edit `layout-v5.2.3.xml`, you have broken compatibility, not fixed a fixture).
 5. Run both suites (below).
 
-### Adding or changing an event
-
-1. Add the constant or builder in `rust/crates/lbm-ipc/src/protocol.rs`.
-2. Add the case to `DaemonMessage.TryParse` **and** the enum member in
-   `LittleBigMouseEvent`. An event the UI does not know is dropped silently.
-3. Add the frame to the `frames` array in `daemon_event_frames_match_the_golden`, then:
-   ```
-   LBM_UPDATE_GOLDEN=1 cargo test --test wire_goldens
-   ```
-4. `EveryDaemonEventGoldenParsesToAKnownEvent` will fail until the UI learns it. That
-   failure is the point.
-
-### Renaming or removing a field
-
-Don't, unless you also ship a migration on both sides. A rename is indistinguishable on
-the wire from "the old side stopped sending it", so every existing user silently gets the
-absent-value fallback. If you must: keep reading the old name on the Rust side for at
-least one release, and leave the frozen version goldens alone.
-
-### Regenerating everything
-
-```
-# C#-owned (ui-to-daemon)
-LBM_UPDATE_GOLDEN=1 dotnet test LittleBigMouse.Core/LittleBigMouse.DisplayLayout.Tests \
-    --filter FullyQualifiedName~WireContractGoldenTests
-# Rust-owned (daemon-to-ui) — cold-start safe, one pass
-cd rust && LBM_UPDATE_GOLDEN=1 cargo test -p lbm-hook --test wire_goldens
-```
-
-Then **read the diff before committing.** A changed line in `ui-to-daemon/` is a daemon
-that no longer understands what the UI sends; a changed line in `daemon-to-ui/` is a UI
-that no longer understands what the daemon reports.
-
-### Running the checks
-
-```
-cd rust && cargo test
-dotnet test LittleBigMouse.Core/LittleBigMouse.DisplayLayout.Tests
-```
-
 ## What is deliberately NOT covered here
 
-* **`Current.xml` replay.** The recovery file holds serialized `CommandMessage`s and is
-  covered by `DaemonProtocolTests` (atomic write, `.bak`, `MarkStopped` stripping `Run`).
+* **The agent↔hook protocol.** It has one implementation, in
+  `rust/crates/lbm-ipc/src/protocol.rs`, and its own round-trip tests. A contract needs
+  two parties who could disagree; that one has none.
 * **The persistence format** (`layouts/*.json`, the registry). Different contract,
   different goldens — `LayoutPersistenceGoldenTests` and `TestData/Persistence`. It
   shares the `Algorithm` value with this one, which is exactly how the spelling drift got

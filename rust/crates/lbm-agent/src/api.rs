@@ -44,7 +44,6 @@
 
 use std::io;
 
-use lbm_ipc::client::DaemonEvent;
 use lbm_ipc::framing::{read_frame, write_frame};
 use lbm_store::{GlobalOptionsDto, LayoutDocument};
 use serde::{Deserialize, Serialize};
@@ -186,27 +185,6 @@ pub fn state_event(snapshot: &Snapshot) -> String {
 /// The `Hook` event: what the hook said, forwarded.
 pub fn hook_event(name: &str, payload: &str) -> String {
     json!({ "Event": "Hook", "Hook": name, "Payload": payload }).to_string()
-}
-
-/// A hook event's name on this API: C#'s `LittleBigMouseEvent`.
-pub fn hook_event_name(event: DaemonEvent) -> &'static str {
-    match event {
-        DaemonEvent::Running => "Running",
-        DaemonEvent::Stopped => "Stopped",
-        DaemonEvent::Paused => "Paused",
-        DaemonEvent::Dead => "Dead",
-        DaemonEvent::SettingsChanged => "SettingsChanged",
-        DaemonEvent::DisplayChanged => "DisplayChanged",
-        DaemonEvent::DesktopChanged => "DesktopChanged",
-        DaemonEvent::FocusChanged => "FocusChanged",
-        DaemonEvent::Suspended => "Suspended",
-        DaemonEvent::Resumed => "Resumed",
-        DaemonEvent::Loaded => "Loaded",
-        DaemonEvent::LoadFailed => "LoadFailed",
-        DaemonEvent::Probed => "Probed",
-        DaemonEvent::Rescued => "Rescued",
-        DaemonEvent::ShortcutUnavailable => "ShortcutUnavailable",
-    }
 }
 
 /// C# `ProcessesCollector`: the processes seen in the foreground, in order, each once.
@@ -408,11 +386,7 @@ mod tests {
 
     #[test]
     fn a_hook_event_keeps_its_csharp_name_and_payload() {
-        let event: Value = serde_json::from_str(&hook_event(
-            hook_event_name(DaemonEvent::Probed),
-            "<ProbeReport />",
-        ))
-        .unwrap();
+        let event: Value = serde_json::from_str(&hook_event("Probed", "<ProbeReport />")).unwrap();
         assert_eq!(
             event,
             json!({ "Event": "Hook", "Hook": "Probed", "Payload": "<ProbeReport />" })

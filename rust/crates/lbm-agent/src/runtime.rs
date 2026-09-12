@@ -4,7 +4,7 @@
 
 use std::future::Future;
 
-use lbm_ipc::client::{self, DaemonEvent, DaemonMessage};
+use lbm_ipc::protocol::{self, Command, Event};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::api::{self, Call, Request, Snapshot};
@@ -22,24 +22,28 @@ pub enum SleepSignal {
     Ended,
 }
 
-/// A daemon event as the reconciler knows it.
-fn hook_event(message: DaemonMessage) -> HookEvent {
-    match message.event {
-        DaemonEvent::Running => HookEvent::Running,
-        DaemonEvent::Stopped => HookEvent::Stopped,
-        DaemonEvent::Paused => HookEvent::Paused,
-        DaemonEvent::Dead => HookEvent::Dead,
-        DaemonEvent::SettingsChanged => HookEvent::SettingsChanged,
-        DaemonEvent::DisplayChanged => HookEvent::DisplayChanged,
-        DaemonEvent::DesktopChanged => HookEvent::DesktopChanged,
-        DaemonEvent::FocusChanged => HookEvent::FocusChanged(message.payload),
-        DaemonEvent::Suspended => HookEvent::Suspended,
-        DaemonEvent::Resumed => HookEvent::Resumed,
-        DaemonEvent::Loaded => HookEvent::Loaded,
-        DaemonEvent::LoadFailed => HookEvent::LoadFailed,
-        DaemonEvent::Probed => HookEvent::Probed,
-        DaemonEvent::Rescued => HookEvent::Rescued,
-        DaemonEvent::ShortcutUnavailable => HookEvent::ShortcutUnavailable,
+/// A hook event as the reconciler knows it. The two vocabularies are deliberately not
+/// the same one: the reconciler also reasons about a hook that is not there
+/// (`Connected`, `Dead`), which is not something a hook can say.
+fn hook_event(message: Event) -> HookEvent {
+    match message {
+        Event::Running => HookEvent::Running,
+        Event::Stopped => HookEvent::Stopped,
+        Event::Paused => HookEvent::Paused,
+        Event::Dead => HookEvent::Dead,
+        Event::SettingsChanged => HookEvent::SettingsChanged,
+        Event::DisplayChanged => HookEvent::DisplayChanged,
+        Event::DesktopChanged => HookEvent::DesktopChanged,
+        Event::FocusChanged { process } => HookEvent::FocusChanged(process),
+        Event::Suspended => HookEvent::Suspended,
+        Event::Resumed => HookEvent::Resumed,
+        Event::Loaded { .. } => HookEvent::Loaded,
+        Event::LoadFailed => HookEvent::LoadFailed,
+        Event::Rescued => HookEvent::Rescued,
+        Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
+        // The handshake is the runtime's business, not the reconciler's; an event
+        // this version does not know is one it has nothing to do about.
+        Event::Hello { .. } | Event::Unknown => HookEvent::Unknown,
     }
 }
 
@@ -108,7 +112,7 @@ impl<W: AgentWorld> Agent<W> {
     /// is let go), and the agent stands down until the wake (`Suspended`).
     async fn sleep_starting(&mut self) {
         eprintln!("[lbm-agent] the system is going to sleep: -> Stop");
-        self.hook.send(client::messages(&[client::stop()]));
+        self.hook.send(protocol::frame(&[Command::Stop]));
         let _ = tokio::time::timeout(std::time::Duration::from_secs(2), self.hook.flush()).await;
         self.handle(Input::Hook(HookEvent::Suspended));
     }
@@ -261,7 +265,7 @@ impl<W: AgentWorld> Agent<W> {
             Request::Quit => {
                 // The tray's Quit (C#: QuitAsync): the hook leaves, then the agent.
                 eprintln!("[lbm-agent] -> Quit");
-                self.hook.send(client::messages(&[client::quit()]));
+                self.hook.send(protocol::frame(&[Command::Quit]));
                 self.quitting = true;
                 Ok(serde_json::Value::Null)
             }
@@ -282,7 +286,7 @@ impl<W: AgentWorld> Agent<W> {
         };
         client.send(api::answer(id, result));
         if let Some(report) = report {
-            self.forward(api::hook_event_name(DaemonEvent::Probed), &report);
+            self.forward("Probed", &report);
         }
     }
 
@@ -329,8 +333,9 @@ impl<W: AgentWorld> Agent<W> {
         if shortcut.trim().is_empty() || self.shortcut.as_ref() == Some(&shortcut) {
             return;
         }
-        self.hook
-            .send(client::messages(&[client::shortcut(&shortcut)]));
+        self.hook.send(protocol::frame(&[Command::Shortcut {
+            text: shortcut.clone(),
+        }]));
         self.shortcut = Some(shortcut);
     }
 
@@ -425,9 +430,9 @@ impl<W: AgentWorld> Agent<W> {
                         Input::Hook(HookEvent::Connected)
                     }
                     Some(HookSignal::Message(message)) => {
-                        // C#: DaemonEventTrace.
-                        eprintln!("[lbm-agent] hook: {:?}", message.event);
-                        self.forward(api::hook_event_name(message.event), &message.payload);
+                        // C#: EventTrace.
+                        eprintln!("[lbm-agent] hook: {}", message.name());
+                        self.forward(message.name(), &message.payload());
                         Input::Hook(hook_event(message))
                     }
                     // C#: the client synthesizes Dead when the connection drops.
@@ -500,12 +505,14 @@ impl<W: AgentWorld> Agent<W> {
                         let _ = self.inputs.send(Input::DisplayChanged);
                         return;
                     }
-                    let load = client::load(&zones);
+                    let load = Command::Load {
+                        zones: zones.clone(),
+                    };
                     // A foreign layout is simulated: loaded, never run.
                     let frame = if foreign {
-                        client::messages(&[load])
+                        protocol::frame(&[load])
                     } else {
-                        client::messages(&[load, client::run()])
+                        protocol::frame(&[load, Command::Run])
                     };
                     eprintln!(
                         "[lbm-agent] -> {} ({} zones)",
@@ -531,13 +538,17 @@ impl<W: AgentWorld> Agent<W> {
                     "[lbm-agent] -> Preview ({} zones)",
                     zones.matches("<Zone ").count()
                 );
-                self.hook
-                    .send(client::messages(&[client::load(&zones), client::run()]));
+                self.hook.send(protocol::frame(&[
+                    Command::Load {
+                        zones: zones.clone(),
+                    },
+                    Command::Run,
+                ]));
                 self.on_the_wire = Some(zones);
             }
             Effect::Stop => {
                 eprintln!("[lbm-agent] -> Stop");
-                self.hook.send(client::messages(&[client::stop()]));
+                self.hook.send(protocol::frame(&[Command::Stop]));
                 // Nobody to deliver it to: end the hook this agent launched instead (C#:
                 // a lost IPC Stop falls back to stopping the process).
                 if !self.hook_connected {

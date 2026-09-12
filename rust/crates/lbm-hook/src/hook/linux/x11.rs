@@ -77,7 +77,7 @@ pub fn run(shared: &'static Shared) {
                     crate::platform::set_process_priority(crate::priority::Priority::from_u8(
                         shared.priority.load(Ordering::SeqCst),
                     ));
-                    shared.broadcast(protocol::RUNNING);
+                    shared.broadcast(&protocol::Event::Running);
                 } else {
                     // Feed the engine a final running=false event so it restores
                     // any clip it holds, then drop ours.
@@ -91,11 +91,11 @@ pub fn run(shared: &'static Shared) {
                     crate::platform::set_process_priority(crate::priority::Priority::from_u8(
                         shared.priority_unhooked.load(Ordering::SeqCst),
                     ));
-                    shared.broadcast(protocol::STOPPED);
+                    shared.broadcast(&protocol::Event::Stopped);
                 }
             } else {
                 shared.hooked.store(false, Ordering::SeqCst);
-                shared.broadcast(protocol::STOPPED);
+                shared.broadcast(&protocol::Event::Stopped);
             }
         }
 

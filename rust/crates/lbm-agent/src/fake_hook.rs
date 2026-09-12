@@ -13,7 +13,7 @@ use std::io;
 use std::sync::{Arc, Mutex};
 
 use lbm_ipc::framing::{read_frame, write_frame};
-use lbm_ipc::protocol::{self, Command};
+use lbm_ipc::protocol::{self, Command, Event};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 use tokio::task::{AbortHandle, JoinHandle};
@@ -29,15 +29,16 @@ struct State {
 }
 
 impl State {
-    fn broadcast(&mut self, frame: &str) {
-        self.listeners.retain(|l| l.send(frame.to_owned()).is_ok());
+    fn broadcast(&mut self, event: &Event) {
+        let frame = protocol::event(event);
+        self.listeners.retain(|l| l.send(frame.clone()).is_ok());
     }
 
-    fn state_frame(&self) -> &'static str {
+    fn state(&self) -> Event {
         if self.hooked {
-            protocol::RUNNING
+            Event::Running
         } else {
-            protocol::STOPPED
+            Event::Stopped
         }
     }
 }
@@ -88,8 +89,8 @@ impl FakeHook {
 
     /// Sends an event frame (see [`lbm_ipc::protocol`]) to every subscriber, as the real
     /// hook does when the system tells it something (a display change, a suspend).
-    pub fn broadcast(&self, frame: &str) {
-        self.state.lock().unwrap().broadcast(frame);
+    pub fn broadcast(&self, event: &Event) {
+        self.state.lock().unwrap().broadcast(event);
     }
 }
 
@@ -181,35 +182,49 @@ async fn connection<S>(
                 match command {
                     Command::Listen => {
                         s.listeners.push(out.clone());
-                        let _ = out.send(s.state_frame().to_owned());
+                        let _ = out.send(protocol::event(&s.state()));
                     }
                     Command::State => {
-                        let _ = out.send(s.state_frame().to_owned());
+                        let _ = out.send(protocol::event(&s.state()));
                     }
-                    Command::Load(xml) if xml.is_empty() => s.broadcast(protocol::LOAD_FAILED),
-                    Command::Load(xml) => {
+                    Command::Load { zones: xml } if xml.is_empty() => {
+                        s.broadcast(&Event::LoadFailed)
+                    }
+                    Command::Load { zones: xml } => {
                         let zones = xml.matches("<Zone ").count();
                         let virtual_layout = xml.contains(r#"Virtual="True""#);
-                        s.broadcast(&protocol::loaded(zones, zones, virtual_layout));
+                        s.broadcast(&Event::Loaded {
+                            zones,
+                            main: zones,
+                            virtual_layout,
+                        });
                         if s.hooked && !rehooks {
                             s.hooked = false;
-                            s.broadcast(protocol::STOPPED);
+                            s.broadcast(&Event::Stopped);
                         }
                     }
                     Command::Run => {
                         s.hooked = true;
-                        s.broadcast(protocol::RUNNING);
+                        s.broadcast(&Event::Running);
                     }
                     Command::Stop => {
                         s.hooked = false;
-                        s.broadcast(protocol::STOPPED);
+                        s.broadcast(&Event::Stopped);
                     }
                     Command::Quit => {
                         s.hooked = false;
-                        s.broadcast(protocol::STOPPED);
+                        s.broadcast(&Event::Stopped);
                         quit = true;
                     }
-                    Command::Shortcut(_) | Command::Unknown(_) => {}
+                    // The fake speaks the protocol, handshake included: an agent
+                    // that asks who is there has to get an answer here too.
+                    Command::Hello { .. } => {
+                        s.broadcast(&Event::Hello {
+                            protocol: protocol::PROTOCOL,
+                            version: "fake".to_owned(),
+                        });
+                    }
+                    Command::Shortcut { .. } | Command::Unknown => {}
                 }
             }
         }

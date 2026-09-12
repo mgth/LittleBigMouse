@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use littlebigmouse_hook::ipc::{framing, server};
+use littlebigmouse_hook::ipc::{framing, protocol, server};
 use littlebigmouse_hook::shared::Shared;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -79,13 +79,13 @@ async fn send_and_read(xml: &str) -> String {
 
 #[tokio::test]
 async fn listen_replies_with_current_state() {
-    let line = send_and_read(r#"<CommandMessage Command="Listen" Payload=""/>"#).await;
+    let line = send_and_read(&protocol::frame(&[protocol::Command::Listen])).await;
     assert!(line.contains("Stopped"), "got {line:?}");
 }
 
 #[tokio::test]
 async fn state_query_replies_stopped() {
-    let line = send_and_read(r#"<CommandMessage Command="State" Payload=""/>"#).await;
+    let line = send_and_read(&protocol::frame(&[protocol::Command::State])).await;
     assert!(line.contains("Stopped"), "got {line:?}");
 }
 
@@ -105,7 +105,7 @@ async fn events_stream_to_listener_while_commands_flow() {
         .expect("listener connect timeout");
     framing::write_frame(
         &mut listener,
-        r#"<CommandMessage Command="Listen" Payload=""/>"#,
+        &protocol::frame(&[protocol::Command::Listen]),
     )
     .await
     .unwrap();
@@ -117,10 +117,10 @@ async fn events_stream_to_listener_while_commands_flow() {
         .expect("commander connect timeout");
 
     for _ in 0..50 {
-        server.broadcast(protocol::DISPLAY_CHANGED);
+        server.broadcast(&protocol::Event::DisplayChanged);
         framing::write_frame(
             &mut commander,
-            r#"<CommandMessage Command="State" Payload=""/>"#,
+            &protocol::frame(&[protocol::Command::State]),
         )
         .await
         .unwrap();
@@ -155,14 +155,14 @@ async fn listener_can_reconnect_after_disconnect() {
             .expect("connect timeout");
         framing::write_frame(
             &mut listener,
-            r#"<CommandMessage Command="Listen" Payload=""/>"#,
+            &protocol::frame(&[protocol::Command::Listen]),
         )
         .await
         .unwrap();
         let ack = framing::read_frame(&mut listener).await.unwrap();
         assert!(ack.contains("Stopped"), "got {ack:?}");
 
-        server.broadcast(protocol::DISPLAY_CHANGED);
+        server.broadcast(&protocol::Event::DisplayChanged);
         let event =
             tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
                 .await
@@ -187,7 +187,7 @@ async fn load_outcome_is_broadcast_to_listener() {
         .expect("listener connect timeout");
     framing::write_frame(
         &mut listener,
-        r#"<CommandMessage Command="Listen" Payload=""/>"#,
+        &protocol::frame(&[protocol::Command::Listen]),
     )
     .await
     .unwrap();
@@ -198,24 +198,39 @@ async fn load_outcome_is_broadcast_to_listener() {
         .await
         .expect("commander connect timeout");
 
-    let load = concat!(
-        r#"<CommandMessage Command="Load"><Payload>"#,
+    let zones = concat!(
         r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200" Virtual="True"><MainZones>"#,
         r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
-        r#"</MainZones></ZonesLayout></Payload></CommandMessage>"#,
+        r#"</MainZones></ZonesLayout>"#,
     );
-    framing::write_frame(&mut commander, load).await.unwrap();
+    let load = protocol::frame(&[protocol::Command::Load {
+        zones: zones.to_owned(),
+    }]);
+    framing::write_frame(&mut commander, &load).await.unwrap();
     let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
         .await
         .expect("Loaded event timeout")
         .unwrap();
-    assert!(event.contains("Loaded"), "got {event:?}");
-    assert!(event.contains("1 zones (1 main), virtual"), "got {event:?}");
+    // What it accepted travels as numbers now, not as a sentence about them.
+    assert_eq!(
+        protocol::parse_event(&event),
+        Some(protocol::Event::Loaded {
+            zones: 1,
+            main: 1,
+            virtual_layout: true
+        }),
+        "got {event:?}"
+    );
 
     // An empty/unparsable payload reports failure the same way.
-    framing::write_frame(&mut commander, r#"<CommandMessage Command="Load"/>"#)
-        .await
-        .unwrap();
+    framing::write_frame(
+        &mut commander,
+        &protocol::frame(&[protocol::Command::Load {
+            zones: String::new(),
+        }]),
+    )
+    .await
+    .unwrap();
     let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
         .await
         .expect("LoadFailed event timeout")
@@ -235,12 +250,9 @@ async fn malformed_frame_is_ignored_without_crashing_server() {
     framing::write_frame(&mut stream, "not xml <<<")
         .await
         .unwrap();
-    framing::write_frame(
-        &mut stream,
-        r#"<CommandMessage Command="State" Payload=""/>"#,
-    )
-    .await
-    .unwrap();
+    framing::write_frame(&mut stream, &protocol::frame(&[protocol::Command::State]))
+        .await
+        .unwrap();
     let reply = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut stream))
         .await
         .expect("reply timeout")

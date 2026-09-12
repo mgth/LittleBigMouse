@@ -20,7 +20,6 @@
 use std::path::PathBuf;
 
 use littlebigmouse_hook::engine::probe;
-use littlebigmouse_hook::ipc::protocol;
 use littlebigmouse_hook::priority::Priority;
 use littlebigmouse_hook::zones::zone_link::{MODE_DRAG, MODE_MOVE};
 use littlebigmouse_hook::zones::{Algorithm, ZonesLayout};
@@ -315,98 +314,6 @@ fn cross_is_the_wire_value_and_corner_crossing_is_tolerated_as_an_alias() {
     }
 }
 
-// =========================================================================
-// UI→daemon — commands
-// =========================================================================
-
-#[test]
-fn command_goldens_parse_to_the_commands_they_name() {
-    use littlebigmouse_hook::ipc::protocol::Command;
-
-    assert_eq!(
-        protocol::parse(&read("ui-to-daemon/command-run.xml")),
-        vec![Command::Run]
-    );
-    assert_eq!(
-        protocol::parse(&read("ui-to-daemon/command-stop.xml")),
-        vec![Command::Stop]
-    );
-    assert_eq!(
-        protocol::parse(&read("ui-to-daemon/command-quit.xml")),
-        vec![Command::Quit]
-    );
-    assert_eq!(
-        protocol::parse(&read("ui-to-daemon/command-shortcut.xml")),
-        vec![Command::Shortcut("Ctrl+Alt+Shift+M".to_string())]
-    );
-}
-
-/// A `Load` golden must yield a payload that parses on its own: the daemon slices the
-/// `<ZonesLayout>` subtree back out of the command by source range.
-#[test]
-fn load_command_golden_yields_a_layout_that_parses_on_its_own() {
-    use littlebigmouse_hook::ipc::protocol::Command;
-
-    let commands = protocol::parse(&read("ui-to-daemon/command-load.xml"));
-    let [Command::Load(payload)] = &commands[..] else {
-        panic!("expected a single Load, got {commands:?}");
-    };
-
-    // Byte-identical to the standalone layout golden — the same document, extracted.
-    assert_eq!(payload, &read("ui-to-daemon/layout-v5.6-current.xml"));
-
-    let layout = ZonesLayout::from_xml(payload).expect("extracted payload must parse");
-    assert_eq!(layout.zones.len(), 2);
-    assert_eq!(layout.algorithm, Algorithm::CornerCrossing);
-}
-
-/// An unknown command is reported as Unknown rather than dropped, and never mistaken
-/// for a known one — the daemon logs it instead of acting on a guess.
-#[test]
-fn an_unknown_command_from_a_newer_ui_is_named_not_guessed() {
-    use littlebigmouse_hook::ipc::protocol::Command;
-
-    assert_eq!(
-        protocol::parse(r#"<CommandMessage Command="Hibernate" Payload=""/>"#),
-        vec![Command::Unknown("Hibernate".to_string())]
-    );
-}
-
-// =========================================================================
-// daemon→UI — this crate is the producer of record
-// =========================================================================
-
-/// Every frame the daemon can emit, in one file, regenerated from `protocol.rs`. The C#
-/// side asserts it can parse every line; a frame added here without the UI learning it
-/// is a daemon state the user never sees.
-#[test]
-fn daemon_event_frames_match_the_golden() {
-    // Computed rather than read back, so a cold `LBM_UPDATE_GOLDEN=1` regenerates the
-    // whole corpus in one pass regardless of test order.
-    let report = current_probe_report();
-
-    let frames = [
-        protocol::RUNNING.to_string(),
-        protocol::STOPPED.to_string(),
-        protocol::PAUSED.to_string(),
-        protocol::DISPLAY_CHANGED.to_string(),
-        protocol::SETTING_CHANGED.to_string(),
-        protocol::DESKTOP_CHANGED.to_string(),
-        protocol::SUSPENDED.to_string(),
-        protocol::RESUMED.to_string(),
-        protocol::RESCUED.to_string(),
-        protocol::LOAD_FAILED.to_string(),
-        protocol::loaded(2, 2, false),
-        protocol::shortcut_unavailable("Ctrl+Alt+Shift+M"),
-        // A path carrying XML metacharacters: the case a substring parser gets wrong.
-        protocol::focus_changed(r#"C:\Games\A&B\<Stopped DisplayChanged>.exe"#),
-        protocol::probed(&report),
-    ];
-
-    // Each constant is already `\n`-terminated, so the concatenation IS the file.
-    assert_owned_golden("daemon-to-ui/events.txt", &frames.concat());
-}
-
 /// The probe report for the current layout golden, produced by driving the real engine
 /// over it. This is the only artefact where both geometric models meet on the same
 /// input: the UI sends bounds and links, the daemon answers with where the cursor
@@ -423,30 +330,4 @@ fn probe_report_golden_is_what_the_prober_emits_for_the_current_layout() {
     ));
     assert!(report.contains(r#"DeviceId="DISPLAY1""#));
     assert!(report.contains(r#"DeviceId="DISPLAY2""#));
-}
-
-/// Payload escaping is where the two XML layers meet: the prober escapes the zone name
-/// into the report, then `probed` escapes the whole report into the event payload. The
-/// C# side has to get the original text back after unwrapping both.
-#[test]
-fn probed_payload_survives_two_layers_of_escaping() {
-    let report = current_probe_report();
-    let frame = protocol::probed(&report);
-
-    let document = roxmltree::Document::parse(frame.trim_end()).expect("frame is well-formed XML");
-    let payload = document
-        .descendants()
-        .find(|n| n.has_tag_name("Payload"))
-        .expect("Probed carries a Payload");
-
-    // One unwrap gives back the report document, byte for byte.
-    assert_eq!(payload.text().unwrap(), report);
-
-    // A second parse gives back the escaped-once zone name.
-    let inner = roxmltree::Document::parse(payload.text().unwrap()).expect("report is well-formed");
-    let zone = inner
-        .descendants()
-        .find(|n| n.has_tag_name("Zone"))
-        .expect("report has zones");
-    assert_eq!(zone.attribute("Name"), Some(r#"Left & "Main""#));
 }

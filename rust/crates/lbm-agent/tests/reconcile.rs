@@ -732,7 +732,7 @@ fn while_the_resume_watchdog_runs_the_weaker_re_hook_stands_aside() {
 // Hook events      //
 //==================//
 
-/// C#: `MainService.DaemonEventReceivedAsync` — a hook that reports Stopped right after
+/// C#: `MainService.EventReceivedAsync` — a hook that reports Stopped right after
 /// connecting has no layout yet: it is given one, if the user wants the engine.
 #[test]
 fn a_hook_stopped_right_after_connecting_is_given_the_layout() {

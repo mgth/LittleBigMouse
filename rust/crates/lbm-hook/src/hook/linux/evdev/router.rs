@@ -22,8 +22,8 @@ use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;
 use crate::hook::hot_path::{count_event, route_move, Routed};
 use crate::hook::linux::accel::{AccelConfig, PointerAccel};
-use crate::ipc::protocol;
 use crate::shared::Shared;
+use lbm_ipc::protocol::Event;
 
 use super::cursor::EvdevCursor;
 use super::devices::{
@@ -83,12 +83,12 @@ pub fn run(shared: &'static Shared) -> bool {
                     crate::platform::set_process_priority(crate::priority::Priority::from_u8(
                         shared.priority.load(Ordering::SeqCst),
                     ));
-                    shared.broadcast(protocol::RUNNING);
+                    shared.broadcast(&Event::Running);
                 }
                 Err(e) => {
                     eprintln!("[LittleBigMouse.Hook] evdev: arm failed: {e}");
                     shared.want_hook.store(false, Ordering::SeqCst);
-                    shared.broadcast(protocol::STOPPED);
+                    shared.broadcast(&Event::Stopped);
                 }
             }
         } else if !want && router.is_some() {
@@ -99,7 +99,7 @@ pub fn run(shared: &'static Shared) -> bool {
             crate::platform::set_process_priority(crate::priority::Priority::from_u8(
                 shared.priority_unhooked.load(Ordering::SeqCst),
             ));
-            shared.broadcast(protocol::STOPPED);
+            shared.broadcast(&Event::Stopped);
         }
 
         if let (Some(deadline), Some(since)) = (autorelease, hooked_since) {

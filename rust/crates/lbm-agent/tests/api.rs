@@ -10,7 +10,7 @@ use lbm_agent::reconcile::{LayoutState, Timings, World};
 use lbm_agent::runtime::Agent;
 use lbm_agent::world::AgentWorld;
 use lbm_ipc::framing::{read_frame, write_frame};
-use lbm_ipc::protocol::{self, Command};
+use lbm_ipc::protocol::{Command, Event};
 use serde_json::{json, Value};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -274,7 +274,9 @@ async fn a_subscriber_hears_the_hook_and_what_it_saw() {
 
     // The foreground processes: each forwarded, each remembered once.
     for process in ["/usr/bin/kate", "/usr/bin/firefox", "/usr/bin/kate", ""] {
-        fake.broadcast(&protocol::focus_changed(process));
+        fake.broadcast(&Event::FocusChanged {
+            process: process.to_string(),
+        });
     }
     assert_eq!(frontend.hook("FocusChanged").await, "/usr/bin/kate");
     assert_eq!(frontend.hook("FocusChanged").await, "/usr/bin/firefox");
@@ -339,7 +341,7 @@ fn stored_layout(dir: &std::path::Path) -> Value {
 fn loads(fake: &FakeHook) -> usize {
     fake.received()
         .iter()
-        .filter(|c| matches!(c, Command::Load(_)))
+        .filter(|c| matches!(c, Command::Load { .. }))
         .count()
 }
 

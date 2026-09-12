@@ -12,6 +12,7 @@ use crate::ipc::protocol::{self, Command};
 use crate::ipc::server::{ClientId, ServerHandle};
 use crate::shared::Shared;
 use crate::zones::ZonesLayout;
+use lbm_ipc::protocol::Event;
 
 /// Dispatch one received line.
 ///
@@ -36,6 +37,18 @@ pub fn receive_message(
 
     for command in commands {
         match command {
+            // The handshake: who is there, and what it speaks. Answered whether or
+            // not the versions agree — the agent decides what to do about a mismatch,
+            // and it cannot decide on silence.
+            Command::Hello { .. } => {
+                server.send_to(
+                    client_id,
+                    &Event::Hello {
+                        protocol: lbm_ipc::protocol::PROTOCOL,
+                        version: env!("CARGO_PKG_VERSION").to_owned(),
+                    },
+                );
+            }
             Command::Listen => {
                 server.set_listening(client_id);
                 send_state(server, Some(client_id), shared);
@@ -51,24 +64,24 @@ pub fn receive_message(
             Command::State => {
                 send_state(server, Some(client_id), shared);
             }
-            Command::Load(xml) => {
+            Command::Load { zones: xml } => {
                 // Report the outcome to every listening client: a Load-without-Run
                 // (virtual-layout inspection) has no later Running event to prove
                 // the zones were accepted.
                 match load_layout(shared, &xml, rehooks) {
                     Some(info) => {
-                        server.broadcast(&protocol::loaded(
-                            info.zones,
-                            info.main,
-                            info.virtual_layout,
-                        ));
+                        server.broadcast(&Event::Loaded {
+                            zones: info.zones,
+                            main: info.main,
+                            virtual_layout: info.virtual_layout,
+                        });
                     }
-                    None => server.broadcast(protocol::LOAD_FAILED),
+                    None => server.broadcast(&Event::LoadFailed),
                 }
             }
             // Always reconciles, even when the text is unchanged: the answer is what
             // the user is waiting for, and a re-registration is cheap.
-            Command::Shortcut(text) => {
+            Command::Shortcut { text } => {
                 adopt_rescue_shortcut(shared, &text);
                 hook::rescue_shortcut_changed(shared);
             }
@@ -76,7 +89,9 @@ pub fn receive_message(
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
                 hook::request_quit(shared);
             }
-            Command::Unknown(_) => {}
+            // A newer agent's command, and the handshake said we speak different
+            // protocols: nothing to do but let the rest of the frame through.
+            Command::Unknown => {}
         }
     }
 
@@ -102,7 +117,7 @@ pub fn receive_message(
 pub fn rescue_fired(shared: &'static Shared) {
     eprintln!("[LittleBigMouse.Hook] rescue: freeing the cursor and stopping");
     crate::platform::cursor::force_release_clip();
-    shared.broadcast(protocol::RESCUED);
+    shared.broadcast(&Event::Rescued);
     hook::request_unhook(shared);
     shared.paused.store(false, Ordering::SeqCst);
 }
@@ -289,11 +304,11 @@ pub fn load_excluded(shared: &Shared) {
 /// broadcasts to all listening clients.
 fn send_state(server: &ServerHandle, to: Option<ClientId>, shared: &Shared) {
     let msg = if shared.hooked.load(Ordering::SeqCst) {
-        protocol::RUNNING
+        &Event::Running
     } else if shared.paused.load(Ordering::SeqCst) {
-        protocol::PAUSED
+        &Event::Paused
     } else {
-        protocol::STOPPED
+        &Event::Stopped
     };
 
     match to {
@@ -379,18 +394,18 @@ mod tests {
 
     #[test]
     fn a_frame_is_recognized_as_rehooking_by_its_run() {
-        // The shape the UI actually sends for an Apply, and for every live-preview
+        // The shape the agent actually sends for an Apply, and for every live-preview
         // tick: both commands in one frame.
-        let frame = format!(
-            "<Messages><CommandMessage Command=\"Load\"><Payload>{ZONES_XML}</Payload></CommandMessage><CommandMessage Command=\"Run\" Payload=\"\"/></Messages>"
-        );
-        assert!(frame_rehooks(&protocol::parse(&frame)));
+        let load = Command::Load {
+            zones: ZONES_XML.to_owned(),
+        };
+        assert!(frame_rehooks(&protocol::parse(&protocol::frame(&[
+            load.clone(),
+            Command::Run
+        ]))));
 
-        let load_only = format!(
-            "<CommandMessage Command=\"Load\"><Payload>{ZONES_XML}</Payload></CommandMessage>"
-        );
         assert!(
-            !frame_rehooks(&protocol::parse(&load_only)),
+            !frame_rehooks(&protocol::parse(&protocol::frame(&[load]))),
             "a Load on its own — the virtual-layout inspection path — has nothing putting the hook back"
         );
     }

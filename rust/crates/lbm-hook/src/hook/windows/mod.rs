@@ -22,10 +22,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MSG, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_QUIT,
 };
 
-use crate::ipc::protocol;
 use crate::platform;
 use crate::priority::Priority;
 use crate::shared::Shared;
+use lbm_ipc::protocol::Event;
 
 /// Custom message that unwinds the pump so `run` re-reconciles the hooks
 /// (C++ `WM_BREAK_LOOP = WM_APP + 1`).
@@ -167,12 +167,12 @@ impl Hooker {
             Ok(h) => {
                 self.mouse_hook = h;
                 shared.hooked.store(true, Ordering::SeqCst);
-                shared.broadcast(protocol::RUNNING);
+                shared.broadcast(&Event::Running);
             }
             Err(_) => {
                 self.mouse_hook = HHOOK::default();
                 shared.hooked.store(false, Ordering::SeqCst);
-                shared.broadcast(protocol::STOPPED);
+                shared.broadcast(&Event::Stopped);
             }
         }
     }
@@ -198,7 +198,7 @@ impl Hooker {
             engine.on_mouse_move(&mut env, &mut e);
         }
         shared.hooked.store(false, Ordering::SeqCst);
-        shared.broadcast(protocol::STOPPED);
+        shared.broadcast(&Event::Stopped);
     }
 
     fn hook_focus(&mut self) {

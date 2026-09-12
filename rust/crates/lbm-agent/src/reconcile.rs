@@ -86,7 +86,7 @@ pub trait World {
 }
 
 /// What the hook reports, as far as reconciling goes (the wire events of
-/// `lbm_ipc::client::DaemonEvent`, plus the client's own `Connected`).
+/// `lbm_ipc::client::Event`, plus the client's own `Connected`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HookEvent {
     /// The connection to the hook was (re)established.
@@ -104,12 +104,14 @@ pub enum HookEvent {
     Resumed,
     Loaded,
     LoadFailed,
-    Probed,
     Rescued,
     ShortcutUnavailable,
     /// The hook declined a Run (#609): the engine stays stopped, and Stopped is what
     /// the reconciler reasons on.
     RunRefused,
+    /// Something this version has no name for. Named so that the map from the wire is
+    /// total, and so that "we do not know" cannot be spelled as something we do.
+    Unknown,
 }
 
 /// The hook's state as its events tell it (C#: `State`, the events up to `Dead`).
@@ -307,7 +309,7 @@ impl Reconciler {
     // Hook events      //
     //==================//
 
-    /// C# `MainService.DaemonEventReceivedAsync`: flags first (they gate what follows),
+    /// C# `MainService.EventReceivedAsync`: flags first (they gate what follows),
     /// then what the event means.
     fn hook_event(&mut self, event: HookEvent, world: &mut impl World, out: &mut Vec<Effect>) {
         match event {

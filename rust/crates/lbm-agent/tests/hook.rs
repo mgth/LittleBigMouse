@@ -187,3 +187,61 @@ async fn a_hook_that_speaks_another_protocol_is_retired_not_talked_to() {
     .await;
     assert!(farewell.is_ok(), "the old hook was never told to leave");
 }
+
+#[cfg(unix)]
+/// The shape a real upgrade leaves behind: a hook that predates this protocol reads the
+/// opening frame as XML, finds no commands in it, and answers **nothing**. The agent must
+/// not sit there talking to it — it is holding the mice, and nothing else can stop it.
+#[tokio::test]
+async fn a_hook_that_answers_nothing_at_all_is_retired_too() {
+    use lbm_ipc::framing::read_frame;
+
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+
+    let listener = tokio::net::UnixListener::bind(&endpoint).unwrap();
+    let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorder = heard.clone();
+    tokio::spawn(async move {
+        while let Ok((stream, _)) = listener.accept().await {
+            let recorder = recorder.clone();
+            tokio::spawn(async move {
+                let (mut reader, _writer) = tokio::io::split(stream);
+                // Reads, understands nothing, says nothing.
+                while let Ok(frame) = read_frame(&mut reader).await {
+                    recorder.lock().unwrap().push(frame);
+                }
+            });
+        }
+    });
+
+    let (_hook, mut signals) = HookClient::spawn(endpoint.clone());
+    assert_eq!(next(&mut signals).await, HookSignal::Connected);
+
+    // Nothing comes back, so the deadline is what decides. Waiting it out is the
+    // test: a paused clock would prove the branch exists, not that it fires.
+    // Read the signal directly: the shared helper's own patience is the deadline
+    // being waited on, so going through it would race what is being tested.
+    let lost = tokio::time::timeout(Duration::from_secs(20), signals.recv())
+        .await
+        .expect("the agent gave up on the silent hook")
+        .expect("the connection task is alive");
+    assert_eq!(lost, HookSignal::Lost);
+    // The farewell goes out on a connection of its own, which the server accepts on
+    // its own schedule: wait for it rather than for the scheduler.
+    let farewell = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if heard
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|f| f == protocol::LEGACY_QUIT)
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    assert!(farewell.is_ok(), "the silent hook was never told to leave");
+}

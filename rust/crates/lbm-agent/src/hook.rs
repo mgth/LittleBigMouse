@@ -22,6 +22,9 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 
 /// Spacing between connection attempts (C#: `RetryDelay`).
+/// How long a hook has to say who it is before it is taken for an older one.
+const HANDSHAKE_PATIENCE: Duration = Duration::from_secs(5);
+
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 
 /// Bound on one connection attempt (C#: `ConnectAttemptTimeout`): a Windows pipe
@@ -169,6 +172,10 @@ enum Served {
     /// There is a hook there, and it is not one this agent can drive — an upgrade
     /// left the old one running (D5: a hook outlives its agent). It is retired the
     /// only way it still understands, and the supervisor launches one of ours.
+    ///
+    /// Either it named a protocol that is not ours, or — the case a real upgrade
+    /// produces — it said nothing at all: a hook that predates this protocol reads
+    /// the opening frame as XML, finds no commands in it, and has nothing to answer.
     Foreign,
 }
 
@@ -207,14 +214,28 @@ where
         }
     });
 
+    // A hook answers `Hello` off its IPC thread, so it answers at once or it is not
+    // one of ours. Generous all the same: the cost of waiting is nothing, and the cost
+    // of retiring a working hook is a cursor that stops routing until it comes back.
+    let handshake_by = tokio::time::Instant::now() + HANDSHAKE_PATIENCE;
+    let mut greeted = false;
+
     let served = loop {
         tokio::select! {
+            _ = tokio::time::sleep_until(handshake_by), if !greeted => {
+                eprintln!(
+                    "[lbm-agent] the hook did not answer the handshake: it is older than \
+                     this protocol; retiring it"
+                );
+                break Served::Foreign;
+            }
             frame = frames_rx.recv() => match frame {
                 Some(frame) => {
                     match protocol::parse_event(&frame) {
                         // The handshake is the connection's business: nothing above
                         // needs to know the number, only whether it is ours.
                         Some(Event::Hello { protocol: theirs, version }) => {
+                            greeted = true;
                             if theirs != protocol::PROTOCOL {
                                 eprintln!(
                                     "[lbm-agent] the hook speaks protocol {theirs} (version \

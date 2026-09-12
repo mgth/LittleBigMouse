@@ -214,6 +214,13 @@ public sealed class AgentClient : IDisposable, IAgentWallpaper
     // The connection   //
     //==================//
 
+    /// <summary>
+    /// Writes one frame, and is the only thing that writes: a frame is a length and then
+    /// that many bytes, so two writers sharing a stream do not produce two frames, they
+    /// produce one bogus length and a reader that is lost until the connection drops.
+    /// `WriteFrameAsync` yields three times (prefix, payload, flush), which is three
+    /// places to be interleaved at.
+    /// </summary>
     async Task SendAsync(string frame, CancellationToken token)
     {
         await _sendGate.WaitAsync(token);
@@ -243,7 +250,13 @@ public sealed class AgentClient : IDisposable, IAgentWallpaper
                 _stream = stream;
                 ConnectionChanged?.Invoke(this, true);
                 // The state now, then every change (the tray does the same in process).
-                await WriteFrameAsync(stream, """{"Id":0,"Method":"Subscribe"}""", _stopping.Token);
+                //
+                // Through the gate like any other frame, though nothing else is meant to
+                // be writing yet: publishing the stream above is what releases whoever
+                // was waiting for a connection, so "yet" lasts exactly as long as the
+                // line between the two — and an interleaved frame does not cost a
+                // request, it costs the connection.
+                await SendAsync("""{"Id":0,"Method":"Subscribe"}""", _stopping.Token);
                 while (!_stopping.IsCancellationRequested)
                     Dispatch(await ReadFrameAsync(stream, _stopping.Token));
             }

@@ -29,6 +29,7 @@ using System.Reactive.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using Avalonia.Threading;
 using DynamicData;
 using HLab.Base;
@@ -172,6 +173,22 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         // dips on every tick and the switch would turn itself off a fifth of a second
         // after being clicked. A foreign layout is excluded outright: the daemon refuses
         // to hook one, so there would be nothing to feel.
+        // The two are not looking at the same desktop. It happens when one of them has
+        // not noticed a display change yet — and it matters, because everything this view
+        // sends names the layout it was built for, so the agent refuses all of it. The
+        // banner says so before the user finds out by pressing a button.
+        _agentLayoutMismatch = this
+            .WhenAnyValue(e => e.AgentLayoutId, e => e.Model, e => e.IsVirtualLayout)
+            .Select(t => t is { Item3: false, Item1: { Length: > 0 } theirs, Item2: { } mine }
+                         && mine.Id != theirs)
+            .ToProperty(this, e => e.AgentLayoutMismatch);
+
+        // What it is for: the agent rebuilds from the displays it can see now (#443).
+        RefreshCommand = ReactiveCommand.CreateFromTask(
+            () => Ask(() => _agent.RefreshAsync(), "Refresh"),
+            this.WhenAnyValue(e => e.Dead, dead => !dead)
+                .ObserveOn(RxSchedulers.MainThreadScheduler));
+
         _canLiveUpdate = this
             .WhenAnyValue(e => e.Dead, e => e.IsVirtualLayout, (dead, virtualLayout) => !dead && !virtualLayout)
             .ToProperty(this, e => e.CanLiveUpdate);
@@ -238,7 +255,11 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         // is. Without this the view would sit on whatever it last inferred — a Running that
         // the tray, another frontend or a display change has since stopped.
         OwnedSubscription.Create<EventHandler<AgentState>>(
-                (_, state) => _status.Apply(new(state.EngineEvent, "")),
+                (_, state) =>
+                {
+                    _status.Apply(new(state.EngineEvent, ""));
+                    _postToUi(() => AgentLayoutId = state.LayoutId);
+                },
                 h => agent.StateChanged += h,
                 h => agent.StateChanged -= h)
             .DisposeWith(this);
@@ -255,6 +276,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
         _status.Apply(new LittleBigMouseServiceEventArgs(
             agent.State?.EngineEvent ?? LittleBigMouseEvent.Dead, ""));
+        AgentLayoutId = agent.State?.LayoutId;
     }
 
     public override void OnDispose()
@@ -487,6 +509,24 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     /// </summary>
     public string DaemonLayoutInfo => _daemonLayoutInfo.Value;
     readonly ObservableAsPropertyHelper<string> _daemonLayoutInfo;
+
+    /// <summary>The layout the agent says it holds, or null while it has said nothing.</summary>
+    public string? AgentLayoutId
+    {
+        get => _agentLayoutId;
+        private set => this.RaiseAndSetIfChanged(ref _agentLayoutId, value);
+    }
+    string? _agentLayoutId;
+
+    /// <summary>
+    /// The agent holds a different layout from the one shown here. A foreign layout is
+    /// excluded: it is not meant to be the agent's, and saying so would be noise.
+    /// </summary>
+    public bool AgentLayoutMismatch => _agentLayoutMismatch.Value;
+    readonly ObservableAsPropertyHelper<bool> _agentLayoutMismatch;
+
+    /// <summary>Ask the agent to rebuild its layout from the displays it can see.</summary>
+    public ICommand RefreshCommand { get; }
 
     public bool IsVirtualLayout => _isVirtualLayout.Value;
     readonly ObservableAsPropertyHelper<bool> _isVirtualLayout;

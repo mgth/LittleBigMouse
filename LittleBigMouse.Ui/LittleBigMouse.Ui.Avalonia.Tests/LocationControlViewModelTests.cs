@@ -171,6 +171,38 @@ public sealed class LocationControlViewModelTests
     }
 
     [Fact]
+    public void TheBannerIsShownOnlyWhenTheAgentIsOnAnotherLayout()
+    {
+        // Everything this view sends names the layout it was built for, so an agent
+        // holding another one refuses all of it. The user should not have to find that
+        // out by pressing a button.
+        var f = new Fixture();
+        var layout = MainServiceFakes.NewLayout(new LbmOptions()); // id: TESTMON1
+        f.Vm.Model = layout;
+        Assert.False(f.Vm.AgentLayoutMismatch, "nothing said yet is not a disagreement");
+
+        f.Agent.Receive(AgentFrames.State("Stopped", layoutId: "SOMETHING_ELSE"));
+        Assert.True(f.Vm.AgentLayoutMismatch);
+
+        f.Agent.Receive(AgentFrames.State("Stopped", layoutId: layout.Id));
+        Assert.False(f.Vm.AgentLayoutMismatch, "the same desktop, no banner");
+    }
+
+    [Fact]
+    public void AForeignLayoutIsNotADisagreement()
+    {
+        // A layout opened for inspection was never meant to be the agent's, so saying
+        // the two differ would be noise on every virtual layout ever opened.
+        var f = new Fixture();
+        f.Vm.Model = MainServiceFakes.NewLayout(new LbmOptions(), source: LayoutSource.VirtualFile);
+
+        f.Agent.Receive(AgentFrames.State("Running", layoutId: "THE_REAL_ONE"));
+
+        Assert.True(f.Vm.IsVirtualLayout);
+        Assert.False(f.Vm.AgentLayoutMismatch);
+    }
+
+    [Fact]
     public void DisposalEndsALivePreview()
     {
         // Closing the window while previewing: without this, the ticker keeps feeding the

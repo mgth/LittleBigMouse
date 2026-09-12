@@ -60,6 +60,15 @@ public class MainService : ReactiveModel, IMainService
     readonly ILayoutFactory _layoutFactory;
     readonly AgentClient _agent;
     readonly Action _leave;
+    readonly Func<bool> _launchAgent;
+
+    /// <summary>
+    /// How long the window waits for an agent before starting one. Long enough for a
+    /// running agent to be found (the client retries every 250 ms), short enough that a
+    /// user opening the window on a machine with none does not sit in front of a dead
+    /// engine wondering. Injectable so the tests do not have to wait it out.
+    /// </summary>
+    readonly TimeSpan _agentPatience;
     readonly Func<ApplicationUpdaterViewModel> _updaterLocator;
 
     readonly MainWindowManager _windows;
@@ -82,7 +91,9 @@ public class MainService : ReactiveModel, IMainService
         ILayoutOptions options)
         : this(mainViewModelLocator, mvvmService, agent, layoutFactory, layoutPersistence,
             updaterLocator, options, post => Dispatcher.UIThread.Post(() => post()),
-            leave: () => Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal))
+            leave: () => Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal),
+            launchAgent: new AgentLauncher().Launch,
+            agentPatience: TimeSpan.FromSeconds(2))
     {
     }
 
@@ -101,9 +112,13 @@ public class MainService : ReactiveModel, IMainService
         Func<ApplicationUpdaterViewModel> updaterLocator,
         ILayoutOptions options,
         Action<Action> postToUi,
-        Action leave)
+        Action leave,
+        Func<bool> launchAgent,
+        TimeSpan agentPatience)
     {
         _leave = leave;
+        _launchAgent = launchAgent;
+        _agentPatience = agentPatience;
         _layoutFactory = layoutFactory;
         _agent = agent;
         _updaterLocator = updaterLocator;
@@ -253,7 +268,19 @@ public class MainService : ReactiveModel, IMainService
 
         // The tray lives in the agent now (it is there whether this window runs or not),
         // and so does the update check on the platforms that have one.
-        await Task.CompletedTask;
+        await EnsureAgentAsync();
+    }
+
+    /// <summary>
+    /// Make sure there is an agent to talk to. It normally comes up with the session, but
+    /// nothing guarantees one is running when this window opens — a first run, a session
+    /// where autostart is off, an agent that died — and the window on its own can do
+    /// nothing about a dead engine but say so.
+    /// </summary>
+    async Task EnsureAgentAsync()
+    {
+        if (await _agent.WaitForConnectionAsync(_agentPatience)) return;
+        _launchAgent();
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action) => _windows.AddPlugin(action);

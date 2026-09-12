@@ -48,13 +48,17 @@ public sealed class MainServiceLifecycleTests
         public FakePersistence Persistence { get; } = new();
         public FakeLayoutFactory Factory { get; }
 
-        /// <summary>Never started: nothing here reaches an agent, so it never opens a socket.</summary>
-        public AgentClient Agent { get; } = new();
+        /// <summary>Never started, unless a test hands one that is.</summary>
+        public AgentClient Agent { get; }
 
         public MainService Service { get; }
 
-        public Fixture()
+        /// <summary>Every agent this service decided to start.</summary>
+        public int Launches { get; private set; }
+
+        public Fixture(AgentClient? agent = null)
         {
+            Agent = agent ?? new AgentClient();
             Factory = new FakeLayoutFactory(() => MainServiceFakes.NewLayout(Options));
 
             Service = new MainService(
@@ -67,7 +71,9 @@ public sealed class MainServiceLifecycleTests
                 options: Options,
                 postToUi: post => post(),
                 // Nothing here opens a window, so nothing here closes one either.
-                leave: () => Assert.Fail("nothing in these tests should end the process"));
+                leave: () => Assert.Fail("nothing in these tests should end the process"),
+                launchAgent: () => { Launches++; return true; },
+                agentPatience: TimeSpan.FromMilliseconds(100));
         }
     }
 
@@ -121,6 +127,37 @@ public sealed class MainServiceLifecycleTests
 
         Assert.Equal(0, f.Factory.Creations);
         Assert.Equal(0, f.Factory.WallpaperUpdates);
+    }
+
+    [Fact]
+    public async Task WithNoAgentAnsweringTheWindowStartsOne()
+    {
+        // Opening the window on a machine where nothing is running: autostart has never
+        // been written, or the agent died. The window alone can do nothing about a dead
+        // engine but say so, so it starts one. The client here is never started, so it
+        // never connects — which is exactly the case being pinned down.
+        var f = new Fixture();
+
+        await f.Service.StartNotifierAsync();
+
+        Assert.Equal(1, f.Launches);
+    }
+
+    [Fact]
+    public async Task AnAgentThatIsAlreadyThereIsNotStartedTwice()
+    {
+        // Positive control, and the case that matters most: starting a second agent would
+        // put two processes on one hook. Over a real connection, since "answering" is the
+        // whole question.
+        await using var agent = FakeAgent.Start();
+        using var client = new AgentClient(agent.Endpoint);
+        var f = new Fixture(client);
+        client.Start();
+        await agent.AnswerAsync(await agent.NextRequestAsync(), AgentFrames.Snapshot("Running"));
+
+        await f.Service.StartNotifierAsync();
+
+        Assert.Equal(0, f.Launches);
     }
 
     [Fact]

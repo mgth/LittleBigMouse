@@ -78,6 +78,30 @@ public sealed class AgentClient : IDisposable
     /// <summary>Connects, and keeps connecting for as long as this client lives.</summary>
     public void Start() => _listener ??= Task.Run(ListenAsync);
 
+    /// <summary>
+    /// Waits for an agent to answer, up to <paramref name="patience"/>. False means none
+    /// did — which is a question for the caller (start one?), not an error: the client
+    /// goes on trying either way.
+    /// </summary>
+    public async Task<bool> WaitForConnectionAsync(TimeSpan patience,
+        CancellationToken token = default)
+    {
+        var deadline = DateTime.UtcNow + patience;
+        while (!Connected)
+        {
+            if (DateTime.UtcNow >= deadline) return false;
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50), token);
+            }
+            catch (OperationCanceledException)
+            {
+                return Connected;
+            }
+        }
+        return true;
+    }
+
     //==================//
     // The API          //
     //==================//

@@ -359,3 +359,37 @@ async fn the_greeting_names_the_layout_the_hook_holds() {
     // contract — two processes naming the same layout the same way.
     assert_eq!(layout, lbm_ipc::protocol::fingerprint(zones));
 }
+
+/// A Run the daemon will not honour still answers. Silence would leave the agent
+/// waiting for a `Running` that never comes — nothing retries a Start — and the user
+/// who pressed it looking at "stopped" with no reason given.
+#[tokio::test]
+async fn a_refused_run_says_what_the_engine_is_doing() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut agent = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(&mut agent, &protocol::frame(&[protocol::Command::Listen]))
+        .await
+        .unwrap();
+    let ack = framing::read_frame(&mut agent).await.unwrap();
+    assert!(ack.contains("Stopped"), "got {ack:?}");
+
+    // Nothing was ever loaded: the engine has no zones to route between, so the Run
+    // is refused — and the refusal is reported, not swallowed.
+    framing::write_frame(&mut agent, &protocol::frame(&[protocol::Command::Run]))
+        .await
+        .unwrap();
+    let answer = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
+        .await
+        .expect("a refused Run answers")
+        .unwrap();
+    assert_eq!(
+        protocol::parse_event(&answer),
+        Some(protocol::Event::Stopped),
+        "got {answer:?}"
+    );
+}

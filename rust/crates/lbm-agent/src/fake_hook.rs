@@ -3,11 +3,17 @@
 //! device. It is what `--fake-hook` runs, so the agent can be developed without
 //! capturing the mice of whoever runs it, and what the tests talk to.
 //!
-//! The answers: `Listen` subscribes and gets the current state; `Load` is reported
-//! (`Loaded`, or `LoadFailed` for an empty layout) and unhooks unless its frame also
-//! holds a `Run`; `Run` hooks (`Running`); `Stop` unhooks (`Stopped`); `State` gets the
+//! The answers: `Hello` greets the asker, naming the layout held; `Listen` subscribes
+//! and gets the current state; `Load` is reported (`Loaded`, or `LoadFailed` for an
+//! empty layout) and unhooks unless its frame also holds a `Run`; `Run` hooks
+//! (`Running`), or is refused — reporting the state, as the daemon does — when nothing
+//! is loaded or the layout is foreign; `Stop` unhooks (`Stopped`); `State` gets the
 //! state; `Probe` gets an (empty) report; `Quit` unhooks and closes the endpoint. Every
 //! command is recorded.
+//!
+//! Where it is tempting to make it simpler than the daemon, don't: a fake more willing
+//! than the hook that ships lets a test pass on behaviour the product does not have,
+//! and this one has hidden two real bugs that way already.
 
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -28,6 +34,10 @@ struct State {
     /// `Load` it accepted. A fake that always greeted with none would be agreeing
     /// with the agent rather than answering it.
     applied: String,
+    /// And whether that layout is a foreign one, which the real daemon refuses to
+    /// run: it would confine the local mouse inside a geometry that does not exist
+    /// on this machine.
+    applied_is_virtual: bool,
     received: Vec<Command>,
     listeners: Vec<mpsc::UnboundedSender<String>>,
 }
@@ -198,6 +208,7 @@ async fn connection<S>(
                         let zones = xml.matches("<Zone ").count();
                         let virtual_layout = xml.contains(r#"Virtual="True""#);
                         s.applied = protocol::fingerprint(&xml);
+                        s.applied_is_virtual = virtual_layout;
                         s.broadcast(&Event::Loaded {
                             zones,
                             main: zones,
@@ -207,6 +218,13 @@ async fn connection<S>(
                             s.hooked = false;
                             s.broadcast(&Event::Stopped);
                         }
+                    }
+                    // Refused where the real daemon refuses, and saying so as it does.
+                    // A fake more willing than the hook that ships lets a test pass on
+                    // behaviour the product does not have.
+                    Command::Run if s.applied.is_empty() || s.applied_is_virtual => {
+                        let state = s.state();
+                        s.broadcast(&state);
                     }
                     Command::Run => {
                         s.hooked = true;

@@ -157,6 +157,11 @@ pub fn start_with_endpoint(
 ) -> io::Result<(ServerHandle, String)> {
     let (command_tx, command_rx) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
     let handle = ServerHandle::new(command_tx);
+    // Published here rather than by the caller: everything that speaks unprompted —
+    // the hook thread, the rescue listener, a refused Run — reaches the client through
+    // `Shared::broadcast`, and a caller that forgot this line would leave all of them
+    // talking to nobody, silently. (An integration test is such a caller.)
+    let _ = shared.server.set(handle.clone());
     let worker_handle = handle.clone();
     let accept_handle = handle.clone();
     let diagnostic = endpoint.clone();

@@ -711,6 +711,7 @@ dependencies = [
  "lbm-ipc",
  "lbm-layout",
  "lbm-store",
+ "lbm-zones",
  "libc",
  "png 0.17.16",
  "serde",

@@ -4,22 +4,26 @@
 //! capturing the mice of whoever runs it, and what the tests talk to.
 //!
 //! The answers: `Hello` greets the asker, naming the layout held; `Listen` subscribes
-//! and gets the current state; `Load` is reported (`Loaded`, or `LoadFailed` for an
-//! empty layout) and unhooks unless its frame also holds a `Run`; `Run` hooks
-//! (`Running`), or is refused — reporting the state, as the daemon does — when nothing
-//! is loaded or the layout is foreign; `Stop` unhooks (`Stopped`); `State` gets the
-//! state; `Probe` gets an (empty) report; `Quit` unhooks and closes the endpoint. Every
+//! and gets the current state; `Load` is put through the parser the daemon uses and
+//! reported (`Loaded` with the document's own two zone counts, or `LoadFailed`), and
+//! unhooks either way unless its frame also holds a `Run`; `Run` hooks (`Running`), or
+//! is refused — reporting the state, as the daemon does — when nothing is loaded or the
+//! layout is foreign; `Stop` unhooks (`Stopped`); `State` gets the state; `Shortcut` is
+//! held; `Probe` gets an (empty) report; `Quit` unhooks and closes the endpoint. Every
 //! command is recorded.
 //!
 //! Where it is tempting to make it simpler than the daemon, don't: a fake more willing
 //! than the hook that ships lets a test pass on behaviour the product does not have,
-//! and this one has hidden two real bugs that way already.
+//! and this one has hidden real bugs that way three times over — a greeting sent where
+//! nobody was listening, a `Run` it granted unconditionally, and a `Load` it judged by
+//! the look of the text.
 
 use std::io;
 use std::sync::{Arc, Mutex};
 
 use lbm_ipc::framing::{read_frame, write_frame};
 use lbm_ipc::protocol::{self, Command, Event};
+use lbm_zones::ZonesLayout;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 use tokio::task::{AbortHandle, JoinHandle};
@@ -38,6 +42,8 @@ struct State {
     /// run: it would confine the local mouse inside a geometry that does not exist
     /// on this machine.
     applied_is_virtual: bool,
+    /// The panic shortcut it was last told to adopt.
+    shortcut: String,
     received: Vec<Command>,
     listeners: Vec<mpsc::UnboundedSender<String>>,
 }
@@ -94,6 +100,11 @@ impl FakeHook {
     /// Whether the last answer was to hook.
     pub fn hooked(&self) -> bool {
         self.state.lock().unwrap().hooked
+    }
+
+    /// The panic shortcut it was last told to adopt; empty until it is told one.
+    pub fn shortcut(&self) -> String {
+        self.state.lock().unwrap().shortcut.clone()
     }
 
     /// Completes once a client sent `Quit`.
@@ -201,19 +212,27 @@ async fn connection<S>(
                     Command::State => {
                         let _ = out.send(protocol::event(&s.state()));
                     }
-                    Command::Load { zones: xml } if xml.is_empty() => {
-                        s.broadcast(&Event::LoadFailed)
-                    }
+                    // Decided by the parser the daemon uses, not by the look of the
+                    // text: an empty document is not the only one that fails, and the
+                    // zone counts a `Loaded` reports are two different numbers.
                     Command::Load { zones: xml } => {
-                        let zones = xml.matches("<Zone ").count();
-                        let virtual_layout = xml.contains(r#"Virtual="True""#);
-                        s.applied = protocol::fingerprint(&xml);
-                        s.applied_is_virtual = virtual_layout;
-                        s.broadcast(&Event::Loaded {
-                            zones,
-                            main: zones,
-                            virtual_layout,
-                        });
+                        match ZonesLayout::from_xml(&xml) {
+                            Some(layout) => {
+                                s.applied = protocol::fingerprint(&xml);
+                                s.applied_is_virtual = layout.virtual_layout;
+                                s.broadcast(&Event::Loaded {
+                                    zones: layout.zones.len(),
+                                    main: layout.main_zones.len(),
+                                    virtual_layout: layout.virtual_layout,
+                                });
+                            }
+                            None => s.broadcast(&Event::LoadFailed),
+                        }
+                        // After the outcome, and whatever the outcome was. The daemon
+                        // lets go *before* it looks at the document, so a Load that
+                        // cannot be parsed takes the hook down too — but the letting go
+                        // is a request its pump answers later, while the outcome is
+                        // reported there and then. Hence this order on the wire.
                         if s.hooked && !rehooks {
                             s.hooked = false;
                             s.broadcast(&Event::Stopped);
@@ -254,7 +273,12 @@ async fn connection<S>(
                             layout: s.applied.clone(),
                         }));
                     }
-                    Command::Shortcut { .. } | Command::Unknown => {}
+                    // Held, not dropped. The daemon adopts it and re-registers; what
+                    // it makes of a blank one is its own policy, tested there. Here it
+                    // is kept verbatim so a test can see what the agent actually sent —
+                    // a known command has no business sharing an arm with unknown ones.
+                    Command::Shortcut { text } => s.shortcut = text,
+                    Command::Unknown => {}
                 }
             }
         }

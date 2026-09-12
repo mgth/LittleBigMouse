@@ -301,3 +301,100 @@ async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
 
     drop(fake);
 }
+
+/// Two screens showing the same thing: the second is a clone, so the document has two
+/// zones and one main zone. The fake used to report one number twice — the count of
+/// `<Zone ` in the text — so any test about what a `Loaded` says was reading a fiction.
+#[tokio::test]
+async fn the_zone_counts_are_the_documents_own_two_numbers() {
+    const CLONES: &str = concat!(
+        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
+        r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
+        r#"<Zone Id="1" Name="B"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let _fake = FakeHook::bind(&endpoint).unwrap();
+    let (hook, mut signals) = HookClient::spawn(endpoint);
+    assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+
+    hook.send(protocol::frame(&[Command::Load {
+        zones: CLONES.into(),
+    }]));
+
+    assert_eq!(
+        event(&mut signals).await,
+        Event::Loaded {
+            zones: 2,
+            main: 1,
+            virtual_layout: false
+        }
+    );
+}
+
+/// A document that cannot be parsed is refused — and lets go of the mice all the same.
+///
+/// The daemon stops hooking *before* it looks at the document, so a Load it cannot read
+/// leaves the engine down rather than running on the layout it no longer describes. The
+/// fake only ever refused an empty string, and never let go when it did.
+#[tokio::test]
+async fn a_load_that_cannot_be_read_is_refused_and_lets_go_anyway() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let (hook, mut signals) = HookClient::spawn(endpoint);
+    assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+
+    hook.send(protocol::frame(&[
+        Command::Load {
+            zones: ZONES.into(),
+        },
+        Command::Run,
+    ]));
+    assert!(matches!(event(&mut signals).await, Event::Loaded { .. }));
+    assert_eq!(event(&mut signals).await, Event::Running);
+
+    // Not empty — just not a layout. The old fake called this one loaded.
+    hook.send(protocol::frame(&[Command::Load {
+        zones: "<ZonesLayout><MainZones>".into(),
+    }]));
+
+    assert_eq!(event(&mut signals).await, Event::LoadFailed);
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+    assert!(!fake.hooked(), "a refused Load must not leave it hooked");
+}
+
+/// The panic shortcut reaches the hook and is held there. The daemon adopts it and
+/// re-registers with the desktop; the fake keeps it, so the trip can be checked.
+#[tokio::test]
+async fn the_panic_shortcut_reaches_the_hook() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let (hook, mut signals) = HookClient::spawn(endpoint);
+    assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+
+    assert_eq!(fake.shortcut(), "");
+    hook.send(protocol::frame(&[Command::Shortcut {
+        text: "CTRL+ALT+SHIFT+M".into(),
+    }]));
+    hook.flush().await;
+
+    // Nothing is answered — the daemon only speaks up when the desktop refuses the
+    // combination — so wait for the command to be recorded rather than for a reply.
+    for _ in 0..200 {
+        if fake.shortcut() == "CTRL+ALT+SHIFT+M" {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the shortcut never reached the hook: {:?}", fake.shortcut());
+}

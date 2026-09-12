@@ -14,6 +14,9 @@ lbm-engine = { path = "../lbm-engine" }
 lbm-ipc = { path = "../lbm-ipc" }
 lbm-layout = { path = "../lbm-layout" }
 lbm-store = { path = "../lbm-store" }
+# The document the hook reads, so the fake hook can decide a Load exactly as the
+# daemon does instead of guessing from the text (already in the graph via lbm-engine).
+lbm-zones = { path = "../lbm-zones" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The tray icons, rendered once from the UI's SVGs (icons/).

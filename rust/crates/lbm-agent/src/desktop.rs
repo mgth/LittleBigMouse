@@ -128,6 +128,10 @@ mod plasma {
         default_path = "/PlasmaShell"
     )]
     trait PlasmaShell {
+        /// Named, not derived: the method on the bus is `evaluateScript`, and zbus would
+        /// otherwise ask for `EvaluateScript` — which plasma answers with "no such
+        /// method", silently, as a wallpaper that never changes.
+        #[zbus(name = "evaluateScript")]
         fn evaluate_script(&self, script: &str) -> zbus::Result<String>;
     }
 
@@ -277,6 +281,20 @@ mod tests {
         // Positions are compared, never screen numbers: plasma orders its own.
         assert!(script.contains("Math.abs(g.x-t.x)<2"));
         assert!(script.ends_with(r#"print("ok");"#));
+    }
+
+    /// Not run by default: it needs a live Plasma session on the other end of the bus.
+    /// `cargo test -p lbm-agent --lib -- --ignored plasma_answers` on a KDE desktop is
+    /// how the D-Bus half of this module gets exercised at all — everything else here
+    /// stops at the script it would have sent.
+    #[cfg(target_os = "linux")]
+    #[ignore = "needs a running plasmashell"]
+    #[tokio::test]
+    async fn plasma_answers_its_own_script() {
+        assert!(
+            is_supported().await,
+            "no plasmashell answered evaluateScript"
+        );
     }
 
     #[cfg(target_os = "linux")]

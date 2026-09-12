@@ -89,54 +89,103 @@ async fn state_query_replies_stopped() {
     assert!(line.contains("Stopped"), "got {line:?}");
 }
 
-/// The historical pipe transport died on exactly this: events pushed to a
-/// listener while another client sends commands (full duplex). Interleaved to
-/// stay under the bounded per-client queue, as the real hook thread would.
+/// The one connection carries both directions, for as long as it lives: events are
+/// pushed onto it while commands keep being answered on it.
+///
+/// This is the regression test for the bug the one-client rewrite fixed. The server
+/// used to treat `Listen` as a change of role — after it, the reader stopped reading
+/// commands, swallowed the next frame and closed the connection. Every test used a
+/// second connection to command, so nothing saw it; against a real hook the v6 agent
+/// subscribes first, and so could drive nothing at all.
+///
+/// Interleaved to stay under the bounded outbound queue, as the real hook thread would.
 #[tokio::test]
-async fn events_stream_to_listener_while_commands_flow() {
+async fn the_connection_answers_commands_while_events_stream_on_it() {
     use littlebigmouse_hook::ipc::protocol;
 
     let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
     let endpoint = endpoint();
     let (server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
 
-    let mut listener = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+    let mut agent = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
         .await
-        .expect("listener connect timeout");
-    framing::write_frame(
-        &mut listener,
-        &protocol::frame(&[protocol::Command::Listen]),
-    )
-    .await
-    .unwrap();
-    let ack = framing::read_frame(&mut listener).await.unwrap();
-    assert!(ack.contains("Stopped"), "got {ack:?}");
-
-    let mut commander = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
-        .await
-        .expect("commander connect timeout");
-
-    for _ in 0..50 {
-        server.broadcast(&protocol::Event::DisplayChanged);
-        framing::write_frame(
-            &mut commander,
-            &protocol::frame(&[protocol::Command::State]),
-        )
+        .expect("connect timeout");
+    framing::write_frame(&mut agent, &protocol::frame(&[protocol::Command::Listen]))
         .await
         .unwrap();
-        let reply =
-            tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut commander))
-                .await
-                .expect("command reply timeout")
-                .unwrap();
-        assert!(reply.contains("Stopped"), "got {reply:?}");
-        let event =
-            tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
-                .await
-                .expect("event timeout")
-                .unwrap();
+    let ack = framing::read_frame(&mut agent).await.unwrap();
+    assert!(ack.contains("Stopped"), "got {ack:?}");
+
+    for _ in 0..50 {
+        // Queued before the command is even read, so the two arrive in this order.
+        server.broadcast(&protocol::Event::DisplayChanged);
+        framing::write_frame(&mut agent, &protocol::frame(&[protocol::Command::State]))
+            .await
+            .unwrap();
+
+        let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
+            .await
+            .expect("event timeout")
+            .unwrap();
         assert!(event.contains("DisplayChanged"), "got {event:?}");
+        let reply = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
+            .await
+            .expect("command reply timeout")
+            .unwrap();
+        assert!(reply.contains("Stopped"), "got {reply:?}");
     }
+}
+
+/// One client at a time, and the newest wins.
+///
+/// An agent that was restarted — or one that took over from a crashed predecessor —
+/// must be able to drive the hook straight away, without waiting for the operating
+/// system to notice that the connection it replaces is dead. The hook outlives its
+/// agent (D5), so this is the ordinary case, not the exception.
+#[tokio::test]
+async fn a_new_client_takes_the_connection_from_the_old_one() {
+    use littlebigmouse_hook::ipc::protocol;
+
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut old = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(&mut old, &protocol::frame(&[protocol::Command::Listen]))
+        .await
+        .unwrap();
+    let ack = framing::read_frame(&mut old).await.unwrap();
+    assert!(ack.contains("Stopped"), "got {ack:?}");
+
+    let mut new = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+    framing::write_frame(&mut new, &protocol::frame(&[protocol::Command::Listen]))
+        .await
+        .unwrap();
+    let ack = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut new))
+        .await
+        .expect("the newcomer is served")
+        .unwrap();
+    assert!(ack.contains("Stopped"), "got {ack:?}");
+
+    // The evicted connection is closed, not merely ignored: an agent holding a
+    // connection nobody serves would wait for events that never come, and would
+    // never know to reconnect.
+    let end = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut old))
+        .await
+        .expect("the evicted connection ends");
+    assert!(end.is_err(), "got {end:?}");
+
+    // And the survivor is the one the events go to.
+    server.broadcast(&protocol::Event::DisplayChanged);
+    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut new))
+        .await
+        .expect("event timeout")
+        .unwrap();
+    assert!(event.contains("DisplayChanged"), "got {event:?}");
 }
 
 /// A dropped listener must not poison the server: a new connection gets a
@@ -182,21 +231,14 @@ async fn load_outcome_is_broadcast_to_listener() {
     let endpoint = endpoint();
     let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
 
-    let mut listener = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+    let mut agent = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
         .await
-        .expect("listener connect timeout");
-    framing::write_frame(
-        &mut listener,
-        &protocol::frame(&[protocol::Command::Listen]),
-    )
-    .await
-    .unwrap();
-    let ack = framing::read_frame(&mut listener).await.unwrap();
+        .expect("connect timeout");
+    framing::write_frame(&mut agent, &protocol::frame(&[protocol::Command::Listen]))
+        .await
+        .unwrap();
+    let ack = framing::read_frame(&mut agent).await.unwrap();
     assert!(ack.contains("Stopped"), "got {ack:?}");
-
-    let mut commander = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
-        .await
-        .expect("commander connect timeout");
 
     let zones = concat!(
         r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200" Virtual="True"><MainZones>"#,
@@ -206,8 +248,8 @@ async fn load_outcome_is_broadcast_to_listener() {
     let load = protocol::frame(&[protocol::Command::Load {
         zones: zones.to_owned(),
     }]);
-    framing::write_frame(&mut commander, &load).await.unwrap();
-    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
+    framing::write_frame(&mut agent, &load).await.unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
         .await
         .expect("Loaded event timeout")
         .unwrap();
@@ -224,14 +266,14 @@ async fn load_outcome_is_broadcast_to_listener() {
 
     // An empty/unparsable payload reports failure the same way.
     framing::write_frame(
-        &mut commander,
+        &mut agent,
         &protocol::frame(&[protocol::Command::Load {
             zones: String::new(),
         }]),
     )
     .await
     .unwrap();
-    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
+    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
         .await
         .expect("LoadFailed event timeout")
         .unwrap();

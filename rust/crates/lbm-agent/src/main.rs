@@ -212,7 +212,11 @@ fn run(options: Options) -> ExitCode {
             None => lbm_agent::schtask::ScheduledTask::for_session(),
         }
         .map_or_else(Platform::default, Platform::with_autostart);
-        let store = JsonLayoutStore::new(options.config_dir.unwrap_or_else(lbm_paths::config_dir));
+        let config_dir = options
+            .config_dir
+            .clone()
+            .unwrap_or_else(lbm_paths::config_dir);
+        let store = JsonLayoutStore::new(config_dir.clone());
         let persistence = match options.data_dir {
             Some(dir) => LayoutPersistence::with_excluded_list_file(store, platform, move || {
                 dir.join("Excluded.txt")
@@ -229,6 +233,14 @@ fn run(options: Options) -> ExitCode {
         {
             world = world.before_first_load(import_registry);
         }
+        // The desktop background is the agent's now (v6): a display change puts it back
+        // whether or not a window is open. Both paths follow --config-dir/--data-dir, so
+        // a scratch agent reads its own (empty) settings and leaves the desktop alone.
+        world = world.with_wallpaper(
+            config_dir.join("wallpaper.json"),
+            data_dir.join("wallpapers"),
+        );
+
         // The KWin gaps move the user's outputs: a real session only, never beside a
         // fake hook (which needs no barriers anyway).
         if !options.fake_hook && cfg!(target_os = "linux") {

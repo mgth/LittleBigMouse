@@ -73,6 +73,8 @@ struct Harness {
     starts_before_it_sticks: u32,
     enabled_writes: Vec<bool>,
     layout_writes: u32,
+    /// Times the desktop background was asked to be put back.
+    repaints: u32,
 }
 
 impl Harness {
@@ -92,6 +94,7 @@ impl Harness {
             starts_before_it_sticks: 0,
             enabled_writes: Vec::new(),
             layout_writes: 0,
+            repaints: 0,
         };
         // C#'s FakeDaemon starts out Stopped.
         h.send(Input::Hook(HookEvent::Stopped));
@@ -138,6 +141,7 @@ impl Harness {
                 Effect::SaveLayout => self.layout_writes += 1,
                 Effect::WakeAfter { wake, after } => self.timers.push((self.now + after, wake)),
                 Effect::ProcessSeen(_) => {}
+                Effect::Wallpaper => self.repaints += 1,
             }
         }
     }
@@ -179,6 +183,50 @@ fn layout(enabled: bool) -> LayoutState {
 //==================//
 // Display changes  //
 //==================//
+
+/// Every rebuild repaints: the span was cut for screens that are no longer where they
+/// were, so a desktop change that leaves the wallpaper alone leaves it wrong.
+#[test]
+fn a_rebuild_puts_the_desktop_background_back() {
+    let mut h = Harness::enabled();
+    let at_boot = h.repaints;
+
+    h.set_signature("two-monitors");
+    h.send(Input::DisplayChanged);
+    h.settle();
+
+    assert_eq!(h.world.rebuilds, 1);
+    assert_eq!(h.repaints, at_boot + 1);
+}
+
+/// And a change that settles back onto the same configuration does not: nothing was
+/// rebuilt, so the slices still describe the screens that are there.
+#[test]
+fn a_change_that_rebuilds_nothing_repaints_nothing() {
+    let mut h = Harness::enabled();
+    h.set_signature("two-monitors");
+    h.send(Input::DisplayChanged);
+    h.settle();
+    let after_the_rebuild = h.repaints;
+
+    h.send(Input::DisplayChanged);
+    h.settle();
+
+    assert_eq!(h.world.rebuilds, 1, "the same configuration");
+    assert_eq!(h.repaints, after_the_rebuild);
+}
+
+/// The manual Refresh (#443) is a rebuild like any other.
+#[test]
+fn a_refresh_repaints_too() {
+    let mut h = Harness::enabled();
+    let before = h.repaints;
+
+    h.send(Input::Refresh);
+    h.settle();
+
+    assert_eq!(h.repaints, before + 1);
+}
 
 /// C#: `DisplayChangeCoordinatorTests.TheFirstChangeAlwaysRebuilds`.
 #[test]

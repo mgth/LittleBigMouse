@@ -114,6 +114,14 @@ pub enum Request {
         )]
         load_at_startup: Option<bool>,
     },
+    /// A frontend's wallpaper settings for one layout: recorded, then shown. The agent
+    /// writes `wallpaper.json` and paints the desktop; the frontends only edit.
+    SaveWallpaper {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "Settings")]
+        settings: Box<lbm_store::wallpaper_settings::LayoutWallpaperSettings>,
+    },
     /// The user's Stop.
     Stop,
     /// Rebuild the layout the automatic detection missed (#443).

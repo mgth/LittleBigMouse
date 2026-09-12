@@ -199,29 +199,41 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   plutôt que rien), sans condition de batterie ni limite de durée, pas en session distante,
   et relance sur échec (D6). Jamais avec `--config-dir`.
 
-- Fond d'écran (début) : `lbm_store::wallpaper_settings` lit et écrit `wallpaper.json` du
-  plugin C# (une entrée par mise en page : mode, image « span », réglages par écran), au
-  membre près — y compris les énumérations écrites en chaîne (`Mode`, `Style`) et celle
-  écrite en nombre (`Kind`). Le découpage en millimètres est déjà porté
-  (`lbm_layout::wallpaper`, phase 1). Restent le rendu des tranches et l'application
-  (Plasma par zbus, `IDesktopWallpaper` sous Windows), puis la ré-application après
-  reconstruction.
+- Fond d'écran : `lbm_store::wallpaper_settings` lit et écrit `wallpaper.json` du plugin C#
+  (une entrée par mise en page : mode, image « span », réglages par écran), au membre près —
+  y compris les énumérations écrites en chaîne (`Mode`, `Style`) et celle écrite en nombre
+  (`Kind`). Le découpage en millimètres vient de `lbm_layout::wallpaper` (phase 1). Les
+  trois pièces suivantes sont en place :
+  - `wallpaper::render` découpe l'image, un fichier par écran, **adressé par contenu**
+    (source, mtime, écran, cadrage, taille) : une configuration inchangée redonne les mêmes
+    chemins, donc on demande au bureau ce qu'il affiche déjà et il ne cligne pas ; tout
+    changement donne un nouveau chemin, ce qui force `org.kde.image` (qui met en cache par
+    chemin) à relire. Les tranches que plus personne ne désigne sont balayées ;
+  - `desktop::apply` pose le fond sous Plasma via `evaluateScript` en zbus (C# lançait
+    `busctl`), les écrans appariés **par position** à deux pixels près — l'agent nomme ses
+    écrans par leur identifiant de mise en page, Plasma les numérote à sa façon ;
+  - `wallpaper::screens` décide quoi montrer par écran, avec la signature qui évite de
+    réécrire un fond identique.
+
+  Reste à **brancher** : appliquer après une reconstruction, et reprendre l'écriture de
+  `wallpaper.json` au C# (aujourd'hui le plugin écrit *et* applique ; les deux côtés
+  balaieraient mutuellement leurs tranches). Sous Windows, `IDesktopWallpaper` n'est pas
+  porté.
 
 ## Suite
 
-Ce qui reste de la phase 3, par ordre de valeur :
+Par ordre de valeur :
 
 1. **Checklist Windows sur machines réelles** (`docs/v6-windows-checklist.md`) : rien de ce
    qui suit ne remplace un passage à la main — dumps d'écran comparés au C#, import du
    registre, tubes et élévation, tray, tâche planifiée et sa migration, veille, dock/undock
    et #607, bureau sécurisé UAC.
-2. **Fond d'écran « span »** : les réglages (`wallpaper_settings`) et le découpage
-   (`lbm_layout::wallpaper`) sont là ; restent le rendu des tranches (fichiers adressés par
-   contenu, comme `SpanRenderer`), l'application (Plasma par zbus au lieu de `busctl`,
-   `IDesktopWallpaper` sous Windows) et la ré-application après reconstruction.
-3. **Option « masquer l'icône »** suivie par le tray (l'état la publie déjà :
-   `HideTrayIcon`).
-4. **Exclusion par focus dans l'agent (D4)** : elle touche le hook (il perdrait
+2. **Brancher le fond d'écran** (les trois pièces sont là, voir plus haut) : l'agent
+   applique après reconstruction et devient l'écrivain de `wallpaper.json` ; le plugin C#
+   lui envoie ses réglages au lieu d'écrire et d'appliquer lui-même.
+3. **Exclusion par focus dans l'agent (D4)** : elle touche le hook (il perdrait
    `Excluded.txt` et la politique) — à faire avec l'allègement du hook, phase 5. L'agent
    tient déjà l'historique des processus vus, que le hook lui envoie.
-5. `Current.xml` disparaît côté C# (phase 4 : l'arrêt utilisateur est déjà `Enabled=false`).
+4. **`IDesktopWallpaper` sous Windows**, avec le reste des correctifs Windows.
+5. `Current.xml` : plus personne ne l'écrit côté C# (le magasin de reprise est parti avec
+   la phase 4) ; le hook le rejoue encore, sa disparition est un travail de phase 5.

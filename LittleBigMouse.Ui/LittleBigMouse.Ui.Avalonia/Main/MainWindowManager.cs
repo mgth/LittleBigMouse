@@ -13,10 +13,11 @@ namespace LittleBigMouse.Ui.Avalonia.Main;
 /// The configuration window: building it on demand, bringing back the one that already exists,
 /// and letting it go when it closes.
 /// <para>
-/// Closing is not leaving — the layout lives on the service and comes back with the window —
-/// but it is the gesture that reads as "done", so it is also the moment to say the
-/// configuration was never saved. Avalonia gives no way to ask a question mid-close, so the
-/// close is cancelled, the question asked, and the close repeated once answered.
+/// Closing <em>is</em> leaving now (v6, phase 4): the mouse engine lives in the agent, which
+/// keeps running, so this process has nothing left to be resident for — and nothing to be
+/// resident <em>as</em>, the tray icon being the agent's. So the close is also the moment to
+/// say the configuration was never saved. Avalonia gives no way to ask a question mid-close,
+/// so the close is cancelled, the question asked, and the close repeated once answered.
 /// </para>
 /// </summary>
 public sealed class MainWindowManager(
@@ -46,7 +47,13 @@ public sealed class MainWindowManager(
     /// <param name="confirmClose">
     /// Asked before the window actually closes. False means the user chose to stay.
     /// </param>
-    public void Show(IMainService mainService, Func<Window, Task<bool>> confirmClose)
+    /// <param name="onClosed">
+    /// The window is gone. This is where the process leaves: the frontend outlives its
+    /// window by nothing, and a process with no window and no tray icon is one the user
+    /// cannot see, cannot reach and cannot stop.
+    /// </param>
+    public void Show(IMainService mainService, Func<Window, Task<bool>> confirmClose,
+        Action onClosed)
     {
         if (_window?.IsLoaded == true)
         {
@@ -77,6 +84,7 @@ public sealed class MainWindowManager(
         {
             _window = null;
             ReleaseWindowSubscriptions();
+            onClosed();
         }
 
         async void OnClosing(object? sender, WindowClosingEventArgs e)

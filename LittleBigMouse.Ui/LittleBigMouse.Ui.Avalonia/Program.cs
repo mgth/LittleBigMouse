@@ -33,7 +33,6 @@ using LittleBigMouse.Ui.Avalonia.Updater;
 using LittleBigMouse.Ui.Core;
 using ReactiveUI;
 using Splat;
-using LittleBigMouseClientService = LittleBigMouse.Ui.Avalonia.Remote.LittleBigMouseClientService;
 
 namespace LittleBigMouse.Ui.Avalonia;
 
@@ -164,16 +163,6 @@ internal class Program
 
             services.AddSingleton<IMainService, MainService>();
 
-            // Shared, not owned by MainService: the window's Start/Stop buttons and the tray's
-            // menu entries are the same gesture, so they have to reach the same controller —
-            // two instances would be two answers to "should the engine be hooked". The layout
-            // accessor resolves IMainService lazily, inside the lambda, so that MainService can
-            // still take the controller in its own constructor.
-            services.AddSingleton(sp => new EngineController(
-                sp.GetRequiredService<ILittleBigMouseClientService>(),
-                sp.GetRequiredService<ILayoutPersistence>(),
-                () => sp.GetRequiredService<IMainService>().MonitorsLayout));
-
             // The MVVM locator: registered services come from the container, anything
             // else (views, view-models, MonitorsLayout…) is built by ActivatorUtilities.
             // Instances created that way are transient and NOT tracked by the root
@@ -235,7 +224,16 @@ internal class Program
             services.AddSingleton<HisenseVidaaSettingsStore>();
             services.AddSingleton<IHisenseVidaaService, HisenseVidaaService>();
 
-            services.AddSingleton<ILittleBigMouseClientService, LittleBigMouseClientService>();
+            // The agent owns the hook, the profiles and the engine (v6): this window is one
+            // of its frontends, and this is the one connection it speaks through. It starts
+            // connecting as soon as anything asks for it — the window opens on what the
+            // agent says, so waiting for the first call would show a dead engine first.
+            services.AddSingleton(_ =>
+            {
+                var agent = new AgentClient();
+                agent.Start();
+                return agent;
+            });
             services.AddSingleton<ILayoutOptions, LbmOptions>();
             services.AddSingleton<IProcessesCollector, ProcessesCollector>();
 

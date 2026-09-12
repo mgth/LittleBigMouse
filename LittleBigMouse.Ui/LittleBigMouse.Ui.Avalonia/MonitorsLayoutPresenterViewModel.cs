@@ -63,25 +63,25 @@ public class MonitorsLayoutPresenterViewModel
         IMainPluginsViewModel mainViewModel,
         IDisplayController? controller,
         ILayoutPersistence? persistence,
-        ILittleBigMouseClientService? service)
+        AgentClient? agent)
     {
         MainViewModel = mainViewModel;
         _controller = controller;
         _persistence = persistence;
 
-        // Edge-prober reports ride the daemon event stream (already marshalled to the
-        // UI thread by the client service). A report describes one loaded layout: a
-        // model swap (rebuild, back-to-local) makes it stale, so it is dropped then.
-        if (service is not null)
+        // Edge-prober reports ride the hook events the agent forwards. A report describes
+        // one loaded layout: a model swap (rebuild, back-to-local) makes it stale, so it
+        // is dropped then.
+        if (agent is not null)
         {
-            EventHandler<LittleBigMouseServiceEventArgs> onDaemonEvent = (_, args) =>
+            EventHandler<LittleBigMouseServiceEventArgs> onHookEvent = (_, args) =>
             {
                 if (args.Event == LittleBigMouseEvent.Probed
                     && Zoning.ProbeReport.TryParse(args.Payload, out var report))
                     ProbeReport = report;
             };
-            service.DaemonEventReceived += onDaemonEvent;
-            Disposer.OnDispose(() => service.DaemonEventReceived -= onDaemonEvent);
+            agent.HookEventReceived += onHookEvent;
+            Disposer.OnDispose(() => agent.HookEventReceived -= onHookEvent);
         }
 
         this.WhenAnyValue(e => e.Model)

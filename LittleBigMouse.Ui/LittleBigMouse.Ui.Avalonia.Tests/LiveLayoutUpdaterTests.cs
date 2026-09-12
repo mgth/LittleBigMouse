@@ -1,15 +1,14 @@
-using HLab.Geo;
-using LittleBigMouse.DisplayLayout.Dimensions;
+using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Remote;
-using LittleBigMouse.Zoning;
 using Xunit;
 
 namespace LittleBigMouse.Ui.Avalonia.Tests;
 
 /// <summary>
 /// The live-preview pump. What matters here is what it does <em>not</em> do: a tick over
-/// a still layout must not touch the model, and a tick that would hand the daemon what it
-/// already has must not send — the daemon swaps its whole zone graph on every Load.
+/// a still layout must not touch the model, and a tick that would hand the agent what it
+/// already has must not send — a preview rebuilds the hook's whole zone graph.
 /// </summary>
 public sealed class LiveLayoutUpdaterTests
 {
@@ -17,52 +16,49 @@ public sealed class LiveLayoutUpdaterTests
     /// Stands in for <c>SavableReactiveModel.Revision</c>: monotonic, bumped by whatever
     /// marks the model unsaved. The tests move it by hand, exactly where an edit would.
     /// </summary>
-    sealed class Model(double widthMm = 480)
+    sealed class Model
     {
+        readonly MonitorsLayout _layout = MainServiceFakes.NewLayout(new LbmOptions());
+
         public long Revision { get; private set; }
         public int Reads { get; private set; }
 
+        /// <summary>A monitor's width, the one edit these tests make.</summary>
         public double WidthMm
         {
-            get => widthMm;
-            set { widthMm = value; Revision++; }
+            get => _layout.PhysicalMonitors[0].Model.PhysicalSize.Width;
+            set { _layout.PhysicalMonitors[0].Model.PhysicalSize.Width = value; Revision++; }
         }
 
-        /// <summary>An edit the daemon cannot see — a rename, a value set back to itself.</summary>
+        /// <summary>An edit the agent cannot see — a value set back to itself, a repaint.</summary>
         public void TouchWithoutMoving() => Revision++;
 
-        public ZonesLayout Zones()
+        public MonitorsLayout Current()
         {
             Reads++;
-            return OneMonitor(widthMm);
+            return _layout;
         }
     }
 
-    static ZonesLayout OneMonitor(double widthMm = 480)
-    {
-        var zones = new ZonesLayout();
-        zones.Zones.Add(new Zone(
-            new BorderResistance(), "DEV", "Monitor",
-            new Rect(0, 0, 1920, 1080),
-            new Rect(0, 0, widthMm, 270)));
-        zones.Init();
-        return zones;
-    }
-
+    /// <summary>
+    /// The agent's side. What it keeps is the width <em>as it stood when the send left</em>:
+    /// the layout is a live object, so holding the reference would say nothing about what
+    /// actually went out.
+    /// </summary>
     sealed class Recorder
     {
-        public List<ZonesLayout> Sent { get; } = [];
+        public List<double> Sent { get; } = [];
         public Func<Task>? Behaviour { get; set; }
 
-        public Task Send(ZonesLayout zones, CancellationToken token)
+        public Task Send(MonitorsLayout layout, CancellationToken token)
         {
-            Sent.Add(zones);
+            Sent.Add(layout.PhysicalMonitors[0].Model.PhysicalSize.Width);
             return Behaviour?.Invoke() ?? Task.CompletedTask;
         }
     }
 
     static LiveLayoutUpdater UpdaterOver(Model model, Recorder recorder)
-        => new(() => model.Revision, model.Zones, recorder.Send);
+        => new(() => model.Revision, model.Current, recorder.Send);
 
     [Fact]
     public async Task TheFirstTickSendsWhatThereIs()
@@ -96,7 +92,7 @@ public sealed class LiveLayoutUpdaterTests
     }
 
     [Fact]
-    public async Task AChangeTheDaemonCannotSeeCostsNoSend()
+    public async Task AChangeTheAgentCannotSeeCostsNoSend()
     {
         // The counter is deliberately coarse — anything marking itself unsaved bumps it,
         // including things no zone carries. The payload is what decides.
@@ -150,13 +146,13 @@ public sealed class LiveLayoutUpdaterTests
 
         Assert.Equal(reads + 1, model.Reads);
         Assert.Equal(2, recorder.Sent.Count);
-        Assert.Equal(490, recorder.Sent[^1].Zones[0].PhysicalBounds.Width);
+        Assert.Equal(490, recorder.Sent[^1]);
     }
 
     [Fact]
     public async Task ForgettingMakesTheNextTickSendAgain()
     {
-        // What the daemon holds stops following from what we sent as soon as anything
+        // What the agent holds stops following from what we sent as soon as anything
         // else has fed it — a Start, a rebuild, the switch coming back on. Nothing in
         // the model has moved, so the counter alone would have kept the tick quiet.
         var model = new Model();
@@ -181,7 +177,7 @@ public sealed class LiveLayoutUpdaterTests
         var inFlight = updater.TickAsync();
         Assert.False(inFlight.IsCompleted);
 
-        // The layout keeps moving while the daemon is busy.
+        // The layout keeps moving while the agent is busy.
         model.WidthMm = 500;
         Assert.False(await updater.TickAsync());
         model.WidthMm = 520;
@@ -192,12 +188,12 @@ public sealed class LiveLayoutUpdaterTests
 
         // One send, carrying the geometry as it stood when it left.
         Assert.Single(recorder.Sent);
-        Assert.Equal(480, recorder.Sent[0].Zones[0].PhysicalBounds.Width);
+        Assert.Equal(600, recorder.Sent[0]);
 
         // And the next tick carries the latest, not the two it skipped — the revision
         // was taken before the model was read, so those edits are not lost.
         Assert.True(await updater.TickAsync());
-        Assert.Equal(520, recorder.Sent[^1].Zones[0].PhysicalBounds.Width);
+        Assert.Equal(520, recorder.Sent[^1]);
     }
 
     [Fact]
@@ -214,14 +210,14 @@ public sealed class LiveLayoutUpdaterTests
         Assert.True(await inFlight);
 
         Assert.True(await updater.TickAsync());
-        Assert.Equal(500, recorder.Sent[^1].Zones[0].PhysicalBounds.Width);
+        Assert.Equal(500, recorder.Sent[^1]);
     }
 
     [Fact]
     public async Task AFailedSendIsRetriedOnTheNextTick()
     {
         var model = new Model();
-        var recorder = new Recorder { Behaviour = () => Task.FromException(new IOException("daemon gone")) };
+        var recorder = new Recorder { Behaviour = () => Task.FromException(new IOException("agent gone")) };
         var updater = UpdaterOver(model, recorder);
 
         Assert.False(await updater.TickAsync());
@@ -241,6 +237,20 @@ public sealed class LiveLayoutUpdaterTests
     {
         var recorder = new Recorder();
         var updater = new LiveLayoutUpdater(() => 1, () => null, recorder.Send);
+
+        Assert.False(await updater.TickAsync());
+        Assert.Empty(recorder.Sent);
+    }
+
+    [Fact]
+    public async Task AForeignLayoutIsNeverPreviewedIntoTheLocalMouse()
+    {
+        // A layout opened for inspection describes someone else's desktop: the agent
+        // refuses to hook it, and sending it every fifth of a second is asking for that
+        // refusal over and over.
+        var foreign = MainServiceFakes.NewLayout(new LbmOptions(), source: LayoutSource.VirtualFile);
+        var recorder = new Recorder();
+        var updater = new LiveLayoutUpdater(() => 1, () => foreign, recorder.Send);
 
         Assert.False(await updater.TickAsync());
         Assert.Empty(recorder.Sent);

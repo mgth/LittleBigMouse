@@ -135,6 +135,18 @@ public abstract class LayoutPersistence : ILayoutPersistence
     }
 
     /// <summary>
+    /// Flag the layout and everything under it as saved, writing nothing: what a frontend
+    /// does once the agent has written its document (v6, phase 4 — the agent is the only
+    /// writer, but the model on this side still has to learn it is no longer dirty).
+    /// </summary>
+    public static void MarkLayoutSaved(MonitorsLayout layout)
+    {
+        foreach (var monitor in layout.PhysicalMonitors) MarkSaved(monitor);
+        layout.Options.Saved = true;
+        layout.Saved = true;
+    }
+
+    /// <summary>
     /// Flag the monitor and every savable child as saved. Runs after a load — with or
     /// without stored data — so that the next edit produces a true→false transition the
     /// reactive Saved chains can observe.

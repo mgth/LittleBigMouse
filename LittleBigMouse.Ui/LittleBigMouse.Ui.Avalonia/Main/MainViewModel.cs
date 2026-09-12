@@ -129,24 +129,17 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
     public ICommand MaximizeCommand { get; }
 
-    async Task CloseAsync()
+    /// <summary>
+    /// The title bar's close. It used to ask whether to exit, because exiting stopped the
+    /// mouse: the app was the engine. In v6 it is not — the agent holds the hook and keeps
+    /// it — so closing is an ordinary gesture and asking about it every time would be noise.
+    /// What is still worth a question is an unsaved layout, and the window's own close is
+    /// where that is asked.
+    /// </summary>
+    Task CloseAsync()
     {
-        //if (Layout?.Saved ?? true)
-        //{
-        //    // TODO : exit application
-        //    return;
-        //}
-
-        var result = await MessageBoxManager
-            .GetMessageBoxStandard(
-                "Exit LittleBigMouse?",
-                "LittleBigMouse will stop controlling mouse transitions until it is started again.",
-                ButtonEnum.YesNo,
-                Icon.Question, WindowStartupLocation.CenterOwner
-                )
-            .ShowAsync();
-
-        if (ShouldShutdown(result)) Shutdown();
+        MainService?.CloseControl();
+        return Task.CompletedTask;
     }
 
     public static bool ShouldShutdown(ButtonResult result) => result == ButtonResult.Yes;

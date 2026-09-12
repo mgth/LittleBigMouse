@@ -22,57 +22,47 @@
 */
 
 using System;
-using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using HLab.Base.ReactiveUI;
 using HLab.Mvvm.Annotations;
-using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Persistence;
 using LittleBigMouse.Ui.Avalonia.Controls;
-using LittleBigMouse.Platform.Windows;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Ui.Avalonia.Updater;
-using LittleBigMouse.Zoning;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
 /// <summary>
-/// The coordinator. It holds the layout the whole application edits, routes what the daemon and
-/// the platform report, and decides what those reports <em>mean</em> — but it performs none of
-/// it itself.
+/// The window's side of the application (v6, phase 4). It holds the layout the whole
+/// application edits, shows it, and keeps it in step with the displays.
 /// <para>
-/// Five collaborators do the performing, and this class <em>owns</em> four of them rather
-/// than resolving them: <see cref="DisplayChangeCoordinator"/> decides when a display change
-/// deserves a rebuild, <see cref="MainWindowManager"/> and <see cref="TrayIconController"/>
-/// put that state in front of the user, and <see cref="WallpaperRefresher"/> keeps the drawn
-/// desktop current. They are constructed here, wired to each other here, and released here,
-/// because the wiring — a display change may rebuild, or may only re-hook; a resume must do
-/// both, in that order — is the decision this class exists to make.
+/// What it no longer does is decide anything about the mouse engine. The agent owns the
+/// hook, the profiles and the engine — when to rebuild, when to re-hook, what to write —
+/// and this process is one of its frontends: it starts when the user opens it, and leaves
+/// when they close it. What used to live here (the engine controller, the display-change
+/// coordinator, the tray, the daemon's process management, the crash-recovery file) is the
+/// agent's, and its rules are tested there.
 /// </para>
 /// <para>
-/// The fifth, <see cref="EngineController"/>, is the exception: it decides whether the mouse
-/// engine should be hooked, and the window's Start/Stop buttons ask that same question as the
-/// tray's menu entries. It is injected rather than built here so that both sides go through
-/// one instance — two would be two answers.
+/// Two collaborators are still owned here, because they are about the window rather than
+/// the engine: <see cref="MainWindowManager"/> puts the layout in front of the user, and
+/// <see cref="WallpaperRefresher"/> keeps the drawn desktop current.
 /// </para>
 /// </summary>
 public class MainService : ReactiveModel, IMainService
 {
     readonly ILayoutFactory _layoutFactory;
-    readonly ILayoutPersistence _layoutPersistence;
-    readonly ILittleBigMouseClientService _littleBigMouseClientService;
-    readonly IProcessesCollector _processesCollector;
+    readonly AgentClient _agent;
+    readonly Action _leave;
     readonly Func<ApplicationUpdaterViewModel> _updaterLocator;
 
-    readonly DisplayChangeCoordinator _displayChanges;
-    readonly EngineController _engine;
     readonly MainWindowManager _windows;
-    readonly TrayIconController _tray;
 
     public IMonitorsLayout? MonitorsLayout
     {
@@ -85,43 +75,49 @@ public class MainService : ReactiveModel, IMainService
     (
         Func<IMainPluginsViewModel> mainViewModelLocator,
         IMvvmService mvvmService,
-        ILittleBigMouseClientService littleBigMouseClientService,
-        IUserNotificationService notify,
+        AgentClient agent,
         ILayoutFactory layoutFactory,
         ILayoutPersistence layoutPersistence,
-        IProcessesCollector processesCollector,
+        Func<ApplicationUpdaterViewModel> updaterLocator,
+        ILayoutOptions options)
+        : this(mainViewModelLocator, mvvmService, agent, layoutFactory, layoutPersistence,
+            updaterLocator, options, post => Dispatcher.UIThread.Post(() => post()),
+            leave: () => Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal))
+    {
+    }
+
+    /// <summary>
+    /// The dispatcher seam, injectable for the same reason <see cref="WallpaperRefresher"/>
+    /// takes one: tests have no UI thread, and a post to a loop nobody pumps is a rebuild
+    /// that never happens — which would make every assertion here pass for the wrong reason.
+    /// </summary>
+    internal MainService
+    (
+        Func<IMainPluginsViewModel> mainViewModelLocator,
+        IMvvmService mvvmService,
+        AgentClient agent,
+        ILayoutFactory layoutFactory,
+        ILayoutPersistence layoutPersistence,
         Func<ApplicationUpdaterViewModel> updaterLocator,
         ILayoutOptions options,
-        EngineController engine)
+        Action<Action> postToUi,
+        Action leave)
     {
+        _leave = leave;
         _layoutFactory = layoutFactory;
-        _layoutPersistence = layoutPersistence;
-        _littleBigMouseClientService = littleBigMouseClientService;
-        _processesCollector = processesCollector;
+        _agent = agent;
         _updaterLocator = updaterLocator;
-
-        _engine = engine;
-
-        _displayChanges = new DisplayChangeCoordinator(
-            layoutFactory.DisplaySignature,
-            () => _engine.Suspended,
-            UpdateLayout,
-            _engine.StartIfEnabledAsync,
-            _engine.EnsureHookedAsync);
 
         _windows = new MainWindowManager(mvvmService, mainViewModelLocator);
         _windows.DisposeWith(this);
 
-        _tray = new TrayIconController(notify, options);
-        _tray.DisposeWith(this);
-
-        new WallpaperRefresher(
-                layoutFactory, () => MonitorsLayout, action => Dispatcher.UIThread.Post(action))
+        new WallpaperRefresher(layoutFactory, () => MonitorsLayout, postToUi)
             .DisposeWith(this);
 
-        // App-level options never go through the engine start flow: persist them as
-        // soon as they change instead of waiting for the save button (#406). The
-        // IsLoading guard keeps registry loads from echoing back.
+        // App-level options never go through the engine start flow: they are recorded as
+        // soon as they change instead of waiting for the save button (#406). They now go
+        // to the agent, which is the only writer. The IsLoading guard keeps store loads
+        // from echoing back.
         options.WhenAnyValue(
                 o => o.AutoUpdate,
                 o => o.StartMinimized,
@@ -132,32 +128,24 @@ public class MainService : ReactiveModel, IMainService
                 o => o.ShowMonitorActionWarning)
             .Skip(1)
             .Where(_ => !layoutPersistence.IsLoading)
-            .Subscribe(_ => layoutPersistence.SaveLive(options))
+            .Subscribe(_ => SaveOptions(options))
             .DisposeWith(this);
 
+        // Starting with the session is the agent's too: it owns the autostart entry (the
+        // XDG one on Linux, the scheduled task on Windows), so the option travels with the
+        // others rather than being written here.
         options.WhenAnyValue(
                 o => o.LoadAtStartup,
                 o => o.StartElevated)
             .Skip(1)
             .Where(_ => !layoutPersistence.IsLoading)
-            .Subscribe(_ => (MonitorsLayout as MonitorsLayout)?.UpdateSchedule())
-            .DisposeWith(this);
-
-        // Relate service state with the notify icon. Post to the UI thread so events arrive in
-        // order (a Task.Run per event could invert Running/Stopped); the Safely wrapper keeps
-        // one failed handler from stopping later events.
-        void OnDaemonEvent(object? sender, LittleBigMouseServiceEventArgs args)
-            => Dispatcher.UIThread.Post(() => _ = DaemonEventReceivedSafelyAsync(args));
-
-        OwnedSubscription.Create<EventHandler<LittleBigMouseServiceEventArgs>>(
-                OnDaemonEvent,
-                h => littleBigMouseClientService.DaemonEventReceived += h,
-                h => littleBigMouseClientService.DaemonEventReceived -= h)
+            .Subscribe(_ => SaveOptions(options))
             .DisposeWith(this);
 
         // Platforms without a daemon reporting display changes (Linux) detect them in the
-        // factory itself; same debounce/settle/idempotence path as the daemon event.
-        void OnDisplayChanged(object? sender, EventArgs args) => _ = _displayChanges.NotifyAsync();
+        // factory itself. The agent rebuilds its own layout on its own; this is the
+        // window's copy, which has to follow what the user is looking at.
+        void OnDisplayChanged(object? sender, EventArgs args) => postToUi(UpdateLayout);
 
         OwnedSubscription.Create<EventHandler>(
                 OnDisplayChanged,
@@ -165,6 +153,14 @@ public class MainService : ReactiveModel, IMainService
                 h => layoutFactory.DisplayChanged -= h)
             .DisposeWith(this);
     }
+
+    /// <summary>The app-level options and the session autostart, recorded by the agent.</summary>
+    void SaveOptions(ILayoutOptions options) => _ = FireAndForget(
+        () => _agent.SaveOptionsAsync(
+            LayoutDtoMapper.ToGlobalOptionsDto(options, null),
+            [.. options.ExcludedList],
+            options.LoadAtStartup),
+        "Saving the options");
 
     public void UpdateLayout()
     {
@@ -192,9 +188,14 @@ public class MainService : ReactiveModel, IMainService
 
     public Task ShowControlAsync()
     {
-        _windows.Show(this, window => ConfirmLeavingAsync(window, leaving: false));
+        // leaving: the window closing is the process leaving now, so the edits it holds
+        // really are lost — there is no minimised app they come back to.
+        _windows.Show(this, window => ConfirmLeavingAsync(window, leaving: true), onClosed: _leave);
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public void CloseControl() => _windows.Current?.Close();
 
     /// <inheritdoc/>
     public bool LivePreview { get; set; }
@@ -220,9 +221,11 @@ public class MainService : ReactiveModel, IMainService
             case UnsavedChoice.Cancel:
                 return false;
             case UnsavedChoice.Save:
-                // Only reachable under live update, so this writes the geometry that is
-                // driving the mouse at this moment — never one nobody has tried.
-                await Task.Run(() => _layoutPersistence.Save((MonitorsLayout)MonitorsLayout));
+                // Only reachable under live update, so this keeps the geometry that is
+                // driving the mouse at this moment — never one nobody has tried. The agent
+                // writes it.
+                if (MonitorsLayout is MonitorsLayout layout)
+                    await _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout));
                 return true;
             default:
                 return true;
@@ -248,140 +251,33 @@ public class MainService : ReactiveModel, IMainService
                 .DisposeWith(this);
         }
 
-        await _tray.InitializeAsync(new TrayMenu(
-            // Hidden where the app cannot update itself (Linux: the distribution package
-            // owns updates) — clicking it would be a no-op.
-            CheckUpdateAsync: _updaterLocator().IsSupported
-                ? () => _updaterLocator().CheckUpdateAsync(true)
-                : null,
-            OpenAsync: ShowControlAsync,
-            // The tray starts the layout as it stands; keeping the geometry is the window
-            // apply button's business, and there is no editor behind a menu entry.
-            StartAsync: () => _engine.StartFromUserAsync(keepLayout: false),
-            StopAsync: _engine.StopFromUserAsync,
-            RefreshAsync: _displayChanges.RefreshAsync,
-            QuitAsync: QuitAsync));
+        // The tray lives in the agent now (it is there whether this window runs or not),
+        // and so does the update check on the platforms that have one.
+        await Task.CompletedTask;
     }
 
     public void AddControlPlugin(Action<IMainPluginsViewModel>? action) => _windows.AddPlugin(action);
 
-    async Task QuitAsync()
-    {
-        // The one place the edits are actually lost.
-        if (!await ConfirmLeavingAsync(_windows.Current, leaving: true)) return;
-
-        // TODO : it should not append by sometimes the QuitAsync does not return
-        _ = Task.Delay(5000).ContinueWith(
-            _ => Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal));
-        await _littleBigMouseClientService.QuitAsync();
-        Dispatcher.UIThread.BeginInvokeShutdown(DispatcherPriority.Normal);
-    }
+    /// <summary>The updater, still the window's: the agent does not update anything.</summary>
+    public Task CheckUpdateAsync() => _updaterLocator().IsSupported
+        ? _updaterLocator().CheckUpdateAsync(true)
+        : Task.CompletedTask;
 
     /// <summary>
-    /// The daemon reported something. The whole of this method is deciding what it means; the
-    /// acting on it belongs to the collaborators.
+    /// An asynchronous gesture nobody awaits has nowhere to report a failure to, and an
+    /// unobserved exception would take the process down. Surviving it costs something: a
+    /// failure now looks like nothing happening, so it goes to <see cref="Console.Error"/>,
+    /// where the app's other diagnostics go and where a Release build still has it.
     /// </summary>
-    async Task DaemonEventReceivedAsync(LittleBigMouseServiceEventArgs args)
-    {
-        DaemonEventTrace.Write(args.Event);
-
-        // Flags first, and synchronously: they gate paths that can run while the icon update
-        // below is awaiting. Raising Suspended after an await would leave a window in which a
-        // display change still believes there is a desktop.
-        switch (args.Event)
-        {
-            // The daemon detected the display turning off (sleep / session standby / lock-idle)
-            // and already unhooked itself, so the cursor is never left confined without us.
-            // Stop reacting to display events until it comes back.
-            case LittleBigMouseEvent.Suspended:
-                _engine.Suspended = true;
-                break;
-
-            case LittleBigMouseEvent.Resumed:
-                _engine.Suspended = false;
-                break;
-
-            case LittleBigMouseEvent.Connected:
-                _justConnected = true;
-                break;
-
-            case LittleBigMouseEvent.Running:
-                _justConnected = false;
-                break;
-        }
-
-        await _tray.ShowDaemonStateAsync(args.Event);
-
-        switch (args.Event)
-        {
-            // A daemon reporting itself stopped right after connecting has no layout yet: that
-            // is not the user's Stop, it is a daemon waiting to be told what to do.
-            case LittleBigMouseEvent.Stopped:
-                if (MonitorsLayout is not null && MonitorsLayout.Options.Enabled && _justConnected)
-                {
-                    _justConnected = false;
-                    await _engine.StartAsync();
-                }
-                break;
-
-            case LittleBigMouseEvent.SettingsChanged:
-            case LittleBigMouseEvent.DesktopChanged:
-            case LittleBigMouseEvent.DisplayChanged:
-                await _displayChanges.NotifyAsync();
-                break;
-
-            // Display is back: reconcile the layout only if it actually changed while off (the
-            // idempotence guard), then keep re-hooking the daemon through the post-resume
-            // display re-enumeration storm. A single Start loses a race — a late
-            // WM_DISPLAYCHANGE unhooks us ~1-2s after Resumed — and the engine would stay
-            // stopped ("blue") until a manual Start.
-            case LittleBigMouseEvent.Resumed:
-                await _displayChanges.NotifyAsync();
-                await _engine.EnsureRunningAfterResumeAsync();
-                break;
-
-            case LittleBigMouseEvent.FocusChanged:
-                _processesCollector?.AddProcess(args.Payload);
-                break;
-
-            // Load outcome: consumed by the location control (badge/status); nothing
-            // to reconcile at the service level.
-            case LittleBigMouseEvent.Loaded:
-            case LittleBigMouseEvent.LoadFailed:
-                break;
-
-            // The panic shortcut ran. Its two steps announce themselves through the ordinary
-            // events as well — a restore reloads, a stop unhooks — so the tray icon is already
-            // right; the location control is what has to act.
-            case LittleBigMouseEvent.Rescued:
-                break;
-
-            // Anything else, including events only a newer daemon knows about, is not ours to
-            // reconcile. This used to throw, which faulted the handler on every Suspended,
-            // Resumed and Probed.
-            default:
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Set between a daemon connecting and its first Running: the Stopped that arrives in
-    /// between means "I have no layout", not "the user stopped me".
-    /// </summary>
-    bool _justConnected;
-
-    async Task DaemonEventReceivedSafelyAsync(LittleBigMouseServiceEventArgs args)
+    internal static async Task FireAndForget(Func<Task> action, string what)
     {
         try
         {
-            await DaemonEventReceivedAsync(args);
+            await action();
         }
         catch (Exception error)
         {
-            // One failed notification must not stop later daemon events — but its reason
-            // has to reach ui.log: a layout rebuild throwing on hot-plug (#589) was
-            // invisible in Release, Debug.WriteLine being compiled out.
-            Console.Error.WriteLine($"Daemon event handler failed: {error}");
+            Console.Error.WriteLine($"{what} failed: {error}");
         }
     }
 }

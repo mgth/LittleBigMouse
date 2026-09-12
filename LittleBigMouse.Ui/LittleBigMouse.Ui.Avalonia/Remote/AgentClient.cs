@@ -72,6 +72,9 @@ public sealed class AgentClient : IDisposable
 
     public bool Connected => _stream is not null;
 
+    /// <summary>The last state the agent published, if this client has one yet.</summary>
+    public AgentState? State { get; private set; }
+
     /// <summary>Connects, and keeps connecting for as long as this client lives.</summary>
     public void Start() => _listener ??= Task.Run(ListenAsync);
 
@@ -234,6 +237,7 @@ public sealed class AgentClient : IDisposable
     {
         if (_stream is null) return;
         _stream = null;
+        State = null;
         foreach (var (id, pending) in _pending)
         {
             pending.TrySetException(new AgentException("the agent went away before answering"));
@@ -241,6 +245,13 @@ public sealed class AgentClient : IDisposable
         }
         ConnectionChanged?.Invoke(this, false);
     }
+
+    /// <summary>
+    /// A frame, applied as if an agent had sent it. The listener is the only caller in the
+    /// application; a test speaks for an agent through it, over the real parsing, without
+    /// a socket and without a thread.
+    /// </summary>
+    internal void Receive(string frame) => Dispatch(frame);
 
     void Dispatch(string frame)
     {
@@ -282,8 +293,9 @@ public sealed class AgentClient : IDisposable
     /// <summary>The subscription's own answer carries the first state, like an event.</summary>
     void Raise(JsonElement state)
     {
-        if (state.Deserialize<AgentState>(Json) is { } snapshot)
-            StateChanged?.Invoke(this, snapshot);
+        if (state.Deserialize<AgentState>(Json) is not { } snapshot) return;
+        State = snapshot;
+        StateChanged?.Invoke(this, snapshot);
     }
 
     async Task<Stream> ConnectAsync(CancellationToken token)

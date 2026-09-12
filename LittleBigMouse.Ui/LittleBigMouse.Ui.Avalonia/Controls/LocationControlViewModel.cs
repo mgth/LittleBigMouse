@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.IO;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
@@ -373,8 +374,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
             Console.Error.WriteLine("A foreign layout cannot be simulated through the agent yet.");
             return;
         }
-        await _agent.StartEngineAsync(layout.Id, AgentDocument.Of(layout));
-        _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
+        if (await Ask(() => _agent.StartEngineAsync(layout.Id, AgentDocument.Of(layout)), "Start"))
+            _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
     }
 
     async Task StopAsync()
@@ -383,7 +384,33 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         // next tick would hook it straight back up. The agent records the user's Stop.
         LiveUpdate = false;
 
-        await _agent.StopEngineAsync();
+        await Ask(() => _agent.StopEngineAsync(), "Stop");
+    }
+
+    /// <summary>
+    /// One request to the agent, with its refusal shown rather than thrown. A command that
+    /// lets an exception out has nowhere to report it — ReactiveUI would take it to the
+    /// dispatcher, where the user sees a log line at best — and the layout is not lost by
+    /// a request that did not happen, so the honest answer is to say so where the load
+    /// outcome is already shown and leave the model as it is.
+    /// </summary>
+    /// <returns>True when the agent did it.</returns>
+    async Task<bool> Ask(Func<Task> request, string what)
+    {
+        try
+        {
+            await request();
+            return true;
+        }
+        catch (Exception error) when (error is AgentException
+                                      or OperationCanceledException
+                                      or IOException)
+        {
+            var reason = error is OperationCanceledException ? "no agent answered" : error.Message;
+            Console.Error.WriteLine($"{what} refused: {reason}");
+            _status.Say($"{what} refused: {reason}");
+            return false;
+        }
     }
 
     /// <summary>
@@ -393,8 +420,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     async Task SaveAsync()
     {
         if (Model is not { } layout || layout.Saved) return;
-        await _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout));
-        _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
+        if (await Ask(() => _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout)), "Save"))
+            _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
     }
 
     /// <summary>
@@ -407,7 +434,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         await LoadAsync();
         if (Model is null || Model.IsVirtual) return;
         // The agent puts the engine back on the layout it holds — the saved one.
-        await _agent.EndPreviewAsync();
+        await Ask(() => _agent.EndPreviewAsync(), "Ending the preview");
     }
 
     Task LoadAsync() =>

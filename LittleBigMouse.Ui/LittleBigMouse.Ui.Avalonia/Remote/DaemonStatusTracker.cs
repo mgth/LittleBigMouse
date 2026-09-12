@@ -72,6 +72,13 @@ public sealed class DaemonStatusTracker(
     public void ForgetLayoutInfo() => LayoutInfo = "";
 
     /// <summary>
+    /// Say what just happened to the layout, where the load outcome is already shown: an
+    /// agent that refused a request, or one that could not be asked. Safe to call from
+    /// the receive thread, like <see cref="Apply"/>.
+    /// </summary>
+    public void Say(string what) => onUiThread(() => LayoutInfo = what);
+
+    /// <summary>
     /// Fold one daemon event into the state above. Safe to call from the receive thread.
     /// </summary>
     public void Apply(LittleBigMouseServiceEventArgs e)

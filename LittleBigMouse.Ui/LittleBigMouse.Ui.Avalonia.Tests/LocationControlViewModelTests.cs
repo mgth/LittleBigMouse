@@ -1,3 +1,4 @@
+using System.Reactive.Threading.Tasks;
 using HLab.Sys.Windows.API;
 using HLab.Sys.Windows.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors;
@@ -140,6 +141,33 @@ public sealed class LocationControlViewModelTests
         // Both at once: the two are set together, on the connection's thread, and reading
         // them one after the other from here can catch the pair half-published.
         await FakeAgent.WaitFor(() => f.Vm is { Dead: true, Running: false });
+    }
+
+    [Fact]
+    public async Task WhatTheAgentRefusesIsShownRatherThanThrown()
+    {
+        // A command that lets the refusal out has nowhere to report it, and the layout is
+        // not lost by a save that did not happen: say so where the load outcome is shown,
+        // and leave the model dirty so the button is still there to press again.
+        var agent = FakeAgent.Start();
+        using var client = new AgentClient(agent.Endpoint);
+        var f = new Fixture(client);
+        client.Start();
+        await agent.AnswerAsync(await agent.NextRequestAsync(), AgentFrames.Snapshot("Running"));
+        await FakeAgent.WaitFor(() => f.Vm.Running);
+
+        var layout = MainServiceFakes.NewLayout(new LbmOptions());
+        layout.Saved = false;
+        f.Vm.Model = layout;
+
+        var saving = f.Vm.SaveCommand.Execute().ToTask();
+        var request = await agent.NextRequestAsync();
+        Assert.Equal("SaveLayout", request.GetProperty("Method").GetString());
+        await agent.ErrorAsync(request, "the layout TESTMON1 is not the current one");
+        await saving.WaitAsync(FakeAgent.Patience);
+
+        Assert.Contains("not the current one", f.Vm.DaemonLayoutInfo);
+        Assert.False(layout.Saved, "a refused save leaves the layout unsaved");
     }
 
     [Fact]

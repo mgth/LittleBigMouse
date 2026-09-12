@@ -464,6 +464,17 @@ Spikes, avant tout écran :
 - Mires plein écran natives Wayland par `with_monitor` : si le rendu est au pixel près,
   `lbm-pattern` disparaît.
 - Icônes SVG recolorées selon le thème (resvg) et alias des 72 logos PnP.
+  *Répondu (`lbm-icons`), et il en sort deux défauts de l'existant. **La table d'alias n'est
+  écrite nulle part ailleurs que dans les noms de fichiers** : chaque jeton séparé par un point
+  de `Acer.CHE.ALI.ACR.API.svg` est une clé, donc perdre la règle c'est perdre la table (97 noms
+  sous `Pnp/`, épinglés contre les fichiers réels). **Et la recoloration du C# manque les icônes
+  Inkscape** : elle remplace les orthographes **entre guillemets** (`fill="#000000"`), alors
+  qu'Inkscape écrit `style="fill:#000000;…"` — le logo LittleBigMouse lui-même en est un et
+  n'est donc jamais recoloré dans l'app livrée. Les deux formes sont traitées ici, ancrées sur le
+  nom de la propriété, ce que réclamait le TODO d'`IconService` (« "Black" pourrait être utilisé
+  dans une chaîne »). L'heuristique de `EffectiveForeground` (tout noir devient blanc en thème
+  sombre — l'équerre blanche sur blanc) n'est **pas** reprise : la couleur demandée est la
+  couleur obtenue.*
 - Tailles proportionnelles au cadre de l'écran dessiné.
 - `egui_kittest` en CI avec un rendu wgpu logiciel ; temps de démarrage à froid et mémoire.
   *Première moitié faite (`lbm-ui`) : l'interface se pilote et s'affirme **sans serveur graphique

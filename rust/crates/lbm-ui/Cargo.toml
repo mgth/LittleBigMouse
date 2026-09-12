@@ -8,6 +8,9 @@ description = "The LittleBigMouse frontend (v7): state, actions and views, with 
 
 [dependencies]
 egui = "0.36"
+# The layout model the map draws: millimetres, bezels, and the rectangles a monitor
+# occupies. The frontend reads the same model the agent computes from.
+lbm-layout = { path = "../lbm-layout" }
 
 [dev-dependencies]
 egui_kittest = "0.36"

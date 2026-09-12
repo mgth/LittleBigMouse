@@ -6,6 +6,10 @@
 //! `Quit`), in process instead of over the endpoint. The icon is the engine's state, as in
 //! C#: on, off, dead, paused (the display asleep included). A click opens the frontend.
 //!
+//! The icon can also be asked not to be there at all: `HideTrayIcon` travels in the state
+//! like everything else, and the platforms take the icon down and put it back rather than
+//! grey it out — that is what the option meant in C#, where it set `Visible`.
+//!
 //! [`TrayModel`] is all of that; `linux` and `windows` only draw it.
 
 use std::sync::Arc;
@@ -75,6 +79,8 @@ pub struct TrayModel {
     icon: TrayIcon,
     /// The engine's state in words, for the tooltip.
     state: String,
+    /// The user asked for no icon at all.
+    hidden: bool,
     calls: UnboundedSender<Call>,
     /// Where the answers to the tray's requests go (read by [`follow`], which ignores
     /// them).
@@ -94,6 +100,7 @@ impl TrayModel {
         TrayModel {
             icon: TrayIcon::Dead,
             state: "Starting".to_owned(),
+            hidden: false,
             calls,
             client,
             next_id: 0,
@@ -120,6 +127,9 @@ impl TrayModel {
 
     /// Shows a state of the agent (a `Snapshot`, as the API sends it).
     pub fn show(&mut self, state: &Value) {
+        // Absent means "not hidden": a state from an agent holding no layout yet has no
+        // app options to report, and starting invisible would be the worse guess.
+        self.hidden = state["HideTrayIcon"] == true;
         let engine = state["Engine"].as_str().unwrap_or("Dead");
         let suspended = state["Suspended"] == true;
         self.icon = TrayIcon::for_state(engine, suspended);
@@ -140,6 +150,11 @@ impl TrayModel {
     /// The engine's state in words.
     pub fn state(&self) -> &str {
         &self.state
+    }
+
+    /// Whether the user asked for no icon (C#'s `HideTrayIcon`).
+    pub fn hidden(&self) -> bool {
+        self.hidden
     }
 }
 
@@ -220,6 +235,24 @@ mod tests {
         tray.act(Action::Open);
         assert_eq!(opened.load(Ordering::Relaxed), 1);
         assert!(calls.try_recv().is_err(), "Open asks the agent nothing");
+    }
+
+    #[test]
+    fn the_hide_option_is_followed_both_ways() {
+        // It is a state like any other: the agent publishes it, so a change made from any
+        // frontend reaches the tray without it having to read the store.
+        let (mut tray, _calls, _) = model();
+        assert!(!tray.hidden(), "no option said yet: the icon is there");
+
+        tray.show(&json!({ "Engine": "Running", "HideTrayIcon": true }));
+        assert!(tray.hidden());
+
+        tray.show(&json!({ "Engine": "Running", "HideTrayIcon": false }));
+        assert!(!tray.hidden(), "and it comes back");
+
+        // An agent with no layout loaded reports nothing about the app options.
+        tray.show(&json!({ "Engine": "Dead" }));
+        assert!(!tray.hidden());
     }
 
     #[test]

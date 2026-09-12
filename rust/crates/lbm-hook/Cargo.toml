@@ -117,7 +117,7 @@ evdev = "0.13"
 # "res" (X-Resource) resolves the pid of clients that do not set _NET_WM_PID
 # (focus watcher / process exclusion).
 x11rb = { version = "0.13", features = ["xinput", "randr", "res"] }
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "input_capture", "tracing"] }
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "global_shortcuts", "input_capture", "tracing"] }
 # Already in the tree through ashpd; used directly by the evdev backend to ask
 # KWin for the real cursor position (scripting API) when arming.
 zbus = { version = "5", default-features = false, features = ["tokio"] }

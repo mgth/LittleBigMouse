@@ -19,6 +19,7 @@ pub mod accel;
 pub mod evdev;
 pub mod focus;
 pub mod portal;
+pub mod rescue;
 pub mod x11;
 
 use std::sync::atomic::Ordering;

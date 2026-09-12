@@ -59,6 +59,73 @@ impl Shortcut {
     }
 }
 
+/// The same shortcut as the XDG "shortcuts" specification writes a trigger, which is
+/// what the global-shortcuts portal takes as a *preferred* binding on Linux.
+///
+/// `None` for anything the specification has no portable name for — the OEM keys,
+/// which are Win32 *positions* rather than characters and mean nothing to a keysym
+/// table. The portal then binds no preference and the desktop asks the user, which
+/// is a worse experience than a wrong key would be honest.
+///
+/// Validated through [`Shortcut::parse`] rather than beside it: a shortcut the
+/// Windows registrar would refuse must not become one the portal accepts.
+pub fn portal_trigger(text: &str) -> Option<String> {
+    Shortcut::parse(text)?;
+
+    let mut modifiers = Vec::new();
+    let mut key = None;
+    for part in text.split('+') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        match part.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => modifiers.push("CTRL"),
+            "alt" => modifiers.push("ALT"),
+            "shift" | "maj" => modifiers.push("SHIFT"),
+            "win" | "super" | "meta" | "cmd" => modifiers.push("LOGO"),
+            _ => key = Some(keysym_name(part)?),
+        }
+    }
+
+    let key = key?;
+    modifiers.push(&key);
+    Some(modifiers.join("+"))
+}
+
+/// Name to the keysym name the specification spells it by, over the same closed set
+/// [`virtual_key`] accepts.
+fn keysym_name(name: &str) -> Option<String> {
+    let lower = name.to_ascii_lowercase();
+
+    if lower.len() == 1 {
+        let c = lower.as_bytes()[0];
+        return match c {
+            b'a'..=b'z' | b'0'..=b'9' => Some(lower),
+            _ => None,
+        };
+    }
+
+    if let Some(digits) = lower.strip_prefix('f') {
+        if let Ok(n) = digits.parse::<u32>() {
+            if (1..=24).contains(&n) {
+                return Some(format!("F{n}"));
+            }
+        }
+    }
+
+    if let Some(digit) = lower.strip_prefix("numpad") {
+        if let Ok(n) = digit.parse::<u32>() {
+            if n <= 9 {
+                return Some(format!("KP_{n}"));
+            }
+        }
+    }
+
+    // OEM keys are positions; a keysym table has no such thing.
+    None
+}
+
 /// Name to Win32 virtual-key code, over the set a shortcut may sensibly use.
 /// Deliberately closed: an open mapping would let the UI record a key the daemon
 /// cannot register, and the failure would surface far from its cause.
@@ -144,6 +211,37 @@ fn virtual_key(name: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_trigger_is_the_same_shortcut_as_the_specification_writes_it() {
+        assert_eq!(portal_trigger(DEFAULT).as_deref(), Some("CTRL+ALT+SHIFT+m"));
+        assert_eq!(
+            portal_trigger("Ctrl+Alt+F9").as_deref(),
+            Some("CTRL+ALT+F9")
+        );
+        assert_eq!(
+            portal_trigger("Super+Shift+Numpad5").as_deref(),
+            Some("LOGO+SHIFT+KP_5")
+        );
+    }
+
+    #[test]
+    fn a_shortcut_the_windows_registrar_refuses_has_no_trigger_either() {
+        // One grammar, two renderings: the two must not disagree about what is a
+        // shortcut at all.
+        assert_eq!(portal_trigger("M"), None, "no modifier");
+        assert_eq!(portal_trigger("Ctrl+Alt"), None, "no key");
+        assert_eq!(portal_trigger("Ctrl+A+B"), None, "two keys");
+    }
+
+    #[test]
+    fn a_key_with_no_portable_name_binds_no_preference() {
+        // OEM3 is ` on a QWERTY board and ² on an AZERTY one: a position, which a
+        // keysym table cannot express. Better no preference than the wrong key.
+        assert!(Shortcut::parse("Ctrl+Alt+Oem3").is_some());
+        assert_eq!(portal_trigger("Ctrl+Alt+Oem3"), None);
+    }
+
     use super::*;
 
     #[test]

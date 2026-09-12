@@ -37,6 +37,21 @@
 			</StackPanel>
 		</Border>
 
+		<!-- The agent holds another layout: everything sent from here names this one, so
+		     it would all be refused. Say so, and offer the one thing that fixes it. -->
+		<Border Classes="Badge Virtual"
+		        IsVisible="{Binding AgentLayoutMismatch}"
+		        HorizontalAlignment="Center" VerticalAlignment="Center"
+		        ToolTip.Tip="The mouse engine is working on a different set of displays. Refreshing makes it read them again.">
+			<StackPanel Orientation="Horizontal" Spacing="8">
+				<TextBlock Text="The engine is on another layout" FontWeight="SemiBold"
+				           VerticalAlignment="Center"/>
+				<Button Content="Refresh"
+				        Command="{Binding RefreshCommand}"
+				        FontSize="12" Padding="8,2" VerticalAlignment="Center"/>
+			</StackPanel>
+		</Border>
+
 		<StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
 
 			<Button Classes="ToolbarButton Menu">

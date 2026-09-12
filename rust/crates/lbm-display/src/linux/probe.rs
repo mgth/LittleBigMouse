@@ -75,7 +75,13 @@ fn give_up(program: &str, child: &mut std::process::Child) -> Option<String> {
     None
 }
 
-#[cfg(test)]
+/// Run on Linux only: every case here spawns a POSIX shell to play the part of a probe
+/// that prints, fails, hangs, lingers or answers at length. The module is compiled on
+/// Windows — the Linux enumeration is, for the fixtures the parity tests read — but what
+/// it guards (kscreen-doctor, xrandr) only ever runs here, and `sh` on a Windows runner
+/// is whatever Git for Windows happens to ship, slow enough under load to trip a
+/// deadline this test is not about.
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 

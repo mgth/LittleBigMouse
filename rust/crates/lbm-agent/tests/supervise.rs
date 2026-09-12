@@ -39,6 +39,17 @@ impl AgentWorld for Enabled {
     fn zones(&self) -> Option<(String, bool)> {
         self.0.map(|_| (ZONES.to_owned(), false))
     }
+
+    /// The desktop the fixture's zones sit on. Named rather than inferred, as the real
+    /// world names it: a world that answered None would be exercising the fallback.
+    fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
+        self.0.map(|_| lbm_ipc::protocol::Desktop {
+            left: 0,
+            top: 0,
+            width: 3840,
+            height: 1080,
+        })
+    }
     fn save_enabled(&mut self) -> io::Result<()> {
         Ok(())
     }

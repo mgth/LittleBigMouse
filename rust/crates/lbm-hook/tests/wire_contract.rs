@@ -247,6 +247,7 @@ async fn load_outcome_is_broadcast_to_listener() {
     );
     let load = protocol::frame(&[protocol::Command::Load {
         zones: zones.to_owned(),
+        desktop: None,
     }]);
     framing::write_frame(&mut agent, &load).await.unwrap();
     let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
@@ -269,6 +270,7 @@ async fn load_outcome_is_broadcast_to_listener() {
         &mut agent,
         &protocol::frame(&[protocol::Command::Load {
             zones: String::new(),
+            desktop: None,
         }]),
     )
     .await
@@ -340,6 +342,7 @@ async fn the_greeting_names_the_layout_the_hook_holds() {
         &protocol::frame(&[
             protocol::Command::Load {
                 zones: zones.to_owned(),
+                desktop: None,
             },
             protocol::Command::Hello {
                 protocol: lbm_ipc::protocol::PROTOCOL,

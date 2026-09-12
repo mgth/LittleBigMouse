@@ -64,6 +64,7 @@ async fn the_client_subscribes_then_follows_the_hook() {
     hook.send(protocol::frame(&[
         Command::Load {
             zones: ZONES.into(),
+            desktop: None,
         },
         Command::Run,
     ]));
@@ -78,7 +79,8 @@ async fn the_client_subscribes_then_follows_the_hook() {
             },
             Command::Listen,
             Command::Load {
-                zones: ZONES.into()
+                zones: ZONES.into(),
+                desktop: None
             },
             Command::Run
         ]
@@ -282,6 +284,7 @@ async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
     hook.send(protocol::frame(&[
         Command::Load {
             zones: ZONES.into(),
+            desktop: None,
         },
         Command::Run,
     ]));
@@ -324,6 +327,7 @@ async fn the_zone_counts_are_the_documents_own_two_numbers() {
 
     hook.send(protocol::frame(&[Command::Load {
         zones: CLONES.into(),
+        desktop: None,
     }]));
 
     assert_eq!(
@@ -354,6 +358,7 @@ async fn a_load_that_cannot_be_read_is_refused_and_lets_go_anyway() {
     hook.send(protocol::frame(&[
         Command::Load {
             zones: ZONES.into(),
+            desktop: None,
         },
         Command::Run,
     ]));
@@ -363,6 +368,7 @@ async fn a_load_that_cannot_be_read_is_refused_and_lets_go_anyway() {
     // Not empty — just not a layout. The old fake called this one loaded.
     hook.send(protocol::frame(&[Command::Load {
         zones: "<ZonesLayout><MainZones>".into(),
+        desktop: None,
     }]));
 
     assert_eq!(event(&mut signals).await, Event::LoadFailed);

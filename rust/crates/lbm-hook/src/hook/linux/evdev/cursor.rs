@@ -27,9 +27,20 @@ pub struct EvdevCursor {
     /// its own clamp) and emits it; nothing else in the process knows better.
     pub(super) virtual_pos: Point<i32>,
     clip: Option<Rect<i32>>,
-    /// The ABS range the virtual pointer was built with. Rebuilt by the router
-    /// when a new layout changes the desktop under us.
-    pub(super) desktop: Rect<i32>,
+    /// Where the cursor may be, with no clip set: the layout's own extent, the
+    /// union of its zones. Not the desktop — an excluded monitor is part of the
+    /// desktop and is precisely where the cursor is not to go.
+    pub(super) bounds: Rect<i32>,
+    /// The ABS range the virtual pointer was built with, and the origin its
+    /// coordinates are relative to: the desktop the compositor draws, which the
+    /// agent names. Rebuilt by the router when it changes under us.
+    ///
+    /// Distinct from [`Self::bounds`] because a compositor maps the whole range
+    /// onto the whole desktop: declaring the layout's extent instead stretches
+    /// every position by the ratio between the two, which is a cursor that lands
+    /// somewhere else entirely. They are equal whenever the layout covers the
+    /// desktop, which is the ordinary case and was the only one before.
+    pub(super) device: Rect<i32>,
     pub(super) started: Instant,
     /// Modifier state fed by the observed keyboards and the grabbed combined
     /// nodes; left/right tracked apart so releasing one keeps the other held.
@@ -42,14 +53,16 @@ pub struct EvdevCursor {
 }
 
 impl EvdevCursor {
-    /// A cursor sitting at `start` on `desktop`, nothing held. The grabbed
-    /// devices' real button state is seeded by the caller (`EVIOCGKEY` at arm
-    /// time — a press that predates the grab never reached the pump).
-    pub fn new(desktop: Rect<i32>, start: Point<i32>) -> EvdevCursor {
+    /// A cursor sitting at `start`, free to move within `bounds`, emitted into a
+    /// device spanning `device`. The grabbed devices' real button state is seeded by
+    /// the caller (`EVIOCGKEY` at arm time — a press that predates the grab never
+    /// reached the pump).
+    pub fn new(bounds: Rect<i32>, device: Rect<i32>, start: Point<i32>) -> EvdevCursor {
         EvdevCursor {
             virtual_pos: start,
             clip: None,
-            desktop,
+            bounds,
+            device,
             started: Instant::now(),
             ctrl_left: false,
             ctrl_right: false,
@@ -96,7 +109,7 @@ impl EvdevCursor {
     }
 
     pub(super) fn clamp(&self, p: Point<i32>) -> Point<i32> {
-        let r = self.clip.unwrap_or(self.desktop);
+        let r = self.clip.unwrap_or(self.bounds);
         Point::new(
             p.x().clamp(r.left(), r.right() - 1),
             p.y().clamp(r.top(), r.bottom() - 1),
@@ -114,11 +127,11 @@ impl CursorEnv for EvdevCursor {
     }
 
     fn get_clip(&self) -> Rect<i32> {
-        self.clip.unwrap_or(self.desktop)
+        self.clip.unwrap_or(self.bounds)
     }
 
     fn set_clip(&mut self, r: Rect<i32>) {
-        if r.is_empty() || r == self.desktop {
+        if r.is_empty() || r == self.bounds {
             self.clip = None;
             return;
         }
@@ -152,7 +165,11 @@ mod tests {
     use super::*;
 
     fn cursor() -> EvdevCursor {
-        EvdevCursor::new(Rect::new(0, 0, 1920, 1080), Point::new(0, 0))
+        EvdevCursor::new(
+            Rect::new(0, 0, 1920, 1080),
+            Rect::new(0, 0, 1920, 1080),
+            Point::new(0, 0),
+        )
     }
 
     #[test]

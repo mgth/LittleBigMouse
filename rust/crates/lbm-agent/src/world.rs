@@ -28,6 +28,13 @@ pub trait AgentWorld: World {
     /// loaded, never run). `None` before the first layout.
     fn zones(&self) -> Option<(String, bool)>;
 
+    /// The desktop those zones sit on, in pixels — the union of the attached screens,
+    /// including any the layout excludes. `None` before the first layout.
+    ///
+    /// The hook cannot work this out: it is given the zones and nothing else, and the
+    /// zones stop at the layout's edge. Only the agent enumerates the outputs.
+    fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop>;
+
     /// Persists the current layout's Enabled alone.
     fn save_enabled(&mut self) -> io::Result<()>;
 
@@ -286,6 +293,22 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             .as_ref()
             .or(self.layout.as_ref())
             .map(|l| (compute_zones(l).serialize(), l.is_virtual()))
+    }
+
+    fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
+        let bounds = self
+            .preview
+            .as_ref()
+            .or(self.layout.as_ref())?
+            .desktop_pixel_bounds()?;
+        // Truncated the way the zones' own pixel rectangles are written to the wire,
+        // so the two describe the same grid.
+        Some(lbm_ipc::protocol::Desktop {
+            left: bounds.left() as i32,
+            top: bounds.top() as i32,
+            width: bounds.width() as i32,
+            height: bounds.height() as i32,
+        })
     }
 
     fn save_enabled(&mut self) -> io::Result<()> {

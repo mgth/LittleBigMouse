@@ -34,6 +34,15 @@ pub enum Command {
     Load {
         #[serde(rename = "Zones")]
         zones: String,
+        /// The desktop those zones sit on, in pixels, as the agent's own display
+        /// enumeration sees it. Absent from an older agent, and then the hook falls
+        /// back to what it can infer.
+        ///
+        /// It is here rather than in the document because it is a fact about the
+        /// machine, not a property of the layout — and because the two must never
+        /// get out of step: a display change rebuilds both and sends them together.
+        #[serde(rename = "Desktop", default, skip_serializing_if = "Option::is_none")]
+        desktop: Option<Desktop>,
     },
     /// Install the hook and route.
     Run,
@@ -55,6 +64,24 @@ pub enum Command {
     /// silence the `Run` beside it.
     #[serde(other)]
     Unknown,
+}
+
+/// A rectangle of desktop pixels: where the desktop starts and how big it is.
+///
+/// The hook needs it for one thing the layout cannot tell it — the range of the
+/// absolute pointing device it creates. A compositor maps that range onto the whole
+/// desktop, so a range that is not the desktop is a cursor that lands somewhere else,
+/// scaled by the ratio between the two.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Desktop {
+    #[serde(rename = "Left")]
+    pub left: i32,
+    #[serde(rename = "Top")]
+    pub top: i32,
+    #[serde(rename = "Width")]
+    pub width: i32,
+    #[serde(rename = "Height")]
+    pub height: i32,
 }
 
 /// `Quit`, spelled the way a hook that predates this protocol reads it.
@@ -241,6 +268,12 @@ mod tests {
         let sent = frame(&[
             Command::Load {
                 zones: "<ZonesLayout/>".to_owned(),
+                desktop: Some(Desktop {
+                    left: 0,
+                    top: 0,
+                    width: 3840,
+                    height: 1080,
+                }),
             },
             Command::Run,
         ]);
@@ -249,7 +282,13 @@ mod tests {
             parse(&sent),
             [
                 Command::Load {
-                    zones: "<ZonesLayout/>".to_owned()
+                    zones: "<ZonesLayout/>".to_owned(),
+                    desktop: Some(Desktop {
+                        left: 0,
+                        top: 0,
+                        width: 3840,
+                        height: 1080,
+                    })
                 },
                 Command::Run
             ]
@@ -263,8 +302,9 @@ mod tests {
         let zones =
             "<ZonesLayout Algorithm=\"Strait\">\n\t<Zone Name=\"A &amp; B\"/>\n</ZonesLayout>";
 
-        let [Command::Load { zones: back }] = &parse(&frame(&[Command::Load {
+        let [Command::Load { zones: back, .. }] = &parse(&frame(&[Command::Load {
             zones: zones.to_owned(),
+            desktop: None,
         }]))[..] else {
             panic!("a Load came back");
         };
@@ -278,6 +318,48 @@ mod tests {
         assert!(parse("not json").is_empty());
         // An object is not a frame: a frame is always an array.
         assert!(parse("{\"Command\":\"Run\"}").is_empty());
+    }
+
+    #[test]
+    fn a_load_without_a_desktop_is_still_a_load() {
+        // What an agent built before the field sends. It must not become an unreadable
+        // frame — the hook would ignore the Run beside it and the engine would never
+        // start — and it must not become a desktop of zeroes either.
+        assert_eq!(
+            parse(r#"[{"Command":"Load","Zones":"<ZonesLayout/>"}]"#),
+            [Command::Load {
+                zones: "<ZonesLayout/>".to_owned(),
+                desktop: None
+            }]
+        );
+    }
+
+    #[test]
+    fn a_desktop_survives_the_frame_with_its_origin() {
+        // A screen to the left of the primary puts the desktop origin at a negative
+        // x. Losing that sign moves every cursor position by the width of a screen.
+        let sent = frame(&[Command::Load {
+            zones: "<ZonesLayout/>".to_owned(),
+            desktop: Some(Desktop {
+                left: -1920,
+                top: -120,
+                width: 5760,
+                height: 1200,
+            }),
+        }]);
+
+        let [Command::Load { desktop, .. }] = &parse(&sent)[..] else {
+            panic!("a Load came back");
+        };
+        assert_eq!(
+            *desktop,
+            Some(Desktop {
+                left: -1920,
+                top: -120,
+                width: 5760,
+                height: 1200
+            })
+        );
     }
 
     #[test]

@@ -215,7 +215,7 @@ async fn connection<S>(
                     // Decided by the parser the daemon uses, not by the look of the
                     // text: an empty document is not the only one that fails, and the
                     // zone counts a `Loaded` reports are two different numbers.
-                    Command::Load { zones: xml } => {
+                    Command::Load { zones: xml, .. } => {
                         match ZonesLayout::from_xml(&xml) {
                             Some(layout) => {
                                 s.applied = protocol::fingerprint(&xml);

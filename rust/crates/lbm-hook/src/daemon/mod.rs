@@ -58,7 +58,17 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
             Command::State => {
                 send_state(server, Some(client_id), shared);
             }
-            Command::Load { zones: xml } => {
+            Command::Load {
+                zones: xml,
+                desktop,
+            } => {
+                // Before the layout: a Load that fails to parse still describes the
+                // machine correctly, and the absolute device is rebuilt from this
+                // whether or not the zones were taken.
+                if let Some(d) = desktop {
+                    *shared.desktop.lock().unwrap_or_else(|p| p.into_inner()) =
+                        Some(crate::geometry::Rect::new(d.left, d.top, d.width, d.height));
+                }
                 // Report the outcome to every listening client: a Load-without-Run
                 // (virtual-layout inspection) has no later Running event to prove
                 // the zones were accepted.
@@ -417,6 +427,7 @@ mod tests {
         // tick: both commands in one frame.
         let load = Command::Load {
             zones: ZONES_XML.to_owned(),
+            desktop: None,
         };
         assert!(frame_rehooks(&protocol::parse(&protocol::frame(&[
             load.clone(),

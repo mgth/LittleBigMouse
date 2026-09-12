@@ -246,4 +246,63 @@ mod tests {
             assert!(!shared.paused.load(Ordering::SeqCst));
         }
     }
+
+    //==================//
+    // What it says     //
+    //==================//
+    //
+    // These run on every platform although only the Windows backends call them: the
+    // decisions are the same everywhere, and the maintainer's Windows pass is by hand.
+
+    /// A display changed: let go of the mice first, then say so. Letting go is not
+    /// optional — the zones describe a desktop that is on its way out.
+    #[tokio::test]
+    async fn a_display_change_lets_go_and_says_so() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        shared.hooked.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+
+        on_display_changed(shared);
+
+        assert_eq!(
+            agent.next("the display change").await,
+            Event::DisplayChanged
+        );
+        assert!(!shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    /// The screen going off is announced once, however many times it is reported.
+    ///
+    /// Windows re-pushes the current display state every time the listener window is
+    /// recreated — which is every hook/unhook cycle, so a suspend that announced
+    /// itself each time would announce itself on its own unhook, and again on the
+    /// next. The silence is the behaviour; nothing could observe it until now.
+    #[tokio::test]
+    async fn the_screen_going_off_is_announced_once() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+
+        on_suspend(shared);
+        assert_eq!(agent.next("the suspend").await, Event::Suspended);
+
+        on_suspend(shared);
+        agent.stays_quiet().await;
+    }
+
+    /// And coming back is announced only if it went away: the same re-push arrives
+    /// on the other side too.
+    #[tokio::test]
+    async fn coming_back_from_a_screen_that_never_went_off_says_nothing() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+
+        on_resume(shared);
+        agent.stays_quiet().await;
+
+        on_suspend(shared);
+        assert_eq!(agent.next("the suspend").await, Event::Suspended);
+        on_resume(shared);
+        assert_eq!(agent.next("the resume").await, Event::Resumed);
+    }
 }

@@ -36,11 +36,11 @@ use lbm_agent::discovery::Discovery;
 use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::gap_guard::GapGuard;
 use lbm_agent::hook::HookClient;
-use lbm_agent::instance::InstanceLock;
 use lbm_agent::reconcile::Timings;
 use lbm_agent::runtime::Agent;
 use lbm_agent::supervise::HookLauncher;
 use lbm_agent::world::{Platform, SystemWorld};
+use lbm_ipc::instance::{self, InstanceLock};
 use lbm_store::{lbm_paths, JsonLayoutStore, LayoutPersistence};
 use serde_json::Value;
 
@@ -162,7 +162,7 @@ fn utc_now() -> String {
 fn run(options: Options) -> ExitCode {
     // One agent per session, decided before anything is touched — the log included:
     // a second launch must not rotate the running agent's log away.
-    let _instance = match InstanceLock::acquire_for_session() {
+    let _instance = match InstanceLock::acquire_for_session(instance::AGENT) {
         Ok(Some(lock)) => lock,
         Ok(None) => {
             eprintln!("lbm-agent: an agent already runs in this session");

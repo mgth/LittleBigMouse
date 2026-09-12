@@ -75,6 +75,10 @@ impl AgentWorld for FakeWorld {
         self.layout.map(|_| self.bound)
     }
 
+    fn excluded(&self) -> Option<Vec<String>> {
+        self.layout.map(|_| vec![r"\steamapps\".to_owned()])
+    }
+
     fn save_enabled(&mut self) -> io::Result<()> {
         let enabled = self.layout.is_some_and(|l| l.enabled);
         self.record.lock().unwrap().enabled_saves.push(enabled);
@@ -180,6 +184,11 @@ async fn the_agent_hands_its_layout_to_the_hook_and_keeps_it_hooked() {
             // Declared on every connection, even when it is "no": a hook taken over
             // from another agent holds whatever that one asked of it.
             Command::BindToAgent { bound: false },
+            // The list the engine stands aside for, before any layout: the first Run of
+            // a connection must be decided against the user's list, not an empty one.
+            Command::Excluded {
+                processes: vec![r"\steamapps\".to_owned()]
+            },
             // The desktop travels with the layout: the hook cannot work it out, and
             // the absolute pointing device it builds has to span exactly this.
             Command::Load {
@@ -361,6 +370,10 @@ impl AgentWorld for GappingWorld {
         self.layout.map(|_| false)
     }
 
+    fn excluded(&self) -> Option<Vec<String>> {
+        self.layout.map(|_| vec![r"\steamapps\".to_owned()])
+    }
+
     fn save_enabled(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -423,6 +436,11 @@ async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
             // Declared on every connection, even when it is "no": a hook taken over
             // from another agent holds whatever that one asked of it.
             Command::BindToAgent { bound: false },
+            // The list the engine stands aside for, before any layout: the first Run of
+            // a connection must be decided against the user's list, not an empty one.
+            Command::Excluded {
+                processes: vec![r"\steamapps\".to_owned()]
+            },
             // The desktop travels with the layout: the hook cannot work it out, and
             // the absolute pointing device it builds has to span exactly this.
             Command::Load {

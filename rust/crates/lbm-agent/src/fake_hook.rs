@@ -46,6 +46,8 @@ struct State {
     shortcut: String,
     /// Whether it was last told it belongs to the agent driving it.
     bound: bool,
+    /// The exclusion list it was last handed; `None` until it is handed one.
+    excluded: Option<Vec<String>>,
     received: Vec<Command>,
     listeners: Vec<mpsc::UnboundedSender<String>>,
 }
@@ -112,6 +114,11 @@ impl FakeHook {
     /// Whether it was last told it belongs to the agent driving it.
     pub fn bound(&self) -> bool {
         self.state.lock().unwrap().bound
+    }
+
+    /// The exclusion list it was last handed; `None` until it is handed one.
+    pub fn excluded(&self) -> Option<Vec<String>> {
+        self.state.lock().unwrap().excluded.clone()
     }
 
     /// Completes once a client sent `Quit`.
@@ -289,6 +296,10 @@ async fn connection<S>(
                     // for. What it means when the connection ends is the hook's, and
                     // this one has no mice to let go of.
                     Command::BindToAgent { bound } => s.bound = bound,
+                    // Held whole, emptying included — the daemon adopts it the same
+                    // way, and a fake that treated an empty list as "nothing said"
+                    // would hide a user clearing their exclusions.
+                    Command::Excluded { processes } => s.excluded = Some(processes),
                     Command::Unknown => {}
                 }
             }

@@ -57,6 +57,14 @@ pub enum Command {
         #[serde(rename = "Text")]
         text: String,
     },
+    /// The processes to stand aside for: path fragments, as the exclusion list spells
+    /// them. The hook keeps the matching and the decision — it is the only one that can
+    /// ask who is in front at the instant it is about to grab, which is what #541 was —
+    /// but the list is the agent's, who owns what the user edits.
+    Excluded {
+        #[serde(rename = "Processes")]
+        processes: Vec<String>,
+    },
     /// Whether this hook belongs to the agent that is speaking: on `true`, the end of
     /// this connection is the end of the hook — it lets go of the mice and leaves.
     ///
@@ -334,6 +342,23 @@ mod tests {
         assert_eq!(
             parse(&frame(&[Command::BindToAgent { bound: false }])),
             [Command::BindToAgent { bound: false }]
+        );
+    }
+
+    #[test]
+    fn an_exclusion_list_reads_back_as_itself_including_empty() {
+        let list = vec![r"\steamapps\".to_owned(), "*EscapeFrom*".to_owned()];
+        assert_eq!(
+            parse(&frame(&[Command::Excluded {
+                processes: list.clone()
+            }])),
+            [Command::Excluded { processes: list }]
+        );
+        // Emptying the list is a thing a user does, and it has to travel as itself
+        // rather than as "nothing to say".
+        assert_eq!(
+            parse(&frame(&[Command::Excluded { processes: vec![] }])),
+            [Command::Excluded { processes: vec![] }]
         );
     }
 

@@ -19,9 +19,10 @@ const NEW_LINE: &str = "\n";
 /// C# `ExcludedListPersistence`: the excluded-processes list — its file, its default
 /// entries and the one-time top-up that brings new defaults to existing
 /// installations. It sits beside [`LayoutStore`] rather than in it, because the list
-/// is a plain-text FILE the daemon reads directly (`Excluded.txt`: one entry per line,
+/// is a plain-text FILE the user may edit by hand (`Excluded.txt`: one entry per line,
 /// `:` lines are comments, empty lines are nothing); the store only holds the version
-/// counter that keeps the top-up one-time.
+/// counter that keeps the top-up one-time. The daemon no longer reads it — the agent
+/// does, and hands the daemon the list (`Command::Excluded`).
 ///
 /// The writes a load makes are best effort, as in C#: a read-only or missing directory
 /// must never keep the app from starting, and the in-memory list is correct either
@@ -89,9 +90,10 @@ impl<F: Fn() -> PathBuf> ExcludedListPersistence<F> {
             return Ok(());
         }
 
-        // Split the file the way the daemon does: an empty line is nothing, a ':' line
-        // is a comment, everything else is an exclusion. Diverging here would mean the
-        // list the user edits and the list that actually filters are not the same list.
+        // An empty line is nothing, a ':' line is a comment, everything else is an
+        // exclusion — the split the daemon used to make for itself, and which this is
+        // now the only implementation of: what comes out of here is what the daemon is
+        // handed, so the list the user edits and the list that filters are one list.
         let bytes = fs::read(&file)?;
         let mut comments = Vec::new();
         for line in read_lines(&decode_text(&bytes)) {
@@ -191,9 +193,10 @@ impl<F: Fn() -> PathBuf> ExcludedListPersistence<F> {
 /// a line ends at `\r\n`, `\n` or a lone `\r`, and a final line ending does not start
 /// an empty line.
 ///
-/// The daemon's reader (`lbm-hook`, `daemon::load_excluded`) splits with Rust's
-/// `str::lines`, which does not end a line at a lone `\r` and keeps a byte-order mark
-/// in the first line; neither shows up in a file either side writes.
+/// Kept faithful to C# because the file is shared with it and with the user's editor.
+/// (The daemon used to split it a second time, with Rust's `str::lines`, which differs
+/// on a lone `\r` and on a byte-order mark; it is handed the parsed list now, so there
+/// is one reader left.)
 fn read_lines(text: &str) -> Vec<&str> {
     let mut lines = Vec::new();
     let mut rest = text;

@@ -409,7 +409,12 @@ Objectif : le hook ne connaît plus que l'agent.
   `Run`, `Stop`, `Pause`/`Resume`, `Shortcut`, `Quit` ; événements Running, Stopped, RunRefused,
   Rescued, DisplayChanged, Suspended, ShortcutUnavailable. Poignée de main versionnée : en cas
   d'écart, l'agent relance le hook de son propre dossier. `roxmltree` part.
-- Partent vers l'agent : le sondeur, l'exclusion (D4), les statistiques `Loaded`.
+- Partent vers l'agent : le sondeur, la **liste** d'exclusion (D4), les statistiques `Loaded`.
+  *D4 tranché : la liste vient de l'agent (`Command::Excluded`, envoyée avant toute mise en page),
+  la **décision** reste au hook. Lui seul peut demander qui est au premier plan à l'instant où il
+  accroche, et c'est ce contrôle synchrone qui a corrigé #541 — le jeu déjà lancé, qu'aucun
+  changement de focus n'annonce jamais. Le hook ne lit plus `Excluded.txt` : un second lecteur du
+  même document est libre d'être en désaccord avec celui que l'utilisateur voit.*
 - Restent : décrochage sur écran changé ou éteint, refus des zones fantômes (Windows), touche de
   secours, autorelease, watchdog Windows, relâche des boutons au démontage.
 - Les bornes du bureau du périphérique absolu uinput viennent explicitement de l'agent, au lieu

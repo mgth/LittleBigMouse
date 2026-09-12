@@ -1,0 +1,102 @@
+{
+  "GlobalOptions": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": false,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false
+  },
+  "Layout": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": false,
+      "LoopY": false,
+      "Enabled": true,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "DEL42E2_FAKE27U00001": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DEL42E2_FAKE27U00001",
+        "SerialNumber": "FAKE27U00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DEL42E2_FAKE27U00001": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-1",
+            "Primary": true
+          }
+        }
+      },
+      "SAME035_FAKE32G00001": {
+        "XLocationInMm": 620,
+        "YLocationInMm": -10,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "SAME035_FAKE32G00001",
+        "SerialNumber": "FAKE32G00001",
+        "ExcludedFromLayout": false,
+        "Sources": {}
+      }
+    }
+  },
+  "Models": {
+    "DEL42E2": {
+      "Width": 597,
+      "Height": 336,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "Dell U2724DE"
+    },
+    "SAME035": {
+      "Width": 697,
+      "Height": 392,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "Odyssey G80SD"
+    }
+  }
+}

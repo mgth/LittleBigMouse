@@ -1,0 +1,153 @@
+{
+  "GlobalOptions": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": false,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false
+  },
+  "Layout": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": false,
+      "LoopY": false,
+      "Enabled": false,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "DELD0D9_FAKE24H0G001": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELD0D9_FAKE24H0G001",
+        "SerialNumber": "FAKE24H0G001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELD0D9_FAKE24H0G001": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DP-1",
+            "Primary": true
+          }
+        }
+      },
+      "DELD0D9_FAKE24H0G002": {
+        "XLocationInMm": 567,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELD0D9_FAKE24H0G002",
+        "SerialNumber": "FAKE24H0G002",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELD0D9_FAKE24H0G002": {
+            "PixelX": 1920,
+            "PixelY": 0,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DP-2",
+            "Primary": false
+          }
+        }
+      },
+      "DELD0D9_FAKE24H0G003": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 336,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELD0D9_FAKE24H0G003",
+        "SerialNumber": "FAKE24H0G003",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELD0D9_FAKE24H0G003": {
+            "PixelX": 0,
+            "PixelY": 1080,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DP-3",
+            "Primary": false
+          }
+        }
+      },
+      "DELD0D9_FAKE24H0G004": {
+        "XLocationInMm": 567,
+        "YLocationInMm": 336,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELD0D9_FAKE24H0G004",
+        "SerialNumber": "FAKE24H0G004",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELD0D9_FAKE24H0G004": {
+            "PixelX": 1920,
+            "PixelY": 1080,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "DP-4",
+            "Primary": false
+          }
+        }
+      }
+    }
+  },
+  "Models": {
+    "DELD0D9": {
+      "Width": 527,
+      "Height": 296,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "DELL P2419H"
+    }
+  }
+}

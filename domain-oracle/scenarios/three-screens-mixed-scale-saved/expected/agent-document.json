@@ -1,0 +1,190 @@
+{
+  "GlobalOptions": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": true,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": true,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false
+  },
+  "Layout": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": false,
+      "LoopY": false,
+      "Enabled": true,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "DELA0BE_FAKE24Q00001": {
+        "XLocationInMm": -765,
+        "YLocationInMm": 100,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {
+            "Sections": [
+              {
+                "From": 0,
+                "To": 296,
+                "Move": 15,
+                "MoveBlock": false,
+                "Drag": 15,
+                "DragBlock": false
+              }
+            ]
+          },
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DELA0BE_FAKE24Q00001",
+        "SerialNumber": "FAKE24Q00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DELA0BE_FAKE24Q00001": {
+            "PixelX": -1969,
+            "PixelY": 332,
+            "PixelWidth": 1969,
+            "PixelHeight": 1108,
+            "Orientation": 0,
+            "DisplayName": "DP-1",
+            "Primary": false
+          }
+        }
+      },
+      "PHL0927_FAKE32P00001": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {
+            "Sections": [
+              {
+                "From": 0,
+                "To": 190,
+                "Move": 10,
+                "MoveBlock": false,
+                "Drag": 0,
+                "DragBlock": true
+              },
+              {
+                "From": 190,
+                "To": 393,
+                "Move": 0,
+                "MoveBlock": false,
+                "Drag": 0,
+                "DragBlock": false
+              }
+            ]
+          },
+          "Bottom": {}
+        },
+        "ActiveSource": "PHL0927_FAKE32P00001",
+        "SerialNumber": "FAKE32P00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "PHL0927_FAKE32P00001": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-2",
+            "Primary": true
+          }
+        }
+      },
+      "SAME035_FAKE32G00001": {
+        "XLocationInMm": 718,
+        "YLocationInMm": -6,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {
+            "Sections": [
+              {
+                "From": 0,
+                "To": 392,
+                "Move": 5,
+                "MoveBlock": true,
+                "Drag": 5,
+                "DragBlock": true
+              }
+            ]
+          },
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "SAME035_FAKE32G00001",
+        "SerialNumber": "FAKE32G00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "SAME035_FAKE32G00001": {
+            "PixelX": 2560,
+            "PixelY": 0,
+            "PixelWidth": 3072,
+            "PixelHeight": 1728,
+            "Orientation": 0,
+            "DisplayName": "DP-3",
+            "Primary": false
+          }
+        }
+      }
+    }
+  },
+  "Models": {
+    "DELA0BE": {
+      "Width": 527,
+      "Height": 296,
+      "Borders": {
+        "Left": 8,
+        "Top": 8,
+        "Right": 8,
+        "Bottom": 12
+      },
+      "PnpName": "DELL P2415Q"
+    },
+    "PHL0927": {
+      "Width": 698,
+      "Height": 393,
+      "Borders": {
+        "Left": 10,
+        "Top": 10,
+        "Right": 10,
+        "Bottom": 14
+      },
+      "PnpName": "PHL 328P6VU"
+    },
+    "SAME035": {
+      "Width": 697,
+      "Height": 392,
+      "Borders": {
+        "Left": 6,
+        "Top": 6,
+        "Right": 6,
+        "Bottom": 10
+      },
+      "PnpName": "Odyssey G80SD"
+    }
+  }
+}

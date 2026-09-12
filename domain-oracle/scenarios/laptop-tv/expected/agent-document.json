@@ -1,0 +1,149 @@
+{
+  "GlobalOptions": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": false,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false
+  },
+  "Layout": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": false,
+      "LoopY": false,
+      "Enabled": false,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "SDC419D_92031425": {
+        "XLocationInMm": -340,
+        "YLocationInMm": 10,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "SDC419D_92031425",
+        "SerialNumber": "92031425",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "SDC419D_92031425": {
+            "PixelX": -1440,
+            "PixelY": 0,
+            "PixelWidth": 1440,
+            "PixelHeight": 900,
+            "Orientation": 0,
+            "DisplayName": "eDP-1",
+            "Primary": false
+          }
+        }
+      },
+      "DEL42E2_FAKE27U00001": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DEL42E2_FAKE27U00001",
+        "SerialNumber": "FAKE27U00001",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DEL42E2_FAKE27U00001": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-1",
+            "Primary": true
+          }
+        }
+      },
+      "SAM7016_81920314": {
+        "XLocationInMm": -331.90615185301505,
+        "YLocationInMm": -660,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "SAM7016_81920314",
+        "SerialNumber": "81920314",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "SAM7016_81920314": {
+            "PixelX": -237,
+            "PixelY": -720,
+            "PixelWidth": 1280,
+            "PixelHeight": 720,
+            "Orientation": 0,
+            "DisplayName": "HDMI-A-1",
+            "Primary": false
+          }
+        }
+      }
+    }
+  },
+  "Models": {
+    "SDC419D": {
+      "Width": 300,
+      "Height": 190,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "eDP-1"
+    },
+    "DEL42E2": {
+      "Width": 597,
+      "Height": 336,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "Dell U2724DE"
+    },
+    "SAM7016": {
+      "Width": 1110,
+      "Height": 620,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "SAMSUNG"
+    }
+  }
+}

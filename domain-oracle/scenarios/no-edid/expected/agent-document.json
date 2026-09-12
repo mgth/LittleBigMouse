@@ -1,0 +1,112 @@
+{
+  "GlobalOptions": {
+    "Priority": "Normal",
+    "PriorityUnhooked": "Below",
+    "HomeCinema": false,
+    "VcpControl": false,
+    "Pinned": false,
+    "AutoUpdate": false,
+    "StartMinimized": false,
+    "StartElevated": false,
+    "DebugTools": false,
+    "ExperimentalFeatures": false,
+    "ShowMonitorActionWarning": true,
+    "BorderValues": "PerModel",
+    "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "HideTrayIcon": false
+  },
+  "Layout": {
+    "Options": {
+      "AllowOverlaps": false,
+      "AllowDiscontinuity": false,
+      "Algorithm": "Strait",
+      "MinimalEdgeOverlap": 20,
+      "MaxTravelDistance": 200,
+      "FreelookCheckInterval": 100,
+      "FreelookEnabled": true,
+      "LoopX": false,
+      "LoopY": false,
+      "Enabled": false,
+      "AdjustPointer": false,
+      "AdjustSpeed": false
+    },
+    "Monitors": {
+      "DP-0": {
+        "XLocationInMm": 0,
+        "YLocationInMm": 0,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "DP-0",
+        "SerialNumber": "N/A",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "DP-0": {
+            "PixelX": 0,
+            "PixelY": 0,
+            "PixelWidth": 2560,
+            "PixelHeight": 1440,
+            "Orientation": 0,
+            "DisplayName": "DP-0",
+            "Primary": true
+          }
+        }
+      },
+      "HDMI-0": {
+        "XLocationInMm": 637,
+        "YLocationInMm": 126,
+        "PhysicalRatioX": 1,
+        "PhysicalRatioY": 1,
+        "BorderResistance": {
+          "Left": {},
+          "Top": {},
+          "Right": {},
+          "Bottom": {}
+        },
+        "ActiveSource": "HDMI-0",
+        "SerialNumber": "N/A",
+        "ExcludedFromLayout": false,
+        "Sources": {
+          "HDMI-0": {
+            "PixelX": 2560,
+            "PixelY": 0,
+            "PixelWidth": 1920,
+            "PixelHeight": 1080,
+            "Orientation": 0,
+            "DisplayName": "HDMI-0",
+            "Primary": false
+          }
+        }
+      }
+    }
+  },
+  "Models": {
+    "DP-0": {
+      "Width": 597,
+      "Height": 336,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "DP-0"
+    },
+    "HDMI-0": {
+      "Width": 0,
+      "Height": 0,
+      "Borders": {
+        "Left": 20,
+        "Top": 20,
+        "Right": 20,
+        "Bottom": 20
+      },
+      "PnpName": "HDMI-0"
+    }
+  }
+}

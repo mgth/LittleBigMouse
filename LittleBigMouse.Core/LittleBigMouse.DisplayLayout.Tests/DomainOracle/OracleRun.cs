@@ -65,6 +65,10 @@ static class OracleRun
                 ["pixel-locations.json"] = Json(PixelLocations(layout)),
             };
 
+            // What a frontend would hand the agent instead of saving it itself (v6,
+            // phase 4): taken here, where a save is about to write the same thing.
+            outputs["agent-document.json"] = Json(AgentDocumentNode(layout));
+
             // Last: a save only flips Saved flags on the model, but nothing above should
             // have to reason about that.
             persistence.Save(layout);
@@ -360,6 +364,32 @@ static class OracleRun
 
         return files;
     }
+
+    //====================//
+    // agent-document.json //
+    //====================//
+
+    /// <summary>
+    /// <see cref="AgentDocument.Of"/> as a node, so the corpus holds the very bytes the UI
+    /// will put on the wire — the store's own DTOs, absent members for nulls, the store's
+    /// number format.
+    /// </summary>
+    static JsonNode AgentDocumentNode(MonitorsLayout layout)
+    {
+        var document = JsonSerializer.SerializeToNode(AgentDocument.Of(layout), StoreShaped)!;
+        // The excluded list is not recorded: the defaults are the platform's
+        // ("/steamapps/" here, "\steamapps\" there) and a top-up mixes them into a
+        // pinned list, so it would make this corpus say where it was regenerated. That
+        // the document carries the list is pinned by lbm-store's own document test.
+        document.AsObject().Remove("Excluded");
+        return document;
+    }
+
+    /// <summary>`JsonLayoutStore`'s: absent members for nulls.</summary>
+    static readonly JsonSerializerOptions StoreShaped = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     //==================//
     // Encoding         //

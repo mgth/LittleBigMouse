@@ -297,6 +297,30 @@ mod tests {
         );
     }
 
+    /// The other half of the same problem: a script that does not parse is refused the
+    /// same silent way a misnamed method is. This one is sent for a screen at a position
+    /// no desktop has, so plasma parses it, runs it, matches nothing and changes nothing
+    /// — and answers, which is the whole assertion.
+    #[cfg(target_os = "linux")]
+    #[ignore = "needs a running plasmashell"]
+    #[tokio::test]
+    async fn plasma_runs_the_script_it_is_sent() {
+        let nowhere = ScreenWallpaper {
+            x: 500_000.0,
+            y: 500_000.0,
+            image: Some(PathBuf::from("/nowhere/none.png")),
+            style: WallpaperStyle::Fill,
+            color: "#204060".to_owned(),
+        };
+
+        assert!(
+            super::plasma::evaluate(&super::plasma::script(&[nowhere]))
+                .await
+                .is_some(),
+            "plasma did not run the script"
+        );
+    }
+
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn nothing_to_show_is_not_a_failure() {

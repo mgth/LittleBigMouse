@@ -1,9 +1,10 @@
 //! Little Big Mouse hook daemon — Rust port of the native C++ `LittleBigMouse.Hook`.
 //!
-//! The daemon is a separate process launched by the C# UI. The two communicate
-//! over per-user local IPC using bounded length-prefixed UTF-8 XML
-//! messages — the language-agnostic contract that lets this Rust process replace
-//! the C++ one wholesale.
+//! The daemon is a separate process, driven by the agent (v6) — by the C# UI before
+//! it. The two communicate over per-user local IPC using bounded length-prefixed
+//! UTF-8 frames carrying `lbm_ipc::protocol` — JSON since the two ends became Rust,
+//! XML while the contract had to be language-agnostic enough to let this process
+//! replace the C++ one wholesale.
 //!
 //! The safe zone engine, platform hooks, and authenticated local IPC transport
 //! together replace the historical C++ daemon in distributable builds.
@@ -14,6 +15,9 @@ pub mod ipc;
 pub mod platform;
 pub mod shared;
 pub mod shortcut;
+
+#[cfg(test)]
+mod testing;
 
 // Split out into sibling crates of the workspace so the v6 agent and frontend can
 // use them without the platform layer. Re-exported under their historical paths:

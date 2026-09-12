@@ -502,4 +502,42 @@ mod tests {
             "a Run alone must not hook an engine with no layout"
         );
     }
+
+    //==================//
+    // The rescue       //
+    //==================//
+
+    /// The panic shortcut, which until now nothing exercised at all.
+    ///
+    /// It is the path with the least margin for a regression: it runs when the cursor
+    /// is trapped and nothing can be clicked, so a listener that stops hearing it has
+    /// no other way to find out, and neither does the user.
+    #[tokio::test]
+    async fn the_rescue_frees_the_cursor_and_says_it_did() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+
+        // As it is when a layout has trapped the user: hooked, and paused because the
+        // thing in front happened to be excluded.
+        shared.want_hook.store(true, Ordering::SeqCst);
+        shared.paused.store(true, Ordering::SeqCst);
+
+        rescue_fired(shared);
+
+        // Said at all — which is the part a regression would take away, and which
+        // nothing checked until there was a way to listen. (That it is said *before*
+        // the unhook stays a matter of reading the two lines: the `Stopped` it must
+        // precede comes from the pump, and there is none here. A stand-in pump would
+        // only be asserting its own timing.)
+        assert_eq!(agent.next("the rescue").await, Event::Rescued);
+        assert!(
+            !shared.want_hook.load(Ordering::SeqCst),
+            "the rescue must take the engine down, not only announce it"
+        );
+        assert!(
+            !shared.paused.load(Ordering::SeqCst),
+            "a rescue out of a pause must not leave the engine parked in it: the next \
+             Run would decide against a flag describing a window that is long gone"
+        );
+    }
 }

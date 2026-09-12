@@ -1,18 +1,21 @@
-//! Bounded, per-user local IPC server.
+//! Single-client, per-user local IPC server.
 //!
 //! Windows uses a current-session named pipe whose DACL grants only the current
 //! user and SYSTEM. Linux uses a 0600 Unix-domain socket. Both transports share
-//! the same length-prefixed UTF-8 protocol, four-client cap, ordered command
-//! queue, and non-blocking outbound queues.
+//! the same length-prefixed UTF-8 protocol, ordered command queue, and
+//! non-blocking outbound queue.
+//!
+//! There is exactly one client, and it is the agent (v6): the frontends talk to the
+//! agent, the agent talks to the hook, and nothing else has any business driving the
+//! mice. The newest connection wins — see [`ServerHandle`].
 
-use std::collections::HashMap;
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{mpsc, oneshot, Semaphore};
+use tokio::sync::{mpsc, oneshot, Notify};
 
 use crate::daemon;
 use crate::ipc::framing::{read_frame, write_frame};
@@ -20,9 +23,11 @@ use crate::shared::Shared;
 
 pub type ClientId = u64;
 
-const MAX_CLIENTS: usize = 4;
 const COMMAND_QUEUE_CAPACITY: usize = 64;
 const CLIENT_QUEUE_CAPACITY: usize = 16;
+/// How long the daemon has to act on a command. Not how long a client may stay
+/// silent: the one client holds its connection for as long as it lives, and asks
+/// nothing between a display change and the next.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -30,6 +35,13 @@ struct ClientHandle {
     id: ClientId,
     outbound: mpsc::Sender<String>,
     listening: AtomicBool,
+    /// Raised when a newer connection took this one's place. Notified with
+    /// [`Notify::notify_one`], not `notify_waiters`: eviction lands whenever it
+    /// lands, including while this connection is busy dispatching a command, and a
+    /// wake-up nobody was waiting for yet must not be lost. It would leave an
+    /// evicted agent holding a connection the hook still executes `Run` and `Quit`
+    /// from.
+    evicted: Arc<Notify>,
 }
 
 impl ClientHandle {
@@ -38,6 +50,7 @@ impl ClientHandle {
             id,
             outbound,
             listening: AtomicBool::new(false),
+            evicted: Arc::new(Notify::new()),
         }
     }
 }
@@ -45,45 +58,52 @@ impl ClientHandle {
 struct InboundCommand {
     id: ClientId,
     message: String,
-    completed: oneshot::Sender<bool>,
+    completed: oneshot::Sender<()>,
 }
 
 /// Cloneable synchronous facade used by daemon and hook callbacks.
+///
+/// One client at a time — the agent. The newest connection wins: an agent that was
+/// restarted, or one that took over from a crashed predecessor, must be able to drive
+/// the hook without waiting for the operating system to notice that the connection it
+/// replaces is dead.
 #[derive(Clone)]
 pub struct ServerHandle {
-    registry: Arc<Mutex<HashMap<ClientId, Arc<ClientHandle>>>>,
+    client: Arc<Mutex<Option<Arc<ClientHandle>>>>,
     commands: mpsc::Sender<InboundCommand>,
 }
 
 impl ServerHandle {
     fn new(commands: mpsc::Sender<InboundCommand>) -> Self {
         Self {
-            registry: Arc::new(Mutex::new(HashMap::new())),
+            client: Arc::new(Mutex::new(None)),
             commands,
         }
     }
 
-    fn insert(&self, client: Arc<ClientHandle>) -> bool {
-        let mut registry = self.registry.lock().unwrap_or_else(|p| p.into_inner());
-        if registry.len() >= MAX_CLIENTS {
-            return false;
-        }
-        registry.insert(client.id, client);
-        true
-    }
-
-    pub fn remove(&self, id: ClientId) {
-        self.registry
+    /// Take the connection, and hand back whoever had it so they can be told.
+    fn adopt(&self, client: Arc<ClientHandle>) -> Option<Arc<ClientHandle>> {
+        self.client
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .remove(&id);
+            .replace(client)
+    }
+
+    /// Give the connection up — but only if it is still ours. A connection that ends
+    /// after being evicted must not take its successor's place with it.
+    pub fn remove(&self, id: ClientId) {
+        let mut held = self.client.lock().unwrap_or_else(|p| p.into_inner());
+        if held.as_ref().is_some_and(|client| client.id == id) {
+            *held = None;
+        }
     }
 
     fn get(&self, id: ClientId) -> Option<Arc<ClientHandle>> {
-        self.registry
+        self.client
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .get(&id)
+            .as_ref()
+            .filter(|client| client.id == id)
             .cloned()
     }
 
@@ -102,21 +122,20 @@ impl ServerHandle {
         }
     }
 
-    /// Never blocks the hook/message-pump thread. Slow clients have a bounded
-    /// queue and are disconnected rather than delaying input routing.
+    /// Never blocks the hook/message-pump thread. A client whose bounded queue is
+    /// full is disconnected rather than allowed to delay input routing.
     pub fn broadcast(&self, event: &crate::ipc::protocol::Event) {
-        let message = &crate::ipc::protocol::event(event);
-        let clients: Vec<Arc<ClientHandle>> = self
-            .registry
+        let listener = self
+            .client
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .values()
+            .as_ref()
             .filter(|client| client.listening.load(Ordering::SeqCst))
-            .cloned()
-            .collect();
+            .cloned();
 
-        for client in clients {
-            if client.outbound.try_send(message.to_string()).is_err() {
+        if let Some(client) = listener {
+            let message = crate::ipc::protocol::event(event);
+            if client.outbound.try_send(message).is_err() {
                 self.remove(client.id);
             }
         }
@@ -181,24 +200,34 @@ async fn command_worker(
     shared: &'static Shared,
 ) {
     while let Some(command) = commands.recv().await {
-        let listening = daemon::receive_message(&command.message, command.id, &server, shared);
-        let _ = command.completed.send(listening);
+        daemon::receive_message(&command.message, command.id, &server, shared);
+        let _ = command.completed.send(());
     }
 }
 
-async fn run_connection<S: LocalStream>(
-    stream: S,
-    server: ServerHandle,
-    _permit: tokio::sync::OwnedSemaphorePermit,
-) {
+/// One client's connection, for as long as it lives.
+///
+/// It both listens and commands — the agent uses one connection for both, and a
+/// subscription that stopped taking commands is a hook nobody can drive. There is no
+/// idle deadline for the same reason: the agent is silent between a display change and
+/// the next, and silence is not death. What ends the connection is the client going
+/// away, the writer failing, or a newer client taking its place.
+async fn run_connection<S: LocalStream>(stream: S, server: ServerHandle) {
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let (mut reader, mut writer) = tokio::io::split(stream);
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<String>(CLIENT_QUEUE_CAPACITY);
     let client = Arc::new(ClientHandle::new(id, outbound_tx));
-    if !server.insert(client) {
-        return;
+    let evicted = client.evicted.clone();
+
+    if let Some(previous) = server.adopt(client) {
+        eprintln!(
+            "[LittleBigMouse.Hook] a new client took the connection; client {} is done",
+            previous.id
+        );
+        previous.evicted.notify_one();
     }
+
     let mut writer_task = tokio::spawn(async move {
         while let Some(message) = outbound_rx.recv().await {
             match tokio::time::timeout(WRITE_TIMEOUT, write_frame(&mut writer, &message)).await {
@@ -209,10 +238,15 @@ async fn run_connection<S: LocalStream>(
     });
 
     loop {
-        let message = match tokio::time::timeout(COMMAND_TIMEOUT, read_frame(&mut reader)).await {
-            Ok(Ok(message)) => message,
-            _ => break,
+        let message = tokio::select! {
+            read = read_frame(&mut reader) => match read {
+                Ok(message) => message,
+                Err(_) => break,
+            },
+            () = evicted.notified() => break,
+            _ = &mut writer_task => break,
         };
+
         let (completed, result) = oneshot::channel();
         let command = InboundCommand {
             id,
@@ -222,23 +256,15 @@ async fn run_connection<S: LocalStream>(
         if server.commands.try_send(command).is_err() {
             break;
         }
-        let listening = match tokio::time::timeout(COMMAND_TIMEOUT, result).await {
-            Ok(Ok(listening)) => listening,
-            _ => break,
-        };
-        if listening {
-            tokio::select! {
-                _ = read_frame(&mut reader) => {}
-                _ = &mut writer_task => {}
-            }
-            server.remove(id);
-            writer_task.abort();
-            return;
+        // The daemon has a deadline, the client does not: a command that hangs the
+        // daemon must not hold the connection with it.
+        if tokio::time::timeout(COMMAND_TIMEOUT, result).await.is_err() {
+            break;
         }
     }
 
     server.remove(id);
-    let _ = writer_task.await;
+    writer_task.abort();
 }
 
 #[cfg(windows)]
@@ -277,7 +303,6 @@ mod transport {
         }
 
         pub async fn run(self, server: ServerHandle, _shared: &'static Shared) {
-            let semaphore = Arc::new(Semaphore::new(MAX_CLIENTS));
             let mut next = Some(self.first);
             loop {
                 let pipe = match next.take() {
@@ -302,10 +327,10 @@ mod transport {
                 if !client_is_current_session(&pipe) {
                     continue;
                 }
-                let Ok(permit) = semaphore.clone().try_acquire_owned() else {
-                    continue;
-                };
-                tokio::spawn(run_connection(pipe, server.clone(), permit));
+                // Every connection is accepted: the newest client is the one that
+                // matters, and refusing it would leave the hook driven by whoever got
+                // there first — including a connection nobody is reading any more.
+                tokio::spawn(run_connection(pipe, server.clone()));
             }
         }
     }
@@ -441,12 +466,9 @@ mod transport {
         }
 
         pub async fn run(self, server: ServerHandle, _shared: &'static Shared) {
-            let semaphore = Arc::new(Semaphore::new(MAX_CLIENTS));
             while let Ok((stream, _)) = self.listener.accept().await {
-                let Ok(permit) = semaphore.clone().try_acquire_owned() else {
-                    continue;
-                };
-                tokio::spawn(run_connection(stream, server.clone(), permit));
+                // Every connection is accepted: see the Windows side.
+                tokio::spawn(run_connection(stream, server.clone()));
             }
             let _ = std::fs::remove_file(&self.path);
         }

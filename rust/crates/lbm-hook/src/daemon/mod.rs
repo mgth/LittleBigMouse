@@ -15,22 +15,12 @@ use crate::zones::ZonesLayout;
 use lbm_ipc::protocol::Event;
 
 /// Dispatch one received line.
-///
-/// Returns `true` if this client just became a listening client, so the reader
-/// stops reading and leaves the socket open for event pushes.
-pub fn receive_message(
-    line: &str,
-    client_id: ClientId,
-    server: &ServerHandle,
-    shared: &Shared,
-) -> bool {
+pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, shared: &Shared) {
     // C++ `ReceiveClientMessage`: an empty message just re-reports state.
     if line.trim().is_empty() {
         send_state(server, Some(client_id), shared);
-        return false;
+        return;
     }
-
-    let mut became_listening = false;
 
     let commands = protocol::parse(line);
     let rehooks = frame_rehooks(&commands);
@@ -52,7 +42,6 @@ pub fn receive_message(
             Command::Listen => {
                 server.set_listening(client_id);
                 send_state(server, Some(client_id), shared);
-                became_listening = true;
             }
             Command::Run => run(shared),
             Command::Stop => {
@@ -94,8 +83,6 @@ pub fn receive_message(
             Command::Unknown => {}
         }
     }
-
-    became_listening
 }
 
 /// The panic shortcut fired. Runs on the listener's own thread.

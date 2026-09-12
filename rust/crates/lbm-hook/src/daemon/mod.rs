@@ -226,6 +226,21 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
 /// second click restarted it. Re-asserting the flag makes the swap seamless
 /// (the router never observes the transient false) or at worst a quick
 /// re-arm — both correct.
+/// A `Run` this daemon will not honour, said out loud.
+///
+/// The refusal itself is the point of these guards; the saying is what was missing.
+/// A client that asked for the engine and hears nothing waits for a `Running` that
+/// will never come — the agent has no deadline on a Start and nothing retries it —
+/// so the user who pressed Start is left looking at "stopped" with no reason given.
+/// The state is the answer rather than a refusal of its own: `Paused` is exactly what
+/// "an excluded application has the foreground" means, and the frontends already know
+/// how to show it. (A dedicated `RunRefused` is #609's, for the geometric refusal;
+/// two spellings of the same idea would be worse than one.)
+fn refuse(shared: &Shared, why: &str) {
+    eprintln!("[LittleBigMouse.Hook] Run refused: {why}");
+    shared.broadcast(state(shared));
+}
+
 fn run(shared: &Shared) {
     // A virtual (foreign) layout is loaded for inspection only: hooking it would
     // confine the local mouse inside a geometry that does not exist on this
@@ -238,9 +253,7 @@ fn run(shared: &Shared) {
         .layout
         .virtual_layout;
     if virtual_layout {
-        eprintln!(
-            "[LittleBigMouse.Hook] Run refused: the loaded layout is virtual (inspection only)"
-        );
+        refuse(shared, "the loaded layout is virtual (inspection only)");
         return;
     }
 
@@ -255,7 +268,7 @@ fn run(shared: &Shared) {
         .zones
         .is_empty()
     {
-        eprintln!("[LittleBigMouse.Hook] Run refused: no layout is loaded");
+        refuse(shared, "no layout is loaded");
         return;
     }
 
@@ -266,10 +279,15 @@ fn run(shared: &Shared) {
     // a pause flag that only a focus *change* ever sets is what let the engine
     // hook straight over an excluded game that was already running (#541).
     if hook::adopt_foreground(shared) {
+        eprintln!("[LittleBigMouse.Hook] Run refused: an excluded application has the foreground");
         // An excluded app holds the foreground: do not hook over it, and let go
         // if an earlier Run already did.
         if shared.hooked.load(Ordering::SeqCst) {
+            // The unhook announces itself once the pump has done it. Saying anything
+            // here would say `Running` — which is precisely what is being undone.
             hook::request_unhook(shared);
+        } else {
+            shared.broadcast(state(shared));
         }
         return;
     }
@@ -295,17 +313,22 @@ pub fn load_excluded(shared: &Shared) {
     }
 }
 
-/// Report current state (C++ `SendState`): `Running` when hooked, else `Paused`
-/// when paused, else `Stopped`. `to = Some(id)` replies to one client; `None`
-/// broadcasts to all listening clients.
-fn send_state(server: &ServerHandle, to: Option<ClientId>, shared: &Shared) {
-    let msg = if shared.hooked.load(Ordering::SeqCst) {
+/// What this daemon is doing, as one event: `Running` when hooked, else `Paused`
+/// when paused, else `Stopped`.
+fn state(shared: &Shared) -> &'static Event {
+    if shared.hooked.load(Ordering::SeqCst) {
         &Event::Running
     } else if shared.paused.load(Ordering::SeqCst) {
         &Event::Paused
     } else {
         &Event::Stopped
-    };
+    }
+}
+
+/// Report current state (C++ `SendState`). `to = Some(id)` replies to one client;
+/// `None` broadcasts to the listening client.
+fn send_state(server: &ServerHandle, to: Option<ClientId>, shared: &Shared) {
+    let msg = state(shared);
 
     match to {
         Some(id) => server.send_to(id, msg),

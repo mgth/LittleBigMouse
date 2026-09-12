@@ -50,12 +50,12 @@ fn main() {
         }
     };
 
-    let (server, endpoint) = match side_by_side {
+    // The handle publishes itself into `shared` as it starts.
+    let (_server, endpoint) = match side_by_side {
         Ok(endpoint) => ipc::server::start_with_endpoint(shared, endpoint),
         Err(_) => ipc::server::start(shared),
     }
     .unwrap_or_else(|error| panic!("failed to start per-user local IPC: {error}"));
-    let _ = shared.server.set(server);
 
     eprintln!("[LittleBigMouse.Hook] listening on {endpoint}");
 

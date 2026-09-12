@@ -105,7 +105,24 @@ public class WallpaperManager : ReactiveObject, IDisposable
     public void Commit()
     {
         if (_layout is not { } layout) return;
-        _ = _agent.SaveWallpaperAsync(layout.Id, CurrentForEdit);
+        var settings = CurrentForEdit;
+        _ = Send();
+        return;
+
+        async Task Send()
+        {
+            try
+            {
+                await _agent.SaveWallpaperAsync(layout.Id, settings);
+            }
+            catch (Exception error)
+            {
+                // Nobody awaits this, so there is nowhere to report to but the log the
+                // app's other diagnostics go to. Letting it out would be an unobserved
+                // exception raised on a thread that has nothing to do with the editor.
+                Console.Error.WriteLine($"Saving the wallpaper failed: {error.Message}");
+            }
+        }
     }
 
     /// <summary>

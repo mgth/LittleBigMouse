@@ -32,7 +32,6 @@ pub mod gap_guard;
 pub mod hook;
 #[cfg(any(target_os = "linux", windows))]
 pub mod icons;
-pub mod instance;
 pub mod log;
 pub mod reconcile;
 pub mod runtime;

@@ -22,7 +22,35 @@ fn main() {
     // `LBM_HOOK_ENDPOINT` overrides the per-session pipe/socket path, enabling
     // side-by-side testing next to a running daemon (successor of the old
     // LBM_HOOK_PORT override).
-    let (server, endpoint) = match std::env::var("LBM_HOOK_ENDPOINT") {
+    let side_by_side = std::env::var("LBM_HOOK_ENDPOINT");
+
+    // One hook per session. Two of them is the worst state this program can reach:
+    // both grab the mice, and the second takes the first one's socket with it — a
+    // live socket and a stale one look the same from outside, so the second unlinks
+    // and rebinds over a daemon that is still routing.
+    //
+    // Not when an endpoint was named: that is the deliberate side-by-side instance,
+    // and refusing to start would take the way of testing next to a running daemon
+    // with it.
+    let _instance = if side_by_side.is_ok() {
+        None
+    } else {
+        match lbm_ipc::instance::InstanceLock::acquire_for_session(lbm_ipc::instance::HOOK) {
+            Ok(Some(lock)) => Some(lock),
+            Ok(None) => {
+                eprintln!("[LittleBigMouse.Hook] a hook already runs in this session");
+                return;
+            }
+            // Not fatal: a runtime directory that cannot be written is no reason to
+            // leave the mouse unrouted, and it was no guard at all until today.
+            Err(error) => {
+                eprintln!("[LittleBigMouse.Hook] no instance lock: {error}");
+                None
+            }
+        }
+    };
+
+    let (server, endpoint) = match side_by_side {
         Ok(endpoint) => ipc::server::start_with_endpoint(shared, endpoint),
         Err(_) => ipc::server::start(shared),
     }

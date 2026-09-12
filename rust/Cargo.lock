@@ -771,8 +771,11 @@ dependencies = [
 name = "lbm-ipc"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "roxmltree",
+ "tempfile",
  "tokio",
+ "windows",
 ]
 
 [[package]]

@@ -69,12 +69,22 @@ pub const LEGACY_QUIT: &str = r#"<CommandMessage Command="Quit" Payload=""></Com
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "Event")]
 pub enum Event {
-    /// The answer to [`Command::Hello`].
+    /// The answer to [`Command::Hello`]: who is there, and what it is applying.
     Hello {
         #[serde(rename = "Protocol")]
         protocol: u32,
         #[serde(rename = "Version")]
         version: String,
+        /// [`fingerprint`] of the layout this hook holds; empty when it holds none.
+        ///
+        /// This is what makes reattachment (D5) more than a guess. A hook outlives
+        /// its agent, so the agent that finds one running must decide whether to
+        /// leave it alone — and leaving it alone is only right if it is applying the
+        /// layout the agent wants. It is not, if the previous agent died mid-preview:
+        /// the mice would keep being routed by an experiment nobody ever committed
+        /// to, for as long as the session lasts, with nothing to say so.
+        #[serde(rename = "Layout", default)]
+        layout: String,
     },
     /// The input hook is installed.
     Running,
@@ -171,6 +181,28 @@ impl Event {
             _ => String::new(),
         }
     }
+}
+
+/// What a layout document is known by on the wire, so that two processes can tell
+/// whether they mean the same one without one of them sending it back.
+///
+/// FNV-1a, 64 bits, in hex. A fingerprint, not a signature: the two sides trust each
+/// other (same user, same session, 0600 socket), so this only has to survive
+/// accidents, and an accidental collision between two layouts a user actually has is
+/// not a thing that happens. It is exact where it matters — the document is produced
+/// deterministically by one side and hashed byte for byte, which is what already
+/// makes the agent's own "is this the layout I last sent" comparison mean something.
+///
+/// Deliberately not shared with the wallpaper's file-name hash, which happens to use
+/// the same function: that one names files on disk and can never change without
+/// orphaning them, this one lives for the length of a connection.
+pub fn fingerprint(zones: &str) -> String {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let hash = zones.bytes().fold(OFFSET, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(PRIME)
+    });
+    format!("{hash:016x}")
 }
 
 /// One frame's worth of commands, as the agent writes it.
@@ -300,6 +332,7 @@ mod tests {
             Event::Hello {
                 protocol: PROTOCOL,
                 version: "0.1.0".to_owned(),
+                layout: fingerprint("<ZonesLayout/>"),
             },
             Event::Running,
             Event::Stopped,
@@ -325,6 +358,39 @@ mod tests {
         ] {
             assert_eq!(parse_event(&event(&original)), Some(original.clone()));
         }
+    }
+
+    #[test]
+    fn the_same_layout_fingerprints_the_same_and_a_different_one_does_not() {
+        let zones = "<ZonesLayout Algorithm=\"Strait\"><Zone Id=\"0\"/></ZonesLayout>";
+        assert_eq!(fingerprint(zones), fingerprint(zones));
+        assert_ne!(
+            fingerprint(zones),
+            fingerprint("<ZonesLayout Algorithm=\"Cross\"><Zone Id=\"0\"/></ZonesLayout>")
+        );
+        // Byte for byte: a layout that moved a screen by a millimetre is a different
+        // layout, and the whole point is to notice.
+        assert_ne!(
+            fingerprint("<Rect Left=\"0\"/>"),
+            fingerprint("<Rect Left=\"1\"/>")
+        );
+        // Fixed width, so it reads as one thing in a log line.
+        assert_eq!(fingerprint("").len(), 16);
+    }
+
+    #[test]
+    fn a_hook_that_names_no_layout_still_says_hello() {
+        // The field arrived after PROTOCOL 1 was written down. A hook built before it
+        // omits it, and omitting it must mean "no layout", not "unreadable greeting" —
+        // the agent would retire a hook it can perfectly well talk to.
+        assert_eq!(
+            parse_event(r#"{"Event":"Hello","Protocol":1,"Version":"0.1.0"}"#),
+            Some(Event::Hello {
+                protocol: 1,
+                version: "0.1.0".to_owned(),
+                layout: String::new(),
+            })
+        );
     }
 
     #[test]

@@ -41,8 +41,9 @@ fn hook_event(message: Event) -> HookEvent {
         Event::LoadFailed => HookEvent::LoadFailed,
         Event::Rescued => HookEvent::Rescued,
         Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
-        // The handshake is the runtime's business, not the reconciler's; an event
-        // this version does not know is one it has nothing to do about.
+        // The handshake never comes through here: the connection answers it and
+        // reports what it learned as `HookSignal::Greeted`. An event this version does
+        // not know is one it has nothing to do about.
         Event::Hello { .. } | Event::Unknown => HookEvent::Unknown,
     }
 }
@@ -428,6 +429,13 @@ impl<W: AgentWorld> Agent<W> {
                             launcher.on_connected();
                         }
                         Input::Hook(HookEvent::Connected)
+                    }
+                    Some(HookSignal::Greeted { layout }) => {
+                        eprintln!(
+                            "[lbm-agent] hook greeting: layout {}",
+                            if layout.is_empty() { "none" } else { &layout }
+                        );
+                        Input::Hook(HookEvent::Greeted(layout))
                     }
                     Some(HookSignal::Message(message)) => {
                         // C#: EventTrace.

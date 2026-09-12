@@ -35,6 +35,8 @@ struct FakeWorld {
     layout: Option<LayoutState>,
     /// A preview is held (set by the test, as the runtime does before `Input::Preview`).
     preview: bool,
+    /// The fingerprint of the zones this agent would send, if it has a layout.
+    wanted: Option<String>,
 }
 
 impl World for FakeWorld {
@@ -59,6 +61,10 @@ impl World for FakeWorld {
 
     fn end_preview(&mut self) {
         self.preview = false;
+    }
+
+    fn wanted_fingerprint(&mut self) -> Option<String> {
+        self.wanted.clone()
     }
 }
 
@@ -87,6 +93,7 @@ impl Harness {
                 rebuilds: 0,
                 layout,
                 preview: false,
+                wanted: None,
             },
             now: Duration::ZERO,
             timers: Vec::new(),
@@ -761,6 +768,7 @@ fn focused_processes_are_reported() {
         rebuilds: 0,
         layout: None,
         preview: false,
+        wanted: None,
     };
     let effects = r.handle(
         Input::Hook(HookEvent::FocusChanged("/usr/bin/game".into())),
@@ -790,6 +798,101 @@ fn at_boot_the_first_layout_waits_for_the_hook_to_ask() {
     survivor.send(Input::Hook(HookEvent::Connected));
     survivor.send(Input::Hook(HookEvent::Running));
     assert!(survivor.commands.is_empty());
+}
+
+//==================//
+// Reattachment     //
+//==================//
+
+/// A hook that outlived its agent (D5) keeps its layout and its grabs — as long as the
+/// layout it holds is the one this agent wants. That is what the greeting says.
+#[test]
+fn a_hook_running_the_layout_this_agent_wants_is_left_alone() {
+    let mut h = Harness::enabled();
+    h.world.wanted = Some("6d6f6e69746f7273".to_owned());
+    h.send(Input::Hook(HookEvent::Connected));
+    h.send(Input::Hook(HookEvent::Greeted(
+        "6d6f6e69746f7273".to_owned(),
+    )));
+    h.send(Input::Hook(HookEvent::Running));
+
+    assert!(h.commands.is_empty(), "{:?}", h.commands);
+}
+
+/// And is handed this agent's when it is not.
+///
+/// The case that makes this worth a round trip: the previous agent died while a
+/// frontend was previewing. Without the comparison, an experiment nobody ever
+/// committed to would keep routing the mice for the rest of the session, and nothing
+/// anywhere would say so.
+#[test]
+fn a_hook_running_another_layout_is_handed_this_agent_s() {
+    let mut h = Harness::enabled();
+    h.world.wanted = Some("7468652073617665".to_owned());
+    h.send(Input::Hook(HookEvent::Connected));
+    h.send(Input::Hook(HookEvent::Greeted(
+        "616e206f6c642031".to_owned(),
+    )));
+    h.send(Input::Hook(HookEvent::Running));
+
+    assert_eq!(h.commands, ["Start"]);
+}
+
+/// Not knowing is not a reason to act. A hook whose greeting names no layout is one
+/// built before the greeting carried one: recapturing the mice on that guess is worse
+/// than a layout that is probably right anyway.
+#[test]
+fn a_hook_that_names_no_layout_is_left_alone() {
+    // It greeted, holding nothing it could name.
+    let mut named_none = Harness::enabled();
+    named_none.world.wanted = Some("7468652073617665".to_owned());
+    named_none.send(Input::Hook(HookEvent::Connected));
+    named_none.send(Input::Hook(HookEvent::Greeted(String::new())));
+    named_none.send(Input::Hook(HookEvent::Running));
+    assert!(named_none.commands.is_empty(), "{:?}", named_none.commands);
+
+    // Or it never greeted at all.
+    let mut silent = Harness::enabled();
+    silent.world.wanted = Some("7468652073617665".to_owned());
+    silent.send(Input::Hook(HookEvent::Connected));
+    silent.send(Input::Hook(HookEvent::Running));
+    assert!(silent.commands.is_empty(), "{:?}", silent.commands);
+}
+
+/// A hook running while the user asked for the engine to be off is wrong too — but
+/// the answer to that is Stop, not Start, and this reattachment does not give it.
+/// Pinned so that changing one's mind about it is a decision and not an accident.
+#[test]
+fn a_disabled_layout_does_not_make_this_hand_over_a_layout() {
+    let mut h = Harness::new(fast(), Some(layout(false)));
+    h.world.wanted = Some("7468652073617665".to_owned());
+    h.send(Input::Hook(HookEvent::Connected));
+    h.send(Input::Hook(HookEvent::Greeted(
+        "616e206f6c642031".to_owned(),
+    )));
+    h.send(Input::Hook(HookEvent::Running));
+
+    assert!(h.commands.is_empty(), "{:?}", h.commands);
+}
+
+/// Only on reattachment. A hook that goes Running later — because this agent started
+/// it — is not compared against anything: it is running what it was just given.
+#[test]
+fn a_running_that_is_not_a_reattachment_compares_nothing() {
+    let mut h = Harness::enabled();
+    h.world.wanted = Some("7468652073617665".to_owned());
+    h.send(Input::Hook(HookEvent::Connected));
+    h.send(Input::Hook(HookEvent::Greeted(
+        "616e206f6c642031".to_owned(),
+    )));
+    h.send(Input::Hook(HookEvent::Running));
+    assert_eq!(h.commands, ["Start"]);
+
+    // The layout changed under it (a display change would rebuild): still nothing,
+    // because this Running answers the Start above.
+    h.world.wanted = Some("736f6d657468696e".to_owned());
+    h.send(Input::Hook(HookEvent::Running));
+    assert_eq!(h.commands, ["Start"]);
 }
 
 //==================//

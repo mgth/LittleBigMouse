@@ -60,6 +60,10 @@ pub struct Shared {
     /// Foreground-process path substrings that pause the hook (C++
     /// `LittleBigMouseDaemon::_excluded`), loaded from `Excluded.txt` on `Run`.
     pub excluded: Mutex<Vec<String>>,
+    /// [`lbm_ipc::protocol::fingerprint`] of the layout last accepted by a `Load`;
+    /// empty until one is. Announced in the greeting, so an agent that finds this
+    /// hook already running (D5) can tell whether it is applying the layout it wants.
+    pub applied: Mutex<String>,
     /// The IPC server handle, published once the listener is up.
     pub server: OnceLock<ServerHandle>,
 }
@@ -82,6 +86,7 @@ impl Shared {
             priority_unhooked: AtomicU8::new(Priority::Below.as_u8()),
             engine: Mutex::new(MouseEngine::new()),
             excluded: Mutex::new(Vec::new()),
+            applied: Mutex::new(String::new()),
             server: OnceLock::new(),
         }
     }

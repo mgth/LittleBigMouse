@@ -238,6 +238,13 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
     fn end_preview(&mut self) {
         self.preview = None;
     }
+
+    fn wanted_fingerprint(&mut self) -> Option<String> {
+        // The same document `zones()` would send, hashed: comparing anything else
+        // would be comparing a summary of the layout with the layout.
+        self.zones()
+            .map(|(zones, _)| lbm_ipc::protocol::fingerprint(&zones))
+    }
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {

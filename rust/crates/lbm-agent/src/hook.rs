@@ -40,6 +40,10 @@ const UNREACHABLE_EVERY: u32 = 14;
 pub enum HookSignal {
     /// Connected and subscribed.
     Connected,
+    /// The hook said who it is, and which layout it holds (empty: none). Always
+    /// before the state that follows it: the opening frame asks `Hello` then
+    /// `Listen`, and the hook answers a frame's commands in the order they are in it.
+    Greeted { layout: String },
     /// An event from the hook (unknown ones are dropped, as C# does).
     Message(Event),
     /// The connection dropped; it is being re-established.
@@ -232,9 +236,11 @@ where
             frame = frames_rx.recv() => match frame {
                 Some(frame) => {
                     match protocol::parse_event(&frame) {
-                        // The handshake is the connection's business: nothing above
-                        // needs to know the number, only whether it is ours.
-                        Some(Event::Hello { protocol: theirs, version }) => {
+                        // The protocol number is the connection's business — above,
+                        // only whether it is ours matters, and that is decided here.
+                        // The layout it names is not: what to do about a hook already
+                        // applying one is the reconciler's to decide.
+                        Some(Event::Hello { protocol: theirs, version, layout }) => {
                             greeted = true;
                             if theirs != protocol::PROTOCOL {
                                 eprintln!(
@@ -243,6 +249,9 @@ where
                                     protocol::PROTOCOL
                                 );
                                 break Served::Foreign;
+                            }
+                            if signals.send(HookSignal::Greeted { layout }).is_err() {
+                                break Served::Closed;
                             }
                         }
                         Some(message) => {

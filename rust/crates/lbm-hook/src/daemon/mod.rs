@@ -36,6 +36,11 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                     &Event::Hello {
                         protocol: lbm_ipc::protocol::PROTOCOL,
                         version: env!("CARGO_PKG_VERSION").to_owned(),
+                        layout: shared
+                            .applied
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .clone(),
                     },
                 );
             }
@@ -196,6 +201,10 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
             }
             engine.load(layout);
         }
+        // After the engine has it: what this hook applies is what it accepted, and a
+        // Load that failed to parse leaves the previous layout — and its fingerprint.
+        *shared.applied.lock().unwrap_or_else(|p| p.into_inner()) =
+            lbm_ipc::protocol::fingerprint(xml);
         eprintln!(
             "[LittleBigMouse.Hook] layout loaded: {} zones ({} main){tag}",
             info.zones, info.main

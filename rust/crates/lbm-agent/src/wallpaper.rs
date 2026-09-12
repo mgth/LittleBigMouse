@@ -15,7 +15,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use image::imageops::FilterType;
-use lbm_layout::wallpaper::Slice;
+use lbm_layout::geo::Size;
+use lbm_layout::model::Layout;
+use lbm_layout::wallpaper::{self, Slice};
+use lbm_store::wallpaper_settings::{
+    LayoutWallpaperSettings, ScreenWallpaperKind, WallpaperMode, WallpaperStyle,
+};
+
+use crate::desktop::ScreenWallpaper;
 
 /// Where the slices live (C#'s `SpanRenderer.OutputDir`).
 pub fn output_dir() -> PathBuf {
@@ -191,11 +198,262 @@ fn fingerprint(text: &str) -> u64 {
     })
 }
 
+//==================//
+// What to show     //
+//==================//
+
+/// What each screen of `layout` should show, with any slices rendered into `dir`
+/// (C#'s `WallpaperManager.BuildScreens`).
+///
+/// Only screens the desktop actually has: a monitor with no attached source is not
+/// somewhere a wallpaper can go.
+pub fn screens(
+    layout: &Layout,
+    settings: &LayoutWallpaperSettings,
+    dir: &Path,
+) -> Vec<ScreenWallpaper> {
+    let attached: Vec<&lbm_layout::model::Monitor> = layout
+        .monitors()
+        .iter()
+        .filter(|monitor| on_the_desktop(layout, monitor))
+        .collect();
+
+    match settings.mode {
+        WallpaperMode::Span => span(layout, &attached, settings, dir),
+        WallpaperMode::PerScreen => per_screen(layout, &attached, settings),
+    }
+}
+
+/// One image or colour per screen, each shown the way that screen asks.
+fn per_screen(
+    layout: &Layout,
+    monitors: &[&lbm_layout::model::Monitor],
+    settings: &LayoutWallpaperSettings,
+) -> Vec<ScreenWallpaper> {
+    let mut screens = Vec::new();
+    for monitor in monitors {
+        let Some(wanted) = settings.per_screen.get(&monitor.id) else {
+            continue;
+        };
+        let Some(bounds) = pixel_bounds(layout, monitor) else {
+            continue;
+        };
+        match wanted.kind {
+            ScreenWallpaperKind::Image => {
+                // A picture that has been moved or deleted is not shown as a black
+                // screen: the desktop keeps what it had.
+                let Some(path) = wanted
+                    .image_path
+                    .as_ref()
+                    .filter(|p| Path::new(p).is_file())
+                else {
+                    continue;
+                };
+                screens.push(ScreenWallpaper {
+                    x: bounds.0,
+                    y: bounds.1,
+                    image: Some(PathBuf::from(path)),
+                    style: wanted.style,
+                    color: wanted.color.clone(),
+                });
+            }
+            ScreenWallpaperKind::Color => screens.push(ScreenWallpaper {
+                x: bounds.0,
+                y: bounds.1,
+                image: None,
+                style: wanted.style,
+                color: wanted.color.clone(),
+            }),
+        }
+    }
+    screens
+}
+
+/// One image across the whole desktop, cut per screen.
+fn span(
+    layout: &Layout,
+    monitors: &[&lbm_layout::model::Monitor],
+    settings: &LayoutWallpaperSettings,
+    dir: &Path,
+) -> Vec<ScreenWallpaper> {
+    let Some(source) = settings
+        .span_image_path
+        .as_ref()
+        .filter(|path| Path::new(path).is_file())
+    else {
+        return Vec::new();
+    };
+    let source = Path::new(source);
+
+    let bounds_mm = wallpaper::compute_bounds_mm(
+        monitors
+            .iter()
+            .filter_map(|monitor| layout.depth_projection(monitor))
+            .map(|projection| projection.outside_bounds()),
+    );
+
+    let inputs: Vec<wallpaper::ScreenInput> = monitors
+        .iter()
+        .filter_map(|monitor| {
+            let projection = layout.depth_projection(monitor)?;
+            Some(wallpaper::ScreenInput::new(
+                monitor.id.clone(),
+                projection.bounds(),
+                panel_pixels(layout, monitor)?,
+            ))
+        })
+        .collect();
+
+    // The image's own size decides the cut, so it is read before anything is written.
+    let Some(image_px) = measure(source) else {
+        return Vec::new();
+    };
+    let cut = render(
+        dir,
+        source,
+        &wallpaper::compute_slices(image_px, bounds_mm, &inputs),
+    );
+
+    monitors
+        .iter()
+        .filter_map(|monitor| {
+            let file = cut.get(&monitor.id)?;
+            let (x, y) = pixel_bounds(layout, monitor)?;
+            Some(ScreenWallpaper {
+                x,
+                y,
+                image: Some(file.clone()),
+                // Each slice already has its screen's exact aspect: stretching maps it 1:1.
+                style: WallpaperStyle::Stretch,
+                color: String::new(),
+            })
+        })
+        .collect()
+}
+
+/// How big the image is, without decoding it.
+fn measure(source: &Path) -> Option<Size> {
+    match image::image_dimensions(source) {
+        Ok((width, height)) => Some(Size::new(f64::from(width), f64::from(height))),
+        Err(error) => {
+            eprintln!(
+                "[lbm-agent] wallpaper: {} cannot be read: {error}",
+                source.display()
+            );
+            None
+        }
+    }
+}
+
+fn on_the_desktop(layout: &Layout, monitor: &lbm_layout::model::Monitor) -> bool {
+    active_source(layout, monitor).is_some_and(|source| source.attached_to_desktop)
+}
+
+fn active_source<'a>(
+    layout: &'a Layout,
+    monitor: &lbm_layout::model::Monitor,
+) -> Option<&'a lbm_layout::model::DisplaySource> {
+    Some(&layout.source(monitor.active_source.as_deref()?)?.source)
+}
+
+/// Where the desktop believes the screen is: its top-left in the cursor's own pixels,
+/// which is what the desktop matches its screens by.
+fn pixel_bounds(layout: &Layout, monitor: &lbm_layout::model::Monitor) -> Option<(f64, f64)> {
+    let bounds = active_source(layout, monitor)?.in_pixel.bounds();
+    Some((bounds.x(), bounds.y()))
+}
+
+/// The panel's own pixels, which is what a slice has to be rendered at.
+///
+/// `in_pixel` is the cursor space: the panel's pixels on Windows, the compositor's
+/// logical size on Linux — where `effective_dpi = 96 × scale` recovers the panel.
+fn panel_pixels(layout: &Layout, monitor: &lbm_layout::model::Monitor) -> Option<Size> {
+    let source = active_source(layout, monitor)?;
+    let (kx, ky) = if cfg!(windows) {
+        (1.0, 1.0)
+    } else {
+        (source.effective_dpi.x / 96.0, source.effective_dpi.y / 96.0)
+    };
+    Some(Size::new(
+        (source.in_pixel.width * kx).round().max(1.0),
+        (source.in_pixel.height * ky).round().max(1.0),
+    ))
+}
+
+/// What the desktop was last told, as one line. Comparing it with the last one is what
+/// keeps an apply that changes nothing from reaching the desktop at all — and the slice
+/// paths being content-addressed is what makes the comparison mean something.
+pub fn signature(screens: &[ScreenWallpaper]) -> String {
+    screens
+        .iter()
+        .map(|screen| {
+            format!(
+                "{},{}|{}|{:?}|{}",
+                screen.x,
+                screen.y,
+                screen
+                    .image
+                    .as_ref()
+                    .map_or(String::new(), |p| p.to_string_lossy().into_owned()),
+                screen.style,
+                screen.color
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
 #[cfg(test)]
 mod tests {
     use lbm_layout::geo::{Rect, Size};
+    use lbm_layout::linux::{add_monitor, LinuxEdid, LinuxMonitor};
+    use lbm_layout::model::LayoutOptions;
+    use lbm_store::wallpaper_settings::ScreenWallpaperSettings;
 
     use super::*;
+
+    /// Two screens side by side, as the Linux enumeration hands them over: the path the
+    /// agent actually builds its layout through.
+    fn desktop() -> Layout {
+        let mut layout = Layout::new(LayoutOptions::default());
+        for (index, connector) in ["DP-1", "DP-2"].iter().enumerate() {
+            let at = 1920.0 * index as f64;
+            add_monitor(
+                &mut layout,
+                &LinuxMonitor {
+                    connector_name: (*connector).to_owned(),
+                    logical_x: at,
+                    logical_y: 0.0,
+                    logical_width: 1920.0,
+                    logical_height: 1080.0,
+                    pixel_width: 1920,
+                    pixel_height: 1080,
+                    scale: 1.0,
+                    width_mm: 600.0,
+                    height_mm: 340.0,
+                    primary: index == 0,
+                    enabled: true,
+                    orientation: 0,
+                    frequency: 60,
+                    edid: Some(LinuxEdid {
+                        manufacturer_code: Some("TST".to_owned()),
+                        product_code: Some(format!("000{index}")),
+                        serial: None,
+                        serial_number: Some(format!("SN{index}")),
+                        model: Some("Test".to_owned()),
+                        physical_width: 600.0,
+                        physical_height: 340.0,
+                        video_interface: None,
+                    }),
+                },
+            );
+        }
+        layout
+    }
+
+    fn ids(layout: &Layout) -> Vec<String> {
+        layout.monitors().iter().map(|m| m.id.clone()).collect()
+    }
 
     /// A source whose every pixel says where it is: a crop can be checked by reading one.
     fn source(dir: &Path, width: u32, height: u32) -> PathBuf {
@@ -214,6 +472,146 @@ mod tests {
             source_px,
             output_px,
         }
+    }
+
+    #[test]
+    fn each_screen_shows_what_it_was_given() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let picture = source(dir.path(), 100, 100);
+        let layout = desktop();
+        let [left, right] = <[String; 2]>::try_from(ids(&layout)).expect("two screens");
+
+        let mut settings = LayoutWallpaperSettings::default();
+        settings.per_screen.insert(
+            left.clone(),
+            ScreenWallpaperSettings {
+                kind: ScreenWallpaperKind::Image,
+                image_path: Some(picture.to_string_lossy().into_owned()),
+                style: WallpaperStyle::Fit,
+                color: "#204060".to_owned(),
+            },
+        );
+        settings.per_screen.insert(
+            right.clone(),
+            ScreenWallpaperSettings {
+                kind: ScreenWallpaperKind::Color,
+                image_path: None,
+                style: WallpaperStyle::Fill,
+                color: "#102030".to_owned(),
+            },
+        );
+
+        let shown = screens(&layout, &settings, &dir.path().join("wallpapers"));
+
+        assert_eq!(shown.len(), 2);
+        assert_eq!(shown[0].image.as_deref(), Some(picture.as_path()));
+        assert_eq!(shown[0].style, WallpaperStyle::Fit);
+        assert_eq!((shown[0].x, shown[0].y), (0.0, 0.0));
+        assert_eq!(shown[1].image, None, "a colour screen shows no file");
+        assert_eq!(shown[1].color, "#102030");
+        assert_eq!(
+            (shown[1].x, shown[1].y),
+            (1920.0, 0.0),
+            "the second screen's own position, which is how the desktop finds it"
+        );
+    }
+
+    #[test]
+    fn a_picture_that_is_no_longer_there_leaves_the_screen_alone() {
+        // Wallpapers outlive the files they point at. Sending nothing for that screen
+        // keeps what the desktop is showing; sending a missing path would blank it.
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let layout = desktop();
+        let mut settings = LayoutWallpaperSettings::default();
+        settings.per_screen.insert(
+            ids(&layout)[0].clone(),
+            ScreenWallpaperSettings {
+                kind: ScreenWallpaperKind::Image,
+                image_path: Some("/where/it/used/to/be.png".to_owned()),
+                style: WallpaperStyle::Fill,
+                color: "#204060".to_owned(),
+            },
+        );
+
+        assert!(screens(&layout, &settings, dir.path()).is_empty());
+    }
+
+    #[test]
+    fn a_screen_nobody_configured_is_not_touched() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let layout = desktop();
+
+        let shown = screens(&layout, &LayoutWallpaperSettings::default(), dir.path());
+
+        assert!(shown.is_empty());
+    }
+
+    #[test]
+    fn a_span_reaches_every_screen_with_its_own_slice() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let picture = source(dir.path(), 3840, 1080);
+        let layout = desktop();
+        let settings = LayoutWallpaperSettings {
+            mode: WallpaperMode::Span,
+            span_image_path: Some(picture.to_string_lossy().into_owned()),
+            per_screen: Default::default(),
+        };
+
+        let shown = screens(&layout, &settings, &dir.path().join("wallpapers"));
+
+        assert_eq!(shown.len(), 2);
+        for screen in &shown {
+            let file = screen.image.as_ref().expect("a slice");
+            assert!(file.exists(), "{} was written", file.display());
+            // Each slice is already its screen's shape; stretching maps it 1:1.
+            assert_eq!(screen.style, WallpaperStyle::Stretch);
+        }
+        assert_ne!(
+            shown[0].image, shown[1].image,
+            "a slice each, not one shared"
+        );
+        assert_eq!((shown[0].x, shown[1].x), (0.0, 1920.0));
+    }
+
+    #[test]
+    fn a_span_with_no_image_shows_nothing_rather_than_black() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let layout = desktop();
+        let settings = LayoutWallpaperSettings {
+            mode: WallpaperMode::Span,
+            span_image_path: Some("/gone.png".to_owned()),
+            per_screen: Default::default(),
+        };
+
+        assert!(screens(&layout, &settings, dir.path()).is_empty());
+    }
+
+    #[test]
+    fn the_signature_moves_only_when_the_desktop_would_see_it() {
+        // What keeps a rebuild from rewriting an identical wallpaper: the slice paths are
+        // content-addressed, so an unchanged desktop produces an unchanged line.
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let picture = source(dir.path(), 3840, 1080);
+        let out = dir.path().join("wallpapers");
+        let layout = desktop();
+        let settings = LayoutWallpaperSettings {
+            mode: WallpaperMode::Span,
+            span_image_path: Some(picture.to_string_lossy().into_owned()),
+            per_screen: Default::default(),
+        };
+
+        let once = signature(&screens(&layout, &settings, &out));
+        let twice = signature(&screens(&layout, &settings, &out));
+        assert_eq!(once, twice);
+
+        // Another picture is another desktop.
+        let other = dir.path().join("other.png");
+        std::fs::copy(&picture, &other).expect("a second picture");
+        let moved = LayoutWallpaperSettings {
+            span_image_path: Some(other.to_string_lossy().into_owned()),
+            ..settings
+        };
+        assert_ne!(once, signature(&screens(&layout, &moved, &out)));
     }
 
     #[test]

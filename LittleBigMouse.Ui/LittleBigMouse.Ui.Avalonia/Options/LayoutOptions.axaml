@@ -259,6 +259,9 @@
 							<TextBlock Classes="SettingWarning"
 							           Text="{Binding ShortcutWarning}"
 							           IsVisible="{Binding ShortcutWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+							<TextBlock Classes="SettingNote"
+							           Text="{Binding ShortcutOwnership}"
+							           IsVisible="{Binding ShortcutOwnership, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 						</StackPanel>
 					</Border>
 

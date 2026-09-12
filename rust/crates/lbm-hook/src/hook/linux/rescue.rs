@@ -97,7 +97,7 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
         // as long as they like. Give up only if the wanted shortcut changed under us:
         // then the answer would be to the wrong question.
         let bound = tokio::select! {
-            bound = bind(&wanted) => bound,
+            bound = bind(shared, &wanted) => bound,
             () = superseded(generation) => continue,
         };
 
@@ -135,8 +135,9 @@ struct Binding {
     session: ashpd::desktop::Session<GlobalShortcuts>,
 }
 
-/// Ask the desktop for the combination `wanted` names.
-async fn bind(wanted: &str) -> Result<Binding, ashpd::Error> {
+/// Ask the desktop for the combination `wanted` names. `shared` is only told when
+/// the answer is "registered, but bound to nothing".
+async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::Error> {
     let shortcuts = GlobalShortcuts::new().await?;
     let session = shortcuts.create_session(Default::default()).await?;
 
@@ -158,10 +159,17 @@ async fn bind(wanted: &str) -> Result<Binding, ashpd::Error> {
         .response()?;
     for shortcut in bound.shortcuts() {
         match shortcut.trigger_description() {
-            "" | "none" => eprintln!(
-                "[LittleBigMouse.Hook] rescue: registered with no key — give it one in \
-                 the desktop's shortcut settings, under {DESCRIPTION:?}"
-            ),
+            // Registered, described, and bound to nothing. Said the same way Windows
+            // says "another application owns this combination": a rescue that
+            // silently does not exist is worse than none, because the user finds out
+            // at the moment they need it.
+            "" | "none" => {
+                eprintln!(
+                    "[LittleBigMouse.Hook] rescue: registered with no key — give it one in \
+                     the desktop's shortcut settings, under {DESCRIPTION:?}"
+                );
+                shared.broadcast(&crate::ipc::protocol::shortcut_unavailable(wanted));
+            }
             trigger => eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}"),
         }
     }
@@ -238,7 +246,8 @@ mod tests {
     #[ignore = "asks the running desktop to bind a shortcut"]
     #[tokio::test]
     async fn binds_for_real_and_says_what_it_got() {
-        let binding = bind(crate::shortcut::DEFAULT)
+        let shared: &'static Shared = crate::shared::SHARED.get_or_init(Shared::new);
+        let binding = bind(shared, crate::shortcut::DEFAULT)
             .await
             .expect("the portal bound the shortcut");
 

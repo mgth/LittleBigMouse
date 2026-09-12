@@ -17,4 +17,7 @@ path = "src/main.rs"
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+# The X11 back: a placed, override-redirect, 32-bit window with an empty input shape —
+# and, unlike Wayland, a server that can be asked back what it granted.
+x11rb = { version = "0.14", features = ["shape", "randr"] }
 libc = "0.2"

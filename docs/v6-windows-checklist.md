@@ -15,8 +15,12 @@ décrit dans `docs/v6-agent.md`.
   `rust/target/release/lbm-agent.exe`.
 - Le hook reste celui d'aujourd'hui (`LittleBigMouse.Hook.exe`), posé **à côté** de l'agent
   ou nommé par `--hook` : l'agent le lance quand personne ne répond au tube.
-- **Ne pas laisser tourner l'UI C# pendant les essais** : elle est encore résidente et
-  pilote le hook elle-même — deux chefs pour un hook. La quitter par son icône avant.
+- **L'UI C# lance maintenant un agent** (phase 4) : si rien ne répond au bout de deux
+  secondes, elle démarre le `lbm-agent` trouvé à côté d'elle, puis dans
+  `rust/target/{debug,release}`. Cet agent-là n'a ni `--fake-hook` ni répertoires jetables :
+  il pilote le vrai hook. Donc soit on lance d'abord l'agent d'essai et on vérifie qu'il
+  répond, soit on accepte que l'UI en démarre un vrai. Elle ne pilote plus le hook
+  elle-même : il n'y a plus deux chefs.
 - Deux machines sont demandées par le plan : une avec station d'accueil, une NVIDIA avec un
   écran en portrait.
 - Un essai sans rien toucher de la configuration réelle :
@@ -121,9 +125,12 @@ Sur une machine qui a servi avec la 5.x :
 - `hook.log` : ce que dit le hook lancé par l'agent.
 - Une erreur inattendue dans l'un ou l'autre est un résultat de checklist à rapporter.
 
-## Ce qui n'est pas encore là (phase 3 en cours)
+## Ce qui n'est pas encore là
 
-- L'exclusion par focus est toujours dans le hook (D4 la déplacera dans l'agent).
-- Le fond d'écran « span » n'est pas ré-appliqué après reconstruction.
-- L'UI C# est encore résidente : elle devient un frontend de l'agent en phase 4, et c'est
-  elle qui ouvrira la fenêtre depuis le tray (`--ui`).
+- L'exclusion par focus est toujours dans le hook (D4 la déplacera dans l'agent, phase 5).
+- **Le fond d'écran est repris par l'agent, mais sa moitié Windows ne l'est pas** :
+  `IDesktopWallpaper` n'est pas porté, donc sous Windows l'agent répond « non supporté » et
+  laisse le bureau tel quel. Le plugin C# ne l'applique plus non plus : sous Windows, aucun
+  fond n'est posé pour l'instant. C'est attendu, et c'est à faire avec le reste du travail
+  Windows.
+- `Current.xml` : plus personne ne l'écrit côté C#, le hook le rejoue encore (phase 5).

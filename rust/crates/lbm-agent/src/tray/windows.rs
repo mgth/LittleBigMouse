@@ -50,6 +50,9 @@ struct Tray {
     icons: [HICON; 4],
     /// Explorer's "the taskbar is back" broadcast.
     taskbar_created: u32,
+    /// Whether the notification area is currently holding our icon. NIM_MODIFY on an
+    /// icon that is not there fails, and NIM_ADD on one that is duplicates it.
+    shown: bool,
 }
 
 thread_local! {
@@ -138,9 +141,10 @@ fn window_thread(model: Arc<Mutex<TrayModel>>, ready: tokio::sync::oneshot::Send
             icons,
             // SAFETY: registers (or finds) a message name.
             taskbar_created: unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) },
+            shown: false,
         })
     });
-    if !notify(window, NIM_ADD) {
+    if !refresh(window) {
         // SAFETY: the window created above.
         unsafe {
             let _ = DestroyWindow(window);
@@ -164,6 +168,33 @@ fn window_thread(model: Arc<Mutex<TrayModel>>, ready: tokio::sync::oneshot::Send
             let _ = DestroyIcon(icon);
         }
     }
+}
+
+/// Puts the notification area in step with the model: the icon added, redrawn or taken
+/// away, depending on what it shows and on whether the user asked for an icon at all.
+/// Answers false only when something that had to happen did not.
+fn refresh(window: HWND) -> bool {
+    let (hidden, shown) = TRAY.with(|tray| {
+        tray.borrow().as_ref().map_or((true, false), |tray| {
+            let model = tray.model.lock().unwrap_or_else(|p| p.into_inner());
+            (model.hidden(), tray.shown)
+        })
+    });
+    let message = match (hidden, shown) {
+        (true, false) => return true, // nothing to take away
+        (true, true) => NIM_DELETE,
+        (false, true) => NIM_MODIFY,
+        (false, false) => NIM_ADD,
+    };
+    let done = notify(window, message);
+    if done {
+        TRAY.with(|tray| {
+            if let Some(tray) = tray.borrow_mut().as_mut() {
+                tray.shown = !hidden;
+            }
+        });
+    }
+    done
 }
 
 /// Adds, redraws or removes the icon from the model.
@@ -216,10 +247,16 @@ unsafe extern "system" fn window_procedure(
             _ => {}
         },
         WM_REDRAW => {
-            notify(window, NIM_MODIFY);
+            refresh(window);
         }
         _ if Some(msg) == taskbar_created => {
-            notify(window, NIM_ADD);
+            // Explorer restarted: it has forgotten the icon, whatever we believed.
+            TRAY.with(|tray| {
+                if let Some(tray) = tray.borrow_mut().as_mut() {
+                    tray.shown = false;
+                }
+            });
+            refresh(window);
         }
         WM_CLOSE => {
             notify(window, NIM_DELETE);

@@ -69,26 +69,45 @@ impl ksni::Tray for AgentTray {
 /// Puts the tray up and keeps it on the agent's state until the agent goes. Without a
 /// tray host (no StatusNotifierWatcher: a bare session, a test runner) it says so and
 /// returns: the agent runs on without one.
+///
+/// The icon is registered when there is one to show and unregistered when the user hides
+/// it, rather than being left in place as a passive item: hosts differ on what they do
+/// with a passive item, and "hide the icon" has to mean the same thing everywhere.
 pub async fn run(calls: UnboundedSender<Call>, open: Arc<dyn Fn() + Send + Sync>) {
     let (client, frames) = api::in_process();
-    let model = TrayModel::new(calls.clone(), client.clone(), open);
-    let tray = match AgentTray(model).spawn().await {
-        Ok(handle) => handle,
-        Err(error) => {
-            eprintln!("[lbm-agent] no tray: {error}");
-            return;
-        }
-    };
     let (updates, mut pending) = tokio::sync::mpsc::unbounded_channel();
+    let theirs = client.clone();
     let showing = async {
+        let mut shown: Option<ksni::Handle<AgentTray>> = None;
         while let Some(state) = pending.recv().await {
-            if tray
-                .update(|t: &mut AgentTray| t.0.show(&state))
-                .await
-                .is_none()
-            {
-                return;
+            let mut model = TrayModel::new(calls.clone(), theirs.clone(), open.clone());
+            model.show(&state);
+            match (model.hidden(), shown.take()) {
+                (true, Some(handle)) => handle.shutdown().await,
+                (true, None) => {}
+                (false, Some(handle)) => {
+                    // The handle owns the model; hand it the new state rather than the
+                    // one built here. A handle whose tray is gone answers None.
+                    if handle
+                        .update(|t: &mut AgentTray| t.0.show(&state))
+                        .await
+                        .is_none()
+                    {
+                        return;
+                    }
+                    shown = Some(handle);
+                }
+                (false, None) => match AgentTray(model).spawn().await {
+                    Ok(handle) => shown = Some(handle),
+                    Err(error) => {
+                        eprintln!("[lbm-agent] no tray: {error}");
+                        return;
+                    }
+                },
             }
+        }
+        if let Some(handle) = shown {
+            handle.shutdown().await;
         }
     };
     let following = follow(&calls, client, frames, |state| {
@@ -98,7 +117,6 @@ pub async fn run(calls: UnboundedSender<Call>, open: Arc<dyn Fn() + Send + Sync>
         _ = showing => {}
         _ = following => {}
     }
-    tray.shutdown().await;
 }
 
 #[cfg(test)]

@@ -24,6 +24,7 @@
 
 pub mod api;
 pub mod autostart;
+pub mod desktop;
 pub mod discovery;
 pub mod elevation;
 pub mod fake_hook;

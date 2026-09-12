@@ -1,0 +1,12 @@
+[package]
+name = "lbm-layout"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The LittleBigMouse layout model: monitors in millimetres and pixels, placement solvers, zones"
+
+[dev-dependencies]
+# float_roundtrip: parse doubles correctly rounded, like .NET, so the oracle
+# compares bits and not the parser's best effort.
+serde_json = { workspace = true, features = ["float_roundtrip"] }

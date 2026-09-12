@@ -10,6 +10,12 @@
 #   lbm-ipc      local IPC framing and the XML command/event protocol
 #   lbm-hook     the daemon: platform hooks, IPC server, command dispatch
 #   lbm-pattern  native-Wayland fullscreen test-pattern viewer (Linux only)
+#   lbm-layout   the layout model: monitors in mm and pixels, placement solvers,
+#                the zone compiler
+#   lbm-store    persistence: layout DTOs, the JSON store the C# UI shares, store
+#                keys, the excluded-processes file, the engine loading the model
+#   lbm-display  display detection: EDID, the outputs the system reports
+#   lbm-agent    the v6 resident process (for now: --dump-displays)
 #
 # Build from here (`cargo build`, `cargo test`) or with
 # `--manifest-path rust/Cargo.toml` from the repository root; both pick up the
@@ -24,8 +30,12 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [workspace.dependencies]
+indexmap = "2"
 roxmltree = "0.20"
+serde = "1"
+serde_json = "1"
 slotmap = "1"
+tempfile = "3"
 tokio = "1"
 
 # Profiles are only read from the workspace root.

@@ -1,0 +1,49 @@
+[package]
+name = "lbm-agent"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The resident process of LittleBigMouse v6: watches the system, loads the profiles, drives the hook"
+
+[dependencies]
+indexmap.workspace = true
+lbm-display = { path = "../lbm-display" }
+lbm-ipc = { path = "../lbm-ipc" }
+lbm-layout = { path = "../lbm-layout" }
+lbm-store = { path = "../lbm-store" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# The tray icons, rendered once from the UI's SVGs (icons/).
+png = "0.17"
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "signal", "sync", "time"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+futures-util = { version = "0.3", default-features = false }
+# The tray (tray.rs): a StatusNotifierItem over D-Bus, no GTK.
+ksni = { version = "0.3.6", default-features = false, features = ["tokio"] }
+# System sleep from logind (sleep.rs), with the hook's zbus build.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+[dev-dependencies]
+tempfile.workspace = true

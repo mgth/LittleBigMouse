@@ -309,10 +309,7 @@ mod transport {
     }
 
     pub fn default_endpoint() -> io::Result<String> {
-        Ok(format!(
-            r"\\.\pipe\LittleBigMouse-v1-session-{}",
-            current_session_id()?
-        ))
+        Ok(lbm_ipc::endpoint::pipe_name(current_session_id()?))
     }
 
     fn current_session_id() -> io::Result<u32> {
@@ -454,16 +451,10 @@ mod transport {
     }
 
     pub fn default_endpoint() -> io::Result<String> {
-        let base = std::env::var_os("XDG_RUNTIME_DIR")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .or_else(|| crate::platform::paths::lbm_data_file(""))
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::NotFound, "no per-user runtime directory")
-            })?;
-        Ok(base
-            .join("littlebigmouse-v1.sock")
-            .to_string_lossy()
-            .into_owned())
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+        let data = crate::platform::paths::lbm_data_file("");
+        lbm_ipc::endpoint::socket_path(runtime.as_deref(), data.as_deref())
+            .map(|path| path.to_string_lossy().into_owned())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no per-user runtime directory"))
     }
 }

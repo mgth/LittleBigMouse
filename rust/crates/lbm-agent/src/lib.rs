@@ -41,6 +41,7 @@ pub mod sleep;
 pub mod supervise;
 #[cfg(any(target_os = "linux", windows))]
 pub mod tray;
+pub mod wallpaper;
 pub mod watch;
 #[cfg(windows)]
 pub mod winpipe;

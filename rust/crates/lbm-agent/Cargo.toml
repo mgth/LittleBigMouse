@@ -16,6 +16,8 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The tray icons, rendered once from the UI's SVGs (icons/).
 png = "0.17"
+# The span wallpaper: decoding whatever the user picked, and writing the slices.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "signal", "sync", "time"] }
 
 [target.'cfg(unix)'.dependencies]

@@ -138,18 +138,39 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
     void OnDaemonEvent(object? sender, LittleBigMouseServiceEventArgs e)
     {
         if (e.Event != LittleBigMouseEvent.ShortcutUnavailable) return;
-        Dispatcher.UIThread.Post(() => ShortcutWarning =
-            $"{e.Payload} is already taken by another application — the rescue shortcut is NOT active.");
+        Dispatcher.UIThread.Post(() => ShortcutWarning = ShortcutUnavailableMessage(e.Payload));
     }
 
     /// <summary>
-    /// Whether there is a rescue shortcut to configure. Windows only for now: the
-    /// daemon registers it with RegisterHotKey, and Wayland has no global shortcut
-    /// without a portal — reading one from evdev would mean opening the keyboard
-    /// devices, which is the keylogging surface the design avoids. Hidden rather than
-    /// shown dead, so a Linux build has nothing that looks broken.
+    /// Why the rescue is not armed — and it is not the same "why" on both platforms.
+    /// Windows registers the combination itself, so the only way to fail is that
+    /// something else already owns it. The desktop owns it on Linux: it can accept
+    /// the shortcut and give it no key, which is not a refusal and not a collision,
+    /// and which the user fixes somewhere else entirely.
     /// </summary>
-    public bool RescueShortcutSupported => OperatingSystem.IsWindows();
+    internal static string ShortcutUnavailableMessage(string shortcut)
+        => OperatingSystem.IsWindows()
+            ? $"{shortcut} is already taken by another application — the rescue shortcut is NOT active."
+            : $"Your desktop has not given {shortcut} a key — the rescue shortcut is NOT active. "
+              + "Assign it under \"Little Big Mouse\" in the desktop's keyboard shortcut settings.";
+
+    /// <summary>
+    /// Whether there is a rescue shortcut to configure. Both platforms have one now:
+    /// Windows registers the combination itself, Linux asks the desktop for it
+    /// through the global-shortcuts portal (#526). Anywhere else it is hidden rather
+    /// than shown dead, so a build without one has nothing that looks broken.
+    /// </summary>
+    public bool RescueShortcutSupported => OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+
+    /// <summary>
+    /// Said on Linux whether or not the binding worked, because it is not a failure —
+    /// it is who owns the shortcut. The user needs to know where it lives before they
+    /// go looking for it, and where to go if they want it gone.
+    /// </summary>
+    public string? ShortcutOwnership => OperatingSystem.IsWindows()
+        ? null
+        : "Your desktop owns global shortcuts: Little Big Mouse asks for this one, and "
+          + "you can change or clear it in the desktop's keyboard shortcut settings.";
 
     /// <summary>Empty while the rescue shortcut is registered and working.</summary>
     public string ShortcutWarning

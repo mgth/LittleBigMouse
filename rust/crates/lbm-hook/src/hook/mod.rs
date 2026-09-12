@@ -38,13 +38,16 @@ pub use linux::{
 /// Start the panic-shortcut listener: a global hotkey that frees a cursor trapped
 /// where no click can reach the UI. `on_fire` runs on the listener's own thread.
 ///
-/// Linux gets nothing yet. There is no global shortcut without a portal, and reading
-/// one from evdev would mean opening the keyboard devices — the keylogging surface
-/// this design exists to avoid. Tracked in mgth/LittleBigMouse#526.
+/// Windows registers the hotkey itself; Linux asks the desktop for it through the
+/// global-shortcuts portal, so that neither platform has to read the keyboard
+/// (#526). A desktop with no portal has no rescue, which is what Linux had until
+/// now either way.
 pub fn spawn_rescue_key(shared: &'static Shared, on_fire: fn(&'static Shared)) {
     #[cfg(windows)]
     windows::rescue_key::spawn(shared, on_fire);
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    linux::rescue::spawn(shared, on_fire);
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (shared, on_fire);
     }
@@ -55,7 +58,12 @@ pub fn spawn_rescue_key(shared: &'static Shared, on_fire: fn(&'static Shared)) {
 pub fn rescue_shortcut_changed(shared: &Shared) {
     #[cfg(windows)]
     windows::post_rescue_reconfigure(shared);
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = shared;
+        linux::rescue::shortcut_changed();
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = shared;
     }

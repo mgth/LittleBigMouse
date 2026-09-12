@@ -59,6 +59,15 @@
 		<Setter Property="Margin" Value="14,0,14,12"/>
 	</Style>
 
+	<!-- A plain statement about a setting, not a complaint about it: same place as the
+	     warning, in the secondary text colour so the two are told apart at a glance. -->
+	<Style Selector="TextBlock.SettingNote">
+		<Setter Property="FontSize" Value="12"/>
+		<Setter Property="TextWrapping" Value="Wrap"/>
+		<Setter Property="Foreground" Value="{DynamicResource Lbm.Brushes.Text.Secondary}"/>
+		<Setter Property="Margin" Value="14,0,14,12"/>
+	</Style>
+
 	<Style Selector="Border.SettingCard">
 		<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Card.Background}"/>
 		<Setter Property="BorderBrush" Value="{DynamicResource Lbm.Brushes.Card.Border}"/>

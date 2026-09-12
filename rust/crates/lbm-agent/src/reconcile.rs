@@ -178,6 +178,9 @@ pub enum Effect {
     WakeAfter { wake: Wake, after: Duration },
     /// A process was seen in the foreground (for the exclusion editor).
     ProcessSeen(String),
+    /// Put the desktop background back on the layout now held. Emitted with every
+    /// rebuild: the span was cut for the desktop that just went away.
+    Wallpaper,
 }
 
 /// Where the display-change flow stands.
@@ -279,8 +282,7 @@ impl Reconciler {
         let mut out = Vec::new();
         match input {
             Input::Boot => {
-                world.rebuild_layout();
-                self.rebuild_count += 1;
+                self.rebuild(world, &mut out);
             }
             Input::DisplayChanged => {
                 self.display_changed(&mut out);
@@ -423,8 +425,7 @@ impl Reconciler {
             } else {
                 // The edit was of the desktop that just went away.
                 self.stop_previewing(world);
-                world.rebuild_layout();
-                self.rebuild_count += 1;
+                self.rebuild(world, out);
                 self.last_built_signature = settled;
                 self.reconcile_fresh_layout(world, out);
             }
@@ -452,6 +453,15 @@ impl Reconciler {
         }
     }
 
+    /// Rebuild the layout from the displays, and say the desktop has to be repainted:
+    /// the span was cut for screens that are no longer where they were. One place, so a
+    /// rebuild added later cannot forget it.
+    fn rebuild(&mut self, world: &mut impl World, out: &mut Vec<Effect>) {
+        world.rebuild_layout();
+        self.rebuild_count += 1;
+        out.push(Effect::Wallpaper);
+    }
+
     /// C# `DisplayChangeCoordinator.RefreshAsync`: the rebuild the automatic detection
     /// missed (#443), past the debounce, the settle loop and the guard — which it then
     /// realigns, so the next display event does not rebuild again on its account.
@@ -460,8 +470,7 @@ impl Reconciler {
             return;
         }
         self.stop_previewing(world);
-        world.rebuild_layout();
-        self.rebuild_count += 1;
+        self.rebuild(world, out);
         self.last_built_signature = world.display_signature();
         self.reconcile_fresh_layout(world, out);
     }

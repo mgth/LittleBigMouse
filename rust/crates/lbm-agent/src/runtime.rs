@@ -65,6 +65,8 @@ pub struct Agent<W> {
     on_the_wire: Option<String>,
     /// The rescue shortcut the hook was last told (Windows).
     shortcut: Option<String>,
+    /// What the desktop was last told to show; `None`: unknown, so the next apply goes.
+    wallpaper_on_screen: Option<String>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -91,6 +93,7 @@ impl<W: AgentWorld> Agent<W> {
             sleep: None,
             on_the_wire: None,
             shortcut: None,
+            wallpaper_on_screen: None,
         }
     }
 
@@ -175,9 +178,12 @@ impl<W: AgentWorld> Agent<W> {
                 layout_id,
                 document,
             } => match document {
-                Some(document) => self
-                    .edit(layout_id.as_deref(), &document)
-                    .map(|()| self.handle(Input::UserStart { keep_layout: true })),
+                Some(document) => self.edit(layout_id.as_deref(), &document).map(|()| {
+                    // "Apply and start" saves the edit too, so the screens may have moved.
+                    self.handle(Input::UserStart { keep_layout: true });
+                    let screens = self.world.wallpaper();
+                    self.paint_desktop(screens);
+                }),
                 None => {
                     self.handle(Input::UserStart { keep_layout });
                     Ok(())
@@ -191,7 +197,13 @@ impl<W: AgentWorld> Agent<W> {
             } => self
                 .edit(Some(&layout_id), &document)
                 .and_then(|()| self.world.save_layout().map_err(|e| e.to_string()))
-                .map(|()| serde_json::Value::Null),
+                .map(|()| {
+                    // The screens moved: a span cut for where they were is wrong now.
+                    // C# re-sliced on Saved for the same reason.
+                    let screens = self.world.wallpaper();
+                    self.paint_desktop(screens);
+                    serde_json::Value::Null
+                }),
             Request::Preview {
                 layout_id,
                 document,
@@ -212,6 +224,19 @@ impl<W: AgentWorld> Agent<W> {
                 .save_options(options.as_ref(), excluded.as_deref(), load_at_startup)
                 .map(|()| {
                     self.tell_shortcut();
+                    serde_json::Value::Null
+                }),
+            Request::SaveWallpaper {
+                layout_id,
+                settings,
+            } => self
+                .world
+                .save_wallpaper(&layout_id, *settings)
+                .map(|screens| {
+                    // An edit is the one apply that must not be skipped as "already
+                    // shown": the user changed something and is looking at the screen.
+                    self.wallpaper_on_screen = None;
+                    self.paint_desktop(screens);
                     serde_json::Value::Null
                 }),
             Request::Stop => {
@@ -253,6 +278,26 @@ impl<W: AgentWorld> Agent<W> {
     /// C# `SendShortcutAsync`, when the options change it: the hook registers the
     /// rescue shortcut at once and says if it cannot. Windows only, as in C#: nothing
     /// registers one elsewhere (and every Load carries it anyway).
+    /// Show `screens`, unless the desktop is already showing exactly that.
+    ///
+    /// The call reaches the desktop environment, which can take its time (or hang), so it
+    /// goes to a task of its own: nothing the agent does may wait on a wallpaper. Nothing
+    /// waits for the answer either — a desktop that refused is a background that stayed
+    /// as it was, and the next apply tries again.
+    fn paint_desktop(&mut self, screens: Vec<crate::desktop::ScreenWallpaper>) {
+        if screens.is_empty() {
+            return;
+        }
+        let signature = crate::wallpaper::signature(&screens);
+        if self.wallpaper_on_screen.as_deref() == Some(signature.as_str()) {
+            return;
+        }
+        self.wallpaper_on_screen = Some(signature);
+        tokio::spawn(async move {
+            crate::desktop::apply(&screens).await;
+        });
+    }
+
     fn tell_shortcut(&mut self) {
         if !cfg!(windows) {
             return;
@@ -502,6 +547,10 @@ impl<W: AgentWorld> Agent<W> {
                     tokio::time::sleep(after).await;
                     let _ = inputs.send(Input::Wake(wake));
                 });
+            }
+            Effect::Wallpaper => {
+                let screens = self.world.wallpaper();
+                self.paint_desktop(screens);
             }
             Effect::ProcessSeen(process) => {
                 if self.seen.add(&process) {

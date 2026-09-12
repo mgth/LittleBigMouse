@@ -110,7 +110,7 @@ public class WallpaperFrameViewModel : ViewModel<PhysicalMonitor>
         set
         {
             if (Screen is not { } screen || screen.Color == value) return;
-            if (WallpaperManager.ParseColor(value) == null) return; // incomplete input, keep typing
+            if (!WallpaperManager.IsColor(value)) return; // incomplete input, keep typing
             screen.Color = value;
             this.RaisePropertyChanged();
             this.RaisePropertyChanged(nameof(ColorBrush));

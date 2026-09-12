@@ -298,6 +298,7 @@ fn system_world(
     dir: &std::path::Path,
 ) -> lbm_agent::world::SystemWorld<lbm_store::JsonLayoutStore, lbm_agent::world::Platform> {
     lbm_agent::world::SystemWorld::new(lbm_agent::discovery::Discovery::Fallback, persistence(dir))
+        .with_wallpaper(dir.join("wallpaper.json"), dir.join("wallpapers"))
 }
 
 fn persistence(
@@ -341,6 +342,76 @@ fn loads(fake: &FakeHook) -> usize {
         .iter()
         .filter(|c| matches!(c, Command::Load(_)))
         .count()
+}
+
+#[tokio::test]
+async fn the_agent_writes_the_wallpaper_settings_a_frontend_sends() {
+    // The frontends edit; the agent writes and paints. The file is the C# plugin's own,
+    // so what lands on disk has to be what that plugin reads back.
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({ "Method": "Subscribe" })).await["Result"].clone();
+    let layout_id = state["LayoutId"].as_str().unwrap().to_owned();
+    let screen = frontend_layout(dir.path()).monitors()[0].id.clone();
+
+    let settings = json!({
+        "Mode": "PerScreen",
+        "PerScreen": { screen.clone(): {
+            "Kind": 1,
+            "Style": "Fill",
+            "Color": "#102030",
+        }},
+    });
+    let saved = frontend
+        .ask(json!({
+            "Method": "SaveWallpaper",
+            "LayoutId": layout_id.clone(),
+            "Settings": settings,
+        }))
+        .await;
+    assert_eq!(saved["Result"], Value::Null, "{saved}");
+
+    let written: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("wallpaper.json")).unwrap())
+            .unwrap();
+    assert_eq!(written[&layout_id]["Mode"], "PerScreen");
+    assert_eq!(
+        written[&layout_id]["PerScreen"][&screen]["Color"],
+        "#102030"
+    );
+    assert_eq!(
+        written[&layout_id]["PerScreen"][&screen]["Kind"], 1,
+        "Kind travels as the number System.Text.Json writes"
+    );
+
+    // Another layout's settings are not this agent's to write: the displays changed
+    // under the editor, exactly as for an edit.
+    let refused = frontend
+        .ask(json!({
+            "Method": "SaveWallpaper",
+            "LayoutId": "SOMEONE_ELSE",
+            "Settings": settings,
+        }))
+        .await;
+    assert!(
+        refused["Error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("not the current one"),
+        "{refused}"
+    );
 }
 
 #[tokio::test]

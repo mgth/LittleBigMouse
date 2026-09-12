@@ -11,6 +11,7 @@ use std::io;
 use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_layout::zoning::compute_zones;
 use lbm_store::layout_dto_mapper::apply_global_options;
+use lbm_store::wallpaper_settings::{self, LayoutWallpaperSettings};
 use lbm_store::{
     GlobalOptionsDto, LayoutDocument, LayoutPersistence, LayoutStore, PersistencePlatform,
 };
@@ -49,6 +50,24 @@ pub trait AgentWorld: World {
     /// left as it is. Refused as [`edit`](Self::edit) is.
     fn set_preview(&mut self, _layout_id: &str, _document: &LayoutDocument) -> Result<(), String> {
         Err("this agent takes no previews".to_owned())
+    }
+
+    /// What the desktop should show for the layout now held: one target per screen,
+    /// with any span slices cut (v6: the agent applies the wallpaper, so that a display
+    /// change puts it back whether or not a window is open).
+    fn wallpaper(&self) -> Vec<crate::desktop::ScreenWallpaper> {
+        Vec::new()
+    }
+
+    /// Records a frontend's wallpaper settings for `layout_id` and answers what the
+    /// desktop should then show. Refused for another layout than the current one, as
+    /// [`edit`](Self::edit) is: the settings are keyed by layout.
+    fn save_wallpaper(
+        &mut self,
+        _layout_id: &str,
+        _settings: LayoutWallpaperSettings,
+    ) -> Result<Vec<crate::desktop::ScreenWallpaper>, String> {
+        Err("this agent keeps no wallpaper".to_owned())
     }
 
     /// Records the app-level options and the excluded list (C#: `SaveLive`), and aligns
@@ -101,6 +120,19 @@ pub struct SystemWorld<S, P> {
     /// A frontend's edit of `layout`, being previewed.
     preview: Option<Layout>,
     gaps: Option<GapGuard>,
+    /// Where the wallpaper settings are read and written, and where the span slices go.
+    /// `None` leaves the desktop alone — a scratch agent has no business repainting the
+    /// user's background.
+    wallpaper: Option<WallpaperPaths>,
+}
+
+/// The two places the wallpaper lives.
+#[derive(Clone, Debug)]
+struct WallpaperPaths {
+    /// `wallpaper.json`, the C# plugin's own file.
+    settings: std::path::PathBuf,
+    /// Where the cut slices go (`<data>/wallpapers`).
+    slices: std::path::PathBuf,
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
@@ -113,7 +145,19 @@ impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
             layout: None,
             preview: None,
             gaps: None,
+            wallpaper: None,
         }
+    }
+
+    /// Take charge of the desktop background: the settings file, and where the slices go.
+    /// Without this the agent reads and writes neither.
+    pub fn with_wallpaper(
+        mut self,
+        settings: std::path::PathBuf,
+        slices: std::path::PathBuf,
+    ) -> Self {
+        self.wallpaper = Some(WallpaperPaths { settings, slices });
+        self
     }
 
     /// Runs `before` once, with the id of the layout about to be loaded and the store,
@@ -197,6 +241,39 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
+    fn wallpaper(&self) -> Vec<crate::desktop::ScreenWallpaper> {
+        let (Some(paths), Some(layout)) = (self.wallpaper.as_ref(), self.layout.as_ref()) else {
+            return Vec::new();
+        };
+        // A foreign layout describes someone else's desktop: nothing here is ours to paint.
+        if layout.is_virtual() {
+            return Vec::new();
+        }
+        let all = wallpaper_settings::load(&paths.settings);
+        let Some(settings) = all.get(&layout.id).filter(|s| s.has_content()) else {
+            return Vec::new();
+        };
+        crate::wallpaper::screens(layout, settings, &paths.slices)
+    }
+
+    fn save_wallpaper(
+        &mut self,
+        layout_id: &str,
+        settings: LayoutWallpaperSettings,
+    ) -> Result<Vec<crate::desktop::ScreenWallpaper>, String> {
+        let Some(paths) = self.wallpaper.clone() else {
+            return Err("this agent keeps no wallpaper".to_owned());
+        };
+        // The same rule as an edit: the settings are keyed by layout, and a frontend
+        // whose displays have changed under it must not write over the new one.
+        self.editable(layout_id)?;
+        let mut all = wallpaper_settings::load(&paths.settings);
+        all.insert(layout_id.to_owned(), settings);
+        wallpaper_settings::save(&paths.settings, &all)
+            .map_err(|error| format!("the wallpaper settings could not be written: {error}"))?;
+        Ok(self.wallpaper())
+    }
+
     fn zones(&self) -> Option<(String, bool)> {
         self.preview
             .as_ref()

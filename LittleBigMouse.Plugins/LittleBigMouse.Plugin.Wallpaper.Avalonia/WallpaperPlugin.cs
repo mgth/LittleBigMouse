@@ -11,8 +11,9 @@ public class WallpaperPlugin(IMainService mainService, IWallpaperService wallpap
 {
     public override Task<BootState> LoadAsync()
     {
-        // Injecting the manager instantiates the singleton at boot: it must be
-        // listening before the first layout lands to re-slice span wallpapers.
+        // Injecting the manager instantiates the singleton at boot, so the editor has
+        // the settings of the layout that lands first. Re-slicing is not its business
+        // any more: the agent repaints the desktop on every rebuild, window or no window.
         _ = manager;
 
         // No supported desktop environment (GNOME, bare X11…): stay out of the UI.

@@ -128,6 +128,10 @@ mod plasma {
         default_path = "/PlasmaShell"
     )]
     trait PlasmaShell {
+        /// Named, not derived: the method on the bus is `evaluateScript`, and zbus would
+        /// otherwise ask for `EvaluateScript` — which plasma answers with "no such
+        /// method", silently, as a wallpaper that never changes.
+        #[zbus(name = "evaluateScript")]
         fn evaluate_script(&self, script: &str) -> zbus::Result<String>;
     }
 
@@ -277,6 +281,44 @@ mod tests {
         // Positions are compared, never screen numbers: plasma orders its own.
         assert!(script.contains("Math.abs(g.x-t.x)<2"));
         assert!(script.ends_with(r#"print("ok");"#));
+    }
+
+    /// Not run by default: it needs a live Plasma session on the other end of the bus.
+    /// `cargo test -p lbm-agent --lib -- --ignored plasma_answers` on a KDE desktop is
+    /// how the D-Bus half of this module gets exercised at all — everything else here
+    /// stops at the script it would have sent.
+    #[cfg(target_os = "linux")]
+    #[ignore = "needs a running plasmashell"]
+    #[tokio::test]
+    async fn plasma_answers_its_own_script() {
+        assert!(
+            is_supported().await,
+            "no plasmashell answered evaluateScript"
+        );
+    }
+
+    /// The other half of the same problem: a script that does not parse is refused the
+    /// same silent way a misnamed method is. This one is sent for a screen at a position
+    /// no desktop has, so plasma parses it, runs it, matches nothing and changes nothing
+    /// — and answers, which is the whole assertion.
+    #[cfg(target_os = "linux")]
+    #[ignore = "needs a running plasmashell"]
+    #[tokio::test]
+    async fn plasma_runs_the_script_it_is_sent() {
+        let nowhere = ScreenWallpaper {
+            x: 500_000.0,
+            y: 500_000.0,
+            image: Some(PathBuf::from("/nowhere/none.png")),
+            style: WallpaperStyle::Fill,
+            color: "#204060".to_owned(),
+        };
+
+        assert!(
+            super::plasma::evaluate(&super::plasma::script(&[nowhere]))
+                .await
+                .is_some(),
+            "plasma did not run the script"
+        );
     }
 
     #[cfg(target_os = "linux")]

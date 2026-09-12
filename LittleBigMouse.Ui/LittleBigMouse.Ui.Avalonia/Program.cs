@@ -234,6 +234,10 @@ internal class Program
                 agent.Start();
                 return agent;
             });
+            // The wallpaper editor reaches the agent through the narrow seam its own
+            // assembly can see.
+            services.AddSingleton<LittleBigMouse.Plugins.IAgentWallpaper>(
+                provider => provider.GetRequiredService<AgentClient>());
             services.AddSingleton<ILayoutOptions, LbmOptions>();
             services.AddSingleton<IProcessesCollector, ProcessesCollector>();
 
@@ -246,9 +250,10 @@ internal class Program
             // VCP goes through the IVcpService seam: dxva2 on Windows, ddcutil on
             // Linux (monitors without a reachable DDC/CI channel just get no sliders).
             parser.LoadDll("LittleBigMouse.Plugin.Vcp.Avalonia");
-            // Wallpaper drives the desktop through IWallpaperService (plasmashell
-            // scripting on Linux, IDesktopWallpaper COM on Windows); the plugin
-            // hides itself where IsSupported is false (GNOME, bare X11…).
+            // The wallpaper editor: it hands its settings to the agent, which records
+            // them and paints the desktop. IWallpaperService is only the question "can
+            // this desktop be driven at all" — the plugin hides itself where the answer
+            // is no (GNOME, bare X11…).
             parser.LoadDll("LittleBigMouse.Plugin.Wallpaper.Avalonia");
             services.AddSingleton<LittleBigMouse.Plugin.Wallpaper.Avalonia.WallpaperManager>();
 

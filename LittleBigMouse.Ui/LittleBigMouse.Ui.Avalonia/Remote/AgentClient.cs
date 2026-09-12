@@ -31,7 +31,7 @@ namespace LittleBigMouse.Ui.Avalonia.Remote;
 /// once: the agent is usually only being relaunched.
 /// </para>
 /// </summary>
-public sealed class AgentClient : IDisposable
+public sealed class AgentClient : IDisposable, IAgentWallpaper
 {
     const int MaxFrameSize = 1024 * 1024;
     static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(250);
@@ -146,6 +146,17 @@ public sealed class AgentClient : IDisposable
             ["Excluded"] = excluded,
             ["LoadAtStartup"] = loadAtStartup,
         }, token);
+
+    /// <summary>
+    /// The wallpaper settings of one layout. The agent writes `wallpaper.json` and paints
+    /// the desktop: a frontend edits, it does not apply (v6).
+    /// </summary>
+    public Task SaveWallpaperAsync(string layoutId, object settings)
+        => CallAsync("SaveWallpaper", new Dictionary<string, object?>
+        {
+            ["LayoutId"] = layoutId,
+            ["Settings"] = settings,
+        });
 
     /// <summary>Ask the hook for its edge report; it comes back as a Probed event.</summary>
     public Task ProbeAsync(CancellationToken token = default)

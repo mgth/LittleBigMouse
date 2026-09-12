@@ -18,6 +18,8 @@
 #   lbm-agent    the v6 resident process (for now: --dump-displays)
 #   lbm-ui       the v7 frontend: state, actions and views, driven headless in
 #                tests through the accessibility tree (no window yet)
+#   lbm-overlay  the surfaces the rulers and resistance bands are drawn on: placed
+#                to the pixel on a chosen screen, transparent, click-through
 #
 # Build from here (`cargo build`, `cargo test`) or with
 # `--manifest-path rust/Cargo.toml` from the repository root; both pick up the

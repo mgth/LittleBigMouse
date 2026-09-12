@@ -439,6 +439,14 @@ Spikes, avant tout écran :
 - Fenêtres superposées : règles et bandes éditables sur Windows (au premier plan, transparentes,
   hors barre des tâches, au pixel près, DPI par écran), sur X11, et sous Wayland (layer-shell ou
   XWayland).
+  *Wayland/KWin répondu (`lbm-overlay`) : **layer-shell**, pas XWayland. KWin annonce
+  `zwlr_layer_shell_v1` v5 ; une surface `Overlay` ancrée à deux bords adjacents transforme les
+  marges en position, et la mesure sur capture donne **exactement** les quatre nombres attendus
+  (420×64 demandés à (160,120) sur un écran à l'échelle 1,25 ⇒ 525×80 physiques à (200,150)).
+  XWayland était de toute façon exclu : c'est pour ça que `lbm-pattern` existe — KWin rééchelonne
+  ses surfaces dès qu'un écran diffère du facteur global. **Restent à éprouver : X11 et Windows**,
+  et le passage du pointeur au travers (région d'entrée vide, déclarée mais non prouvée ici :
+  aucun clic n'est possible sous KWin depuis un test).*
 - Mires plein écran natives Wayland par `with_monitor` : si le rendu est au pixel près,
   `lbm-pattern` disparaît.
 - Icônes SVG recolorées selon le thème (resvg) et alias des 72 logos PnP.

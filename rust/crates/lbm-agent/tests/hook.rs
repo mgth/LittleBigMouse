@@ -33,6 +33,13 @@ async fn next(signals: &mut UnboundedReceiver<HookSignal>) -> HookSignal {
         .expect("the connection task is alive")
 }
 
+/// What a hook with no layout loaded greets with.
+fn greeting_holding_nothing() -> HookSignal {
+    HookSignal::Greeted {
+        layout: String::new(),
+    }
+}
+
 async fn event(signals: &mut UnboundedReceiver<HookSignal>) -> Event {
     match next(signals).await {
         HookSignal::Message(message) => message,
@@ -48,6 +55,8 @@ async fn the_client_subscribes_then_follows_the_hook() {
     let (hook, mut signals) = HookClient::spawn(endpoint);
 
     assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    // The greeting comes first: the opening frame asks Hello before Listen.
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
     // Subscribing is answered with the hook's state: no layout yet.
     assert_eq!(event(&mut signals).await, Event::Stopped);
 
@@ -91,6 +100,7 @@ async fn a_hook_that_goes_away_is_signalled_and_found_again() {
     let fake = FakeHook::bind(&endpoint).unwrap();
     let (hook, mut signals) = HookClient::spawn(endpoint.clone());
     assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
     assert_eq!(event(&mut signals).await, Event::Stopped);
 
     drop(fake);
@@ -102,6 +112,7 @@ async fn a_hook_that_goes_away_is_signalled_and_found_again() {
 
     let fake = FakeHook::bind(&endpoint).unwrap();
     assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
     assert_eq!(event(&mut signals).await, Event::Stopped);
     assert_eq!(
         fake.received(),
@@ -157,6 +168,7 @@ async fn a_hook_that_speaks_another_protocol_is_retired_not_talked_to() {
                         let answer = protocol::event(&Event::Hello {
                             protocol: protocol::PROTOCOL + 99,
                             version: "ancient".to_owned(),
+                            layout: String::new(),
                         });
                         let _ = write_frame(&mut writer, &answer).await;
                     }
@@ -244,4 +256,48 @@ async fn a_hook_that_answers_nothing_at_all_is_retired_too() {
     })
     .await;
     assert!(farewell.is_ok(), "the silent hook was never told to leave");
+}
+
+/// The hook greets before it answers anything else, and what it says about the layout
+/// it holds reaches the runtime — that is what lets an agent reattach to a hook that
+/// outlived it (D5) without recapturing the mice for a layout that was already right.
+#[tokio::test]
+async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let (hook, mut signals) = HookClient::spawn(endpoint.clone());
+
+    assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    // Nothing loaded: it holds no layout, and the greeting still arrives — before the
+    // state, because the opening frame asks Hello then Listen.
+    assert_eq!(
+        next(&mut signals).await,
+        HookSignal::Greeted {
+            layout: String::new()
+        }
+    );
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+
+    hook.send(protocol::frame(&[
+        Command::Load {
+            zones: ZONES.into(),
+        },
+        Command::Run,
+    ]));
+    assert!(matches!(event(&mut signals).await, Event::Loaded { .. }));
+    assert_eq!(event(&mut signals).await, Event::Running);
+
+    // A second agent arrives at a hook that is already running: it is told what that
+    // hook holds, and it is exactly what the first agent sent.
+    let (_second, mut theirs) = HookClient::spawn(endpoint);
+    assert_eq!(next(&mut theirs).await, HookSignal::Connected);
+    assert_eq!(
+        next(&mut theirs).await,
+        HookSignal::Greeted {
+            layout: protocol::fingerprint(ZONES)
+        }
+    );
+
+    drop(fake);
 }

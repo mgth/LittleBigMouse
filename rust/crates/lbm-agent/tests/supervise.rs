@@ -76,7 +76,10 @@ async fn until_state(endpoint: &str, want: Event) {
 async fn next_state(signals: &mut UnboundedReceiver<HookSignal>) -> Option<Event> {
     match signals.recv().await? {
         HookSignal::Message(m) => Some(m),
-        HookSignal::Connected | HookSignal::Lost | HookSignal::Unreachable => {
+        HookSignal::Connected
+        | HookSignal::Greeted { .. }
+        | HookSignal::Lost
+        | HookSignal::Unreachable => {
             tokio::time::sleep(Duration::from_millis(50)).await;
             None
         }

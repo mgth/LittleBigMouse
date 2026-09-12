@@ -24,6 +24,10 @@ pub const PROBE_REPORT: &str = "<ProbeReport />";
 #[derive(Default)]
 struct State {
     hooked: bool,
+    /// The layout it holds, as the real hook keeps it: the fingerprint of the last
+    /// `Load` it accepted. A fake that always greeted with none would be agreeing
+    /// with the agent rather than answering it.
+    applied: String,
     received: Vec<Command>,
     listeners: Vec<mpsc::UnboundedSender<String>>,
 }
@@ -193,6 +197,7 @@ async fn connection<S>(
                     Command::Load { zones: xml } => {
                         let zones = xml.matches("<Zone ").count();
                         let virtual_layout = xml.contains(r#"Virtual="True""#);
+                        s.applied = protocol::fingerprint(&xml);
                         s.broadcast(&Event::Loaded {
                             zones,
                             main: zones,
@@ -216,13 +221,20 @@ async fn connection<S>(
                         s.broadcast(&Event::Stopped);
                         quit = true;
                     }
-                    // The fake speaks the protocol, handshake included: an agent
-                    // that asks who is there has to get an answer here too.
+                    // The fake speaks the protocol, handshake included: an agent that
+                    // asks who is there has to get an answer here too.
+                    //
+                    // To the asker, as the real hook answers it — not to the
+                    // subscribers. The agent opens with `[Hello, Listen]`, so at Hello
+                    // time nobody is subscribed yet: broadcasting it sent it nowhere,
+                    // and the agent, hearing nothing, took this fake for a hook older
+                    // than the protocol and retired it every five seconds.
                     Command::Hello { .. } => {
-                        s.broadcast(&Event::Hello {
+                        let _ = out.send(protocol::event(&Event::Hello {
                             protocol: protocol::PROTOCOL,
                             version: "fake".to_owned(),
-                        });
+                            layout: s.applied.clone(),
+                        }));
                     }
                     Command::Shortcut { .. } | Command::Unknown => {}
                 }

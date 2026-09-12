@@ -301,3 +301,61 @@ async fn malformed_frame_is_ignored_without_crashing_server() {
         .unwrap();
     assert!(reply.contains("Stopped"), "got {reply:?}");
 }
+
+/// The greeting names the layout the hook holds, so an agent that finds it already
+/// running (D5) can tell whether it is the one it wants — and only recapture the mice
+/// when it is not.
+#[tokio::test]
+async fn the_greeting_names_the_layout_the_hook_holds() {
+    let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+    let endpoint = endpoint();
+    let (_server, _) = server::start_with_endpoint(shared, endpoint.clone()).unwrap();
+
+    let mut agent = tokio::time::timeout(Duration::from_secs(2), connect(&endpoint))
+        .await
+        .expect("connect timeout");
+
+    // Nothing loaded yet: it holds no layout, and says so.
+    framing::write_frame(
+        &mut agent,
+        &protocol::frame(&[protocol::Command::Hello {
+            protocol: lbm_ipc::protocol::PROTOCOL,
+        }]),
+    )
+    .await
+    .unwrap();
+    let greeting = framing::read_frame(&mut agent).await.unwrap();
+    let Some(protocol::Event::Hello { layout, .. }) = protocol::parse_event(&greeting) else {
+        panic!("a greeting came back, got {greeting:?}");
+    };
+    assert_eq!(layout, "");
+
+    let zones = concat!(
+        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
+        r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+    framing::write_frame(
+        &mut agent,
+        &protocol::frame(&[
+            protocol::Command::Load {
+                zones: zones.to_owned(),
+            },
+            protocol::Command::Hello {
+                protocol: lbm_ipc::protocol::PROTOCOL,
+            },
+        ]),
+    )
+    .await
+    .unwrap();
+    let greeting = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
+        .await
+        .expect("greeting timeout")
+        .unwrap();
+    let Some(protocol::Event::Hello { layout, .. }) = protocol::parse_event(&greeting) else {
+        panic!("a greeting came back, got {greeting:?}");
+    };
+    // Exactly what the agent computes over the document it sent: that is the whole
+    // contract — two processes naming the same layout the same way.
+    assert_eq!(layout, lbm_ipc::protocol::fingerprint(zones));
+}

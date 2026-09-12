@@ -83,6 +83,15 @@ pub trait World {
     /// Drops the layout being previewed, if any: what the hook is handed next is the
     /// current layout again.
     fn end_preview(&mut self) {}
+
+    /// `lbm_ipc::protocol::fingerprint` of the zones this agent would hand the hook
+    /// right now. `None` before the first layout.
+    ///
+    /// Asked only of a hook found already running, so the cost of building the
+    /// document to hash it is paid once per reattachment, not per event.
+    fn wanted_fingerprint(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// What the hook reports, as far as reconciling goes (the wire events of
@@ -91,6 +100,9 @@ pub trait World {
 pub enum HookEvent {
     /// The connection to the hook was (re)established.
     Connected,
+    /// The hook named the layout it holds (empty: none), before saying what it is
+    /// doing with it.
+    Greeted(String),
     Running,
     Stopped,
     Paused,
@@ -217,6 +229,9 @@ pub struct Reconciler {
     /// Between a (re)connection and the first Running: a Stopped then means "I have no
     /// layout", not the user's Stop.
     just_connected: bool,
+    /// The layout the hook named in its greeting, until the state that follows it has
+    /// been reasoned about.
+    greeted_with: Option<String>,
     display_generation: u64,
     display: DisplayFlow,
     /// Display flows after which a resume starts its watchdog: each C# `Resumed`
@@ -238,6 +253,7 @@ impl Reconciler {
             suspended: false,
             engine: EngineState::Dead,
             just_connected: false,
+            greeted_with: None,
             display_generation: 0,
             display: DisplayFlow::Idle,
             resume_after: Vec::new(),
@@ -309,6 +325,29 @@ impl Reconciler {
     // Hook events      //
     //==================//
 
+    /// Whether a hook found running should be handed this agent's layout instead of
+    /// being left with the one it has.
+    ///
+    /// Says no whenever it cannot tell, which is the answer that costs nothing: the
+    /// mice keep being routed by a layout that is probably right, instead of being
+    /// recaptured for one that is certainly no better. It cannot tell when the hook
+    /// names no layout — a hook built before the greeting carried one — and when this
+    /// agent has none of its own to compare, or none the user enabled.
+    fn holds_the_wrong_layout(&mut self, world: &mut impl World) -> bool {
+        let Some(theirs) = self.greeted_with.take().filter(|it| !it.is_empty()) else {
+            return false;
+        };
+        // A disabled layout with a running hook is its own kind of wrong — the user
+        // asked for the engine to be off — but the answer to that one is Stop, not
+        // Start, and it is not this reattachment's to give.
+        if !world.layout().is_some_and(|l| l.enabled) {
+            return false;
+        }
+        world
+            .wanted_fingerprint()
+            .is_some_and(|ours| ours != theirs)
+    }
+
     /// C# `MainService.EventReceivedAsync`: flags first (they gate what follows),
     /// then what the event means.
     fn hook_event(&mut self, event: HookEvent, world: &mut impl World, out: &mut Vec<Effect>) {
@@ -322,8 +361,11 @@ impl Reconciler {
         match event {
             HookEvent::Suspended => self.suspended = true,
             HookEvent::Resumed => self.suspended = false,
-            HookEvent::Connected => self.just_connected = true,
-            HookEvent::Running => self.just_connected = false,
+            HookEvent::Connected => {
+                self.just_connected = true;
+                self.greeted_with = None;
+            }
+            HookEvent::Greeted(ref layout) => self.greeted_with = Some(layout.clone()),
             _ => {}
         }
 
@@ -334,6 +376,24 @@ impl Reconciler {
                 if self.just_connected && world.layout().is_some_and(|l| l.enabled) {
                     self.just_connected = false;
                     out.push(Effect::Start);
+                }
+            }
+            // A hook already running when this agent arrived outlived its predecessor
+            // (D5). Leaving it alone is the point — the mice are not recaptured and the
+            // cursor never stutters — but it is only right if it is applying the layout
+            // this agent wants. The case it is not: the previous agent died while a
+            // frontend was previewing, and an experiment nobody committed to would keep
+            // routing the mice for the rest of the session, with nothing to say so.
+            HookEvent::Running => {
+                if self.just_connected {
+                    self.just_connected = false;
+                    if self.holds_the_wrong_layout(world) {
+                        eprintln!(
+                            "[lbm-agent] the hook is running another layout than this \
+                             agent's: handing it ours"
+                        );
+                        out.push(Effect::Start);
+                    }
                 }
             }
             HookEvent::SettingsChanged | HookEvent::DesktopChanged | HookEvent::DisplayChanged => {

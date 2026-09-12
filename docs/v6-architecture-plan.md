@@ -390,9 +390,11 @@ Objectif : le hook ne connaît plus que l'agent.
   l'agent. DACL limitée à l'utilisateur de la session et à SYSTEM, étiquette d'intégrité si le
   hook est élevé (D11). Verrou d'instance unique sous Linux, qui n'en a pas aujourd'hui (le
   socket périmé est simplement effacé).
-- Rattachement : à la connexion, le hook annonce son état (accroché, en pause), la génération et
-  l'empreinte du layout qu'il applique ; si c'est celui que l'agent veut, rien n'est renvoyé et
-  les souris ne sont pas recapturées.
+- Rattachement : à la connexion, le hook annonce son état (accroché, en pause) et l'empreinte du
+  layout qu'il applique ; si c'est celui que l'agent veut, rien n'est renvoyé et les souris ne
+  sont pas recapturées. *Pas de génération : un agent relancé repart de zéro, donc le numéro ne
+  voudrait rien dire au moment précis où il servirait. L'empreinte, elle, est la même des deux
+  côtés parce que le document est produit par un seul (`lbm_ipc::protocol::fingerprint`).*
 - Option « lié à l'agent » : fin de connexion ⇒ relâche des grabs, des boutons tenus et du clip,
   puis sortie.
 - Disparaissent : serveur multi-clients et diffusion, détection de mode par le parent, rejeu de

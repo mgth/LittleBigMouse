@@ -46,6 +46,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool StartMinimized { get; set; } = false;
       public bool StartElevated { get; set; } = false;
       public bool HideTrayIcon { get; set; } = false;
+      public bool BoundToAgent { get; set; } = false;
       public bool Elevated { get; set; } = true;
       public bool DebugTools { get; set; } = false;
       public bool ExperimentalFeatures { get; set; } = false;
@@ -228,6 +229,14 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// Hide the system tray icon
    /// </summary>
    bool HideTrayIcon { get; set; }
+
+   /// <summary>
+   /// The mouse engine belongs to the agent that drives it: when they stop talking it
+   /// lets go of the mice and leaves. Off by default — an engine that outlives the
+   /// agent keeps routing the cursor across a crash, and this trades that away for no
+   /// resident process.
+   /// </summary>
+   bool BoundToAgent { get; set; }
 
    /// <summary>
    /// Current elevated state

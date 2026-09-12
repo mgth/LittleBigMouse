@@ -13,5 +13,6 @@
   "BorderValues": "PerMonitor",
   "RescueShortcut": "Ctrl\u002BAlt\u002BShift\u002BM",
   "HideTrayIcon": true,
+  "BoundToAgent": false,
   "ExcludedDefaultsVersion": 2
 }

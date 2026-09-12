@@ -30,6 +30,7 @@ public class GlobalOptionsDto
     public string? BorderValues { get; set; }
     public string? RescueShortcut { get; set; }
     public bool? HideTrayIcon { get; set; }
+    public bool? BoundToAgent { get; set; }
 
     /// <summary>
     /// Version of the excluded-defaults top-up already applied (see

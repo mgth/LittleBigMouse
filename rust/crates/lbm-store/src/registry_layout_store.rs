@@ -208,6 +208,7 @@ pub fn read_global_options<K: RegistryKey>(root: &K, layout_key: Option<&K>) -> 
         border_values: try_get_string(root, "BorderValues"),
         rescue_shortcut: try_get_string(root, "RescueShortcut"),
         hide_tray_icon: try_get_bool(root, "HideTrayIcon"),
+        bound_to_agent: try_get_bool(root, "BoundToAgent"),
         excluded_defaults_version: try_get_int(root, "ExcludedDefaultsVersion"),
         ..Default::default()
     }

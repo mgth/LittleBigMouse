@@ -57,6 +57,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _hideTrayIcon;
 
     [DataMember]
+    public bool BoundToAgent
+    {
+        get => _boundToAgent;
+        set => SetUnsavedValue(ref _boundToAgent, value);
+    }
+    bool _boundToAgent;
+
+    [DataMember]
     public bool Elevated
     {
         get => _elevated;

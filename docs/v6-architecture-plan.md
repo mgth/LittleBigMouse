@@ -396,7 +396,11 @@ Objectif : le hook ne connaît plus que l'agent.
   voudrait rien dire au moment précis où il servirait. L'empreinte, elle, est la même des deux
   côtés parce que le document est produit par un seul (`lbm_ipc::protocol::fingerprint`).*
 - Option « lié à l'agent » : fin de connexion ⇒ relâche des grabs, des boutons tenus et du clip,
-  puis sortie.
+  puis sortie. *Déclarée par une commande à chaque connexion (`BindToAgent`), pas portée par la
+  mise en page : un hook repris à un autre agent tient ce que cet autre lui avait demandé, et un
+  hook qui a survécu à son agent (D5) ne doit pas rester lié à un processus disparu. Une connexion
+  fermée **par éviction** ne la déclenche pas — le discriminant est que `remove` n'a rien retiré,
+  l'évinceur ayant déjà pris la poignée.*
 - Disparaissent : serveur multi-clients et diffusion, détection de mode par le parent, rejeu de
   `Current.xml`.
 - Touche de secours sous Linux (#526) : un hook qui survit à l'agent doit pouvoir être arrêté

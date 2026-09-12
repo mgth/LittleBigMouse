@@ -89,13 +89,20 @@ impl ServerHandle {
             .replace(client)
     }
 
-    /// Give the connection up — but only if it is still ours. A connection that ends
-    /// after being evicted must not take its successor's place with it.
-    pub fn remove(&self, id: ClientId) {
+    /// Give the connection up — but only if it is still ours, and say whether it was.
+    ///
+    /// A connection that ends after being evicted must not take its successor's place
+    /// with it. The answer is also the only honest way to tell the two endings apart:
+    /// after an eviction the newcomer has already replaced the handle, so nothing is
+    /// removed here. A client that *was* still the current one is a client that really
+    /// went away — which is what "bound to the agent" turns on.
+    pub fn remove(&self, id: ClientId) -> bool {
         let mut held = self.client.lock().unwrap_or_else(|p| p.into_inner());
         if held.as_ref().is_some_and(|client| client.id == id) {
             *held = None;
+            return true;
         }
+        false
     }
 
     fn get(&self, id: ClientId) -> Option<Arc<ClientHandle>> {
@@ -217,7 +224,11 @@ async fn command_worker(
 /// idle deadline for the same reason: the agent is silent between a display change and
 /// the next, and silence is not death. What ends the connection is the client going
 /// away, the writer failing, or a newer client taking its place.
-async fn run_connection<S: LocalStream>(stream: S, server: ServerHandle) {
+///
+/// The last of those is not the client going away, and the difference is the whole of
+/// "bound to the agent": a hook that left when a *newer* agent took it over would be
+/// killed by the very agent that just adopted it.
+async fn run_connection<S: LocalStream>(stream: S, server: ServerHandle, shared: &'static Shared) {
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let (mut reader, mut writer) = tokio::io::split(stream);
@@ -268,8 +279,22 @@ async fn run_connection<S: LocalStream>(stream: S, server: ServerHandle) {
         }
     }
 
-    server.remove(id);
+    // `remove` is the discriminator: after an eviction the newcomer has already taken
+    // the handle, so nothing is removed here and this connection ending is not its
+    // client going away.
+    let was_the_client = server.remove(id);
     writer_task.abort();
+
+    if was_the_client && shared.bound_to_agent.load(Ordering::SeqCst) {
+        eprintln!(
+            "[LittleBigMouse.Hook] the agent this hook belongs to is gone: \
+             letting go of the mice and leaving"
+        );
+        // The unhook is what releases: the teardown pays the held buttons out on the
+        // virtual pointer while it is still alive, then hands every mouse back.
+        crate::hook::request_unhook(shared);
+        crate::hook::request_quit(shared);
+    }
 }
 
 #[cfg(windows)]
@@ -307,7 +332,7 @@ mod transport {
             })
         }
 
-        pub async fn run(self, server: ServerHandle, _shared: &'static Shared) {
+        pub async fn run(self, server: ServerHandle, shared: &'static Shared) {
             let mut next = Some(self.first);
             loop {
                 let pipe = match next.take() {
@@ -335,7 +360,7 @@ mod transport {
                 // Every connection is accepted: the newest client is the one that
                 // matters, and refusing it would leave the hook driven by whoever got
                 // there first — including a connection nobody is reading any more.
-                tokio::spawn(run_connection(pipe, server.clone()));
+                tokio::spawn(run_connection(pipe, server.clone(), shared));
             }
         }
     }
@@ -470,10 +495,10 @@ mod transport {
             Ok(Self { listener, path })
         }
 
-        pub async fn run(self, server: ServerHandle, _shared: &'static Shared) {
+        pub async fn run(self, server: ServerHandle, shared: &'static Shared) {
             while let Ok((stream, _)) = self.listener.accept().await {
                 // Every connection is accepted: see the Windows side.
-                tokio::spawn(run_connection(stream, server.clone()));
+                tokio::spawn(run_connection(stream, server.clone(), shared));
             }
             let _ = std::fs::remove_file(&self.path);
         }

@@ -60,6 +60,10 @@ pub struct Shared {
     /// Foreground-process path substrings that pause the hook (C++
     /// `LittleBigMouseDaemon::_excluded`), loaded from `Excluded.txt` on `Run`.
     pub excluded: Mutex<Vec<String>>,
+    /// The client asked for this hook to be its own: when its connection ends, the
+    /// hook lets go of the mice and leaves. False until a client says otherwise —
+    /// D5 is that a hook outlives its agent, and being bound is the option.
+    pub bound_to_agent: AtomicBool,
     /// The desktop the agent named with the layout it last handed over, in pixels.
     /// `None` until one says so: an agent older than the field, or a hook driven by
     /// something else, and then the layout's own extent stands in. Only the agent
@@ -91,6 +95,7 @@ impl Shared {
             priority_unhooked: AtomicU8::new(Priority::Below.as_u8()),
             engine: Mutex::new(MouseEngine::new()),
             excluded: Mutex::new(Vec::new()),
+            bound_to_agent: AtomicBool::new(false),
             applied: Mutex::new(String::new()),
             desktop: Mutex::new(None),
             server: OnceLock::new(),

@@ -13,7 +13,8 @@
     "ShowMonitorActionWarning": true,
     "BorderValues": "PerModel",
     "RescueShortcut": "Ctrl+Alt+Shift+M",
-    "HideTrayIcon": false
+    "HideTrayIcon": false,
+    "BoundToAgent": false
   },
   "Layout": {
     "Options": {

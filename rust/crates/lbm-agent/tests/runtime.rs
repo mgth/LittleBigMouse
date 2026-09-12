@@ -23,6 +23,8 @@ struct Record {
 /// One monitor, an enabled layout; what was asked of it is recorded.
 struct FakeWorld {
     layout: Option<LayoutState>,
+    /// What the user asked for: does the engine stop with the agent?
+    bound: bool,
     record: Arc<Mutex<Record>>,
 }
 
@@ -65,6 +67,12 @@ impl AgentWorld for FakeWorld {
             width: 3840,
             height: 1080,
         })
+    }
+
+    /// Answers as the real world does — a value as soon as there are options to ask.
+    /// A world that answered None would leave the declaration untested.
+    fn bound_to_agent(&self) -> Option<bool> {
+        self.layout.map(|_| self.bound)
     }
 
     fn save_enabled(&mut self) -> io::Result<()> {
@@ -142,6 +150,7 @@ async fn the_agent_hands_its_layout_to_the_hook_and_keeps_it_hooked() {
     let record = Arc::new(Mutex::new(Record::default()));
     let world = FakeWorld {
         layout: None,
+        bound: false,
         record: record.clone(),
     };
 
@@ -168,6 +177,9 @@ async fn the_agent_hands_its_layout_to_the_hook_and_keeps_it_hooked() {
                 protocol: protocol::PROTOCOL
             },
             Command::Listen,
+            // Declared on every connection, even when it is "no": a hook taken over
+            // from another agent holds whatever that one asked of it.
+            Command::BindToAgent { bound: false },
             // The desktop travels with the layout: the hook cannot work it out, and
             // the absolute pointing device it builds has to span exactly this.
             Command::Load {
@@ -216,6 +228,7 @@ async fn a_hook_that_comes_late_or_comes_back_gets_the_layout() {
     let record = Arc::new(Mutex::new(Record::default()));
     let world = FakeWorld {
         layout: None,
+        bound: false,
         record,
     };
 
@@ -253,6 +266,7 @@ async fn the_hook_is_let_go_before_the_system_sleeps_and_taken_back_after() {
     let record = Arc::new(Mutex::new(Record::default()));
     let world = FakeWorld {
         layout: None,
+        bound: false,
         record: record.clone(),
     };
 
@@ -343,6 +357,10 @@ impl AgentWorld for GappingWorld {
         })
     }
 
+    fn bound_to_agent(&self) -> Option<bool> {
+        self.layout.map(|_| false)
+    }
+
     fn save_enabled(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -402,6 +420,9 @@ async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
                 protocol: protocol::PROTOCOL
             },
             Command::Listen,
+            // Declared on every connection, even when it is "no": a hook taken over
+            // from another agent holds whatever that one asked of it.
+            Command::BindToAgent { bound: false },
             // The desktop travels with the layout: the hook cannot work it out, and
             // the absolute pointing device it builds has to span exactly this.
             Command::Load {
@@ -425,4 +446,49 @@ async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
 
     stop.send(()).unwrap();
     agent.await.unwrap();
+}
+
+/// The option reaches the hook, and reaches it again on a fresh connection.
+///
+/// Declared rather than carried by the layout: a hook this agent took over from
+/// another one holds whatever that other one asked of it, and a hook that outlived an
+/// agent (D5) must not stay bound to a process that is gone.
+#[tokio::test]
+async fn the_engine_is_told_whether_it_belongs_to_this_agent() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let record = Arc::new(Mutex::new(Record::default()));
+    let world = FakeWorld {
+        layout: Some(LayoutState {
+            enabled: true,
+            is_virtual: false,
+            saved: true,
+        }),
+        bound: true,
+        record,
+    };
+
+    let (hook, signals) = HookClient::spawn(endpoint.clone());
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let agent = tokio::spawn(async move {
+        let mut agent = Agent::new(world, quick(), hook, inputs);
+        agent
+            .run(signals, inputs_rx, async {
+                let _ = stopped.await;
+            })
+            .await;
+    });
+
+    until("the hook is told it belongs to this agent", || fake.bound()).await;
+    assert!(
+        fake.received()
+            .contains(&Command::BindToAgent { bound: true }),
+        "{:?}",
+        fake.received()
+    );
+
+    let _ = stop.send(());
+    let _ = agent.await;
 }

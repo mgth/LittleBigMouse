@@ -16,24 +16,29 @@ Everything the app ships goes into a single directory:
 ```
 /usr/lib/littlebigmouse/
     LittleBigMouse.Ui.Avalonia      app host (framework-dependent, net10.0)
-    lbm-hook                        routing daemon (Rust)
+    lbm-agent                       resident process (Rust): profiles, engine, tray
+    lbm-hook                        routing daemon (Rust), driven by the agent
     lbm-pattern                     native-Wayland test pattern viewer
     *.dll, libSkiaSharp.so, ...
 /usr/bin/littlebigmouse -> ../lib/littlebigmouse/LittleBigMouse.Ui.Avalonia
 ```
 
-This is not cosmetic: `LittleBigMouseClientService.FindHookPath` looks for
-`lbm-hook` next to `AppContext.BaseDirectory`, and `WaylandPattern.FindHelper`
-does the same for `lbm-pattern`. Neither has a system-path fallback nor an
-environment override, so the three binaries must stay siblings.
+This is not cosmetic: `AgentLauncher.Find` looks for `lbm-agent` next to
+`AppContext.BaseDirectory`, the agent looks for `lbm-hook` next to itself, and
+`WaylandPattern.FindHelper` does the same for `lbm-pattern`. None has a
+system-path fallback nor an environment override, so the four binaries must stay
+siblings.
+
+The window is not resident (v6): it starts an agent when none answers and leaves
+when the user closes it. The agent is what stays — it owns the tray icon and its
+own XDG autostart entry, which it writes when the user asks for it, so the
+package installs no autostart entry of its own.
 
 The `/usr/bin` entry is a symlink rather than a wrapper script on purpose. The
 .NET app host resolves its own location through `/proc/self/exe`, which follows
 symlinks, so `AppContext.BaseDirectory` is still `/usr/lib/littlebigmouse/`.
-The daemon's "was I launched by the UI?" test (`parent_process_path()` in
-`src/platform/linux/process.rs`, which reads the already-resolved
-`/proc/<ppid>/exe` and looks for `LittleBigMouse` in it) also keeps working —
-otherwise the daemon would start in standalone auto-run mode.
+The agent writes its autostart entry with the path it was started from, so a
+session started through the symlink still points at a real binary.
 
 Per-user state stays where `LbmPaths` puts it: `~/.config/LittleBigMouse/` and
 `~/.local/share/LittleBigMouse/`.

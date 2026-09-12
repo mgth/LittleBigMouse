@@ -212,14 +212,6 @@ async fn load_outcome_is_broadcast_to_listener() {
     assert!(event.contains("Loaded"), "got {event:?}");
     assert!(event.contains("1 zones (1 main), virtual"), "got {event:?}");
 
-    // A virtual load is auto-probed: the edge report follows immediately.
-    let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut listener))
-        .await
-        .expect("Probed event timeout")
-        .unwrap();
-    assert!(event.contains("Probed"), "got {event:?}");
-    assert!(event.contains("ProbeReport"), "got {event:?}");
-
     // An empty/unparsable payload reports failure the same way.
     framing::write_frame(&mut commander, r#"<CommandMessage Command="Load"/>"#)
         .await

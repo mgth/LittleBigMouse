@@ -40,6 +40,7 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Persistence;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Zoning;
@@ -52,13 +53,12 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     readonly ISystemMonitorsService _monitorsService;
     readonly IMainService _mainService;
     readonly ILayoutPersistence _persistence;
-    readonly EngineController _engine;
 
-    readonly ILittleBigMouseClientService _service;
+    readonly AgentClient _agent;
     readonly Action<Action> _postToUi;
 
-    public LocationControlViewModel(ILittleBigMouseClientService service,IMainService main, ISystemMonitorsService monitorsService, ILayoutPersistence persistence, EngineController engine)
-        : this(service, main, monitorsService, persistence, engine,
+    public LocationControlViewModel(AgentClient agent, IMainService main, ISystemMonitorsService monitorsService, ILayoutPersistence persistence)
+        : this(agent, main, monitorsService, persistence,
             run => Dispatcher.UIThread.Invoke(run),
             post => Dispatcher.UIThread.Post(() => post()),
             tick => new DispatcherLiveTicker(tick))
@@ -71,14 +71,13 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     /// dispatcher belongs to whichever thread reaches it first — a blocking Invoke from any
     /// other one waits forever on a loop nobody pumps.
     /// </summary>
-    internal LocationControlViewModel(ILittleBigMouseClientService service, IMainService main,
-        ISystemMonitorsService monitorsService, ILayoutPersistence persistence, EngineController engine,
+    internal LocationControlViewModel(AgentClient agent, IMainService main,
+        ISystemMonitorsService monitorsService, ILayoutPersistence persistence,
         Action<Action> onUiThread, Action<Action> postToUi, Func<Func<Task>, ILiveTicker> liveTicker)
     {
-        _service = service;
+        _agent = agent;
         _mainService = main;
         _persistence = persistence;
-        _engine = engine;
         _postToUi = postToUi;
 
         _monitorsService = monitorsService;
@@ -200,8 +199,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
         _live = new LiveLayoutUpdater(
             () => SavableReactiveModel.Revision,
-            () => Model?.ComputeZones(),
-            (zones, token) => _service.SendLiveAsync(zones, token));
+            () => Model,
+            (layout, token) => _agent.PreviewAsync(layout.Id, AgentDocument.Of(layout), token));
 
         _liveTimer = liveTicker(() => _live.TickAsync());
 
@@ -224,16 +223,37 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
         this.UnsavedOn(e => e.Model);
 
-        // The service is a process-lifetime singleton: a bare += would keep every
+        // The agent's client is a process-lifetime singleton: a bare += would keep every
         // generation of this view model alive for as long as the app runs. Disposal
         // happens when the owning view leaves the logical tree (HLab.Mvvm's LinkDispose).
         OwnedSubscription.Create<EventHandler<LittleBigMouseServiceEventArgs>>(
                 (_, e) => _status.Apply(e),
-                h => service.DaemonEventReceived += h,
-                h => service.DaemonEventReceived -= h)
+                h => agent.HookEventReceived += h,
+                h => agent.HookEventReceived -= h)
             .DisposeWith(this);
 
-        _status.Apply(new LittleBigMouseServiceEventArgs(service.State, ""));
+        // The engine's own state travels in the agent's snapshot, not in a hook event: the
+        // hook reports what it did (a load, a probe, a rescue), the agent reports what it
+        // is. Without this the view would sit on whatever it last inferred — a Running that
+        // the tray, another frontend or a display change has since stopped.
+        OwnedSubscription.Create<EventHandler<AgentState>>(
+                (_, state) => _status.Apply(new(state.EngineEvent, "")),
+                h => agent.StateChanged += h,
+                h => agent.StateChanged -= h)
+            .DisposeWith(this);
+
+        // No agent answering is the same thing to this view as no hook: nothing to drive.
+        OwnedSubscription.Create<EventHandler<bool>>(
+                (_, connected) =>
+                {
+                    if (!connected) _status.Apply(new(LittleBigMouseEvent.Dead, ""));
+                },
+                h => agent.ConnectionChanged += h,
+                h => agent.ConnectionChanged -= h)
+            .DisposeWith(this);
+
+        _status.Apply(new LittleBigMouseServiceEventArgs(
+            agent.State?.EngineEvent ?? LittleBigMouseEvent.Dead, ""));
     }
 
     public override void OnDispose()
@@ -338,24 +358,44 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     /// <c>keepLayout</c>: this one comes from an editor, so the geometry on screen is kept
     /// too.
     /// </summary>
-    Task StartAsync() => _engine.StartFromUserAsync(keepLayout: true);
+    /// <summary>
+    /// "Apply and start": the edit goes to the agent, which applies it, writes it and hooks
+    /// — one gesture, one message. The agent records Enabled itself, as C#'s engine
+    /// controller did before it.
+    /// </summary>
+    async Task StartAsync()
+    {
+        if (Model is not { } layout) return;
+        if (layout.IsVirtual)
+        {
+            // A foreign layout is inspected, never adopted: the agent takes no document
+            // for one. Simulating it is not in the API yet (phase 4 note).
+            Console.Error.WriteLine("A foreign layout cannot be simulated through the agent yet.");
+            return;
+        }
+        await _agent.StartEngineAsync(layout.Id, AgentDocument.Of(layout));
+        _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
+    }
 
     async Task StopAsync()
     {
         // Asking for the engine to stop outranks previewing into it — otherwise the
-        // next tick would hook it straight back up. The rest of stopping is the tray's
-        // Stop, unchanged.
+        // next tick would hook it straight back up. The agent records the user's Stop.
         LiveUpdate = false;
 
-        await _engine.StopFromUserAsync();
+        await _agent.StopEngineAsync();
     }
 
-    Task SaveAsync() =>
-        Task.Run(() =>
-        {
-            if (!(Model?.Saved??true))
-                _persistence.Save(Model);
-        });
+    /// <summary>
+    /// The Save button: the agent writes, this side only learns that the model is no
+    /// longer dirty (v6: one writer).
+    /// </summary>
+    async Task SaveAsync()
+    {
+        if (Model is not { } layout || layout.Saved) return;
+        await _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout));
+        _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
+    }
 
     /// <summary>
     /// The panic shortcut interrupted a live preview: throw the experiment away and put
@@ -366,7 +406,8 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     {
         await LoadAsync();
         if (Model is null || Model.IsVirtual) return;
-        await _service.StartAsync(Model.ComputeZones());
+        // The agent puts the engine back on the layout it holds — the saved one.
+        await _agent.EndPreviewAsync();
     }
 
     Task LoadAsync() =>

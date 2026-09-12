@@ -3,6 +3,7 @@ using HLab.Core.Annotations;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Main;
+using LittleBigMouse.Ui.Avalonia.Remote;
 using Xunit;
 
 namespace LittleBigMouse.Ui.Avalonia.Tests;
@@ -13,9 +14,10 @@ namespace LittleBigMouse.Ui.Avalonia.Tests;
 /// true, and becomes a leak the day it stops. Every event it listens to is held as something it
 /// can give back, and disposing it gives all of them back.
 /// <para>
-/// The rest of what it does — deciding when a display change is worth a rebuild, when the
-/// engine should be hooked — is asserted where it now lives, in
-/// <see cref="DisplayChangeCoordinatorTests"/> and <see cref="EngineControllerTests"/>.
+/// What it no longer does is decide anything about the engine (v6, phase 4): when a display
+/// change is worth a rebuild, when the hook should be taken, what is written — all of that is
+/// the agent's, and is asserted there. What is left here is the window's own: the layout it
+/// shows, and the platform events that make it stale.
 /// </para>
 /// </summary>
 public sealed class MainServiceLifecycleTests
@@ -43,10 +45,12 @@ public sealed class MainServiceLifecycleTests
     sealed class Fixture
     {
         public LbmOptions Options { get; } = new();
-        public FakeDaemon Daemon { get; } = new();
         public FakePersistence Persistence { get; } = new();
-        public FakeNotification Notify { get; } = new();
         public FakeLayoutFactory Factory { get; }
+
+        /// <summary>Never started: nothing here reaches an agent, so it never opens a socket.</summary>
+        public AgentClient Agent { get; } = new();
+
         public MainService Service { get; }
 
         public Fixture()
@@ -56,23 +60,22 @@ public sealed class MainServiceLifecycleTests
             Service = new MainService(
                 mainViewModelLocator: () => throw new NotSupportedException(),
                 mvvmService: new UnusedMvvmService(),
-                littleBigMouseClientService: Daemon,
-                notify: Notify,
+                agent: Agent,
                 layoutFactory: Factory,
                 layoutPersistence: Persistence,
-                processesCollector: new ProcessesCollector(),
                 updaterLocator: () => throw new NotSupportedException(),
                 options: Options,
-                engine: new EngineController(Daemon, Persistence, () => Service?.MonitorsLayout));
+                postToUi: post => post(),
+                // Nothing here opens a window, so nothing here closes one either.
+                leave: () => Assert.Fail("nothing in these tests should end the process"));
         }
     }
 
     [Fact]
-    public void BuildingTheServiceSubscribesToTheDaemonAndThePlatform()
+    public void BuildingTheServiceSubscribesToThePlatform()
     {
         var f = new Fixture();
 
-        Assert.True(f.Daemon.HasSubscribers);
         Assert.True(f.Factory.HasDisplaySubscribers);
         Assert.True(f.Factory.HasWallpaperSubscribers);
     }
@@ -87,9 +90,20 @@ public sealed class MainServiceLifecycleTests
 
         f.Service.Dispose();
 
-        Assert.False(f.Daemon.HasSubscribers);
         Assert.False(f.Factory.HasDisplaySubscribers);
         Assert.False(f.Factory.HasWallpaperSubscribers);
+    }
+
+    /// <summary>Positive control: gives the negative test below its meaning.</summary>
+    [Fact]
+    public void APlatformDisplayChangeRebuildsTheLayoutTheWindowShows()
+    {
+        var f = new Fixture();
+
+        f.Factory.RaiseDisplayChanged();
+
+        Assert.Equal(1, f.Factory.Creations);
+        Assert.NotNull(f.Service.MonitorsLayout);
     }
 
     [Fact]
@@ -101,24 +115,12 @@ public sealed class MainServiceLifecycleTests
 
         f.Factory.RaiseDisplayChanged();
         f.Factory.RaiseWallpaperChanged();
-        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.DisplayChanged);
 
         // Long enough that a surviving handler would have cleared its debounce window.
         await Task.Delay(500);
 
         Assert.Equal(0, f.Factory.Creations);
         Assert.Equal(0, f.Factory.WallpaperUpdates);
-        Assert.Empty(f.Daemon.Commands);
-    }
-
-    [Fact]
-    public void DisposingTheServiceReleasesTheTrayIconToo()
-    {
-        var f = new Fixture();
-
-        Assert.False(f.Notify.HasClickSubscribers); // nothing wired before the notifier starts
-        f.Service.Dispose();
-        Assert.False(f.Notify.HasClickSubscribers);
     }
 
     [Fact]

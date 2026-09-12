@@ -22,16 +22,14 @@ public class MainBootloader(
         Console.Error.WriteLine(
             $"Startup options: StartMinimized={options.StartMinimized}, AutoUpdate={options.AutoUpdate}");
 
-        // A blind update check is not actually silent when a newer release exists: the
-        // updater opens its window.  "Start minimized to tray" must suppress every
-        // automatic startup window, not only the main configuration window (#549).
-        if (options.AutoUpdate && !options.StartMinimized)
-            await updater.CheckUpdateAsync(false);
+        if (options.AutoUpdate) await updater.CheckUpdateAsync(false);
 
-        if (!options.StartMinimized)
-            await mainService.ShowControlAsync();
-        else
-            Console.Error.WriteLine("Startup UI suppressed: running in the notification area.");
+        // The window always opens (v6): this process is a frontend the user just launched,
+        // it has no tray icon to sit behind, and nothing else to be. "Start minimized" is
+        // about what runs at login, which is the agent — it brings up the notification area
+        // on its own and never opens this window. Suppressing the window here would leave a
+        // process the user cannot see, cannot reach and cannot stop (the shape of #589).
+        await mainService.ShowControlAsync();
 
         return BootState.Completed;
     }

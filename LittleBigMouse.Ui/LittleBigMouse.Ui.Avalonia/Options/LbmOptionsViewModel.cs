@@ -14,6 +14,7 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using Avalonia.Threading;
 using LittleBigMouse.Ui.Avalonia.Main;
+using LittleBigMouse.Plugins.Persistence;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Zoning;
 using ReactiveUI;
@@ -25,7 +26,7 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
     public LbmOptionsViewModel(
         IProcessesCollector collector,
         IMainService mainService,
-        ILittleBigMouseClientService daemon)
+        AgentClient agent)
     {
         // Turning a permission OFF must fix the current layout right away, not
         // wait for the next monitor move: compact resolves the existing overlaps
@@ -100,18 +101,17 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             .Subscribe(p => Pattern = p?.Caption??"")
             .DisposeWith(this);
 
-        // The daemon is what registers the rescue shortcut, so it is the only one who
-        // knows whether the registration took. Reported rather than logged: a rescue
-        // that silently does not exist is worse than none, because the user only finds
-        // out at the moment they need it.
-        daemon.DaemonEventReceived += OnDaemonEvent;
+        // The hook is what registers the rescue shortcut, so it is the only one who knows
+        // whether the registration took; the agent forwards what it says. Reported rather
+        // than logged: a rescue that silently does not exist is worse than none, because
+        // the user only finds out at the moment they need it.
+        agent.HookEventReceived += OnDaemonEvent;
+        Disposer.OnDispose(() => agent.HookEventReceived -= OnDaemonEvent);
 
-        // Send it as soon as it is recorded, not at the next Apply. It rides inside the
-        // layout too — that is what gets one to a standalone daemon at boot — but
-        // waiting for an Apply would mean recording a combination, seeing nothing
-        // happen, and having no way to tell "it works" from "something else owns it".
-        // Clearing the warning here makes it a fresh attempt: whatever comes back is
-        // about the combination now being asked for.
+        // Recorded as soon as it is set, not at the next Apply: the agent writes the
+        // option and tells the hook, so the answer comes back while the user is still
+        // looking at the setting. Clearing the warning makes it a fresh attempt —
+        // whatever comes back is about the combination now being asked for.
         this.WhenAnyValue(e => e.Model.RescueShortcut)
             // Nothing registers it off Windows, so nothing needs telling.
             .Where(_ => RescueShortcutSupported)
@@ -120,7 +120,10 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             .Subscribe(shortcut =>
             {
                 ShortcutWarning = "";
-                _ = daemon.SendShortcutAsync(shortcut);
+                _ = MainService.FireAndForget(
+                    () => agent.SaveOptionsAsync(
+                        LayoutDtoMapper.ToGlobalOptionsDto(Model, null), null, null),
+                    "Recording the rescue shortcut");
             })
             .DisposeWith(this);
 

@@ -13,6 +13,14 @@ public interface IMainService
     /// </summary>
     void ReloadSystemLayout();
 
+    /// <summary>
+    /// Close the configuration window, which is how this process leaves (v6): the mouse
+    /// engine is the agent's and keeps running. It goes through the window rather than
+    /// through the application so that the unsaved-changes question is still asked — a
+    /// shutdown would close over it.
+    /// </summary>
+    void CloseControl();
+
     IMonitorsLayout MonitorsLayout {get; set;}
 
     /// <summary>

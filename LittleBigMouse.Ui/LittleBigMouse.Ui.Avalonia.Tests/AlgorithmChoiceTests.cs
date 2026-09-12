@@ -3,6 +3,7 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Options;
+using LittleBigMouse.Ui.Avalonia.Remote;
 using Xunit;
 
 namespace LittleBigMouse.Ui.Avalonia.Tests;
@@ -30,7 +31,7 @@ public class AlgorithmChoiceTests
     static readonly string[] WireValues = ["Strait", "Cross"];
 
     static LbmOptionsViewModel NewOptionsViewModel() =>
-        new(new FakeProcessesCollector(), new FakeMainService(), new FakeDaemon());
+        new(new FakeProcessesCollector(), new FakeMainService(), new AgentClient());
 
     [Fact]
     public void AlgorithmListOffersExactlyTheWireValues()
@@ -83,6 +84,7 @@ public class AlgorithmChoiceTests
         public void ReloadSystemLayout() { }
         public Task StartNotifierAsync() => Task.CompletedTask;
         public Task ShowControlAsync() => Task.CompletedTask;
+        public void CloseControl() { }
         public void AddControlPlugin(Action<IMainPluginsViewModel>? action) { }
     }
 }

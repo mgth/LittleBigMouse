@@ -266,14 +266,11 @@ async fn a_subscriber_hears_the_hook_and_what_it_saw() {
         .await;
     assert!(fake.hooked());
 
-    // The probe report comes back as the hook sent it.
+    // The probe report is the agent's own: it holds the zones the report is about.
     let probe = frontend.ask(json!({ "Method": "Probe" })).await;
     assert_eq!(probe["Result"], Value::Null);
-    assert_eq!(
-        frontend.hook("Probed").await,
-        lbm_agent::fake_hook::PROBE_REPORT
-    );
-    assert!(fake.received().contains(&Command::Probe));
+    let report = frontend.hook("Probed").await;
+    assert!(report.starts_with("<ProbeReport"), "{report}");
 
     // The foreground processes: each forwarded, each remembered once.
     for process in ["/usr/bin/kate", "/usr/bin/firefox", "/usr/bin/kate", ""] {
@@ -286,11 +283,13 @@ async fn a_subscriber_hears_the_hook_and_what_it_saw() {
     let seen = frontend.ask(json!({ "Method": "SeenProcesses" })).await;
     assert_eq!(seen["Result"], json!(["/usr/bin/kate", "/usr/bin/firefox"]));
 
-    // The hook goes away: said as C# says it, and a probe is refused.
+    // The hook goes away: said as C# says it. The probe still answers — it never
+    // needed the hook, and the editor asks for it over layouts no hook will ever run.
     drop(fake);
     frontend.hook("Dead").await;
-    let refused = frontend.ask(json!({ "Method": "Probe" })).await;
-    assert_eq!(refused["Error"], "no hook is connected");
+    let without_a_hook = frontend.ask(json!({ "Method": "Probe" })).await;
+    assert_eq!(without_a_hook["Result"], Value::Null);
+    assert!(frontend.hook("Probed").await.starts_with("<ProbeReport"));
 }
 
 /// The real world over a store in `dir`: no display backend, so one fallback output.

@@ -9,6 +9,8 @@ description = "The resident process of LittleBigMouse v6: watches the system, lo
 [dependencies]
 indexmap.workspace = true
 lbm-display = { path = "../lbm-display" }
+# The edge report (Probe): a pure function of the zones the agent already holds.
+lbm-engine = { path = "../lbm-engine" }
 lbm-ipc = { path = "../lbm-ipc" }
 lbm-layout = { path = "../lbm-layout" }
 lbm-store = { path = "../lbm-store" }

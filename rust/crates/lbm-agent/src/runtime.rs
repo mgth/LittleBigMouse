@@ -142,6 +142,14 @@ impl<W: AgentWorld> Agent<W> {
         }
     }
 
+    /// Sweeps the current layout's edges. `None` when there is no layout to sweep.
+    /// The report goes out as a `Probed` event — the shape the hook used to answer in,
+    /// so the frontends did not have to learn a second one.
+    fn probe(&mut self) -> Option<String> {
+        let (zones, _) = self.world.zones()?;
+        lbm_engine::probe::probe_xml(&zones)
+    }
+
     /// Sends the state to the subscribers when it changed since they last saw it.
     fn publish(&mut self) {
         let snapshot = self.snapshot();
@@ -160,6 +168,9 @@ impl<W: AgentWorld> Agent<W> {
             request,
             client,
         } = call;
+        // Held until the answer has gone out: a frontend that asks and then listens
+        // must not have the report arrive before the acknowledgement it is waiting on.
+        let mut report = None;
         let result = match request {
             Request::Hello { .. } => Ok(serde_json::json!({
                 "Agent": "lbm-agent",
@@ -255,14 +266,24 @@ impl<W: AgentWorld> Agent<W> {
                 Ok(serde_json::Value::Null)
             }
             // A command, not a question: the report comes back as a Probed event.
-            Request::Probe if self.hook_connected => {
-                self.hook.send(client::messages(&[client::probe()]));
-                Ok(serde_json::Value::Null)
-            }
-            Request::Probe => Err("no hook is connected".to_owned()),
+            //
+            // Answered here rather than by the hook: the report is a pure function of
+            // the zones, which the agent holds — so it can be asked for a layout no
+            // hook has, or has yet, which is exactly the foreign-layout case the
+            // editor uses it for.
+            Request::Probe => match self.probe() {
+                Some(sweep) => {
+                    report = Some(sweep);
+                    Ok(serde_json::Value::Null)
+                }
+                None => Err("no layout to probe".to_owned()),
+            },
             Request::SeenProcesses => Ok(serde_json::json!(self.seen.list())),
         };
         client.send(api::answer(id, result));
+        if let Some(report) = report {
+            self.forward(api::hook_event_name(DaemonEvent::Probed), &report);
+        }
     }
 
     /// Applies a frontend's edit to the current layout.

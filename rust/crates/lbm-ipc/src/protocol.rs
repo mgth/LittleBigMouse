@@ -18,9 +18,6 @@ pub enum Command {
     Run,
     Stop,
     State,
-    /// Sweep the loaded layout's edges with the engine and broadcast a
-    /// `Probed` event carrying the report.
-    Probe,
     /// Adopt this panic shortcut now, without waiting for a layout to carry it.
     /// Recording one in the options has to take effect there and then — and has to
     /// say so when the combination is already owned by something else.
@@ -66,7 +63,6 @@ fn command_from(node: Node) -> Option<Command> {
         "Run" => Command::Run,
         "Stop" => Command::Stop,
         "State" => Command::State,
-        "Probe" => Command::Probe,
         "Shortcut" => Command::Shortcut(payload_string(node)),
         "Quit" => Command::Quit,
         other => Command::Unknown(other.to_string()),

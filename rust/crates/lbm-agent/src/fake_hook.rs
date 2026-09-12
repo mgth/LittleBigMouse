@@ -209,7 +209,6 @@ async fn connection<S>(
                         s.broadcast(protocol::STOPPED);
                         quit = true;
                     }
-                    Command::Probe => s.broadcast(&protocol::probed(PROBE_REPORT)),
                     Command::LoadFromFile(_) | Command::Shortcut(_) | Command::Unknown(_) => {}
                 }
             }

@@ -707,6 +707,7 @@ dependencies = [
  "indexmap",
  "ksni",
  "lbm-display",
+ "lbm-engine",
  "lbm-ipc",
  "lbm-layout",
  "lbm-store",

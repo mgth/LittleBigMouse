@@ -11,4 +11,5 @@
 pub mod client;
 pub mod endpoint;
 pub mod framing;
+pub mod instance;
 pub mod protocol;

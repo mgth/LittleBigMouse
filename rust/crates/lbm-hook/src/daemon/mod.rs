@@ -72,9 +72,6 @@ pub fn receive_message(
                 adopt_rescue_shortcut(shared, &text);
                 hook::rescue_shortcut_changed(shared);
             }
-            Command::LoadFromFile(path) => {
-                load_from_file(shared, &path);
-            }
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
                 hook::request_quit(shared);
@@ -236,6 +233,21 @@ fn run(shared: &Shared) {
         return;
     }
 
+    // Nothing loaded: hooking here would grab the mice for an engine with no zones
+    // to route between. The file path refused a Run that no Load had preceded; the
+    // socket path never did, and it is the only one left.
+    if shared
+        .engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .layout
+        .zones
+        .is_empty()
+    {
+        eprintln!("[LittleBigMouse.Hook] Run refused: no layout is loaded");
+        return;
+    }
+
     load_excluded(shared);
 
     // Ask who is in front rather than wait to be told. The list was just
@@ -272,53 +284,6 @@ pub fn load_excluded(shared: &Shared) {
     }
 }
 
-/// C++ `LoadFromFile`: read `Current.xml` and replay its command lines
-/// (`Load` then `Run`) — the standalone/autostart path.
-pub fn load_from_file(shared: &Shared, path: &str) {
-    // A file that parses into a layout is authoritative even if it holds no
-    // Run line (a stopped state is a valid persisted state — falling back to
-    // the .bak then would auto-start an older layout). The backup only covers
-    // unreadable or corrupt primaries, written atomically by the UI.
-    let primary_ok = std::fs::read_to_string(path)
-        .map(|content| replay(shared, &content))
-        .unwrap_or(false);
-    if primary_ok {
-        return;
-    }
-
-    let backup = format!("{path}.bak");
-    match std::fs::read_to_string(&backup) {
-        Ok(content) if replay(shared, &content) => {
-            eprintln!("[LittleBigMouse.Hook] recovered startup configuration from {backup}")
-        }
-        Ok(_) => eprintln!("[LittleBigMouse.Hook] startup configuration and backup are invalid"),
-        Err(error) => eprintln!(
-            "[LittleBigMouse.Hook] cannot recover startup configuration from {path} or {backup}: {error}"
-        ),
-    }
-}
-
-/// Replay the `Load`/`Run` command lines from a serialized layout file. Runs
-/// without a socket client, so it only handles the commands the file contains.
-/// Returns whether a layout was successfully loaded; `Run` is only honoured
-/// after a successful `Load` (a Run alone must not hook a stale engine).
-fn replay(shared: &Shared, content: &str) -> bool {
-    let mut loaded = false;
-    for line in content.lines() {
-        for command in protocol::parse(line) {
-            match command {
-                // One command per line here, so a Run is never in sight when the Load
-                // is handled. It costs nothing: this is the startup path, where there
-                // is no hook up to take down.
-                Command::Load(xml) => loaded = load_layout(shared, &xml, false).is_some(),
-                Command::Run if loaded => run(shared),
-                _ => {}
-            }
-        }
-    }
-    loaded
-}
-
 /// Report current state (C++ `SendState`): `Running` when hooked, else `Paused`
 /// when paused, else `Stopped`. `to = Some(id)` replies to one client; `None`
 /// broadcasts to all listening clients.
@@ -341,20 +306,27 @@ fn send_state(server: &ServerHandle, to: Option<ClientId>, shared: &Shared) {
 mod tests {
     use super::*;
 
-    // A serialized Load command (as the UI writes to Current.xml) plus a Run,
-    // exactly the two lines the standalone path replays.
-    const LOAD_LINE: &str = concat!(
-        r#"<CommandMessage Command="Load"><Payload>"#,
+    // The payload alone, as `load_layout` receives it once the CommandMessage
+    // envelope is off.
+    const ZONES_XML: &str = concat!(
         r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
         r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
-        r#"</MainZones></ZonesLayout></Payload></CommandMessage>"#,
+        r#"</MainZones></ZonesLayout>"#,
     );
 
+    /// A Load then a Run, as the agent sends them.
+    fn load_and_run(shared: &Shared, layout: &str) -> bool {
+        let loaded = load_layout(shared, layout, false).is_some();
+        if loaded {
+            run(shared);
+        }
+        loaded
+    }
+
     #[test]
-    fn replay_loads_layout_and_requests_hook() {
+    fn a_load_then_a_run_requests_the_hook() {
         let shared = Shared::new();
-        let content = format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
-        replay(&shared, &content);
+        assert!(load_and_run(&shared, ZONES_XML));
 
         // Load populated the engine's layout...
         assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
@@ -371,8 +343,7 @@ mod tests {
         // the UI play button needed a second click to apply an options change.
         let shared = Shared::new();
         shared.hooked.store(true, Ordering::SeqCst);
-        let content = format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
-        replay(&shared, &content);
+        load_and_run(&shared, ZONES_XML);
 
         assert!(
             shared.want_hook.load(Ordering::SeqCst),
@@ -380,21 +351,18 @@ mod tests {
         );
     }
 
-    // Same layout flagged as virtual: the daemon must accept the Load (so the
+    // The same layout flagged as virtual: the daemon must accept the Load (so the
     // engine can be inspected) but refuse the Run that follows.
-    const VIRTUAL_LOAD_LINE: &str = concat!(
-        r#"<CommandMessage Command="Load"><Payload>"#,
+    const VIRTUAL_LAYOUT: &str = concat!(
         r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200" Virtual="True"><MainZones>"#,
         r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
-        r#"</MainZones></ZonesLayout></Payload></CommandMessage>"#,
+        r#"</MainZones></ZonesLayout>"#,
     );
 
     #[test]
     fn virtual_layout_loads_but_run_never_hooks() {
         let shared = Shared::new();
-        let content =
-            format!("{VIRTUAL_LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
-        replay(&shared, &content);
+        load_and_run(&shared, VIRTUAL_LAYOUT);
 
         // The layout IS loaded (inspection works)...
         let engine = shared.engine.lock().unwrap();
@@ -408,14 +376,6 @@ mod tests {
             "Run must be refused on a virtual layout"
         );
     }
-
-    // The payload alone, as `load_layout` receives it once the CommandMessage
-    // envelope is off.
-    const ZONES_XML: &str = concat!(
-        r#"<ZonesLayout Algorithm="Strait" MaxTravelDistance="200"><MainZones>"#,
-        r#"<Zone Id="0" Name="A"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="500" Height="280"></Rect></PhysicalBounds></Zone>"#,
-        r#"</MainZones></ZonesLayout>"#,
-    );
 
     #[test]
     fn a_frame_is_recognized_as_rehooking_by_its_run() {
@@ -468,14 +428,14 @@ mod tests {
 
     #[test]
     fn a_layout_carries_the_rescue_shortcut() {
-        // It travels with the layout like every other daemon-side setting, which is
-        // what gets it to a standalone daemon replaying Current.xml at boot.
+        // It travels with the layout like every other daemon-side setting: the hook
+        // is told nothing else about it.
         let shared = Shared::new();
-        let line = LOAD_LINE.replace(
+        let layout = ZONES_XML.replace(
             r#"<ZonesLayout Algorithm="Strait""#,
             r#"<ZonesLayout RescueShortcut="Ctrl+Alt+F9" Algorithm="Strait""#,
         );
-        replay(&shared, &format!("{line}\n"));
+        load_layout(&shared, &layout, false);
 
         assert_eq!(
             *shared.rescue_shortcut.lock().unwrap(),
@@ -489,7 +449,7 @@ mod tests {
         // Layouts written by an older UI have no such attribute; the rescue must
         // still exist for them.
         let shared = Shared::new();
-        replay(&shared, &format!("{LOAD_LINE}\n"));
+        load_layout(&shared, ZONES_XML, false);
 
         assert_eq!(
             *shared.rescue_shortcut.lock().unwrap(),
@@ -498,59 +458,14 @@ mod tests {
     }
 
     #[test]
-    fn run_without_a_successful_load_is_ignored() {
+    fn a_run_with_nothing_loaded_never_grabs_the_mice() {
         let shared = Shared::new();
-        replay(&shared, "<CommandMessage Command=\"Run\" Payload=\"\"/>\n");
+
+        run(&shared);
+
         assert!(
             !shared.want_hook.load(Ordering::SeqCst),
             "a Run alone must not hook an engine with no layout"
         );
-    }
-
-    #[test]
-    fn corrupt_primary_recovers_last_good_backup() {
-        let shared = Shared::new();
-        let id = format!("{}-{:?}", std::process::id(), std::thread::current().id());
-        let path = std::env::temp_dir().join(format!("lbm-current-{id}.xml"));
-        let backup = format!("{}.bak", path.display());
-        std::fs::write(&path, "<truncated").unwrap();
-        std::fs::write(
-            &backup,
-            format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n"),
-        )
-        .unwrap();
-
-        load_from_file(&shared, path.to_str().unwrap());
-
-        assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
-        assert!(shared.want_hook.load(Ordering::SeqCst));
-        let _ = std::fs::remove_file(&path);
-        let _ = std::fs::remove_file(&backup);
-    }
-
-    #[test]
-    fn valid_stopped_primary_does_not_fall_back_to_backup() {
-        // A primary holding only a Load (user stopped, state persisted) is
-        // authoritative: the backup must not auto-start an older layout.
-        let shared = Shared::new();
-        let id = format!("{}-{:?}", std::process::id(), std::thread::current().id());
-        let path = std::env::temp_dir().join(format!("lbm-stopped-{id}.xml"));
-        let backup = format!("{}.bak", path.display());
-        std::fs::write(&path, format!("{LOAD_LINE}\n")).unwrap();
-        std::fs::write(
-            &backup,
-            format!("{LOAD_LINE}\n<CommandMessage Command=\"Run\" Payload=\"\"/>\n"),
-        )
-        .unwrap();
-
-        load_from_file(&shared, path.to_str().unwrap());
-
-        assert_eq!(shared.engine.lock().unwrap().layout.zones.len(), 1);
-        assert!(
-            !shared.want_hook.load(Ordering::SeqCst),
-            "backup must not override a valid stopped state"
-        );
-        let _ = std::fs::remove_file(&path);
-        let _ = std::fs::remove_file(&backup);
     }
 }

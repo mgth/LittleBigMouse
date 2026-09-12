@@ -14,7 +14,6 @@ pub enum Command {
     Listen,
     /// The extracted `<ZonesLayout>...</ZonesLayout>` XML (empty if absent).
     Load(String),
-    LoadFromFile(String),
     Run,
     Stop,
     State,
@@ -59,7 +58,6 @@ fn command_from(node: Node) -> Option<Command> {
     Some(match command {
         "Listen" => Command::Listen,
         "Load" => Command::Load(zones_layout_xml(node)),
-        "LoadFromFile" => Command::LoadFromFile(payload_string(node)),
         "Run" => Command::Run,
         "Stop" => Command::Stop,
         "State" => Command::State,
@@ -79,7 +77,7 @@ fn zones_layout_xml(node: Node) -> String {
         .unwrap_or_default()
 }
 
-/// Read the `Payload` for `LoadFromFile`, whether serialized as an attribute
+/// Read the `Payload` for `Shortcut`, whether serialized as an attribute
 /// (`Payload="..."`) or a child element (`<Payload>...</Payload>`).
 fn payload_string(node: Node) -> String {
     if let Some(attr) = node.attribute("Payload") {

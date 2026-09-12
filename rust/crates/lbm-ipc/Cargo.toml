@@ -10,5 +10,14 @@ description = "LittleBigMouse local IPC: length-prefixed framing and the XML com
 roxmltree.workspace = true
 tokio = { workspace = true, features = ["io-util"] }
 
+# The single-instance lock (instance.rs).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = ["Win32_Foundation", "Win32_System_Threading"]
+
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "rt"] }

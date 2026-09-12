@@ -209,7 +209,7 @@ async fn connection<S>(
                         s.broadcast(protocol::STOPPED);
                         quit = true;
                     }
-                    Command::LoadFromFile(_) | Command::Shortcut(_) | Command::Unknown(_) => {}
+                    Command::Shortcut(_) | Command::Unknown(_) => {}
                 }
             }
         }

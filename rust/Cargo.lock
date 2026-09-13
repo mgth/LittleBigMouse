@@ -1146,6 +1146,7 @@ dependencies = [
  "egui",
  "egui_kittest",
  "lbm-layout",
+ "serde_json",
 ]
 
 [[package]]

@@ -73,10 +73,21 @@ pub fn catalogue(root: &Path) -> (Catalogue, Vec<String>) {
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
+            // Joined with `/` explicitly, not by printing the path. A key is a name in
+            // the Avalonia resource space, which is built from a URI and always uses
+            // `/`; printing a `Path` would use the platform's separator and produce
+            // `icon\pnp/del` on Windows, which answers to nothing. The spike missed this
+            // because its root left a prefix of one segment, and one segment has no
+            // separator in it to get wrong.
             let prefix = path
                 .parent()
                 .and_then(|p| p.strip_prefix(root).ok())
-                .map(|p| p.to_string_lossy().into_owned())
+                .map(|p| {
+                    p.components()
+                        .map(|c| c.as_os_str().to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
                 .unwrap_or_default();
             for token in stem.split('.') {
                 if token.is_empty() {

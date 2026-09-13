@@ -175,3 +175,24 @@ fn both_of_the_codes_asus_actually_reports_find_the_asus_logo() {
     let same = resolve(&found, "icon/Pnp/AUS").expect("ASUS VP28U reports AUS");
     assert_eq!(asus, same, "the same manufacturer, the same logo");
 }
+
+/// A key is a name in the resource space, not a file path: it is spelled with `/` on
+/// every platform. This bit on Windows — the keys came out `icon\pnp/del`, nothing
+/// resolved, and the count of names under `icon/pnp/` was **zero** — while every test
+/// here passed on Linux. It is asserted as a property of the whole shipped set so that
+/// the platform that cannot run this locally is still the one that catches it.
+#[test]
+fn keys_are_spelled_with_slashes_whatever_the_platform() {
+    let (found, _) = catalogue(&assets());
+
+    for key in found.keys() {
+        assert!(
+            !key.contains('\\'),
+            "a key built with the platform's separator: {key}"
+        );
+        assert_eq!(key, &key.to_lowercase(), "a key that was not lowercased");
+    }
+    // And the nesting really is two deep, so the join above is exercised rather than
+    // being trivially right on a one-segment prefix — which is how the spike missed it.
+    assert!(found.keys().any(|k| k.matches('/').count() == 2));
+}

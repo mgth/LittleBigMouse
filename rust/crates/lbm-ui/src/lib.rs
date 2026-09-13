@@ -14,6 +14,7 @@
 //! see `tests/bottom_bar.rs`.
 
 pub mod frame;
+pub mod map;
 
 /// What the engine is doing, in the agent's own words (its `Snapshot.Engine`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

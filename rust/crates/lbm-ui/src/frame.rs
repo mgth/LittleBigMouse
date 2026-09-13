@@ -60,12 +60,26 @@ pub fn draw(mm_outside: Rect, mm_content: Rect, origin: (f64, f64), ratio: Ratio
     }
 }
 
+/// The bezel's colour, which is how a selected screen is told apart.
+///
+/// A function rather than two lines inside the painting, so that "selected looks
+/// different" is something a test can ask without a pixel: the drawing itself can only
+/// be checked by eye, but the choice it makes can be checked here.
+pub fn bezel_fill(visuals: &egui::Visuals, selected: bool) -> egui::Color32 {
+    if selected {
+        visuals.selection.bg_fill
+    } else {
+        visuals.widgets.inactive.bg_fill
+    }
+}
+
 /// Draws one monitor. Returns the rectangle it took, so a caller can lay several out.
-pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, name: &str) -> egui::Rect {
+pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, name: &str, selected: bool) -> egui::Rect {
+    let fill = bezel_fill(ui.visuals(), selected);
     let painter = ui.painter();
     // The bezel is what is between the two rectangles; drawing the outside first and
     // the lit part over it is the whole of it.
-    painter.rect_filled(drawn.outside, 2.0, ui.visuals().widgets.inactive.bg_fill);
+    painter.rect_filled(drawn.outside, 2.0, fill);
     painter.rect_filled(drawn.content, 0.0, ui.visuals().extreme_bg_color);
 
     if let Some(height) = drawn.name_height {
@@ -142,6 +156,19 @@ mod tests {
                 .left(),
             0.0
         );
+    }
+
+    /// Whatever the theme, the selected screen is not painted like the others — the
+    /// map is read at a glance, and a selection you have to infer is not one.
+    #[test]
+    fn a_selected_screen_is_not_painted_like_the_rest() {
+        for visuals in [egui::Visuals::light(), egui::Visuals::dark()] {
+            assert_ne!(
+                bezel_fill(&visuals, true),
+                bezel_fill(&visuals, false),
+                "selection is invisible in this theme"
+            );
+        }
     }
 
     /// A name too small to read is ink that looks like information.

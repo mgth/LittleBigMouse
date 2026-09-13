@@ -21,6 +21,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use lbm_app::client::{self, Message};
 use lbm_icons::{Catalogue, Rgba};
 use lbm_layout::geo::Rect;
 use lbm_layout::model::{Layout, LayoutOptions};
@@ -43,6 +44,10 @@ struct Screen {
 /// are known instead of waiting on a wallpaper that may take a second to decode.
 enum Found {
     Screens(Vec<Screen>),
+    /// Something the agent said.
+    Agent(Message),
+    /// The agent went away, or was never there.
+    AgentGone,
     Thumbnail {
         screen: String,
         picture: image::RgbaImage,
@@ -72,8 +77,14 @@ struct App {
     textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded wallpaper thumbnails, by screen id.
     wallpapers: HashMap<String, egui::TextureHandle>,
-    /// What the bottom bar shows. No agent answers here, so it stays as it opens.
+    /// What the bottom bar shows, from what the agent says.
     state: lbm_ui::State,
+    /// What to ask the agent, when there is one to ask.
+    requests: Option<Asks>,
+    /// Why there is nothing to ask, when there is not: a short reason for the bar and
+    /// the endpoint it was looking for, which belongs in a tooltip and not across the
+    /// top of the window.
+    without_agent: Option<(String, String)>,
 }
 
 /// Where the icons are.
@@ -318,6 +329,73 @@ fn colour_of(text: &str) -> [u8; 4] {
     [byte(0), byte(2), byte(4), 255]
 }
 
+/// What the window asks the agent: a method and whatever the API wants beside it.
+type Asks = std::sync::mpsc::Sender<(&'static str, serde_json::Value)>;
+
+/// Connects to a running agent and keeps talking to it, or says why it cannot.
+///
+/// **Nothing is started.** No agent means a window that draws what it can and a bottom
+/// bar that stays grey — never a process brought up behind the user's back, because the
+/// process behind the agent is the hook and the hook takes the mice.
+///
+/// Two threads: one reads and pushes what the agent says at the window, one writes what
+/// the window asks. Neither is the UI thread.
+fn join_agent(
+    ctx: &egui::Context,
+    found: std::sync::mpsc::Sender<Found>,
+) -> (Option<Asks>, Option<(String, String)>) {
+    let Some(endpoint) = client::default_endpoint() else {
+        return (
+            None,
+            Some((
+                "this session has no endpoint".to_owned(),
+                "neither XDG_RUNTIME_DIR nor a data directory".to_owned(),
+            )),
+        );
+    };
+    let where_ = endpoint.display().to_string();
+    let (mut incoming, mut outgoing) = match client::connect(&endpoint) {
+        Ok(both) => both,
+        Err(error) => return (None, Some((error.to_string(), where_))),
+    };
+
+    // Who is there, and then everything it has to say. Asked once, before the reader
+    // takes the connection over.
+    if let Err(error) = outgoing
+        .ask("Hello", serde_json::json!({ "Client": "lbm-app" }))
+        .and_then(|_| outgoing.ask("Subscribe", serde_json::json!({})))
+    {
+        return (None, Some((error.to_string(), where_)));
+    }
+
+    let waker = ctx.clone();
+    std::thread::spawn(move || loop {
+        match incoming.receive() {
+            Ok(message) => {
+                if found.send(Found::Agent(message)).is_err() {
+                    return;
+                }
+            }
+            Err(_) => {
+                let _ = found.send(Found::AgentGone);
+                waker.request_repaint();
+                return;
+            }
+        }
+        waker.request_repaint();
+    });
+
+    let (asks, to_write) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok((method, extra)) = to_write.recv() {
+            if outgoing.ask(method, extra).is_err() {
+                return;
+            }
+        }
+    });
+    (Some(asks), None)
+}
+
 impl App {
     fn new(ctx: egui::Context) -> Self {
         let icons = icons_root()
@@ -327,6 +405,7 @@ impl App {
             eprintln!("[lbm-app] no icons found: logos will not be drawn (set LBM_ICONS)");
         }
         let (send, arriving) = std::sync::mpsc::channel();
+        let detected = send.clone();
         let waker = ctx.clone();
         std::thread::spawn(move || {
             let (id, screens) = detect();
@@ -335,7 +414,7 @@ impl App {
             let wanted = wallpapers(&id, &screens);
             // The receiver is gone only if the window closed first, which is not a
             // failure worth reporting.
-            let _ = send.send(Found::Screens(screens));
+            let _ = detected.send(Found::Screens(screens));
             // **The thread wakes the window.** Nothing polls, and nothing needs to:
             // measured, including the adversarial case where the answer is held back
             // three seconds so that it lands while the window is idle — eframe schedules
@@ -346,12 +425,14 @@ impl App {
             // decoding a 4K wallpaper is not quick, and the map is worth looking at
             // before they arrive.
             for (screen, picture) in wanted {
-                if send.send(Found::Thumbnail { screen, picture }).is_err() {
+                if detected.send(Found::Thumbnail { screen, picture }).is_err() {
                     return;
                 }
                 waker.request_repaint();
             }
         });
+        let (requests, without_agent) = join_agent(&ctx, send);
+
         App {
             arriving: Some(arriving),
             screens: Vec::new(),
@@ -361,7 +442,56 @@ impl App {
             textures: HashMap::new(),
             wallpapers: HashMap::new(),
             state: lbm_ui::State::default(),
+            requests,
+            without_agent,
         }
+    }
+
+    /// Asks the agent for what the user pressed.
+    ///
+    /// Start and Stop only. Save and Undo would have to send a layout document, and
+    /// this window has none to send — see [`App::agent_said`].
+    fn ask(&mut self, press: lbm_ui::Press) {
+        let method = match press {
+            lbm_ui::Press::Start => "Start",
+            lbm_ui::Press::Stop => "Stop",
+            lbm_ui::Press::Save | lbm_ui::Press::Undo => return,
+        };
+        if let Some(requests) = &self.requests {
+            if requests.send((method, serde_json::json!({}))).is_err() {
+                self.requests = None;
+                self.without_agent =
+                    Some(("the agent stopped listening".to_owned(), String::new()));
+            }
+        }
+    }
+
+    /// What the agent said, in the bar's terms.
+    ///
+    /// **`saved` is not taken from the agent, and that is deliberate.** Save and Undo
+    /// need a layout document to send, and this window cannot make one: it draws the
+    /// screens it detects and edits nothing. A Save offered here would be a button with
+    /// nothing behind it, which is worse than a button that is grey. When the window
+    /// learns to edit, the flag comes with it.
+    fn agent_said(&mut self, message: Message) {
+        let Message::State(state) = message else {
+            // Answers and hook events are not the bar's business yet: the bar reads
+            // state, and every request this window makes changes state, so the change
+            // is what it hears. Kept rather than dropped, so that wiring the probe
+            // report later is a matter of reading them.
+            return;
+        };
+        let engine = state
+            .get("Engine")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("Dead");
+        self.state.engine = lbm_ui::Engine::from_agent(engine);
+        self.state.hook_connected = state
+            .get("HookConnected")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        self.state.waiting = false;
+        self.without_agent = None;
     }
 
     /// The logo for one screen, uploaded once and kept.
@@ -417,12 +547,25 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         // The answer, when it has arrived. Nothing is polled: the thread asks for a
         // repaint after sending, so this runs on the pass that request causes.
-        if let Some(arriving) = &self.arriving {
-            // Everything that has landed, not just the first: several thumbnails can
-            // arrive between two passes.
-            while let Ok(found) = arriving.try_recv() {
+        // Everything that has landed, not just the first: several thumbnails can arrive
+        // between two passes, and so can a burst of agent states. Taken off the channel
+        // before any of it is acted on, because acting on it needs the whole window and
+        // the channel is part of it.
+        let landed: Vec<Found> = match &self.arriving {
+            Some(arriving) => std::iter::from_fn(|| arriving.try_recv().ok()).collect(),
+            None => Vec::new(),
+        };
+        {
+            for found in landed {
                 match found {
                     Found::Screens(screens) => self.screens = screens,
+                    Found::Agent(message) => self.agent_said(message),
+                    Found::AgentGone => {
+                        self.requests = None;
+                        self.without_agent =
+                            Some(("the agent went away".to_owned(), String::new()));
+                        self.state = lbm_ui::State::default();
+                    }
                     Found::Thumbnail { screen, picture } => {
                         let size = [picture.width() as usize, picture.height() as usize];
                         let image = egui::ColorImage::from_rgba_unmultiplied(size, &picture);
@@ -464,13 +607,27 @@ impl eframe::App for App {
                     1 => "1 screen".to_owned(),
                     n => format!("{n} screens"),
                 });
+                ui.separator();
+                // Said plainly. A window that looked the same with and without an agent
+                // would leave the user guessing why the buttons do nothing.
+                match &self.without_agent {
+                    Some((why, where_)) => ui
+                        .label(format!("no agent — {why}"))
+                        .on_hover_text(where_.clone()),
+                    None => ui.label("agent connected"),
+                };
             });
         });
 
         egui::Panel::bottom("controls").show(ui, |ui| {
-            // Drawn, and every button disabled: there is no agent to ask, and saying so
-            // by greying them is more honest than hiding them.
-            let _ = lbm_ui::bottom_bar(ui, &self.state);
+            // Without an agent every button is disabled on its own — `can` asks for a
+            // hook — so nothing here has to hide them.
+            if let Some(lbm_ui::Action::Pressed(press)) = lbm_ui::bottom_bar(ui, &self.state) {
+                for effect in lbm_ui::update(&mut self.state, lbm_ui::Action::Pressed(press)) {
+                    let lbm_ui::Effect::Ask(press) = effect;
+                    self.ask(press);
+                }
+            }
         });
 
         // The `Ui` handed to `App::ui` has no background of its own — the doc says so

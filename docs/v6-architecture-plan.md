@@ -505,6 +505,10 @@ Architecture :
    d'options, dialogues, géométrie de fenêtre.
 2. Carte : ajustement à la fenêtre, cadres (bordures en mm, nom, logo, vignette du fond décodée
    hors fil UI), sélection, menu contextuel, bandes du sondeur, mode liste.
+   *Ajustement et sélection faits (`lbm-ui::map`) ; trois écarts assumés au C# et une carte
+   qui a vu de vrais bureaux, dans `docs/v7-frontend.md`. **Le mode liste n'a demandé aucune
+   seconde fonction** : même ajustement, autre étendue. Restent le menu contextuel, les
+   bandes du sondeur, le logo et la vignette du fond.*
 3. Modes Default, Location (glisser, aimantation à 10 mm, guides, molette, primaire qui déplace
    les autres), Size, Info, About.
 4. Options complètes, dont l'enregistreur du raccourci de secours et la liste d'exclusion avec

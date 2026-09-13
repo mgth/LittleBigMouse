@@ -45,6 +45,12 @@ enum View {
 }
 
 struct App {
+    /// Not yet arrived. Finding the displays runs `kscreen-doctor` — a **subprocess** —
+    /// and the architecture note this crate was written against says effects never run
+    /// on the UI thread. It takes 77 ms here, which is not a stall, but the thread is
+    /// what the agent connection will need and it is better exercised now than invented
+    /// later.
+    arriving: Option<std::sync::mpsc::Receiver<Vec<Screen>>>,
     screens: Vec<Screen>,
     selected: Option<String>,
     view: View,
@@ -148,17 +154,29 @@ fn detect() -> Vec<Screen> {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(ctx: egui::Context) -> Self {
         let icons = icons_root()
             .map(|root| lbm_icons::catalogue(&root).0)
             .unwrap_or_default();
         if icons.is_empty() {
             eprintln!("[lbm-app] no icons found: logos will not be drawn (set LBM_ICONS)");
         }
+        let (send, arriving) = std::sync::mpsc::channel();
+        let waker = ctx.clone();
+        std::thread::spawn(move || {
+            let found = detect();
+            // The receiver is gone only if the window closed first, which is not a
+            // failure worth reporting.
+            let _ = send.send(found);
+            // **The thread wakes the window.** Nothing polls, and nothing needs to:
+            // measured, including the adversarial case where the answer is held back
+            // three seconds so that it lands while the window is idle — eframe schedules
+            // the pass and the answer is picked up on it.
+            waker.request_repaint();
+        });
         App {
-            // Synchronous, and measured: 77 ms on this machine, subprocess included.
-            // A worker thread was tried and reverted — see the note on `logo`.
-            screens: detect(),
+            arriving: Some(arriving),
+            screens: Vec::new(),
             selected: None,
             view: View::Map,
             icons,
@@ -168,18 +186,6 @@ impl App {
     }
 
     /// The logo for one screen, uploaded once and kept.
-    ///
-    /// **A worker thread cannot help here, and that is worth knowing before the agent
-    /// connection is written.** Detection was moved to one, and the window then never
-    /// saw the answer: measured, the thread sent 2 screens and asked for a repaint 78 ms
-    /// in, and neither `ui` nor `logic` ran again — the window sat on "looking for
-    /// screens…" for as long as it was left alone. `eframe`'s handler
-    /// (`native/run.rs:320`) honours a repaint only when the pass number carried with the
-    /// request is the current one or one behind, and a request made from outside a pass
-    /// does not satisfy that here. Measured under **both** feature sets, the trimmed one
-    /// and eframe's defaults, so it is not a feature that is missing. Answers that arrive
-    /// on another thread — which is every answer the agent will ever give — will need
-    /// this understood first.
     ///
     /// Rendered at a fixed size rather than at the band's: a texture re-uploaded every
     /// time the window is resized would be a decode and an upload per frame during a
@@ -229,6 +235,14 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // The answer, when it has arrived. Nothing is polled: the thread asks for a
+        // repaint after sending, so this runs on the pass that request causes.
+        if let Some(arriving) = &self.arriving {
+            if let Ok(found) = arriving.try_recv() {
+                self.screens = found;
+                self.arriving = None;
+            }
+        }
 
         // One logo per frame, not all of them. Parsing and rasterising an SVG is not
         // free, and doing every screen's on the frame that first needs them is the same
@@ -292,6 +306,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "LittleBigMouse",
         options,
-        Box::new(|_cc| Ok(Box::new(App::new()))),
+        Box::new(|cc| Ok(Box::new(App::new(cc.egui_ctx.clone())))),
     )
 }

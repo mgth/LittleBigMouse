@@ -11,13 +11,19 @@ description = "The LittleBigMouse frontend's window: what lbm-ui draws, on scree
 # accessibility tree — so everything that needs winit and a GL context lives here and
 # nowhere else.
 #
-# Its default features are kept. Trimming them is what broke the first attempt: with
-# `default-features = false` a repaint asked for from another thread never reached the
-# event loop at all — neither `ui` nor `logic` ran again — and the window sat on
-# "looking for screens…" while the answer had been ready in 78 ms. The default list
-# includes `winit/default`, which a crate that does not depend on winit directly cannot
-# ask for on its own.
-eframe = { version = "0.36", features = ["glow"] }
+# **Without `wgpu`.** It is an eframe default and `glow` draws this perfectly well, but
+# taking the defaults breaks the Windows build outright: `wgpu-hal`'s DX12 backend wants
+# `windows-core` 0.58 through `gpu-allocator` 0.28, while this workspace resolves the
+# `windows` crate to 0.62 for the hook's Win32 calls, and the two do not meet. Reproduced
+# locally with `cargo check --target x86_64-pc-windows-msvc` after CI found it.
+eframe = { version = "0.36", default-features = false, features = [
+    "glow",
+    "accesskit",
+    "default_fonts",
+    "links",
+    "wayland",
+    "x11",
+] }
 egui = "0.36"
 
 lbm-ui = { path = "../lbm-ui" }

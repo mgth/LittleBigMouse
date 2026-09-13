@@ -176,8 +176,10 @@ impl App {
     /// screens…" for as long as it was left alone. `eframe`'s handler
     /// (`native/run.rs:320`) honours a repaint only when the pass number carried with the
     /// request is the current one or one behind, and a request made from outside a pass
-    /// does not satisfy that here. Answers that arrive on another thread — which is
-    /// every answer the agent will ever give — will need this understood first.
+    /// does not satisfy that here. Measured under **both** feature sets, the trimmed one
+    /// and eframe's defaults, so it is not a feature that is missing. Answers that arrive
+    /// on another thread — which is every answer the agent will ever give — will need
+    /// this understood first.
     ///
     /// Rendered at a fixed size rather than at the band's: a texture re-uploaded every
     /// time the window is resized would be a decode and an upload per frame during a

@@ -1,0 +1,32 @@
+[package]
+name = "lbm-app"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The LittleBigMouse frontend's window: what lbm-ui draws, on screen"
+
+[dependencies]
+# The window. `lbm-ui` deliberately has none — it is driven headlessly through the
+# accessibility tree — so everything that needs winit and a GL context lives here and
+# nowhere else.
+#
+# **Without `wgpu`.** It is an eframe default and `glow` draws this perfectly well, but
+# taking the defaults breaks the Windows build outright: `wgpu-hal`'s DX12 backend wants
+# `windows-core` 0.58 through `gpu-allocator` 0.28, while this workspace resolves the
+# `windows` crate to 0.62 for the hook's Win32 calls, and the two do not meet. Reproduced
+# locally with `cargo check --target x86_64-pc-windows-msvc` after CI found it.
+eframe = { version = "0.36", default-features = false, features = [
+    "glow",
+    "accesskit",
+    "default_fonts",
+    "links",
+    "wayland",
+    "x11",
+] }
+egui = "0.36"
+
+lbm-ui = { path = "../lbm-ui" }
+lbm-layout = { path = "../lbm-layout" }
+lbm-display = { path = "../lbm-display" }
+lbm-icons = { path = "../lbm-icons" }

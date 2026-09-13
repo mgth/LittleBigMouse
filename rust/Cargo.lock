@@ -1987,9 +1987,11 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui",
+ "image",
  "lbm-display",
  "lbm-icons",
  "lbm-layout",
+ "lbm-store",
  "lbm-ui",
 ]
 

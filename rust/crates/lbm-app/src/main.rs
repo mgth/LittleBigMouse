@@ -34,6 +34,19 @@ struct Screen {
     logo: Option<PathBuf>,
     mm_outside: Rect,
     mm_content: Rect,
+    /// The source's rectangle in cursor pixels — `ActiveSource.Source.InPixel.Bounds`,
+    /// which is what the thumbnail is cut to.
+    pixels: Rect,
+}
+
+/// What the worker sends back. Two kinds, so the screens can be drawn as soon as they
+/// are known instead of waiting on a wallpaper that may take a second to decode.
+enum Found {
+    Screens(Vec<Screen>),
+    Thumbnail {
+        screen: String,
+        picture: image::RgbaImage,
+    },
 }
 
 /// Which view the window is showing — `MainViewModel.ViewList`, a toggle of its own and
@@ -50,13 +63,15 @@ struct App {
     /// on the UI thread. It takes 77 ms here, which is not a stall, but the thread is
     /// what the agent connection will need and it is better exercised now than invented
     /// later.
-    arriving: Option<std::sync::mpsc::Receiver<Vec<Screen>>>,
+    arriving: Option<std::sync::mpsc::Receiver<Found>>,
     screens: Vec<Screen>,
     selected: Option<String>,
     view: View,
     icons: Catalogue,
     /// Uploaded logos, by icon path. Loaded once, on the frame that first needs one.
     textures: HashMap<String, egui::TextureHandle>,
+    /// Uploaded wallpaper thumbnails, by screen id.
+    wallpapers: HashMap<String, egui::TextureHandle>,
     /// What the bottom bar shows. No agent answers here, so it stays as it opens.
     state: lbm_ui::State,
 }
@@ -88,8 +103,8 @@ fn icons_root() -> Option<PathBuf> {
 }
 
 /// The displays now, as the agent's `Discovery` finds them — the same two calls, without
-/// the agent.
-fn detect() -> Vec<Screen> {
+/// the agent. Gives the layout's id too: the wallpaper settings are keyed by it.
+fn detect() -> (String, Vec<Screen>) {
     let mut layout = Layout::new(LayoutOptions::default());
 
     #[cfg(windows)]
@@ -128,10 +143,10 @@ fn detect() -> Vec<Screen> {
     };
 
     if !built {
-        return Vec::new();
+        return (String::new(), Vec::new());
     }
 
-    layout
+    let screens = layout
         .monitors()
         .iter()
         .filter_map(|m| {
@@ -148,9 +163,159 @@ fn detect() -> Vec<Screen> {
                     .map(PathBuf::from),
                 mm_outside: projection.outside_bounds(),
                 mm_content: projection.bounds(),
+                pixels: m
+                    .active_source
+                    .as_deref()
+                    .and_then(|id| layout.source(id))
+                    .map(|source| source.source.in_pixel.bounds())
+                    .unwrap_or_default(),
             })
         })
-        .collect()
+        .collect();
+    (layout.id.clone(), screens)
+}
+
+/// The thumbnails for one layout's screens, in the order they will be wanted.
+///
+/// Read-only, from the file the agent owns (`wallpaper.json`) and the C# frontend reads
+/// the same way — `WallpaperSettings.FilePath`, and the wire test that says outright
+/// "the agent writes what it is sent into wallpaper.json, and this side reads that".
+///
+/// Everything is done in quarter-pixels, as `MonitorFrameViewModel.cs:176-201` does:
+/// the screen's rectangle and the desktop's are divided by four and so is the picture,
+/// which is what keeps a wall of 4K wallpapers out of memory. A screen smaller than the
+/// divisor gets nothing, as there too.
+fn wallpapers(layout_id: &str, screens: &[Screen]) -> Vec<(String, image::RgbaImage)> {
+    use lbm_store::wallpaper_settings::{self, ScreenWallpaperKind, WallpaperMode};
+
+    if layout_id.is_empty() {
+        return Vec::new();
+    }
+    let all = wallpaper_settings::load(&wallpaper_settings::settings_path());
+    let Some(settings) = all.get(layout_id) else {
+        return Vec::new();
+    };
+
+    let shrink = lbm_ui::wallpaper::SHRINK;
+    let quarter = |r: Rect| lbm_ui::wallpaper::Rect {
+        x: (r.left() as i32) / shrink,
+        y: (r.top() as i32) / shrink,
+        w: (r.width() as i32) / shrink,
+        h: (r.height() as i32) / shrink,
+    };
+    // The desktop the spanned styles are cut out of: every screen's pixels together.
+    let desktop = screens
+        .iter()
+        .fold(None::<lbm_ui::wallpaper::Rect>, |box_, s| {
+            let r = quarter(s.pixels);
+            Some(match box_ {
+                None => r,
+                Some(b) => {
+                    let left = b.x.min(r.x);
+                    let top = b.y.min(r.y);
+                    lbm_ui::wallpaper::Rect {
+                        x: left,
+                        y: top,
+                        w: (b.x + b.w).max(r.x + r.w) - left,
+                        h: (b.y + b.h).max(r.y + r.h) - top,
+                    }
+                }
+            })
+        });
+
+    let mut made = Vec::new();
+    for screen in screens {
+        if screen.pixels.width() < shrink as f64 || screen.pixels.height() < shrink as f64 {
+            continue;
+        }
+        let here = quarter(screen.pixels);
+
+        let (path, style, colour) = match settings.mode {
+            WallpaperMode::Span => {
+                let Some(path) = settings.span_image_path.as_ref().filter(|p| !p.is_empty()) else {
+                    continue;
+                };
+                (path.clone(), lbm_ui::wallpaper::Style::Span, [0, 0, 0, 255])
+            }
+            WallpaperMode::PerScreen => {
+                let Some(wanted) = settings.per_screen.get(&screen.id) else {
+                    continue;
+                };
+                if wanted.kind == ScreenWallpaperKind::Color {
+                    // A colour is not a picture, and painting one into a texture to
+                    // show a flat rectangle would be work for nothing; the frame's own
+                    // background is already a flat rectangle. Left for when the frame
+                    // learns to take a colour.
+                    continue;
+                }
+                let Some(path) = wanted.image_path.as_ref().filter(|p| !p.is_empty()) else {
+                    continue;
+                };
+                (
+                    path.clone(),
+                    style_of(wanted.style),
+                    colour_of(&wanted.color),
+                )
+            }
+        };
+
+        // A picture that has been moved or deleted is not an error worth shouting
+        // about: the desktop keeps what it had, and so does the map.
+        let Ok(decoded) = image::open(&path) else {
+            continue;
+        };
+        let full = decoded.to_rgba8();
+        let source = lbm_ui::wallpaper::Size {
+            w: full.width() as i32,
+            h: full.height() as i32,
+        };
+        let Some(small) = lbm_ui::wallpaper::shrunk(source, shrink) else {
+            continue;
+        };
+        let picture = lbm_ui::wallpaper::apply(
+            full,
+            &[lbm_ui::wallpaper::Step::Resize(small)],
+            image::Rgba(colour),
+        );
+
+        let steps = match style {
+            lbm_ui::wallpaper::Style::Span | lbm_ui::wallpaper::Style::Tile => {
+                let Some(desktop) = desktop else { continue };
+                lbm_ui::wallpaper::across_the_desktop(style, small, here, desktop)
+            }
+            _ => lbm_ui::wallpaper::on_one_screen(style, small, here.size()),
+        };
+        made.push((
+            screen.id.clone(),
+            lbm_ui::wallpaper::apply(picture, &steps, image::Rgba(colour)),
+        ));
+    }
+    made
+}
+
+/// The store's style, as the view names it. Exhaustive on purpose: a style added to the
+/// store has to be answered for here rather than quietly drawn as something else.
+fn style_of(style: lbm_store::wallpaper_settings::WallpaperStyle) -> lbm_ui::wallpaper::Style {
+    use lbm_store::wallpaper_settings::WallpaperStyle as Stored;
+    use lbm_ui::wallpaper::Style;
+    match style {
+        Stored::Fill => Style::Fill,
+        Stored::Fit => Style::Fit,
+        Stored::Stretch => Style::Stretch,
+        Stored::Tile => Style::Tile,
+        Stored::Center => Style::Center,
+        Stored::Span => Style::Span,
+    }
+}
+
+/// `#RRGGBB`, and black for anything else — a wallpaper is never a reason to stop.
+fn colour_of(text: &str) -> [u8; 4] {
+    let hex = text.trim_start_matches('#');
+    if hex.len() != 6 {
+        return [0, 0, 0, 255];
+    }
+    let byte = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).unwrap_or(0);
+    [byte(0), byte(2), byte(4), 255]
 }
 
 impl App {
@@ -164,15 +329,28 @@ impl App {
         let (send, arriving) = std::sync::mpsc::channel();
         let waker = ctx.clone();
         std::thread::spawn(move || {
-            let found = detect();
+            let (id, screens) = detect();
+            // The wallpaper is worked out from what the screens turn out to be, so the
+            // settings are read here and not before.
+            let wanted = wallpapers(&id, &screens);
             // The receiver is gone only if the window closed first, which is not a
             // failure worth reporting.
-            let _ = send.send(found);
+            let _ = send.send(Found::Screens(screens));
             // **The thread wakes the window.** Nothing polls, and nothing needs to:
             // measured, including the adversarial case where the answer is held back
             // three seconds so that it lands while the window is idle — eframe schedules
             // the pass and the answer is picked up on it.
             waker.request_repaint();
+
+            // Then the pictures, one at a time and each announced as it is ready:
+            // decoding a 4K wallpaper is not quick, and the map is worth looking at
+            // before they arrive.
+            for (screen, picture) in wanted {
+                if send.send(Found::Thumbnail { screen, picture }).is_err() {
+                    return;
+                }
+                waker.request_repaint();
+            }
         });
         App {
             arriving: Some(arriving),
@@ -181,6 +359,7 @@ impl App {
             view: View::Map,
             icons,
             textures: HashMap::new(),
+            wallpapers: HashMap::new(),
             state: lbm_ui::State::default(),
         }
     }
@@ -222,6 +401,7 @@ impl App {
                 name: &s.name,
                 mm_outside: s.mm_outside,
                 mm_content: s.mm_content,
+                wallpaper: self.wallpapers.get(&s.id),
                 logo: s
                     .logo
                     .as_ref()
@@ -238,9 +418,24 @@ impl eframe::App for App {
         // The answer, when it has arrived. Nothing is polled: the thread asks for a
         // repaint after sending, so this runs on the pass that request causes.
         if let Some(arriving) = &self.arriving {
-            if let Ok(found) = arriving.try_recv() {
-                self.screens = found;
-                self.arriving = None;
+            // Everything that has landed, not just the first: several thumbnails can
+            // arrive between two passes.
+            while let Ok(found) = arriving.try_recv() {
+                match found {
+                    Found::Screens(screens) => self.screens = screens,
+                    Found::Thumbnail { screen, picture } => {
+                        let size = [picture.width() as usize, picture.height() as usize];
+                        let image = egui::ColorImage::from_rgba_unmultiplied(size, &picture);
+                        self.wallpapers.insert(
+                            screen.clone(),
+                            ctx.load_texture(
+                                format!("wallpaper:{screen}"),
+                                image,
+                                egui::TextureOptions::LINEAR,
+                            ),
+                        );
+                    }
+                }
             }
         }
 

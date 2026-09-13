@@ -30,3 +30,8 @@ lbm-ui = { path = "../lbm-ui" }
 lbm-layout = { path = "../lbm-layout" }
 lbm-display = { path = "../lbm-display" }
 lbm-icons = { path = "../lbm-icons" }
+# Read-only, and only for `wallpaper.json`: the agent owns that file and the C# frontend
+# reads it the same way (`WallpaperSettings.FilePath`, and the wire test that says "this
+# side reads that"). Nothing here writes to the store.
+lbm-store = { path = "../lbm-store" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }

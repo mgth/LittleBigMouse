@@ -162,6 +162,11 @@ pub struct Look<'a> {
     /// EDID manufacturer code, where the Windows one falls back to the LittleBigMouse
     /// mark.
     pub logo: Option<&'a egui::TextureHandle>,
+    /// The desktop picture as it will look on this screen, already cut to shape by
+    /// [`crate::wallpaper`] and uploaded. Drawn stretched over the lit part, which is
+    /// what `Stretch="Fill"` on the frame's image means — the thumbnail is already the
+    /// screen's own shape, so filling it distorts nothing.
+    pub wallpaper: Option<&'a egui::TextureHandle>,
 }
 
 /// Draws one monitor. Returns the rectangle it took, so a caller can lay several out.
@@ -170,6 +175,7 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
         name,
         selected,
         logo,
+        wallpaper,
     } = *look;
     let fill = bezel_fill(ui.visuals(), selected);
     let painter = ui.painter();
@@ -177,6 +183,16 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
     // the lit part over it is the whole of it.
     painter.rect_filled(drawn.outside, 2.0, fill);
     painter.rect_filled(drawn.content, 0.0, ui.visuals().extreme_bg_color);
+    if let Some(picture) = wallpaper {
+        // Over the background colour and under everything else, as the frame's third
+        // grid is: what is on the screen, not what is written about it.
+        painter.image(
+            picture.id(),
+            drawn.content,
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
+    }
 
     if let Some(height) = drawn.name_height {
         // In the bezel band, at its own size, not stretched to fill it: the rectangle it

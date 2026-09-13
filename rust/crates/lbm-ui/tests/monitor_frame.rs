@@ -19,7 +19,14 @@ fn name_height_drawn(ratio: f64) -> Option<f64> {
     let drawn = frame::draw(outside, content, (0.0, 0.0), Ratio { x: ratio, y: ratio });
 
     let harness = Harness::new_ui(|ui| {
-        frame::monitor(ui, &drawn, "Odyssey G80SD", false);
+        frame::monitor(
+            ui,
+            &drawn,
+            &frame::Look {
+                name: "Odyssey G80SD",
+                ..Default::default()
+            },
+        );
     });
     let node = harness.query_by_label("Odyssey G80SD")?;
     let bounds = node.accesskit_node().bounding_box()?;

@@ -17,3 +17,7 @@ egui_kittest = "0.36"
 # The oracle's scenario inputs, so the map is exercised on real desktops and not only
 # on rectangles chosen by whoever wrote the test.
 serde_json.workspace = true
+# The frame places the logo; this is what turns a `Logo` string into pixels. A
+# dev-dependency because the loading belongs to whoever owns the egui context, not to
+# the view — but the two have to be shown to meet.
+lbm-icons = { path = "../lbm-icons" }

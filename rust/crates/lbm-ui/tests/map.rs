@@ -21,12 +21,14 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             name: "Left screen",
             mm_outside: Rect::new(0.0, 0.0, 640.0, 380.0),
             mm_content: Rect::new(20.0, 20.0, 600.0, 340.0),
+            logo: None,
         },
         MapMonitor {
             id: "right",
             name: "Right screen",
             mm_outside: Rect::new(700.0, 0.0, 640.0, 380.0),
             mm_content: Rect::new(720.0, 20.0, 600.0, 340.0),
+            logo: None,
         },
     ]
 }

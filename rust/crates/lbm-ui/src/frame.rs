@@ -32,6 +32,11 @@ pub struct Drawn {
     pub name_band: egui::Rect,
     /// The height to set the name in, or `None` when it would be too small to read.
     pub name_height: Option<f32>,
+    /// Where the manufacturer logo goes: the bottom bezel, across the lit width — the
+    /// frame's cell (2, 1), the name's opposite number
+    /// (`MonitorFrameView.axaml:196-206`: `Grid.Row="2" Grid.Column="1"`,
+    /// `Height="{Binding Unrotated.BottomBorder}"`, `Width="{Binding Unrotated.Width}"`).
+    pub logo_band: egui::Rect,
 }
 
 impl Drawn {
@@ -44,6 +49,7 @@ impl Drawn {
             content: self.content.translate(by),
             name_band: self.name_band.translate(by),
             name_height: self.name_height,
+            logo_band: self.logo_band.translate(by),
         }
     }
 }
@@ -86,12 +92,45 @@ pub fn draw(mm_outside: Rect, mm_content: Rect, origin: (f64, f64), ratio: Ratio
         egui::pos2(content.right(), content.top()),
     );
     let name_height = (name_band.height() as f64 * NAME_SHARE_OF_TOP_BEZEL) as f32;
+    // The bottom bezel, same width: the name's opposite number.
+    let logo_band = egui::Rect::from_min_max(
+        egui::pos2(content.left(), content.bottom()),
+        egui::pos2(content.right(), outside.bottom()),
+    );
     Drawn {
         outside,
         content,
         name_band,
         name_height: (name_height >= LEGIBLE).then_some(name_height),
+        logo_band,
     }
+}
+
+/// The colour a logo is painted in.
+///
+/// The Avalonia frame says `Foreground="LightGray"` outright, and can: its bezel is a
+/// fixed pair of gradient brushes, so light grey always lands on the same dark plastic.
+/// This frame paints the bezel from the theme, so a fixed light grey would be light on
+/// light in a light theme. Following the theme is what keeps the *intent* of that
+/// LightGray — a logo that is present but recedes — rather than its literal value.
+pub fn logo_colour(visuals: &egui::Visuals) -> egui::Color32 {
+    visuals.weak_text_color()
+}
+
+/// How much of the logo shows through: `Opacity="0.8"`, kept as it is.
+pub const LOGO_OPACITY: f32 = 0.8;
+
+/// The largest rectangle of `of`'s shape that fits centred inside `into` — Avalonia's
+/// `Stretch="Uniform"`, which is what an `Image` inside an `IconView` does by default.
+///
+/// Empty when there is no room or nothing to place, so a caller can skip the drawing
+/// without a second condition.
+pub fn fit_uniform(into: egui::Rect, of: egui::Vec2) -> egui::Rect {
+    if of.x <= 0.0 || of.y <= 0.0 || into.width() <= 0.0 || into.height() <= 0.0 {
+        return egui::Rect::from_min_size(into.center(), egui::Vec2::ZERO);
+    }
+    let scale = (into.width() / of.x).min(into.height() / of.y);
+    egui::Rect::from_center_size(into.center(), of * scale)
 }
 
 /// The bezel's colour, which is how a selected screen is told apart.
@@ -107,8 +146,31 @@ pub fn bezel_fill(visuals: &egui::Visuals, selected: bool) -> egui::Color32 {
     }
 }
 
+/// What is written on a frame, as opposed to where the frame is.
+///
+/// A struct rather than more arguments, because the frame is going to gain the wallpaper
+/// thumbnail and the prober's strips, and a call of six positional flags says nothing at
+/// the call site.
+#[derive(Clone, Copy, Default)]
+pub struct Look<'a> {
+    /// `PhysicalMonitorModel.PnpDeviceName` — "DELL P2419H", not the layout's id.
+    pub name: &'a str,
+    pub selected: bool,
+    /// The manufacturer logo, already resolved through `lbm_icons`, recoloured to
+    /// [`logo_colour`] and uploaded. `None` when the monitor has no logo, which is a
+    /// real case: the Linux factory leaves `Logo` empty for a monitor that reports no
+    /// EDID manufacturer code, where the Windows one falls back to the LittleBigMouse
+    /// mark.
+    pub logo: Option<&'a egui::TextureHandle>,
+}
+
 /// Draws one monitor. Returns the rectangle it took, so a caller can lay several out.
-pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, name: &str, selected: bool) -> egui::Rect {
+pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
+    let Look {
+        name,
+        selected,
+        logo,
+    } = *look;
     let fill = bezel_fill(ui.visuals(), selected);
     let painter = ui.painter();
     // The bezel is what is between the two rectangles; drawing the outside first and
@@ -138,6 +200,21 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, name: &str, selected: bool) -> 
                 );
             },
         );
+    }
+
+    if let Some(logo) = logo {
+        // Uniform and centred in the bottom bezel, as the `IconView`'s `Image` is. The
+        // colour is already in the texture — `lbm_icons::load` paints the black paths on
+        // the way in — so the tint carries only the opacity.
+        let where_ = fit_uniform(drawn.logo_band, logo.size_vec2());
+        if where_.width() >= 1.0 && where_.height() >= 1.0 {
+            ui.painter().image(
+                logo.id(),
+                where_,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::from_white_alpha((LOGO_OPACITY * 255.0) as u8),
+            );
+        }
     }
     drawn.outside
 }
@@ -201,6 +278,76 @@ mod tests {
                 .left(),
             0.0
         );
+    }
+
+    /// The two bezels carry one thing each, at opposite ends, and neither of them
+    /// reaches over the picture. A logo drawn on the lit part would cover the screen it
+    /// is labelling.
+    #[test]
+    fn the_name_is_on_the_top_bezel_and_the_logo_on_the_bottom() {
+        let (outside, content) = screen();
+        let drawn = draw(outside, content, (0.0, 0.0), Ratio { x: 1.0, y: 1.0 });
+
+        assert_eq!(drawn.name_band.bottom(), drawn.content.top());
+        assert_eq!(drawn.logo_band.top(), drawn.content.bottom());
+        assert_eq!(drawn.logo_band.bottom(), drawn.outside.bottom());
+        // Both across the lit width, which is the grid's middle column.
+        for band in [drawn.name_band, drawn.logo_band] {
+            assert_eq!(band.left(), drawn.content.left());
+            assert_eq!(band.right(), drawn.content.right());
+        }
+        assert!(!drawn.name_band.intersects(drawn.logo_band));
+    }
+
+    /// Uniform: the logo keeps its shape and is centred, however wrong the band's shape
+    /// is for it. A bezel is a long thin strip, so this is the normal case and not an
+    /// edge one.
+    #[test]
+    fn a_logo_keeps_its_shape_in_a_band_of_the_wrong_one() {
+        // A square logo in a strip ten times as wide as it is tall.
+        let band = egui::Rect::from_min_size(egui::pos2(0.0, 100.0), egui::vec2(500.0, 50.0));
+        let placed = fit_uniform(band, egui::vec2(64.0, 64.0));
+
+        assert_eq!(placed.width(), placed.height(), "it was stretched");
+        assert_eq!(
+            placed.height(),
+            50.0,
+            "the tight axis is the one that binds"
+        );
+        assert_eq!(placed.center(), band.center(), "and it is centred");
+        assert!(band.contains_rect(placed));
+
+        // A wide logo in the same strip binds on the other axis.
+        let wide = fit_uniform(band, egui::vec2(1000.0, 20.0));
+        assert_eq!(wide.width(), 500.0);
+        assert!((wide.height() - 10.0).abs() < 1e-4);
+    }
+
+    /// Nothing to place, or nowhere to place it, comes back empty rather than infinite
+    /// or negative — the caller skips on the size, so the size has to be honest.
+    #[test]
+    fn a_logo_with_no_room_or_no_size_is_empty() {
+        let band = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(500.0, 50.0));
+        for of in [egui::vec2(0.0, 64.0), egui::vec2(64.0, 0.0)] {
+            assert_eq!(fit_uniform(band, of).area(), 0.0);
+        }
+        let none = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::Vec2::ZERO);
+        assert_eq!(fit_uniform(none, egui::vec2(64.0, 64.0)).area(), 0.0);
+    }
+
+    /// A logo the colour of the plastic it sits on is not a logo. The Avalonia frame can
+    /// hard-code LightGray because its bezel is a fixed brush; this one cannot.
+    #[test]
+    fn a_logo_is_not_the_colour_of_the_bezel_under_it() {
+        for visuals in [egui::Visuals::light(), egui::Visuals::dark()] {
+            for selected in [false, true] {
+                assert_ne!(
+                    logo_colour(&visuals),
+                    bezel_fill(&visuals, selected),
+                    "the logo vanishes into the bezel"
+                );
+            }
+        }
     }
 
     /// Whatever the theme, the selected screen is not painted like the others — the

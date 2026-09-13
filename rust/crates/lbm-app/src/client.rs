@@ -101,8 +101,21 @@ impl Outgoing {
     }
 }
 
-/// Where the agent listens, by the rules it binds with.
+/// `LBM_AGENT_ENDPOINT`: the socket to use instead of this session's.
+///
+/// The twin of the hook's `LBM_HOOK_ENDPOINT`, and for the same two reasons: a
+/// side-by-side instance, and being able to point a window at an agent raised for a
+/// test instead of the one holding the user's mice.
+pub const ENDPOINT_VARIABLE: &str = "LBM_AGENT_ENDPOINT";
+
+/// Where the agent listens, by the rules it binds with — or wherever
+/// [`ENDPOINT_VARIABLE`] says.
 pub fn default_endpoint() -> Option<PathBuf> {
+    if let Some(named) = std::env::var_os(ENDPOINT_VARIABLE) {
+        if !named.is_empty() {
+            return Some(PathBuf::from(named));
+        }
+    }
     let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
     let data = lbm_store::lbm_paths::data_dir();
     lbm_ipc::endpoint::agent_socket_path(runtime.as_deref(), Some(&data))

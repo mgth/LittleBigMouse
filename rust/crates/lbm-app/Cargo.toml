@@ -35,3 +35,14 @@ lbm-icons = { path = "../lbm-icons" }
 # side reads that"). Nothing here writes to the store.
 lbm-store = { path = "../lbm-store" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
+# The frame and the endpoint names, so the frontend cannot spell either differently from
+# the agent that binds them.
+lbm-ipc = { path = "../lbm-ipc" }
+serde_json.workspace = true
+
+[dev-dependencies]
+# The real agent, driving the fake hook, so the client is exercised against the server it
+# will actually meet rather than against a double written by whoever wrote the client.
+lbm-agent = { path = "../lbm-agent" }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time"] }
+tempfile.workspace = true

@@ -78,6 +78,48 @@ De `LocationControlViewModel`, et plus riches qu'il n'y paraît :
 - **Save et Undo** sont une condition lue deux fois, et **aucune ne dépend du moteur**. Perdre une
   édition parce qu'un daemon manque serait le pire des deux mondes.
 
+## La carte, et trois écarts assumés au C#
+
+`lbm-ui::map` répond à deux questions et pas une de plus : **combien vaut un millimètre
+ici**, et **où est le coin du bureau**. Tout le reste suit par `frame`. Un rapport et non
+deux : Avalonia porte une paire `VisualRatio` mais `FrameMover.cs:167` écrit
+`var ratioY = ratioX;` — la paire est une forme que le code n'emploie jamais.
+
+Trois choses ne sont **pas** reprises, chacune annotée là où elle s'applique :
+
+- **Le trou du garde vide.** `GetRatio` se protège par `all.Width * all.Height > 0.0`
+  avant de diviser. Ce test est **vrai** pour `Rect.Empty`, dont la largeur et la hauteur
+  valent toutes deux −∞ : le produit vaut +∞, le garde laisse passer, et
+  `min(w / −∞, h / −∞)` donne un rapport de **moins zéro** — la carte s'évanouit au lieu
+  de retomber sur 1:1. `PhysicalBounds` atteint `Empty` par le quirk d'union que ce dépôt
+  porte fidèlement (vide dès qu'un opérande l'est), donc **un seul écran non mesuré
+  suffit**. La règle que le garde visait est « une étendue par laquelle je peux diviser ».
+- **Le jeu non centré.** `Math.Min` fait des bandes noires, et l'AXAML demande que le
+  résultat soit centré, mais les cadres vivent dans un `Canvas`, qui arrange à
+  `Canvas.Left/Top` et ignore l'alignement — dans l'app livrée, tout le jeu tombe à droite
+  et en bas.
+- **La sélection au pixel exact.** `FrameMover.cs:111-116` ne sélectionne que si le point
+  de relâchement **égale** celui de l'appui, sur des doubles. Un dixième de pixel de
+  dérive — ce qu'un pavé tactile produit en permanence — en fait un glissement de longueur
+  nulle, et l'écran n'est jamais sélectionné.
+
+**Le mode liste n'a demandé aucune seconde fonction** : c'est le même ajustement sur une
+autre étendue (l'écran sélectionné au lieu de tous), et son cas « rien de sélectionné »
+est `Rect::EMPTY`, qui retombe sur le même repli.
+
+Et un défaut **à moi**, trouvé en me relisant et non par un test : le centrage calculait
+l'étendue dessinée depuis l'extent, si bien que le repli plaçait la carte **à l'infini**.
+Le cas n'était pas théorique — c'est exactement celui du premier point, écrans présents et
+union vide, où chaque cadre partait à l'infini au lieu d'être seulement à la mauvaise
+échelle.
+
+**Les fixtures que j'écris sont des fixtures auxquelles je crois déjà.** Tous les tests de
+la carte mangeaient deux écrans côte à côte, en nombres ronds, coin à l'origine. Les huit
+scénarios de l'oracle **sans magasin** passent maintenant par le vrai pipeline
+(`lbm_layout::linux::populate`, l'appel de l'agent) et l'extent est comparé à ce que le C#
+a enregistré, à 1e-9 près — −682 mm de coin, une télé de 1110 mm à côté d'une dalle de
+300 mm, des hauteurs fractionnaires, neuf écrans.
+
 ## Ce qui attend une décision
 
 1. **« Non enregistré » : la formule du plan a un piège.** « DTO courant ≠ DTO stocké » vaut pour

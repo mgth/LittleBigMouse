@@ -16,7 +16,7 @@
 //! outright. A map that scaled the axes independently would show a 16:9 screen as 4:3,
 //! so the pair is a shape the code never uses, and here the ratio is one number.
 
-use crate::frame::{self, Drawn, Ratio};
+use crate::frame::{self, Drawn, Look, Ratio};
 use lbm_layout::geo::Rect;
 
 /// The map keeps this much clear of the window's edge, on every side, as the Avalonia
@@ -28,12 +28,15 @@ pub const MARGIN: f32 = 30.0;
 /// Four things, which is the whole of the map's appetite — it does not need the model.
 /// `mm_outside` is `DepthProjection.OutsideBounds` (the screen with its bezels) and
 /// `mm_content` is `DepthProjection.Bounds` (the lit part).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct MapMonitor<'a> {
     pub id: &'a str,
     pub name: &'a str,
     pub mm_outside: Rect,
     pub mm_content: Rect,
+    /// The manufacturer logo, resolved and uploaded by whoever has an egui context and
+    /// the icon catalogue — the map itself loads nothing. `None` draws no logo.
+    pub logo: Option<&'a egui::TextureHandle>,
 }
 
 /// How the map sits in the window: one scale, and one corner.
@@ -197,7 +200,15 @@ pub fn draw<'a>(
             ui.id().with(("monitor", m.id)),
             egui::Sense::click(),
         );
-        frame::monitor(ui, &drawn, m.name, selected == Some(m.id));
+        frame::monitor(
+            ui,
+            &drawn,
+            &Look {
+                name: m.name,
+                selected: selected == Some(m.id),
+                logo: m.logo,
+            },
+        );
         if response.clicked() {
             clicked = Some(m.id);
         }
@@ -232,12 +243,14 @@ mod tests {
                 name: "Left",
                 mm_outside: Rect::new(0.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(10.0, 10.0, 600.0, 340.0),
+                logo: None,
             },
             MapMonitor {
                 id: "right",
                 name: "Right",
                 mm_outside: Rect::new(700.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(710.0, 10.0, 600.0, 340.0),
+                logo: None,
             },
         ]
     }
@@ -305,12 +318,14 @@ mod tests {
                 name: "Primary",
                 mm_outside: Rect::new(0.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(10.0, 10.0, 600.0, 340.0),
+                logo: None,
             },
             MapMonitor {
                 id: "left-of-it",
                 name: "Left of it",
                 mm_outside: Rect::new(-700.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(-690.0, 10.0, 600.0, 340.0),
+                logo: None,
             },
         ];
         let win = window(800.0, 600.0);

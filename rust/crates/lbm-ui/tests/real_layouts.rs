@@ -146,6 +146,7 @@ fn as_map(screens: &[Screen]) -> Vec<MapMonitor<'_>> {
             name: &s.id,
             mm_outside: s.mm_outside,
             mm_content: s.mm_content,
+            logo: None,
         })
         .collect()
 }

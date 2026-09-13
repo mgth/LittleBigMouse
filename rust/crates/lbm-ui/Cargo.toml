@@ -11,6 +11,9 @@ egui = "0.36"
 # The layout model the map draws: millimetres, bezels, and the rectangles a monitor
 # occupies. The frontend reads the same model the agent computes from.
 lbm-layout = { path = "../lbm-layout" }
+# The same crate, version and feature set the agent decodes wallpapers with, so the two
+# sides of the product cannot disagree about what a picture looks like.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
 
 [dev-dependencies]
 egui_kittest = "0.36"

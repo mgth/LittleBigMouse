@@ -434,3 +434,279 @@ mod tests {
         assert_eq!(rect(60, 60, 10, 10).clamped(size(50, 50)).w, 0);
     }
 }
+
+//==================//
+// The pixels       //
+//==================//
+
+use image::imageops::{self, FilterType};
+use image::{Rgba as Pixel, RgbaImage};
+
+/// The resize the recipe's `Resize` means.
+///
+/// Bicubic, because that is what ImageSharp's `Resize` is by default — the same choice
+/// the agent already made and wrote down for the wallpapers it paints
+/// (`lbm-agent/src/wallpaper.rs:91`). Two parts of one product disagreeing about what a
+/// picture looks like would be worse than either choice.
+const FILTER: FilterType = FilterType::CatmullRom;
+
+/// Runs a recipe over a picture.
+///
+/// `fill` is what shows where the picture does not reach — the wallpaper's background
+/// colour, which only `Fit` and `Center` ever expose.
+///
+/// Every step guards its own sizes. The recipe already clamps its crops (see
+/// [`Rect::clamped`] and the #492 note), but a zero-sized image is a panic in most image
+/// libraries and the arithmetic upstream is integer division: a thumbnail that cannot be
+/// made comes back as it was rather than taking the window down.
+pub fn apply(mut picture: RgbaImage, steps: &[Step], fill: Pixel<u8>) -> RgbaImage {
+    for step in steps {
+        picture = match *step {
+            Step::Crop(rect) => {
+                let inside = rect.clamped(Size {
+                    w: picture.width() as i32,
+                    h: picture.height() as i32,
+                });
+                if inside.w <= 0 || inside.h <= 0 {
+                    return picture;
+                }
+                imageops::crop_imm(
+                    &picture,
+                    inside.x as u32,
+                    inside.y as u32,
+                    inside.w as u32,
+                    inside.h as u32,
+                )
+                .to_image()
+            }
+            Step::Resize(size) => {
+                if size.w <= 0 || size.h <= 0 {
+                    return picture;
+                }
+                imageops::resize(&picture, size.w as u32, size.h as u32, FILTER)
+            }
+            Step::Pad { to, at } => {
+                if to.w <= 0 || to.h <= 0 {
+                    return picture;
+                }
+                let mut canvas = RgbaImage::from_pixel(to.w as u32, to.h as u32, fill);
+                imageops::overlay(&mut canvas, &picture, at.0 as i64, at.1 as i64);
+                canvas
+            }
+            Step::Tile { to } => {
+                if to.w <= 0 || to.h <= 0 || picture.width() == 0 || picture.height() == 0 {
+                    return picture;
+                }
+                let mut canvas = RgbaImage::from_pixel(to.w as u32, to.h as u32, fill);
+                // From the corner, as `MakeTileWall` does — not centred, so the seam
+                // falls where the desktop's own corner is.
+                let mut y = 0;
+                while y < to.h as u32 {
+                    let mut x = 0;
+                    while x < to.w as u32 {
+                        imageops::overlay(&mut canvas, &picture, x as i64, y as i64);
+                        x += picture.width();
+                    }
+                    y += picture.height();
+                }
+                canvas
+            }
+        };
+    }
+    picture
+}
+
+#[cfg(test)]
+mod pixels {
+    use super::*;
+
+    fn rgba(r: u8, g: u8, b: u8) -> Pixel<u8> {
+        Pixel([r, g, b, 255])
+    }
+
+    /// Four quarters, each its own colour, so any crop or move is visible.
+    fn quarters(side: u32) -> RgbaImage {
+        RgbaImage::from_fn(side, side, |x, y| match (x < side / 2, y < side / 2) {
+            (true, true) => rgba(255, 0, 0),
+            (false, true) => rgba(0, 255, 0),
+            (true, false) => rgba(0, 0, 255),
+            (false, false) => rgba(255, 255, 0),
+        })
+    }
+
+    #[test]
+    fn stretch_fills_the_target_and_keeps_the_corners() {
+        let out = apply(
+            quarters(8),
+            &on_one_screen(Style::Stretch, Size { w: 8, h: 8 }, Size { w: 32, h: 16 }),
+            rgba(0, 0, 0),
+        );
+
+        assert_eq!(out.dimensions(), (32, 16));
+        assert_eq!(out.get_pixel(0, 0), &rgba(255, 0, 0), "top left stays red");
+        assert_eq!(
+            out.get_pixel(31, 15),
+            &rgba(255, 255, 0),
+            "bottom right stays yellow"
+        );
+    }
+
+    /// The padding is the fill colour, and it is the only place the fill ever shows.
+    #[test]
+    fn fit_pads_with_the_colour_and_centres_the_picture() {
+        let fill = rgba(7, 9, 11);
+        let out = apply(
+            quarters(8),
+            &on_one_screen(Style::Fit, Size { w: 8, h: 8 }, Size { w: 24, h: 8 }),
+            fill,
+        );
+
+        assert_eq!(out.dimensions(), (24, 8));
+        // Bound by the height: an 8x8 square, centred in 24 wide, leaves 8 either side.
+        assert_eq!(out.get_pixel(0, 0), &fill, "the left margin is the colour");
+        assert_eq!(out.get_pixel(23, 7), &fill, "and so is the right");
+        assert_eq!(
+            out.get_pixel(12, 1),
+            &rgba(0, 255, 0),
+            "the picture is in the middle"
+        );
+    }
+
+    /// The C#'s oddity, now visible in pixels: a picture larger than the screen shows its
+    /// **top-left quarter**, not its middle.
+    #[test]
+    fn center_shows_the_corner_of_a_picture_too_big_for_the_screen() {
+        let out = apply(
+            quarters(8),
+            &on_one_screen(Style::Center, Size { w: 8, h: 8 }, Size { w: 4, h: 4 }),
+            rgba(0, 0, 0),
+        );
+
+        assert_eq!(out.dimensions(), (4, 4));
+        for pixel in out.pixels() {
+            assert_eq!(
+                pixel,
+                &rgba(255, 0, 0),
+                "every pixel should be the red quarter — the top left one"
+            );
+        }
+    }
+
+    #[test]
+    fn fill_covers_the_screen_with_no_colour_showing() {
+        let fill = rgba(7, 9, 11);
+        let out = apply(
+            quarters(8),
+            &on_one_screen(Style::Fill, Size { w: 8, h: 8 }, Size { w: 16, h: 4 }),
+            fill,
+        );
+
+        assert_eq!(out.dimensions(), (16, 4));
+        assert!(
+            out.pixels().all(|p| p != &fill),
+            "cover means the background is never seen"
+        );
+    }
+
+    #[test]
+    fn tile_repeats_from_the_corner() {
+        let steps = across_the_desktop(
+            Style::Tile,
+            Size { w: 8, h: 8 },
+            Rect {
+                x: 0,
+                y: 0,
+                w: 16,
+                h: 16,
+            },
+            Rect {
+                x: 0,
+                y: 0,
+                w: 16,
+                h: 16,
+            },
+        );
+        let out = apply(quarters(8), &steps, rgba(0, 0, 0));
+
+        assert_eq!(out.dimensions(), (16, 16));
+        // The same point of the pattern, one tile along, is the same colour.
+        assert_eq!(out.get_pixel(1, 1), out.get_pixel(9, 1));
+        assert_eq!(out.get_pixel(1, 1), out.get_pixel(1, 9));
+        assert_eq!(out.get_pixel(1, 1), &rgba(255, 0, 0));
+    }
+
+    /// Two screens of one spanned picture get different halves, and neither is blank.
+    #[test]
+    fn span_gives_the_two_screens_different_halves() {
+        let source = Size { w: 16, h: 8 };
+        let desktop = Rect {
+            x: 0,
+            y: 0,
+            w: 16,
+            h: 8,
+        };
+        let left = apply(
+            quarters(16),
+            &across_the_desktop(
+                Style::Span,
+                source,
+                Rect {
+                    x: 0,
+                    y: 0,
+                    w: 8,
+                    h: 8,
+                },
+                desktop,
+            ),
+            rgba(0, 0, 0),
+        );
+        let right = apply(
+            quarters(16),
+            &across_the_desktop(
+                Style::Span,
+                source,
+                Rect {
+                    x: 8,
+                    y: 0,
+                    w: 8,
+                    h: 8,
+                },
+                desktop,
+            ),
+            rgba(0, 0, 0),
+        );
+
+        assert_eq!(left.dimensions(), right.dimensions());
+        assert_ne!(
+            left.as_raw(),
+            right.as_raw(),
+            "both screens were given the same slice"
+        );
+    }
+
+    /// A recipe that cannot be carried out gives the picture back rather than panicking
+    /// or handing out an empty image — a thumbnail is worth less than the window.
+    #[test]
+    fn an_impossible_step_gives_the_picture_back() {
+        let source = quarters(8);
+        for steps in [
+            vec![Step::Resize(Size { w: 0, h: 4 })],
+            vec![Step::Pad {
+                to: Size { w: 0, h: 0 },
+                at: (0, 0),
+            }],
+            vec![Step::Crop(Rect {
+                x: 100,
+                y: 100,
+                w: 4,
+                h: 4,
+            })],
+            vec![Step::Tile {
+                to: Size { w: -1, h: 4 },
+            }],
+        ] {
+            let out = apply(source.clone(), &steps, rgba(0, 0, 0));
+            assert_eq!(out.dimensions(), (8, 8), "{steps:?}");
+        }
+    }
+}

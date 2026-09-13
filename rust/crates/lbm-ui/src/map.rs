@@ -68,7 +68,10 @@ impl Fit {
 }
 
 /// The box the map is fitted into: the window less the margin, never inside out.
-fn inner(available: egui::Rect) -> egui::Rect {
+///
+/// Shared with the list mode, which splits this same box in two: one rule for "the
+/// window less the margin", in one place, so the two views cannot drift apart on it.
+pub(crate) fn inner(available: egui::Rect) -> egui::Rect {
     let shrunk = available.shrink(MARGIN);
     // A window narrower than its own two margins would give a negative box, and a
     // negative box a negative ratio — a map drawn mirrored and off-screen. Avalonia
@@ -95,7 +98,17 @@ fn inner(available: egui::Rect) -> egui::Rect {
 /// vanishes rather than falling back. The rule the guard was reaching for is "an extent
 /// I can divide by", and that is what is written here.
 pub fn fit(extent: Rect, available: egui::Rect) -> Fit {
-    let inner = inner(available);
+    fit_in(inner(available), extent)
+}
+
+/// The same, into a box that is already the size it should be.
+///
+/// `fit` takes a window and keeps the margin clear of its edge; this takes the box
+/// itself. The list mode needs it: there the margin goes around the whole view and the
+/// two columns divide what is left (`MonitorsListPresenterView.axaml:30`,
+/// `Margin="30" ColumnDefinitions="*,2*"`), so the presenter's column has already had
+/// its share of the margin and taking another one out would be taking it twice.
+pub fn fit_in(inner: egui::Rect, extent: Rect) -> Fit {
     let usable = !extent.is_empty()
         && extent.width().is_finite()
         && extent.height().is_finite()

@@ -14,6 +14,7 @@
 //! see `tests/bottom_bar.rs`.
 
 pub mod frame;
+pub mod list;
 pub mod map;
 pub mod probe;
 

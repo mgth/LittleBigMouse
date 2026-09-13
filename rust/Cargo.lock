@@ -1988,11 +1988,16 @@ dependencies = [
  "eframe",
  "egui",
  "image",
+ "lbm-agent",
  "lbm-display",
  "lbm-icons",
+ "lbm-ipc",
  "lbm-layout",
  "lbm-store",
  "lbm-ui",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

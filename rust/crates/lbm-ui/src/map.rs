@@ -37,6 +37,8 @@ pub struct MapMonitor<'a> {
     /// The manufacturer logo, resolved and uploaded by whoever has an egui context and
     /// the icon catalogue — the map itself loads nothing. `None` draws no logo.
     pub logo: Option<&'a egui::TextureHandle>,
+    /// This screen's wallpaper thumbnail, or none.
+    pub wallpaper: Option<&'a egui::TextureHandle>,
 }
 
 /// How the map sits in the window: one scale, and one corner.
@@ -220,6 +222,7 @@ pub fn draw<'a>(
                 name: m.name,
                 selected: selected == Some(m.id),
                 logo: m.logo,
+                wallpaper: m.wallpaper,
             },
         );
         if response.clicked() {
@@ -257,6 +260,7 @@ mod tests {
                 mm_outside: Rect::new(0.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(10.0, 10.0, 600.0, 340.0),
                 logo: None,
+                wallpaper: None,
             },
             MapMonitor {
                 id: "right",
@@ -264,6 +268,7 @@ mod tests {
                 mm_outside: Rect::new(700.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(710.0, 10.0, 600.0, 340.0),
                 logo: None,
+                wallpaper: None,
             },
         ]
     }
@@ -332,6 +337,7 @@ mod tests {
                 mm_outside: Rect::new(0.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(10.0, 10.0, 600.0, 340.0),
                 logo: None,
+                wallpaper: None,
             },
             MapMonitor {
                 id: "left-of-it",
@@ -339,6 +345,7 @@ mod tests {
                 mm_outside: Rect::new(-700.0, 0.0, 620.0, 360.0),
                 mm_content: Rect::new(-690.0, 10.0, 600.0, 340.0),
                 logo: None,
+                wallpaper: None,
             },
         ];
         let win = window(800.0, 600.0);

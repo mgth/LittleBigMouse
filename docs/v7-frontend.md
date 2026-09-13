@@ -164,6 +164,56 @@ dessiner des noms de 2 points comme aujourd'hui ; ou s'écarter de la règle Ava
 mesurer le nom autrement (une fraction du cadre, bornée par la bordure). **Rien n'est
 tranché ici** : la règle portée est celle du C#, le plancher est resté à 7.
 
+## Le cadre complet : le nom, le logo, les bandes du sondeur
+
+Le cadre porte trois choses, et chacune a livré une surprise.
+
+**Le nom** — voir la section précédente : moitié de la bordure du haut, sur le plastique.
+
+**Le logo** est son symétrique : cellule (2, 1), la bordure du bas, sur la largeur de la
+dalle, centré, `Stretch="Uniform"`, `Opacity="0.8"`. Trois points :
+
+- `LogoPadding` (`MonitorFrameViewModel.cs:67-71`, un `4 × ratio` sur chaque côté) est
+  **du code mort** — ces deux lignes et rien d'autre dans toute la solution. Le logo n'a
+  aucun padding aujourd'hui. Je m'apprêtais à le porter depuis l'arithmétique seule.
+- `Foreground="LightGray"` n'est pas repris littéralement. Avalonia peut le coder en dur
+  parce que son bezel est une paire de brosses **fixes** ; le nôtre vient du thème, donc
+  un gris clair fixe serait clair sur clair. On garde l'intention, pas la valeur.
+- La résolution du chemin (`icon/Pnp/{code}?icon/Pnp/LBM`) est dans `lbm-icons` : le `?`
+  est un repli, la casse est ignorée des deux côtés, et **il n'y a pas de dernier
+  recours** — le `icons/default` du C# ne peut jamais être enregistré, le chargeur ne
+  produisant que des clés préfixées `icon/`.
+- Trouvaille de données : `Asus.ATK.ACI.ASU.svg` ne répondait pas à **`AUS`**, le code
+  qu'ASUS écrit réellement dans son EDID. Sur `six-monitors`, un ASUS avait son logo et
+  l'autre non. La table d'alias étant le nom du fichier, le correctif est le nom — et il
+  vaut aussi pour l'app Avalonia livrée.
+- **Piège de portage** : une clé est un nom dans l'espace de ressources, pas un chemin.
+  La construire en imprimant un `Path` donne `icon\pnp\del` sous Windows et plus rien ne
+  résout. Le spike y échappait parce que sa racine laissait un préfixe d'un seul segment.
+
+**Les bandes du sondeur** montrent ce que le moteur va *faire*, par opposition à ce que le
+layout dit : rouge pour un mur, vert pour un passage. Deux règles faciles à manquer — un
+run **nomme son dernier pixel** (d'où le `+1`, sans lequel chaque bande est courte d'un
+pixel : 224,79 sur 225), et les runs sont en **pixels du bureau**, donc un écran qui ne
+commence pas à l'origine doit être décalé avant d'être mis à l'échelle. L'épaisseur de
+5 points n'est **pas** mise à l'échelle : c'est une marque sur le dessin, pas une mesure du
+bureau.
+
+## Deux choses que l'item 2 a révélées sur le reste
+
+- **Le rapport de sondage arrive en XML dans une chaîne JSON** (`api.rs`,
+  `"Payload": "<ProbeReport/>"`), forme héritée du frontend C#, qui le lit encore jusqu'à
+  la phase 7. Quelqu'un devra le parser côté Rust — ou l'agent gagnera une forme JSON à
+  côté du XML. Question de contrat filaire, pas de dessin, **non tranchée**.
+- **Le menu contextuel n'est pas un travail de vue.** Ses deux entrées sont des commandes
+  du présentateur, pas de l'écran, et la seconde — « Apply layout to system config » —
+  **écrit la topologie d'écrans du système**. Le C# le fait par `IDisplayController`
+  (`LinuxDisplayController.cs:85` avec kscreen-doctor, ses relances quand le compositeur
+  écrase les positions et sa vérification de recouvrement ; `WindowsDisplayController.cs:57`).
+  Rien de tout cela n'existe en Rust. Ce n'est pas un trou du plan : la ligne 79 confie la
+  topologie au **frontend** et non à l'agent — c'est donc une capacité à écrire avant que
+  le menu ait un sens.
+
 ## Ce qui attend une décision
 
 1. **« Non enregistré » : la formule du plan a un piège.** « DTO courant ≠ DTO stocké » vaut pour

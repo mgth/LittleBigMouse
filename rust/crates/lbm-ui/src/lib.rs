@@ -17,6 +17,7 @@ pub mod frame;
 pub mod list;
 pub mod map;
 pub mod probe;
+pub mod wallpaper;
 
 /// What the engine is doing, in the agent's own words (its `Snapshot.Engine`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

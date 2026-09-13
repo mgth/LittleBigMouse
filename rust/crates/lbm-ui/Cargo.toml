@@ -14,3 +14,6 @@ lbm-layout = { path = "../lbm-layout" }
 
 [dev-dependencies]
 egui_kittest = "0.36"
+# The oracle's scenario inputs, so the map is exercised on real desktops and not only
+# on rectangles chosen by whoever wrote the test.
+serde_json.workspace = true

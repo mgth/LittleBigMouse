@@ -26,15 +26,41 @@ pub struct Drawn {
     pub outside: egui::Rect,
     /// The lit part, inside the bezel: what the layout is actually about.
     pub content: egui::Rect,
+    /// Where the name goes: the top bezel, across the lit width — the frame's cell
+    /// (0, 1). It is printed *on the plastic*, where a real monitor prints it, not over
+    /// the picture.
+    pub name_band: egui::Rect,
     /// The height to set the name in, or `None` when it would be too small to read.
     pub name_height: Option<f32>,
 }
 
-/// Names below this are not information any more.
+impl Drawn {
+    /// The same monitor, moved. Every rectangle is listed rather than spread from
+    /// `self`, so that a rectangle added to `Drawn` later cannot be quietly left behind
+    /// — the compiler asks about it here, next to the field it belongs to.
+    pub fn translate(self, by: egui::Vec2) -> Drawn {
+        Drawn {
+            outside: self.outside.translate(by),
+            content: self.content.translate(by),
+            name_band: self.name_band.translate(by),
+            name_height: self.name_height,
+        }
+    }
+}
+
+/// Names below this are not information any more. This floor is a judgement of this
+/// port, not a rule of the Avalonia frame, which draws the name at whatever size the
+/// arithmetic gives.
 pub const LEGIBLE: f32 = 7.0;
 
-/// A name takes this much of the lit height, as the Avalonia frame does.
-const NAME_SHARE: f64 = 0.14;
+/// A name is set at half the height of the bezel it is printed on.
+///
+/// `MonitorFrameView.axaml:184-186` binds the label's font size to `TopRow.Bounds.Height`
+/// through a `Scale` converter with a parameter of `0.5`, and `TopRow` is the border
+/// stretched into the frame grid's cell (0, 0) — whose height is `Unrotated.TopBorder`
+/// (`:155-158`, rows `Auto,*,Auto`). So the name is measured against **the bezel**, and
+/// a screen with a thin bezel gets a small name however large its panel is.
+const NAME_SHARE_OF_TOP_BEZEL: f64 = 0.5;
 
 /// Where a monitor lands on the map, and how big its parts are.
 ///
@@ -51,11 +77,19 @@ pub fn draw(mm_outside: Rect, mm_content: Rect, origin: (f64, f64), ratio: Ratio
             egui::vec2((r.width() * ratio.x) as f32, (r.height() * ratio.y) as f32),
         )
     };
+    let outside = place(mm_outside);
     let content = place(mm_content);
-    let name_height = (mm_content.height() * ratio.y * NAME_SHARE) as f32;
+    // The top bezel, across the lit width: the frame grid's cell (0, 1), whose row is
+    // the border's height and whose column is the panel's width.
+    let name_band = egui::Rect::from_min_max(
+        egui::pos2(content.left(), outside.top()),
+        egui::pos2(content.right(), content.top()),
+    );
+    let name_height = (name_band.height() as f64 * NAME_SHARE_OF_TOP_BEZEL) as f32;
     Drawn {
-        outside: place(mm_outside),
+        outside,
         content,
+        name_band,
         name_height: (name_height >= LEGIBLE).then_some(name_height),
     }
 }
@@ -83,19 +117,27 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, name: &str, selected: bool) -> 
     painter.rect_filled(drawn.content, 0.0, ui.visuals().extreme_bg_color);
 
     if let Some(height) = drawn.name_height {
-        // Laid out inside the lit part at its own size, not stretched to fill it: the
-        // rectangle it ends up with has to be the text's, or nothing downstream — a
-        // test, a screen reader — can tell a big name from a small one in a big frame.
-        ui.scope_builder(egui::UiBuilder::new().max_rect(drawn.content), |ui| {
-            ui.add(
-                egui::Label::new(
-                    egui::RichText::new(name)
-                        .size(height)
-                        .color(ui.visuals().text_color()),
-                )
-                .selectable(false),
-            );
-        });
+        // In the bezel band, at its own size, not stretched to fill it: the rectangle it
+        // ends up with has to be the text's, or nothing downstream — a test, a screen
+        // reader — can tell a big name from a small one in a big frame.
+        //
+        // Sat on the bottom of the band, as `VerticalAlignment="Bottom"` does: the name
+        // rests on the edge of the screen rather than floating in the plastic.
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(drawn.name_band)
+                .layout(egui::Layout::bottom_up(egui::Align::LEFT)),
+            |ui| {
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(name)
+                            .size(height)
+                            .color(ui.visuals().text_color()),
+                    )
+                    .selectable(false),
+                );
+            },
+        );
     }
     drawn.outside
 }
@@ -114,8 +156,11 @@ mod tests {
     #[test]
     fn everything_scales_with_the_ratio() {
         let (outside, content) = screen();
-        let one = draw(outside, content, (0.0, 0.0), Ratio { x: 0.5, y: 0.5 });
-        let two = draw(outside, content, (0.0, 0.0), Ratio { x: 1.0, y: 1.0 });
+        // Above the legibility floor at both ratios: a name of 10 points and one of 20,
+        // out of the 10 mm bezel. At 1:1 this screen's name would be 5 points and get
+        // dropped, which is the floor's business and tested on its own below.
+        let one = draw(outside, content, (0.0, 0.0), Ratio { x: 2.0, y: 2.0 });
+        let two = draw(outside, content, (0.0, 0.0), Ratio { x: 4.0, y: 4.0 });
 
         assert_eq!(two.outside.width(), one.outside.width() * 2.0);
         assert_eq!(two.content.height(), one.content.height() * 2.0);
@@ -180,9 +225,64 @@ mod tests {
         assert_eq!(tiny.name_height, None);
 
         // And just above the floor it is there, so the rule is a threshold and not a
-        // blanket refusal.
-        let ratio = LEGIBLE as f64 / (340.0 * NAME_SHARE);
+        // blanket refusal. The floor is measured against the 10 mm top bezel, not the
+        // 340 mm panel, so it bites at a far larger ratio than a panel-sized rule would.
+        let ratio = LEGIBLE as f64 / (10.0 * NAME_SHARE_OF_TOP_BEZEL);
         let just = draw(outside, content, (0.0, 0.0), Ratio { x: ratio, y: ratio });
         assert!(just.name_height.is_some());
+    }
+
+    /// The name is printed on the plastic, where a monitor prints it — not over the
+    /// picture. Getting this wrong is not a matter of taste: a name laid over the lit
+    /// part covers the thing the map is about, and on a small frame it covers all of it.
+    #[test]
+    fn the_name_is_printed_on_the_bezel_and_not_on_the_screen() {
+        let (outside, content) = screen();
+        let drawn = draw(outside, content, (0.0, 0.0), Ratio { x: 1.0, y: 1.0 });
+
+        assert!(
+            drawn.name_band.bottom() <= drawn.content.top(),
+            "the name band reaches over the lit part: {:?} against {:?}",
+            drawn.name_band,
+            drawn.content
+        );
+        assert_eq!(drawn.name_band.top(), drawn.outside.top());
+        // Across the lit width, which is the frame grid's middle column.
+        assert_eq!(drawn.name_band.left(), drawn.content.left());
+        assert_eq!(drawn.name_band.right(), drawn.content.right());
+    }
+
+    /// Half the bezel it is printed on, and nothing to do with the size of the panel.
+    /// A wide screen with a thin bezel gets a small name; that is the Avalonia rule.
+    #[test]
+    fn the_name_is_measured_against_the_bezel_not_the_panel() {
+        // Zoomed in far enough that both names clear the legibility floor, so that what
+        // is compared is the rule and not the floor.
+        let ratio = Ratio { x: 20.0, y: 20.0 };
+        // Same 600x340 panel, two different bezels.
+        let thin = draw(
+            Rect::new(0.0, 0.0, 604.0, 344.0),
+            Rect::new(2.0, 2.0, 600.0, 340.0),
+            (0.0, 0.0),
+            ratio,
+        );
+        let thick = draw(
+            Rect::new(0.0, 0.0, 640.0, 380.0),
+            Rect::new(20.0, 20.0, 600.0, 340.0),
+            (0.0, 0.0),
+            ratio,
+        );
+
+        assert_eq!(
+            thin.name_height,
+            Some(20.0),
+            "half of a 2 mm bezel, at 20:1"
+        );
+        assert_eq!(thick.name_height, Some(200.0), "half of a 20 mm bezel");
+        assert_eq!(
+            thin.content.height(),
+            thick.content.height(),
+            "the panels are the same, so a panel-sized rule would give the same name"
+        );
     }
 }

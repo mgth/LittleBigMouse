@@ -11,21 +11,33 @@ use egui_kittest::Harness;
 use lbm_layout::geo::Rect;
 use lbm_ui::map::{self, MapMonitor};
 
+/// Two screens with the 20 mm bezel the oracle's desktops actually have — the name is
+/// half of that bezel, so a thinner one would put every name under the legibility floor
+/// and these tests would be asserting about text that is not drawn.
 fn two_screens() -> Vec<MapMonitor<'static>> {
     vec![
         MapMonitor {
             id: "left",
             name: "Left screen",
-            mm_outside: Rect::new(0.0, 0.0, 620.0, 360.0),
-            mm_content: Rect::new(10.0, 10.0, 600.0, 340.0),
+            mm_outside: Rect::new(0.0, 0.0, 640.0, 380.0),
+            mm_content: Rect::new(20.0, 20.0, 600.0, 340.0),
         },
         MapMonitor {
             id: "right",
             name: "Right screen",
-            mm_outside: Rect::new(700.0, 0.0, 620.0, 360.0),
-            mm_content: Rect::new(710.0, 10.0, 600.0, 340.0),
+            mm_outside: Rect::new(700.0, 0.0, 640.0, 380.0),
+            mm_content: Rect::new(720.0, 20.0, 600.0, 340.0),
         },
     ]
+}
+
+/// A window of a stated size, because the name's size follows the fit and the fit
+/// follows the window: a harness left at whatever size it defaults to would make these
+/// tests depend on that default.
+fn harness<'a>(app: impl FnMut(&mut egui::Ui) + 'a) -> Harness<'a> {
+    Harness::builder()
+        .with_size(egui::vec2(1200.0, 900.0))
+        .build_ui(app)
 }
 
 /// The left edge of a laid-out name, as the tree reports it.
@@ -45,7 +57,7 @@ fn left_of(harness: &Harness, label: &str) -> f64 {
 fn the_screens_land_where_the_fit_says_they_do() {
     let screens = two_screens();
     let fitted = std::cell::Cell::new(0.0);
-    let harness = Harness::new_ui(|ui| {
+    let harness = harness(|ui| {
         let fit = map::fit(map::extent(&screens), ui.max_rect());
         fitted.set(fit.ratio);
         map::draw(ui, &screens, &fit, None);
@@ -66,7 +78,7 @@ fn clicking_a_screen_selects_it() {
     let screens = two_screens();
     let clicked = std::cell::Cell::new(None);
 
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness(|ui| {
         let fit = map::fit(map::extent(&screens), ui.max_rect());
         if let Some(id) = map::draw(ui, &screens, &fit, None) {
             clicked.set(Some(id));

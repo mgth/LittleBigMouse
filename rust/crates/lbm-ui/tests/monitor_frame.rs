@@ -28,8 +28,10 @@ fn name_height_drawn(ratio: f64) -> Option<f64> {
 
 #[test]
 fn the_name_grows_with_the_frame() {
-    let small = name_height_drawn(0.2).expect("drawn at 0.2");
-    let large = name_height_drawn(0.4).expect("drawn at 0.4");
+    // Ratios that keep a 10 mm bezel's name — half of it — above the legibility floor,
+    // so what is measured is the growth and not the floor.
+    let small = name_height_drawn(2.0).expect("drawn at 2.0");
+    let large = name_height_drawn(4.0).expect("drawn at 4.0");
 
     assert!(
         large > small * 1.5,

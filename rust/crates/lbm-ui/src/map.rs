@@ -59,13 +59,8 @@ impl Fit {
 
     /// Where one monitor lands in the window, bezel, lit part and name size.
     pub fn place(&self, m: &MapMonitor) -> Drawn {
-        let drawn = frame::draw(m.mm_outside, m.mm_content, self.origin, self.scale());
-        let by = self.corner.to_vec2();
-        Drawn {
-            outside: drawn.outside.translate(by),
-            content: drawn.content.translate(by),
-            name_height: drawn.name_height,
-        }
+        frame::draw(m.mm_outside, m.mm_content, self.origin, self.scale())
+            .translate(self.corner.to_vec2())
     }
 }
 

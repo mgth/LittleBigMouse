@@ -120,6 +120,50 @@ scénarios de l'oracle **sans magasin** passent maintenant par le vrai pipeline
 a enregistré, à 1e-9 près — −682 mm de coin, une télé de 1110 mm à côté d'une dalle de
 300 mm, des hauteurs fractionnaires, neuf écrans.
 
+## Le nom d'un écran : correction d'une règle que j'avais inventée
+
+Le spike des tailles proportionnelles (#682) posait « le nom prend 14 % de la hauteur
+allumée, comme le cadre Avalonia ». **C'était faux, et la seconde moitié de la phrase
+l'était aussi** : le C# ne mesure pas le nom contre la dalle mais contre **la bordure**.
+`MonitorFrameView.axaml:184-186` lie la taille de police à `TopRow.Bounds.Height` par un
+convertisseur `Scale` de paramètre `0.5`, et `TopRow` est la bordure étirée dans la
+cellule (0, 0) de la grille — dont la hauteur est `Unrotated.TopBorder` (`:155-158`,
+lignes `Auto,*,Auto`).
+
+Deux conséquences, pas une :
+
+- **La taille** est la moitié de la bordure du haut. Un écran à bordure fine porte un
+  petit nom quelle que soit la taille de sa dalle. Sur un écran de 600×340 à bordure de
+  10 mm, l'écart entre les deux règles est d'un facteur **47**.
+- **La place** est la bordure du haut, sur la largeur de la dalle (cellule (0, 1)),
+  alignée en bas. Le nom est imprimé **sur le plastique**, là où un vrai moniteur
+  l'imprime — pas par-dessus l'image. Mon cadre le posait dans la partie allumée.
+
+### Et ce que la vraie règle rend visible
+
+Mesuré sur les bureaux de l'oracle, fenêtre de 1000×700 (donc boîte de 940×640) :
+
+| bureau | bordures | police du nom |
+|---|---|---|
+| un seul écran | 20 mm | 13 à 17 pt |
+| `grid-2x2` | 20 mm | 8,3 pt |
+| `six-monitors` | 20 mm | **4,9 pt** |
+| `nine-monitors-long-id` | 20 mm | 4,3 pt |
+| `three-screens-mixed-scale-saved` | 6–10 mm | **1,3 à 2,1 pt** |
+| `border-sections` | 3–6 mm | 1,0 à 2,0 pt |
+
+Autrement dit, **sur tout bureau multi-écrans l'UI livrée dessine le nom entre 1 et 5
+points**. En plein écran (1920×1080) les bordures de 20 mm remontent vers 8–10 pt, mais
+celles de 3 à 6 mm restent sous 3 pt quoi qu'on fasse.
+
+Le plancher de lisibilité de ce portage (7 pt, mon jugement, pas une règle du C#) n'est
+donc **pas une soupape rare** : il décide du cas courant. Tel quel, la carte perd tous
+ses noms dès que la fenêtre n'est pas grande. Trois issues, et c'est un choix produit :
+garder le plancher et accepter une carte sans noms en petite fenêtre ; l'enlever et
+dessiner des noms de 2 points comme aujourd'hui ; ou s'écarter de la règle Avalonia et
+mesurer le nom autrement (une fraction du cadre, bornée par la bordure). **Rien n'est
+tranché ici** : la règle portée est celle du C#, le plancher est resté à 7.
+
 ## Ce qui attend une décision
 
 1. **« Non enregistré » : la formule du plan a un piège.** « DTO courant ≠ DTO stocké » vaut pour

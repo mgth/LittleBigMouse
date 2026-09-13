@@ -479,6 +479,11 @@ Spikes, avant tout écran :
   sombre — l'équerre blanche sur blanc) n'est **pas** reprise : la couleur demandée est la
   couleur obtenue.*
 - Tailles proportionnelles au cadre de l'écran dessiné.
+  ***Corrigé depuis** : la règle que ce spike avait posée pour le nom (« 14 % de la hauteur
+  allumée, comme le cadre Avalonia ») était inventée, et le C# mesure le nom contre **la
+  bordure du haut**, pas contre la dalle — facteur 47 d'écart sur un cas ordinaire. Voir
+  `docs/v7-frontend.md`, qui porte aussi la mesure de ce que la vraie règle donne sur les
+  bureaux de l'oracle.*
   *Répondu (`lbm-ui::frame`). Plus mince que prévu : `MonitorSnapshot` porte déjà `mm_bounds`,
   `mm_outside_bounds` et `pixel_bounds`, donc placer revient à multiplier par un rapport mm→points
   par axe — l'arithmétique se fait à l'entrée, la vue n'a rien à décider (là où Avalonia fait

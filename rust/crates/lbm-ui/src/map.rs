@@ -17,7 +17,7 @@
 //! so the pair is a shape the code never uses, and here the ratio is one number.
 
 use crate::frame::{self, Drawn, Ratio};
-use lbm_layout::geo::{Point, Rect};
+use lbm_layout::geo::Rect;
 
 /// The map keeps this much clear of the window's edge, on every side, as the Avalonia
 /// `Grid Margin="30"` around the presenter does.
@@ -127,14 +127,27 @@ pub fn fit(extent: Rect, available: egui::Rect) -> Fit {
     // alignment outright — so in the shipped app every bit of slack falls to the right
     // and the bottom. Centring here is honouring the layout the view already declares,
     // not inventing one.
-    let drawn = egui::vec2(
-        (extent.width() * ratio) as f32,
-        (extent.height() * ratio) as f32,
-    );
-    let slack = egui::vec2(
-        (inner.width() - drawn.x).max(0.0) / 2.0,
-        (inner.height() - drawn.y).max(0.0) / 2.0,
-    );
+    //
+    // The span has to come from the guarded branch too, and not from the extent
+    // directly. An unusable extent is `-∞` wide, so `inner.width() - drawn.x` would be
+    // `+∞` and the corner infinite — and this is not a case that cannot happen: it is
+    // exactly the one above, monitors present and their union come out empty, where
+    // every frame would then be placed at infinity instead of merely at the wrong
+    // scale.
+    let slack = if usable {
+        let drawn = egui::vec2(
+            (extent.width() * ratio) as f32,
+            (extent.height() * ratio) as f32,
+        );
+        egui::vec2(
+            (inner.width() - drawn.x).max(0.0) / 2.0,
+            (inner.height() - drawn.y).max(0.0) / 2.0,
+        )
+    } else {
+        // Nothing to centre. Draw from the corner of the box, which at least puts what
+        // there is where it can be seen.
+        egui::Vec2::ZERO
+    };
 
     Fit {
         ratio,
@@ -209,11 +222,6 @@ pub fn extent(monitors: &[MapMonitor]) -> Rect {
         Some(first) => it.fold(first, |acc, r| acc.union(&r)),
         None => Rect::EMPTY,
     }
-}
-
-/// `contains`, in millimetres, for callers that work in the layout's own space.
-pub fn contains_mm(r: Rect, at: (f64, f64)) -> bool {
-    r.contains_point(Point::new(at.0, at.1))
 }
 
 #[cfg(test)]
@@ -339,6 +347,28 @@ mod tests {
         // A degenerate extent, which is what `default(Rect)` gives before the first
         // measurement: the C# guard catches this one.
         assert_eq!(fit(Rect::new(0.0, 0.0, 0.0, 0.0), win).ratio, 1.0);
+    }
+
+    /// The fallback has to leave a map that can be drawn, not one placed at infinity.
+    /// An extent is `Rect::EMPTY` while its monitors still exist — that is what the
+    /// union quirk produces from a single unmeasured screen — so the frames are drawn,
+    /// and they have to land somewhere on the window.
+    #[test]
+    fn a_map_with_no_usable_extent_is_still_placed_somewhere_finite() {
+        let screens = two_screens();
+        let f = fit(Rect::EMPTY, window(800.0, 600.0));
+
+        assert!(
+            f.corner.is_finite(),
+            "the map's corner is not a place: {:?}",
+            f.corner
+        );
+        let drawn = f.place(&screens[0]);
+        assert!(
+            drawn.outside.is_finite() && drawn.content.is_finite(),
+            "a frame drawn nowhere: {:?}",
+            drawn.outside
+        );
     }
 
     #[test]

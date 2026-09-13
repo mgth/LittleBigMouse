@@ -5,8 +5,8 @@
 //!
 //! **Keep: the aliases.** A manufacturer logo serves several PnP codes, and the Avalonia
 //! icon loader encodes that in the file name — every dot-separated token of
-//! `Acer.CHE.ALI.ACR.API.svg` becomes a key of its own, so `Pnp/CHE` and `Pnp/ACR` and
-//! `Pnp/Acer` are all that one file. Seventy-odd files cover the whole table that way,
+//! `Acer.CHE.ALI.ACR.API.svg` becomes a key of its own, so `icon/pnp/che` and
+//! `icon/pnp/acr` and `icon/pnp/acer` are all that one file. Seventy-odd files cover the whole table that way,
 //! and nothing else records it: lose the rule and you lose the table.
 //!
 //! **Keep: the recolouring.** An icon is drawn in black and painted in the theme's
@@ -37,11 +37,22 @@ pub type Catalogue = BTreeMap<String, PathBuf>;
 
 /// Every name the icons under `root` answer to, keyed as the Avalonia loader keys them:
 /// the directories below `root`, then one entry per dot-separated token of the file
-/// name.
+/// name, **lowercased**.
 ///
-/// `Pnp/Acer.CHE.ALI.ACR.API.svg` therefore answers to `Pnp/Acer`, `Pnp/CHE`, `Pnp/ALI`,
-/// `Pnp/ACR` and `Pnp/API`. A token claimed by two files is a collision the caller
-/// should know about, so the first one wins and the other is reported.
+/// `Icon/Pnp/Acer.CHE.ALI.ACR.API.svg` under a root of `Assets` therefore answers to
+/// `icon/pnp/acer`, `icon/pnp/che`, `icon/pnp/ali`, `icon/pnp/acr` and `icon/pnp/api` —
+/// which is exactly the shape of the `Logo` strings the model carries, so pass the
+/// `Assets` directory and the keys line up with what a monitor asks for.
+///
+/// Lowercased because `IconService.AddIconProvider` registers with `name.ToLower()` and
+/// every lookup goes through `path.Trim().ToLower()` (`IconService.cs:211-223, 259`): the
+/// table is case-insensitive, and a port that was not would miss on a file whose brand is
+/// spelled `Hp` when the code asks for `HP`.
+///
+/// A token claimed by two files is a collision the caller should know about, so the first
+/// one wins and the other is reported. The C# keeps the **last** registration instead
+/// (`AddOrUpdate`), which resolution order makes arbitrary; the difference is moot on the
+/// shipped set, where the 189 keys collide zero times.
 pub fn catalogue(root: &Path) -> (Catalogue, Vec<String>) {
     let mut found = Catalogue::new();
     let mut collisions = Vec::new();
@@ -62,19 +73,30 @@ pub fn catalogue(root: &Path) -> (Catalogue, Vec<String>) {
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
+            // Joined with `/` explicitly, not by printing the path. A key is a name in
+            // the Avalonia resource space, which is built from a URI and always uses
+            // `/`; printing a `Path` would use the platform's separator and produce
+            // `icon\pnp/del` on Windows, which answers to nothing. The spike missed this
+            // because its root left a prefix of one segment, and one segment has no
+            // separator in it to get wrong.
             let prefix = path
                 .parent()
                 .and_then(|p| p.strip_prefix(root).ok())
-                .map(|p| p.to_string_lossy().into_owned())
+                .map(|p| {
+                    p.components()
+                        .map(|c| c.as_os_str().to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
                 .unwrap_or_default();
             for token in stem.split('.') {
                 if token.is_empty() {
                     continue;
                 }
                 let key = if prefix.is_empty() {
-                    token.to_owned()
+                    token.to_lowercase()
                 } else {
-                    format!("{prefix}/{token}")
+                    format!("{prefix}/{token}").to_lowercase()
                 };
                 match found.entry(key.clone()) {
                     std::collections::btree_map::Entry::Vacant(slot) => {
@@ -86,6 +108,35 @@ pub fn catalogue(root: &Path) -> (Catalogue, Vec<String>) {
         }
     }
     (found, collisions)
+}
+
+/// The file a `Logo` string resolves to, or `None` when nothing answers to it.
+///
+/// The model carries paths of the shape `icon/Pnp/DEL?icon/Pnp/LBM`
+/// (`linux.rs:122`, `windows.rs:337`), and `IconService.BuildIconAsync` reads the `?` as
+/// *main, then fallback* (`IconService.cs:92-94`). Both halves are trimmed and
+/// lowercased before the lookup, as the C# does.
+///
+/// **There is no last resort.** When neither half answers, the C# tries a third key,
+/// `"icons/default"` — and nothing ever registers it: the resource loader builds every
+/// key from `Assets/…` with an `icon/` prefix, so `icons/` with an s cannot be produced,
+/// and no other caller registers it either. A miss is an icon that is simply not drawn
+/// (`IconView.Update` hides the element), and that is what `None` means here.
+///
+/// A path with no `?` therefore has no fallback at all — worth knowing, because the
+/// Linux factory leaves `Logo` empty when a monitor reports no manufacturer code, where
+/// the Windows one falls back to `icon/Pnp/LBM` explicitly.
+pub fn resolve<'a>(catalogue: &'a Catalogue, path: &str) -> Option<&'a Path> {
+    let key = |s: &str| {
+        catalogue
+            .get(s.trim().to_lowercase().as_str())
+            .map(|p| &**p)
+    };
+    let (main, fallback) = match path.split_once('?') {
+        Some((main, fallback)) => (main, Some(fallback)),
+        None => (path, None),
+    };
+    key(main).or_else(|| fallback.and_then(key))
 }
 
 /// A colour to paint an icon in.

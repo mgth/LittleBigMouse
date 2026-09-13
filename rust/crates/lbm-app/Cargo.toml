@@ -1,0 +1,26 @@
+[package]
+name = "lbm-app"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The LittleBigMouse frontend's window: what lbm-ui draws, on screen"
+
+[dependencies]
+# The window. `lbm-ui` deliberately has none — it is driven headlessly through the
+# accessibility tree — so everything that needs winit and a GL context lives here and
+# nowhere else.
+#
+# Its default features are kept. Trimming them is what broke the first attempt: with
+# `default-features = false` a repaint asked for from another thread never reached the
+# event loop at all — neither `ui` nor `logic` ran again — and the window sat on
+# "looking for screens…" while the answer had been ready in 78 ms. The default list
+# includes `winit/default`, which a crate that does not depend on winit directly cannot
+# ask for on its own.
+eframe = { version = "0.36", features = ["glow"] }
+egui = "0.36"
+
+lbm-ui = { path = "../lbm-ui" }
+lbm-layout = { path = "../lbm-layout" }
+lbm-display = { path = "../lbm-display" }
+lbm-icons = { path = "../lbm-icons" }

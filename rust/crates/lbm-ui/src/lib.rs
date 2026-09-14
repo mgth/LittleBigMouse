@@ -20,6 +20,7 @@ pub mod list;
 pub mod map;
 pub mod options;
 pub mod probe;
+pub mod shortcut;
 pub mod wallpaper;
 
 /// What the engine is doing, in the agent's own words (its `Snapshot.Engine`).

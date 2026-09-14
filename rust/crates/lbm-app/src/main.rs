@@ -135,6 +135,14 @@ struct App {
     excluded: Option<Vec<String>>,
     /// What the user is typing into the exclusion box.
     pattern: String,
+    /// Whether the rescue recorder is waiting for a combination.
+    recording: lbm_ui::shortcut::Recording,
+    /// The shortcut the hook said it could not arm, if it said so.
+    ///
+    /// Only the hook knows: it is the one that registers. A well-formed shortcut that
+    /// nothing armed is exactly the case a user would otherwise discover at the moment
+    /// they need the rescue.
+    shortcut_unavailable: Option<String>,
     /// The document the agent was last given, as it went on the wire, and when.
     ///
     /// `None` means "unknown", which makes the next tick send whatever the layout is —
@@ -606,6 +614,8 @@ impl App {
             seen: Vec::new(),
             excluded: None,
             pattern: String::new(),
+            recording: lbm_ui::shortcut::Recording::default(),
+            shortcut_unavailable: None,
             previewed: None,
             view: View::Map,
             icons,
@@ -773,6 +783,10 @@ impl App {
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
+        // A new shortcut makes the hook's old verdict meaningless: it was about the one
+        // before. Cleared here rather than in the panel, because this is the moment the
+        // change actually leaves — the hook will say again if the new one is no better.
+        self.shortcut_unavailable = None;
         let (method, extra) =
             lbm_app::settings::save_options(&layout.options, self.excluded.as_deref());
         self.send(method, extra);
@@ -800,6 +814,15 @@ impl App {
             }
             // Whatever it said, a request came back: the bar stops waiting.
             lbm_ui::update(&mut self.state, lbm_ui::Action::Answered);
+            return;
+        }
+        // The hook's own report on the rescue. Only it knows whether the registration
+        // took, so this is repeated rather than reasoned about — and cleared the moment
+        // the shortcut changes, because the verdict was about the old one.
+        if let Message::Hook { name, payload } = &message {
+            if name == "ShortcutUnavailable" {
+                self.shortcut_unavailable = Some(payload.clone());
+            }
             return;
         }
         let Message::State(state) = message else {
@@ -1096,18 +1119,23 @@ impl eframe::App for App {
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
                 if self.view == View::Settings {
+                    let mut recording = self.recording;
+                    let unavailable = self.shortcut_unavailable.clone();
                     match self.layout.as_mut() {
-                        // Through `edit_options` rather than at the field: it is what
-                        // marks the layout unsaved and what republishes the extent when
-                        // the border values move, and a panel writing round it would
-                        // leave both wrong.
                         // `edit_options` is what marks the layout unsaved and what
                         // republishes the extent when the border values move; a panel
                         // writing round it would leave both wrong. The per-layout half
                         // needs no more than that — being unsaved *is* what Save reads.
                         Some(layout) => {
                             layout.edit_options(|o| {
-                                save_options = lbm_ui::options::panel(ui, o, cfg!(windows)).app;
+                                save_options = lbm_ui::options::panel(
+                                    ui,
+                                    o,
+                                    cfg!(windows),
+                                    &mut recording,
+                                    unavailable.as_deref(),
+                                )
+                                .app;
                             });
                             // Outside `edit_options`: the excluded list is not one of the
                             // layout's options here — the window keeps it apart precisely
@@ -1124,6 +1152,7 @@ impl eframe::App for App {
                             ui.label("the displays have not been read yet");
                         }
                     }
+                    self.recording = recording;
                     return (None, None);
                 }
                 let monitors = self.monitors(&logos);

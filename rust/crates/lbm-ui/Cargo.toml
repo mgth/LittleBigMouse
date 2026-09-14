@@ -11,6 +11,10 @@ egui = "0.36"
 # The layout model the map draws: millimetres, bezels, and the rectangles a monitor
 # occupies. The frontend reads the same model the agent computes from.
 lbm-layout = { path = "../lbm-layout" }
+# The rescue shortcut'''s grammar, shared with the hook that registers it — so what this
+# panel lets a user write is exactly what the daemon will accept. Not `lbm-hook`: that
+# crate is the one that takes the mice, and this window must never be able to.
+lbm-ipc = { path = "../lbm-ipc" }
 # The same crate, version and feature set the agent decodes wallpapers with, so the two
 # sides of the product cannot disagree about what a picture looks like.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }

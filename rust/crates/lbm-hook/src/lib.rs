@@ -14,7 +14,15 @@ pub mod hook;
 pub mod ipc;
 pub mod platform;
 pub mod shared;
-pub mod shortcut;
+/// The rescue shortcut's grammar, which now lives with the protocol.
+///
+/// It moved because its own first paragraph said where it belonged: "as it travels on
+/// the wire", and "keeping the grammar in one place means the UI's recorder and the
+/// daemon's registrar cannot drift apart". The v7 frontend is that recorder, and it must
+/// never link this crate — linking the hook is linking the code that takes the mice. So
+/// the grammar sits in `lbm-ipc`, which both sides already have, and this re-export keeps
+/// every `crate::shortcut::…` in the hook meaning what it did.
+pub use lbm_ipc::shortcut;
 
 #[cfg(test)]
 mod testing;

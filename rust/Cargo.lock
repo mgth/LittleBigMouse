@@ -2115,6 +2115,7 @@ dependencies = [
  "egui_kittest",
  "image",
  "lbm-icons",
+ "lbm-ipc",
  "lbm-layout",
  "serde_json",
 ]

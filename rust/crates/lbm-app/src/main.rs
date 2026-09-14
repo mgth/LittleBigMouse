@@ -57,6 +57,8 @@ enum Found {
     Displays {
         layout: Box<Layout>,
         screens: Vec<Screen>,
+        /// `None` when `Excluded.txt` does not exist yet — see [`read_excluded`].
+        excluded: Option<Vec<String>>,
     },
     /// Something the agent said.
     Agent(Message),
@@ -114,6 +116,14 @@ struct App {
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
     drag: Option<Drag>,
+    /// The processes the engine stands aside for, once they have been read.
+    ///
+    /// `None` is **not** an empty list: it is "not read", and it is what keeps the window
+    /// from offering exclusions it does not have to be removed, and from sending an empty
+    /// list over the user's real one. See [`read_excluded`].
+    excluded: Option<Vec<String>>,
+    /// What the user is typing into the exclusion box.
+    pattern: String,
     /// The document the agent was last given, as it went on the wire, and when.
     ///
     /// `None` means "unknown", which makes the next tick send whatever the layout is —
@@ -521,7 +531,13 @@ impl App {
             let wanted = wallpapers(&layout.id, &screens);
             // The receiver is gone only if the window closed first, which is not a
             // failure worth reporting.
-            let _ = detected.send(Found::Displays { layout, screens });
+            let _ = detected.send(Found::Displays {
+                layout,
+                screens,
+                excluded: lbm_app::settings::read_excluded(
+                    lbm_store::layout_persistence::default_excluded_list_file(),
+                ),
+            });
             // **The thread wakes the window.** Nothing polls, and nothing needs to:
             // measured, including the adversarial case where the answer is held back
             // three seconds so that it lands while the window is idle — eframe schedules
@@ -546,6 +562,8 @@ impl App {
             screens: Vec::new(),
             selected: None,
             drag: None,
+            excluded: None,
+            pattern: String::new(),
             previewed: None,
             view: View::Map,
             icons,
@@ -659,6 +677,46 @@ impl App {
         self.drag = None;
     }
 
+    /// Applies what the user did to the excluded list. `true` when it changed, which is
+    /// the cue to save.
+    ///
+    /// The duplicate rules are the store's, not this window's: a typed pattern is
+    /// compared exactly (a user is entitled to two spellings of a path), while the
+    /// defaults top-up is **separator-insensitive** — `ExcludedProcessDefaults.ContainsEntry`,
+    /// the daemon's own matching — so a list seeded with the Windows-style entries is not
+    /// doubled with their Linux twins.
+    fn excluded_edit(&mut self, did: lbm_ui::excluded::Did) -> bool {
+        use lbm_store::excluded_process_defaults as defaults;
+        let Some(list) = self.excluded.as_mut() else {
+            return false;
+        };
+        match did {
+            lbm_ui::excluded::Did::Add(pattern) => {
+                if !lbm_ui::excluded::can_add(list, &pattern) {
+                    return false;
+                }
+                list.push(pattern);
+                self.pattern.clear();
+                true
+            }
+            lbm_ui::excluded::Did::Remove(pattern) => {
+                let before = list.len();
+                list.retain(|e| *e != pattern);
+                before != list.len()
+            }
+            lbm_ui::excluded::Did::AddDefaults => {
+                let mut added = false;
+                for entry in defaults::ALL {
+                    if !defaults::contains_entry(list.iter(), entry) {
+                        list.push((*entry).to_owned());
+                        added = true;
+                    }
+                }
+                added
+            }
+        }
+    }
+
     /// Sends the app-wide options to the agent, which is the only thing that writes them.
     ///
     /// The request itself is [`lbm_app::settings::save_options`], where a test can check
@@ -667,7 +725,8 @@ impl App {
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
-        let (method, extra) = lbm_app::settings::save_options(&layout.options);
+        let (method, extra) =
+            lbm_app::settings::save_options(&layout.options, self.excluded.as_deref());
         self.send(method, extra);
     }
 
@@ -852,9 +911,14 @@ impl eframe::App for App {
         {
             for found in landed {
                 match found {
-                    Found::Displays { layout, screens } => {
+                    Found::Displays {
+                        layout,
+                        screens,
+                        excluded,
+                    } => {
                         self.layout = Some(layout);
                         self.screens = screens;
+                        self.excluded = excluded;
                     }
                     Found::Agent(message) => self.agent_said(message),
                     Found::AgentGone => {
@@ -937,6 +1001,7 @@ impl eframe::App for App {
         // The `Ui` handed to `App::ui` has no background of its own — the doc says so
         // outright — so the map would be drawn on nothing.
         let mut save_options = false;
+        let mut excluded_did = None;
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
                 if self.view == View::Settings {
@@ -949,9 +1014,21 @@ impl eframe::App for App {
                         // republishes the extent when the border values move; a panel
                         // writing round it would leave both wrong. The per-layout half
                         // needs no more than that — being unsaved *is* what Save reads.
-                        Some(layout) => layout.edit_options(|o| {
-                            save_options = lbm_ui::options::panel(ui, o, cfg!(windows)).app;
-                        }),
+                        Some(layout) => {
+                            layout.edit_options(|o| {
+                                save_options = lbm_ui::options::panel(ui, o, cfg!(windows)).app;
+                            });
+                            // Outside `edit_options`: the excluded list is not one of the
+                            // layout's options here — the window keeps it apart precisely
+                            // because it may not have read it, and `LayoutOptions` has no
+                            // way to say "not read".
+                            excluded_did = lbm_ui::excluded::panel(
+                                ui,
+                                self.excluded.as_deref(),
+                                &mut self.pattern,
+                                &[],
+                            );
+                        }
                         None => {
                             ui.label("the displays have not been read yet");
                         }
@@ -1006,6 +1083,9 @@ impl eframe::App for App {
                 }
             })
             .inner;
+        if let Some(did) = excluded_did {
+            save_options |= self.excluded_edit(did);
+        }
         if save_options {
             self.save_options();
         }

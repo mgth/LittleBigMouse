@@ -569,10 +569,15 @@ impl App {
     ///
     /// One function for both because the two must not disagree: the lines say why the
     /// screen is where it is, so they have to come from the same call that put it there.
+    ///
+    /// `anchors` is the Ctrl key, inverted — see [`drag::snap`]. It is read on every
+    /// frame of the gesture rather than at the press, because that is when the user
+    /// reaches for it: they drag, watch it jump flush, and then hold Ctrl to say no.
     fn held(
         &self,
         monitors: &[MapMonitor<'_>],
         fit: &map::Fit,
+        anchors: bool,
     ) -> Option<(usize, (f64, f64), drag::Snap)> {
         let drag = self.drag.as_ref()?;
         let i = monitors.iter().position(|m| m.id == drag.id)?;
@@ -589,7 +594,7 @@ impl App {
             .filter(|(j, _)| *j != i)
             .map(|(_, m)| drag::Screen::from(m))
             .collect();
-        let snap = drag::snap(drag::Screen::from(&monitors[i]), free, &others);
+        let snap = drag::snap(drag::Screen::from(&monitors[i]), free, &others, anchors);
         Some((i, (free.0 + snap.offset.0, free.1 + snap.offset.1), snap))
     }
 
@@ -767,7 +772,9 @@ impl eframe::App for App {
                         // it was when the gesture started, and a screen dragged past the
                         // edge goes off the map instead of shrinking it under the pointer.
                         let fit = map::fit(map::extent(&monitors), at);
-                        let held = self.held(&monitors, &fit);
+                        // Ctrl held means no anchors: `MonitorLocationView.axaml.cs:185`.
+                        let anchors = !ui.input(|i| i.modifiers.ctrl);
+                        let held = self.held(&monitors, &fit, anchors);
 
                         // Drawn where the pointer has it, and **last**, so it stays on top
                         // of whatever it is sliding over.

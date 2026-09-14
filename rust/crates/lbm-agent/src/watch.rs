@@ -705,81 +705,81 @@ mod tests {
                 "the source reads events but is marked down"
             );
         }
-    }
 
-    /// When the loop goes back for a missing source, and when it leaves well alone.
-    #[test]
-    fn a_missing_source_is_tried_again_but_not_before_its_time() {
-        let live = Live::default();
-        let (_, _) = (live.came_up(Source::Inotify), live.came_up(Source::Uevents));
-        assert!(live.all_up());
-        assert!(
-            !retry_due(&live, RETRY * 100),
-            "nothing is missing, so there is nothing to raise — however long it has been"
-        );
+        /// When the loop goes back for a missing source, and when it leaves well alone.
+        #[test]
+        fn a_missing_source_is_tried_again_but_not_before_its_time() {
+            let live = Live::default();
+            let (_, _) = (live.came_up(Source::Inotify), live.came_up(Source::Uevents));
+            assert!(live.all_up());
+            assert!(
+                !retry_due(&live, RETRY * 100),
+                "nothing is missing, so there is nothing to raise — however long it has been"
+            );
 
-        live.went(Source::Inotify);
-        assert!(
-            !retry_due(&live, RETRY - Duration::from_millis(1)),
-            "a source down for less than the interval is not tried again yet"
-        );
-        assert!(retry_due(&live, RETRY), "and at the interval it is");
-        assert!(retry_due(&live, RETRY * 10));
-    }
+            live.went(Source::Inotify);
+            assert!(
+                !retry_due(&live, RETRY - Duration::from_millis(1)),
+                "a source down for less than the interval is not tried again yet"
+            );
+            assert!(retry_due(&live, RETRY), "and at the interval it is");
+            assert!(retry_due(&live, RETRY * 10));
+        }
 
-    /// A reader that ends marks its source down, **however** it ends.
-    ///
-    /// This is what makes the retry fire at all, and it was the one perturbation the
-    /// other tests did not catch: deleting the line that marked the source down left
-    /// every one of them green, because they all made the loss by hand. Hence the guard,
-    /// and hence this.
-    #[test]
-    fn a_reader_that_ends_marks_its_source_down() {
-        let live = Arc::new(Live::default());
+        /// A reader that ends marks its source down, **however** it ends.
+        ///
+        /// This is what makes the retry fire at all, and it was the one perturbation the
+        /// other tests did not catch: deleting the line that marked the source down left
+        /// every one of them green, because they all made the loss by hand. Hence the guard,
+        /// and hence this.
+        #[test]
+        fn a_reader_that_ends_marks_its_source_down() {
+            let live = Arc::new(Live::default());
 
-        let (reader, recovered) = Reader::new(Source::Inotify, live.clone());
-        assert!(live.up(Source::Inotify));
-        assert!(!recovered, "it had not been lost, so nothing to announce");
-        drop(reader);
-        assert!(!live.up(Source::Inotify), "nothing would ever retry it");
+            let (reader, recovered) = Reader::new(Source::Inotify, live.clone());
+            assert!(live.up(Source::Inotify));
+            assert!(!recovered, "it had not been lost, so nothing to announce");
+            drop(reader);
+            assert!(!live.up(Source::Inotify), "nothing would ever retry it");
 
-        // Including the ways a plain line at the end of the loop would miss: a panic on
-        // the way out, and the task dropped without running to completion.
-        let live2 = live.clone();
-        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let (_reader, _) = Reader::new(Source::Uevents, live2);
-            panic!("the relevance test blew up");
-        }));
-        assert!(panicked.is_err());
-        assert!(
-            !live.up(Source::Uevents),
-            "a panicking reader left its source marked up with nobody reading it"
-        );
-    }
+            // Including the ways a plain line at the end of the loop would miss: a panic on
+            // the way out, and the task dropped without running to completion.
+            let live2 = live.clone();
+            let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let (_reader, _) = Reader::new(Source::Uevents, live2);
+                panic!("the relevance test blew up");
+            }));
+            assert!(panicked.is_err());
+            assert!(
+                !live.up(Source::Uevents),
+                "a panicking reader left its source marked up with nobody reading it"
+            );
+        }
 
-    /// The bookkeeping that decides what reaches the log, away from any descriptor.
-    #[test]
-    fn a_loss_is_said_once_and_so_is_the_recovery() {
-        let live = Live::default();
+        /// The bookkeeping that decides what reaches the log, away from any descriptor.
+        #[test]
+        fn a_loss_is_said_once_and_so_is_the_recovery() {
+            let live = Live::default();
 
-        assert!(live.lost(Source::Inotify), "the first loss is news");
-        assert!(!live.lost(Source::Inotify), "and the second is not");
-        assert!(!live.lost(Source::Inotify));
-        // The other source keeps its own counsel.
-        assert!(live.lost(Source::Uevents), "each source speaks for itself");
+            assert!(live.lost(Source::Inotify), "the first loss is news");
+            assert!(!live.lost(Source::Inotify), "and the second is not");
+            assert!(!live.lost(Source::Inotify));
+            // The other source keeps its own counsel.
+            assert!(live.lost(Source::Uevents), "each source speaks for itself");
 
-        assert!(live.came_up(Source::Inotify), "coming back is news too");
-        assert!(live.up(Source::Inotify));
-        assert!(!live.all_up(), "the other one is still down");
+            assert!(live.came_up(Source::Inotify), "coming back is news too");
+            assert!(live.up(Source::Inotify));
+            assert!(!live.all_up(), "the other one is still down");
 
-        // And once it has been up, losing it again is news again.
-        live.went(Source::Inotify);
-        assert!(live.lost(Source::Inotify));
+            // And once it has been up, losing it again is news again.
+            live.went(Source::Inotify);
+            assert!(live.lost(Source::Inotify));
 
-        assert!(live.came_up(Source::Uevents));
-        assert!(
-            !live.came_up(Source::Uevents),
-            "a source that never went is not a recovery"
-        );
+            assert!(live.came_up(Source::Uevents));
+            assert!(
+                !live.came_up(Source::Uevents),
+                "a source that never went is not a recovery"
+            );
+        }
     }
 }

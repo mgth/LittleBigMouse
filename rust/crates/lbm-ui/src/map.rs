@@ -67,6 +67,18 @@ impl Fit {
         frame::draw(m.mm_outside, m.mm_content, self.origin, self.scale())
             .translate(self.corner.to_vec2())
     }
+
+    /// A millimetre on the x axis, in the window. The same arithmetic [`Fit::place`]
+    /// does to a rectangle's left edge, for callers that have a bare position to put
+    /// somewhere — [`crate::drag`]'s guides are lines, not frames.
+    pub fn x(&self, mm: f64) -> f32 {
+        self.corner.x + ((mm - self.origin.0) * self.ratio) as f32
+    }
+
+    /// The same on the y axis.
+    pub fn y(&self, mm: f64) -> f32 {
+        self.corner.y + ((mm - self.origin.1) * self.ratio) as f32
+    }
 }
 
 /// The box the map is fitted into: the window less the margin, never inside out.
@@ -197,23 +209,56 @@ pub fn select<'a>(current: Option<&'a str>, clicked: Option<&'a str>) -> Option<
     clicked.or(current)
 }
 
-/// Draws the whole map and gives back the monitor the user clicked, if any.
+/// What the user is doing to the map with the pointer.
+///
+/// One gesture, reported in three parts, because the caller has to treat them
+/// differently: a click changes the selection, a move needs the screen redrawn somewhere
+/// else, and only the release is allowed to touch the layout.
+///
+/// **The caller keeps the running total, not this.** [`Gesture::Dragged`] carries the
+/// whole gesture so far because that is what the snap needs, but [`Gesture::Dropped`]
+/// carries nothing: on the frame a drag ends, egui has already let go of the press and
+/// `Response::total_drag_delta` is `None`. So the value to commit is the last one the
+/// caller was given — which is exactly how the C# does it, `EndMove` reading the `X`/`Y`
+/// that the last `Move` wrote (`FrameMover.cs:139-140`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Gesture<'a> {
+    /// Pressed and released without really moving.
+    Clicked(&'a str),
+    /// Held and moved. `by` is the whole gesture, press to now, in points.
+    Dragged { id: &'a str, by: egui::Vec2 },
+    /// Let go.
+    Dropped { id: &'a str },
+}
+
+/// Draws the whole map and gives back what the pointer did, if anything.
+///
+/// The monitors are drawn in the order given and the last one wins an overlap, so a
+/// caller with a screen in hand should pass it last — a dragged screen sliding underneath
+/// a stationary one is a screen the user has lost sight of. (`MonitorLocationView.axaml.cs:149`
+/// wants the same thing and says so: `//Gui.BringToFront(); // Todo`.)
 pub fn draw<'a>(
     ui: &mut egui::Ui,
     monitors: &[MapMonitor<'a>],
     fit: &Fit,
     selected: Option<&str>,
-) -> Option<&'a str> {
-    let mut clicked = None;
+) -> Option<Gesture<'a>> {
+    let mut gesture = None;
     for m in monitors {
         let drawn = fit.place(m);
         // Sensed before it is painted: the rect has to be claimed for the pointer
         // whether or not anything is drawn inside it, and a screen too small to be
         // labelled is still a screen you can click.
+        //
+        // `click_and_drag`, so egui decides which of the two a press turns out to be. It
+        // does it by distance and duration, which is the rule the C# was reaching for and
+        // missed: `FrameMover.cs:113` compares the release point to the press point for
+        // exact equality, and a touchpad's tenth of a pixel of drift turns every click
+        // into a zero-length drag that never selects anything.
         let response = ui.interact(
             drawn.outside,
             ui.id().with(("monitor", m.id)),
-            egui::Sense::click(),
+            egui::Sense::click_and_drag(),
         );
         frame::monitor(
             ui,
@@ -226,10 +271,14 @@ pub fn draw<'a>(
             },
         );
         if response.clicked() {
-            clicked = Some(m.id);
+            gesture = Some(Gesture::Clicked(m.id));
+        } else if response.drag_stopped() {
+            gesture = Some(Gesture::Dropped { id: m.id });
+        } else if let Some(by) = response.total_drag_delta() {
+            gesture = Some(Gesture::Dragged { id: m.id, by });
         }
     }
-    clicked
+    gesture
 }
 
 /// The union of every monitor's outside bounds — the map's extent, when the caller does

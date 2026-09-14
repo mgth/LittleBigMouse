@@ -13,6 +13,7 @@
 //! `egui_kittest` drives the widgets through the accessibility tree, headless, in CI —
 //! see `tests/bottom_bar.rs`.
 
+pub mod drag;
 pub mod frame;
 pub mod list;
 pub mod map;

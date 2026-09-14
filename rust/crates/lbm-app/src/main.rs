@@ -23,10 +23,10 @@ use std::path::PathBuf;
 
 use lbm_app::client::{self, Message};
 use lbm_icons::{Catalogue, Rgba};
-use lbm_layout::geo::Rect;
+use lbm_layout::geo::{Rect, Vector};
 use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_ui::map::MapMonitor;
-use lbm_ui::{frame, list, map};
+use lbm_ui::{drag, frame, list, map};
 
 /// One monitor, owned, because `MapMonitor` borrows.
 struct Screen {
@@ -43,7 +43,13 @@ struct Screen {
 /// What the worker sends back. Two kinds, so the screens can be drawn as soon as they
 /// are known instead of waiting on a wallpaper that may take a second to decode.
 enum Found {
-    Screens(Vec<Screen>),
+    /// The layout as detected, and the screens read off it. Both, because the window now
+    /// keeps the layout: dragging a screen writes a millimetre position into it, and
+    /// [`screens_of`] reads the answer back out.
+    Displays {
+        layout: Box<Layout>,
+        screens: Vec<Screen>,
+    },
     /// Something the agent said.
     Agent(Message),
     /// The agent went away, or was never there.
@@ -52,6 +58,25 @@ enum Found {
         screen: String,
         picture: image::RgbaImage,
     },
+}
+
+/// A screen in hand: which one, and how far the pointer has taken it.
+///
+/// `by` is in points and covers the whole gesture, press to now — the map turns it into
+/// millimetres, because the conversion is the map's ratio and only the map knows it.
+struct Drag {
+    id: String,
+    by: egui::Vec2,
+}
+
+/// What the pointer did to the map, in a form that no longer borrows the screens.
+///
+/// The views hand back a `&str` into `self.screens`, and every one of these answers ends
+/// in changing `self` — so the borrow has to be given up in between.
+enum Did {
+    Clicked(String),
+    Dragged { id: String, by: egui::Vec2 },
+    Dropped { id: String },
 }
 
 /// Which view the window is showing — `MainViewModel.ViewList`, a toggle of its own and
@@ -69,8 +94,17 @@ struct App {
     /// what the agent connection will need and it is better exercised now than invented
     /// later.
     arriving: Option<std::sync::mpsc::Receiver<Found>>,
+    /// The layout the screens were read off, kept so that the window can edit it.
+    ///
+    /// **In memory only.** Nothing here writes a file: the detection ran with a loader
+    /// that does nothing, so no stored profile was read, and a drag changes this copy and
+    /// nothing else. Handing the edit to the agent — which is what would make it last — is
+    /// the `Save` the bar still greys out.
+    layout: Option<Box<Layout>>,
     screens: Vec<Screen>,
     selected: Option<String>,
+    /// The screen the pointer is holding, while it holds it.
+    drag: Option<Drag>,
     view: View,
     icons: Catalogue,
     /// Uploaded logos, by icon path. Loaded once, on the frame that first needs one.
@@ -114,8 +148,11 @@ fn icons_root() -> Option<PathBuf> {
 }
 
 /// The displays now, as the agent's `Discovery` finds them — the same two calls, without
-/// the agent. Gives the layout's id too: the wallpaper settings are keyed by it.
-fn detect() -> (String, Vec<Screen>) {
+/// the agent.
+///
+/// The layout comes back whole rather than reduced to its screens, because the window
+/// keeps it: a drag writes a position into it and [`screens_of`] reads the result.
+fn detect() -> Option<Box<Layout>> {
     let mut layout = Layout::new(LayoutOptions::default());
 
     #[cfg(windows)]
@@ -153,11 +190,15 @@ fn detect() -> (String, Vec<Screen>) {
         .is_ok()
     };
 
-    if !built {
-        return (String::new(), Vec::new());
-    }
+    built.then(|| Box::new(layout))
+}
 
-    let screens = layout
+/// The screens as the views want them, read off the layout.
+///
+/// Called again after every edit, so what is drawn is what the layout says and never a
+/// separate copy of it kept in step by hand.
+fn screens_of(layout: &Layout) -> Vec<Screen> {
+    layout
         .monitors()
         .iter()
         .filter_map(|m| {
@@ -182,8 +223,7 @@ fn detect() -> (String, Vec<Screen>) {
                     .unwrap_or_default(),
             })
         })
-        .collect();
-    (layout.id.clone(), screens)
+        .collect()
 }
 
 /// The thumbnails for one layout's screens, in the order they will be wanted.
@@ -408,13 +448,16 @@ impl App {
         let detected = send.clone();
         let waker = ctx.clone();
         std::thread::spawn(move || {
-            let (id, screens) = detect();
+            let Some(layout) = detect() else {
+                return;
+            };
+            let screens = screens_of(&layout);
             // The wallpaper is worked out from what the screens turn out to be, so the
             // settings are read here and not before.
-            let wanted = wallpapers(&id, &screens);
+            let wanted = wallpapers(&layout.id, &screens);
             // The receiver is gone only if the window closed first, which is not a
             // failure worth reporting.
-            let _ = detected.send(Found::Screens(screens));
+            let _ = detected.send(Found::Displays { layout, screens });
             // **The thread wakes the window.** Nothing polls, and nothing needs to:
             // measured, including the adversarial case where the answer is held back
             // three seconds so that it lands while the window is idle — eframe schedules
@@ -435,8 +478,10 @@ impl App {
 
         App {
             arriving: Some(arriving),
+            layout: None,
             screens: Vec::new(),
             selected: None,
+            drag: None,
             view: View::Map,
             icons,
             textures: HashMap::new(),
@@ -519,6 +564,79 @@ impl App {
         Some(handle)
     }
 
+    /// The screen in hand, if there is one: which of `monitors` it is, how far it has
+    /// really gone in millimetres, and what it lines up with on the way.
+    ///
+    /// One function for both because the two must not disagree: the lines say why the
+    /// screen is where it is, so they have to come from the same call that put it there.
+    fn held(
+        &self,
+        monitors: &[MapMonitor<'_>],
+        fit: &map::Fit,
+    ) -> Option<(usize, (f64, f64), drag::Snap)> {
+        let drag = self.drag.as_ref()?;
+        let i = monitors.iter().position(|m| m.id == drag.id)?;
+        // Points back to millimetres, `FrameMover.cs:172`. The ratio should not be zero
+        // here — a screen was drawn, so it was drawn at some scale — but dividing by it
+        // is not a thing to do on a should.
+        if fit.ratio <= 0.0 || !fit.ratio.is_finite() {
+            return None;
+        }
+        let free = (drag.by.x as f64 / fit.ratio, drag.by.y as f64 / fit.ratio);
+        let others: Vec<drag::Screen> = monitors
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .map(|(_, m)| drag::Screen::from(m))
+            .collect();
+        let snap = drag::snap(drag::Screen::from(&monitors[i]), free, &others);
+        Some((i, (free.0 + snap.offset.0, free.1 + snap.offset.1), snap))
+    }
+
+    /// What a click, a move or a drop means.
+    ///
+    /// A **drop is the only thing here that touches the layout**, which is the C#'s shape
+    /// too: the mover carries its own position while the gesture lasts and writes it into
+    /// the model in `EndMove`. Nothing leaves this process either way — the edit lives in
+    /// the window's copy of the layout until there is a Save to send it anywhere.
+    fn acted_on_the_map(
+        &mut self,
+        did: Option<Did>,
+        total: Option<(f64, f64)>,
+        ctx: &egui::Context,
+    ) {
+        match did {
+            Some(Did::Clicked(id)) => {
+                self.selected = Some(id);
+                self.drag = None;
+            }
+            Some(Did::Dragged { id, by }) => self.drag = Some(Drag { id, by }),
+            Some(Did::Dropped { id }) => self.drop_it(&id, total),
+            // A drag that stops being reported without a drop — the window losing the
+            // pointer mid-gesture — is a drop, not a screen left hanging.
+            // `MonitorLocationView.axaml.cs:177-182` ends the move the same way, on the
+            // button no longer being down rather than on a release it may never see.
+            None => {
+                if self.drag.is_some() && !ctx.input(|i| i.pointer.any_down()) {
+                    let id = self.drag.as_ref().map(|d| d.id.clone()).unwrap_or_default();
+                    self.drop_it(&id, total);
+                }
+            }
+        }
+    }
+
+    /// Writes the drop into the layout and reads the screens back out of it.
+    fn drop_it(&mut self, id: &str, total: Option<(f64, f64)>) {
+        self.drag = None;
+        let (Some(layout), Some(by)) = (self.layout.as_mut(), total) else {
+            return;
+        };
+        drag::drop_screen(layout, id, by);
+        // Not "move that one screen": compaction can shift any of them, so what is drawn
+        // next is read off the layout whole.
+        self.screens = screens_of(layout);
+    }
+
     /// The screens as the views want them, logos resolved.
     fn monitors<'a>(
         &'a self,
@@ -558,7 +676,10 @@ impl eframe::App for App {
         {
             for found in landed {
                 match found {
-                    Found::Screens(screens) => self.screens = screens,
+                    Found::Displays { layout, screens } => {
+                        self.layout = Some(layout);
+                        self.screens = screens;
+                    }
                     Found::Agent(message) => self.agent_said(message),
                     Found::AgentGone => {
                         self.requests = None;
@@ -632,19 +753,65 @@ impl eframe::App for App {
 
         // The `Ui` handed to `App::ui` has no background of its own — the doc says so
         // outright — so the map would be drawn on nothing.
-        egui::CentralPanel::default().show(ui, |ui| {
-            let monitors = self.monitors(&logos);
-            let at = ui.max_rect();
-            let picked = match self.view {
-                View::Map => {
-                    let fit = map::fit(map::extent(&monitors), at);
-                    map::draw(ui, &monitors, &fit, self.selected.as_deref())
+        let acted = egui::CentralPanel::default()
+            .show(ui, |ui| {
+                let monitors = self.monitors(&logos);
+                let at = ui.max_rect();
+                match self.view {
+                    View::Map => {
+                        // **Measured before anything moves.** The Avalonia presenter asks
+                        // the layout for its ratio on every move
+                        // (`FrameMover.cs:166`) and the layout only republishes its
+                        // extent when a position is written — which nothing does until
+                        // the drop. So the scale and the corner belong to the desktop as
+                        // it was when the gesture started, and a screen dragged past the
+                        // edge goes off the map instead of shrinking it under the pointer.
+                        let fit = map::fit(map::extent(&monitors), at);
+                        let held = self.held(&monitors, &fit);
+
+                        // Drawn where the pointer has it, and **last**, so it stays on top
+                        // of whatever it is sliding over.
+                        let mut shown = monitors.clone();
+                        if let Some((i, total, _)) = &held {
+                            let moved = shown.remove(*i);
+                            let by = Vector::new(total.0, total.1);
+                            shown.push(MapMonitor {
+                                mm_outside: moved.mm_outside.translate(by),
+                                mm_content: moved.mm_content.translate(by),
+                                ..moved
+                            });
+                        }
+
+                        let gesture = map::draw(ui, &shown, &fit, self.selected.as_deref());
+                        // After the frames: the lines are about the screens, so they are
+                        // read over them. The C# adds its canvas to the panel the frames
+                        // are already in, which puts it on top the same way.
+                        if let Some((_, _, snap)) = &held {
+                            drag::draw(ui, &fit, snap);
+                        }
+                        (owned(gesture), held.map(|(_, total, _)| total))
+                    }
+                    View::List => {
+                        let picked = list::draw(ui, at, &monitors, self.selected.as_deref());
+                        (picked.map(|id| Did::Clicked(id.to_owned())), None)
+                    }
                 }
-                View::List => list::draw(ui, at, &monitors, self.selected.as_deref()),
-            };
-            picked.map(str::to_owned)
-        });
+            })
+            .inner;
+        self.acted_on_the_map(acted.0, acted.1, &ctx);
     }
+}
+
+/// The gesture with the screens let go of, so the window can change them.
+fn owned(gesture: Option<map::Gesture<'_>>) -> Option<Did> {
+    Some(match gesture? {
+        map::Gesture::Clicked(id) => Did::Clicked(id.to_owned()),
+        map::Gesture::Dragged { id, by } => Did::Dragged {
+            id: id.to_owned(),
+            by,
+        },
+        map::Gesture::Dropped { id } => Did::Dropped { id: id.to_owned() },
+    })
 }
 
 fn main() -> eframe::Result<()> {

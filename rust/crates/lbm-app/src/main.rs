@@ -114,6 +114,19 @@ struct App {
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
     drag: Option<Drag>,
+    /// The document the agent was last given, as it went on the wire, and when.
+    ///
+    /// `None` means "unknown", which makes the next tick send whatever the layout is —
+    /// `LiveLayoutUpdater.Forget`. The comparison is the gate that keeps a live preview
+    /// from costing anything while nothing moves: an edit the agent cannot see (a value
+    /// set back to itself) produces no request, and the agent is never made to swap a
+    /// layout for an identical one.
+    ///
+    /// The C# has a cheaper gate in front of this one — a revision counter, so a still
+    /// layout is one integer read. There is no such counter here and none is invented:
+    /// building the document is a walk over owned data rather than a reactive graph, and
+    /// at five times a second it does not show.
+    previewed: Option<(String, std::time::Instant)>,
     view: View,
     icons: Catalogue,
     /// Uploaded logos, by icon path. Loaded once, on the frame that first needs one.
@@ -533,6 +546,7 @@ impl App {
             screens: Vec::new(),
             selected: None,
             drag: None,
+            previewed: None,
             view: View::Map,
             icons,
             textures: HashMap::new(),
@@ -561,10 +575,67 @@ impl App {
                 self.undo();
                 None
             }
+            // Turning the switch on sends the layout at once rather than waiting up to
+            // `PREVIEW_INTERVAL`: the user pressed something and expects the cursor to
+            // follow. `previewed` is cleared so the gate cannot suppress it — the agent
+            // is holding the last applied layout, not ours
+            // (`LiveLayoutUpdater.Forget`).
+            lbm_ui::Press::Live => {
+                self.previewed = None;
+                None
+            }
         };
         let Some((method, extra)) = request else {
             return;
         };
+        self.send(method, extra);
+    }
+
+    /// Stops previewing: the agent goes back to the layout it had.
+    fn end_preview(&mut self) {
+        self.previewed = None;
+        let (method, extra) = lbm_app::settings::end_preview();
+        self.send(method, extra);
+    }
+
+    /// One tick of the live preview, if it is on and anything the agent can see has moved.
+    ///
+    /// Called every frame; the interval is a **rate limit**, not a clock — egui redraws
+    /// for its own reasons and this must not turn a repaint into a layout swap.
+    fn preview_tick(&mut self, ctx: &egui::Context) {
+        if !self.state.live {
+            return;
+        }
+        // Without this the window only redraws when something happens, so an edit made
+        // by a key repeat or by the agent would wait for the next stray repaint.
+        ctx.request_repaint_after(lbm_app::settings::PREVIEW_INTERVAL);
+
+        let Some(layout) = self.layout.as_ref() else {
+            return;
+        };
+        if let Some((_, when)) = &self.previewed {
+            if when.elapsed() < lbm_app::settings::PREVIEW_INTERVAL {
+                return;
+            }
+        }
+        let (method, extra) = lbm_app::settings::preview(layout);
+        let document = extra.to_string();
+        if self
+            .previewed
+            .as_ref()
+            .is_some_and(|(sent, _)| *sent == document)
+        {
+            // Something moved, but nothing the agent can see. Take the time so the
+            // document is not rebuilt until the interval is up again.
+            self.previewed = Some((document, std::time::Instant::now()));
+            return;
+        }
+        self.send(method, extra);
+        self.previewed = Some((document, std::time::Instant::now()));
+    }
+
+    /// Puts a request on the writer thread, and says so if there is nobody to take it.
+    fn send(&mut self, method: &'static str, extra: serde_json::Value) {
         if let Some(requests) = &self.requests {
             if requests.send((method, extra)).is_err() {
                 self.requests = None;
@@ -597,13 +668,7 @@ impl App {
             return;
         };
         let (method, extra) = lbm_app::settings::save_options(&layout.options);
-        if let Some(requests) = &self.requests {
-            if requests.send((method, extra)).is_err() {
-                self.requests = None;
-                self.without_agent =
-                    Some(("the agent stopped listening".to_owned(), String::new()));
-            }
-        }
+        self.send(method, extra);
     }
 
     /// What the agent said, in the bar's terms.
@@ -625,11 +690,22 @@ impl App {
             .get("Engine")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("Dead");
-        self.state.engine = lbm_ui::Engine::from_agent(engine);
-        self.state.hook_connected = state
-            .get("HookConnected")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
+        // Through `update`, not written straight onto the state: the rule that ends a
+        // live preview when the engine goes down lives there, and it needs to see the
+        // transition.
+        let said = lbm_ui::Action::AgentSaid {
+            engine: lbm_ui::Engine::from_agent(engine),
+            connected: state
+                .get("HookConnected")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        };
+        for effect in lbm_ui::update(&mut self.state, said) {
+            match effect {
+                lbm_ui::Effect::Ask(press) => self.ask(press),
+                lbm_ui::Effect::EndPreview => self.end_preview(),
+            }
+        }
         self.state.waiting = false;
         self.without_agent = None;
     }
@@ -850,8 +926,10 @@ impl eframe::App for App {
             self.state.saved = self.layout.as_ref().is_none_or(|l| l.saved());
             if let Some(lbm_ui::Action::Pressed(press)) = lbm_ui::bottom_bar(ui, &self.state) {
                 for effect in lbm_ui::update(&mut self.state, lbm_ui::Action::Pressed(press)) {
-                    let lbm_ui::Effect::Ask(press) = effect;
-                    self.ask(press);
+                    match effect {
+                        lbm_ui::Effect::Ask(press) => self.ask(press),
+                        lbm_ui::Effect::EndPreview => self.end_preview(),
+                    }
                 }
             }
         });
@@ -932,6 +1010,9 @@ impl eframe::App for App {
             self.save_options();
         }
         self.acted_on_the_map(acted.0, acted.1, &ctx);
+        // Last, so a drag or a setting changed on this frame is in the document this
+        // tick sends rather than waiting for the next one.
+        self.preview_tick(&ctx);
     }
 }
 

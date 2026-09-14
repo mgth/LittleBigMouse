@@ -56,3 +56,24 @@ pub fn save_layout(layout: &lbm_layout::model::Layout) -> (&'static str, Value) 
         json!({ "LayoutId": layout.id, "Document": document }),
     )
 }
+
+/// How often a live preview is sent at most: `LiveLayoutUpdater.Interval`.
+///
+/// "Short enough that adjusting a border feels immediate, long enough that dragging a
+/// monitor never turns into a burst of layout swaps." A rate limit, not a poll.
+pub const PREVIEW_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// The `Preview` request: the layout the user is editing, run but not written.
+///
+/// The same document as [`save_layout`], excluded list stripped for the same reason, and
+/// the same one the agent would have saved — a preview differs from a save in what the
+/// agent *does* with it, not in what it is.
+pub fn preview(layout: &lbm_layout::model::Layout) -> (&'static str, Value) {
+    let (_, extra) = save_layout(layout);
+    ("Preview", extra)
+}
+
+/// The `EndPreview` request: the agent goes back to the layout it had.
+pub fn end_preview() -> (&'static str, Value) {
+    ("EndPreview", json!({}))
+}

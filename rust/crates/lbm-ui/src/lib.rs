@@ -62,6 +62,23 @@ pub struct State {
     /// A foreign layout, loaded to be looked at rather than run. It can always be sent
     /// again, because sending it changes nothing on this machine.
     pub is_virtual: bool,
+    /// Every edit is fed to the engine as it is made, so the layout can be felt with the
+    /// real mouse before it is kept.
+    ///
+    /// **This runs the engine.** The agent answers a preview with `Load` *and* `Run`
+    /// (`runtime.rs`, `Effect::Preview`), so turning it on over a stopped engine starts
+    /// it — which the C# says outright is a legitimate way to start. It is the one
+    /// control in this window that makes the hook take the mice, and the button says so.
+    ///
+    /// Turning it off does not leave the engine where the preview put it: the agent goes
+    /// back to the current layout, or takes the hook down if the user does not want this
+    /// layout hooked (`reconcile.rs`, `end_preview`). So the switch is reversible, which
+    /// is what makes it safe to offer at all.
+    ///
+    /// Never restored from a previous session: coming back to unsaved geometry already
+    /// live would be a trap, and the mode costs one click
+    /// (`LocationControlViewModel.LiveUpdate`).
+    pub live: bool,
 }
 
 impl Default for State {
@@ -74,6 +91,7 @@ impl Default for State {
             // opened offering Save and Undo would be offering to undo nothing.
             saved: true,
             is_virtual: false,
+            live: false,
         }
     }
 }
@@ -100,12 +118,19 @@ pub enum Press {
     Save,
     /// Throw the edits away and load the stored layout again.
     Undo,
+    /// Turn the live preview on or off.
+    Live,
 }
 
 /// What the caller has to go and do, off the UI thread.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Effect {
     Ask(Press),
+    /// Stop previewing — the layout the agent runs goes back to the stored one.
+    ///
+    /// Its own effect rather than `Ask(Live)`, because it happens when nobody pressed
+    /// anything: the engine going down under a live preview ends it.
+    EndPreview,
 }
 
 /// The whole of the decision, with no window, no socket and no clock in it.
@@ -115,6 +140,20 @@ pub enum Effect {
 /// the user did not ask for.
 pub fn update(state: &mut State, action: Action) -> Vec<Effect> {
     match action {
+        // The live switch is not a request with an answer: it turns a mode on, and the
+        // sending is the caller's business from then on. So it does not wait, and
+        // turning it *off* is `EndPreview` rather than another ask.
+        Action::Pressed(Press::Live) => {
+            if !can(state, Press::Live) {
+                return Vec::new();
+            }
+            state.live = !state.live;
+            if state.live {
+                vec![Effect::Ask(Press::Live)]
+            } else {
+                vec![Effect::EndPreview]
+            }
+        }
         Action::Pressed(press) => {
             if state.waiting || !can(state, press) {
                 return Vec::new();
@@ -123,8 +162,24 @@ pub fn update(state: &mut State, action: Action) -> Vec<Effect> {
             vec![Effect::Ask(press)]
         }
         Action::AgentSaid { engine, connected } => {
+            let was = routing(state);
             state.engine = engine;
             state.hook_connected = connected;
+            // **The engine going down outranks the preview.** The tray's Stop, a display
+            // change, an excluded application — without this the next tick would hook it
+            // straight back up, because a preview is a `Load` *and* a `Run`. A
+            // transition, not the current state: turning the switch on over a stopped
+            // engine is a legitimate way to start
+            // (`LocationControlViewModel`, `.Skip(1).Where(running => !running)`).
+            if state.live && was && !routing(state) {
+                state.live = false;
+                return vec![Effect::EndPreview];
+            }
+            // And a hook that goes away leaves nothing to preview into.
+            if state.live && !can(state, Press::Live) {
+                state.live = false;
+                return vec![Effect::EndPreview];
+            }
             Vec::new()
         }
         Action::Answered => {
@@ -156,6 +211,9 @@ pub fn can(state: &State, press: Press) -> bool {
         // Not the agent's business and not the hook's: the store's. An engine that is
         // not there does not stop the user saving what they have edited.
         Press::Save | Press::Undo => !state.saved,
+        // `CanLiveUpdate`: `!dead && !virtualLayout`. A foreign layout is never previewed
+        // into the local mouse — it describes someone else's desk.
+        Press::Live => state.hook_connected && !state.is_virtual,
     }
 }
 
@@ -171,6 +229,7 @@ pub fn label(press: Press) -> &'static str {
         Press::Stop => "Stop",
         Press::Save => "Save",
         Press::Undo => "Undo",
+        Press::Live => "Live",
     }
 }
 
@@ -197,6 +256,32 @@ pub fn bottom_bar(ui: &mut egui::Ui, state: &State) -> Option<Action> {
                 pressed = Some(Action::Pressed(press));
             }
         }
+        // A mode, not a command, so it is drawn as one — lit while it is on.
+        //
+        // **The tooltip is not decoration.** A preview is a `Load` *and* a `Run`: turning
+        // this on hands the layout being edited to the engine and lets it move the
+        // cursor. In the Avalonia app that sits next to an Apply button, where the user
+        // came to apply something; here it is one toggle among four, and the consequence
+        // has to be readable before it is pressed rather than felt afterwards.
+        if ui
+            .add_enabled(
+                can(state, Press::Live),
+                egui::Button::selectable(state.live, label(Press::Live)),
+            )
+            .on_hover_text(
+                "Feed each edit to the mouse engine as you make it, so the layout can be \
+                 felt before it is kept. This runs the engine: the cursor follows the \
+                 layout you are editing.",
+            )
+            .on_disabled_hover_text(if state.is_virtual {
+                "This layout belongs to another machine: it is never fed to the local mouse."
+            } else {
+                "No engine to preview into."
+            })
+            .clicked()
+        {
+            pressed = Some(Action::Pressed(Press::Live));
+        }
     });
     pressed
 }
@@ -217,6 +302,7 @@ mod tests {
             waiting: false,
             saved: true,
             is_virtual: false,
+            live: false,
         }
     }
 

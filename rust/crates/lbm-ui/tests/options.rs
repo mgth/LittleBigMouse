@@ -30,7 +30,8 @@ fn watching<'a>(
     Harness::builder()
         .with_size(egui::vec2(560.0, 2200.0))
         .build_ui(move |ui| {
-            let what = options::panel(ui, &mut options.borrow_mut(), true);
+            let mut recording = lbm_ui::shortcut::Recording::default();
+            let what = options::panel(ui, &mut options.borrow_mut(), true, &mut recording, None);
             if what.app {
                 app.set(app.get() + 1);
             }

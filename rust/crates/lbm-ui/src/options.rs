@@ -18,8 +18,7 @@
 //! against the layout's own document.
 //!
 //! What the Avalonia panel has and this does not, each for a reason worth stating:
-//! the **rescue shortcut** (it needs a key-capture widget, which is its own piece of
-//! work), the **excluded processes** (a list with add, remove, defaults and the seen
+//! the **excluded processes** (a list with add, remove, defaults and the seen
 //! processes — `SaveOptions` carries it in a separate field, so it is a slice of its own),
 //! and the **Ko-fi card**, which is a link and not a setting.
 
@@ -168,7 +167,13 @@ fn section(ui: &mut egui::Ui, title: &str) {
 /// `elevated` says whether this build can offer the elevation switch at all: it is a
 /// Windows notion (a process token, a scheduled task) and there is nothing behind it on
 /// Linux, so the row is absent rather than present and dead.
-pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> Changed {
+pub fn panel(
+    ui: &mut egui::Ui,
+    options: &mut LayoutOptions,
+    elevated: bool,
+    rescue: &mut crate::shortcut::Recording,
+    unavailable: Option<&str>,
+) -> Changed {
     let mut what = Changed::default();
     egui::ScrollArea::vertical().show(ui, |ui| {
         section(ui, "General");
@@ -309,6 +314,15 @@ pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> 
             "Keep size consistent across DPI",
             &mut options.adjust_pointer,
         );
+
+        // The rescue belongs with the mouse: it is the way out when the cursor is
+        // trapped where the layout put it.
+        if let Some(recorded) =
+            crate::shortcut::recorder(ui, &options.rescue_shortcut, rescue, unavailable)
+        {
+            options.rescue_shortcut = recorded;
+            what.app = true;
+        }
 
         section(ui, "Layout");
         what.layout |= toggle(

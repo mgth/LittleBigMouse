@@ -190,7 +190,18 @@ pub struct Snap {
 ///
 /// The two axes are decided independently — a screen can catch a neighbour's left edge
 /// while staying free vertically — which is `FrameMover.cs:237-247`, two separate tests.
-pub fn snap(dragged: Screen, free: (f64, f64), others: &[Screen]) -> Snap {
+///
+/// `anchors` is the Ctrl key, inverted: `MonitorLocationView.axaml.cs:184-185` passes
+/// `(e.KeyModifiers & KeyModifiers.Control) == 0` into `Move`, and `FrameMover.cs:183`
+/// skips the whole search when it is false. **The user needs a way out of the snap** —
+/// a desk where two screens really do sit 4 mm apart cannot be described at all if every
+/// drag is pulled flush — so this is not a detail of the port, it is the escape hatch.
+pub fn snap(dragged: Screen, free: (f64, f64), others: &[Screen], anchors: bool) -> Snap {
+    if !anchors {
+        // Not "snap by zero": no lines either. The guides explain a correction, and there
+        // is no correction to explain.
+        return Snap::default();
+    }
     let moved = dragged.moved(free);
     let mut offset = (f64::INFINITY, f64::INFINITY);
     let mut vertical: Vec<Guide> = Vec::new();
@@ -467,7 +478,7 @@ mod tests {
         let other = screen(700.0, 0.0);
         // Dropped so its right bezel is 3 mm short of the other's left bezel.
         let free = (77.0, 0.0);
-        let s = snap(dragged, free, &[other]);
+        let s = snap(dragged, free, &[other], true);
 
         assert!((s.offset.0 - 3.0).abs() < 1e-9, "{:?}", s.offset);
         assert_eq!(s.offset.1, 0.0, "already level, so nothing to correct");
@@ -481,7 +492,7 @@ mod tests {
     #[test]
     fn further_than_ten_millimetres_is_not_a_snap_at_all() {
         // Well below as well as to the left, so neither axis has anything in reach.
-        let s = snap(screen(0.0, 0.0), (69.0, 0.0), &[screen(700.0, 500.0)]);
+        let s = snap(screen(0.0, 0.0), (69.0, 0.0), &[screen(700.0, 500.0)], true);
         // 11 mm short of touching, and nothing else within ten either.
         assert_eq!(s.offset, (0.0, 0.0));
         assert!(
@@ -493,7 +504,7 @@ mod tests {
     /// Exactly ten still snaps: the C# compares with `>`.
     #[test]
     fn ten_millimetres_is_still_within_reach() {
-        let s = snap(screen(0.0, 0.0), (70.0, 0.0), &[screen(700.0, 0.0)]);
+        let s = snap(screen(0.0, 0.0), (70.0, 0.0), &[screen(700.0, 0.0)], true);
         assert!((s.offset.0 - 10.0).abs() < 1e-9, "{:?}", s.offset);
     }
 
@@ -508,7 +519,7 @@ mod tests {
         let other = screen(700.0, 0.0);
         // Bezel right at 708, two short of the other's picture at 710 — and picture right
         // at 698, two short of the other's bezel at 700. Both rules, both cross-kind.
-        let s = snap(dragged, (88.0, 0.0), &[other]);
+        let s = snap(dragged, (88.0, 0.0), &[other], true);
 
         assert!((s.offset.0 - 2.0).abs() < 1e-9, "{:?}", s.offset);
         let matched: Vec<(Kind, bool)> = s.vertical.iter().map(|g| (g.kind, g.dragged)).collect();
@@ -521,16 +532,36 @@ mod tests {
     #[test]
     fn the_two_axes_are_decided_on_their_own() {
         // Close enough to catch horizontally, nowhere near vertically.
-        let s = snap(screen(0.0, 0.0), (78.0, 200.0), &[screen(700.0, 0.0)]);
+        let s = snap(screen(0.0, 0.0), (78.0, 200.0), &[screen(700.0, 0.0)], true);
         assert!((s.offset.0 - 2.0).abs() < 1e-9);
         assert_eq!(s.offset.1, 0.0);
         assert!(!s.vertical.is_empty());
         assert!(s.horizontal.is_empty());
     }
 
+    /// Ctrl: the escape hatch. Without it a desk whose screens really do sit a few
+    /// millimetres apart cannot be described at all, because every drag is pulled flush.
+    #[test]
+    fn holding_ctrl_puts_the_screen_exactly_where_the_pointer_is() {
+        let dragged = screen(0.0, 0.0);
+        let other = screen(700.0, 0.0);
+        // Three short of touching — well inside the snap, which is the point.
+        let free = (77.0, 0.0);
+
+        let caught = snap(dragged, free, &[other], true);
+        assert!(caught.offset.0 != 0.0, "the test is not testing anything");
+
+        let loose = snap(dragged, free, &[other], false);
+        assert_eq!(loose.offset, (0.0, 0.0), "Ctrl did not free the screen");
+        assert!(
+            loose.vertical.is_empty() && loose.horizontal.is_empty(),
+            "a guide was drawn for a correction that was not made: {loose:?}"
+        );
+    }
+
     #[test]
     fn with_nothing_else_on_the_desktop_the_screen_goes_where_it_is_put() {
-        let s = snap(screen(0.0, 0.0), (123.456, -78.9), &[]);
+        let s = snap(screen(0.0, 0.0), (123.456, -78.9), &[], true);
         assert_eq!(s.offset, (0.0, 0.0));
         assert!(s.vertical.is_empty() && s.horizontal.is_empty());
     }
@@ -541,7 +572,7 @@ mod tests {
     fn a_match_draws_a_line_on_each_screen_at_the_same_place() {
         let dragged = screen(0.0, 0.0);
         let other = screen(700.0, 0.0);
-        let s = snap(dragged, (77.0, 0.0), &[other]);
+        let s = snap(dragged, (77.0, 0.0), &[other], true);
 
         assert_eq!(s.vertical.len(), 2, "{:?}", s.vertical);
         let (mine, theirs): (Vec<&Guide>, Vec<&Guide>) = s.vertical.iter().partition(|g| g.dragged);
@@ -560,7 +591,7 @@ mod tests {
         let dragged = screen(0.0, 0.0);
         let other = screen(700.0, 400.0);
         // Right bezel 3 mm short of the other's left, and top 4 mm short of its top.
-        let s = snap(dragged, (77.0, 396.0), &[other]);
+        let s = snap(dragged, (77.0, 396.0), &[other], true);
         assert!((s.offset.0 - 3.0).abs() < 1e-9);
         assert!((s.offset.1 - 4.0).abs() < 1e-9);
 
@@ -579,7 +610,7 @@ mod tests {
         let column = [screen(700.0, 0.0), screen(700.0, 400.0)];
         // Left bezel 2 mm short of the column's left bezel — and, the screens being
         // identical, every one of the five rules is 2 mm out at the same time.
-        let s = snap(dragged, (698.0, 0.0), &column);
+        let s = snap(dragged, (698.0, 0.0), &column, true);
 
         assert!((s.offset.0 - 2.0).abs() < 1e-9);
         let theirs: Vec<&Guide> = s.vertical.iter().filter(|g| !g.dragged).collect();
@@ -602,7 +633,7 @@ mod tests {
         };
         // The wide screen's picture is centred on 600; put the dragged one's middle
         // (310 mm into it) four short of that. Every edge pair is hundreds out.
-        let s = snap(dragged, (286.0, 0.0), &[wide]);
+        let s = snap(dragged, (286.0, 0.0), &[wide], true);
 
         assert!((s.offset.0 - 4.0).abs() < 1e-9, "{:?}", s.offset);
         let kinds: Vec<Kind> = s.vertical.iter().map(|g| g.kind).collect();

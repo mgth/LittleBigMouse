@@ -199,6 +199,54 @@ commence pas à l'origine doit être décalé avant d'être mis à l'échelle. L
 5 points n'est **pas** mise à l'échelle : c'est une marque sur le dessin, pas une mesure du
 bureau.
 
+## Glisser un écran : la première édition
+
+`lbm-ui::drag`, porté de `FrameMover.cs`. Trois morceaux séparés parce qu'ils répondent à
+des questions différentes : l'**aimantation** (millimètres en entrée, millimètres en
+sortie), les **repères** qui disent pourquoi elle a accroché, et le **dépôt**, seul à
+écrire quelque chose. La fenêtre garde désormais son `Layout` au lieu de le jeter après la
+détection — en mémoire seulement, rien n'est sauvé.
+
+Cinq ancres par axe et par écran : bord du plastique, bord de la dalle, **milieu de la
+dalle** (`s.X + s.Width / 2`, donc de l'image et non de l'objet), puis la paire opposée.
+La plus petite correction par axe l'emporte, dans la limite de **10 mm** (`:164`, comparé
+avec `>`, donc 10 accroche encore). Les deux axes se décident séparément.
+
+Quatre faits du C# qu'on ne devine pas en lisant le code :
+
+- **Les ancres de natures différentes s'apparient.** `:187-190` croise les cinq contre les
+  cinq, donc un bord de plastique atterrit sur la dalle du voisin. C'est ce qui permet
+  d'aligner un écran par son cadre contre l'image d'un autre — et ça veut dire qu'un écran
+  décalé de moins qu'une épaisseur de cadre a **plusieurs règles en portée à la fois**.
+- **La carte ne se remet pas à l'échelle pendant le glissement.** `GetRatio` lit
+  `PhysicalBounds`, que le layout ne republie qu'à l'écriture d'une position — ce qui
+  n'arrive qu'au dépôt. Un écran traîné hors du bureau sort donc de la carte au lieu de la
+  rétrécir sous le pointeur.
+- **Glisser le primaire le long d'une rangée jointive ne fait rien du tout.** Le primaire
+  est l'origine de l'espace en millimètres : on décale donc tous les *autres* en sens
+  inverse (`:123-136`), ils chevauchent, et la compaction qui suit (`:131-144`) les remet
+  exactement où ils étaient. Trouvé en écrivant le test du primaire avec un glissement
+  diagonal et en regardant la moitié horizontale s'évaporer.
+- **La compaction peut déplacer des écrans que l'utilisateur n'a pas touchés**, d'où la
+  relecture du layout entier après chaque dépôt plutôt qu'une mise à jour de l'écran
+  déposé.
+
+Deux écarts assumés, tous deux annotés dans le code :
+
+- **La sélection** passe par `Sense::click_and_drag`, qui laisse egui décider à la distance
+  et à la durée, au lieu de l'égalité exacte appui/relâchement de `:113`.
+- **L'épaisseur des repères est choisie, pas portée** : `:257` calcule `5 : 2` et ne le lit
+  jamais, les deux `StrokeThickness` étant commentés en dessous. Il est donc possible que
+  ces traits ne soient visibles dans **aucune version livrée** de l'app Avalonia — non
+  vérifié, faute de sources Avalonia sous la main. Valeurs retenues : 2 et 1, **regardées
+  à l'écran et validées par le mainteneur le 2026-09-14**.
+
+Et un manque **à moi**, rattrapé en construisant le binaire à donner à essayer, pas par un
+test : **Ctrl** pendant le glissement désactive l'aimantation (`MonitorLocationView.axaml.cs:184-185`
+→ `FrameMover.cs:183`). Sous 10 mm tout glissement est happé, donc un bureau dont les
+écrans sont réellement à quelques millimètres l'un de l'autre était **indescriptible**.
+Mes tests vérifiaient que l'aimantation marche ; aucun ne vérifiait qu'on peut y échapper.
+
 ## Deux choses que l'item 2 a révélées sur le reste
 
 - **Le rapport de sondage arrive en XML dans une chaîne JSON** (`api.rs`,

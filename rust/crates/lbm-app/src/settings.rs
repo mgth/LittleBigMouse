@@ -17,24 +17,27 @@ use serde_json::{json, Value};
 /// whole picture back over it. The C# `SaveLive` has the same shape; anything narrower
 /// would be a change to the wire protocol.
 ///
-/// **`Excluded` is deliberately absent.** The excluded list lives in its own file and
-/// this window never reads it, so sending the empty list it holds would erase the user's
-/// exclusions. The field is optional and the agent leaves the list alone without it
-/// (`world.rs`, `if let Some(excluded)`).
+/// **`Excluded` goes only when the caller has read it.** The list lives in its own file,
+/// and a window that has not read it holds an empty one; sending that would erase the
+/// user's exclusions. The field is optional and the agent leaves the list alone without
+/// it (`world.rs`, `if let Some(excluded)`), so `None` says "I do not know" and means it.
 ///
 /// `excluded_defaults_version` is `None` for the same reason: it belongs to the excluded
 /// list, and the agent writes its own from its `ExcludedListPersistence` rather than from
 /// the request.
-pub fn save_options(options: &LayoutOptions) -> (&'static str, Value) {
-    (
-        "SaveOptions",
-        json!({
-            "Options": to_global_options_dto(options, None),
-            // Not one of the stored options: it *is* the session autostart, which the
-            // agent aligns when it is present.
-            "LoadAtStartup": options.load_at_startup,
-        }),
-    )
+pub fn save_options(options: &LayoutOptions, excluded: Option<&[String]>) -> (&'static str, Value) {
+    let mut request = json!({
+        "Options": to_global_options_dto(options, None),
+        // Not one of the stored options: it *is* the session autostart, which the agent
+        // aligns when it is present.
+        "LoadAtStartup": options.load_at_startup,
+    });
+    // Only when the caller has actually read the list. `None` is not "no exclusions": it
+    // is "I do not know", and the agent leaves the list alone for it.
+    if let Some(excluded) = excluded {
+        request["Excluded"] = json!(excluded);
+    }
+    ("SaveOptions", request)
 }
 
 /// The `SaveLayout` request for this layout — the Save button.
@@ -76,4 +79,36 @@ pub fn preview(layout: &lbm_layout::model::Layout) -> (&'static str, Value) {
 /// The `EndPreview` request: the agent goes back to the layout it had.
 pub fn end_preview() -> (&'static str, Value) {
     ("EndPreview", json!({}))
+}
+
+/// The excluded list at `file`, through the agent's own parser — or `None` when there is
+/// no file.
+///
+/// **The file is checked first, and that is the whole subtlety.**
+/// `ExcludedListPersistence::load` seeds the defaults and **writes** the file when it is
+/// missing (`excluded_list_persistence.rs`: "First run: seed the defaults and write the
+/// file the daemon reads"). Correct for the agent, which is the writer; a promise broken
+/// for a window that creates nothing. So the write path is never entered, and a missing
+/// file comes back as `None` — the agent will make it.
+///
+/// `None` is not an empty list anywhere downstream: it is "not read", which is why
+/// [`save_options`] takes an `Option` and leaves the field out for it.
+///
+/// The parser is reused rather than reimplemented: what comes out of it is what the
+/// daemon is handed, so the list the user edits and the list that filters are one list.
+pub fn read_excluded(file: std::path::PathBuf) -> Option<Vec<String>> {
+    if !file.is_file() {
+        return None;
+    }
+    let store = lbm_store::JsonLayoutStore::new(lbm_store::lbm_paths::config_dir());
+    let at = file.clone();
+    let mut persistence = lbm_store::ExcludedListPersistence::new(move || at.clone());
+    let mut list = Vec::new();
+    match persistence.load(&store, &mut list, None) {
+        Ok(()) => Some(list),
+        Err(error) => {
+            eprintln!("[lbm-app] the excluded list could not be read: {error}");
+            None
+        }
+    }
 }

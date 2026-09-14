@@ -36,3 +36,23 @@ pub fn save_options(options: &LayoutOptions) -> (&'static str, Value) {
         }),
     )
 }
+
+/// The `SaveLayout` request for this layout — the Save button.
+///
+/// **`Excluded` is stripped, and that is the whole point of this function.**
+/// `LayoutDocument::of` fills it from `layout.options.excluded_list`, which is the right
+/// thing for the agent (it has read the list) and a destructive thing for this window
+/// (it has not). Sending the empty list it holds would erase the user's exclusions on the
+/// first Save. The field is optional and the document's own doc says what absent means:
+/// "the excluded processes; absent: left as they are".
+///
+/// The same trap as `SaveOptions`, one level deeper and easier to miss, because here the
+/// field is filled in for you.
+pub fn save_layout(layout: &lbm_layout::model::Layout) -> (&'static str, Value) {
+    let mut document = lbm_store::LayoutDocument::of(layout);
+    document.excluded = None;
+    (
+        "SaveLayout",
+        json!({ "LayoutId": layout.id, "Document": document }),
+    )
+}

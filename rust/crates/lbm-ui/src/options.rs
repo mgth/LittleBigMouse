@@ -9,13 +9,13 @@
 //!   read *and* write today.
 //! * **Per-layout** — `LayoutOptionsDto`, inside the layout's own profile: allow
 //!   overlaps, allow discontinuity, the crossing algorithm, the loops, the travel
-//!   distance. Saving one means sending a whole `LayoutDocument`, which is the same
-//!   capability `Save` is still waiting on. They are **not drawn here**: a switch that
-//!   cannot be kept is worse than a switch that is missing, because it looks like it
-//!   worked.
+//!   distance. These go with the layout, in the `LayoutDocument` the Save button sends.
 //!
-//! The split is not a simplification of the port. It is where the wire protocol already
-//! cuts, and drawing the two halves together would hide that one of them has nowhere to go.
+//! The split is not a simplification of the port: it is where the wire protocol already
+//! cuts. It shows in the panel's **behaviour**, which is why [`Changed`] keeps the two
+//! apart — an app-wide setting is written the moment it is moved, a per-layout one is an
+//! edit like dragging a screen and waits for Save. The C# does the same, `SaveLive`
+//! against the layout's own document.
 //!
 //! What the Avalonia panel has and this does not, each for a reason worth stating:
 //! the **rescue shortcut** (it needs a key-capture widget, which is its own piece of
@@ -24,6 +24,34 @@
 //! and the **Ko-fi card**, which is a link and not a setting.
 
 use lbm_layout::model::{LayoutOptions, PER_MODEL, PER_MONITOR};
+
+/// The crossing algorithms, wire spelling first — `LbmOptionsViewModel.AlgorithmList`.
+pub const ALGORITHMS: [(&str, &str); 2] = [
+    ("Strait", "Simple and highly CPU-efficient transition"),
+    (
+        "Cross",
+        "Corner crossing: in a direction-friendly manner, allows traversal through corners",
+    ),
+];
+
+/// Which half of the settings the user moved.
+///
+/// Two flags rather than one, because the two halves are kept in different places and
+/// saved by different requests: an app-wide setting goes to the agent at once, a
+/// per-layout one is an edit that waits for Save with the rest of the layout.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Changed {
+    /// Send `SaveOptions` now.
+    pub app: bool,
+    /// The layout is edited; Save will carry it.
+    pub layout: bool,
+}
+
+impl Changed {
+    pub fn any(self) -> bool {
+        self.app || self.layout
+    }
+}
 
 /// The daemon priorities, in the order the C# combo lists them, with the wire spelling
 /// first — `LbmOptionsViewModel.PriorityList`.
@@ -107,48 +135,68 @@ fn choice(
     changed
 }
 
+/// A number row, with the unit in the description as the AXAML puts it.
+fn number(
+    ui: &mut egui::Ui,
+    header: &str,
+    description: &str,
+    range: std::ops::RangeInclusive<f64>,
+    step: f64,
+    value: &mut f64,
+) -> bool {
+    let changed = ui
+        .horizontal(|ui| {
+            let changed = ui
+                .add(egui::DragValue::new(value).range(range).speed(step))
+                .changed();
+            ui.label(header);
+            changed
+        })
+        .inner;
+    note(ui, description);
+    changed
+}
+
 fn section(ui: &mut egui::Ui, title: &str) {
     ui.add_space(10.0);
     ui.label(egui::RichText::new(title).strong().size(15.0));
     ui.separator();
 }
 
-/// Draws the panel and edits `options` in place. `true` when something changed, which is
-/// the caller's cue to save — the agent takes the whole set, so *what* changed is not its
-/// business.
+/// Draws the panel and edits `options` in place, saying which half was touched.
 ///
 /// `elevated` says whether this build can offer the elevation switch at all: it is a
 /// Windows notion (a process token, a scheduled task) and there is nothing behind it on
 /// Linux, so the row is absent rather than present and dead.
-pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> bool {
-    let mut changed = false;
+pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> Changed {
+    let mut what = Changed::default();
     egui::ScrollArea::vertical().show(ui, |ui| {
         section(ui, "General");
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Check for updates automatically",
             "Look for new versions online in the background",
             &mut options.auto_update,
         );
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Load at startup",
             "Start LittleBigMouse when you sign in",
             &mut options.load_at_startup,
         );
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Start minimized to tray",
             "",
             &mut options.start_minimized,
         );
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Hide tray icon",
             "Reopen the window by launching LittleBigMouse again",
             &mut options.hide_tray_icon,
         );
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Stop the mouse engine with LittleBigMouse",
             "Off: the engine keeps routing the cursor if LittleBigMouse stops, and picks \
@@ -156,14 +204,14 @@ pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> 
             &mut options.bound_to_agent,
         );
         if elevated {
-            changed |= toggle(
+            what.app |= toggle(
                 ui,
                 "Start with elevated privileges",
                 "Keeps working over elevated apps (admin accounts only)",
                 &mut options.start_elevated,
             );
         }
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Enable VCP monitor control",
             "Brightness, contrast, inputs and smart-TV remotes over DDC/CI",
@@ -174,7 +222,7 @@ pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> 
         // the VCP panel.
         if options.vcp_control {
             ui.indent("vcp", |ui| {
-                changed |= toggle(
+                what.app |= toggle(
                     ui,
                     "Enable experimental features",
                     "Argyll colour calibration and smart-TV remote test tools",
@@ -182,7 +230,7 @@ pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> 
                 );
             });
         }
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Activate debug tools",
             "Extra tools for troubleshooting, like viewing exported layouts",
@@ -190,14 +238,14 @@ pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> 
         );
 
         section(ui, "Daemon priority");
-        changed |= choice(
+        what.app |= choice(
             ui,
             "While active (hooked)",
             "Process priority of the mouse engine",
             &PRIORITIES,
             &mut options.priority,
         );
-        changed |= choice(
+        what.app |= choice(
             ui,
             "While inactive (unhooked)",
             "",
@@ -205,36 +253,100 @@ pub fn panel(ui: &mut egui::Ui, options: &mut LayoutOptions, elevated: bool) -> 
             &mut options.priority_unhooked,
         );
 
+        // Everything below belongs to the layout, not to the app: it is saved with the
+        // layout's own profile, so it is an edit and the Save button carries it.
+        section(ui, "Mouse");
+        what.layout |= choice(
+            ui,
+            "Crossing algorithm",
+            "How the cursor jumps between screens",
+            &ALGORITHMS,
+            &mut options.algorithm,
+        );
+        what.layout |= number(
+            ui,
+            "Max travel distance",
+            "Maximum crossing jump, in pixels",
+            0.0..=10_000.0,
+            10.0,
+            &mut options.max_travel_distance,
+        );
+        what.layout |= toggle(
+            ui,
+            "Pause in games",
+            "Pause crossing while a game captures the mouse",
+            &mut options.freelook_enabled,
+        );
+        if options.freelook_enabled {
+            ui.indent("freelook", |ui| {
+                what.layout |= number(
+                    ui,
+                    "Detection interval",
+                    "Re-check mouse capture while gaming, in ms. 0 checks on every mouse \
+                     event",
+                    0.0..=1000.0,
+                    10.0,
+                    &mut options.freelook_check_interval,
+                );
+            });
+        }
+        what.layout |= toggle(
+            ui,
+            "Horizontal loop",
+            "Re-enter from the opposite side",
+            &mut options.loop_x,
+        );
+        what.layout |= toggle(ui, "Vertical loop", "", &mut options.loop_y);
+        what.layout |= toggle(
+            ui,
+            "Adjust pointer speed",
+            "Keep speed consistent across DPI",
+            &mut options.adjust_speed,
+        );
+        what.layout |= toggle(
+            ui,
+            "Adjust pointer size",
+            "Keep size consistent across DPI",
+            &mut options.adjust_pointer,
+        );
+
         section(ui, "Layout");
-        changed |= choice(
+        what.layout |= toggle(
+            ui,
+            "Allow overlaps",
+            "Screens may overlap in the layout",
+            &mut options.allow_overlaps,
+        );
+        what.layout |= toggle(
+            ui,
+            "Allow discontinuity",
+            "Gaps between monitors are allowed",
+            &mut options.allow_discontinuity,
+        );
+        what.layout |= number(
+            ui,
+            "Minimal edge overlap",
+            "Display surface two touching screens must share, in mm. 0 only asks for \
+             contact",
+            0.0..=1000.0,
+            5.0,
+            &mut options.minimal_edge_overlap,
+        );
+        what.app |= choice(
             ui,
             "Border values",
             "Where each monitor's bezel borders are stored",
             &BORDER_VALUES,
             &mut options.border_values,
         );
-        changed |= toggle(
+        what.app |= toggle(
             ui,
             "Warn before monitor actions",
             "Ask before attaching, detaching or making a monitor primary",
             &mut options.show_monitor_action_warning,
         );
-
-        // Said, rather than left as an absence the reader has to notice. Every setting
-        // above is app-wide; the ones that are not are stored in the layout's own profile
-        // and need a capability the frontend has not got yet.
-        ui.add_space(12.0);
-        ui.label(
-            egui::RichText::new(
-                "Overlaps, discontinuity, the crossing algorithm and the loops belong to \
-                 this layout rather than to the app. Editing them needs the same layout \
-                 document Save is waiting on, so they are not offered here yet.",
-            )
-            .small()
-            .color(ui.visuals().weak_text_color()),
-        );
     });
-    changed
+    what
 }
 
 #[cfg(test)]

@@ -5,13 +5,21 @@
 //! machine. That is worth keeping, so `lbm-ui` stays window-free and everything that
 //! needs winit and a GL context lives here.
 //!
-//! **This window reads and draws. It does nothing else.** It does not start an agent, it
-//! does not speak to one, it does not start a hook, and it writes no file. Finding the
-//! displays is `kscreen-doctor --json` or xrandr and the EDID under sysfs, all of them
-//! read-only; the layout is built in memory with a loader that does nothing, so no stored
-//! profile is read and none is written. The engine controls are drawn because they are
-//! part of the window, and they are all disabled, which is the truth: there is no agent
-//! to ask.
+//! **This window never starts anything and writes no file.** It does not start an agent,
+//! it does not start a hook. Finding the displays is `kscreen-doctor --json` or xrandr and
+//! the EDID under sysfs, all of them read-only.
+//!
+//! It **does** read the store now — `options.json` and the layout profile — which it did
+//! not when it could only draw. Reading is not what was dangerous; starting a process and
+//! writing over the user's configuration were, and neither happens here. What the map
+//! shows is therefore the arrangement the engine runs rather than the one the system
+//! reports, which is what an edit has to start from. Everything that writes goes through
+//! the agent, which stays the only writer: `SaveOptions` for the app-wide settings,
+//! `SaveLayout` for the layout.
+//!
+//! Deliberately **not** read: the excluded list. `ExcludedListPersistence::load` writes
+//! `Excluded.txt` when it is missing, and this window creates nothing — which is why
+//! `settings::save_layout` has to strip the list back out of the document it sends.
 //!
 //! It links `lbm-display` and `lbm-layout` directly rather than `lbm-agent`, mirroring
 //! `lbm-agent/src/discovery.rs`. The architecture has the frontend talk to the agent over
@@ -194,31 +202,46 @@ fn detect() -> Option<Box<Layout>> {
     if !built {
         return None;
     }
-    read_options(&mut layout);
+    read_stored(&mut layout);
     Some(Box::new(layout))
 }
 
-/// The app-wide options as the agent last wrote them, onto the layout in memory.
+/// The stored profile onto the layout in memory: the app-wide options, the layout's own
+/// options, and every monitor's saved place and model.
 ///
-/// **Read, never written.** The frontend reads a file the agent owns, exactly as it
+/// **Read, never written.** The frontend reads files the agent owns, exactly as it
 /// already reads `wallpaper.json` for the thumbnails; writing goes back through the
-/// agent's `SaveOptions`, which keeps it the only writer. Only `options.json` is read —
-/// not the layout profile — so the map still shows the screens as they are and not as a
-/// saved arrangement puts them.
+/// agent, which stays the only writer.
 ///
-/// A missing or unreadable file leaves the defaults: a settings panel opening on
-/// `LayoutOptions::default()` is wrong about the user's machine, but it is the same wrong
-/// the agent starts from, and it is better than refusing to open.
-fn read_options(layout: &mut Layout) {
+/// **Not `LayoutPersistence::load`, deliberately.** That is the same read plus the
+/// excluded list — and `ExcludedListPersistence::load` **writes `Excluded.txt`** when it
+/// does not exist yet, seeding the defaults. Correct for the agent, and a promise broken
+/// for a window that creates nothing. The list is not read here at all, which is why
+/// [`lbm_app::settings::save_layout`] has to strip it back out of the document.
+///
+/// **This changes what the map shows**: the screens as the stored profile arranges them,
+/// not as the system reports them. That is the arrangement the engine runs, so it is the
+/// one an edit should start from — saving a detected arrangement over a user's saved one
+/// would lose it.
+///
+/// A missing or unreadable store leaves the detected arrangement and the defaults, which
+/// is what the agent falls back to as well (`read_store`: a store that cannot be read
+/// must not keep the app from starting, #589).
+fn read_stored(layout: &mut Layout) {
+    use lbm_store::layout_dto_mapper as mapper;
+    use lbm_store::LayoutStore;
+
     let store = lbm_store::JsonLayoutStore::new(lbm_store::lbm_paths::config_dir());
-    let Ok(text) = std::fs::read_to_string(store.options_path()) else {
+    let Ok(data) = store.read(&layout.id, &[]) else {
+        eprintln!("[lbm-app] the store could not be read: the detected screens are shown");
         return;
     };
-    let Ok(dto) = serde_json::from_str::<lbm_store::GlobalOptionsDto>(&text) else {
-        eprintln!("[lbm-app] options.json could not be read: the defaults are shown");
-        return;
-    };
-    layout.edit_options(|o| lbm_store::layout_dto_mapper::apply_global_options(o, Some(&dto)));
+    layout.edit_options(|o| mapper::apply_global_options(o, data.global_options.as_ref()));
+    mapper::apply_layout(layout, data.layout.as_ref(), &data.models);
+    // Everything saved, so the next edit is a change from a saved state — and so the bar
+    // opens with Save and Undo grey, which is the truth.
+    layout.mark_saved();
+    layout.parse_physical_monitors();
 }
 
 /// The screens as the views want them, read off the layout.
@@ -522,21 +545,47 @@ impl App {
 
     /// Asks the agent for what the user pressed.
     ///
-    /// Start and Stop only. Save and Undo would have to send a layout document, and
-    /// this window has none to send — see [`App::agent_said`].
+    /// **Undo never leaves this process.** Throwing an edit away is re-reading the store,
+    /// which this window does for itself; asking the agent to do it would be asking it to
+    /// reload a layout it never edited. Save is the only one that travels, because the
+    /// agent is the only writer.
     fn ask(&mut self, press: lbm_ui::Press) {
-        let method = match press {
-            lbm_ui::Press::Start => "Start",
-            lbm_ui::Press::Stop => "Stop",
-            lbm_ui::Press::Save | lbm_ui::Press::Undo => return,
+        let request = match press {
+            lbm_ui::Press::Start => Some(("Start", serde_json::json!({}))),
+            lbm_ui::Press::Stop => Some(("Stop", serde_json::json!({}))),
+            lbm_ui::Press::Save => self
+                .layout
+                .as_ref()
+                .map(|layout| lbm_app::settings::save_layout(layout)),
+            lbm_ui::Press::Undo => {
+                self.undo();
+                None
+            }
+        };
+        let Some((method, extra)) = request else {
+            return;
         };
         if let Some(requests) = &self.requests {
-            if requests.send((method, serde_json::json!({}))).is_err() {
+            if requests.send((method, extra)).is_err() {
                 self.requests = None;
                 self.without_agent =
                     Some(("the agent stopped listening".to_owned(), String::new()));
             }
         }
+    }
+
+    /// Throws the edits away: the stored profile again, over the layout as detected.
+    ///
+    /// Re-read rather than kept as a copy from the start — a copy would be one more thing
+    /// that can drift, and the store is what Save writes to anyway. It runs on the UI
+    /// thread: it is two small files, where the detection was a subprocess.
+    fn undo(&mut self) {
+        let Some(layout) = self.layout.as_mut() else {
+            return;
+        };
+        read_stored(layout);
+        self.screens = screens_of(layout);
+        self.drag = None;
     }
 
     /// Sends the app-wide options to the agent, which is the only thing that writes them.
@@ -559,11 +608,11 @@ impl App {
 
     /// What the agent said, in the bar's terms.
     ///
-    /// **`saved` is not taken from the agent, and that is deliberate.** Save and Undo
-    /// need a layout document to send, and this window cannot make one: it draws the
-    /// screens it detects and edits nothing. A Save offered here would be a button with
-    /// nothing behind it, which is worse than a button that is grey. When the window
-    /// learns to edit, the flag comes with it.
+    /// **`saved` is still not taken from the agent, and that is still deliberate** —
+    /// for a different reason now. The agent's `Snapshot.saved` is about *its* layout;
+    /// this window edits its own copy, and what Save and Undo are for is the difference
+    /// between that copy and the store. So the flag comes from the layout here, in
+    /// [`App::ui`], and the agent's is ignored rather than fought with.
     fn agent_said(&mut self, message: Message) {
         let Message::State(state) = message else {
             // Answers and hook events are not the bar's business yet: the bar reads
@@ -795,6 +844,10 @@ impl eframe::App for App {
         egui::Panel::bottom("controls").show(ui, |ui| {
             // Without an agent every button is disabled on its own — `can` asks for a
             // hook — so nothing here has to hide them.
+            // From the layout, every frame: an edit anywhere — a drag, a setting — marks
+            // it unsaved through `Layout::edit_*`, so the bar cannot fall out of step
+            // with what there is to save.
+            self.state.saved = self.layout.as_ref().is_none_or(|l| l.saved());
             if let Some(lbm_ui::Action::Pressed(press)) = lbm_ui::bottom_bar(ui, &self.state) {
                 for effect in lbm_ui::update(&mut self.state, lbm_ui::Action::Pressed(press)) {
                     let lbm_ui::Effect::Ask(press) = effect;
@@ -814,8 +867,12 @@ impl eframe::App for App {
                         // marks the layout unsaved and what republishes the extent when
                         // the border values move, and a panel writing round it would
                         // leave both wrong.
+                        // `edit_options` is what marks the layout unsaved and what
+                        // republishes the extent when the border values move; a panel
+                        // writing round it would leave both wrong. The per-layout half
+                        // needs no more than that — being unsaved *is* what Save reads.
                         Some(layout) => layout.edit_options(|o| {
-                            save_options = lbm_ui::options::panel(ui, o, cfg!(windows));
+                            save_options = lbm_ui::options::panel(ui, o, cfg!(windows)).app;
                         }),
                         None => {
                             ui.label("the displays have not been read yet");

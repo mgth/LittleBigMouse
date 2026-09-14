@@ -11,16 +11,31 @@ use egui_kittest::Harness;
 use lbm_layout::model::{LayoutOptions, PER_MONITOR};
 use lbm_ui::options;
 
-/// The panel over one set of options, with whatever the test wants to assert on after.
+/// The panel over one set of options, counting what each half asked for.
 fn panel<'a>(
     options: &'a std::cell::RefCell<LayoutOptions>,
     saved: &'a std::cell::Cell<usize>,
 ) -> Harness<'a> {
+    watching(options, saved, &EDITS)
+}
+
+/// How many times the layout half said it was edited, for the one test that cares.
+static EDITS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn watching<'a>(
+    options: &'a std::cell::RefCell<LayoutOptions>,
+    app: &'a std::cell::Cell<usize>,
+    layout: &'static std::sync::atomic::AtomicUsize,
+) -> Harness<'a> {
     Harness::builder()
-        .with_size(egui::vec2(520.0, 900.0))
+        .with_size(egui::vec2(560.0, 2200.0))
         .build_ui(move |ui| {
-            if options::panel(ui, &mut options.borrow_mut(), true) {
-                saved.set(saved.get() + 1);
+            let what = options::panel(ui, &mut options.borrow_mut(), true);
+            if what.app {
+                app.set(app.get() + 1);
+            }
+            if what.layout {
+                layout.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         })
 }
@@ -122,5 +137,49 @@ fn a_choice_stores_the_wire_spelling_and_not_the_caption() {
         saved.get(),
         1,
         "choosing the current value asked for a save"
+    );
+}
+
+/// **The two halves are saved differently, so the panel must not confuse them.** An
+/// app-wide setting goes to the agent the moment it moves; a per-layout one is an edit
+/// that waits for Save with the rest of the layout. A panel that reported `app` for a
+/// layout setting would write it to `options.json`, where nothing reads it back.
+#[test]
+fn a_layout_setting_is_an_edit_and_not_a_save() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static LAYOUT_EDITS: AtomicUsize = AtomicUsize::new(0);
+
+    let options = std::cell::RefCell::new(LayoutOptions::default());
+    let app = std::cell::Cell::new(0);
+    let mut harness = watching(&options, &app, &LAYOUT_EDITS);
+    harness.run();
+    LAYOUT_EDITS.store(0, Ordering::Relaxed);
+
+    harness.get_by_label("Allow discontinuity").click();
+    harness.run();
+    assert!(
+        options.borrow().allow_discontinuity,
+        "the toggle did not land"
+    );
+    assert_eq!(
+        LAYOUT_EDITS.load(Ordering::Relaxed),
+        1,
+        "a layout setting was not reported as an edit"
+    );
+    assert_eq!(
+        app.get(),
+        0,
+        "a layout setting asked for SaveOptions, which does not carry it"
+    );
+
+    // And the other way round: an app-wide one is not an edit of the layout.
+    LAYOUT_EDITS.store(0, Ordering::Relaxed);
+    harness.get_by_label("Activate debug tools").click();
+    harness.run();
+    assert_eq!(app.get(), 1);
+    assert_eq!(
+        LAYOUT_EDITS.load(Ordering::Relaxed),
+        0,
+        "an app-wide setting marked the layout unsaved, so Save would stay lit forever"
     );
 }

@@ -84,7 +84,7 @@ fn clicking_a_screen_selects_it() {
 
     let mut harness = harness(|ui| {
         let fit = map::fit(map::extent(&screens), ui.max_rect());
-        if let Some(id) = map::draw(ui, &screens, &fit, None) {
+        if let Some(map::Gesture::Clicked(id)) = map::draw(ui, &screens, &fit, None) {
             clicked.set(Some(id));
         }
     });

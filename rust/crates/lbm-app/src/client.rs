@@ -88,16 +88,36 @@ impl Outgoing {
     /// `extra` is merged into the frame beside the method, so a caller writes what the
     /// API documents and nothing else.
     pub fn ask(&mut self, method: &str, extra: Value) -> io::Result<u64> {
+        let id = self.reserve();
+        self.ask_as(id, method, extra)?;
+        Ok(id)
+    }
+
+    /// Takes the id the next request will carry, without sending anything.
+    ///
+    /// For a caller that has to know **what** an answer answers. The id [`ask`](Self::ask)
+    /// hands back comes too late for that: the request is already on the wire, so the
+    /// reading thread can have the answer before the writing thread has recorded what it
+    /// asked. Reserving first puts the pairing in place before the frame exists, which is
+    /// an ordering the agent cannot get ahead of.
+    pub fn reserve(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
+        id
+    }
+
+    /// Sends a request under an id already taken from [`reserve`](Self::reserve).
+    ///
+    /// `extra` is merged into the frame beside the method, so a caller writes what the
+    /// API documents and nothing else.
+    pub fn ask_as(&mut self, id: u64, method: &str, extra: Value) -> io::Result<()> {
         let mut frame = json!({ "Id": id, "Method": method });
         if let (Some(object), Some(more)) = (frame.as_object_mut(), extra.as_object()) {
             for (key, value) in more {
                 object.insert(key.clone(), value.clone());
             }
         }
-        lbm_ipc::framing::write_frame_blocking(&mut self.stream, &frame.to_string())?;
-        Ok(id)
+        lbm_ipc::framing::write_frame_blocking(&mut self.stream, &frame.to_string())
     }
 }
 

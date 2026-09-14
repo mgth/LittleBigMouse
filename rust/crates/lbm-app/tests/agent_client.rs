@@ -258,3 +258,121 @@ fn no_agent_is_an_error_and_nothing_is_started() {
         "connecting created something: the client must never bring an agent up"
     );
 }
+
+/// **An id reserved before the frame goes out is an id the answer cannot beat.**
+///
+/// The window pairs an answer with what it answers by recording the id before sending.
+/// This checks the half that has to be true of the *agent*: that the id it answers under
+/// is the one the request carried, for two requests in flight at once — a pairing done by
+/// arrival order instead would come apart exactly here.
+#[test]
+fn every_answer_comes_back_under_the_id_its_request_carried() {
+    let mut running = Running::start();
+
+    // Two out before either is answered, and the second is the one with a payload.
+    let snapshot = running.outgoing.reserve();
+    running
+        .outgoing
+        .ask_as(snapshot, "Snapshot", json!({}))
+        .expect("sent");
+    let seen = running.outgoing.reserve();
+    running
+        .outgoing
+        .ask_as(seen, "SeenProcesses", json!({}))
+        .expect("sent");
+    assert_ne!(snapshot, seen, "two requests must not share an id");
+
+    let mut answers: Vec<(u64, bool)> = Vec::new();
+    for _ in 0..200 {
+        match running
+            .incoming
+            .receive()
+            .expect("the agent stopped talking")
+        {
+            Message::Answer { id, result } => {
+                answers.push((id, result.is_ok()));
+                if answers.len() == 2 {
+                    break;
+                }
+            }
+            _ => continue,
+        }
+    }
+    assert_eq!(answers.len(), 2, "one of the two was never answered");
+    let ids: Vec<u64> = answers.iter().map(|(id, _)| *id).collect();
+    assert!(
+        ids.contains(&snapshot) && ids.contains(&seen),
+        "the answers came back under ids nobody asked with: {ids:?} for {snapshot} and {seen}"
+    );
+    assert!(
+        answers.iter().all(|(_, ok)| *ok),
+        "the agent refused one of them: {answers:?}"
+    );
+}
+
+/// `SeenProcesses` answers with a list — the one request whose *value* the window reads.
+/// An empty session is still an array, not null, or the window would show nothing and be
+/// unable to tell that from a failure.
+#[test]
+fn seen_processes_answers_with_a_list() {
+    let mut running = Running::start();
+    let id = running.outgoing.reserve();
+    running
+        .outgoing
+        .ask_as(id, "SeenProcesses", json!({}))
+        .expect("sent");
+
+    for _ in 0..200 {
+        if let Message::Answer {
+            id: answered,
+            result,
+        } = running
+            .incoming
+            .receive()
+            .expect("the agent stopped talking")
+        {
+            if answered != id {
+                continue;
+            }
+            let value = result.expect("SeenProcesses was refused");
+            assert!(
+                value.is_array(),
+                "the window reads this as a list of names: {value}"
+            );
+            return;
+        }
+    }
+    panic!("SeenProcesses was never answered");
+}
+
+/// A request the agent turns down comes back as an error under its own id, which is what
+/// lets the window say *which* request failed instead of going quiet.
+#[test]
+fn a_refused_request_is_an_error_under_its_own_id() {
+    let mut running = Running::start();
+    let id = running.outgoing.reserve();
+    // This world keeps no options, so the agent refuses in words.
+    running
+        .outgoing
+        .ask_as(id, "SaveOptions", json!({ "Options": {} }))
+        .expect("sent");
+
+    for _ in 0..200 {
+        if let Message::Answer {
+            id: answered,
+            result,
+        } = running
+            .incoming
+            .receive()
+            .expect("the agent stopped talking")
+        {
+            if answered != id {
+                continue;
+            }
+            let why = result.expect_err("this world cannot keep options");
+            assert!(!why.is_empty(), "a refusal with nothing to show the user");
+            return;
+        }
+    }
+    panic!("the refusal never came back");
+}

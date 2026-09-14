@@ -17,6 +17,7 @@ pub mod drag;
 pub mod frame;
 pub mod list;
 pub mod map;
+pub mod options;
 pub mod probe;
 pub mod wallpaper;
 

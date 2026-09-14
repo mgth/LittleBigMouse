@@ -85,6 +85,7 @@ enum Did {
 enum View {
     Map,
     List,
+    Settings,
 }
 
 struct App {
@@ -190,7 +191,34 @@ fn detect() -> Option<Box<Layout>> {
         .is_ok()
     };
 
-    built.then(|| Box::new(layout))
+    if !built {
+        return None;
+    }
+    read_options(&mut layout);
+    Some(Box::new(layout))
+}
+
+/// The app-wide options as the agent last wrote them, onto the layout in memory.
+///
+/// **Read, never written.** The frontend reads a file the agent owns, exactly as it
+/// already reads `wallpaper.json` for the thumbnails; writing goes back through the
+/// agent's `SaveOptions`, which keeps it the only writer. Only `options.json` is read —
+/// not the layout profile — so the map still shows the screens as they are and not as a
+/// saved arrangement puts them.
+///
+/// A missing or unreadable file leaves the defaults: a settings panel opening on
+/// `LayoutOptions::default()` is wrong about the user's machine, but it is the same wrong
+/// the agent starts from, and it is better than refusing to open.
+fn read_options(layout: &mut Layout) {
+    let store = lbm_store::JsonLayoutStore::new(lbm_store::lbm_paths::config_dir());
+    let Ok(text) = std::fs::read_to_string(store.options_path()) else {
+        return;
+    };
+    let Ok(dto) = serde_json::from_str::<lbm_store::GlobalOptionsDto>(&text) else {
+        eprintln!("[lbm-app] options.json could not be read: the defaults are shown");
+        return;
+    };
+    layout.edit_options(|o| lbm_store::layout_dto_mapper::apply_global_options(o, Some(&dto)));
 }
 
 /// The screens as the views want them, read off the layout.
@@ -511,6 +539,24 @@ impl App {
         }
     }
 
+    /// Sends the app-wide options to the agent, which is the only thing that writes them.
+    ///
+    /// The request itself is [`lbm_app::settings::save_options`], where a test can check
+    /// the very frame this sends.
+    fn save_options(&mut self) {
+        let Some(layout) = self.layout.as_ref() else {
+            return;
+        };
+        let (method, extra) = lbm_app::settings::save_options(&layout.options);
+        if let Some(requests) = &self.requests {
+            if requests.send((method, extra)).is_err() {
+                self.requests = None;
+                self.without_agent =
+                    Some(("the agent stopped listening".to_owned(), String::new()));
+            }
+        }
+    }
+
     /// What the agent said, in the bar's terms.
     ///
     /// **`saved` is not taken from the agent, and that is deliberate.** Save and Undo
@@ -727,6 +773,7 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.view, View::Map, "Map");
                 ui.selectable_value(&mut self.view, View::List, "List");
+                ui.selectable_value(&mut self.view, View::Settings, "Settings");
                 ui.separator();
                 ui.label(match self.screens.len() {
                     0 => "no screens detected".to_owned(),
@@ -758,8 +805,24 @@ impl eframe::App for App {
 
         // The `Ui` handed to `App::ui` has no background of its own — the doc says so
         // outright — so the map would be drawn on nothing.
+        let mut save_options = false;
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
+                if self.view == View::Settings {
+                    match self.layout.as_mut() {
+                        // Through `edit_options` rather than at the field: it is what
+                        // marks the layout unsaved and what republishes the extent when
+                        // the border values move, and a panel writing round it would
+                        // leave both wrong.
+                        Some(layout) => layout.edit_options(|o| {
+                            save_options = lbm_ui::options::panel(ui, o, cfg!(windows));
+                        }),
+                        None => {
+                            ui.label("the displays have not been read yet");
+                        }
+                    }
+                    return (None, None);
+                }
                 let monitors = self.monitors(&logos);
                 let at = ui.max_rect();
                 match self.view {
@@ -802,9 +865,15 @@ impl eframe::App for App {
                         let picked = list::draw(ui, at, &monitors, self.selected.as_deref());
                         (picked.map(|id| Did::Clicked(id.to_owned())), None)
                     }
+                    // Returned above, before the screens were borrowed: the panel edits
+                    // the very options they were read from.
+                    View::Settings => unreachable!("handled before the monitors are built"),
                 }
             })
             .inner;
+        if save_options {
+            self.save_options();
+        }
         self.acted_on_the_map(acted.0, acted.1, &ctx);
     }
 }

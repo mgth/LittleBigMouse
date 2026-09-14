@@ -116,6 +116,17 @@ struct App {
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
     drag: Option<Drag>,
+    /// What each request in flight was, by the id its answer will carry.
+    ///
+    /// Without this an answer is an anonymous `Ok(null)` and the window can only guess
+    /// what it settles — which is why, until now, a `SaveLayout` that the agent refused
+    /// was completely invisible.
+    asked: HashMap<u64, &'static str>,
+    /// The last thing the agent refused, and what was refused. Shown, because a request
+    /// that fails silently is worse than one that fails.
+    refused: Option<String>,
+    /// The processes seen in the foreground this session, as the agent lists them.
+    seen: Vec<String>,
     /// The processes the engine stands aside for, once they have been read.
     ///
     /// `None` is **not** an empty list: it is "not read", and it is what keeps the window
@@ -147,6 +158,8 @@ struct App {
     state: lbm_ui::State,
     /// What to ask the agent, when there is one to ask.
     requests: Option<Asks>,
+    /// The id the next request will carry. The window's own counter — see [`Asks`].
+    next_id: u64,
     /// Why there is nothing to ask, when there is not: a short reason for the bar and
     /// the endpoint it was looking for, which belongs in a tooltip and not across the
     /// top of the window.
@@ -443,8 +456,25 @@ fn colour_of(text: &str) -> [u8; 4] {
     [byte(0), byte(2), byte(4), 255]
 }
 
-/// What the window asks the agent: a method and whatever the API wants beside it.
-type Asks = std::sync::mpsc::Sender<(&'static str, serde_json::Value)>;
+/// What the window asks the agent: the id its answer will carry, a method, and whatever
+/// the API wants beside it.
+///
+/// **The window picks the id, not the writer thread.** It is the only way the pairing
+/// between a request and its answer cannot lose a race: the window records `id -> method`
+/// and *then* hands the request over, both on the UI thread, so there is no window in
+/// which an answer exists and its meaning does not. Letting the writer assign the id and
+/// announce it back would put that announcement on one thread and the answer on another,
+/// and the ordering would hold only by luck.
+type Asks = std::sync::mpsc::Sender<(u64, &'static str, serde_json::Value)>;
+
+/// A joined agent: where to send requests, and the first id the window may use.
+struct Joined {
+    asks: Asks,
+    next_id: u64,
+}
+
+/// Why there is no agent: a short reason for the bar, and the endpoint it looked at.
+type NoAgent = (String, String);
 
 /// Connects to a running agent and keeps talking to it, or says why it cannot.
 ///
@@ -457,7 +487,7 @@ type Asks = std::sync::mpsc::Sender<(&'static str, serde_json::Value)>;
 fn join_agent(
     ctx: &egui::Context,
     found: std::sync::mpsc::Sender<Found>,
-) -> (Option<Asks>, Option<(String, String)>) {
+) -> (Option<Joined>, Option<NoAgent>) {
     let Some(endpoint) = client::default_endpoint() else {
         return (
             None,
@@ -483,15 +513,16 @@ fn join_agent(
     }
 
     let waker = ctx.clone();
+    let reading = found.clone();
     std::thread::spawn(move || loop {
         match incoming.receive() {
             Ok(message) => {
-                if found.send(Found::Agent(message)).is_err() {
+                if reading.send(Found::Agent(message)).is_err() {
                     return;
                 }
             }
             Err(_) => {
-                let _ = found.send(Found::AgentGone);
+                let _ = reading.send(Found::AgentGone);
                 waker.request_repaint();
                 return;
             }
@@ -499,15 +530,17 @@ fn join_agent(
         waker.request_repaint();
     });
 
-    let (asks, to_write) = std::sync::mpsc::channel();
+    // The ids the window may use, after the two spent above.
+    let next_id = outgoing.reserve();
+    let (asks, to_write) = std::sync::mpsc::channel::<(u64, &'static str, serde_json::Value)>();
     std::thread::spawn(move || {
-        while let Ok((method, extra)) = to_write.recv() {
-            if outgoing.ask(method, extra).is_err() {
+        while let Ok((id, method, extra)) = to_write.recv() {
+            if outgoing.ask_as(id, method, extra).is_err() {
                 return;
             }
         }
     });
-    (Some(asks), None)
+    (Some(Joined { asks, next_id }), None)
 }
 
 impl App {
@@ -554,7 +587,13 @@ impl App {
                 waker.request_repaint();
             }
         });
-        let (requests, without_agent) = join_agent(&ctx, send);
+        let (joined, without_agent) = join_agent(&ctx, send);
+        // Without an agent there is nothing to number; the counter starts where the
+        // handshake left off when there is.
+        let (requests, next_id) = match joined {
+            Some(Joined { asks, next_id }) => (Some(asks), next_id),
+            None => (None, 0),
+        };
 
         App {
             arriving: Some(arriving),
@@ -562,6 +601,9 @@ impl App {
             screens: Vec::new(),
             selected: None,
             drag: None,
+            asked: HashMap::new(),
+            refused: None,
+            seen: Vec::new(),
             excluded: None,
             pattern: String::new(),
             previewed: None,
@@ -571,6 +613,7 @@ impl App {
             wallpapers: HashMap::new(),
             state: lbm_ui::State::default(),
             requests,
+            next_id,
             without_agent,
         }
     }
@@ -654,8 +697,13 @@ impl App {
 
     /// Puts a request on the writer thread, and says so if there is nobody to take it.
     fn send(&mut self, method: &'static str, extra: serde_json::Value) {
+        let id = self.next_id;
+        self.next_id += 1;
+        // Recorded **before** the request leaves, on this thread: an answer that arrives
+        // the instant after cannot find the pairing missing.
+        self.asked.insert(id, method);
         if let Some(requests) = &self.requests {
-            if requests.send((method, extra)).is_err() {
+            if requests.send((id, method, extra)).is_err() {
                 self.requests = None;
                 self.without_agent =
                     Some(("the agent stopped listening".to_owned(), String::new()));
@@ -738,6 +786,22 @@ impl App {
     /// between that copy and the store. So the flag comes from the layout here, in
     /// [`App::ui`], and the agent's is ignored rather than fought with.
     fn agent_said(&mut self, message: Message) {
+        if let Message::Answer { id, result } = &message {
+            let method = self.asked.remove(id).unwrap_or("something");
+            match result {
+                Ok(value) => {
+                    self.refused = None;
+                    self.answered(method, value);
+                }
+                // The agent says why in words meant for a person ("no layout yet", "this
+                // agent keeps no options"); passing them through beats inventing a
+                // summary of them.
+                Err(why) => self.refused = Some(format!("{method} refused: {why}")),
+            }
+            // Whatever it said, a request came back: the bar stops waiting.
+            lbm_ui::update(&mut self.state, lbm_ui::Action::Answered);
+            return;
+        }
         let Message::State(state) = message else {
             // Answers and hook events are not the bar's business yet: the bar reads
             // state, and every request this window makes changes state, so the change
@@ -767,6 +831,24 @@ impl App {
         }
         self.state.waiting = false;
         self.without_agent = None;
+    }
+
+    /// What an answer carried, for the requests whose answer says something.
+    ///
+    /// Most say `null`: the agent did it, and the `State` event that follows is the real
+    /// news. `SeenProcesses` is the one that answers with a value.
+    fn answered(&mut self, method: &str, value: &serde_json::Value) {
+        if method != "SeenProcesses" {
+            return;
+        }
+        self.seen = value
+            .as_array()
+            .map(|list| {
+                list.iter()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
     }
 
     /// The logo for one screen, uploaded once and kept.
@@ -962,7 +1044,14 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.view, View::Map, "Map");
                 ui.selectable_value(&mut self.view, View::List, "List");
-                ui.selectable_value(&mut self.view, View::Settings, "Settings");
+                // Asked when the panel is opened rather than on a timer: the list only
+                // grows, and nobody is looking at it the rest of the time.
+                if ui
+                    .selectable_value(&mut self.view, View::Settings, "Settings")
+                    .clicked()
+                {
+                    self.send("SeenProcesses", serde_json::json!({}));
+                }
                 ui.separator();
                 ui.label(match self.screens.len() {
                     0 => "no screens detected".to_owned(),
@@ -972,11 +1061,13 @@ impl eframe::App for App {
                 ui.separator();
                 // Said plainly. A window that looked the same with and without an agent
                 // would leave the user guessing why the buttons do nothing.
-                match &self.without_agent {
-                    Some((why, where_)) => ui
+                match (&self.without_agent, &self.refused) {
+                    (Some((why, where_)), _) => ui
                         .label(format!("no agent — {why}"))
                         .on_hover_text(where_.clone()),
-                    None => ui.label("agent connected"),
+                    // A request the agent turned down used to vanish without a word.
+                    (None, Some(why)) => ui.colored_label(ui.visuals().error_fg_color, why.clone()),
+                    (None, None) => ui.label("agent connected"),
                 };
             });
         });
@@ -1026,7 +1117,7 @@ impl eframe::App for App {
                                 ui,
                                 self.excluded.as_deref(),
                                 &mut self.pattern,
-                                &[],
+                                &self.seen,
                             );
                         }
                         None => {

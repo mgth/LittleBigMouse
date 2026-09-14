@@ -377,6 +377,10 @@ fn dashes(kind: Kind) -> (&'static [f32], &'static [f32]) {
 /// (`:281`, `:300`) — so the distinction is clearly intended but its numbers were never
 /// on screen to be judged. Five points of chartreuse would be a stripe across the frame;
 /// these keep the dragged line the louder of the two without painting over the picture.
+///
+/// **Settled**: looked at on screen and accepted by the maintainer (2026-09-14). Not an
+/// open question any more — change it because the design changed, not because the
+/// provenance looks unfinished.
 pub const THICKNESS: (f32, f32) = (2.0, 1.0);
 
 /// How much of the other screens' lines shows: `Opacity = 0.6` (`FrameMover.cs:284`,

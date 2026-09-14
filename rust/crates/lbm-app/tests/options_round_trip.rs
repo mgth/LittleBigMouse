@@ -182,3 +182,49 @@ fn the_agent_understands_the_request_the_window_sends() {
         other => panic!("the frame parsed as something else: {other:?}"),
     }
 }
+
+/// **The Save button must not erase the user's exclusions.**
+///
+/// `LayoutDocument::of` fills `Excluded` from `layout.options.excluded_list` — right for
+/// the agent, which has read the list, and destructive for this window, which has not:
+/// the empty list it holds would be applied over the real one. Harder to notice than the
+/// `SaveOptions` case, because here the field is filled in for you.
+#[test]
+fn saving_the_layout_carries_no_excluded_list() {
+    let mut layout = lbm_layout::model::Layout::new(LayoutOptions::default());
+    layout.id = "TESTMON1".to_owned();
+
+    let (method, extra) = lbm_app::settings::save_layout(&layout);
+    assert_eq!(method, "SaveLayout");
+
+    let mut frame = serde_json::json!({ "Id": 3, "Method": method });
+    let serde_json::Value::Object(rest) = extra else {
+        panic!("an object");
+    };
+    for (key, value) in rest {
+        frame[key] = value;
+    }
+
+    let parsed: lbm_agent::api::RequestFrame =
+        serde_json::from_value(frame).expect("the agent could not parse the window's frame");
+    match parsed.request {
+        lbm_agent::api::Request::SaveLayout {
+            layout_id,
+            document,
+        } => {
+            assert_eq!(layout_id, "TESTMON1");
+            assert_eq!(
+                document.excluded, None,
+                "Save would apply an excluded list this window never read, erasing the \
+                 user's exclusions"
+            );
+            // What it *must* carry: the layout and its options, or Save saves nothing.
+            assert!(
+                document.layout.is_some(),
+                "the layout itself did not travel"
+            );
+            assert!(document.global_options.is_some());
+        }
+        other => panic!("the frame parsed as something else: {other:?}"),
+    }
+}

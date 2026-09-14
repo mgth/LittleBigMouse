@@ -11,7 +11,7 @@
 
 use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::Harness;
-use lbm_ui::{can, engine_controls, Action, Effect, Engine, Press, State};
+use lbm_ui::{can, engine_controls, update, Action, Effect, Engine, Press, State};
 
 /// Drives the bar over one state and hands back what the press produced.
 fn press(state: State, label: &str) -> (Vec<Effect>, State) {
@@ -40,6 +40,7 @@ fn stopped() -> State {
         waiting: false,
         saved: true,
         is_virtual: false,
+        live: false,
     }
 }
 
@@ -97,6 +98,7 @@ fn an_agent_with_no_hook_offers_nothing() {
         waiting: false,
         saved: true,
         is_virtual: false,
+        live: false,
     };
 
     let harness = Harness::new_ui(|ui| {
@@ -133,4 +135,108 @@ fn the_bar_shows_what_the_agent_last_said() {
         });
         let _ = harness.get_by_label(shown);
     }
+}
+
+//==========================================================================//
+// The live preview                                                         //
+//==========================================================================//
+
+/// Turning it on is an ask; turning it off ends the preview instead of asking again.
+#[test]
+fn the_live_switch_turns_on_with_an_ask_and_off_with_an_end() {
+    let mut state = stopped();
+
+    let effects = update(&mut state, Action::Pressed(Press::Live));
+    assert!(state.live);
+    assert_eq!(effects, vec![Effect::Ask(Press::Live)]);
+    assert!(
+        !state.waiting,
+        "a mode is not a request with an answer; waiting would grey the whole bar"
+    );
+
+    let effects = update(&mut state, Action::Pressed(Press::Live));
+    assert!(!state.live);
+    assert_eq!(effects, vec![Effect::EndPreview]);
+}
+
+/// **The engine going down outranks the preview.** The tray's Stop, a display change, an
+/// excluded application: without this the next tick would hand the hook a `Load` and a
+/// `Run` and put it straight back up, against a user who just stopped it.
+#[test]
+fn an_engine_that_goes_down_ends_the_preview() {
+    let mut state = stopped();
+    update(&mut state, Action::Pressed(Press::Live));
+    // It is running now, previewing.
+    update(
+        &mut state,
+        Action::AgentSaid {
+            engine: Engine::Running,
+            connected: true,
+        },
+    );
+    assert!(state.live, "a preview that started the engine stays on");
+
+    let effects = update(
+        &mut state,
+        Action::AgentSaid {
+            engine: Engine::Stopped,
+            connected: true,
+        },
+    );
+    assert!(!state.live, "the switch stayed on over a stopped engine");
+    assert_eq!(effects, vec![Effect::EndPreview]);
+}
+
+/// A transition, not the current state: over an engine that is *already* stopped,
+/// turning the switch on is a legitimate way to start — and must not be undone at once
+/// by the next state the agent sends.
+#[test]
+fn a_preview_started_over_a_stopped_engine_survives_the_next_state() {
+    let mut state = stopped();
+    update(&mut state, Action::Pressed(Press::Live));
+    assert!(state.live);
+
+    // The agent has not caught up yet and repeats "stopped".
+    let effects = update(
+        &mut state,
+        Action::AgentSaid {
+            engine: Engine::Stopped,
+            connected: true,
+        },
+    );
+    assert!(
+        state.live,
+        "the switch turned itself off on a state that did not change"
+    );
+    assert!(effects.is_empty());
+}
+
+/// A hook that goes away leaves nothing to preview into.
+#[test]
+fn losing_the_hook_ends_the_preview() {
+    let mut state = stopped();
+    update(&mut state, Action::Pressed(Press::Live));
+
+    let effects = update(
+        &mut state,
+        Action::AgentSaid {
+            engine: Engine::Dead,
+            connected: false,
+        },
+    );
+    assert!(!state.live);
+    assert_eq!(effects, vec![Effect::EndPreview]);
+}
+
+/// A foreign layout is never fed to the local mouse: it describes someone else's desk.
+#[test]
+fn a_foreign_layout_is_never_previewed() {
+    let mut state = State {
+        is_virtual: true,
+        ..stopped()
+    };
+    assert!(!can(&state, Press::Live));
+    let effects = update(&mut state, Action::Pressed(Press::Live));
+    assert!(!state.live);
+    assert!(effects.is_empty());
 }

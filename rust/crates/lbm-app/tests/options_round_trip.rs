@@ -228,3 +228,63 @@ fn saving_the_layout_carries_no_excluded_list() {
         other => panic!("the frame parsed as something else: {other:?}"),
     }
 }
+
+/// A preview is the same document as a save — including the excluded list it must not
+/// carry. The trap is one the preview inherits: `preview` is built on `save_layout`
+/// precisely so it cannot drift away from that.
+#[test]
+fn a_preview_carries_the_same_document_as_a_save() {
+    let mut layout = lbm_layout::model::Layout::new(LayoutOptions::default());
+    layout.id = "TESTMON1".to_owned();
+
+    let (save_method, save_extra) = lbm_app::settings::save_layout(&layout);
+    let (preview_method, preview_extra) = lbm_app::settings::preview(&layout);
+    assert_eq!(save_method, "SaveLayout");
+    assert_eq!(preview_method, "Preview");
+    assert_eq!(
+        save_extra, preview_extra,
+        "a preview and a save describe the same layout; only the agent's answer differs"
+    );
+
+    let parsed: lbm_agent::api::RequestFrame =
+        serde_json::from_value(frame(3, preview_method, preview_extra))
+            .expect("the agent could not parse the window's preview");
+    match parsed.request {
+        lbm_agent::api::Request::Preview {
+            layout_id,
+            document,
+        } => {
+            assert_eq!(layout_id, "TESTMON1");
+            assert_eq!(
+                document.excluded, None,
+                "a preview would apply an excluded list this window never read"
+            );
+            assert!(document.layout.is_some());
+        }
+        other => panic!("the frame parsed as something else: {other:?}"),
+    }
+}
+
+/// And ending one is a request the agent knows, with nothing in it to get wrong.
+#[test]
+fn ending_a_preview_is_a_request_the_agent_understands() {
+    let (method, extra) = lbm_app::settings::end_preview();
+    let parsed: lbm_agent::api::RequestFrame =
+        serde_json::from_value(frame(4, method, extra)).expect("parsed");
+    assert!(matches!(
+        parsed.request,
+        lbm_agent::api::Request::EndPreview
+    ));
+}
+
+/// The frame the writer thread puts on the wire: the id, the method, and the rest.
+fn frame(id: u64, method: &str, extra: serde_json::Value) -> serde_json::Value {
+    let mut frame = serde_json::json!({ "Id": id, "Method": method });
+    let serde_json::Value::Object(rest) = extra else {
+        panic!("an object");
+    };
+    for (key, value) in rest {
+        frame[key] = value;
+    }
+    frame
+}

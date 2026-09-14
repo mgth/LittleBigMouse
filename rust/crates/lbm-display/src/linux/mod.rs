@@ -10,6 +10,7 @@ pub mod desktop;
 pub mod drm;
 pub mod kscreen;
 pub mod probe;
+pub mod topology;
 pub mod xrandr;
 
 use lbm_layout::geo::dotnet::format_double;

@@ -25,13 +25,33 @@ pub const PATIENCE: Duration = Duration::from_secs(5);
 ///
 /// Nothing otherwise — a command that is not there, one that failed, and one that ran out
 /// of time are all "this source has no answer", which is what the caller does with them.
+/// The same, with the error stream folded into the answer.
+///
+/// For a command whose failure is something it *says* rather than something it exits
+/// with: `kscreen-doctor` exits 0 even when the compositor rejects the configuration, and
+/// the only signal is the word "failed" on its output — dropping stderr would drop the
+/// only evidence that a topology change did not take.
+pub fn run_with_stderr(program: &str, args: &[&str], patience: Duration) -> Option<String> {
+    run_inner(program, args, patience, Stdio::piped(), true)
+}
+
 pub fn run(program: &str, args: &[&str], patience: Duration) -> Option<String> {
+    run_inner(program, args, patience, Stdio::null(), false)
+}
+
+fn run_inner(
+    program: &str,
+    args: &[&str],
+    patience: Duration,
+    stderr: Stdio,
+    keep_failure: bool,
+) -> Option<String> {
     let started = Instant::now();
     let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(stderr)
         .spawn()
         .ok()?;
 
@@ -42,6 +62,18 @@ pub fn run(program: &str, args: &[&str], patience: Duration) -> Option<String> {
         let _ = child.wait();
         return None;
     };
+    // Drained on its own thread too, when it was asked for. Redirecting the error stream
+    // and then not reading it would be worse than not redirecting it: the child blocks on
+    // a full pipe, and what it was trying to say is exactly the failure signal.
+    let errors = child.stderr.take().map(|mut stderr| {
+        let (said, hearing) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = stderr.read_to_string(&mut text);
+            let _ = said.send(text);
+        });
+        hearing
+    });
     let (printed, reading) = mpsc::channel();
     std::thread::spawn(move || {
         let mut text = String::new();
@@ -49,15 +81,22 @@ pub fn run(program: &str, args: &[&str], patience: Duration) -> Option<String> {
         let _ = printed.send(text);
     });
 
-    let Ok(text) = reading.recv_timeout(patience) else {
+    let Ok(mut text) = reading.recv_timeout(patience) else {
         return give_up(program, &mut child);
     };
+    if let Some(errors) = errors {
+        if let Ok(said) = errors.recv_timeout(patience) {
+            text.push_str(&said);
+        }
+    }
 
     // The pipe is closed; the process itself usually follows at once, but "usually" is
     // what this whole module is about.
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return status.success().then_some(text),
+            // `keep_failure` is for a command that reports failure in words: its output
+            // is the evidence, so it comes back whatever the exit code was.
+            Ok(Some(status)) => return (status.success() || keep_failure).then_some(text),
             Ok(None) if started.elapsed() < patience => {
                 std::thread::sleep(Duration::from_millis(20));
             }
@@ -142,5 +181,36 @@ mod tests {
         let answer = run("sh", &["-c", "yes lbm | head -c 200000"], PATIENCE);
 
         assert_eq!(answer.map(|text| text.len()), Some(200_000));
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod stderr_tests {
+    use super::*;
+
+    /// A command that reports failure in words needs both streams and its exit code
+    /// ignored — otherwise the evidence of a rejected topology is thrown away.
+    #[test]
+    fn what_a_failing_command_says_on_both_streams_comes_back() {
+        let said = run_with_stderr(
+            "sh",
+            &[
+                "-c",
+                "printf out; printf ' applying config failed!' >&2; exit 1",
+            ],
+            PATIENCE,
+        )
+        .expect("a command that fails in words still has something to say");
+        assert!(said.contains("out"), "stdout was dropped: {said}");
+        assert!(
+            said.contains("applying config failed!"),
+            "stderr was dropped, which is the only failure signal kscreen-doctor gives: {said}"
+        );
+    }
+
+    /// The plain runner keeps its old contract: a failure is no answer at all.
+    #[test]
+    fn the_quiet_runner_still_treats_a_failure_as_no_answer() {
+        assert_eq!(run("sh", &["-c", "printf out; exit 1"], PATIENCE), None);
     }
 }

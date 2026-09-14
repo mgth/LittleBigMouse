@@ -217,7 +217,13 @@ mod events {
         | libc::IN_MOVED_TO;
 
     /// An inotify descriptor watching `dirs`; an error if none can be watched.
-    fn inotify(dirs: &BTreeSet<PathBuf>) -> io::Result<OwnedFd> {
+    ///
+    /// `ENOSPC` here is not a full disk: it is this user's `fs.inotify.max_user_watches`
+    /// spent, usually by a file indexer that watches the whole home directory. The agent
+    /// survives it — [`start`] leaves `live` short of `SOURCES`, so the loop keeps its
+    /// two-second poll instead of the thirty-second safety net — but it loses the instant
+    /// reaction to a desktop saving its outputs.
+    pub fn inotify(dirs: &BTreeSet<PathBuf>) -> io::Result<OwnedFd> {
         // SAFETY: plain syscall; the descriptor is owned right after.
         let raw = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
         if raw < 0 {
@@ -430,10 +436,35 @@ mod tests {
             let config = tempfile::tempdir().unwrap();
             let file = config.path().join("kwinoutputconfig.json");
             std::fs::write(&file, "[]").unwrap();
+
+            // Asked of inotify itself, and not read off `live`. `start` raises **two**
+            // sources and `live` counts both, so on a machine with no inotify watches
+            // left the uevent socket alone takes it to 1 — and the old
+            // `assert!(live >= 1, "inotify is up")` passed while inotify was not up at
+            // all. The test then failed a second later on `Elapsed`, which names nothing
+            // and sends you looking at the rename.
+            if let Err(error) = events::inotify(&events::watched(std::slice::from_ref(&file)).0) {
+                panic!(
+                    "no inotify watch to test with: {error}.\n\
+                     ENOSPC is this user's fs.inotify.max_user_watches spent, not a full \
+                     disk — look for a file indexer holding them \
+                     (`sysctl fs.inotify.max_user_watches`, and grep /proc/*/fdinfo/* for \
+                     inotify). The agent itself survives this: it keeps its two-second \
+                     poll and only loses the instant reaction."
+                );
+            }
+
             let nudge = Arc::new(Notify::new());
             let live = Arc::new(AtomicUsize::new(0));
             events::start(std::slice::from_ref(&file), &nudge, &live);
-            assert!(live.load(Ordering::Relaxed) >= 1, "inotify is up");
+            // Still `>= 1` and not `== SOURCES`: the uevent socket binds a kernel
+            // multicast group, which a container may well refuse, and this test is about
+            // inotify. What inotify is up is the line above's business, said there
+            // because that is where it can be said truthfully.
+            assert!(
+                live.load(Ordering::Relaxed) >= 1,
+                "no event source came up at all"
+            );
 
             let staged = config.path().join("kwinoutputconfig.json.tmp");
             std::fs::write(&staged, r#"[{"name":"outputs"}]"#).unwrap();

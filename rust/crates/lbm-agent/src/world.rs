@@ -55,6 +55,16 @@ pub trait AgentWorld: World {
 
     /// The layout to preview: the current one with the edit applied, the current one
     /// left as it is. Refused as [`edit`](Self::edit) is.
+    /// Apply the layout to the system display configuration. The screens really move.
+    fn apply_topology(
+        &mut self,
+        _layout_id: &str,
+        _document: &LayoutDocument,
+        _adjust_scale: bool,
+    ) -> Result<(), String> {
+        Err("this agent cannot change the display topology".to_owned())
+    }
+
     fn set_preview(&mut self, _layout_id: &str, _document: &LayoutDocument) -> Result<(), String> {
         Err("this agent takes no previews".to_owned())
     }
@@ -345,6 +355,62 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     fn edit(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {
         document.apply(self.editable(layout_id)?);
         Ok(())
+    }
+
+    /// Save the edit, then move the screens to match it.
+    ///
+    /// **Saved first, and the C# says why**: the system change triggers a rebuild that
+    /// re-imports the system layout and then loads the saved one, so the physical layout
+    /// the user just applied survives only if it was written down first.
+    ///
+    /// `before_apply` is where the engine's 1px gaps are closed. `lbm-display` cannot do
+    /// it — the gap guard is the agent's (D7) and a frontend must not link the agent —
+    /// which is the whole reason this request exists rather than the frontend applying
+    /// for itself. Restoring deletes the journal, so the old positions can never be
+    /// "restored" over the ones applied here; an engine still running re-gaps the new
+    /// topology on the rebuild that follows.
+    #[cfg(target_os = "linux")]
+    fn apply_topology(
+        &mut self,
+        layout_id: &str,
+        document: &LayoutDocument,
+        adjust_scale: bool,
+    ) -> Result<(), String> {
+        // The layout is borrowed for this block only, so the gap guard below is free.
+        let wanted: Vec<lbm_display::linux::topology::Wanted> = {
+            document.apply(self.editable(layout_id)?);
+            let layout = self.layout.as_mut().ok_or("no layout yet")?;
+            self.persistence.save(layout).map_err(|e| e.to_string())?;
+            layout
+                .compute_pixel_locations_from_physical(adjust_scale)
+                .into_iter()
+                .filter_map(|(source_id, placement)| {
+                    // The connector is what both tools name an output by, and what the
+                    // Linux factory puts in `interface_path` (`linux.rs`, `AddMonitor`).
+                    let connector = layout.source(&source_id)?.source.interface_path.clone()?;
+                    Some(lbm_display::linux::topology::Wanted {
+                        connector,
+                        x: placement.pixel_bounds.left(),
+                        y: placement.pixel_bounds.top(),
+                        scale: placement.scale,
+                    })
+                })
+                .collect()
+        };
+        if wanted.is_empty() {
+            return Err("no attached screen to place".to_owned());
+        }
+
+        let Some(backend) = lbm_display::linux::Backend::detect() else {
+            return Err("no display backend to apply through".to_owned());
+        };
+        let gaps = &self.gaps;
+        lbm_display::linux::topology::apply(backend, &wanted, |before| {
+            if let Some(gaps) = gaps {
+                gaps.restore(before, run_kscreen_doctor);
+            }
+        })
+        .map(|_| ())
     }
 
     fn set_preview(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {

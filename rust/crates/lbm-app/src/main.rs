@@ -135,6 +135,9 @@ struct App {
     excluded: Option<Vec<String>>,
     /// What the user is typing into the exclusion box.
     pattern: String,
+    /// Whether the apply asks for the scales too. Remembered between openings of the
+    /// menu, not across runs — it is a choice about this apply, not a setting.
+    adjust_scale: bool,
     /// Whether the rescue recorder is waiting for a combination.
     recording: lbm_ui::shortcut::Recording,
     /// The shortcut the hook said it could not arm, if it said so.
@@ -614,6 +617,7 @@ impl App {
             seen: Vec::new(),
             excluded: None,
             pattern: String::new(),
+            adjust_scale: false,
             recording: lbm_ui::shortcut::Recording::default(),
             shortcut_unavailable: None,
             previewed: None,
@@ -659,6 +663,21 @@ impl App {
         let Some((method, extra)) = request else {
             return;
         };
+        self.send(method, extra);
+    }
+
+    /// Asks the agent to move the real screens to match this layout.
+    ///
+    /// **Through the agent, though the plan lets the frontend touch topology directly.**
+    /// Applying means closing the engine's 1px gaps first, and the gap guard is the
+    /// agent's (D7) — which a frontend must not link, because linking the agent is
+    /// linking the code that can start a hook. Two processes writing the topology would
+    /// fight over it; one of them already knows whether the engine is running.
+    fn apply_topology(&mut self) {
+        let Some(layout) = self.layout.as_ref() else {
+            return;
+        };
+        let (method, extra) = lbm_app::settings::apply_topology(layout, self.adjust_scale);
         self.send(method, extra);
     }
 
@@ -1116,6 +1135,8 @@ impl eframe::App for App {
         // outright — so the map would be drawn on nothing.
         let mut save_options = false;
         let mut excluded_did = None;
+        let mut apply = false;
+        let mut adjust_scale = self.adjust_scale;
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
                 if self.view == View::Settings {
@@ -1185,6 +1206,30 @@ impl eframe::App for App {
                         }
 
                         let gesture = map::draw(ui, &shown, &fit, self.selected.as_deref());
+                        // The presenter's context menu, as the C# has it. Right-click on
+                        // the map, not a button in the bar: this is the one action in the
+                        // window that moves the user's real screens, and it should take
+                        // some finding rather than sit next to Save.
+                        ui.response().context_menu(|ui| {
+                            ui.label("Apply this layout to the system configuration?");
+                            ui.label(
+                                egui::RichText::new(
+                                    "Your screens will move. The layout is saved first, \
+                                     because the system change reloads the saved one.",
+                                )
+                                .small()
+                                .color(ui.visuals().weak_text_color()),
+                            );
+                            ui.checkbox(&mut adjust_scale, "Also adjust the scales");
+                            ui.separator();
+                            if ui.button("Apply").clicked() {
+                                apply = true;
+                                ui.close();
+                            }
+                            if ui.button("Cancel").clicked() {
+                                ui.close();
+                            }
+                        });
                         // After the frames: the lines are about the screens, so they are
                         // read over them. The C# adds its canvas to the panel the frames
                         // are already in, which puts it on top the same way.
@@ -1203,6 +1248,10 @@ impl eframe::App for App {
                 }
             })
             .inner;
+        self.adjust_scale = adjust_scale;
+        if apply {
+            self.apply_topology();
+        }
         if let Some(did) = excluded_did {
             save_options |= self.excluded_edit(did);
         }

@@ -89,6 +89,26 @@ pub enum Request {
         #[serde(rename = "Document")]
         document: Box<LayoutDocument>,
     },
+    /// Apply the layout to the **system**: the screens really move.
+    ///
+    /// The document is saved first, as the C# does and for the reason it gives: the
+    /// system change triggers a rebuild that re-imports the system layout and then loads
+    /// the saved one, so the physical layout survives only if it was saved.
+    ///
+    /// It goes through the agent rather than being done by the frontend — which the plan
+    /// otherwise lets do topology — because applying means closing the engine's 1px gaps
+    /// first, and the gap guard is the agent's (D7). Two processes writing the topology
+    /// would fight over it.
+    ApplyTopology {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "Document")]
+        document: Box<LayoutDocument>,
+        /// Ask the compositor for the per-output scales that make every monitor's
+        /// logical pitch the primary's. Linux only; the C# offers it in the dialog.
+        #[serde(rename = "AdjustScale", default)]
+        adjust_scale: bool,
+    },
     /// A live-preview tick: the hook runs the edit, nothing is saved.
     Preview {
         #[serde(rename = "LayoutId")]

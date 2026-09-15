@@ -112,3 +112,22 @@ pub fn read_excluded(file: std::path::PathBuf) -> Option<Vec<String>> {
         }
     }
 }
+
+/// The `ApplyTopology` request: move the real screens to match this layout.
+///
+/// The same document as a save, for the same reason and with the same excluded list
+/// stripped out — the agent saves it before applying, because the system change triggers
+/// a rebuild that loads the *saved* layout and the applied arrangement survives only if
+/// it was written down first.
+///
+/// `adjust_scale` asks for the per-output scales that give every monitor the primary's
+/// logical pitch. Linux only, and off unless the user asked: rescaling every monitor is
+/// not what someone who wanted their screens rearranged necessarily meant.
+pub fn apply_topology(
+    layout: &lbm_layout::model::Layout,
+    adjust_scale: bool,
+) -> (&'static str, Value) {
+    let (_, mut extra) = save_layout(layout);
+    extra["AdjustScale"] = json!(adjust_scale);
+    ("ApplyTopology", extra)
+}

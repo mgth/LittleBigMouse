@@ -542,3 +542,52 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
         .await;
     assert!(!entry.exists(), "the session no longer starts the agent");
 }
+
+/// The frontend's apply request, parsed by the agent's own type.
+///
+/// The screens really move when this succeeds, so the shape is worth pinning: a
+/// misspelled member would land as a default — `AdjustScale` silently false, or worse a
+/// document that does not parse at all and an apply that never happens.
+#[test]
+fn an_apply_topology_request_carries_the_document_and_the_scale_choice() {
+    let frame: lbm_agent::api::RequestFrame = serde_json::from_value(serde_json::json!({
+        "Id": 9,
+        "Method": "ApplyTopology",
+        "LayoutId": "TESTMON1",
+        "Document": { "Layout": { "Options": {}, "Monitors": {} } },
+        "AdjustScale": true
+    }))
+    .expect("the agent must understand what the window sends");
+
+    match frame.request {
+        lbm_agent::api::Request::ApplyTopology {
+            layout_id,
+            document,
+            adjust_scale,
+        } => {
+            assert_eq!(layout_id, "TESTMON1");
+            assert!(adjust_scale);
+            assert!(document.layout.is_some());
+        }
+        other => panic!("parsed as something else: {other:?}"),
+    }
+}
+
+/// And without it, the scale adjustment is off — the reading that does nothing extra.
+#[test]
+fn an_apply_without_the_scale_choice_does_not_adjust_scales() {
+    let frame: lbm_agent::api::RequestFrame = serde_json::from_value(serde_json::json!({
+        "Id": 10,
+        "Method": "ApplyTopology",
+        "LayoutId": "TESTMON1",
+        "Document": {}
+    }))
+    .expect("parsed");
+    match frame.request {
+        lbm_agent::api::Request::ApplyTopology { adjust_scale, .. } => assert!(
+            !adjust_scale,
+            "a missing AdjustScale must not mean 'rescale every monitor'"
+        ),
+        other => panic!("{other:?}"),
+    }
+}

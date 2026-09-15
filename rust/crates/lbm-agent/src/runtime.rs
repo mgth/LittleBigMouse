@@ -227,6 +227,19 @@ impl<W: AgentWorld> Agent<W> {
                     self.paint_desktop(screens);
                     serde_json::Value::Null
                 }),
+            Request::ApplyTopology {
+                layout_id,
+                document,
+                adjust_scale,
+            } => self
+                .world
+                .apply_topology(&layout_id, &document, adjust_scale)
+                .map(|()| {
+                    // The topology changed under everyone: the layout has to be rebuilt
+                    // from what the system now says, exactly as a hotplug would.
+                    let _ = self.inputs.send(Input::DisplayChanged);
+                    serde_json::Value::Null
+                }),
             Request::Preview {
                 layout_id,
                 document,

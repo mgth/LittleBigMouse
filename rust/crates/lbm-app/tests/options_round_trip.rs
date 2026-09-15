@@ -395,3 +395,44 @@ fn an_excluded_file_is_read_the_way_the_daemon_reads_it() {
         "the comments or the blank line were taken for exclusions"
     );
 }
+
+/// The apply request the window sends, parsed by the agent's own type.
+///
+/// This is the one request in the window whose success **moves the user's real screens**,
+/// so what it says has to be exactly what it means: the document that will be saved, and
+/// the scale choice the user actually made.
+#[test]
+fn the_agent_understands_the_apply_the_window_sends() {
+    let mut layout = lbm_layout::model::Layout::new(LayoutOptions::default());
+    layout.id = "TESTMON1".to_owned();
+
+    let (method, extra) = lbm_app::settings::apply_topology(&layout, true);
+    assert_eq!(method, "ApplyTopology");
+    let parsed: lbm_agent::api::RequestFrame =
+        serde_json::from_value(frame(11, method, extra)).expect("parsed");
+    match parsed.request {
+        lbm_agent::api::Request::ApplyTopology {
+            layout_id,
+            document,
+            adjust_scale,
+        } => {
+            assert_eq!(layout_id, "TESTMON1");
+            assert!(adjust_scale);
+            assert!(document.layout.is_some(), "nothing to apply");
+            assert_eq!(
+                document.excluded, None,
+                "an apply saves the document too, so it would erase the exclusions"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// And the default is not to rescale: someone who asked for their screens to be
+/// rearranged did not necessarily ask for every monitor's scale to change.
+#[test]
+fn an_apply_only_adjusts_scales_when_it_was_asked_to() {
+    let layout = lbm_layout::model::Layout::new(LayoutOptions::default());
+    let (_, extra) = lbm_app::settings::apply_topology(&layout, false);
+    assert_eq!(extra["AdjustScale"], serde_json::json!(false));
+}

@@ -335,6 +335,96 @@ pub fn overlaps(live: &[LinuxMonitor]) -> Vec<String> {
     found
 }
 
+/// Whether taking this output off the desktop would leave nothing on it.
+///
+/// An output that is already off cannot be the only one; an output that is not on this
+/// desktop at all is somebody else's question.
+pub fn is_the_only_screen(live: &[LinuxMonitor], connector: &str) -> bool {
+    let mut enabled = live.iter().filter(|m| m.enabled);
+    match (enabled.next(), enabled.next()) {
+        (Some(only), None) => only.connector_name == connector,
+        _ => false,
+    }
+}
+
+/// A change to one output, as the context menu offers them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Change {
+    /// Make it the primary display.
+    Primary,
+    /// Put it on the desktop at its current mode.
+    Attach,
+    /// Take it off the desktop.
+    Detach,
+}
+
+/// The command line one change is, for this session's tool.
+///
+/// Pure, because the spelling is the part that can be wrong: Plasma 6 replaced the
+/// primary *flag* by a priority order, where **1 is the primary** — nothing about
+/// `priority.1` says "primary" to a reader, and getting it wrong would quietly reorder
+/// the user's screens instead.
+pub fn command(
+    backend: super::Backend,
+    change: Change,
+    connector: &str,
+) -> (&'static str, Vec<String>) {
+    if backend == super::Backend::KScreen {
+        let verb = match change {
+            Change::Primary => "priority.1",
+            Change::Attach => "enable",
+            Change::Detach => "disable",
+        };
+        return ("kscreen-doctor", vec![format!("output.{connector}.{verb}")]);
+    }
+    let flag = match change {
+        Change::Primary => "--primary",
+        Change::Attach => "--auto",
+        Change::Detach => "--off",
+    };
+    (
+        "xrandr",
+        vec!["--output".to_owned(), connector.to_owned(), flag.to_owned()],
+    )
+}
+
+/// Applies one change to one output.
+///
+/// **Detaching the last enabled output is refused**, which the C# does not do. Its answer
+/// is a confirmation dialog ("Warn before monitor actions"), and a dialog the user can
+/// turn off is not much of a guard for an action that leaves them with no screen at all
+/// and no way to see the dialog that would undo it. Added here, and said to be added.
+///
+/// Every `kscreen-doctor` call goes through the failure-detecting path, including these
+/// three — the C# uses its plain runner for them and only checks the exit code, while
+/// `RunKScreen` exists a few lines below precisely because **kscreen-doctor exits 0 when
+/// the compositor rejects the configuration**. The reason applies here just as much: a
+/// refused "make this primary" would otherwise be reported as done.
+pub fn change(backend: super::Backend, change_: Change, connector: &str) -> Result<(), String> {
+    if change_ == Change::Detach {
+        let live = backend.query().map_err(|e| e.to_string())?;
+        if is_the_only_screen(&live, connector) {
+            return Err(format!(
+                "{connector} is the only screen on the desktop: detaching it would leave \
+                 nothing to look at"
+            ));
+        }
+    }
+    let (program, args) = command(backend, change_, connector);
+    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+    let Some(output) = super::probe::run_with_stderr(program, &borrowed, APPLYING) else {
+        return Err(format!("{program} {} did not answer", args.join(" ")));
+    };
+    if output.to_lowercase().contains("failed") {
+        return Err(format!(
+            "{program} {} failed: {}",
+            args.join(" "),
+            output.trim()
+        ));
+    }
+    Ok(())
+}
+
 /// What one apply did, for a caller that wants to say so.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Applied {
@@ -788,5 +878,74 @@ mod tests {
         off.enabled = false;
         let live = vec![monitor("on", 0.0, 0.0, 1920.0, 1080.0), off];
         assert!(overlaps(&live).is_empty());
+    }
+
+    /// Plasma 6 replaced the primary flag by a priority order, where **1 is the
+    /// primary**. Nothing about `priority.1` says "primary" to a reader, and getting it
+    /// wrong reorders the user's screens instead of doing nothing visible.
+    #[test]
+    fn the_primary_is_a_priority_under_kscreen_and_a_flag_under_xrandr() {
+        assert_eq!(
+            command(super::super::Backend::KScreen, Change::Primary, "DP-1"),
+            ("kscreen-doctor", vec!["output.DP-1.priority.1".to_owned()])
+        );
+        assert_eq!(
+            command(super::super::Backend::XRandR, Change::Primary, "DP-1"),
+            (
+                "xrandr",
+                vec![
+                    "--output".to_owned(),
+                    "DP-1".to_owned(),
+                    "--primary".to_owned()
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn attaching_and_detaching_are_the_words_each_tool_knows() {
+        assert_eq!(
+            command(super::super::Backend::KScreen, Change::Attach, "HDMI-1").1,
+            vec!["output.HDMI-1.enable".to_owned()]
+        );
+        assert_eq!(
+            command(super::super::Backend::KScreen, Change::Detach, "HDMI-1").1,
+            vec!["output.HDMI-1.disable".to_owned()]
+        );
+        assert_eq!(
+            command(super::super::Backend::XRandR, Change::Attach, "HDMI-1").1[2],
+            "--auto"
+        );
+        assert_eq!(
+            command(super::super::Backend::XRandR, Change::Detach, "HDMI-1").1[2],
+            "--off"
+        );
+    }
+
+    /// **The guard the C# does not have.** Its answer is a confirmation dialog the user
+    /// can turn off — which is thin cover for an action that leaves them with no screen
+    /// at all, and therefore no way to see the dialog that would undo it.
+    #[test]
+    fn the_last_screen_on_the_desktop_cannot_be_detached() {
+        let alone = vec![monitor("DP-1", 0.0, 0.0, 1920.0, 1080.0)];
+        assert!(is_the_only_screen(&alone, "DP-1"));
+
+        let mut off = monitor("HDMI-1", 0.0, 0.0, 1920.0, 1080.0);
+        off.enabled = false;
+        let one_on_one_off = vec![monitor("DP-1", 0.0, 0.0, 1920.0, 1080.0), off];
+        assert!(
+            is_the_only_screen(&one_on_one_off, "DP-1"),
+            "an output that is already off does not keep the desktop alive"
+        );
+
+        let two = vec![
+            monitor("DP-1", 0.0, 0.0, 1920.0, 1080.0),
+            monitor("HDMI-1", 1920.0, 0.0, 1920.0, 1080.0),
+        ];
+        assert!(!is_the_only_screen(&two, "DP-1"));
+        assert!(!is_the_only_screen(&two, "HDMI-1"));
+
+        // And an output nobody is looking at is not the one being asked about.
+        assert!(!is_the_only_screen(&alone, "HDMI-9"));
     }
 }

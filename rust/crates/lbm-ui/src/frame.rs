@@ -167,6 +167,51 @@ pub struct Look<'a> {
     /// what `Stretch="Fill"` on the frame's image means — the thumbnail is already the
     /// screen's own shape, so filling it distorts nothing.
     pub wallpaper: Option<&'a egui::TextureHandle>,
+    /// What the chosen view mode writes inside the lit part, as label/value rows —
+    /// empty for [`crate::mode::Mode::Default`], which writes nothing there.
+    ///
+    /// The frame does not know which mode this is, and does not want to: in C# the
+    /// content is a whole view resolved from the mode, and what every ported one of them
+    /// comes down to is a name/value grid. Whoever holds the layout fills the rows; the
+    /// frame only has to fit them.
+    ///
+    /// **Not scaled with the frame**, unlike the name. In C# the content is an ordinary
+    /// control in the frame's middle cell, laid out at the app's font size; a screen
+    /// drawn small gets fewer rows, not smaller ones. Text that shrinks with the map
+    /// would be unreadable on exactly the desktops that have most to say.
+    pub details: &'a [(&'a str, String)],
+}
+
+/// The view mode's rows, inside the lit part.
+///
+/// **Clipped, and that is the point.** A screen drawn small cannot hold five rows of
+/// text, and there is no honest way to make it: shrinking the font gives ink that looks
+/// like information and cannot be read, and letting it spill writes one screen's numbers
+/// across its neighbour. So the rows are laid out at the app's own size and the frame cuts
+/// off what does not fit — the same thing the C#'s grid does inside its cell.
+fn write_details(ui: &mut egui::Ui, content: egui::Rect, rows: &[(&str, String)]) {
+    // Off the edges, so the text does not touch the bezel.
+    let inside = content.shrink(4.0);
+    if inside.width() < 24.0 || inside.height() < 12.0 {
+        return;
+    }
+    let mut ui = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(inside)
+            .layout(egui::Layout::top_down(egui::Align::LEFT)),
+    );
+    ui.set_clip_rect(inside);
+    ui.spacing_mut().item_spacing.y = 1.0;
+    for (label, value) in rows {
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(*label)
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+            ui.label(egui::RichText::new(value).small().monospace());
+        });
+    }
 }
 
 /// Draws one monitor. Returns the rectangle it took, so a caller can lay several out.
@@ -176,6 +221,7 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
         selected,
         logo,
         wallpaper,
+        details,
     } = *look;
     let fill = bezel_fill(ui.visuals(), selected);
     let painter = ui.painter();
@@ -216,6 +262,10 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
                 );
             },
         );
+    }
+
+    if !details.is_empty() {
+        write_details(ui, drawn.content, details);
     }
 
     if let Some(logo) = logo {

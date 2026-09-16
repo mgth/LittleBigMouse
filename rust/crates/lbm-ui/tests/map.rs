@@ -23,6 +23,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             mm_content: Rect::new(20.0, 20.0, 600.0, 340.0),
             logo: None,
             wallpaper: None,
+            details: &[],
         },
         MapMonitor {
             id: "right",
@@ -31,6 +32,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             mm_content: Rect::new(720.0, 20.0, 600.0, 340.0),
             logo: None,
             wallpaper: None,
+            details: &[],
         },
     ]
 }

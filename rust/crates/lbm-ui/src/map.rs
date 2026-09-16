@@ -39,6 +39,9 @@ pub struct MapMonitor<'a> {
     pub logo: Option<&'a egui::TextureHandle>,
     /// This screen's wallpaper thumbnail, or none.
     pub wallpaper: Option<&'a egui::TextureHandle>,
+    /// What the chosen view mode writes inside this screen — see
+    /// [`crate::frame::Look::details`]. Empty in the default mode.
+    pub details: &'a [(&'a str, String)],
 }
 
 /// How the map sits in the window: one scale, and one corner.
@@ -268,6 +271,7 @@ pub fn draw<'a>(
                 selected: selected == Some(m.id),
                 logo: m.logo,
                 wallpaper: m.wallpaper,
+                details: m.details,
             },
         );
         if response.clicked() {
@@ -310,6 +314,7 @@ mod tests {
                 mm_content: Rect::new(10.0, 10.0, 600.0, 340.0),
                 logo: None,
                 wallpaper: None,
+                details: &[],
             },
             MapMonitor {
                 id: "right",
@@ -318,6 +323,7 @@ mod tests {
                 mm_content: Rect::new(710.0, 10.0, 600.0, 340.0),
                 logo: None,
                 wallpaper: None,
+                details: &[],
             },
         ]
     }
@@ -387,6 +393,7 @@ mod tests {
                 mm_content: Rect::new(10.0, 10.0, 600.0, 340.0),
                 logo: None,
                 wallpaper: None,
+                details: &[],
             },
             MapMonitor {
                 id: "left-of-it",
@@ -395,6 +402,7 @@ mod tests {
                 mm_content: Rect::new(-690.0, 10.0, 600.0, 340.0),
                 logo: None,
                 wallpaper: None,
+                details: &[],
             },
         ];
         let win = window(800.0, 600.0);

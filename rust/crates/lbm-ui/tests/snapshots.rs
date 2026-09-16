@@ -56,6 +56,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             mm_content: Rect::new(20.0, 20.0, 600.0, 340.0),
             logo: None,
             wallpaper: None,
+            details: &[],
         },
         MapMonitor {
             id: "right",
@@ -64,6 +65,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             mm_content: Rect::new(720.0, 20.0, 600.0, 340.0),
             logo: None,
             wallpaper: None,
+            details: &[],
         },
     ]
 }
@@ -134,4 +136,50 @@ fn a_monitor_frame_with_its_name() {
     });
     harness.run();
     harness.snapshot("monitor-frame");
+}
+
+/// The mode bar: what is offered and what is not.
+///
+/// The tree test asserts which buttons are disabled; only a render says whether *disabled*
+/// looks disabled. Five of the seven are greyed here, which is the honest picture of the
+/// port — and the reason the modes that are not ported yet are shown rather than dropped.
+#[test]
+fn the_mode_bar() {
+    let mut harness = harness((760.0, 50.0), |ui| {
+        lbm_ui::mode::bar(ui, lbm_ui::mode::Mode::Location, &Default::default());
+    });
+    harness.run();
+    harness.snapshot("mode-bar");
+}
+
+/// The Location mode, in a frame big enough to hold its rows.
+///
+/// The rows are **not** scaled with the frame — the name above them is, and the two are
+/// deliberately different: in C# the mode's content is an ordinary control at the app's
+/// font size. A screen drawn small gets fewer rows, never smaller ones.
+#[test]
+fn a_monitor_frame_in_the_location_mode() {
+    let outside = Rect::new(0.0, 0.0, 640.0, 380.0);
+    let content = Rect::new(20.0, 20.0, 600.0, 340.0);
+    let drawn = frame::draw(outside, content, (0.0, 0.0), Ratio { x: 0.6, y: 0.6 });
+    let rows = [
+        ("at", "40, 20 mm".to_owned()),
+        ("size", "600 × 340 mm".to_owned()),
+        ("pixels", "3840 × 2160".to_owned()),
+        ("dpi", "163 × 161".to_owned()),
+        ("pnp", "SAM".to_owned()),
+    ];
+    let mut harness = harness((420.0, 260.0), |ui| {
+        frame::monitor(
+            ui,
+            &drawn,
+            &frame::Look {
+                name: "Odyssey G80SD",
+                details: &rows,
+                ..Default::default()
+            },
+        );
+    });
+    harness.run();
+    harness.snapshot("monitor-frame-location");
 }

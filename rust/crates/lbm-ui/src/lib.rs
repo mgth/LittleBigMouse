@@ -18,6 +18,7 @@ pub mod excluded;
 pub mod frame;
 pub mod list;
 pub mod map;
+pub mod mode;
 pub mod options;
 pub mod probe;
 pub mod shortcut;

@@ -422,13 +422,26 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             let Some(gaps) = gaps else {
                 return Vec::new();
             };
-            // The gap guard's own writes, run or recorded by the same switch — they go
-            // before everything else, so a dry run that left them out would understate
-            // what pressing Apply does.
+            // The gap guard's own writes go before everything else, so a dry run that
+            // left them out would understate what pressing Apply does.
+            //
+            // **Two paths, and not out of laziness.** `restore` deletes the journal when
+            // it succeeds; a dry run that called it with a runner that merely recorded
+            // would report success and take the journal with it — leaving a gapped
+            // topology nothing could put back. A "dry" that writes is not dry.
+            if dry {
+                // One invocation, not one per argument: `restore` hands the whole list
+                // to a single `kscreen-doctor`, and nothing at all when it is empty.
+                let moves = gaps.would_restore(before);
+                return match moves.is_empty() {
+                    true => Vec::new(),
+                    false => vec![format!("kscreen-doctor {}", moves.join(" "))],
+                };
+            }
             let mut said = Vec::new();
             gaps.restore(before, |args| {
                 said.push(format!("kscreen-doctor {}", args.join(" ")));
-                dry || run_kscreen_doctor(args)
+                run_kscreen_doctor(args)
             });
             said
         })

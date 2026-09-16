@@ -288,3 +288,42 @@ fn the_journal_has_the_shape_the_csharp_writes() {
     assert_eq!(parsed, [entry("DP-3", (3072, 0), (3073, 0))]);
     assert_eq!(serde_json::to_string_pretty(&parsed).unwrap(), csharp);
 }
+
+//==========================================================================//
+// A dry run must not touch the journal                                     //
+//==========================================================================//
+
+/// `restore` deletes the journal when it succeeds. A dry run that called it with a
+/// runner that merely recorded would report success and take the journal with it —
+/// leaving a gapped topology with nothing left able to put it back.
+///
+/// The journal is written here by hand rather than through `apply`, whose prologue only
+/// runs on a Wayland Plasma session without evdev; what is under test is the epilogue's
+/// side effect, not when the prologue fires.
+#[test]
+fn asking_what_a_restore_would_do_leaves_the_journal_where_it_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("kscreen-restore.json");
+    let journal = [entry("B", (1920, 0), (1921, 0))];
+    std::fs::write(&file, serde_json::to_string(&journal).unwrap()).unwrap();
+
+    let guard = lbm_agent::gap_guard::GapGuard::for_session(file.clone());
+    let live = [
+        m("A", 0.0, 0.0, 1920.0, 1080.0),
+        m("B", 1921.0, 0.0, 1920.0, 1080.0),
+    ];
+
+    assert_eq!(
+        guard.would_restore(&live),
+        ["output.B.position.1920,0"],
+        "it still says what a restore would run"
+    );
+    assert!(
+        file.exists(),
+        "the dry run deleted the journal: a gapped topology would be unrestorable"
+    );
+
+    // And the real thing does consume it, which is what makes the difference matter.
+    assert!(guard.restore(&live, |_| true));
+    assert!(!file.exists(), "a restore that ran keeps no journal");
+}

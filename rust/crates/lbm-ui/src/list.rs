@@ -112,6 +112,7 @@ pub fn draw<'a>(
                 selected: false,
                 logo: m.logo,
                 wallpaper: m.wallpaper,
+                details: m.details,
             },
         );
     }
@@ -135,6 +136,7 @@ mod tests {
                 mm_content: Rect::new(20.0, 20.0, 600.0, 340.0),
                 logo: None,
                 wallpaper: None,
+                details: &[],
             },
             MapMonitor {
                 id: "right",
@@ -143,6 +145,7 @@ mod tests {
                 mm_content: Rect::new(720.0, 20.0, 600.0, 340.0),
                 logo: None,
                 wallpaper: None,
+                details: &[],
             },
         ]
     }
@@ -211,6 +214,7 @@ mod tests {
                 mm_content: Rect::new(i as f64 * 700.0 + 20.0, 20.0, 600.0, 340.0),
                 logo: None,
                 wallpaper: None,
+                details: &[],
             })
             .collect();
         let on_the_map = map::fit(map::extent(&four), win).ratio;

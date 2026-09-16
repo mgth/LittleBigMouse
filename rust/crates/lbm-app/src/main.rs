@@ -46,6 +46,9 @@ struct Screen {
     /// The source's rectangle in cursor pixels — `ActiveSource.Source.InPixel.Bounds`,
     /// which is what the thumbnail is cut to.
     pixels: Rect,
+    /// What the chosen view mode writes inside this screen. Built with the screens, so
+    /// the rows and the rectangles are read off one layout and cannot drift apart.
+    details: Vec<(&'static str, String)>,
 }
 
 /// What the worker sends back. Two kinds, so the screens can be drawn as soon as they
@@ -147,6 +150,8 @@ struct App {
     /// at five times a second it does not show.
     previewed: Option<(String, std::time::Instant)>,
     view: View,
+    /// What every frame shows inside it — the mode bar's choice. See `lbm_ui::mode`.
+    mode: lbm_ui::mode::Mode,
     icons: Catalogue,
     /// Uploaded logos, by icon path. Loaded once, on the frame that first needs one.
     textures: HashMap<String, egui::TextureHandle>,
@@ -280,11 +285,78 @@ fn read_stored(layout: &mut Layout) {
     layout.parse_physical_monitors();
 }
 
+/// What the chosen mode writes inside one screen's frame.
+///
+/// Empty for every mode this window cannot draw — `lbm_ui::mode::why_not` is what says
+/// which those are, and the bar will not let one be chosen, so reaching a missing arm
+/// here means the two have drifted apart. They are kept in one place by the compiler
+/// instead: both match on the same closed enum.
+fn details_of(
+    layout: &Layout,
+    monitor: &lbm_layout::model::Monitor,
+    mode: lbm_ui::mode::Mode,
+) -> Vec<(&'static str, String)> {
+    use lbm_ui::mode::Mode;
+    let Some(projection) = layout.depth_projection(monitor) else {
+        return Vec::new();
+    };
+    let model = layout.model(&monitor.model);
+    match mode {
+        // The frame is the picture; nothing is written over it.
+        Mode::Default => Vec::new(),
+        // C# `MonitorLocationView`: where it is, how big, and at what pitch.
+        Mode::Location => {
+            let mm = projection.bounds();
+            let source = monitor
+                .active_source
+                .as_deref()
+                .and_then(|id| layout.source(id));
+            let pixels = source.map(|s| s.source.in_pixel.bounds());
+            let mut rows = vec![
+                ("at", format!("{:.0}, {:.0} mm", mm.x(), mm.y())),
+                ("size", format!("{:.0} × {:.0} mm", mm.width(), mm.height())),
+            ];
+            if let Some(p) = pixels {
+                rows.push(("pixels", format!("{:.0} × {:.0}", p.width(), p.height())));
+                // The pitch the layout actually works in, rather than the one the
+                // system advertises: pixels over the millimetres of the lit part.
+                if mm.width() > 0.0 && mm.height() > 0.0 {
+                    rows.push((
+                        "dpi",
+                        format!(
+                            "{:.0} × {:.0}",
+                            p.width() / mm.width() * 25.4,
+                            p.height() / mm.height() * 25.4
+                        ),
+                    ));
+                }
+            }
+            if let Some(model) = model {
+                rows.push(("pnp", model.pnp_code.clone()));
+            }
+            rows
+        }
+        // C# `AboutMonitorView`: this app's version, and what identifies the screen.
+        Mode::About => {
+            let mut rows = vec![
+                ("version", env!("CARGO_PKG_VERSION").to_owned()),
+                ("id", monitor.id.clone()),
+            ];
+            if let Some(serial) = &monitor.serial_number {
+                rows.push(("serial", serial.clone()));
+            }
+            rows
+        }
+        // Not drawn by this window; the bar does not offer them.
+        Mode::Info | Mode::Resistance | Mode::Size | Mode::Vcp | Mode::Wallpaper => Vec::new(),
+    }
+}
+
 /// The screens as the views want them, read off the layout.
 ///
 /// Called again after every edit, so what is drawn is what the layout says and never a
 /// separate copy of it kept in step by hand.
-fn screens_of(layout: &Layout) -> Vec<Screen> {
+fn screens_of(layout: &Layout, mode: lbm_ui::mode::Mode) -> Vec<Screen> {
     layout
         .monitors()
         .iter()
@@ -308,6 +380,7 @@ fn screens_of(layout: &Layout) -> Vec<Screen> {
                     .and_then(|id| layout.source(id))
                     .map(|source| source.source.in_pixel.bounds())
                     .unwrap_or_default(),
+                details: details_of(layout, m, mode),
             })
         })
         .collect()
@@ -573,7 +646,7 @@ impl App {
             let Some(layout) = detect() else {
                 return;
             };
-            let screens = screens_of(&layout);
+            let screens = screens_of(&layout, lbm_ui::mode::Mode::default());
             // The wallpaper is worked out from what the screens turn out to be, so the
             // settings are read here and not before.
             let wanted = wallpapers(&layout.id, &screens);
@@ -628,6 +701,7 @@ impl App {
             recording: lbm_ui::shortcut::Recording::default(),
             previewed: None,
             view: View::Map,
+            mode: lbm_ui::mode::Mode::default(),
             icons,
             textures: HashMap::new(),
             wallpapers: HashMap::new(),
@@ -766,7 +840,7 @@ impl App {
         };
         read_stored(layout);
         self.saved = Some(lbm_app::saved::Reference::of(layout));
-        self.screens = screens_of(layout);
+        self.screens = screens_of(layout, self.mode);
         self.drag = None;
     }
 
@@ -954,7 +1028,23 @@ impl App {
         drag::drop_screen(layout, id, by);
         // Not "move that one screen": compaction can shift any of them, so what is drawn
         // next is read off the layout whole.
-        self.screens = screens_of(layout);
+        self.screens = screens_of(layout, self.mode);
+    }
+
+    /// Which modes this window can offer right now.
+    ///
+    /// `vcp_enabled` is the user's setting, read off the layout the window holds — the
+    /// same `VcpControl` the C# button follows. `wallpaper_supported` is `false` until
+    /// the agent is asked: only it knows whether this desktop has a wallpaper service,
+    /// and a window that guessed would offer a picker that does nothing.
+    fn offered(&self) -> lbm_ui::mode::Offered {
+        lbm_ui::mode::Offered {
+            vcp_enabled: self
+                .layout
+                .as_deref()
+                .is_some_and(|l| l.options.vcp_control),
+            wallpaper_supported: false,
+        }
     }
 
     /// The screens as the views want them, logos resolved.
@@ -975,6 +1065,7 @@ impl App {
                     .as_ref()
                     .and_then(|p| p.to_str())
                     .and_then(|p| logos.get(p)),
+                details: &s.details,
             })
             .collect()
     }
@@ -1076,6 +1167,20 @@ impl eframe::App for App {
                     1 => "1 screen".to_owned(),
                     n => format!("{n} screens"),
                 });
+                // What the frames show inside them — a second axis over Map/List, as in
+                // C# where `ContentViewMode` and the list toggle are separate. Not on the
+                // settings view, which has no frames to write in.
+                if self.view != View::Settings {
+                    ui.separator();
+                    if let Some(chosen) = lbm_ui::mode::bar(ui, self.mode, &self.offered()) {
+                        self.mode = chosen;
+                        // The rows are built with the screens, so changing the mode is
+                        // reading them off the layout again.
+                        if let Some(layout) = self.layout.as_deref() {
+                            self.screens = screens_of(layout, chosen);
+                        }
+                    }
+                }
                 ui.separator();
                 // Said plainly. A window that looked the same with and without an agent
                 // would leave the user guessing why the buttons do nothing.

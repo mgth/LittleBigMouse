@@ -109,11 +109,13 @@ struct App {
     agent: lbm_app::conversation::Conversation,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
-    /// **In memory only.** Nothing here writes a file: the detection ran with a loader
-    /// that does nothing, so no stored profile was read, and a drag changes this copy and
-    /// nothing else. Handing the edit to the agent — which is what would make it last — is
-    /// the `Save` the bar still greys out.
+    /// **In memory only, and this window writes no file.** A drag changes this copy and
+    /// nothing else; what makes an edit last is `SaveLayout`, which hands it to the agent
+    /// — the only writer. Whether there is anything to hand over is [`App::saved`].
     layout: Option<Box<Layout>>,
+    /// The document this window loaded, or last saved — what Save and Undo compare
+    /// against. See [`lbm_app::saved`] for why it is not the store.
+    saved: Option<lbm_app::saved::Reference>,
     screens: Vec<Screen>,
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
@@ -270,8 +272,10 @@ fn read_stored(layout: &mut Layout) {
     };
     layout.edit_options(|o| mapper::apply_global_options(o, data.global_options.as_ref()));
     mapper::apply_layout(layout, data.layout.as_ref(), &data.models);
-    // Everything saved, so the next edit is a change from a saved state — and so the bar
-    // opens with Save and Undo grey, which is the truth.
+    // The store's own load semantics, kept so this window's layout says what the agent's
+    // says about itself. The bar no longer reads this flag — it compares documents
+    // (`lbm_app::saved`) — but a layout that lied about having been loaded would be a
+    // trap for whatever reads it next.
     layout.mark_saved();
     layout.parse_physical_monitors();
 }
@@ -613,6 +617,7 @@ impl App {
         App {
             arriving: Some(arriving),
             layout: None,
+            saved: None,
             screens: Vec::new(),
             selected: None,
             drag: None,
@@ -643,10 +648,18 @@ impl App {
         let request = match press {
             lbm_ui::Press::Start => Some(("Start", serde_json::json!({}))),
             lbm_ui::Press::Stop => Some(("Stop", serde_json::json!({}))),
-            lbm_ui::Press::Save => self
-                .layout
-                .as_ref()
-                .map(|layout| lbm_app::settings::save_layout(layout)),
+            // The one press that earns a new reference, and only if the agent takes it.
+            lbm_ui::Press::Save => {
+                let Some(layout) = self.layout.as_deref() else {
+                    return;
+                };
+                let (method, extra) = lbm_app::settings::save_layout(layout);
+                let earned = lbm_app::saved::Reference::of(layout);
+                let id = self.send(method, extra);
+                // What this save earns if the agent takes it — the document **as sent**.
+                self.agent.earning(id, earned);
+                return;
+            }
             lbm_ui::Press::Undo => {
                 self.undo();
                 None
@@ -726,7 +739,7 @@ impl App {
     }
 
     /// Puts a request on the writer thread, and says so if there is nobody to take it.
-    fn send(&mut self, method: &'static str, extra: serde_json::Value) {
+    fn send(&mut self, method: &'static str, extra: serde_json::Value) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         // Recorded **before** the request leaves, on this thread: an answer that arrives
@@ -739,6 +752,7 @@ impl App {
                     Some(("the agent stopped listening".to_owned(), String::new()));
             }
         }
+        id
     }
 
     /// Throws the edits away: the stored profile again, over the layout as detected.
@@ -751,6 +765,7 @@ impl App {
             return;
         };
         read_stored(layout);
+        self.saved = Some(lbm_app::saved::Reference::of(layout));
         self.screens = screens_of(layout);
         self.drag = None;
     }
@@ -829,6 +844,10 @@ impl App {
                 lbm_ui::Effect::Ask(press) => self.ask(press),
                 lbm_ui::Effect::EndPreview => self.end_preview(),
             }
+        }
+        // A save that landed: what it sent is now what is on disk.
+        if let Some(earned) = self.agent.earned() {
+            self.saved = Some(earned);
         }
         if self.agent.heard {
             self.without_agent = None;
@@ -993,6 +1012,10 @@ impl eframe::App for App {
                         screens,
                         excluded,
                     } => {
+                        // The reference is taken here, after the store has been read and
+                        // any migration applied: a profile written by an older version
+                        // opens with nothing to save, which is the truth.
+                        self.saved = Some(lbm_app::saved::Reference::of(&layout));
                         self.layout = Some(layout);
                         self.screens = screens;
                         self.excluded = excluded;
@@ -1070,10 +1093,20 @@ impl eframe::App for App {
         egui::Panel::bottom("controls").show(ui, |ui| {
             // Without an agent every button is disabled on its own — `can` asks for a
             // hook — so nothing here has to hide them.
-            // From the layout, every frame: an edit anywhere — a drag, a setting — marks
-            // it unsaved through `Layout::edit_*`, so the bar cannot fall out of step
-            // with what there is to save.
-            self.state.saved = self.layout.as_ref().is_none_or(|l| l.saved());
+            // From the layout, every frame: the document it would save against the one it
+            // loaded or last saved, so the bar cannot fall out of step with what there is
+            // to save — and an edit undone by hand takes the buttons back out, which the
+            // ported `Saved` latch cannot do. See `lbm_app::saved`.
+            //
+            // Rebuilt rather than cached: the cache would be one more thing to keep in
+            // step with every edit anywhere in the window, which is the failure this is
+            // fixing. It is a walk over owned data, the same one the live preview already
+            // makes five times a second.
+            self.state.saved = match (&self.layout, &self.saved) {
+                (Some(layout), Some(reference)) => reference.holds(layout),
+                // Nothing loaded, or loaded without a reference: nothing to save.
+                _ => true,
+            };
             if let Some(lbm_ui::Action::Pressed(press)) = lbm_ui::bottom_bar(ui, &self.state) {
                 for effect in lbm_ui::update(&mut self.state, lbm_ui::Action::Pressed(press)) {
                     match effect {

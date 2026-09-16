@@ -52,12 +52,22 @@ pub fn save_options(options: &LayoutOptions, excluded: Option<&[String]>) -> (&'
 /// The same trap as `SaveOptions`, one level deeper and easier to miss, because here the
 /// field is filled in for you.
 pub fn save_layout(layout: &lbm_layout::model::Layout) -> (&'static str, Value) {
-    let mut document = lbm_store::LayoutDocument::of(layout);
-    document.excluded = None;
     (
         "SaveLayout",
-        json!({ "LayoutId": layout.id, "Document": document }),
+        json!({ "LayoutId": layout.id, "Document": document(layout) }),
     )
+}
+
+/// The document this window sends, for a save or for a preview.
+///
+/// One function because it must be one document: [`crate::saved::Reference`] decides
+/// whether there is anything to save by comparing against it, and a reference built from
+/// a *slightly* different document would say "unsaved" for a field Save does not send —
+/// a Save button that never goes out.
+pub fn document(layout: &lbm_layout::model::Layout) -> lbm_store::LayoutDocument {
+    let mut document = lbm_store::LayoutDocument::of(layout);
+    document.excluded = None;
+    document
 }
 
 /// How often a live preview is sent at most: `LiveLayoutUpdater.Interval`.

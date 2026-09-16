@@ -264,7 +264,7 @@ Mes tests vérifiaient que l'aimantation marche ; aucun ne vérifiait qu'on peut
 
 ## Ce qui a été tranché
 
-### 1. « Non enregistré » est une **référence**, pas un drapeau — tranché, livré
+### 1. « Non enregistré » est une **référence**, pas un drapeau
 
 La formule du plan, « DTO courant ≠ DTO stocké », a un piège. Elle vaut pour un document écrit
 par la version courante ; pour un document **antérieur** le DTO diffère sans aucune édition,
@@ -295,6 +295,33 @@ id — un refus ne mérite rien, une réponse à autre chose ne règle rien. La 
 `Conversation` (`earning`/`earned`) et non dans `main.rs` : le routage des messages d'un binaire
 est l'angle mort où les deux bugs de #716 se cachaient.
 
+### 2. Les captures de référence — le blocage n'était pas lavapipe
+
+La note disait : « il faut un rastériseur logiciel (lavapipe) dans l'image du workflow, donc ça
+n'a pas été tenté ». lavapipe est la partie facile — une ligne d'`apt-get`, et il rend des images
+que le seuil accepte face à celles d'un vrai GPU. Le vrai blocage est le **graphe de
+dépendances**, et il est côté Windows :
+
+> `egui_kittest` rend par wgpu ; `lbm-hook` épingle `windows` 0.62 ; cargo unifie `windows-core`
+> à 0.62 pour `wgpu-hal` ; `gpu-allocator` 0.28, que le back-end DX12 de `wgpu-hal` appelle, a été
+> bâti contre 0.58. Leurs `ID3D12Device` sont alors deux types différents et **`wgpu-hal` lui-même
+> ne compile pas**.
+
+Rien ici ne peut le corriger, c'est à l'amont. Et une dev-dependency atteint `cargo test`, que le
+job Windows lance **sur tout le workspace** : wgpu est donc tenu hors de Windows par
+`[target.'cfg(not(windows))'.dev-dependencies]`.
+
+Deux choses que le premier rendu a montrées, et qu'aucun test d'arbre n'aurait pu montrer :
+
+- **`Harness::render` peint sur rien.** Le `Ui` d'`App::ui` n'a pas de fond, la fenêtre l'enveloppe
+  dans un `CentralPanel`, et une capture sans panneau rend du blanc sur transparent — composité
+  ensuite sur ce que le visionneur met derrière. La première série ressemblait à des rectangles
+  noirs sur papier blanc, avec un bloc sombre parasite qui n'était que de l'alpha prémultiplié.
+  **Image et application doivent être la même chose, sinon la référence épingle une fiction.**
+- **À 900×600, la carte à deux écrans n'a aucun nom.** Les tests d'arbre ne l'avaient jamais vu :
+  ils utilisent une fenêtre de 1200×900, où les noms survivent. C'est la question du plancher de
+  7 pt rendue visible — il décide bien du cas courant, et la capture est gardée telle quelle.
+
 ### 3. Le spike des mires reste repoussé — mais pas pour la raison écrite
 
 La raison notée ici (« le spike demanderait `eframe` ») est **morte** : `eframe` est dans le
@@ -314,14 +341,43 @@ forte :
 Porter les mires, c'est donc porter VCP — item 8 de l'ordre des écrans. Rien à faire avant, et
 `lbm-pattern` ne peut pas disparaître entre-temps.
 
-## Ce qui attend une décision
+### 4. Les modes deviennent une énumération fermée
 
-2. **Captures de référence en CI** : `egui_kittest` sait rendre avec wgpu, mais il faut un
-   rastériseur logiciel (**lavapipe**) dans l'image du workflow. C'est le seul point qui touche la
-   CI, donc il n'a pas été tenté.
-4. **La barre des modes** : en C# les modes sont un mécanisme de **plugins** (chaque plugin
-   contribue sa `ViewMode`). Les remplacer par une énumération fermée, comme le plan le demande,
-   revient à décider quels plugins survivent au portage — décision produit, pas portage mécanique.
+La note disait que fermer la liste « revient à décider quels plugins survivent au portage ». Le
+relevé la désamorce : il y a exactement **sept** enregistrements de `ViewMode` — `about`, `info`,
+`location`, `resistance`, `size`, `vcp`, `wallpaper` — et **tous les sept sont dans ce dépôt**,
+compilés dans l'app, découverts en balayant ses propres DLL (`Program.cs:249-264`). `ViewMode`
+(`IView.cs:28`) est une classe abstraite **vide** et chaque mode une sous-classe vide : le type
+*est* l'identité. Aucun plugin tiers, aucun point d'extension publié. C'est une indirection
+interne sur une liste que ce dépôt possède, et la fermer ne décide rien sur le produit.
+
+Ce qui reste une vraie question — lesquels sont portés, et quand — passe par `mode::Offered` :
+un mode que le portage n'a pas atteint est **affiché et désactivé, en disant pourquoi**. Une barre
+de ce qui manque vaut mieux qu'une barre qui prétend que ces fonctions n'ont jamais existé, et
+elle donne une carte visible du travail restant (cinq boutons grisés sur sept aujourd'hui).
+
+Deux comportements du C# repris, aucun des deux déclaré nulle part : presser le mode déjà allumé
+revient au défaut (`MainPluginsViewModelExtension.cs:22-26` — c'est ce qui fait qu'une rangée de
+bascules se comporte en groupe radio, et la seule façon de revenir au défaut, qui n'a pas de
+bouton) ; et un mode qui cesse d'être disponible retombe sur le défaut (`:49-50`, le cas de VCP,
+dont le bouton suit un réglage que l'utilisateur peut éteindre en regardant la vue VCP).
+
+Un comportement **non** repris : l'ordre, qui est un tri alphabétique sur l'`Id` interne du plugin
+(`MainViewModel.cs:63`), donc renommer un id réordonne la barre en silence. `Mode::ALL` garde
+l'ordre livré, mais comme décision.
+
+`Location` et `About` ont un contenu dès maintenant. Les lignes sont **non mises à l'échelle**,
+contrairement au nom : en C# le contenu d'un mode est un contrôle ordinaire dans la cellule du
+milieu, à la taille de police de l'app. Un écran dessiné petit reçoit **moins de lignes**, pas des
+lignes plus petites.
+
+## Ce qui attend encore une décision
+
+**Le plancher de lisibilité du nom (7 pt).** Ce n'est pas une des quatre : c'est la question
+laissée ouverte plus haut, et les captures la rendent regardable. Trois issues, et c'est un choix
+produit : garder le plancher et accepter une carte sans noms en petite fenêtre ; l'enlever et
+dessiner des noms de 2 points comme l'app livrée ; ou s'écarter de la règle Avalonia et mesurer le
+nom autrement (une fraction du cadre, bornée par la bordure).
 
 ## Ce qui n'est pas fait, et qui n'attend personne
 

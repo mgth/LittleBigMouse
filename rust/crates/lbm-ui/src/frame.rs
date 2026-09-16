@@ -5,9 +5,18 @@
 //! `VisualRatio` threaded through bindings; here it is arithmetic on the way in, so the
 //! view has nothing to decide.
 //!
-//! The one judgement in it is the floor. A screen drawn small enough makes its name
-//! unreadable, and a name too small to read is worse than no name: it is ink that looks
-//! like information. Below the floor the name is dropped rather than drawn illegibly.
+//! **Nothing here judges what is readable.** This port carried a legibility floor for a
+//! while — names below 7 points were dropped rather than drawn illegibly — and measuring
+//! it is what killed it: the name is half the *top bezel*, so on any multi-screen desktop
+//! in an ordinary window it lands between 1 and 5 points. The floor was not a rare relief
+//! valve, it decided the common case, and a map that silently loses every name is worse
+//! than one with small ones. Removed on the maintainer's call (2026-09-16), which also
+//! puts this back on the Avalonia rule: the C# draws the name at whatever size the
+//! arithmetic gives.
+//!
+//! What is left is arithmetic, not taste: a name is dropped only when its band has no
+//! height at all — a screen with no top bezel, or one drawn at a ratio of zero. A font
+//! size of zero is not a small name, it is not a size.
 
 use lbm_layout::geo::Rect;
 
@@ -54,11 +63,6 @@ impl Drawn {
     }
 }
 
-/// Names below this are not information any more. This floor is a judgement of this
-/// port, not a rule of the Avalonia frame, which draws the name at whatever size the
-/// arithmetic gives.
-pub const LEGIBLE: f32 = 7.0;
-
 /// A name is set at half the height of the bezel it is printed on.
 ///
 /// `MonitorFrameView.axaml:184-186` binds the label's font size to `TopRow.Bounds.Height`
@@ -101,7 +105,10 @@ pub fn draw(mm_outside: Rect, mm_content: Rect, origin: (f64, f64), ratio: Ratio
         outside,
         content,
         name_band,
-        name_height: (name_height >= LEGIBLE).then_some(name_height),
+        // No floor: whatever the arithmetic gives, however small — the Avalonia rule.
+        // `None` only when there is no band to print on, which is not a judgement about
+        // readability but about whether there is a size at all.
+        name_height: (name_height > 0.0).then_some(name_height),
         logo_band,
     }
 }
@@ -299,9 +306,7 @@ mod tests {
     #[test]
     fn everything_scales_with_the_ratio() {
         let (outside, content) = screen();
-        // Above the legibility floor at both ratios: a name of 10 points and one of 20,
-        // out of the 10 mm bezel. At 1:1 this screen's name would be 5 points and get
-        // dropped, which is the floor's business and tested on its own below.
+        // A name of 10 points and one of 20, out of the 10 mm bezel.
         let one = draw(outside, content, (0.0, 0.0), Ratio { x: 2.0, y: 2.0 });
         let two = draw(outside, content, (0.0, 0.0), Ratio { x: 4.0, y: 4.0 });
 
@@ -429,20 +434,28 @@ mod tests {
         }
     }
 
-    /// A name too small to read is ink that looks like information.
+    /// **However small.** The floor this port used to carry is gone: a name of a tenth
+    /// of a point is still a name, and dropping it is what made a map at an ordinary
+    /// window size lose every one of them.
     #[test]
-    fn a_name_that_would_be_unreadable_is_not_drawn() {
+    fn a_tiny_name_is_still_drawn() {
         let (outside, content) = screen();
-
         let tiny = draw(outside, content, (0.0, 0.0), Ratio { x: 0.01, y: 0.01 });
-        assert_eq!(tiny.name_height, None);
+        // 10 mm of bezel at 0.01, halved: five hundredths of a point.
+        assert_eq!(tiny.name_height, Some(0.05));
+    }
 
-        // And just above the floor it is there, so the rule is a threshold and not a
-        // blanket refusal. The floor is measured against the 10 mm top bezel, not the
-        // 340 mm panel, so it bites at a far larger ratio than a panel-sized rule would.
-        let ratio = LEGIBLE as f64 / (10.0 * NAME_SHARE_OF_TOP_BEZEL);
-        let just = draw(outside, content, (0.0, 0.0), Ratio { x: ratio, y: ratio });
-        assert!(just.name_height.is_some());
+    /// The one case left, and it is arithmetic rather than taste: a screen whose panel
+    /// reaches the top of its own outline has no plastic to print on. A font size of
+    /// zero is not a small name.
+    #[test]
+    fn a_screen_with_no_top_bezel_has_nowhere_to_print_its_name() {
+        // 600x340 with bezels everywhere but the top.
+        let outside = Rect::new(0.0, 0.0, 620.0, 350.0);
+        let content = Rect::new(10.0, 0.0, 600.0, 340.0);
+        let drawn = draw(outside, content, (0.0, 0.0), Ratio { x: 1.0, y: 1.0 });
+        assert_eq!(drawn.name_band.height(), 0.0);
+        assert_eq!(drawn.name_height, None);
     }
 
     /// The name is printed on the plastic, where a monitor prints it — not over the
@@ -469,8 +482,6 @@ mod tests {
     /// A wide screen with a thin bezel gets a small name; that is the Avalonia rule.
     #[test]
     fn the_name_is_measured_against_the_bezel_not_the_panel() {
-        // Zoomed in far enough that both names clear the legibility floor, so that what
-        // is compared is the rule and not the floor.
         let ratio = Ratio { x: 20.0, y: 20.0 };
         // Same 600x340 panel, two different bezels.
         let thin = draw(

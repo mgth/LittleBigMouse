@@ -156,13 +156,24 @@ Autrement dit, **sur tout bureau multi-écrans l'UI livrée dessine le nom entre
 points**. En plein écran (1920×1080) les bordures de 20 mm remontent vers 8–10 pt, mais
 celles de 3 à 6 mm restent sous 3 pt quoi qu'on fasse.
 
-Le plancher de lisibilité de ce portage (7 pt, mon jugement, pas une règle du C#) n'est
-donc **pas une soupape rare** : il décide du cas courant. Tel quel, la carte perd tous
-ses noms dès que la fenêtre n'est pas grande. Trois issues, et c'est un choix produit :
-garder le plancher et accepter une carte sans noms en petite fenêtre ; l'enlever et
-dessiner des noms de 2 points comme aujourd'hui ; ou s'écarter de la règle Avalonia et
-mesurer le nom autrement (une fraction du cadre, bornée par la bordure). **Rien n'est
-tranché ici** : la règle portée est celle du C#, le plancher est resté à 7.
+Le plancher de lisibilité de ce portage (7 pt, mon jugement, pas une règle du C#) n'était
+donc **pas une soupape rare** : il décidait du cas courant. Tel quel, la carte perdait
+tous ses noms dès que la fenêtre n'était pas grande — ce que la capture de référence
+`map-two-screens` a fini par montrer, sur deux écrans dans une fenêtre de 900×600.
+
+**Décision du mainteneur (2026-09-16) : « enlève le plancher, on verra bien. »** Il est
+retiré. Le nom est dessiné à la taille que l'arithmétique donne, aussi petite soit-elle,
+ce qui remet ce portage exactement sur la règle Avalonia. Il reste une seule garde, et
+elle est arithmétique et non un jugement : un écran dont la dalle atteint le haut de son
+propre contour n'a pas de plastique où imprimer, et une taille de police nulle n'est pas
+un petit nom — c'est l'absence de taille.
+
+Ce qu'on accepte en connaissance de cause : sur un bureau à six écrans ou à bordures
+fines, le nom sera entre 1 et 5 points, donc présent et à peu près illisible. C'est ce que
+l'app livrée fait déjà. Si ça se révèle pénible à l'usage, la troisième issue reste
+ouverte — s'écarter de la règle Avalonia et mesurer le nom autrement (une fraction du
+cadre, bornée par la bordure) — mais elle demandera d'inventer une règle, ce qui est une
+décision d'un autre ordre que d'en retirer une.
 
 ## Le cadre complet : le nom, le logo, les bandes du sondeur
 
@@ -319,8 +330,9 @@ Deux choses que le premier rendu a montrées, et qu'aucun test d'arbre n'aurait 
   noirs sur papier blanc, avec un bloc sombre parasite qui n'était que de l'alpha prémultiplié.
   **Image et application doivent être la même chose, sinon la référence épingle une fiction.**
 - **À 900×600, la carte à deux écrans n'a aucun nom.** Les tests d'arbre ne l'avaient jamais vu :
-  ils utilisent une fenêtre de 1200×900, où les noms survivent. C'est la question du plancher de
-  7 pt rendue visible — il décide bien du cas courant, et la capture est gardée telle quelle.
+  ils utilisent une fenêtre de 1200×900, où les noms survivaient. C'est la question du plancher de
+  7 pt rendue visible — il décidait bien du cas courant, et **c'est cette capture qui l'a fait
+  retirer** ; elle montre aujourd'hui des noms petits mais présents.
 
 ### 3. Le spike des mires reste repoussé — mais pas pour la raison écrite
 
@@ -370,14 +382,6 @@ l'ordre livré, mais comme décision.
 contrairement au nom : en C# le contenu d'un mode est un contrôle ordinaire dans la cellule du
 milieu, à la taille de police de l'app. Un écran dessiné petit reçoit **moins de lignes**, pas des
 lignes plus petites.
-
-## Ce qui attend encore une décision
-
-**Le plancher de lisibilité du nom (7 pt).** Ce n'est pas une des quatre : c'est la question
-laissée ouverte plus haut, et les captures la rendent regardable. Trois issues, et c'est un choix
-produit : garder le plancher et accepter une carte sans noms en petite fenêtre ; l'enlever et
-dessiner des noms de 2 points comme l'app livrée ; ou s'écarter de la règle Avalonia et mesurer le
-nom autrement (une fraction du cadre, bornée par la bordure).
 
 ## Ce qui n'est pas fait, et qui n'attend personne
 

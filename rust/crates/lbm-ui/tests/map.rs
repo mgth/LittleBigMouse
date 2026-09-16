@@ -12,8 +12,8 @@ use lbm_layout::geo::Rect;
 use lbm_ui::map::{self, MapMonitor};
 
 /// Two screens with the 20 mm bezel the oracle's desktops actually have — the name is
-/// half of that bezel, so a thinner one would put every name under the legibility floor
-/// and these tests would be asserting about text that is not drawn.
+/// half of that bezel, so the fixture decides how big the text these tests measure comes
+/// out.
 fn two_screens() -> Vec<MapMonitor<'static>> {
     vec![
         MapMonitor {
@@ -97,20 +97,33 @@ fn clicking_a_screen_selects_it() {
     assert_eq!(clicked.get(), Some("right"));
 }
 
-/// A screen drawn too small to be labelled is still a screen you can click: the
-/// rectangle is sensed whether or not a name goes into it.
+/// A screen with no name on it is still a screen you can click: the rectangle is sensed
+/// whether or not a name goes into it.
+///
+/// Since the legibility floor was removed there is only one way to have no name — a
+/// screen whose panel reaches the top of its own outline, so there is no plastic to print
+/// on. That is the case built here, because the property being tested is that sensing and
+/// labelling are independent, and it needs a frame that really has no label.
 #[test]
 fn a_screen_with_no_room_for_its_name_is_still_a_target() {
-    let screens = two_screens();
+    let screens = vec![MapMonitor {
+        id: "bezel-less",
+        name: "No top bezel",
+        mm_outside: Rect::new(0.0, 0.0, 620.0, 350.0),
+        mm_content: Rect::new(10.0, 0.0, 600.0, 340.0),
+        logo: None,
+        wallpaper: None,
+        details: &[],
+    }];
     let fit = map::fit(
         map::extent(&screens),
-        egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(100.0, 100.0)),
+        egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(400.0, 400.0)),
     );
 
-    let drawn = fit.place(&screens[1]);
-    assert_eq!(drawn.name_height, None, "the name should have been dropped");
+    let drawn = fit.place(&screens[0]);
+    assert_eq!(drawn.name_height, None, "there is no bezel to print on");
     assert_eq!(
         map::hit(&screens, &fit, drawn.outside.center()),
-        Some("right")
+        Some("bezel-less")
     );
 }

@@ -1,0 +1,7 @@
+# What a failed comparison leaves behind: the render that did not match, the pixel diff,
+# and the reference `UPDATE_SNAPSHOTS=1` replaced. Working files — the CI workflow
+# uploads the directory as an artifact so they can be looked at, and none of them belongs
+# in the repository. Without this, one `git add -A` after a red run commits them.
+*.new.png
+*.diff.png
+*.old.png

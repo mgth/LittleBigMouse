@@ -298,7 +298,7 @@ public class WireContractGoldenTests
                      LittleBigMouseEvent.Paused, LittleBigMouseEvent.DisplayChanged,
                      LittleBigMouseEvent.Loaded, LittleBigMouseEvent.LoadFailed,
                      LittleBigMouseEvent.Probed, LittleBigMouseEvent.Rescued,
-                     LittleBigMouseEvent.ShortcutUnavailable
+                     LittleBigMouseEvent.ShortcutUnavailable, LittleBigMouseEvent.RunRefused
                  })
             Assert.Contains(required, seen);
     }
@@ -323,6 +323,9 @@ public class WireContractGoldenTests
 
         // ShortcutUnavailable names the combination that could not be registered.
         Assert.NotEmpty(byEvent[LittleBigMouseEvent.ShortcutUnavailable].Single().Payload);
+
+        // RunRefused says why, and the UI shows that reason as it is.
+        Assert.NotEmpty(byEvent[LittleBigMouseEvent.RunRefused].Single().Payload);
     }
 
     /// <summary>

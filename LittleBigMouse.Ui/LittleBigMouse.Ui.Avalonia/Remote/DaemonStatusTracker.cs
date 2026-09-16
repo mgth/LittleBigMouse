@@ -113,6 +113,14 @@ public sealed class DaemonStatusTracker(
                         LayoutInfo = string.IsNullOrEmpty(e.Payload) ? "load failed" : e.Payload);
                     break;
 
+                // The daemon would not hook what it was given, and the reason is the whole
+                // of what the user needs: "no display under Dock" says why the engine is
+                // off after undocking, where a bare Stopped would say nothing.
+                case LittleBigMouseEvent.RunRefused:
+                    onUiThread(() =>
+                        LayoutInfo = string.IsNullOrEmpty(e.Payload) ? "run refused" : e.Payload);
+                    break;
+
                 // Previewing? Then there is an experiment to throw away: drop it, go back to the
                 // saved layout and start again. Not previewing? Then what trapped the user is what
                 // they committed to, and leaving the engine down is the right answer — no second

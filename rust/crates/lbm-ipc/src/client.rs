@@ -124,6 +124,9 @@ pub enum DaemonEvent {
     Rescued,
     /// Payload: the panic shortcut that could not be registered.
     ShortcutUnavailable,
+    /// The hook declined a `Run`; payload: why. The layout it was handed lies on
+    /// displays that are no longer attached (#607), or is a virtual one.
+    RunRefused,
 }
 
 /// One event read from the daemon: `DaemonMessage`.
@@ -181,6 +184,7 @@ pub fn parse_event(xml: &str) -> Option<DaemonMessage> {
         "Probed" => DaemonEvent::Probed,
         "Rescued" => DaemonEvent::Rescued,
         "ShortcutUnavailable" => DaemonEvent::ShortcutUnavailable,
+        "RunRefused" => DaemonEvent::RunRefused,
         _ => return None,
     };
     Some(DaemonMessage {

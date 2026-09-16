@@ -8,6 +8,7 @@
 <DaemonMessage><Event>Resumed</Event></DaemonMessage>
 <DaemonMessage><Event>Rescued</Event></DaemonMessage>
 <DaemonMessage><Event>LoadFailed</Event><Payload>the layout could not be parsed</Payload></DaemonMessage>
+<DaemonMessage><Event>RunRefused</Event><Payload>the layout does not match the attached displays: no display under Dock</Payload></DaemonMessage>
 <DaemonMessage><Event>Loaded</Event><Payload>2 zones (2 main)</Payload></DaemonMessage>
 <DaemonMessage><Event>ShortcutUnavailable</Event><Payload>Ctrl+Alt+Shift+M</Payload></DaemonMessage>
 <DaemonMessage><Event>FocusChanged</Event><Payload>C:\Games\A&amp;B\&lt;Stopped DisplayChanged&gt;.exe</Payload></DaemonMessage>

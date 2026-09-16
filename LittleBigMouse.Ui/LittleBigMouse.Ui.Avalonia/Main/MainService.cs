@@ -106,7 +106,7 @@ public class MainService : ReactiveModel, IMainService
             layoutFactory.DisplaySignature,
             () => _engine.Suspended,
             UpdateLayout,
-            _engine.StartIfEnabledAsync,
+            _engine.ReconcileFreshLayoutAsync,
             _engine.EnsureHookedAsync);
 
         _windows = new MainWindowManager(mvvmService, mainViewModelLocator);
@@ -344,10 +344,13 @@ public class MainService : ReactiveModel, IMainService
                 _processesCollector?.AddProcess(args.Payload);
                 break;
 
-            // Load outcome: consumed by the location control (badge/status); nothing
-            // to reconcile at the service level.
+            // Load outcome, and a Run the daemon declined: consumed by the location
+            // control (badge/status); nothing to reconcile at the service level — a
+            // refused Run leaves the engine stopped, and Stopped is what the engine
+            // controller already reasons on.
             case LittleBigMouseEvent.Loaded:
             case LittleBigMouseEvent.LoadFailed:
+            case LittleBigMouseEvent.RunRefused:
                 break;
 
             // The panic shortcut ran. Its two steps announce themselves through the ordinary

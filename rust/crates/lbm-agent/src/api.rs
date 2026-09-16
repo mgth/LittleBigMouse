@@ -198,6 +198,7 @@ pub fn hook_event_name(event: DaemonEvent) -> &'static str {
         DaemonEvent::Probed => "Probed",
         DaemonEvent::Rescued => "Rescued",
         DaemonEvent::ShortcutUnavailable => "ShortcutUnavailable",
+        DaemonEvent::RunRefused => "RunRefused",
     }
 }
 

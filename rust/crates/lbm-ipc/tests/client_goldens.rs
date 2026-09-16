@@ -57,6 +57,7 @@ fn every_event_the_daemon_emits_reads_back() {
             DaemonEvent::Resumed,
             DaemonEvent::Rescued,
             DaemonEvent::LoadFailed,
+            DaemonEvent::RunRefused,
             DaemonEvent::Loaded,
             DaemonEvent::ShortcutUnavailable,
             DaemonEvent::FocusChanged,
@@ -72,6 +73,11 @@ fn every_event_the_daemon_emits_reads_back() {
     };
     assert_eq!(payload(DaemonEvent::Running), "");
     assert_eq!(payload(DaemonEvent::Loaded), "2 zones (2 main)");
+    // RunRefused always says why; the frontend shows the reason as it is.
+    assert_eq!(
+        payload(DaemonEvent::RunRefused),
+        "the layout does not match the attached displays: no display under Dock"
+    );
     assert_eq!(
         payload(DaemonEvent::FocusChanged),
         r"C:\Games\A&B\<Stopped DisplayChanged>.exe"

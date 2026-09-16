@@ -40,6 +40,7 @@ fn hook_event(message: DaemonMessage) -> HookEvent {
         DaemonEvent::Probed => HookEvent::Probed,
         DaemonEvent::Rescued => HookEvent::Rescued,
         DaemonEvent::ShortcutUnavailable => HookEvent::ShortcutUnavailable,
+        DaemonEvent::RunRefused => HookEvent::RunRefused,
     }
 }
 

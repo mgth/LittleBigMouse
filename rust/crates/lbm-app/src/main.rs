@@ -482,6 +482,8 @@ type Asks = std::sync::mpsc::Sender<(u64, &'static str, serde_json::Value)>;
 struct Joined {
     asks: Asks,
     next_id: u64,
+    /// The handshake's own requests, by the id their answers will carry.
+    asked: Vec<(u64, &'static str)>,
 }
 
 /// Why there is no agent: a short reason for the bar, and the endpoint it looked at.
@@ -515,13 +517,19 @@ fn join_agent(
     };
 
     // Who is there, and then everything it has to say. Asked once, before the reader
-    // takes the connection over.
-    if let Err(error) = outgoing
+    // takes the connection over — so their ids are handed back with the rest: the
+    // answer to `Subscribe` **is** the agent's state, and a window that did not know
+    // which request it answered would throw it away.
+    let handshake = match outgoing
         .ask("Hello", serde_json::json!({ "Client": "lbm-app" }))
-        .and_then(|_| outgoing.ask("Subscribe", serde_json::json!({})))
-    {
-        return (None, Some((error.to_string(), where_)));
-    }
+        .and_then(|hello| {
+            outgoing
+                .ask("Subscribe", serde_json::json!({}))
+                .map(|subscribe| vec![(hello, "Hello"), (subscribe, "Subscribe")])
+        }) {
+        Ok(asked) => asked,
+        Err(error) => return (None, Some((error.to_string(), where_))),
+    };
 
     let waker = ctx.clone();
     let reading = found.clone();
@@ -551,7 +559,14 @@ fn join_agent(
             }
         }
     });
-    (Some(Joined { asks, next_id }), None)
+    (
+        Some(Joined {
+            asks,
+            next_id,
+            asked: handshake,
+        }),
+        None,
+    )
 }
 
 impl App {
@@ -601,9 +616,13 @@ impl App {
         let (joined, without_agent) = join_agent(&ctx, send);
         // Without an agent there is nothing to number; the counter starts where the
         // handshake left off when there is.
-        let (requests, next_id) = match joined {
-            Some(Joined { asks, next_id }) => (Some(asks), next_id),
-            None => (None, 0),
+        let (requests, next_id, asked) = match joined {
+            Some(Joined {
+                asks,
+                next_id,
+                asked,
+            }) => (Some(asks), next_id, asked.into_iter().collect()),
+            None => (None, 0, HashMap::new()),
         };
 
         App {
@@ -612,7 +631,7 @@ impl App {
             screens: Vec::new(),
             selected: None,
             drag: None,
-            asked: HashMap::new(),
+            asked,
             refused: None,
             seen: Vec::new(),
             excluded: None,
@@ -819,45 +838,53 @@ impl App {
     /// between that copy and the store. So the flag comes from the layout here, in
     /// [`App::ui`], and the agent's is ignored rather than fought with.
     fn agent_said(&mut self, message: Message) {
-        if let Message::Answer { id, result } = &message {
-            let method = self.asked.remove(id).unwrap_or("something");
-            match result {
-                Ok(value) => {
-                    self.refused = None;
-                    self.answered(method, value);
+        match message {
+            Message::Answer { id, result } => {
+                let method = self.asked.remove(&id).unwrap_or("something");
+                match result {
+                    Ok(value) => {
+                        self.refused = None;
+                        self.answered(method, &value);
+                    }
+                    // The agent says why in words meant for a person ("no layout yet",
+                    // "this agent keeps no options"); passing them through beats
+                    // inventing a summary of them.
+                    Err(why) => self.refused = Some(format!("{method} refused: {why}")),
                 }
-                // The agent says why in words meant for a person ("no layout yet", "this
-                // agent keeps no options"); passing them through beats inventing a
-                // summary of them.
-                Err(why) => self.refused = Some(format!("{method} refused: {why}")),
+                // Whatever it said, a request came back: the bar stops waiting.
+                lbm_ui::update(&mut self.state, lbm_ui::Action::Answered);
             }
-            // Whatever it said, a request came back: the bar stops waiting.
-            lbm_ui::update(&mut self.state, lbm_ui::Action::Answered);
-            return;
-        }
-        // The hook's own report on the rescue. Only it knows whether the registration
-        // took, so this is repeated rather than reasoned about — and cleared the moment
-        // the shortcut changes, because the verdict was about the old one.
-        if let Message::Hook { name, payload } = &message {
-            if name == "ShortcutUnavailable" {
-                self.shortcut_unavailable = Some(payload.clone());
+            Message::State(state) => self.agent_is(&state),
+            // The hook's own report on the rescue. Only it knows whether the
+            // registration took, so this is repeated rather than reasoned about — and
+            // cleared when the shortcut changes, because the verdict was about the old
+            // one.
+            Message::Hook { name, payload } => {
+                if name == "ShortcutUnavailable" {
+                    self.shortcut_unavailable = Some(payload);
+                }
             }
-            return;
+            Message::Unknown(_) => {}
         }
-        let Message::State(state) = message else {
-            // Answers and hook events are not the bar's business yet: the bar reads
-            // state, and every request this window makes changes state, so the change
-            // is what it hears. Kept rather than dropped, so that wiring the probe
-            // report later is a matter of reading them.
-            return;
-        };
+    }
+
+    /// What the agent says it is, from a snapshot — however it arrived.
+    ///
+    /// **`Subscribe` answers *with* the snapshot**, it does not send a `State` event for
+    /// it: the events that follow are the *changes*. A window that only listened for
+    /// events therefore learnt nothing until something moved, and sat showing "No engine"
+    /// in front of a perfectly connected hook — which is what it did until this was run
+    /// against a real agent.
+    ///
+    /// The same trap the agent client hit in #699, one layer up: a state already reached
+    /// is never announced.
+    fn agent_is(&mut self, state: &serde_json::Value) {
         let engine = state
             .get("Engine")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("Dead");
         // Through `update`, not written straight onto the state: the rule that ends a
-        // live preview when the engine goes down lives there, and it needs to see the
-        // transition.
+        // live preview when the engine goes down lives there, and it needs the transition.
         let said = lbm_ui::Action::AgentSaid {
             engine: lbm_ui::Engine::from_agent(engine),
             connected: state
@@ -880,6 +907,13 @@ impl App {
     /// Most say `null`: the agent did it, and the `State` event that follows is the real
     /// news. `SeenProcesses` is the one that answers with a value.
     fn answered(&mut self, method: &str, value: &serde_json::Value) {
+        // `Subscribe` and `Snapshot` answer with the agent's whole state; everything
+        // after that arrives as an event. Reading it here is what tells the window what
+        // it has connected to.
+        if method == "Subscribe" || method == "Snapshot" {
+            self.agent_is(value);
+            return;
+        }
         if method != "SeenProcesses" {
             return;
         }
@@ -1020,6 +1054,40 @@ impl App {
 }
 
 impl eframe::App for App {
+    /// A live preview does not outlive the window that asked for it.
+    ///
+    /// The C# ends one when its view model is disposed (`DisposalEndsALivePreview`), and
+    /// the reason shows up the moment you try it: a preview is a `Load` **and** a `Run`,
+    /// so a window closed while previewing leaves the engine running an arrangement the
+    /// user never saved, with nothing left on screen to turn it off.
+    ///
+    /// Sent straight down the socket rather than through the writer thread: the process
+    /// is about to end, and a request handed to a channel nobody will drain is a request
+    /// that never leaves.
+    ///
+    /// **This does not cover a window that is killed** — no `on_exit` runs then, and the
+    /// agent goes on previewing. Closing that gap belongs to the agent, which is the one
+    /// that can see the connection drop; it is not done here.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if !self.state.live {
+            return;
+        }
+        let Some(endpoint) = client::default_endpoint() else {
+            return;
+        };
+        let Ok((_, mut outgoing)) = client::connect(&endpoint) else {
+            return;
+        };
+        let (method, extra) = lbm_app::settings::end_preview();
+        if outgoing
+            .ask("Hello", serde_json::json!({ "Client": "lbm-app" }))
+            .and_then(|_| outgoing.ask(method, extra))
+            .is_err()
+        {
+            eprintln!("[lbm-app] the live preview could not be ended: the agent is gone");
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         // The answer, when it has arrived. Nothing is polled: the thread asks for a

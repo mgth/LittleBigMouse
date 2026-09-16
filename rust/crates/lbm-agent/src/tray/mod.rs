@@ -118,7 +118,7 @@ impl TrayModel {
             serde_json::from_value(json!({ "Method": method })).expect("a method of the API");
         // The subscription is id 0: the tray's requests count from 1.
         self.next_id += 1;
-        let _ = self.calls.send(Call {
+        let _ = self.calls.send(Call::Asked {
             id: self.next_id,
             request,
             client: self.client.clone(),
@@ -166,7 +166,7 @@ pub async fn follow(
     mut frames: UnboundedReceiver<String>,
     mut show: impl FnMut(&Value) -> bool,
 ) {
-    let subscribed = calls.send(Call {
+    let subscribed = calls.send(Call::Asked {
         id: 0,
         request: Request::Subscribe,
         client,
@@ -215,7 +215,7 @@ mod tests {
             tray.act(action);
         }
         let sent: Vec<(u64, Request)> =
-            std::iter::from_fn(|| calls.try_recv().ok().map(|c| (c.id, c.request))).collect();
+            std::iter::from_fn(|| calls.try_recv().ok().and_then(Call::asked)).collect();
         assert_eq!(
             sent,
             [
@@ -271,14 +271,18 @@ mod tests {
         let (client, frames) = api::in_process();
         let agent = tokio::spawn(async move {
             // The subscription, answered, then two changes, then the agent leaves.
-            let call = calls_rx.recv().await.unwrap();
-            assert_eq!((call.id, call.request), (0, Request::Subscribe));
-            call.client
-                .send(api::answer(0, Ok(json!({ "Engine": "Stopped" }))));
-            call.client
-                .send(json!({ "Id": 3, "Result": null }).to_string());
-            call.client
-                .send(json!({ "Event": "State", "State": { "Engine": "Running" } }).to_string());
+            let Some(Call::Asked {
+                id,
+                request,
+                client,
+            }) = calls_rx.recv().await
+            else {
+                panic!("a request");
+            };
+            assert_eq!((id, request), (0, Request::Subscribe));
+            client.send(api::answer(0, Ok(json!({ "Engine": "Stopped" }))));
+            client.send(json!({ "Id": 3, "Result": null }).to_string());
+            client.send(json!({ "Event": "State", "State": { "Engine": "Running" } }).to_string());
         });
         let mut seen = Vec::new();
         follow(&calls, client, frames, |state| {

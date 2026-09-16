@@ -961,41 +961,18 @@ impl App {
     }
 }
 
+// A live preview does not outlive the window that asked for it — and nothing here does
+// that. The preview belongs to this window's *connection*: when the process ends, the
+// socket closes, and the agent ends the preview on its own.
+//
+// This window used to send `EndPreview` from `on_exit`, which covered a clean close and
+// nothing else: a window that is killed, crashes, or whose session is torn down runs no
+// `on_exit` at all, and a preview is a `Load` **and** a `Run` — so the engine would be
+// left driving an arrangement the user never saved, with nothing on screen able to turn
+// it off. Only the agent can see a connection drop, so only the agent can close that gap,
+// and now does (`runtime::left`). A second mechanism here would just be a second way to
+// end somebody else's preview.
 impl eframe::App for App {
-    /// A live preview does not outlive the window that asked for it.
-    ///
-    /// The C# ends one when its view model is disposed (`DisposalEndsALivePreview`), and
-    /// the reason shows up the moment you try it: a preview is a `Load` **and** a `Run`,
-    /// so a window closed while previewing leaves the engine running an arrangement the
-    /// user never saved, with nothing left on screen to turn it off.
-    ///
-    /// Sent straight down the socket rather than through the writer thread: the process
-    /// is about to end, and a request handed to a channel nobody will drain is a request
-    /// that never leaves.
-    ///
-    /// **This does not cover a window that is killed** — no `on_exit` runs then, and the
-    /// agent goes on previewing. Closing that gap belongs to the agent, which is the one
-    /// that can see the connection drop; it is not done here.
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        if !self.state.live {
-            return;
-        }
-        let Some(endpoint) = client::default_endpoint() else {
-            return;
-        };
-        let Ok((_, mut outgoing)) = client::connect(&endpoint) else {
-            return;
-        };
-        let (method, extra) = lbm_app::settings::end_preview();
-        if outgoing
-            .ask("Hello", serde_json::json!({ "Client": "lbm-app" }))
-            .and_then(|_| outgoing.ask(method, extra))
-            .is_err()
-        {
-            eprintln!("[lbm-app] the live preview could not be ended: the agent is gone");
-        }
-    }
-
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         // The answer, when it has arrived. Nothing is polled: the thread asks for a

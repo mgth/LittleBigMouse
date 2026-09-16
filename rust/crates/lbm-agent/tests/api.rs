@@ -543,6 +543,73 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
     assert!(!entry.exists(), "the session no longer starts the agent");
 }
 
+/// A preview belongs to the connection that asked for it, and dies with it.
+///
+/// A window that exits cleanly sends `EndPreview`. A window that is killed, crashes, or
+/// whose machine drops off the network sends nothing — and a preview is a `Load` *and* a
+/// `Run`, so without this the hook would go on driving an arrangement nobody saved, with
+/// nothing left on screen able to stop it.
+#[tokio::test]
+async fn a_preview_ends_when_the_frontend_that_asked_for_it_goes_and_not_before() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    // The editor previews its edit.
+    let mut editor = Frontend::connect(&api_endpoint).await;
+    let state = editor.ask(json!({ "Method": "Subscribe" })).await["Result"].clone();
+    let layout_id = state["LayoutId"].as_str().unwrap().to_owned();
+    let mut edited = frontend_layout(dir.path());
+    let monitor = edited.monitors()[0].id.clone();
+    edited.set_location(&monitor, lbm_layout::geo::Point::new(40.0, 20.0));
+    let document = serde_json::to_value(lbm_store::LayoutDocument::of(&edited)).unwrap();
+    let preview = json!({ "Method": "Preview", "LayoutId": layout_id, "Document": document });
+    assert_eq!(editor.ask(preview).await["Result"], Value::Null);
+    editor
+        .state(|s| s["Previewing"] == true && s["Engine"] == "Running")
+        .await;
+    assert!(fake.hooked());
+
+    // A watcher — the tray, another window — sees the preview, and is who we ask after
+    // the editor is gone.
+    let mut watcher = Frontend::connect(&api_endpoint).await;
+    let seen = watcher.ask(json!({ "Method": "Subscribe" })).await["Result"].clone();
+    assert_eq!(seen["Previewing"], true);
+
+    // Someone else's connection ends. It is not their preview to end.
+    let passerby = Frontend::connect(&api_endpoint).await;
+    let answer = Frontend::connect(&api_endpoint).await;
+    drop(passerby);
+    drop(answer);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(fake.hooked(), "a passerby leaving ended someone's preview");
+    assert_eq!(
+        watcher.ask(json!({ "Method": "Snapshot" })).await["Result"]["Previewing"],
+        true
+    );
+
+    // The editor is killed: no EndPreview, just a socket that closes.
+    drop(editor);
+    let stopped = watcher
+        .state(|s| s["Previewing"] == false && s["Engine"] == "Stopped")
+        .await;
+    assert_eq!(stopped["LayoutId"], layout_id);
+    assert!(!fake.hooked(), "the hook is left driving the preview");
+    assert!(
+        !dir.path().join("config").join("layouts").exists(),
+        "a preview is never written, however it ends"
+    );
+}
+
 /// The frontend's apply request, parsed by the agent's own type.
 ///
 /// The screens really move when this succeeds, so the shape is worth pinning: a

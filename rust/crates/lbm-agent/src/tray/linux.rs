@@ -146,7 +146,8 @@ mod tests {
             panic!("an entry");
         };
         (stop.activate)(&mut tray);
-        assert_eq!(calls.try_recv().unwrap().request, crate::api::Request::Stop);
+        let (_, request) = calls.try_recv().unwrap().asked().expect("a request");
+        assert_eq!(request, crate::api::Request::Stop);
         tray.activate(0, 0);
         assert_eq!(opened.load(Ordering::Relaxed), 1);
         assert_eq!(tray.icon_pixmap().len(), 6);

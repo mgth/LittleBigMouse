@@ -248,14 +248,51 @@ impl Client {
     pub fn send(&self, frame: String) -> bool {
         self.out.send(frame).is_ok()
     }
+
+    /// The same connection as `other` — not merely another frontend that looks like it.
+    ///
+    /// Two clones of one connection answer `true`; two separate frontends answer `false`.
+    /// It is what lets the agent tell *whose* preview ended when a connection drops.
+    pub fn is(&self, other: &Client) -> bool {
+        self.out.same_channel(&other.out)
+    }
 }
 
-/// A request, with who asked.
+/// What reaches the agent from a frontend.
+///
+/// A departure is one of the two, because some of what a frontend asks for **belongs to
+/// its connection** and has to end with it — a live preview above all: it is a `Load` and
+/// a `Run`, so a frontend that goes away without ending it leaves the engine driving an
+/// arrangement nobody saved.
+// A departure is far smaller than a request, and clippy would have the big one boxed.
+// Nothing is gained: these are channel messages sent one at a time, never collected, and
+// the channel already carried a whole `Request` before departures existed. Boxing would
+// buy back a few bytes on the rarest message the agent receives, at the price of an
+// indirection in the shape every caller reads.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub struct Call {
-    pub id: u64,
-    pub request: Request,
-    pub client: Client,
+pub enum Call {
+    /// A request, with who asked.
+    Asked {
+        id: u64,
+        request: Request,
+        client: Client,
+    },
+    /// A frontend's connection ended, cleanly or not.
+    Gone(Client),
+}
+
+impl Call {
+    /// The request and its id, when this call is one — `None` for a departure.
+    ///
+    /// For a caller that only deals in requests, which is most of them: the tray's tests,
+    /// and anything reading a channel it filled itself.
+    pub fn asked(self) -> Option<(u64, Request)> {
+        match self {
+            Call::Asked { id, request, .. } => Some((id, request)),
+            Call::Gone(_) => None,
+        }
+    }
 }
 
 /// The endpoint, listening until dropped.
@@ -363,7 +400,7 @@ where
         match serde_json::from_str::<RequestFrame>(&frame) {
             Ok(RequestFrame { id, request }) => {
                 if calls
-                    .send(Call {
+                    .send(Call::Asked {
                         id,
                         request,
                         client: client.clone(),
@@ -384,8 +421,12 @@ where
         }
     }
     // Subscribers hold clones of this client: stop the writer outright, and their next
-    // send fails, which is how the agent learns the frontend left.
+    // send fails, which is how the agent learns the frontend left. That is enough for a
+    // subscriber list, which is pruned whenever something is broadcast — and not enough
+    // for a preview, which an agent with nothing to say would go on running for ever. So
+    // the departure is announced.
     writing.abort();
+    let _ = calls.send(Call::Gone(client));
 }
 
 #[cfg(test)]

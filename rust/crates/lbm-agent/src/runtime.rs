@@ -58,6 +58,8 @@ pub struct Agent<W> {
     /// The frontends' requests, when the agent serves them.
     calls: Option<UnboundedReceiver<Call>>,
     subscribers: Vec<api::Client>,
+    /// The connection a live preview belongs to, while one is running.
+    previewing_for: Option<api::Client>,
     /// What the subscribers last saw.
     published: Option<Snapshot>,
     hook_connected: bool,
@@ -96,6 +98,7 @@ impl<W: AgentWorld> Agent<W> {
             launcher: None,
             calls: None,
             subscribers: Vec::new(),
+            previewing_for: None,
             published: None,
             hook_connected: false,
             quitting: false,
@@ -173,13 +176,16 @@ impl<W: AgentWorld> Agent<W> {
         self.published = Some(snapshot);
     }
 
-    /// One frontend request.
+    /// One frontend request, or one frontend leaving.
     fn call(&mut self, call: Call) {
-        let Call {
-            id,
-            request,
-            client,
-        } = call;
+        let (id, request, client) = match call {
+            Call::Asked {
+                id,
+                request,
+                client,
+            } => (id, request, client),
+            Call::Gone(client) => return self.left(&client),
+        };
         // Held until the answer has gone out: a frontend that asks and then listens
         // must not have the report arrive before the acknowledgement it is waiting on.
         let mut report = None;
@@ -244,10 +250,13 @@ impl<W: AgentWorld> Agent<W> {
                 layout_id,
                 document,
             } => self.world.set_preview(&layout_id, &document).map(|()| {
+                // Whoever asked now owns it, and it ends when their connection does.
+                self.previewing_for = Some(client.clone());
                 self.handle(Input::Preview);
                 serde_json::Value::Null
             }),
             Request::EndPreview => {
+                self.previewing_for = None;
                 self.handle(Input::EndPreview);
                 Ok(serde_json::Value::Null)
             }
@@ -310,6 +319,25 @@ impl<W: AgentWorld> Agent<W> {
         client.send(api::answer(id, result));
         if let Some(report) = report {
             self.forward("Probed", &report);
+        }
+    }
+
+    /// A frontend's connection ended.
+    ///
+    /// **A live preview belongs to the connection that asked for it.** It is a `Load`
+    /// *and* a `Run`, so a frontend that goes away without ending it — killed, crashed,
+    /// its machine asleep — would otherwise leave the engine driving an arrangement
+    /// nobody saved and nothing on screen to stop it. A clean exit sends `EndPreview` and
+    /// this finds nothing left to do; this is for every other way of leaving.
+    ///
+    /// Only the owner's departure counts. Another frontend closing its window, or the
+    /// tray reconnecting, must not end somebody else's preview.
+    fn left(&mut self, client: &api::Client) {
+        self.subscribers.retain(|s| !s.is(client));
+        if self.previewing_for.as_ref().is_some_and(|o| o.is(client)) {
+            eprintln!("[lbm-agent] the frontend previewing has gone: ending the preview");
+            self.previewing_for = None;
+            self.handle(Input::EndPreview);
         }
     }
 

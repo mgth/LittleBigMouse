@@ -141,8 +141,14 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   mais le démarrage avec la session lui-même : l'agent aligne l'entrée XDG ou la tâche
   planifiée). Le réconciliateur tient l'aperçu : Start ou Stop de
   l'utilisateur, reconstruction, perte du hook et secours y mettent fin ; un ré-accrochage
-  pendant l'aperçu garde l'aperçu. `Previewing`, `Saved`, `LoadAtStartup` et `HideTrayIcon`
-  dans l'état.
+  pendant l'aperçu garde l'aperçu. **Un aperçu appartient à la connexion qui l'a demandé**
+  et meurt avec elle : le départ d'un frontend arrive à l'agent comme un appel
+  (`Call::Gone`), et si c'est le propriétaire, l'aperçu prend fin. Une fenêtre fermée
+  proprement envoie `EndPreview` ; une fenêtre tuée, plantée, ou dont la session s'en va
+  n'envoie rien — et un aperçu est un Load **et** un Run, donc sans cela le moteur
+  continuerait de piloter une disposition que personne n'a enregistrée, sans rien à l'écran
+  pour l'arrêter. Le départ d'un autre frontend ne met fin à rien.
+  `Previewing`, `Saved`, `LoadAtStartup` et `HideTrayIcon` dans l'état.
   Sous Windows (`winpipe`) : l'agent trouve le tube du hook de sa session
   (`LittleBigMouse-v1-session-{id}`, celui du client C#) et sert l'API sur le sien
   (`LittleBigMouse-Agent-v1-session-{id}`), sécurisé comme celui du hook : SYSTEM et

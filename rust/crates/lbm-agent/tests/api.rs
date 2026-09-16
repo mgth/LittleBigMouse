@@ -631,11 +631,35 @@ fn an_apply_topology_request_carries_the_document_and_the_scale_choice() {
             layout_id,
             document,
             adjust_scale,
+            dry_run,
         } => {
             assert_eq!(layout_id, "TESTMON1");
             assert!(adjust_scale);
             assert!(document.layout.is_some());
+            assert!(
+                !dry_run,
+                "a request that does not ask for a dry run really moves the screens"
+            );
         }
+        other => panic!("parsed as something else: {other:?}"),
+    }
+}
+
+/// A dry run is asked for, never inferred: `DryRun` travels as its own field and the
+/// window has to set it. The default is the one that moves screens, on purpose — a
+/// frontend that forgot the field gets what the method is named after.
+#[test]
+fn a_dry_run_is_asked_for_in_so_many_words() {
+    let frame: lbm_agent::api::RequestFrame = serde_json::from_value(serde_json::json!({
+        "Id": 11,
+        "Method": "ApplyTopology",
+        "LayoutId": "TESTMON1",
+        "Document": {},
+        "DryRun": true
+    }))
+    .expect("the agent must understand a dry run");
+    match frame.request {
+        lbm_agent::api::Request::ApplyTopology { dry_run, .. } => assert!(dry_run),
         other => panic!("parsed as something else: {other:?}"),
     }
 }

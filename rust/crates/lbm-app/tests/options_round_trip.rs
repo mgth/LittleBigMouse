@@ -415,7 +415,9 @@ fn the_agent_understands_the_apply_the_window_sends() {
             layout_id,
             document,
             adjust_scale,
+            dry_run,
         } => {
+            assert!(!dry_run, "the window's Apply really applies");
             assert_eq!(layout_id, "TESTMON1");
             assert!(adjust_scale);
             assert!(document.layout.is_some(), "nothing to apply");

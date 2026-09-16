@@ -108,6 +108,13 @@ pub enum Request {
         /// logical pitch the primary's. Linux only; the C# offers it in the dialog.
         #[serde(rename = "AdjustScale", default)]
         adjust_scale: bool,
+        /// Change nothing: answer with the command lines this would have run.
+        ///
+        /// Defaulted to false, and the default is the dangerous one — which is on
+        /// purpose. A frontend that forgot the field gets the behaviour the method is
+        /// named after; one that wants a preview has to say so.
+        #[serde(rename = "DryRun", default)]
+        dry_run: bool,
     },
     /// A live-preview tick: the hook runs the edit, nothing is saved.
     Preview {

@@ -141,3 +141,18 @@ pub fn apply_topology(
     extra["AdjustScale"] = json!(adjust_scale);
     ("ApplyTopology", extra)
 }
+
+/// The same request, asked as a **dry run**: the agent answers with the command lines it
+/// would have run and changes nothing — not the screens, and not the saved layout.
+///
+/// A separate function rather than a flag on [`apply_topology`], so that the call site
+/// that moves the user's screens and the one that only asks cannot be confused for one
+/// another by a boolean nobody reads.
+pub fn dry_run_topology(
+    layout: &lbm_layout::model::Layout,
+    adjust_scale: bool,
+) -> (&'static str, Value) {
+    let (method, mut extra) = apply_topology(layout, adjust_scale);
+    extra["DryRun"] = json!(true);
+    (method, extra)
+}

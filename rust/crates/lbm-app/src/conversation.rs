@@ -22,6 +22,18 @@ use std::collections::HashMap;
 
 use crate::client::Message;
 
+/// What an apply of the topology did, or would have done.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ran {
+    /// Every command line, in the order the agent ran them — the engine's gap-closing
+    /// first, because it really does go first.
+    pub commands: Vec<String>,
+    /// Nothing was run. The positions are a **prediction**: the real pass re-reads the
+    /// compositor after the scales are applied and re-asserts whatever drifts, and
+    /// neither of those can be known without changing something.
+    pub dry: bool,
+}
+
 /// The requests in flight, and everything the agent has said about itself.
 #[derive(Debug, Default)]
 pub struct Conversation {
@@ -55,6 +67,10 @@ pub struct Conversation {
     pub shortcut_unavailable: Option<String>,
     /// Whether anything has been heard from the agent yet.
     pub heard: bool,
+    /// What an `ApplyTopology` reported: the command lines, and whether they were only
+    /// going to be run. Kept so the window can show them — the one action in the product
+    /// that cannot be undone is also the one worth reading before and after.
+    pub topology: Option<Ran>,
 }
 
 impl Conversation {
@@ -148,6 +164,22 @@ impl Conversation {
             // window what it has connected to — without it the bar waits for something to
             // move, which on a quiet desktop is never.
             "Subscribe" | "Snapshot" => self.snapshot(value, state),
+            // The screens moved, or would have. Either way the window shows the lines.
+            "ApplyTopology" => {
+                self.topology = Some(Ran {
+                    commands: value
+                        .get("Commands")
+                        .and_then(serde_json::Value::as_array)
+                        .map(|list| {
+                            list.iter()
+                                .filter_map(|v| v.as_str().map(str::to_owned))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    dry: value.get("DryRun").and_then(serde_json::Value::as_bool) == Some(true),
+                });
+                Vec::new()
+            }
             "SeenProcesses" => {
                 self.seen = value
                     .as_array()

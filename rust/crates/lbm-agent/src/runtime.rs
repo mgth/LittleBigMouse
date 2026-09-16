@@ -237,15 +237,32 @@ impl<W: AgentWorld> Agent<W> {
                 layout_id,
                 document,
                 adjust_scale,
-            } => self
-                .world
-                .apply_topology(&layout_id, &document, adjust_scale)
-                .map(|()| {
-                    // The topology changed under everyone: the layout has to be rebuilt
-                    // from what the system now says, exactly as a hotplug would.
-                    let _ = self.inputs.send(Input::DisplayChanged);
-                    serde_json::Value::Null
-                }),
+                dry_run,
+            } => {
+                use lbm_display::linux::topology::How;
+                let how = if dry_run { How::DryRun } else { How::ForReal };
+                self.world
+                    .apply_topology(&layout_id, &document, adjust_scale, how)
+                    .map(|commands| {
+                        for line in &commands {
+                            eprintln!(
+                                "[lbm-agent] {} {line}",
+                                if dry_run { "would run:" } else { "ran:" }
+                            );
+                        }
+                        // Nothing moved, so nothing to rebuild from — and sending
+                        // `DisplayChanged` anyway would throw away the frontend's edit
+                        // for a change that never happened.
+                        if !dry_run {
+                            // The topology changed under everyone: the layout has to be
+                            // rebuilt from what the system now says, as a hotplug would.
+                            let _ = self.inputs.send(Input::DisplayChanged);
+                        }
+                        // Self-describing: the answer says which it was, so a frontend
+                        // does not have to remember what it asked for to label it.
+                        serde_json::json!({ "Commands": commands, "DryRun": dry_run })
+                    })
+            }
             Request::Preview {
                 layout_id,
                 document,

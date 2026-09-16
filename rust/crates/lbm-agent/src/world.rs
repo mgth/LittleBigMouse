@@ -55,13 +55,17 @@ pub trait AgentWorld: World {
 
     /// The layout to preview: the current one with the edit applied, the current one
     /// left as it is. Refused as [`edit`](Self::edit) is.
-    /// Apply the layout to the system display configuration. The screens really move.
+    /// Apply the layout to the system display configuration. The screens really move —
+    /// unless `how` is a dry run, which writes **nothing at all**, the layout included.
+    ///
+    /// Gives back every command line, in order: what was run, or what would be.
     fn apply_topology(
         &mut self,
         _layout_id: &str,
         _document: &LayoutDocument,
         _adjust_scale: bool,
-    ) -> Result<(), String> {
+        _how: lbm_display::linux::topology::How,
+    ) -> Result<Vec<String>, String> {
         Err("this agent cannot change the display topology".to_owned())
     }
 
@@ -375,12 +379,21 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         layout_id: &str,
         document: &LayoutDocument,
         adjust_scale: bool,
-    ) -> Result<(), String> {
+        how: lbm_display::linux::topology::How,
+    ) -> Result<Vec<String>, String> {
+        use lbm_display::linux::topology::How;
+        let dry = how == How::DryRun;
         // The layout is borrowed for this block only, so the gap guard below is free.
         let wanted: Vec<lbm_display::linux::topology::Wanted> = {
             document.apply(self.editable(layout_id)?);
             let layout = self.layout.as_mut().ok_or("no layout yet")?;
-            self.persistence.save(layout).map_err(|e| e.to_string())?;
+            // **A dry run does not save either.** The save is not a detail of applying,
+            // it is a write to the user's profile — and a preview that rewrote the thing
+            // it was previewing would be the worst kind of surprise. The edit stays on
+            // this agent's in-memory copy, exactly as `edit` leaves it.
+            if !dry {
+                self.persistence.save(layout).map_err(|e| e.to_string())?;
+            }
             layout
                 .compute_pixel_locations_from_physical(adjust_scale)
                 .into_iter()
@@ -405,12 +418,21 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             return Err("no display backend to apply through".to_owned());
         };
         let gaps = &self.gaps;
-        lbm_display::linux::topology::apply(backend, &wanted, |before| {
-            if let Some(gaps) = gaps {
-                gaps.restore(before, run_kscreen_doctor);
-            }
+        lbm_display::linux::topology::apply(backend, &wanted, how, |before| {
+            let Some(gaps) = gaps else {
+                return Vec::new();
+            };
+            // The gap guard's own writes, run or recorded by the same switch — they go
+            // before everything else, so a dry run that left them out would understate
+            // what pressing Apply does.
+            let mut said = Vec::new();
+            gaps.restore(before, |args| {
+                said.push(format!("kscreen-doctor {}", args.join(" ")));
+                dry || run_kscreen_doctor(args)
+            });
+            said
         })
-        .map(|_| ())
+        .map(|applied| applied.commands)
     }
 
     fn set_preview(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {

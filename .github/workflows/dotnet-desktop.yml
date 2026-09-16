@@ -46,8 +46,28 @@ jobs:
     - name: Format
       run: cargo fmt --check
 
+    # The reference snapshots of `lbm-ui` render through wgpu, and a runner has no GPU.
+    # lavapipe is Mesa's software Vulkan device; `mesa-vulkan-drivers` is what ships it.
+    # Nothing else in the workspace needs it — every other test asks the accessibility
+    # tree — so a runner without it would still pass everything but the snapshots.
+    - name: Software Vulkan for the reference snapshots
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mesa-vulkan-drivers
+
     - name: Test
       run: cargo test
+
+    # What the render actually produced, when it did not match. Without this a snapshot
+    # failure is a number of differing pixels and nothing to look at — and looking is the
+    # entire point of having rendered.
+    - name: Upload the snapshots that did not match
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: snapshot-diffs
+        path: rust/crates/lbm-ui/tests/snapshots/**
+        if-no-files-found: ignore
 
     # Benches are plain binaries nothing else builds; keep them compiling.
     - name: Build benches

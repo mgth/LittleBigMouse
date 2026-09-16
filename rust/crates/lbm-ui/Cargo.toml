@@ -28,3 +28,14 @@ serde_json.workspace = true
 # dev-dependency because the loading belongs to whoever owns the egui context, not to
 # the view — but the two have to be shown to meet.
 lbm-icons = { path = "../lbm-icons" }
+
+# Rendering, for the reference snapshots. **Linux only, and not by taste.**
+# `egui_kittest`'s snapshot feature renders through wgpu, and wgpu cannot enter this
+# workspace's graph on Windows: `lbm-hook` pins `windows` 0.62, cargo unifies
+# `windows-core` to 0.62 for `wgpu-hal`, and `gpu-allocator` 0.28 — which wgpu-hal's DX12
+# backend calls — was built against 0.58. Their `ID3D12Device` are then two different
+# types and wgpu-hal itself does not compile. Nothing here can fix that; it is upstream's
+# to resolve. A dev-dependency reaches `cargo test`, which is exactly what CI runs, so it
+# is kept off Windows entirely rather than left to break the job.
+[target.'cfg(not(windows))'.dev-dependencies]
+egui_kittest = { version = "0.36", features = ["wgpu", "snapshot"] }

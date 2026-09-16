@@ -98,11 +98,13 @@ fn the_bottom_bar_without_an_agent() {
     harness.snapshot("bottom-bar-no-agent");
 }
 
-/// The map: two screens, one selected. The bezels, the fit — and **no names**, at a size
-/// a window is very likely to be. That is not a bug in the picture, it is the picture of
-/// the open question: the name is half the top bezel, here that lands under the 7 pt
-/// legibility floor, and the floor drops it. `docs/v7-frontend.md` says the floor decides
-/// the common case; this is the common case, and it is why the reference is kept.
+/// The map: two screens, one selected. The bezels, the fit, and the names.
+///
+/// This reference is the one that settled the legibility floor. It used to show **no
+/// names at all** — the name is half the top bezel, which at this very ordinary window
+/// size lands near 4 points, and the 7 pt floor dropped it. Seeing that the common case
+/// was the one the floor removed is what made the maintainer take the floor out
+/// (2026-09-16). The names here are small; they are also there.
 #[test]
 fn the_map_with_two_screens() {
     let screens = two_screens();
@@ -114,11 +116,9 @@ fn the_map_with_two_screens() {
     harness.snapshot("map-two-screens");
 }
 
-/// One frame, large. This is the picture behind the open question about the name: it is
-/// **half the top bezel**, printed on the plastic, and on a thin-bezel screen that lands
-/// between 1 and 5 points. Here the bezel is 20 mm and the frame is big, so the name is
-/// comfortably drawn — which is exactly the case the table in `docs/v7-frontend.md` says
-/// is *not* the common one.
+/// One frame. The name is **half the top bezel**, printed on the plastic — so its size
+/// follows the plastic and not the panel, and on this 20 mm bezel at this ratio it comes
+/// out around 6 points. Small, and drawn: there is no floor any more.
 #[test]
 fn a_monitor_frame_with_its_name() {
     let outside = Rect::new(0.0, 0.0, 640.0, 380.0);

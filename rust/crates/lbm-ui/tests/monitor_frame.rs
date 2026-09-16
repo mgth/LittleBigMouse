@@ -46,26 +46,33 @@ fn the_name_grows_with_the_frame() {
     );
 }
 
-/// Not merely small — absent. A name too small to read is ink that looks like
-/// information, and the map is read at a glance.
+/// **However small.** The legibility floor this port carried is gone (maintainer's call,
+/// 2026-09-16), so a name of a twentieth of a point is laid out like any other. Asked
+/// through the harness rather than of the arithmetic: what the floor used to remove was a
+/// real label in a real tree, and this is the same question the other way round.
 #[test]
-fn a_frame_too_small_for_a_readable_name_has_none() {
-    assert_eq!(name_height_drawn(0.01), None);
+fn a_name_is_drawn_however_small_it_comes_out() {
+    let height = name_height_drawn(0.01).expect("a name, small as it is");
+    assert!(
+        height < 1.0,
+        "the fixture was meant to produce a sub-point name, got {height}"
+    );
 }
 
-/// And the frame itself is still there when the name is not: a screen you cannot label
-/// is still a screen you can see and click.
+/// The frame itself is still there when the name is not: a screen you cannot label is
+/// still a screen you can see and click. The only way left to have no name is to have no
+/// top bezel to print it on.
 #[test]
 fn the_screen_is_drawn_even_when_its_name_is_not() {
-    let outside = Rect::new(0.0, 0.0, 620.0, 360.0);
-    let content = Rect::new(10.0, 10.0, 600.0, 340.0);
+    let outside = Rect::new(0.0, 0.0, 620.0, 350.0);
+    let content = Rect::new(10.0, 0.0, 600.0, 340.0);
 
-    let drawn = frame::draw(outside, content, (0.0, 0.0), Ratio { x: 0.01, y: 0.01 });
+    let drawn = frame::draw(outside, content, (0.0, 0.0), Ratio { x: 1.0, y: 1.0 });
 
     assert_eq!(drawn.name_height, None);
     assert!(drawn.outside.width() > 0.0 && drawn.outside.height() > 0.0);
     assert!(
         drawn.content.width() < drawn.outside.width(),
-        "the bezel survives the shrinking"
+        "the side bezels are still there"
     );
 }

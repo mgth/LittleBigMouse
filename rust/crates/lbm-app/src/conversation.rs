@@ -30,6 +30,18 @@ pub struct Conversation {
     /// Without it an answer is an anonymous `Ok(null)` and the window can only guess what
     /// it settles — which is why a `SaveLayout` the agent refused used to be invisible.
     asked: HashMap<u64, &'static str>,
+    /// What a request in flight **earns** if the agent takes it: the document a save
+    /// sent, which becomes what Save and Undo compare against.
+    ///
+    /// Held here rather than in the window because the rule is about answers, and
+    /// answers are this module's business. Two things it gets right that a reference
+    /// taken on arrival would not: the document is the one **as sent**, so editing while
+    /// a save is in flight does not get quietly called saved; and a refusal drops it, so
+    /// the buttons stay lit over a layout that is still not on disk.
+    earning: HashMap<u64, crate::saved::Reference>,
+    /// A save has landed: the reference the window must adopt. Taken, not read — it is a
+    /// one-shot fact, and leaving it behind would re-adopt it at every frame.
+    earned: Option<crate::saved::Reference>,
     /// The last thing the agent refused, and what was refused. Shown, because a request
     /// that fails silently is worse than one that fails.
     pub refused: Option<String>,
@@ -68,6 +80,16 @@ impl Conversation {
         self.asked.insert(id, method);
     }
 
+    /// Records the document request `id` was built from, to be adopted if it is accepted.
+    pub fn earning(&mut self, id: u64, reference: crate::saved::Reference) {
+        self.earning.insert(id, reference);
+    }
+
+    /// The document a landed save earned, once. See [`Conversation::earning`].
+    pub fn earned(&mut self) -> Option<crate::saved::Reference> {
+        self.earned.take()
+    }
+
     /// A new rescue shortcut is on its way, so the hook's verdict is about the old one.
     pub fn shortcut_changed(&mut self) {
         self.shortcut_unavailable = None;
@@ -79,8 +101,12 @@ impl Conversation {
         match message {
             Message::Answer { id, result } => {
                 let method = self.asked.remove(&id).unwrap_or("something");
+                // Whatever this request was carrying is settled either way: taken on an
+                // answer, dropped on a refusal.
+                let earning = self.earning.remove(&id);
                 match result {
                     Ok(value) => {
+                        self.earned = earning;
                         self.refused = None;
                         let effects = self.answered(method, &value, state);
                         // Whatever it said, a request came back: the bar stops waiting.
@@ -373,5 +399,118 @@ mod tests {
         assert!(effects.is_empty());
         assert!(state.hook_connected);
         assert!(agent.heard, "it still counts as having heard the agent");
+    }
+    //==================//
+    // What a save earns//
+    //==================//
+
+    /// The layout a window would be holding, as the real pipeline builds it.
+    fn layout() -> lbm_layout::model::Layout {
+        let mut layout =
+            lbm_layout::model::Layout::new(lbm_layout::model::LayoutOptions::default());
+        lbm_layout::linux::populate(&mut layout, &[], |_| Ok::<(), std::io::Error>(())).unwrap();
+        layout.set_location(
+            &layout.monitors()[0].id.clone(),
+            lbm_layout::geo::Point::new(0.0, 0.0),
+        );
+        layout
+    }
+
+    #[test]
+    fn a_save_the_agent_takes_hands_back_the_document_it_sent() {
+        let mut agent = Conversation::default();
+        let mut state = lbm_ui::State::default();
+        let layout = layout();
+        agent.asking(7, "SaveLayout");
+        agent.earning(7, crate::saved::Reference::of(&layout));
+        assert!(agent.earned().is_none(), "nothing until the answer comes");
+
+        agent.said(
+            Message::Answer {
+                id: 7,
+                result: Ok(serde_json::Value::Null),
+            },
+            &mut state,
+        );
+
+        let earned = agent.earned().expect("the document that save sent");
+        assert!(earned.holds(&layout), "it is the layout that was sent");
+        assert!(
+            agent.earned().is_none(),
+            "taken once: a second frame must not re-adopt it"
+        );
+    }
+
+    /// The window goes on being usable while a save is out. What that save earns is the
+    /// document it **sent**, so an edit made in the meantime is still an edit to save.
+    #[test]
+    fn an_edit_made_while_a_save_is_in_flight_is_not_swallowed_by_it() {
+        let mut agent = Conversation::default();
+        let mut state = lbm_ui::State::default();
+        let mut layout = layout();
+        agent.asking(7, "SaveLayout");
+        agent.earning(7, crate::saved::Reference::of(&layout));
+
+        // The user drags a screen before the answer lands.
+        let monitor = layout.monitors()[0].id.clone();
+        layout.set_location(&monitor, lbm_layout::geo::Point::new(300.0, 100.0));
+
+        agent.said(
+            Message::Answer {
+                id: 7,
+                result: Ok(serde_json::Value::Null),
+            },
+            &mut state,
+        );
+
+        let earned = agent.earned().expect("the save landed");
+        assert!(
+            !earned.holds(&layout),
+            "the drag made after the save was sent is still unsaved"
+        );
+    }
+
+    /// A refusal writes nothing, so it earns nothing: the buttons stay lit over a layout
+    /// that is still not on disk.
+    #[test]
+    fn a_save_the_agent_refuses_earns_nothing() {
+        let mut agent = Conversation::default();
+        let mut state = lbm_ui::State::default();
+        agent.asking(7, "SaveLayout");
+        agent.earning(7, crate::saved::Reference::of(&layout()));
+
+        agent.said(
+            Message::Answer {
+                id: 7,
+                result: Err("not the current one".to_owned()),
+            },
+            &mut state,
+        );
+
+        assert!(agent.earned().is_none(), "a refusal saved nothing");
+        assert!(agent.refused.is_some(), "and it is shown");
+    }
+
+    /// Another request answering in between settles nothing about the save.
+    #[test]
+    fn an_answer_to_something_else_does_not_clear_the_save() {
+        let mut agent = Conversation::default();
+        let mut state = lbm_ui::State::default();
+        agent.asking(7, "SaveLayout");
+        agent.earning(7, crate::saved::Reference::of(&layout()));
+        agent.asking(8, "Snapshot");
+
+        agent.said(
+            Message::Answer {
+                id: 8,
+                result: Ok(snapshot("Running", true)),
+            },
+            &mut state,
+        );
+
+        assert!(
+            agent.earned().is_none(),
+            "a snapshot answered, not the save"
+        );
     }
 }

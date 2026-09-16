@@ -262,24 +262,63 @@ Mes tests vérifiaient que l'aimantation marche ; aucun ne vérifiait qu'on peut
   topologie au **frontend** et non à l'agent — c'est donc une capacité à écrire avant que
   le menu ait un sens.
 
+## Ce qui a été tranché
+
+### 1. « Non enregistré » est une **référence**, pas un drapeau — tranché, livré
+
+La formule du plan, « DTO courant ≠ DTO stocké », a un piège. Elle vaut pour un document écrit
+par la version courante ; pour un document **antérieur** le DTO diffère sans aucune édition,
+parce qu'enregistrer le **migrerait**. Ce n'est pas une conjecture :
+`save_after_load_v56_reproduces_the_stored_files` (lbm-store) charge la fixture `v5.6-current`,
+l'enregistre sans y toucher, et compare à un golden **différent** — `v5.6-current-saved`, où la
+priorité de la mise en page a remonté dans `options.json` et où chaque `+` du raccourci de
+secours est une échappée unicode. Une fenêtre qui comparerait au magasin s'ouvrirait en proposant
+d'enregistrer une mise en page que personne n'a touchée, sur tout profil d'une version
+antérieure.
+
+La comparaison n'est donc pas contre le magasin. Une **référence** est prise au chargement et à
+chaque enregistrement qui aboutit ; « non enregistré » devient *document courant ≠ référence*
+(`lbm_app::saved::Reference`). Trois conséquences, et chacune corrige quelque chose que le
+drapeau porté rate :
+
+- une **migration n'est pas une édition** : la référence est prise *après* le chargement ;
+- **une édition défaite à la main redevient enregistrée.** Le `Saved` du C#
+  (`MonitorsLayout.Saved`) est un loquet que seuls un chargement ou un enregistrement
+  rabaissent : glisser un écran et le remettre exactement laissait Enregistrer allumé ;
+- **un enregistrement qui aboutit éteint les boutons.** La fenêtre envoyait `SaveLayout` et
+  n'entendait jamais la réponse d'une façon qui touche le drapeau : **Enregistrer restait allumé
+  sur une mise en page déjà sur le disque.** Bug livré, trouvé en câblant la décision.
+
+Ce qu'une référence prise à la réponse aurait raté : la fenêtre reste utilisable pendant qu'un
+enregistrement est en vol, donc c'est le document **tel qu'envoyé** qui est mérité, apparié par
+id — un refus ne mérite rien, une réponse à autre chose ne règle rien. La règle vit dans
+`Conversation` (`earning`/`earned`) et non dans `main.rs` : le routage des messages d'un binaire
+est l'angle mort où les deux bugs de #716 se cachaient.
+
+### 3. Le spike des mires reste repoussé — mais pas pour la raison écrite
+
+La raison notée ici (« le spike demanderait `eframe` ») est **morte** : `eframe` est dans le
+workspace depuis #694 et la fenêtre existe. La vraie raison est le séquencement, et elle est plus
+forte :
+
+- `lbm-pattern` **ne dessine rien**. C'est un visionneur : 475 lignes de plomberie Wayland qui
+  décodent un PNG dans un `wl_shm` et le plein-écranisent sur une sortie nommée, avec un
+  `wp_viewport` qui garantit le 1:1 (`main.rs:216-222`). Pas de `lib.rs`, aucune API publique,
+  **aucun test**, et aucun crate du workspace n'en dépend ;
+- **la fonctionnalité est entièrement en C#** : `HLab.Sys.Windows.MonitorVcp.Avalonia/TestPattern.cs`
+  (les sept motifs, le damier de gamma dont `ChessCell` est *la mesure*) et
+  `DrawingContextExtension.cs` ; `TestPatternButtonViewModel.cs:117-127` rend le motif Avalonia
+  hors écran en PNG à la résolution native, puis lance le binaire Rust ;
+- son **seul consommateur** est le plugin VCP en C# (`Patterns/WaylandPattern.cs:17,36,70`).
+
+Porter les mires, c'est donc porter VCP — item 8 de l'ordre des écrans. Rien à faire avant, et
+`lbm-pattern` ne peut pas disparaître entre-temps.
+
 ## Ce qui attend une décision
 
-1. **« Non enregistré » : la formule du plan a un piège.** « DTO courant ≠ DTO stocké » vaut pour
-   un document écrit par la version courante ; pour un document **antérieur**, le DTO diffère sans
-   aucune édition, parce qu'enregistrer le **migrerait** (la priorité qui remonte dans
-   `options.json`, le `+` du raccourci échappé). Mesuré : la fixture `v5.6-current` donne
-   `dto_equal=false` sur un chargement neuf, `v5.6-current-saved` donne `true`.
-   *Proposition* : une **empreinte de référence** prise au chargement et à l'enregistrement —
-   « non enregistré » devient *DTO courant ≠ référence*. La migration ne compte alors pas comme
-   une édition, une édition annulée redevient « enregistré » (ce que le drapeau actuel ne sait pas
-   faire), et rien n'est relu dans le magasin.
 2. **Captures de référence en CI** : `egui_kittest` sait rendre avec wgpu, mais il faut un
    rastériseur logiciel (**lavapipe**) dans l'image du workflow. C'est le seul point qui touche la
    CI, donc il n'a pas été tenté.
-3. **Spike des mires** (`with_monitor`) : repoussé. `lbm-pattern` est lancé comme aide par le
-   plugin **VCP en C#**, donc il ne peut pas disparaître avant le portage de VCP — item 8 de
-   l'ordre des écrans. Le spike demanderait `eframe` (winit + glow) pour une réponse sans
-   consommateur avant longtemps.
 4. **La barre des modes** : en C# les modes sont un mécanisme de **plugins** (chaque plugin
    contribue sa `ViewMode`). Les remplacer par une énumération fermée, comme le plan le demande,
    revient à décider quels plugins survivent au portage — décision produit, pas portage mécanique.

@@ -769,6 +769,68 @@ impl App {
         self.send(method, extra);
     }
 
+    /// The command lines an apply ran, or would run.
+    ///
+    /// A window of its own rather than a line in the bar: this is a list to read, it can
+    /// be a dozen lines long, and the thing it is about — the user's screens moving — is
+    /// the one action here that cannot be undone.
+    fn topology_report(&mut self, ctx: &egui::Context) {
+        let Some(ran) = self.agent.topology.clone() else {
+            return;
+        };
+        let title = if ran.dry {
+            "What applying would run"
+        } else {
+            "What applying ran"
+        };
+        let mut open = true;
+        egui::Window::new(title)
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .show(ctx, |ui| {
+                if ran.commands.is_empty() {
+                    ui.label("Nothing: the screens are already where this layout puts them.");
+                    return;
+                }
+                if ran.dry {
+                    ui.label(
+                        egui::RichText::new(
+                            "Nothing has been run and nothing has been saved. The positions \
+                             below are a prediction: the real pass re-reads the compositor \
+                             after the scales are applied, and re-asserts whatever drifts — \
+                             neither can be known without changing something.",
+                        )
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                    );
+                    ui.separator();
+                }
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (n, line) in ran.commands.iter().enumerate() {
+                        ui.label(egui::RichText::new(format!("{}. {line}", n + 1)).monospace());
+                    }
+                });
+            });
+        if !open {
+            self.agent.topology = None;
+        }
+    }
+
+    /// Asks what an apply *would* run, and changes nothing.
+    ///
+    /// Worth its own entry rather than a flag, because this is the one action in the
+    /// window that cannot be undone: a user is entitled to read the commands before the
+    /// screens move, and the first person ever to press Apply for real deserves it most.
+    fn dry_run_topology(&mut self) {
+        let Some(layout) = self.layout.as_ref() else {
+            return;
+        };
+        self.agent.topology = None;
+        let (method, extra) = lbm_app::settings::dry_run_topology(layout, self.adjust_scale);
+        self.send(method, extra);
+    }
+
     /// Stops previewing: the agent goes back to the layout it had.
     fn end_preview(&mut self) {
         self.previewed = None;
@@ -1227,6 +1289,7 @@ impl eframe::App for App {
         let mut save_options = false;
         let mut excluded_did = None;
         let mut apply = false;
+        let mut dry_run = false;
         let mut adjust_scale = self.adjust_scale;
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
@@ -1313,6 +1376,13 @@ impl eframe::App for App {
                             );
                             ui.checkbox(&mut adjust_scale, "Also adjust the scales");
                             ui.separator();
+                            // Offered **above** Apply, and on purpose: this is the one
+                            // action in the window that cannot be undone, and reading
+                            // the commands costs a click and changes nothing.
+                            if ui.button("Show what it would run").clicked() {
+                                dry_run = true;
+                                ui.close();
+                            }
                             if ui.button("Apply").clicked() {
                                 apply = true;
                                 ui.close();
@@ -1340,6 +1410,9 @@ impl eframe::App for App {
             })
             .inner;
         self.adjust_scale = adjust_scale;
+        if dry_run {
+            self.dry_run_topology();
+        }
         if apply {
             self.apply_topology();
         }
@@ -1349,6 +1422,7 @@ impl eframe::App for App {
         if save_options {
             self.save_options();
         }
+        self.topology_report(&ctx);
         self.acted_on_the_map(acted.0, acted.1, &ctx);
         // Last, so a drag or a setting changed on this frame is in the document this
         // tick sends rather than waiting for the next one.

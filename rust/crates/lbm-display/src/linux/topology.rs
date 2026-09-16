@@ -425,7 +425,31 @@ pub fn change(backend: super::Backend, change_: Change, connector: &str) -> Resu
     Ok(())
 }
 
-/// What one apply did, for a caller that wants to say so.
+/// Whether an apply really moves the screens.
+///
+/// A dry run exists because this is the one place in the product where a mistake is not
+/// a wrong pixel but a desk you cannot use — and because nothing had ever run it. It is
+/// **the same function** either way, with the command runner swapped: a preview written
+/// as its own function would drift from what apply does, quietly, and the first time
+/// anyone noticed would be the time they trusted it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum How {
+    /// Move the screens.
+    ForReal,
+    /// Run nothing. Record what would have been run.
+    ///
+    /// **The recorded list is not the whole story, and a caller must say so.** This
+    /// procedure reads the compositor back between its passes: the positions are computed
+    /// from the sizes it reports *after* the scales are applied (its rounding of
+    /// native/scale is authoritative and differs by a pixel often enough to matter), and
+    /// the re-assertion pass exists precisely because what it does with a position cannot
+    /// be predicted. A dry run changes nothing, so it has nothing newer to read: its
+    /// positions are the **prediction**, and the re-assertion is absent from the list
+    /// because there is nothing yet to re-assert.
+    DryRun,
+}
+
+/// What one apply did — or, for a dry run, what it would have done.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Applied {
     /// Nothing needed doing — and the caller must **not** restore the engine's gaps
@@ -435,22 +459,25 @@ pub struct Applied {
     pub stubborn: Vec<String>,
     /// Pairs of enabled outputs still overlapping afterwards, described.
     pub overlapping: Vec<String>,
+    /// Every command line, in order — run, or would have been. The caller's own, from
+    /// `before_apply`, come first, because they really do go first.
+    pub commands: Vec<String>,
 }
 
 /// How long a `kscreen-doctor` that applies is given. Longer than the read path's
 /// patience: this one waits on the compositor reconfiguring outputs, not on a query.
 const APPLYING: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// Runs `kscreen-doctor`, which **exits 0 even when the compositor rejects the config**:
-/// the only failure signal is the word "failed" on its output.
-fn kscreen(arguments: &[String]) -> Result<(), String> {
+/// Runs a tool that applies. `kscreen-doctor` **exits 0 even when the compositor rejects
+/// the config**: the only failure signal is the word "failed" on its output.
+fn run_for_real(program: &str, arguments: &[String]) -> Result<(), String> {
     let args: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    let Some(output) = super::probe::run_with_stderr("kscreen-doctor", &args, APPLYING) else {
-        return Err(format!("kscreen-doctor {} did not answer", args.join(" ")));
+    let Some(output) = super::probe::run_with_stderr(program, &args, APPLYING) else {
+        return Err(format!("{program} {} did not answer", args.join(" ")));
     };
     if output.to_lowercase().contains("failed") {
         return Err(format!(
-            "kscreen-doctor {} failed: {}",
+            "{program} {} failed: {}",
             args.join(" "),
             output.trim()
         ));
@@ -474,8 +501,48 @@ fn kscreen(arguments: &[String]) -> Result<(), String> {
 pub fn apply(
     backend: super::Backend,
     wanted: &[Wanted],
-    before_apply: impl FnOnce(&[LinuxMonitor]),
+    how: How,
+    before_apply: impl FnOnce(&[LinuxMonitor]) -> Vec<String>,
 ) -> Result<Applied, String> {
+    with(
+        backend,
+        wanted,
+        how,
+        || backend.query().map_err(|e| e.to_string()),
+        run_for_real,
+        before_apply,
+    )
+}
+
+/// The procedure itself, reading the outputs through `read` and running through `run`.
+///
+/// **The two seams are what make any of this testable.** Until they existed, every line
+/// below could only be exercised by moving somebody's real screens, so none of it ever
+/// was: the order of the passes, the re-read that makes the compositor's rounding
+/// authoritative, and the re-assertion loop that exists because a compositor argues back
+/// — all of it was reasoned about and never run. A fake pair of them can now play a
+/// compositor that rounds a size, or one that keeps putting an output back, and the test
+/// says what the procedure does about it.
+fn with(
+    backend: super::Backend,
+    wanted: &[Wanted],
+    how: How,
+    mut read: impl FnMut() -> Result<Vec<LinuxMonitor>, String>,
+    run_it: impl Fn(&str, &[String]) -> Result<(), String>,
+    before_apply: impl FnOnce(&[LinuxMonitor]) -> Vec<String>,
+) -> Result<Applied, String> {
+    let dry = how == How::DryRun;
+    let mut said: Vec<String> = Vec::new();
+    // The one place a dry run differs from a real one: what the runner does with the
+    // line. Everything above it — which outputs moved, in what order, with what
+    // arguments — is the same code reaching the same conclusions.
+    let run = |program: &str, arguments: &[String], said: &mut Vec<String>| {
+        said.push(format!("{program} {}", arguments.join(" ")));
+        if dry {
+            return Ok(());
+        }
+        run_it(program, arguments)
+    };
     let anchored = anchored(wanted);
     if anchored.is_empty() {
         return Ok(Applied {
@@ -483,7 +550,7 @@ pub fn apply(
             ..Default::default()
         });
     }
-    let now = backend.query().map_err(|e| e.to_string())?;
+    let now = read()?;
     let moved = changed(&anchored, &now);
     if moved.is_empty() {
         return Ok(Applied {
@@ -492,15 +559,17 @@ pub fn apply(
         });
     }
 
-    before_apply(&now);
+    // The engine's gaps are closed first, and they are real writes: a dry run that
+    // listed only this function's own commands would understate what pressing Apply
+    // does.
+    said.extend(before_apply(&now));
 
     if backend != super::Backend::KScreen {
-        let args = xrandr_arguments(&moved);
-        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
-        return match super::probe::run_with_stderr("xrandr", &borrowed, APPLYING) {
-            Some(_) => Ok(Applied::default()),
-            None => Err("xrandr did not answer".to_owned()),
-        };
+        run("xrandr", &xrandr_arguments(&moved), &mut said)?;
+        return Ok(Applied {
+            commands: said,
+            ..Default::default()
+        });
     }
 
     let mut placed = predict(&moved, &now);
@@ -510,15 +579,34 @@ pub fn apply(
     // be the last word.
     let scales = scale_arguments(&moved);
     if !scales.is_empty() {
-        kscreen(&scales)?;
+        run("kscreen-doctor", &scales, &mut said)?;
         // Its rounding of native/scale is authoritative and can differ by a pixel from
-        // the prediction — enough to turn an intended contact into an overlap.
-        let actual = backend.query().map_err(|e| e.to_string())?;
-        placed = with_actual_sizes(&placed, &actual);
+        // the prediction — enough to turn an intended contact into an overlap. A dry run
+        // has nothing newer to read, which is exactly why its positions are a prediction
+        // and are declared as one.
+        if !dry {
+            let actual = read()?;
+            placed = with_actual_sizes(&placed, &actual);
+        }
     }
 
     let snapped = snap_to_actual(&placed);
-    kscreen(&position_arguments(&placed, &snapped))?;
+    run(
+        "kscreen-doctor",
+        &position_arguments(&placed, &snapped),
+        &mut said,
+    )?;
+
+    // Nothing moved, so there is nothing to catch drifting and nothing to audit. The
+    // empty `stubborn` and `overlapping` below would read like a clean bill of health,
+    // which is why a dry run stops here instead of producing them.
+    if dry {
+        return Ok(Applied {
+            unchanged: false,
+            commands: said,
+            ..Default::default()
+        });
+    }
 
     // Trust but verify: re-assert once whatever the compositor moved while settling.
     let expected: BTreeMap<String, (f64, f64)> = placed
@@ -530,7 +618,7 @@ pub fn apply(
         .collect();
     let mut stubborn = Vec::new();
     for attempt in 0..2 {
-        let live = backend.query().map_err(|e| e.to_string())?;
+        let live = read()?;
         let drift = drifted(&expected, &live);
         if drift.is_empty() {
             break;
@@ -547,10 +635,10 @@ pub fn apply(
             .iter()
             .map(|(name, (x, y))| format!("output.{name}.position.{x},{y}"))
             .collect();
-        kscreen(&again)?;
+        run("kscreen-doctor", &again, &mut said)?;
     }
 
-    let live = backend.query().map_err(|e| e.to_string())?;
+    let live = read()?;
     let overlapping = overlaps(&live);
     for pair in &overlapping {
         eprintln!("[lbm-display] outputs overlap after apply: {pair}");
@@ -559,6 +647,7 @@ pub fn apply(
         unchanged: false,
         stubborn,
         overlapping,
+        commands: said,
     })
 }
 
@@ -947,5 +1036,188 @@ mod tests {
 
         // And an output nobody is looking at is not the one being asked about.
         assert!(!is_the_only_screen(&alone, "HDMI-9"));
+    }
+    //======================================================================//
+    // The procedure itself, which nothing could exercise before            //
+    //======================================================================//
+
+    /// A compositor that answers a scripted sequence of queries and records what it was
+    /// told to do. The last answer is repeated, so a test only has to script the reads
+    /// that differ.
+    struct Fake {
+        answers: std::cell::RefCell<std::vec::IntoIter<Vec<LinuxMonitor>>>,
+        last: std::cell::RefCell<Vec<LinuxMonitor>>,
+        ran: std::cell::RefCell<Vec<String>>,
+    }
+
+    impl Fake {
+        fn new(answers: Vec<Vec<LinuxMonitor>>) -> Fake {
+            Fake {
+                last: std::cell::RefCell::new(answers.last().cloned().unwrap_or_default()),
+                answers: std::cell::RefCell::new(answers.into_iter()),
+                ran: std::cell::RefCell::new(Vec::new()),
+            }
+        }
+
+        fn read(&self) -> Result<Vec<LinuxMonitor>, String> {
+            match self.answers.borrow_mut().next() {
+                Some(next) => {
+                    *self.last.borrow_mut() = next.clone();
+                    Ok(next)
+                }
+                None => Ok(self.last.borrow().clone()),
+            }
+        }
+
+        fn run(&self, program: &str, arguments: &[String]) -> Result<(), String> {
+            self.ran
+                .borrow_mut()
+                .push(format!("{program} {}", arguments.join(" ")));
+            Ok(())
+        }
+    }
+
+    /// Two screens side by side, the right one to be moved 100 px right.
+    fn two_and_a_move() -> (Vec<LinuxMonitor>, Vec<Wanted>) {
+        let now = vec![
+            monitor("DP-1", 0.0, 0.0, 1920.0, 1080.0),
+            monitor("DP-2", 1920.0, 0.0, 1920.0, 1080.0),
+        ];
+        let wanted = vec![want("DP-1", 0.0, 0.0), want("DP-2", 2020.0, 0.0)];
+        (now, wanted)
+    }
+
+    /// **A dry run runs nothing.** The whole reason it exists: the one procedure in the
+    /// product that cannot be undone should be readable before it is trusted.
+    #[test]
+    fn a_dry_run_runs_nothing_and_says_what_it_would_have_run() {
+        let (now, wanted) = two_and_a_move();
+        let fake = Fake::new(vec![now]);
+
+        let applied = with(
+            super::super::Backend::KScreen,
+            &wanted,
+            How::DryRun,
+            || fake.read(),
+            |p, a| fake.run(p, a),
+            |_| vec!["kscreen-doctor output.DP-2.position.1920,0".to_owned()],
+        )
+        .expect("a dry run");
+
+        assert!(
+            fake.ran.borrow().is_empty(),
+            "a dry run executed something: {:?}",
+            fake.ran.borrow()
+        );
+        assert_eq!(
+            applied.commands,
+            [
+                // The caller's own first, because they really do go first.
+                "kscreen-doctor output.DP-2.position.1920,0",
+                "kscreen-doctor output.DP-2.position.2020,0",
+            ]
+        );
+    }
+
+    /// And a real run runs exactly the list a dry run promised. This is the property the
+    /// dry run is worth anything for, and sharing the code is what gives it: the two
+    /// differ in one closure and nowhere else.
+    #[test]
+    fn a_real_run_runs_what_the_dry_run_said_it_would() {
+        let (now, wanted) = two_and_a_move();
+        let settled = vec![
+            monitor("DP-1", 0.0, 0.0, 1920.0, 1080.0),
+            monitor("DP-2", 2020.0, 0.0, 1920.0, 1080.0),
+        ];
+
+        let dry = Fake::new(vec![now.clone()]);
+        let promised = with(
+            super::super::Backend::KScreen,
+            &wanted,
+            How::DryRun,
+            || dry.read(),
+            |p, a| dry.run(p, a),
+            |_| Vec::new(),
+        )
+        .expect("a dry run")
+        .commands;
+
+        // The real one: the first read is the same, then the compositor has settled.
+        let real = Fake::new(vec![now, settled]);
+        let done = with(
+            super::super::Backend::KScreen,
+            &wanted,
+            How::ForReal,
+            || real.read(),
+            |p, a| real.run(p, a),
+            |_| Vec::new(),
+        )
+        .expect("a real run");
+
+        assert_eq!(*real.ran.borrow(), promised, "the dry run told the truth");
+        assert_eq!(done.commands, promised);
+        assert!(done.stubborn.is_empty());
+        assert!(done.overlapping.is_empty());
+    }
+
+    /// The re-assertion pass, which exists because a compositor argues back. Never run by
+    /// anyone until this test: a compositor that keeps putting an output where it wants
+    /// is told twice, then reported rather than fought with for ever.
+    #[test]
+    fn a_compositor_that_keeps_moving_an_output_is_told_twice_then_reported() {
+        let (now, wanted) = two_and_a_move();
+        // It never accepts: every read shows DP-2 back where it started.
+        let stubborn = Fake::new(vec![now]);
+
+        let done = with(
+            super::super::Backend::KScreen,
+            &wanted,
+            How::ForReal,
+            || stubborn.read(),
+            |p, a| stubborn.run(p, a),
+            |_| Vec::new(),
+        )
+        .expect("a real run");
+
+        assert_eq!(
+            done.stubborn,
+            ["DP-2"],
+            "the output the compositor kept overriding is named"
+        );
+        let ran = stubborn.ran.borrow();
+        assert_eq!(
+            ran.len(),
+            2,
+            "positions once, re-asserted once, then given up on: {ran:?}"
+        );
+        assert!(ran[1].contains("output.DP-2.position.2020,0"));
+    }
+
+    /// Nothing to do means nothing is run — **and the caller's gap-closing is not run
+    /// either**, which is a rule about the engine and not an optimisation: an engine
+    /// running with its gaps keeps them.
+    #[test]
+    fn an_apply_that_changes_nothing_does_not_even_close_the_gaps() {
+        let now = vec![monitor("DP-1", 0.0, 0.0, 1920.0, 1080.0)];
+        let wanted = vec![want("DP-1", 0.0, 0.0)];
+        let fake = Fake::new(vec![now]);
+        let mut gaps_closed = false;
+
+        let applied = with(
+            super::super::Backend::KScreen,
+            &wanted,
+            How::ForReal,
+            || fake.read(),
+            |p, a| fake.run(p, a),
+            |_| {
+                gaps_closed = true;
+                Vec::new()
+            },
+        )
+        .expect("nothing to do");
+
+        assert!(applied.unchanged);
+        assert!(!gaps_closed, "the engine's gaps were closed for nothing");
+        assert!(fake.ran.borrow().is_empty());
     }
 }

@@ -105,6 +105,8 @@ struct App {
     /// what the agent connection will need and it is better exercised now than invented
     /// later.
     arriving: Option<std::sync::mpsc::Receiver<Found>>,
+    /// Everything the agent has said, and the requests still out.
+    agent: lbm_app::conversation::Conversation,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
     /// **In memory only.** Nothing here writes a file: the detection ran with a loader
@@ -116,17 +118,6 @@ struct App {
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
     drag: Option<Drag>,
-    /// What each request in flight was, by the id its answer will carry.
-    ///
-    /// Without this an answer is an anonymous `Ok(null)` and the window can only guess
-    /// what it settles — which is why, until now, a `SaveLayout` that the agent refused
-    /// was completely invisible.
-    asked: HashMap<u64, &'static str>,
-    /// The last thing the agent refused, and what was refused. Shown, because a request
-    /// that fails silently is worse than one that fails.
-    refused: Option<String>,
-    /// The processes seen in the foreground this session, as the agent lists them.
-    seen: Vec<String>,
     /// The processes the engine stands aside for, once they have been read.
     ///
     /// `None` is **not** an empty list: it is "not read", and it is what keeps the window
@@ -140,12 +131,6 @@ struct App {
     adjust_scale: bool,
     /// Whether the rescue recorder is waiting for a combination.
     recording: lbm_ui::shortcut::Recording,
-    /// The shortcut the hook said it could not arm, if it said so.
-    ///
-    /// Only the hook knows: it is the one that registers. A well-formed shortcut that
-    /// nothing armed is exactly the case a user would otherwise discover at the moment
-    /// they need the rescue.
-    shortcut_unavailable: Option<String>,
     /// The document the agent was last given, as it went on the wire, and when.
     ///
     /// `None` means "unknown", which makes the next tick send whatever the layout is —
@@ -631,14 +616,11 @@ impl App {
             screens: Vec::new(),
             selected: None,
             drag: None,
-            asked,
-            refused: None,
-            seen: Vec::new(),
+            agent: lbm_app::conversation::Conversation::after(asked),
             excluded: None,
             pattern: String::new(),
             adjust_scale: false,
             recording: lbm_ui::shortcut::Recording::default(),
-            shortcut_unavailable: None,
             previewed: None,
             view: View::Map,
             icons,
@@ -749,7 +731,7 @@ impl App {
         self.next_id += 1;
         // Recorded **before** the request leaves, on this thread: an answer that arrives
         // the instant after cannot find the pairing missing.
-        self.asked.insert(id, method);
+        self.agent.asking(id, method);
         if let Some(requests) = &self.requests {
             if requests.send((id, method, extra)).is_err() {
                 self.requests = None;
@@ -824,7 +806,7 @@ impl App {
         // A new shortcut makes the hook's old verdict meaningless: it was about the one
         // before. Cleared here rather than in the panel, because this is the moment the
         // change actually leaves — the hook will say again if the new one is no better.
-        self.shortcut_unavailable = None;
+        self.agent.shortcut_changed();
         let (method, extra) =
             lbm_app::settings::save_options(&layout.options, self.excluded.as_deref());
         self.send(method, extra);
@@ -837,94 +819,20 @@ impl App {
     /// this window edits its own copy, and what Save and Undo are for is the difference
     /// between that copy and the store. So the flag comes from the layout here, in
     /// [`App::ui`], and the agent's is ignored rather than fought with.
+    /// What the agent said, and what the window must do about it.
+    ///
+    /// The deciding is [`lbm_app::conversation`]'s, which has no window and no socket and
+    /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
-        match message {
-            Message::Answer { id, result } => {
-                let method = self.asked.remove(&id).unwrap_or("something");
-                match result {
-                    Ok(value) => {
-                        self.refused = None;
-                        self.answered(method, &value);
-                    }
-                    // The agent says why in words meant for a person ("no layout yet",
-                    // "this agent keeps no options"); passing them through beats
-                    // inventing a summary of them.
-                    Err(why) => self.refused = Some(format!("{method} refused: {why}")),
-                }
-                // Whatever it said, a request came back: the bar stops waiting.
-                lbm_ui::update(&mut self.state, lbm_ui::Action::Answered);
-            }
-            Message::State(state) => self.agent_is(&state),
-            // The hook's own report on the rescue. Only it knows whether the
-            // registration took, so this is repeated rather than reasoned about — and
-            // cleared when the shortcut changes, because the verdict was about the old
-            // one.
-            Message::Hook { name, payload } => {
-                if name == "ShortcutUnavailable" {
-                    self.shortcut_unavailable = Some(payload);
-                }
-            }
-            Message::Unknown(_) => {}
-        }
-    }
-
-    /// What the agent says it is, from a snapshot — however it arrived.
-    ///
-    /// **`Subscribe` answers *with* the snapshot**, it does not send a `State` event for
-    /// it: the events that follow are the *changes*. A window that only listened for
-    /// events therefore learnt nothing until something moved, and sat showing "No engine"
-    /// in front of a perfectly connected hook — which is what it did until this was run
-    /// against a real agent.
-    ///
-    /// The same trap the agent client hit in #699, one layer up: a state already reached
-    /// is never announced.
-    fn agent_is(&mut self, state: &serde_json::Value) {
-        let engine = state
-            .get("Engine")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("Dead");
-        // Through `update`, not written straight onto the state: the rule that ends a
-        // live preview when the engine goes down lives there, and it needs the transition.
-        let said = lbm_ui::Action::AgentSaid {
-            engine: lbm_ui::Engine::from_agent(engine),
-            connected: state
-                .get("HookConnected")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false),
-        };
-        for effect in lbm_ui::update(&mut self.state, said) {
+        for effect in self.agent.said(message, &mut self.state) {
             match effect {
                 lbm_ui::Effect::Ask(press) => self.ask(press),
                 lbm_ui::Effect::EndPreview => self.end_preview(),
             }
         }
-        self.state.waiting = false;
-        self.without_agent = None;
-    }
-
-    /// What an answer carried, for the requests whose answer says something.
-    ///
-    /// Most say `null`: the agent did it, and the `State` event that follows is the real
-    /// news. `SeenProcesses` is the one that answers with a value.
-    fn answered(&mut self, method: &str, value: &serde_json::Value) {
-        // `Subscribe` and `Snapshot` answer with the agent's whole state; everything
-        // after that arrives as an event. Reading it here is what tells the window what
-        // it has connected to.
-        if method == "Subscribe" || method == "Snapshot" {
-            self.agent_is(value);
-            return;
+        if self.agent.heard {
+            self.without_agent = None;
         }
-        if method != "SeenProcesses" {
-            return;
-        }
-        self.seen = value
-            .as_array()
-            .map(|list| {
-                list.iter()
-                    .filter_map(|v| v.as_str().map(str::to_owned))
-                    .collect()
-            })
-            .unwrap_or_default();
     }
 
     /// The logo for one screen, uploaded once and kept.
@@ -1171,7 +1079,7 @@ impl eframe::App for App {
                 ui.separator();
                 // Said plainly. A window that looked the same with and without an agent
                 // would leave the user guessing why the buttons do nothing.
-                match (&self.without_agent, &self.refused) {
+                match (&self.without_agent, &self.agent.refused) {
                     (Some((why, where_)), _) => ui
                         .label(format!("no agent — {why}"))
                         .on_hover_text(where_.clone()),
@@ -1209,7 +1117,7 @@ impl eframe::App for App {
             .show(ui, |ui| {
                 if self.view == View::Settings {
                     let mut recording = self.recording;
-                    let unavailable = self.shortcut_unavailable.clone();
+                    let unavailable = self.agent.shortcut_unavailable.clone();
                     match self.layout.as_mut() {
                         // `edit_options` is what marks the layout unsaved and what
                         // republishes the extent when the border values move; a panel
@@ -1234,7 +1142,7 @@ impl eframe::App for App {
                                 ui,
                                 self.excluded.as_deref(),
                                 &mut self.pattern,
-                                &self.seen,
+                                &self.agent.seen,
                             );
                         }
                         None => {

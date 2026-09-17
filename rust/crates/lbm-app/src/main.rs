@@ -5,26 +5,15 @@
 //! machine. That is worth keeping, so `lbm-ui` stays window-free and everything that
 //! needs winit and a GL context lives here.
 //!
-//! **This window never starts anything and writes no file.** It does not start an agent,
-//! it does not start a hook. Finding the displays is `kscreen-doctor --json` or xrandr and
-//! the EDID under sysfs, all of them read-only.
+//! The window starts a sibling agent when the normal session endpoint is absent,
+//! then reconnects in the background. An explicit LBM_AGENT_ENDPOINT is connect-only.
+//! All writes and mouse-engine ownership stay with the resident agent.
 //!
-//! It **does** read the store now — `options.json` and the layout profile — which it did
-//! not when it could only draw. Reading is not what was dangerous; starting a process and
-//! writing over the user's configuration were, and neither happens here. What the map
-//! shows is therefore the arrangement the engine runs rather than the one the system
-//! reports, which is what an edit has to start from. Everything that writes goes through
-//! the agent, which stays the only writer: `SaveOptions` for the app-wide settings,
-//! `SaveLayout` for the layout.
-//!
-//! Deliberately **not** read: the excluded list. `ExcludedListPersistence::load` writes
-//! `Excluded.txt` when it is missing, and this window creates nothing — which is why
-//! `settings::save_layout` has to strip the list back out of the document it sends.
-//!
-//! It links `lbm-display` and `lbm-layout` directly rather than `lbm-agent`, mirroring
-//! `lbm-agent/src/discovery.rs`. The architecture has the frontend talk to the agent over
-//! a socket; a frontend that linked the agent would be a frontend that could start a
-//! hook, and this one cannot.
+//! The map reads options and the saved profile, so editing begins with the physical
+//! arrangement the user saved. SaveLayout and SaveOptions go through the agent, the
+//! only writer. Exclusions use the read-only reader, never the loader that seeds a
+//! missing Excluded.txt. Display enumeration uses lbm-display and lbm-layout directly;
+//! the frontend does not link or supervise the hook.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -51,23 +40,22 @@ struct Screen {
     details: Vec<(&'static str, String)>,
 }
 
-/// What the worker sends back. Two kinds, so the screens can be drawn as soon as they
-/// are known instead of waiting on a wallpaper that may take a second to decode.
+/// Background results. Screens arrive before the wallpaper decoding completes.
 enum Found {
-    /// The layout as detected, and the screens read off it. Both, because the window now
-    /// keeps the layout: dragging a screen writes a millimetre position into it, and
-    /// [`screens_of`] reads the answer back out.
+    /// The detected layout; the window derives its frames in the current view mode.
     Displays {
+        generation: u64,
         layout: Box<Layout>,
-        screens: Vec<Screen>,
-        /// `None` when `Excluded.txt` does not exist yet — see [`read_excluded`].
+        /// `None` when `Excluded.txt` does not exist yet.
         excluded: Option<Vec<String>>,
     },
     /// Something the agent said.
-    Agent(Message),
-    /// The agent went away, or was never there.
-    AgentGone,
+    Session(lbm_app::session::Event),
+    DetectionFailed {
+        generation: u64,
+    },
     Thumbnail {
+        generation: u64,
         screen: String,
         picture: image::RgbaImage,
     },
@@ -108,6 +96,12 @@ struct App {
     /// what the agent connection will need and it is better exercised now than invented
     /// later.
     arriving: Option<std::sync::mpsc::Receiver<Found>>,
+    found: std::sync::mpsc::Sender<Found>,
+    _session: Option<lbm_app::session::Session>,
+    refresh: lbm_app::refresh::Refresh,
+    detecting: Option<u64>,
+    retry_display_at: std::time::Instant,
+    display_error: Option<String>,
     /// Everything the agent has said, and the requests still out.
     agent: lbm_app::conversation::Conversation,
     /// The layout the screens were read off, kept so that the window can edit it.
@@ -160,7 +154,7 @@ struct App {
     /// What the bottom bar shows, from what the agent says.
     state: lbm_ui::State,
     /// What to ask the agent, when there is one to ask.
-    requests: Option<Asks>,
+    requests: Option<lbm_app::session::Requests>,
     /// The id the next request will carry. The window's own counter — see [`Asks`].
     next_id: u64,
     /// Why there is nothing to ask, when there is not: a short reason for the bar and
@@ -529,110 +523,12 @@ fn colour_of(text: &str) -> [u8; 4] {
     [byte(0), byte(2), byte(4), 255]
 }
 
-/// What the window asks the agent: the id its answer will carry, a method, and whatever
-/// the API wants beside it.
-///
-/// **The window picks the id, not the writer thread.** It is the only way the pairing
-/// between a request and its answer cannot lose a race: the window records `id -> method`
-/// and *then* hands the request over, both on the UI thread, so there is no window in
-/// which an answer exists and its meaning does not. Letting the writer assign the id and
-/// announce it back would put that announcement on one thread and the answer on another,
-/// and the ordering would hold only by luck.
-type Asks = std::sync::mpsc::Sender<(u64, &'static str, serde_json::Value)>;
-
-/// A joined agent: where to send requests, and the first id the window may use.
-struct Joined {
-    asks: Asks,
-    next_id: u64,
-    /// The handshake's own requests, by the id their answers will carry.
-    asked: Vec<(u64, &'static str)>,
-}
-
-/// Why there is no agent: a short reason for the bar, and the endpoint it looked at.
-type NoAgent = (String, String);
-
-/// Connects to a running agent and keeps talking to it, or says why it cannot.
-///
-/// **Nothing is started.** No agent means a window that draws what it can and a bottom
-/// bar that stays grey — never a process brought up behind the user's back, because the
-/// process behind the agent is the hook and the hook takes the mice.
-///
-/// Two threads: one reads and pushes what the agent says at the window, one writes what
-/// the window asks. Neither is the UI thread.
-fn join_agent(
-    ctx: &egui::Context,
-    found: std::sync::mpsc::Sender<Found>,
-) -> (Option<Joined>, Option<NoAgent>) {
-    let Some(endpoint) = client::default_endpoint() else {
-        return (
-            None,
-            Some((
-                "this session has no endpoint".to_owned(),
-                "neither XDG_RUNTIME_DIR nor a data directory".to_owned(),
-            )),
-        );
-    };
-    let where_ = endpoint.display().to_string();
-    let (mut incoming, mut outgoing) = match client::connect(&endpoint) {
-        Ok(both) => both,
-        Err(error) => return (None, Some((error.to_string(), where_))),
-    };
-
-    // Who is there, and then everything it has to say. Asked once, before the reader
-    // takes the connection over — so their ids are handed back with the rest: the
-    // answer to `Subscribe` **is** the agent's state, and a window that did not know
-    // which request it answered would throw it away.
-    let handshake = match outgoing
-        .ask("Hello", serde_json::json!({ "Client": "lbm-app" }))
-        .and_then(|hello| {
-            outgoing
-                .ask("Subscribe", serde_json::json!({}))
-                .map(|subscribe| vec![(hello, "Hello"), (subscribe, "Subscribe")])
-        }) {
-        Ok(asked) => asked,
-        Err(error) => return (None, Some((error.to_string(), where_))),
-    };
-
-    let waker = ctx.clone();
-    let reading = found.clone();
-    std::thread::spawn(move || loop {
-        match incoming.receive() {
-            Ok(message) => {
-                if reading.send(Found::Agent(message)).is_err() {
-                    return;
-                }
-            }
-            Err(_) => {
-                let _ = reading.send(Found::AgentGone);
-                waker.request_repaint();
-                return;
-            }
-        }
-        waker.request_repaint();
-    });
-
-    // The ids the window may use, after the two spent above.
-    let next_id = outgoing.reserve();
-    let (asks, to_write) = std::sync::mpsc::channel::<(u64, &'static str, serde_json::Value)>();
-    std::thread::spawn(move || {
-        while let Ok((id, method, extra)) = to_write.recv() {
-            if outgoing.ask_as(id, method, extra).is_err() {
-                return;
-            }
-        }
-    });
-    (
-        Some(Joined {
-            asks,
-            next_id,
-            asked: handshake,
-        }),
-        None,
-    )
-}
-
 impl App {
     fn new(ctx: egui::Context) -> Self {
+        Self::with_config(ctx, lbm_app::session::Config::for_session())
+    }
+
+    fn with_config(ctx: egui::Context, config: Option<lbm_app::session::Config>) -> Self {
         let icons = icons_root()
             .map(|root| lbm_icons::catalogue(&root).0)
             .unwrap_or_default();
@@ -640,61 +536,44 @@ impl App {
             eprintln!("[lbm-app] no icons found: logos will not be drawn (set LBM_ICONS)");
         }
         let (send, arriving) = std::sync::mpsc::channel();
-        let detected = send.clone();
         let waker = ctx.clone();
-        std::thread::spawn(move || {
-            let Some(layout) = detect() else {
-                return;
-            };
-            let screens = screens_of(&layout, lbm_ui::mode::Mode::default());
-            // The wallpaper is worked out from what the screens turn out to be, so the
-            // settings are read here and not before.
-            let wanted = wallpapers(&layout.id, &screens);
-            // The receiver is gone only if the window closed first, which is not a
-            // failure worth reporting.
-            let _ = detected.send(Found::Displays {
-                layout,
-                screens,
-                excluded: lbm_app::settings::read_excluded(
-                    lbm_store::layout_persistence::default_excluded_list_file(),
-                ),
-            });
-            // **The thread wakes the window.** Nothing polls, and nothing needs to:
-            // measured, including the adversarial case where the answer is held back
-            // three seconds so that it lands while the window is idle — eframe schedules
-            // the pass and the answer is picked up on it.
-            waker.request_repaint();
-
-            // Then the pictures, one at a time and each announced as it is ready:
-            // decoding a 4K wallpaper is not quick, and the map is worth looking at
-            // before they arrive.
-            for (screen, picture) in wanted {
-                if detected.send(Found::Thumbnail { screen, picture }).is_err() {
-                    return;
-                }
-                waker.request_repaint();
+        let events = send.clone();
+        let without_agent = Some((
+            if config.is_some() {
+                "connecting to agent"
+            } else {
+                "this session has no agent endpoint"
             }
+            .into(),
+            config
+                .as_ref()
+                .map(|c| c.endpoint.display().to_string())
+                .unwrap_or_default(),
+        ));
+        let session = config.map(|config| {
+            lbm_app::session::spawn(config, move |event| {
+                let sent = events.send(Found::Session(event)).is_ok();
+                waker.request_repaint();
+                sent
+            })
         });
-        let (joined, without_agent) = join_agent(&ctx, send);
-        // Without an agent there is nothing to number; the counter starts where the
-        // handshake left off when there is.
-        let (requests, next_id, asked) = match joined {
-            Some(Joined {
-                asks,
-                next_id,
-                asked,
-            }) => (Some(asks), next_id, asked.into_iter().collect()),
-            None => (None, 0, HashMap::new()),
-        };
+        let mut refresh = lbm_app::refresh::Refresh::default();
+        refresh.invalidate();
 
         App {
             arriving: Some(arriving),
+            found: send,
+            _session: session,
+            refresh,
+            detecting: None,
+            retry_display_at: std::time::Instant::now(),
+            display_error: None,
             layout: None,
             saved: None,
             screens: Vec::new(),
             selected: None,
             drag: None,
-            agent: lbm_app::conversation::Conversation::after(asked),
+            agent: lbm_app::conversation::Conversation::default(),
             excluded: None,
             pattern: String::new(),
             adjust_scale: false,
@@ -706,10 +585,101 @@ impl App {
             textures: HashMap::new(),
             wallpapers: HashMap::new(),
             state: lbm_ui::State::default(),
-            requests,
-            next_id,
+            requests: None,
+            next_id: 3,
             without_agent,
         }
+    }
+
+    fn dirty(&self) -> bool {
+        match (&self.layout, &self.saved) {
+            (Some(layout), Some(reference)) => !reference.holds(layout),
+            _ => false,
+        }
+    }
+
+    fn session_event(&mut self, event: lbm_app::session::Event) {
+        use lbm_app::session::Event;
+        match event {
+            Event::Connected { requests, snapshot } => {
+                self.requests = Some(requests);
+                self.next_id = 3;
+                self.state = lbm_ui::State::default();
+                self.previewed = None;
+                self.agent = lbm_app::conversation::Conversation::after([(2, "Subscribe")]);
+                self.refresh.observe(
+                    lbm_app::refresh::Stamp::from_snapshot(&snapshot),
+                    true,
+                    self.dirty(),
+                );
+                self.agent_said(Message::Answer {
+                    id: 2,
+                    result: Ok(snapshot),
+                });
+                self.send("SeenProcesses", serde_json::json!({}));
+            }
+            Event::Message(message) => self.agent_said(message),
+            Event::Disconnected(why) => {
+                self.requests = None;
+                self.state = lbm_ui::State::default();
+                self.previewed = None;
+                // Forget pending acknowledgements, never the user's document.
+                self.agent = lbm_app::conversation::Conversation::default();
+                self.without_agent = Some((
+                    why,
+                    client::default_endpoint()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default(),
+                ));
+            }
+        }
+    }
+
+    fn read_displays(&mut self, ctx: &egui::Context, discard_edits: bool) {
+        if self.detecting.is_some() || std::time::Instant::now() < self.retry_display_at {
+            return;
+        }
+        let Some(generation) = self.refresh.begin(self.dirty() && !discard_edits) else {
+            return;
+        };
+        self.detecting = Some(generation);
+        let found = self.found.clone();
+        let waker = ctx.clone();
+        std::thread::spawn(move || {
+            let Some(layout) = detect() else {
+                let _ = found.send(Found::DetectionFailed { generation });
+                waker.request_repaint();
+                return;
+            };
+            let id = layout.id.clone();
+            let screens = screens_of(&layout, lbm_ui::mode::Mode::default());
+            if found
+                .send(Found::Displays {
+                    generation,
+                    layout,
+                    excluded: lbm_app::settings::read_excluded(
+                        lbm_store::layout_persistence::default_excluded_list_file(),
+                    ),
+                })
+                .is_err()
+            {
+                return;
+            }
+            waker.request_repaint();
+            for (screen, picture) in wallpapers(&id, &screens) {
+                if found
+                    .send(Found::Thumbnail {
+                        generation,
+                        screen,
+                        picture,
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+                waker.request_repaint();
+            }
+        });
     }
 
     /// Asks the agent for what the user pressed.
@@ -981,6 +951,13 @@ impl App {
                 lbm_ui::Effect::EndPreview => self.end_preview(),
             }
         }
+        if let Some(stamp) = self.agent.layout.clone() {
+            if self.refresh.observe(stamp, false, self.dirty()) {
+                self.state.live = false;
+                self.previewed = None;
+                self.drag = None;
+            }
+        }
         // A save that landed: what it sent is now what is on disk.
         if let Some(earned) = self.agent.earned() {
             self.saved = Some(earned);
@@ -1161,26 +1138,49 @@ impl eframe::App for App {
             for found in landed {
                 match found {
                     Found::Displays {
+                        generation,
                         layout,
-                        screens,
                         excluded,
                     } => {
-                        // The reference is taken here, after the store has been read and
-                        // any migration applied: a profile written by an older version
-                        // opens with nothing to save, which is the truth.
+                        if self.detecting == Some(generation) {
+                            self.detecting = None;
+                        }
+                        if !self.refresh.complete(generation, &layout.id) {
+                            self.retry_display_at =
+                                std::time::Instant::now() + std::time::Duration::from_millis(500);
+                            self.display_error =
+                                Some("Waiting for the displays to match the agent".into());
+                            continue;
+                        }
                         self.saved = Some(lbm_app::saved::Reference::of(&layout));
+                        self.screens = screens_of(&layout, self.mode);
                         self.layout = Some(layout);
-                        self.screens = screens;
                         self.excluded = excluded;
+                        self.wallpapers.clear();
+                        self.drag = None;
+                        self.selected = self
+                            .selected
+                            .take()
+                            .filter(|id| self.screens.iter().any(|s| &s.id == id));
+                        self.display_error = None;
                     }
-                    Found::Agent(message) => self.agent_said(message),
-                    Found::AgentGone => {
-                        self.requests = None;
-                        self.without_agent =
-                            Some(("the agent went away".to_owned(), String::new()));
-                        self.state = lbm_ui::State::default();
+                    Found::Session(event) => self.session_event(event),
+                    Found::DetectionFailed { generation } => {
+                        if self.detecting == Some(generation) {
+                            self.detecting = None;
+                        }
+                        self.retry_display_at =
+                            std::time::Instant::now() + std::time::Duration::from_secs(2);
+                        self.display_error = Some("Display detection failed; retrying".into());
                     }
-                    Found::Thumbnail { screen, picture } => {
+                    Found::Thumbnail {
+                        generation,
+                        screen,
+                        picture,
+                    } => {
+                        if !self.refresh.accepts(generation) || self.refresh.pending() {
+                            continue;
+                        }
                         let size = [picture.width() as usize, picture.height() as usize];
                         let image = egui::ColorImage::from_rgba_unmultiplied(size, &picture);
                         self.wallpapers.insert(
@@ -1194,6 +1194,11 @@ impl eframe::App for App {
                     }
                 }
             }
+        }
+
+        self.read_displays(&ctx, false);
+        if self.refresh.pending() && !self.dirty() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
 
         // One logo per frame, not all of them. Parsing and rasterising an SVG is not
@@ -1257,7 +1262,28 @@ impl eframe::App for App {
             });
         });
 
+        if self.refresh.pending() {
+            egui::Panel::top("display-change").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    if self.dirty() {
+                        ui.label("Displays changed or the agent reconnected. Your unsaved edits are kept until you reload.");
+                        if ui.add_enabled(self.detecting.is_none(), egui::Button::new("Discard edits and reload screens")).clicked() {
+                            self.read_displays(&ctx, true);
+                        }
+                    } else {
+                        ui.label(self.display_error.as_deref().unwrap_or("Refreshing screens…"));
+                    }
+                    if self.requests.is_some() && ui.button("Stop engine").clicked() {
+                        self.send("Stop", serde_json::json!({}));
+                    }
+                });
+            });
+        }
+
         egui::Panel::bottom("controls").show(ui, |ui| {
+            if self.refresh.pending() {
+                ui.disable();
+            }
             // Without an agent every button is disabled on its own — `can` asks for a
             // hook — so nothing here has to hide them.
             // From the layout, every frame: the document it would save against the one it
@@ -1293,6 +1319,9 @@ impl eframe::App for App {
         let mut adjust_scale = self.adjust_scale;
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
+                if self.refresh.pending() {
+                    ui.disable();
+                }
                 if self.view == View::Settings {
                     let mut recording = self.recording;
                     let unavailable = self.agent.shortcut_unavailable.clone();
@@ -1455,4 +1484,64 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| Ok(Box::new(App::new(cc.egui_ctx.clone())))),
     )
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+    use lbm_app::session::Event;
+    use serde_json::json;
+
+    #[test]
+    fn reconnect_keeps_the_edit_but_drops_live_mode_and_unacknowledged_saves() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        layout.id = "A".into();
+        app.saved = Some(lbm_app::saved::Reference::of(&layout));
+        app.layout = Some(Box::new(layout));
+        let snapshot = json!({"LayoutId":"A", "LayoutRevision":1,
+            "DisplaySignature":"1920x1080", "Engine":"Running", "HookConnected":true});
+        let (requests, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        app.session_event(Event::Connected {
+            requests,
+            snapshot: snapshot.clone(),
+        });
+        app.refresh.complete(app.refresh.begin(false).unwrap(), "A");
+        app.layout
+            .as_mut()
+            .unwrap()
+            .edit_options(|o| o.loop_x = !o.loop_x);
+        assert!(app.dirty());
+        let reference = lbm_app::saved::Reference::of(app.layout.as_ref().unwrap());
+        app.agent.asking(10, "SaveLayout");
+        app.agent.earning(10, reference);
+        app.state.live = true;
+        app.state.waiting = true;
+
+        app.session_event(Event::Disconnected("agent restarted".into()));
+        assert!(app.dirty());
+        assert!(!app.state.live);
+        assert!(!app.state.waiting);
+        let (requests, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        app.session_event(Event::Connected { requests, snapshot });
+        assert!(app.dirty());
+        assert!(
+            !app.refresh.pending(),
+            "same desktop: the edit must remain usable"
+        );
+        assert!(app.state.hook_connected);
+        assert!(
+            !app.state.live,
+            "reconnecting must not restart an unsaved preview"
+        );
+        assert!(app.agent.earned().is_none());
+
+        app.session_event(Event::Message(Message::State(json!({
+            "LayoutId":"A", "LayoutRevision":2, "DisplaySignature":"3840x2160",
+            "Engine":"Running", "HookConnected":true
+        }))));
+        assert!(app.refresh.pending());
+        assert_eq!(app.refresh.begin(app.dirty()), None);
+        assert!(app.dirty(), "changing resolution must not discard the edit");
+    }
 }

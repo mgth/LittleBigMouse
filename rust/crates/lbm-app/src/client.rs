@@ -1,13 +1,9 @@
 //! Talking to the agent.
 //!
-//! **This connects. It never starts an agent.** The C# UI does start one when nothing
-//! answers, and starting an agent starts a hook, and a hook takes the mice — so a
-//! frontend that could do it by accident is a frontend that can take the mice by
-//! accident. When no agent answers here, the window says so and draws what it can.
-//!
-//! Blocking, on threads of its own. The frame is `lbm_ipc::framing`'s, in the shape that
-//! crate keeps for callers with no runtime; the endpoint is `lbm_ipc::endpoint`'s, the
-//! same names the agent binds and the C# client spells.
+//! This blocking transport only connects. The window uses `session` to manage startup,
+//! asynchronous I/O and reconnection; both transports share framing and message decoding.
+//! Tests and other synchronous callers can still connect directly without launching
+//! anything. Endpoint names are shared with the agent through lbm-ipc.
 
 use std::io::{self, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -51,35 +47,40 @@ impl Incoming {
     /// the agent went away, and the window should say so rather than retry silently.
     pub fn receive(&mut self) -> io::Result<Message> {
         let frame = lbm_ipc::framing::read_frame_blocking(&mut self.0)?;
-        let value: Value = serde_json::from_str(&frame)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-        if let Some(id) = value.get("Id").and_then(Value::as_u64) {
-            return Ok(Message::Answer {
-                id,
-                result: match value.get("Error").and_then(Value::as_str) {
-                    Some(error) => Err(error.to_owned()),
-                    None => Ok(value.get("Result").cloned().unwrap_or(Value::Null)),
-                },
-            });
-        }
-        Ok(match value.get("Event").and_then(Value::as_str) {
-            Some("State") => Message::State(value.get("State").cloned().unwrap_or(Value::Null)),
-            Some("Hook") => Message::Hook {
-                name: value
-                    .get("Hook")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned(),
-                payload: value
-                    .get("Payload")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned(),
-            },
-            _ => Message::Unknown(value),
-        })
+        decode(&frame)
     }
+}
+
+/// Decode the same protocol on the blocking and asynchronous transports.
+pub(crate) fn decode(frame: &str) -> io::Result<Message> {
+    let value: Value =
+        serde_json::from_str(frame).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+    if let Some(id) = value.get("Id").and_then(Value::as_u64) {
+        return Ok(Message::Answer {
+            id,
+            result: match value.get("Error").and_then(Value::as_str) {
+                Some(error) => Err(error.to_owned()),
+                None => Ok(value.get("Result").cloned().unwrap_or(Value::Null)),
+            },
+        });
+    }
+    Ok(match value.get("Event").and_then(Value::as_str) {
+        Some("State") => Message::State(value.get("State").cloned().unwrap_or(Value::Null)),
+        Some("Hook") => Message::Hook {
+            name: value
+                .get("Hook")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            payload: value
+                .get("Payload")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+        },
+        _ => Message::Unknown(value),
+    })
 }
 
 impl Outgoing {

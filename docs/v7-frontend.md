@@ -1,5 +1,8 @@
 # Frontend Rust — notes de conception
 
+État de reprise et ordre du travail restant : [v7-reprise.md](v7-reprise.md).
+Les observations ci-dessous incluent l'historique des spikes et des premiers écrans.
+
 Complément de la phase 6 du plan (`docs/v6-architecture-plan.md`). Ce document décrit ce que les
 spikes ont établi et ce qu'ils ont laissé ouvert ; le plan reste la référence pour le périmètre.
 

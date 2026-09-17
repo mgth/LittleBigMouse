@@ -22,6 +22,157 @@ use lbm_agent::world::AgentWorld;
 use lbm_app::client::{self, Incoming, Message, Outgoing, PROTOCOL};
 use serde_json::{json, Value};
 
+use lbm_app::session::{self, Config, Event as SessionEvent};
+
+fn event_until(
+    events: &std::sync::mpsc::Receiver<SessionEvent>,
+    wanted: impl Fn(&SessionEvent) -> bool,
+) -> SessionEvent {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let event = events
+            .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+            .expect("session did not report the expected transition");
+        if wanted(&event) {
+            return event;
+        }
+    }
+}
+
+#[test]
+fn reconnect_subscribes_again_and_does_not_reuse_the_old_request_queue() {
+    let dir = std::sync::Arc::new(tempfile::tempdir().unwrap());
+    let first = Running::at(dir.clone());
+    let (send, events) = std::sync::mpsc::channel();
+    let session = session::spawn(
+        Config {
+            endpoint: dir.path().join("lbm-agent.sock"),
+            launch: None,
+            retry: Duration::from_millis(10),
+            deadline: Duration::from_secs(2),
+        },
+        move |event| send.send(event).is_ok(),
+    );
+    let SessionEvent::Connected {
+        requests: old,
+        snapshot,
+    } = event_until(&events, |event| {
+        matches!(event, SessionEvent::Connected { .. })
+    })
+    else {
+        unreachable!()
+    };
+    assert_eq!(snapshot["LayoutId"], "DELA0B1_ABC123");
+    assert!(snapshot["LayoutRevision"].as_u64().unwrap() > 0);
+    drop(first);
+    event_until(&events, |event| {
+        matches!(event, SessionEvent::Disconnected(_))
+    });
+    assert!(
+        old.send((3, "Stop", json!({}))).is_err(),
+        "old commands must not wait for a new agent"
+    );
+    let _second = Running::at(dir);
+    let SessionEvent::Connected { requests, snapshot } = event_until(&events, |event| {
+        matches!(event, SessionEvent::Connected { .. })
+    }) else {
+        unreachable!()
+    };
+    let revision = snapshot["LayoutRevision"].as_u64().unwrap();
+    requests.send((3, "Refresh", json!({}))).unwrap();
+    let event = event_until(&events, |event| {
+        matches!(event,
+        SessionEvent::Message(Message::State(s)) if s["LayoutRevision"].as_u64().is_some_and(|r| r > revision))
+    });
+    let SessionEvent::Message(Message::State(snapshot)) = event else {
+        unreachable!()
+    };
+    assert_eq!(
+        snapshot["LayoutId"], "DELA0B1_ABC123",
+        "a rebuild must be visible even with the same id"
+    );
+    drop(session);
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while !requests.is_closed() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        requests.is_closed(),
+        "closing the window must close its connection"
+    );
+}
+
+#[test]
+fn a_missing_private_agent_can_appear_after_the_window_has_opened() {
+    let dir = std::sync::Arc::new(tempfile::tempdir().unwrap());
+    let (send, events) = std::sync::mpsc::channel();
+    let _session = session::spawn(
+        Config {
+            endpoint: dir.path().join("lbm-agent.sock"),
+            launch: None,
+            retry: Duration::from_millis(10),
+            deadline: Duration::from_secs(2),
+        },
+        move |event| send.send(event).is_ok(),
+    );
+    event_until(&events, |event| {
+        matches!(event, SessionEvent::Disconnected(_))
+    });
+    let _server = Running::at(dir);
+    event_until(&events, |event| {
+        matches!(event, SessionEvent::Connected { .. })
+    });
+}
+
+#[test]
+fn incompatible_and_silent_endpoints_never_enable_the_controls() {
+    use lbm_ipc::framing::{read_frame_blocking, write_frame_blocking};
+    for answer in [Some(999), None] {
+        let dir = tempfile::tempdir().unwrap();
+        let endpoint = dir.path().join("agent.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&endpoint).unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let hello: Value =
+                serde_json::from_str(&read_frame_blocking(&mut socket).unwrap()).unwrap();
+            if let Some(protocol) = answer {
+                write_frame_blocking(
+                    &mut socket,
+                    &json!({"Id":hello["Id"], "Result":{
+                    "Agent":"lbm-agent", "Protocol":protocol }})
+                    .to_string(),
+                )
+                .unwrap();
+            }
+            // The client must close without subscribing or sending user commands.
+            assert!(read_frame_blocking(&mut socket).is_err());
+        });
+        let (send, events) = std::sync::mpsc::channel();
+        let session = session::spawn(
+            Config {
+                endpoint,
+                launch: None,
+                retry: Duration::from_secs(2),
+                deadline: Duration::from_millis(100),
+            },
+            move |event| send.send(event).is_ok(),
+        );
+        match events.recv_timeout(Duration::from_secs(2)).unwrap() {
+            SessionEvent::Disconnected(reason) => assert!(reason.contains(if answer.is_some() {
+                "incompatible"
+            } else {
+                "timed out"
+            })),
+            event => panic!("unverified agent reached the UI: {event:?}"),
+        }
+        drop(session);
+        server.join().unwrap();
+    }
+}
+
 const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones></ZonesLayout>"#;
 
 /// One monitor, a layout the user wants — the agent tests' own fixture.
@@ -84,14 +235,17 @@ struct Running {
     _fake: FakeHook,
     /// Everything runs on this; dropping it stops the agent.
     _runtime: tokio::runtime::Runtime,
-    _dir: tempfile::TempDir,
+    _dir: std::sync::Arc<tempfile::TempDir>,
     /// The last state seen, so that a state already reached is not waited for.
     last: Value,
 }
 
 impl Running {
     fn start() -> Running {
-        let dir = tempfile::tempdir().unwrap();
+        Self::at(std::sync::Arc::new(tempfile::tempdir().unwrap()))
+    }
+
+    fn at(dir: std::sync::Arc<tempfile::TempDir>) -> Running {
         let at = |name: &str| dir.path().join(name).to_string_lossy().into_owned();
         let (hook_endpoint, api_endpoint) = (at("hook.sock"), at("lbm-agent.sock"));
 

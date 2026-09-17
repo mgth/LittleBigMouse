@@ -12,6 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 lbm-layout = { path = "../lbm-layout" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
@@ -20,14 +22,13 @@ features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessag
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
 
-# The standalone Linux spike: the Avalonia windows went through XWayland, which
-# KWin rescales on any screen whose scale differs from the global factor — which is
-# exactly what a ruler cannot survive. The library's Windows backend is separate.
+# The Linux library and standalone spike use native output-bound surfaces on Wayland,
+# avoiding XWayland's global coordinate scale on desktops with mixed output scales.
 [target.'cfg(target_os = "linux")'.dependencies]
 wayland-client = "0.31"
-wayland-protocols = { version = "0.32", features = ["client"] }
+wayland-protocols = { version = "0.32", features = ["client", "unstable", "staging"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 # The X11 back: a placed, override-redirect, 32-bit window with an empty input shape —
 # and, unlike Wayland, a server that can be asked back what it granted.
-x11rb = { version = "0.14", features = ["shape", "randr"] }
+x11rb = { version = "0.14", features = ["shape", "randr", "render"] }
 libc = "0.2"

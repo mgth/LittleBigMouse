@@ -320,16 +320,68 @@ Limites restantes : les fenêtres Win32 sont compilées, pas exécutées sur cet
 machine Linux. Qualifier sur Windows le clic traversant vers une autre application,
 l'absence de vol du focus, les échelles 100/150/200 %, la réduction/fermeture, les
 changements de DPI, le dock et les jeux plein écran. Les bureaux clonés sont refusés
-pour éviter des dessins contradictoires sur les mêmes pixels. Le backend Linux
-reste le prototype autonome : il n'est pas exposé comme fonction opérationnelle
-dans egui. Les lignes de référence traversant les écrans pendant l'accrochage des
-sections restent à raccorder.
+pour éviter des dessins contradictoires sur les mêmes pixels. Le raccordement Linux
+fait l'objet du neuvième lot ci-dessous. Les lignes de référence traversant les
+écrans pendant l'accrochage des sections restent à raccorder.
+
+## Neuvième lot : overlays Linux intégrés à egui
+
+- Les mêmes commandes `Rulers on screens` et `Resistance on screens` sont désormais
+  raccordées aux surfaces natives Linux. Elles réutilisent les scènes physiques,
+  graduations et couleurs du rendu Windows, ainsi que les règles de fermeture du
+  frontend. Le prototype autonome reste disponible séparément.
+- Sous Wayland, chaque bande est attachée à la sortie nommée correspondante.
+  Les bornes logiques xdg-output doivent correspondre au layout détecté. Les bandes
+  occupent 100 ou 40 pixels logiques, y compris dans les zones réservées aux panneaux.
+  Le buffer suit l'échelle fractionnaire préférée du compositeur ; viewporter fixe
+  sa taille logique. Un changement d'échelle ou de sortie ferme l'affichage et
+  demande une nouvelle détection. Sans protocole fractionnaire, seules les échelles
+  entières concordantes sont acceptées. Les régions d'entrée sont vides et aucune
+  interaction clavier n'est demandée.
+- Sous X11, les sorties et géométries RandR sont vérifiées avant affichage. Les
+  fenêtres utilisent un visuel ARGB validé par Render, un compositeur actif,
+  override-redirect et une forme d'entrée vide vérifiée auprès du serveur.
+  Les images sont transférées dans des pixmaps par blocs bornés par la taille des
+  requêtes X11. Le placement et l'absence de capture des clics sont relus ; l'ordre
+  des fenêtres est maintenu sans activation. Les changements RandR ou de compositeur
+  retirent les surfaces.
+- egui lance son propre exécutable dans un mode interne dédié aux overlays. Les
+  appels au serveur graphique restent dans ce processus ; les échanges bornés
+  conservent la dernière scène et transmettent les erreurs au frontend, même si la
+  scène est inchangée. Les surfaces Wayland inchangées ne sont pas redessinées ;
+  les buffers en cours de lecture ne sont jamais réécrits et leur nombre est borné.
+- La fermeture du canal d'entrée termine immédiatement le processus, même pendant
+  une requête native bloquée. Deux surveillances de deux secondes couvrent un
+  éditeur qui ne rafraîchit plus ses overlays et un serveur graphique qui ne répond
+  plus. Désactivation, erreur et destruction du contrôleur arrêtent et récoltent le
+  processus enfant. Aucun exécutable supplémentaire n'est à installer.
+
+Contrôles locaux : 74 tests de l'application et 20 tests d'overlay passent. Les
+nouveaux scénarios couvrent le transport des sections, les coordonnées négatives et
+le portrait aux échelles 100/125/150/175/200 %, les géométries invalides, les erreurs
+asynchrones et les réponses malformées. Le vrai point d'entrée de `lbm-app` est lancé
+contre un socket Wayland privé et silencieux pour vérifier fermeture, trames bornées
+et expiration des deux surveillances. L'image de référence du rendu commun est
+inchangée. Formatage et Clippy avec avertissements interdits passent pour toutes
+les cibles de test overlay/app sur Linux et `x86_64-pc-windows-msvc`.
+
+Références : [layer-shell et zones exclusives](https://wayland.app/protocols/wlr-layer-shell-unstable-v1),
+[échelle fractionnaire](https://wayland.app/protocols/fractional-scale-v1),
+[taille logique des surfaces](https://wayland.app/protocols/viewporter).
+
+Limites : ces contrôles ne remplacent pas les essais sur un compositeur réel.
+Qualifier KWin/Wayland et X11 avec compositeur : clic traversant, maintien du focus,
+fractionnement des échelles, portrait, dock, veille et fermeture/minimisation.
+Les sessions Wayland sans layer-shell sont explicitement refusées, sans repli
+XWayland. X11 refuse les transformations RandR non identitaires et les layouts dont
+les pixels logiques ne correspondent pas aux coordonnées du serveur. Les overlays
+Windows restent eux aussi à qualifier sur matériel. Aucun bureau réel n'a été
+modifié pendant les tests.
 
 ## Suite, dans l'ordre
 
-1. Raccorder les surfaces natives Linux (Wayland layer-shell/X11) à la bibliothèque
-   d'overlay, puis les lignes de référence des sections. Qualifier les overlays et
-   les changements de topologie sur matériel Windows à DPI mixtes.
+1. Raccorder les lignes de référence des sections pendant leur accrochage. Qualifier
+   les overlays Linux/Windows et les changements de topologie sur matériel à DPI mixtes.
 2. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
    périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
 3. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du

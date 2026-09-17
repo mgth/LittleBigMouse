@@ -1448,7 +1448,7 @@ impl App {
                     }
                 }
                 if !lbm_overlay::SUPPORTED {
-                    ui.small("Screen overlays: Windows only for now.");
+                    ui.small("Screen overlays are unavailable on this platform.");
                 }
                 if self.screen_overlay_mode != Mode::Off {
                     ui.small(if self.screen_overlay_mode == Mode::Rulers {
@@ -2096,6 +2096,10 @@ fn owned(gesture: Option<map::Gesture<'_>>) -> Option<Did> {
 }
 
 fn main() -> eframe::Result<()> {
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("--screen-overlay-host") {
+        std::process::exit(lbm_overlay::linux::run_host());
+    }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("LittleBigMouse")

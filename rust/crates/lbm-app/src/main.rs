@@ -25,6 +25,8 @@ use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_ui::map::MapMonitor;
 use lbm_ui::{drag, frame, list, map};
 
+type DisplayReports = HashMap<String, Vec<(String, String)>>;
+
 /// One monitor, owned, because `MapMonitor` borrows.
 struct Screen {
     id: String,
@@ -48,6 +50,7 @@ enum Found {
     Displays {
         generation: u64,
         layout: Box<Layout>,
+        reports: DisplayReports,
         /// `None` when `Excluded.txt` does not exist yet.
         excluded: Option<Vec<String>>,
     },
@@ -120,6 +123,8 @@ struct App {
     /// against. See [`lbm_app::saved`] for why it is not the store.
     saved: Option<lbm_app::saved::Reference>,
     screens: Vec<Screen>,
+    reports: DisplayReports,
+    property_error: Option<String>,
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
     drag: Option<Drag>,
@@ -200,19 +205,30 @@ fn icons_root() -> Option<PathBuf> {
 ///
 /// The layout comes back whole rather than reduced to its screens, because the window
 /// keeps it: a drag writes a position into it and [`screens_of`] reads the result.
-fn detect() -> Option<Box<Layout>> {
+fn detect() -> Option<(Box<Layout>, DisplayReports)> {
     let mut layout = Layout::new(LayoutOptions::default());
+    let mut reports = HashMap::new();
 
     #[cfg(windows)]
     let built = {
         match lbm_display::windows::discover() {
-            Ok(tree) => lbm_layout::windows::populate(
-                &mut layout,
-                lbm_display::windows::thread_dpi_awareness(),
-                &tree.layout_input(),
-                |_| Ok::<(), std::convert::Infallible>(()),
-            )
-            .is_ok(),
+            Ok(tree) => {
+                for monitor in tree.monitors() {
+                    reports.insert(
+                        monitor.id.clone(),
+                        lbm_app::properties::report(&lbm_display::windows::display_json(
+                            &tree, monitor,
+                        )),
+                    );
+                }
+                lbm_layout::windows::populate(
+                    &mut layout,
+                    lbm_display::windows::thread_dpi_awareness(),
+                    &tree.layout_input(),
+                    |_| Ok::<(), std::convert::Infallible>(()),
+                )
+                .is_ok()
+            }
             Err(error) => {
                 eprintln!("[lbm-app] display discovery failed: {error}");
                 false
@@ -222,7 +238,8 @@ fn detect() -> Option<Box<Layout>> {
 
     #[cfg(not(windows))]
     let built = {
-        let outputs = lbm_display::linux::Backend::detect()
+        let backend = lbm_display::linux::Backend::detect();
+        let outputs = backend
             .map(|backend| {
                 backend.query().unwrap_or_else(|error| {
                     eprintln!("[lbm-app] display discovery failed: {error}");
@@ -230,6 +247,14 @@ fn detect() -> Option<Box<Layout>> {
                 })
             })
             .unwrap_or_default();
+        for output in &outputs {
+            let mut report = lbm_display::linux::display_json(output);
+            report["Discovery"] = serde_json::json!(backend.map(|b| b.name()));
+            reports.insert(
+                output.connector_name.clone(),
+                lbm_app::properties::report(&report),
+            );
+        }
         // No loader: nothing is read from the store and nothing is written to it. The
         // window shows the screens as they are, not as a saved profile arranges them.
         lbm_layout::linux::populate(&mut layout, &outputs, |_| {
@@ -242,7 +267,7 @@ fn detect() -> Option<Box<Layout>> {
         return None;
     }
     read_stored(&mut layout);
-    Some(Box::new(layout))
+    Some((Box::new(layout), reports))
 }
 
 /// The stored profile onto the layout in memory: the app-wide options, the layout's own
@@ -347,8 +372,10 @@ fn details_of(
             }
             rows
         }
+        // These modes use the selected-monitor properties panel instead of map rows.
+        Mode::Info | Mode::Size => Vec::new(),
         // Not drawn by this window; the bar does not offer them.
-        Mode::Info | Mode::Resistance | Mode::Size | Mode::Vcp | Mode::Wallpaper => Vec::new(),
+        Mode::Resistance | Mode::Vcp | Mode::Wallpaper => Vec::new(),
     }
 }
 
@@ -578,6 +605,8 @@ impl App {
             layout: None,
             saved: None,
             screens: Vec::new(),
+            reports: HashMap::new(),
+            property_error: None,
             selected: None,
             drag: None,
             agent: lbm_app::conversation::Conversation::default(),
@@ -660,7 +689,7 @@ impl App {
         let found = self.found.clone();
         let waker = ctx.clone();
         std::thread::spawn(move || {
-            let Some(layout) = detect() else {
+            let Some((layout, reports)) = detect() else {
                 let _ = found.send(Found::DetectionFailed { generation });
                 waker.request_repaint();
                 return;
@@ -671,6 +700,7 @@ impl App {
                 .send(Found::Displays {
                     generation,
                     layout,
+                    reports,
                     excluded: lbm_app::settings::read_excluded(
                         lbm_store::layout_persistence::default_excluded_list_file(),
                     ),
@@ -877,17 +907,20 @@ impl App {
 
     /// Throws the edits away: the stored profile again, over the layout as detected.
     ///
-    /// Re-read rather than kept as a copy from the start — a copy would be one more thing
-    /// that can drift, and the store is what Save writes to anyway. It runs on the UI
-    /// thread: it is two small files, where the detection was a subprocess.
+    /// Start with the last loaded/accepted state, including first-run defaults, then
+    /// overlay the current store. Reading an absent file alone would keep the edit.
     fn undo(&mut self) {
         let Some(layout) = self.layout.as_mut() else {
             return;
         };
+        if let Some(reference) = &self.saved {
+            reference.restore(layout);
+        }
         read_stored(layout);
         self.saved = Some(lbm_app::saved::Reference::of(layout));
         self.screens = screens_of(layout, self.mode);
         self.drag = None;
+        self.property_error = None;
     }
 
     /// Applies what the user did to the excluded list. `true` when it changed, which is
@@ -1066,6 +1099,9 @@ impl App {
     ) {
         match did {
             Some(Did::Clicked(id)) => {
+                if self.selected.as_ref() != Some(&id) {
+                    self.property_error = None;
+                }
                 self.selected = Some(id);
                 self.drag = None;
             }
@@ -1204,6 +1240,100 @@ impl App {
         }
     }
 
+    fn properties(&mut self, ui: &mut egui::Ui) {
+        if !matches!(self.view, View::Map | View::List)
+            || !matches!(
+                self.mode,
+                lbm_ui::mode::Mode::Size | lbm_ui::mode::Mode::Info
+            )
+        {
+            return;
+        }
+        lbm_ui::properties::panel(ui, |ui| {
+            ui.heading(self.mode.label());
+            let Some(layout) = &self.layout else {
+                ui.label("Waiting for displays…");
+                return;
+            };
+            let previous = self.selected.clone();
+            egui::ComboBox::from_id_salt("properties-monitor")
+                .selected_text(self.selected.as_deref().unwrap_or("Select a monitor"))
+                .show_ui(ui, |ui| {
+                    for monitor in layout.monitors() {
+                        let name = layout
+                            .model(&monitor.model)
+                            .and_then(|m| m.pnp_device_name.as_deref())
+                            .unwrap_or(&monitor.id);
+                        ui.selectable_value(
+                            &mut self.selected,
+                            Some(monitor.id.clone()),
+                            format!("{name} · {}", monitor.id),
+                        );
+                    }
+                });
+            if previous != self.selected {
+                self.property_error = None;
+            }
+            let Some(id) = self.selected.clone() else {
+                ui.label("Select a screen on the map, in the list or above.");
+                return;
+            };
+            let blocked = self.refresh.pending() || self.outputs.changing() || self.drag.is_some();
+            let mut edits = Vec::new();
+            ui.push_id(("properties", &id), |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("monitor-properties-scroll")
+                    .show(ui, |ui| {
+                        if self.mode == lbm_ui::mode::Mode::Info {
+                            ui.heading("Detected · last display refresh");
+                            let report = layout
+                                .monitors()
+                                .iter()
+                                .find(|m| m.id == id)
+                                .and_then(|m| m.device_id.as_ref())
+                                .and_then(|device| self.reports.get(device));
+                            if let Some(rows) = report {
+                                lbm_ui::properties::rows(ui, rows);
+                            } else {
+                                ui.label("No hardware report available for this monitor.");
+                            }
+                            ui.separator();
+                            ui.heading("Current layout");
+                            lbm_ui::properties::rows(
+                                ui,
+                                &lbm_app::properties::layout_info(layout, &id),
+                            );
+                            return;
+                        }
+                        let Some(size) = lbm_app::properties::size(layout, &id) else {
+                            ui.label("No active source for this monitor.");
+                            return;
+                        };
+                        edits = ui
+                            .add_enabled_ui(!blocked && !layout.is_virtual(), |ui| {
+                                lbm_ui::properties::size(ui, &size)
+                            })
+                            .inner;
+                    });
+            });
+            for edit in edits {
+                if let Some(layout) = self.layout.as_mut() {
+                    match lbm_app::properties::apply(layout, &id, edit) {
+                        Ok(()) => {
+                            self.property_error = None;
+                            self.screens = screens_of(layout, self.mode);
+                            self.probe.want(None, std::time::Instant::now());
+                        }
+                        Err(error) => self.property_error = Some(error),
+                    }
+                }
+            }
+            if let Some(error) = &self.property_error {
+                ui.colored_label(ui.visuals().error_fg_color, error);
+            }
+        });
+    }
+
     fn output_request(&mut self, method: &'static str, extra: serde_json::Value, change: bool) {
         let Some(requests) = &self.requests else {
             return;
@@ -1280,6 +1410,7 @@ impl eframe::App for App {
                     Found::Displays {
                         generation,
                         layout,
+                        reports,
                         excluded,
                     } => {
                         if self.detecting == Some(generation) {
@@ -1294,6 +1425,8 @@ impl eframe::App for App {
                         }
                         self.saved = Some(lbm_app::saved::Reference::of(&layout));
                         self.screens = screens_of(&layout, self.mode);
+                        self.reports = reports;
+                        self.property_error = None;
                         self.layout = Some(layout);
                         self.excluded = excluded;
                         self.wallpapers.clear();
@@ -1479,6 +1612,8 @@ impl eframe::App for App {
                 }
             }
         });
+
+        self.properties(ui);
 
         // The `Ui` handed to `App::ui` has no background of its own — the doc says so
         // outright — so the map would be drawn on nothing.

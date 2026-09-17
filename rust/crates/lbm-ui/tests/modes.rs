@@ -56,7 +56,9 @@ fn what_is_not_ported_is_shown_and_disabled() {
     let disabled = |label: &str| harness.get_by_label(label).accesskit_node().is_disabled();
     assert!(!disabled(Mode::Location.label()), "Location is drawn today");
     assert!(!disabled(Mode::About.label()), "About is drawn today");
-    for mode in [Mode::Info, Mode::Resistance, Mode::Size, Mode::Vcp] {
+    assert!(!disabled(Mode::Info.label()));
+    assert!(!disabled(Mode::Size.label()));
+    for mode in [Mode::Resistance, Mode::Vcp] {
         assert!(disabled(mode.label()), "{} is not ported", mode.label());
     }
 }

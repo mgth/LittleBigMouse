@@ -104,7 +104,7 @@ impl Mode {
         match self {
             Mode::Default => "The screens as they look: the name and the maker's logo.",
             Mode::About => "This app's version, and what identifies each screen.",
-            Mode::Info => "Everything the system reports about a screen, raw.",
+            Mode::Info => "Detected display details and the current layout values.",
             Mode::Location => "Where each screen is, how big it is, and at what pitch.",
             Mode::Resistance => {
                 "The parts of each border the mouse may cross, and the parts it may not."
@@ -142,7 +142,7 @@ pub struct Offered {
 pub fn why_not(mode: Mode, offered: &Offered) -> Option<&'static str> {
     match mode {
         // What the window can draw today.
-        Mode::Default | Mode::About | Mode::Location => None,
+        Mode::Default | Mode::About | Mode::Location | Mode::Size | Mode::Info => None,
         Mode::Vcp if !offered.vcp_enabled => {
             Some("VCP control is off in the settings — turn it on to see this")
         }
@@ -151,9 +151,7 @@ pub fn why_not(mode: Mode, offered: &Offered) -> Option<&'static str> {
         }
         // Ported, but not yet. Named one by one rather than through a catch-all, so
         // that porting one is a line to delete here and the compiler finds the rest.
-        Mode::Info => Some("not ported yet: the raw display report has no Rust reader"),
         Mode::Resistance => Some("not ported yet: the border section editor"),
-        Mode::Size => Some("not ported yet: editing a screen's physical size"),
         Mode::Vcp => Some("not ported yet: DDC/CI and the calibration plugin"),
         Mode::Wallpaper => Some("not ported yet: the per-screen picture picker"),
     }

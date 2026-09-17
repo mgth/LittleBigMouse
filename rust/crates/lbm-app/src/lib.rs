@@ -6,6 +6,7 @@ pub mod client;
 pub mod conversation;
 pub mod displays;
 pub mod probe;
+pub mod properties;
 pub mod refresh;
 pub mod saved;
 pub mod session;

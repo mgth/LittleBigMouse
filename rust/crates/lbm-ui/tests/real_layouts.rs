@@ -149,6 +149,7 @@ fn as_map(screens: &[Screen]) -> Vec<MapMonitor<'_>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         })
         .collect()
 }

@@ -57,6 +57,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
         MapMonitor {
             id: "right",
@@ -66,6 +67,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
     ]
 }
@@ -114,6 +116,56 @@ fn the_map_with_two_screens() {
     });
     harness.run();
     harness.snapshot("map-two-screens");
+}
+
+#[test]
+fn crossings_on_the_map_and_in_the_list() {
+    use lbm_ui::probe::{Edge, Overlay, Run, Side};
+    let edges = [
+        Edge {
+            side: Side::Right,
+            runs: vec![
+                Run {
+                    from: 0,
+                    to: 539,
+                    target: None,
+                },
+                Run {
+                    from: 540,
+                    to: 1079,
+                    target: Some(7),
+                },
+            ],
+        },
+        Edge {
+            side: Side::Bottom,
+            runs: vec![Run {
+                from: 0,
+                to: 1919,
+                target: None,
+            }],
+        },
+    ];
+    let names = [(7, "Right screen".to_owned())];
+    let mut screens = two_screens();
+    screens[0].probe = Some(Overlay {
+        pixels: Rect::new(0.0, 0.0, 1920.0, 1080.0),
+        edges: &edges,
+        names: &names,
+    });
+    let mut map = harness((900.0, 600.0), |ui| {
+        let fit = map::fit(map::extent(&screens), ui.max_rect());
+        map::draw(ui, &screens, &fit, Some("left"));
+    });
+    map.run();
+    map.snapshot("map-crossings");
+    let mut list = harness((900.0, 600.0), |ui| {
+        lbm_ui::list::draw(ui, ui.max_rect(), &screens, Some("left"));
+    });
+    list.run();
+    list.snapshot("list-crossings");
+    let mut results = map.take_snapshot_results();
+    results.extend(list.take_snapshot_results());
 }
 
 /// One frame. The name is **half the top bezel**, printed on the plastic — so its size

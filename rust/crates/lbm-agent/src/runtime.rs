@@ -337,6 +337,20 @@ impl<W: AgentWorld> Agent<W> {
                 }
                 None => Err("no layout to probe".to_owned()),
             },
+            Request::ProbeLayout {
+                layout_id,
+                layout_revision,
+                document,
+            } => {
+                if layout_revision != self.reconciler.rebuild_count() {
+                    Err("the displays changed; refresh the layout before probing".into())
+                } else {
+                    self.world
+                        .probe_zones(&layout_id, &document)
+                        .and_then(|xml| crate::probe::report(layout_id, layout_revision, &xml))
+                        .and_then(|report| serde_json::to_value(report).map_err(|e| e.to_string()))
+                }
+            }
             Request::SeenProcesses => Ok(serde_json::json!(self.seen.list())),
         };
         client.send(api::answer(id, result));

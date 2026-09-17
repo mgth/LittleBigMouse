@@ -599,6 +599,118 @@ async fn an_autostart_that_fails_does_not_keep_the_other_options_from_the_hook()
     assert_eq!(state["LoadAtStartup"], false);
 }
 
+#[tokio::test]
+async fn probing_an_edit_is_correlated_and_leaves_the_running_preview_and_store_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({"Method":"Subscribe"})).await["Result"].clone();
+    let id = state["LayoutId"].as_str().unwrap();
+    let revision = state["LayoutRevision"].as_u64().unwrap();
+    let mut edited = frontend_layout(dir.path());
+    let source = edited.monitors()[0].active_source.clone().unwrap();
+
+    // Run the original arrangement as a preview, then probe a different, unsaved edit.
+    frontend
+        .ask(json!({"Method":"Preview", "LayoutId":id,
+        "Document":lbm_store::LayoutDocument::of(&edited)}))
+        .await;
+    frontend
+        .state(|s| s["Previewing"] == true && s["Engine"] == "Running")
+        .await;
+    frontend.ask(json!({"Method":"Probe"})).await;
+    let original = frontend.hook("Probed").await;
+    let commands = fake.received();
+    let excluded = std::fs::read(dir.path().join("Excluded.txt")).unwrap();
+    let options = std::fs::read(dir.path().join("config/options.json")).ok();
+    edited.edit_options(|o| o.loop_x = true);
+    let request = json!({"Method":"ProbeLayout", "LayoutId":id,
+        "LayoutRevision":revision, "Document":lbm_store::LayoutDocument::of(&edited)});
+
+    let answer = frontend.ask(request.clone()).await;
+    let report: lbm_ipc::probe::Report = serde_json::from_value(answer["Result"].clone())
+        .unwrap_or_else(|e| panic!("{e}: {answer}"));
+    assert_eq!(report.layout_id, id);
+    assert_eq!(report.layout_revision, revision);
+    assert_eq!(report.zones.len(), 1);
+    let zone = &report.zones[0];
+    assert_eq!(
+        zone.device_id, source,
+        "associate by active source, not monitor id"
+    );
+    assert_eq!(zone.edges.len(), 4);
+    for edge in &zone.edges {
+        let target = match edge.side {
+            lbm_ipc::probe::Side::Left | lbm_ipc::probe::Side::Right => Some(zone.id),
+            _ => None,
+        };
+        assert!(!edge.runs.is_empty());
+        assert!(
+            edge.runs
+                .iter()
+                .all(|r| r.target == target && r.from <= r.to),
+            "{edge:?}"
+        );
+    }
+
+    // A second client does not hear the first client's JSON sweep as a Probed event.
+    let mut observer = Frontend::connect(&api_endpoint).await;
+    observer.ask(json!({"Method":"Subscribe"})).await;
+    frontend.ask(request.clone()).await;
+    let barrier = observer.send(json!({"Method":"Snapshot"})).await;
+    loop {
+        let frame = observer.receive().await;
+        assert_ne!(frame["Hook"], "Probed", "JSON probes are private replies");
+        if frame["Id"] == barrier {
+            break;
+        }
+    }
+
+    let mut stale = request.clone();
+    stale["LayoutRevision"] = json!(revision + 1);
+    assert!(frontend.ask(stale).await["Error"].is_string());
+    let mut elsewhere = request;
+    elsewhere["LayoutId"] = json!("another desktop");
+    assert!(frontend.ask(elsewhere).await["Error"].is_string());
+
+    // The legacy report still describes the active preview, byte for byte.
+    frontend.ask(json!({"Method":"Probe"})).await;
+    assert_eq!(frontend.hook("Probed").await, original);
+    let state = frontend.ask(json!({"Method":"Snapshot"})).await["Result"].clone();
+    assert_eq!(state["Previewing"], true);
+    assert_eq!(state["Engine"], "Running");
+    assert_eq!(state["Enabled"], false);
+    assert_eq!(
+        fake.received(),
+        commands,
+        "probing must never command the hook"
+    );
+    assert_eq!(
+        std::fs::read(dir.path().join("Excluded.txt")).unwrap(),
+        excluded
+    );
+    assert!(!dir.path().join("config/layouts").exists());
+    assert_eq!(
+        std::fs::read(dir.path().join("config/options.json")).ok(),
+        options
+    );
+    assert!(!dir.path().join("wallpaper.json").exists());
+
+    frontend.ask(json!({"Method":"EndPreview"})).await;
+    frontend
+        .state(|s| s["Previewing"] == false && s["Engine"] == "Stopped")
+        .await;
+}
+
 /// A preview belongs to the connection that asked for it, and dies with it.
 ///
 /// A window that exits cleanly sends `EndPreview`. A window that is killed, crashes, or

@@ -13,12 +13,8 @@
 //! run is normalised against the source's own pixel rectangle and stretched back over
 //! the lit part.
 //!
-//! The types here are this crate's own rather than `lbm_engine::probe`'s. Nothing is
-//! shared today in any case — the agent's API hands the report over as an XML document
-//! in a string (`api.rs`, `"Payload": "<ProbeReport/>"`), a shape inherited from the C#
-//! frontend — so something has to parse into something. Where that parser lives, and
-//! whether the agent should grow a JSON shape beside the XML for its Rust frontend, is
-//! not settled here.
+//! The frontend adapts the correlated JSON ProbeLayout response to these view types.
+//! The legacy XML Probe/Probed event remains available to Avalonia.
 
 use lbm_layout::geo::Rect;
 
@@ -69,6 +65,27 @@ pub struct Run {
 pub struct Edge {
     pub side: Side,
     pub runs: Vec<Run>,
+}
+
+/// One source's report, shared by the map and the list's enlarged monitor.
+#[derive(Clone, Copy)]
+pub struct Overlay<'a> {
+    pub pixels: Rect,
+    pub edges: &'a [Edge],
+    pub names: &'a [(i32, String)],
+}
+
+impl Overlay<'_> {
+    pub fn draw(&self, ui: &mut egui::Ui, content: egui::Rect) {
+        let strips = strips(content, self.pixels, self.edges, |target| {
+            self.names
+                .iter()
+                .find(|(id, _)| *id == target)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| format!("zone {target}"))
+        });
+        draw(ui, &strips);
+    }
 }
 
 /// A strip to draw, and what it says when hovered.
@@ -157,7 +174,7 @@ pub fn strips(
 
             let side = edge.side.name();
             strips.push(Strip {
-                rect,
+                rect: rect.intersect(content),
                 wall: run.target.is_none(),
                 tip: match run.target {
                     None => format!("{side}: wall — the cursor stops here"),
@@ -176,13 +193,11 @@ pub fn draw(ui: &mut egui::Ui, strips: &[Strip]) {
             .rect_filled(strip.rect, 1.0, if strip.wall { WALL } else { CROSSING });
         // Sensed for hovering only: the strips sit over the lit part, and the frame
         // underneath is what answers a click.
-        ui.interact(
-            strip.rect,
-            ui.id()
-                .with(("strip", strip.rect.min.x as i32, strip.rect.min.y as i32)),
-            egui::Sense::hover(),
-        )
-        .on_hover_text(&strip.tip);
+        // Two sides can share a corner; their top-left coordinates are not unique ids.
+        let id = ui.next_auto_id();
+        ui.skip_ahead_auto_ids(1);
+        ui.interact(strip.rect, id, egui::Sense::hover())
+            .on_hover_text(&strip.tip);
     }
 }
 
@@ -218,6 +233,21 @@ mod tests {
             from,
             to,
             target: Some(into),
+        }
+    }
+
+    #[test]
+    fn very_small_frames_keep_the_strips_inside_the_lit_part() {
+        let content = egui::Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(2.0, 3.0));
+        for side in [Side::Left, Side::Right, Side::Top, Side::Bottom] {
+            let strips = strips(
+                content,
+                Rect::new(0.0, 0.0, 100.0, 100.0),
+                &edge(side, &[wall(0, 99)]),
+                |_| unreachable!(),
+            );
+            assert_eq!(strips.len(), 1);
+            assert!(content.contains_rect(strips[0].rect));
         }
     }
 

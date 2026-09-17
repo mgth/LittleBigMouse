@@ -20,6 +20,7 @@ fn screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
         MapMonitor {
             id: "right",
@@ -29,6 +30,7 @@ fn screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
     ]
 }

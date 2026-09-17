@@ -24,6 +24,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
         MapMonitor {
             id: "right",
@@ -33,6 +34,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
     ]
 }
@@ -97,6 +99,48 @@ fn clicking_a_screen_selects_it() {
     assert_eq!(clicked.get(), Some("right"));
 }
 
+#[test]
+fn a_crossing_strip_names_the_destination_and_does_not_swallow_selection() {
+    use lbm_ui::probe::{Edge, Overlay, Run, Side};
+    let edges = [Edge {
+        side: Side::Right,
+        runs: vec![Run {
+            from: 0,
+            to: 1079,
+            target: Some(7),
+        }],
+    }];
+    let names = [(7, "Right screen".to_owned())];
+    let mut screens = two_screens();
+    screens[0].probe = Some(Overlay {
+        pixels: Rect::new(0.0, 0.0, 1920.0, 1080.0),
+        edges: &edges,
+        names: &names,
+    });
+    let clicked = std::cell::Cell::new(None);
+    let at = std::cell::Cell::new(egui::Pos2::ZERO);
+    let mut harness = harness(|ui| {
+        ui.style_mut().interaction.tooltip_delay = 0.0;
+        ui.style_mut().interaction.tooltip_grace_time = 0.0;
+        let fit = map::fit(map::extent(&screens), ui.max_rect());
+        let content = fit.place(&screens[0]).content;
+        at.set(egui::pos2(content.right() - 2.0, content.center().y));
+        if let Some(map::Gesture::Clicked(id)) = map::draw(ui, &screens, &fit, None) {
+            clicked.set(Some(id));
+        }
+    });
+    harness.hover_at(at.get());
+    harness.run();
+    assert!(harness
+        .query_by_label("Right: crosses into Right screen")
+        .is_some());
+    harness.drag_at(at.get());
+    harness.step();
+    harness.drop_at(at.get());
+    harness.run();
+    assert_eq!(clicked.get(), Some("left"));
+}
+
 /// A screen with no name on it is still a screen you can click: the rectangle is sensed
 /// whether or not a name goes into it.
 ///
@@ -114,6 +158,7 @@ fn a_screen_with_no_room_for_its_name_is_still_a_target() {
         logo: None,
         wallpaper: None,
         details: &[],
+        probe: None,
     }];
     let fit = map::fit(
         map::extent(&screens),

@@ -265,8 +265,10 @@ Mes tests vérifiaient que l'aimantation marche ; aucun ne vérifiait qu'on peut
 
 - **Le rapport de sondage arrive en XML dans une chaîne JSON** (`api.rs`,
   `"Payload": "<ProbeReport/>"`), forme héritée du frontend C#, qui le lit encore jusqu'à
-  la phase 7. Quelqu'un devra le parser côté Rust — ou l'agent gagnera une forme JSON à
-  côté du XML. Question de contrat filaire, pas de dessin, **non tranchée**.
+  la phase 7. **Tranché le 17 septembre 2026** : la nouvelle requête `ProbeLayout`
+  reçoit le document de l'éditeur et renvoie un rapport JSON corrélé, sans modifier
+  l'aperçu ni diffuser le résultat. Le contrat XML est conservé pour Avalonia ; voir
+  le deuxième lot de [la reprise](v7-reprise.md).
 - **Le menu contextuel n'est pas un travail de vue.** Ses deux entrées sont des commandes
   du présentateur, pas de l'écran, et la seconde — « Apply layout to system config » —
   **écrit la topologie d'écrans du système**. Le C# le fait par `IDisplayController`

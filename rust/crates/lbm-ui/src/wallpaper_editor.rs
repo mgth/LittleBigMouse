@@ -3,6 +3,7 @@ use lbm_store::wallpaper_settings::{
 };
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
+    Browse,
     Preview,
     Apply,
     Reset,
@@ -12,6 +13,7 @@ pub fn panel(
     settings: &mut LayoutWallpaperSettings,
     selected: Option<&str>,
     can_apply: bool,
+    can_browse: bool,
 ) -> Option<Action> {
     let mut action = None;
     ui.horizontal_wrapped(|ui| {
@@ -71,7 +73,13 @@ pub fn panel(
         {
             *path = Some(value);
         }
-        ui.small("Paste a local PNG, JPEG, BMP or GIF path, or drop an image here.");
+        if ui
+            .add_enabled(can_browse, egui::Button::new("Browse…"))
+            .clicked()
+        {
+            action = Some(Action::Browse);
+        }
+        ui.small("Choose a PNG, JPEG, BMP or GIF, paste its path, or drop an image here.");
         if ui.is_enabled() {
             if let Some(dropped) =
                 ui.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf()))

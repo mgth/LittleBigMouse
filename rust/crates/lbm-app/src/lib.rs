@@ -5,6 +5,7 @@
 pub mod client;
 pub mod conversation;
 pub mod displays;
+pub mod image_picker;
 pub mod probe;
 pub mod properties;
 pub mod refresh;

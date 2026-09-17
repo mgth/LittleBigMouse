@@ -41,6 +41,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # the agent that binds them.
 lbm-ipc = { path = "../lbm-ipc" }
 serde_json.workspace = true
+raw-window-handle = "0.6"
 tokio = { workspace = true, features = ["rt", "net", "sync", "time", "macros", "io-util"] }
 
 [dev-dependencies]
@@ -50,5 +51,10 @@ lbm-agent = { path = "../lbm-agent" }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time"] }
 tempfile.workspace = true
 
-[target.'cfg(windows)'.dependencies]
-raw-window-handle = "0.6"
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "file_chooser"] }
+url = "2"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"]

@@ -12,7 +12,7 @@ fn opening_does_not_configure_a_screen_and_apply_is_an_explicit_action() {
     let mut h = Harness::builder()
         .with_size(egui::vec2(620., 600.))
         .build_ui(|ui| {
-            if let Some(a) = panel(ui, &mut settings.borrow_mut(), Some("A"), false) {
+            if let Some(a) = panel(ui, &mut settings.borrow_mut(), Some("A"), false, true) {
                 actions.borrow_mut().push(a);
             }
         });
@@ -51,7 +51,7 @@ fn snapshot(width: f32) {
         .build_ui(|ui| {
             lbm_ui::properties::panel(ui, |ui| {
                 ui.heading("Wallpaper");
-                panel(ui, &mut settings, None, true);
+                panel(ui, &mut settings, None, true, true);
             });
             egui::CentralPanel::default().show(ui, |ui| {
                 ui.label("Local preview");
@@ -73,4 +73,38 @@ fn wallpaper_editor_wide() {
 #[test]
 fn wallpaper_editor_narrow() {
     snapshot(480.);
+}
+
+#[test]
+fn browse_is_an_explicit_action_and_cannot_open_two_choosers() {
+    for can_browse in [false, true] {
+        let settings = RefCell::new(LayoutWallpaperSettings {
+            mode: WallpaperMode::Span,
+            ..Default::default()
+        });
+        let actions = RefCell::new(Vec::new());
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(620., 600.))
+            .build_ui(|ui| {
+                if let Some(a) = panel(ui, &mut settings.borrow_mut(), None, false, can_browse) {
+                    actions.borrow_mut().push(a);
+                }
+            });
+        h.run();
+        assert_eq!(
+            h.get_by_label("Browse…").accesskit_node().is_disabled(),
+            !can_browse
+        );
+        if can_browse {
+            h.get_by_label("Browse…").click();
+            h.run();
+            assert_eq!(*actions.borrow(), [Action::Browse]);
+        } else {
+            assert!(actions.borrow().is_empty());
+        }
+        assert!(
+            settings.borrow().span_image_path.is_none(),
+            "opening the chooser does not set an image"
+        );
+    }
 }

@@ -568,12 +568,45 @@ Références : [scripting Plasma et ConfigFile](https://develop.kde.org/docs/pla
 [GetWallpaper Windows](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-idesktopwallpaper-getwallpaper),
 [images distinctes sur les bureaux Windows](https://support.microsoft.com/en-us/windows/experience/configure-multiple-desktops-in-windows).
 
+## Quatorzième lot : parent Wayland du sélecteur de fichiers
+
+- Le bouton `Browse…` transmet désormais la fenêtre native possédée par eframe au
+  thread du sélecteur. Sous Wayland, sa surface est exportée avec xdg-foreign via
+  ashpd (v2, ou v1 si nécessaire), puis le portail reçoit l'identifiant
+  `wayland:<handle>`. Sous X11, l'identifiant reste `x11:<XID>` ; Windows conserve
+  son dialogue natif et son HWND parent.
+- Une référence partagée conserve la fenêtre et son affichage pendant l'opération.
+  Le backend Wayland empruntant cet affichage est également conservé : les objets du
+  protocole seuls n'en garantissent pas la durée de vie. L'export est libéré avant ce
+  backend, puis la fenêtre ; la destruction est envoyée même si la boucle UI a cessé
+  de tourner. Le jeton opaque est transmis au portail sans lui céder cette garde.
+- Export, dialogue et décodage restent hors du fil UI. L'absence de protocole ou de
+  parent utilisable conserve le dialogue autonome autorisé par le portail. Le dialogue
+  reste non modal. L'annulation, le refus des réponses obsolètes et l'aperçu local
+  fonctionnent comme dans le lot 12 ; aucune application du fond d'écran n'est ajoutée.
+
+Contrôles : 259 tests UI/application passent, sans exclusion. Les nouveaux cas
+vérifient la durée de vie du parent pendant une attente, sa libération après réponse,
+annulation, erreur et panique, la transmission du jeton et le repli sans parent.
+Les captures de référence restent inchangées. Formatage et Clippy sans avertissement
+passent sur Linux et `x86_64-pc-windows-msvc`. Les tests utilisent des parents simulés
+et un bus isolé ; aucun dialogue ni bureau réel n'a été utilisé.
+
+Qualification restante : vérifier placement, focus, fermeture de la fenêtre mère
+pendant le dialogue et libération de l'export sur Plasma/GNOME Wayland réels. L'export
+ashpd attend le compositeur dans son propre thread et n'est pas interrompu par un
+timeout : abandonner cette attente sans attendre son thread invaliderait ses pointeurs.
+Un compositeur bloqué peut donc immobiliser cette sélection, sans bloquer le fil UI.
+
+Références : [identifiants de fenêtre du portail](https://flatpak.github.io/xdg-desktop-portal/docs/window-identifiers.html),
+[protocole xdg-foreign v2](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/unstable/xdg-foreign/xdg-foreign-unstable-v2.xml).
+
 ## Suite, dans l'ordre
 
 1. Qualifier les fonds d'écran et overlays Linux/Windows, les changements de topologie
    à DPI mixtes et le premier périmètre egui sur matériel : veille, dock, UAC, reprise,
-   démarrage et mémoire ; compléter le rattachement du dialogue de fichiers sous
-   Wayland et l'inventaire du cache pour les bureaux virtuels Windows et les diaporamas.
+   démarrage et mémoire ; qualifier le parent du dialogue Wayland et compléter
+   l'inventaire du cache pour les bureaux virtuels Windows et les diaporamas.
 2. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
    packaging et retrait de .NET une fois les fonctions conservées remplacées.
 

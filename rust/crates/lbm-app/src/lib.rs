@@ -8,6 +8,7 @@ pub mod displays;
 pub mod probe;
 pub mod properties;
 pub mod refresh;
+pub mod resistance;
 pub mod saved;
 pub mod session;
 pub mod settings;

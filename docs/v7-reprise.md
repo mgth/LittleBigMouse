@@ -144,16 +144,52 @@ Formatage, Clippy sans avertissement et compilation des cibles de test du fronte
 pour Windows passent. Les captures ont été validées avec le moteur de rendu local ;
 la validation de l'application sur matériel Windows reste à faire.
 
+## Cinquième lot : éditeur de sections de résistance
+
+- Le mode `Border resistance` est activé. Les bandes sont dessinées dans la dalle,
+  en coordonnées de projection identiques à celles du moteur, sur la carte et dans
+  la vue liste. La sélection ouvre les valeurs dans le panneau de propriétés.
+- Glisser sur une bande vide crée une section ; ses poignées redimensionnent les
+  extrémités et son centre permet de la déplacer. Le double-clic remplit l'espace
+  libre ou agrandit la section. Le panneau propose aussi l'ajout, les bornes en mm,
+  l'agrandissement et la suppression ; Suppr retire la section sélectionnée hors saisie.
+- Les sections ne se chevauchent pas : les gestes s'arrêtent aux voisines et aux
+  extrémités du bord, avec 2 mm minimum et 16 sections maximum. L'accrochage suit
+  les extrémités, le milieu, les bords visibles des autres écrans et les sections
+  parallèles, même éloignées. Ctrl le suspend ; une ligne indique l'alignement atteint.
+- Chaque section conserve quatre réglages indépendants : résistance au déplacement,
+  blocage du déplacement, résistance au glisser et blocage du glisser. Les couleurs
+  et infobulles distinguent les états. Une section nouvelle bloque le déplacement
+  et laisse passer le glisser, comme dans Avalonia. Un bord intégralement bloqué dans
+  les deux modes affiche l'avertissement existant sur l'absence de contournement Ctrl
+  sous Wayland.
+- `Mirror` copie les quatre réglages sur le bord opposé de l'écran voisin le plus
+  proche dans la distance de parcours, en projetant les coordonnées absolues et en
+  conservant le plus grand intervalle libre. L'action est désactivée sans destination.
+- L'aperçu du geste reste dans la fenêtre jusqu'au relâchement. Échap, perte de focus,
+  changement de vue, de projection ou de données annulent le geste. Une action porte
+  l'état du bord sur lequel elle a commencé : une sélection périmée ne peut pas
+  modifier une autre section. Save, Live et Undo utilisent les parcours existants.
+  Le rapport géométrique `Show crossings` est masqué et suspendu pendant ce mode pour
+  que ses bandes ne recouvrent pas celles de résistance.
+
+Contrôles locaux : 240 tests frontend passent, dont les gestes egui, le double-clic,
+la saisie numérique, l'annulation, les bords partagés, la copie et le refus d'actions
+périmées. Le document SaveLayout est relu puis compilé en liens ; un test du frontend
+vérifie aussi le document envoyé à Live et le refus d'édition pendant une actualisation.
+Les quinze captures comprennent trois nouvelles références carte/liste/fenêtre étroite,
+inspectées localement. Formatage, Clippy sans avertissement et compilation des cibles
+de test du frontend pour Windows passent. Les bandes sur les écrans réels et les essais
+matériels restent à faire.
+
 ## Suite, dans l'ordre
 
-1. Porter l'éditeur de sections de résistance, en réutilisant la zone de propriétés
-   lisible à toute échelle pour les valeurs et la carte pour les bandes spatiales.
-2. Porter les commandes d'écran principal/attachement/détachement sous Windows.
+1. Porter les commandes d'écran principal/attachement/détachement sous Windows.
    Intégrer les règles et bandes sur les vrais écrans, puis valider le backend Windows
    et les DPI mixtes. Le crate overlay reste actuellement un prototype Linux.
-3. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
+2. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
    périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
-4. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
+3. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
    packaging et retrait de .NET une fois les fonctions conservées remplacées.
 
 Essais manuels encore nécessaires : lancement installé sans agent, agent élevé sous

@@ -193,7 +193,7 @@ fn a_monitor_frame_with_its_name() {
 /// The mode bar: what is offered and what is not.
 ///
 /// The tree test asserts which buttons are disabled; only a render says whether *disabled*
-/// looks disabled. Three of the seven are greyed here, which is the honest picture of the
+/// looks disabled. Two of the seven are greyed here, which is the honest picture of the
 /// port — and the reason the modes that are not ported yet are shown rather than dropped.
 #[test]
 fn the_mode_bar() {
@@ -324,4 +324,72 @@ fn a_monitor_frame_in_the_location_mode() {
     });
     harness.run();
     harness.snapshot("monitor-frame-location");
+}
+
+#[test]
+fn resistance_values_and_bands_stay_readable_in_map_and_list() {
+    use lbm_layout::model::{BorderResistance, BorderSection};
+    use lbm_ui::resistance::{Editor, Monitor, Selection, Side};
+    let screens = two_screens();
+    let mut resistance = BorderResistance::default();
+    resistance.right.sections = vec![
+        BorderSection::new(30.0, 130.0, 0.0, true, 8.0, false),
+        BorderSection::new(170.0, 300.0, 0.0, true, 0.0, true),
+    ];
+    resistance.top.sections = vec![BorderSection::new(60.0, 320.0, 6.0, false, 0.0, false)];
+    resistance.bottom.sections = vec![BorderSection::new(200.0, 480.0, 0.0, false, 0.0, true)];
+    let monitors: Vec<_> = screens
+        .iter()
+        .map(|s| Monitor {
+            id: s.id.into(),
+            bounds: s.mm_content,
+            excluded: false,
+            resistance: resistance.clone(),
+        })
+        .collect();
+    let mut results = egui_kittest::SnapshotResults::new();
+    for (width, height, list, name) in [
+        (1100.0, 720.0, false, "resistance-map"),
+        (1100.0, 720.0, true, "resistance-list"),
+        (480.0, 620.0, false, "resistance-narrow"),
+    ] {
+        let mut editor = Editor::default();
+        editor.selected = Some(Selection {
+            monitor: "left".into(),
+            side: Side::Right,
+            index: 0,
+        });
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, height))
+            .build_ui(|ui| {
+                lbm_ui::properties::panel(ui, |ui| {
+                    ui.heading("Border resistance");
+                    ui.label("Left screen");
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        editor.panel(ui, &monitors, "left", 200.0);
+                    });
+                });
+                egui::CentralPanel::default().show(ui, |ui| {
+                    let placements = if list {
+                        lbm_ui::list::draw(ui, ui.max_rect(), &screens, Some("left"));
+                        let fit = map::fit_in(
+                            lbm_ui::list::panes(ui.max_rect()).screen,
+                            screens[0].mm_outside,
+                        );
+                        vec![("left".into(), fit.place(&screens[0]).content)]
+                    } else {
+                        let fit = map::fit(map::extent(&screens), ui.max_rect());
+                        map::draw(ui, &screens, &fit, Some("left"));
+                        screens
+                            .iter()
+                            .map(|s| (s.id.into(), fit.place(s).content))
+                            .collect()
+                    };
+                    editor.bands(ui, &monitors, &placements);
+                });
+            });
+        harness.run();
+        harness.snapshot(name);
+        results.extend(harness.take_snapshot_results());
+    }
 }

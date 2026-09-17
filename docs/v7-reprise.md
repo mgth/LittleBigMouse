@@ -273,11 +273,63 @@ refus de dispositions avec trou/recouvrement. Les tests locaux utilisent des bac
 simulés ; aucun écran réel n'a été déplacé. Un profil sauvegardé avant un refus du
 pilote reste sauvegardé, même si Windows n'a pas accepté le placement.
 
+## Huitième lot : règles et bandes sur les écrans Windows
+
+- `lbm-overlay` fournit maintenant une bibliothèque utilisée par egui. `Rulers on
+  screens` projette les graduations du moniteur sélectionné sur les quatre bords
+  de chaque écran attaché. `Resistance on screens`, dans le mode résistance,
+  affiche les sections éditées avec les mêmes couleurs que la carte. Les deux
+  affichages sont exclusifs et désactivés par défaut.
+- Les origines et longueurs des règles viennent des projections physiques du
+  layout. Chaque écran utilise son propre rapport pixels/mm ; le facteur DPI ne
+  multiplie pas une seconde fois les graduations. Il dimensionne les bandes
+  (100 DIP pour les règles, 40 pour les sections). Les positions négatives, les
+  dalles en portrait et les décalages du zéro sur les autres écrans sont couverts.
+  Les marques extérieures au moniteur mesuré sont atténuées. Les coins sont coupés
+  en diagonale pour que deux bandes voisines ne se recouvrent pas.
+- Le rendu CPU produit du BGRA prémultiplié, avec graduations au millimètre,
+  subdivisions et chiffres de mesure déterministes. La scène est recalculée sur
+  une copie du layout pendant les gestes de position/résistance, sans commit ni
+  demande Save/Live. Les rafraîchissements sont limités à 20 Hz ; une scène inchangée
+  ne réalloue pas les fenêtres et ne redessine pas les surfaces natives.
+- Sous Windows, les fenêtres superposées sont sans activation, hors barre des tâches,
+  au premier plan et transparentes aux clics. Elles appartiennent à la fenêtre egui,
+  donc suivent sa réduction et sa fermeture. Leur création et mise à jour utilisent
+  un contexte DPI par moniteur V2, restauré ensuite sur le fil UI. Les bornes du
+  moniteur, son DPI et les dimensions réellement accordées sont vérifiés.
+- Une déconnexion, un changement de page/mode, une révision de bureau périmée, la
+  suspension, Échap ou un layout étranger arrêtent l'affichage. Les notifications
+  natives de changement d'écran/DPI masquent les fenêtres et demandent de recharger.
+  Une erreur après une création partielle détruit toutes les surfaces ; les ressources
+  HWND, DC et bitmaps sont libérées. Les overlays n'écrivent aucun profil et ne
+  déplacent aucun écran système.
+
+Contrôles locaux : 69 tests de l'application, 10 tests d'overlay et 11 tests de gestes
+de résistance passent. Le raccord des gestes expose la prévisualisation avant
+relâchement et la retire après annulation ; le cycle de vie de l'application couvre
+déconnexion, bureau périmé, layout étranger, suspension, changement de page, réduction
+et Échap. Une image de référence du rendu CPU est vérifiée pixel par pixel et a été
+inspectée visuellement : `rust/crates/lbm-overlay/tests/snapshots/screen-overlays.png`.
+Formatage et Clippy sans avertissement passent sur Linux et sur toutes les cibles de
+test overlay/ui/app pour `x86_64-pc-windows-msvc`.
+
+Références de comportement natif : [fenêtres layered et transparence aux clics](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features),
+[contexte DPI du fil et des fenêtres](https://learn.microsoft.com/en-us/windows/win32/hidpi/high-dpi-improvements-for-desktop-applications).
+
+Limites restantes : les fenêtres Win32 sont compilées, pas exécutées sur cette
+machine Linux. Qualifier sur Windows le clic traversant vers une autre application,
+l'absence de vol du focus, les échelles 100/150/200 %, la réduction/fermeture, les
+changements de DPI, le dock et les jeux plein écran. Les bureaux clonés sont refusés
+pour éviter des dessins contradictoires sur les mêmes pixels. Le backend Linux
+reste le prototype autonome : il n'est pas exposé comme fonction opérationnelle
+dans egui. Les lignes de référence traversant les écrans pendant l'accrochage des
+sections restent à raccorder.
+
 ## Suite, dans l'ordre
 
-1. Intégrer les règles et bandes sur les vrais écrans et valider les DPI mixtes.
-   Les actions individuelles de `Displays` et le placement global Windows sont
-   raccordés ; le crate overlay reste un prototype Linux.
+1. Raccorder les surfaces natives Linux (Wayland layer-shell/X11) à la bibliothèque
+   d'overlay, puis les lignes de référence des sections. Qualifier les overlays et
+   les changements de topologie sur matériel Windows à DPI mixtes.
 2. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
    périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
 3. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du

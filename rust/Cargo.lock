@@ -2136,8 +2136,10 @@ dependencies = [
  "lbm-icons",
  "lbm-ipc",
  "lbm-layout",
+ "lbm-overlay",
  "lbm-store",
  "lbm-ui",
+ "raw-window-handle",
  "serde_json",
  "tempfile",
  "tokio",
@@ -2221,10 +2223,13 @@ dependencies = [
 name = "lbm-overlay"
 version = "0.1.0"
 dependencies = [
+ "image",
+ "lbm-layout",
  "libc",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",
+ "windows 0.58.0",
  "x11rb 0.14.0",
 ]
 

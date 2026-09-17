@@ -130,6 +130,10 @@ struct App {
     detected: lbm_app::properties::Detected,
     property_error: Option<String>,
     resistance: lbm_ui::resistance::Editor,
+    screen_overlay: lbm_overlay::Overlay,
+    screen_overlay_mode: lbm_overlay::Mode,
+    screen_overlay_error: Option<String>,
+    next_screen_overlay: std::time::Instant,
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
     drag: Option<Drag>,
@@ -615,6 +619,10 @@ impl App {
             detected: Default::default(),
             property_error: None,
             resistance: lbm_ui::resistance::Editor::default(),
+            screen_overlay: Default::default(),
+            screen_overlay_mode: Default::default(),
+            screen_overlay_error: None,
+            next_screen_overlay: std::time::Instant::now(),
             selected: None,
             drag: None,
             agent: lbm_app::conversation::Conversation::default(),
@@ -669,6 +677,8 @@ impl App {
             }
             Event::Message(message) => self.agent_said(message),
             Event::Disconnected(why) => {
+                self.screen_overlay_mode = lbm_overlay::Mode::Off;
+                self.screen_overlay.clear();
                 self.outputs = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
@@ -1400,6 +1410,105 @@ impl App {
         }
     }
 
+    fn screen_overlay_controls(&mut self, ui: &mut egui::Ui) {
+        use lbm_overlay::Mode;
+        if !matches!(self.view, View::Map | View::List) {
+            return;
+        }
+        egui::Panel::top("screen-overlays").show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let available = lbm_overlay::SUPPORTED
+                    && self.requests.is_some()
+                    && !self.refresh.pending()
+                    && !self.outputs.changing()
+                    && !self.agent.suspended
+                    && self.layout.as_ref().is_some_and(|l| !l.is_virtual());
+                for (mode, label, enabled) in [
+                    (Mode::Rulers, "Rulers on screens", self.selected.is_some()),
+                    (
+                        Mode::Resistance,
+                        "Resistance on screens",
+                        self.mode == lbm_ui::mode::Mode::Resistance,
+                    ),
+                ] {
+                    if ui
+                        .add_enabled(
+                            available && enabled,
+                            egui::Button::new(label).selected(self.screen_overlay_mode == mode),
+                        )
+                        .clicked()
+                    {
+                        self.screen_overlay_mode = if self.screen_overlay_mode == mode {
+                            Mode::Off
+                        } else {
+                            mode
+                        };
+                        self.screen_overlay_error = None;
+                        self.next_screen_overlay = std::time::Instant::now();
+                    }
+                }
+                if !lbm_overlay::SUPPORTED {
+                    ui.small("Screen overlays: Windows only for now.");
+                }
+                if self.screen_overlay_mode != Mode::Off {
+                    ui.small(if self.screen_overlay_mode == Mode::Rulers {
+                        "Millimetres · large numbers: decimetres · click-through · Esc to hide"
+                    } else {
+                        "Edited resistance sections · click-through · Esc to hide"
+                    });
+                }
+                if let Some(error) = &self.screen_overlay_error {
+                    ui.colored_label(ui.visuals().error_fg_color, error);
+                }
+            });
+        });
+    }
+
+    fn screen_overlay_tick(&mut self, ctx: &egui::Context, movement: Option<(f64, f64)>) {
+        use lbm_overlay::Mode;
+        if self.requests.is_none()
+            || self.refresh.pending()
+            || self.outputs.changing()
+            || self.agent.suspended
+            || !matches!(self.view, View::Map | View::List)
+            || self.layout.as_ref().is_none_or(|l| l.is_virtual())
+            || ctx
+                .input(|i| i.key_pressed(egui::Key::Escape) || i.viewport().minimized == Some(true))
+        {
+            self.screen_overlay_mode = Mode::Off;
+        }
+        if self.screen_overlay_mode == Mode::Off {
+            self.screen_overlay.clear();
+            return;
+        }
+        // Limit CPU rasterization during pointer gestures. Hiding above is immediate.
+        let now = std::time::Instant::now();
+        ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        if now < self.next_screen_overlay {
+            return;
+        }
+        self.next_screen_overlay = now + std::time::Duration::from_millis(50);
+        // Rendering follows local gestures; Save/Live only see the original committed layout.
+        let mut drawn = self.layout.as_deref().unwrap().clone();
+        if let Some(action) = self.resistance.preview_action() {
+            let _ = lbm_app::resistance::apply(&mut drawn, action);
+        }
+        if let (Some(drag), Some((x, y))) = (&self.drag, movement) {
+            drawn.offset_location(&drag.id, lbm_layout::geo::Vector::new(x, y));
+        }
+        let result = lbm_overlay::scene::from_layout(
+            &drawn,
+            self.screen_overlay_mode,
+            self.selected.as_deref(),
+        )
+        .and_then(|bands| self.screen_overlay.sync(&bands));
+        if let Err(error) = result {
+            self.screen_overlay.clear();
+            self.screen_overlay_mode = Mode::Off;
+            self.screen_overlay_error = Some(error);
+        }
+    }
+
     fn output_request(&mut self, method: &'static str, extra: serde_json::Value, change: bool) {
         let Some(requests) = &self.requests else {
             return;
@@ -1459,6 +1568,15 @@ impl App {
 // end somebody else's preview.
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        #[cfg(windows)]
+        {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            if let Ok(handle) = _frame.window_handle() {
+                if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+                    self.screen_overlay.set_owner(handle.hwnd.get());
+                }
+            }
+        }
         let ctx = ui.ctx().clone();
         // The answer, when it has arrived. Nothing is polled: the thread asks for a
         // repaint after sending, so this runs on the pass that request causes.
@@ -1613,7 +1731,10 @@ impl eframe::App for App {
 
         if previous_view != self.view || previous_mode != self.mode || self.refresh.pending() {
             self.resistance.cancel();
+            self.screen_overlay_mode = lbm_overlay::Mode::Off;
+            self.screen_overlay.clear();
         }
+        self.screen_overlay_controls(ui);
         self.probe_tick(&ctx);
         if self.show_probe
             && self.mode != lbm_ui::mode::Mode::Resistance
@@ -1955,6 +2076,7 @@ impl eframe::App for App {
         }
         self.topology_report(&ctx);
         self.acted_on_the_map(acted.0, acted.1, &ctx);
+        self.screen_overlay_tick(&ctx, acted.1);
         // Last, so a drag or a setting changed on this frame is in the document this
         // tick sends rather than waiting for the next one.
         self.preview_tick(&ctx);
@@ -1993,6 +2115,60 @@ mod lifecycle_tests {
     use super::*;
     use lbm_app::session::Event;
     use serde_json::json;
+
+    #[test]
+    fn screen_overlays_stop_on_disconnect_stale_layout_foreign_layout_suspend_or_escape() {
+        for cause in 0..7 {
+            let ctx = egui::Context::default();
+            let mut app = App::with_config(ctx.clone(), None);
+            let mut layout = Layout::new(LayoutOptions::default());
+            layout.id = "A".into();
+            let before = lbm_store::LayoutDocument::of(&layout);
+            app.layout = Some(Box::new(layout));
+            let (requests, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+            app.requests = Some(requests);
+            let generation = app.refresh.begin(false).unwrap();
+            app.refresh.complete(generation, "A");
+            app.screen_overlay_mode = lbm_overlay::Mode::Resistance;
+            let mut input = egui::RawInput::default();
+            match cause {
+                0 => app.requests = None,
+                1 => app.refresh.invalidate(),
+                2 => {
+                    app.layout.as_mut().unwrap().source_kind =
+                        lbm_layout::model::LayoutSource::VirtualImport
+                }
+                3 => app.agent.suspended = true,
+                4 => app.view = View::Settings,
+                5 => input.events.push(egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Default::default(),
+                }),
+                _ => {
+                    input
+                        .viewports
+                        .entry(egui::ViewportId::ROOT)
+                        .or_default()
+                        .minimized = Some(true)
+                }
+            }
+            let mut output = ctx.run_ui(input, |ui| app.screen_overlay_tick(ui.ctx(), None));
+            output.textures_delta.clear();
+            assert_eq!(app.screen_overlay_mode, lbm_overlay::Mode::Off);
+            assert!(app.screen_overlay_error.is_none());
+            assert_eq!(
+                before,
+                lbm_store::LayoutDocument::of(app.layout.as_ref().unwrap())
+            );
+            assert!(
+                incoming.try_recv().is_err(),
+                "overlays never send a Save or Preview request"
+            );
+        }
+    }
 
     #[test]
     fn resistance_edits_are_previewed_and_a_stale_desktop_cannot_be_edited() {

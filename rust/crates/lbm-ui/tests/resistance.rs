@@ -182,9 +182,15 @@ fn a_draw_gesture_commits_only_on_release() {
     drag(&mut h, egui::pos2(634.0, 90.0), egui::pos2(634.0, 150.0));
     assert!(editor.borrow().active());
     assert!(actions.borrow().is_empty());
+    let Edit::Insert(preview) = editor.borrow().preview_action().unwrap().edit else {
+        panic!("expected overlay preview");
+    };
+    assert!((preview.from() - 50.).abs() < 0.001 && (preview.to() - 110.).abs() < 0.001);
+    assert!(monitors.borrow()[0].resistance.right.sections.is_empty());
     h.drop_at(egui::pos2(634.0, 150.0));
     h.run();
     assert!(!editor.borrow().active());
+    assert!(editor.borrow().preview_action().is_none());
     let log = actions.borrow();
     assert_eq!(log.len(), 1);
     let Edit::Insert(s) = log[0].edit else {
@@ -218,6 +224,7 @@ fn escape_focus_loss_and_layout_change_discard_a_gesture() {
         h.run();
         assert!(actions.borrow().is_empty());
         assert!(!editor.borrow().active());
+        assert!(editor.borrow().preview_action().is_none());
     }
 }
 #[test]

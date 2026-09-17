@@ -193,6 +193,18 @@ impl GapGuard {
         run(&args)
     }
 
+    /// What [`restore`](Self::restore) would run, running nothing and **leaving the
+    /// journal alone**.
+    ///
+    /// The second half is the whole reason this exists rather than a flag on `restore`.
+    /// `restore` deletes the journal when it succeeds, which is right for a real restore
+    /// and quietly destructive for a preview: the journal is the only record of the gaps
+    /// this agent opened, so a dry run that threw it away would leave a gapped topology
+    /// with nothing left able to put it back. A "dry" that writes is not dry.
+    pub fn would_restore(&self, monitors: &[LinuxMonitor]) -> Vec<String> {
+        plan_restore(&load(&self.journal), monitors)
+    }
+
     /// C# `Restore`: put the journaled outputs back. Returns whether the topology
     /// changed; the journal goes once nothing is left to restore.
     pub fn restore(&self, monitors: &[LinuxMonitor], run: impl FnOnce(&[String]) -> bool) -> bool {

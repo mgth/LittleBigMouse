@@ -46,6 +46,8 @@ pub mod supervise;
 pub mod tray;
 pub mod wallpaper;
 pub mod watch;
+#[cfg(any(windows, test))]
+mod windows_topology;
 #[cfg(windows)]
 pub mod winpipe;
 #[cfg(windows)]

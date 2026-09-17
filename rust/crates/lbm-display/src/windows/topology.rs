@@ -2,6 +2,7 @@
 //! The policy and transaction are platform neutral; `native` only translates Win32 data.
 #[cfg(windows)]
 mod native;
+pub mod placement;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Id {

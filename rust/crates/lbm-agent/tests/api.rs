@@ -41,6 +41,26 @@ impl World for OutputWorld {
     }
 }
 impl AgentWorld for OutputWorld {
+    fn topology_requires_stopped_engine(&self) -> bool {
+        true
+    }
+    fn apply_topology(
+        &mut self,
+        _: &str,
+        _: &lbm_store::LayoutDocument,
+        _: bool,
+        how: lbm_display::linux::topology::How,
+    ) -> Result<Vec<String>, String> {
+        use std::sync::atomic::Ordering::SeqCst;
+        if how == lbm_display::linux::topology::How::ForReal {
+            self.commands.fetch_add(1, SeqCst);
+            self.live[0].logical_x += 100.;
+            if self.fail_after_change.load(SeqCst) {
+                return Err("partially applied topology".into());
+            }
+        }
+        Ok(vec!["place Windows screens".into()])
+    }
     fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
         None
     }
@@ -895,7 +915,12 @@ fn an_apply_topology_request_carries_the_document_and_the_scale_choice() {
             document,
             adjust_scale,
             dry_run,
+            layout_revision,
         } => {
+            assert_eq!(
+                layout_revision, None,
+                "older Linux clients remain compatible"
+            );
             assert_eq!(layout_id, "TESTMON1");
             assert!(adjust_scale);
             assert!(document.layout.is_some());
@@ -1068,4 +1093,102 @@ async fn monitor_actions_rebuild_the_layout_and_reject_stale_or_running_requests
         .state(|s| s["LayoutRevision"].as_u64().unwrap() > old)
         .await;
     assert_eq!(commands.load(SeqCst), 4);
+}
+
+#[tokio::test]
+async fn topology_dry_runs_keep_edits_and_failed_real_applications_rebuild() {
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst},
+        Arc,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let commands = Arc::new(AtomicUsize::new(0));
+    let fail = Arc::new(AtomicBool::new(false));
+    let world = OutputWorld {
+        state: Enabled(Some(LayoutState {
+            enabled: false,
+            is_virtual: false,
+            saved: true,
+        })),
+        live: vec![lbm_layout::linux::LinuxMonitor::fallback()],
+        commands: commands.clone(),
+        fail_after_change: fail.clone(),
+    };
+    tokio::spawn(async move {
+        let timings = Timings {
+            debounce: Duration::from_millis(5),
+            stability_step: Duration::from_millis(5),
+            ..Default::default()
+        };
+        let mut agent = Agent::new(world, timings, hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let mut state = frontend.ask(json!({"Method":"Subscribe"})).await["Result"].clone();
+    if state["Engine"] != "Stopped" || state["HookConnected"] != true {
+        state = frontend
+            .state(|s| s["Engine"] == "Stopped" && s["HookConnected"] == true)
+            .await;
+    }
+    let mut request =
+        json!({"Method":"ApplyTopology", "LayoutId":"outputs", "Document":{}, "DryRun":true});
+    assert!(frontend.ask(request.clone()).await["Error"]
+        .as_str()
+        .unwrap()
+        .contains("revision"));
+    request["LayoutRevision"] = json!(state["LayoutRevision"].as_u64().unwrap() + 1);
+    assert!(frontend.ask(request.clone()).await["Error"]
+        .as_str()
+        .unwrap()
+        .contains("reload"));
+    request["LayoutRevision"] = state["LayoutRevision"].clone();
+    let result = frontend.ask(request.clone()).await;
+    assert_eq!(result["Result"]["DryRun"], true, "{result}");
+    assert_eq!(result["Result"]["Commands"][0], "place Windows screens");
+    // Wait beyond the display debounce, so an accidental rebuild would be observable.
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    let dry_state = frontend.ask(json!({"Method":"Snapshot"})).await;
+    assert_eq!(
+        dry_state["Result"]["LayoutRevision"],
+        state["LayoutRevision"]
+    );
+    assert_eq!(commands.load(SeqCst), 0);
+    request["DryRun"] = json!(false);
+    fail.store(true, SeqCst);
+    assert_eq!(
+        frontend.ask(request.clone()).await["Error"],
+        "partially applied topology"
+    );
+    let revision = state["LayoutRevision"].as_u64().unwrap();
+    state = frontend
+        .state(|s| s["LayoutRevision"].as_u64().unwrap() > revision)
+        .await;
+    assert_eq!(commands.load(SeqCst), 1);
+    fail.store(false, SeqCst);
+    request["LayoutRevision"] = state["LayoutRevision"].clone();
+    assert_eq!(
+        frontend.ask(request.clone()).await["Result"]["DryRun"],
+        false
+    );
+    let revision = state["LayoutRevision"].as_u64().unwrap();
+    state = frontend
+        .state(|s| s["LayoutRevision"].as_u64().unwrap() > revision)
+        .await;
+    assert_eq!(commands.load(SeqCst), 2);
+    request["LayoutRevision"] = state["LayoutRevision"].clone();
+    frontend.ask(json!({"Method":"Start"})).await;
+    frontend.state(|s| s["Engine"] == "Running").await;
+    for dry in [true, false] {
+        request["DryRun"] = json!(dry);
+        assert!(frontend.ask(request.clone()).await["Error"]
+            .as_str()
+            .unwrap()
+            .contains("stop the engine"));
+    }
+    assert_eq!(commands.load(SeqCst), 2);
 }

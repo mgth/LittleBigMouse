@@ -343,3 +343,184 @@ fn unexpected_activation_and_resolution_changes_are_reported() {
         .is_err());
     }
 }
+
+use lbm_display::windows::topology::placement::{apply_with, Wanted};
+use lbm_layout::geo::Rect;
+fn wanted(c: &Configuration) -> Vec<Wanted> {
+    c.paths
+        .iter()
+        .filter(|p| p.active)
+        .map(|p| {
+            let s = c.sources.iter().find(|s| s.id == p.id.source).unwrap();
+            Wanted {
+                connector: p.connector.to_uppercase(),
+                previous: Rect::new(s.x as f64, s.y as f64, s.width as f64, s.height as f64),
+                x: s.x as f64,
+                y: s.y as f64,
+            }
+        })
+        .collect()
+}
+fn moved(c: &Configuration) -> (Vec<Wanted>, Configuration) {
+    let mut w = wanted(c);
+    w[1].x = 1920.;
+    w[1].y = 0.;
+    let mut after = c.clone();
+    after.sources[1].x = 1920;
+    after.sources[1].y = 0;
+    (w, after)
+}
+#[test]
+fn placement_preserves_paths_modes_and_primary_and_rounds_negative_positions() {
+    let c = desktop();
+    let mut w = wanted(&c);
+    w[1].x = -1919.6;
+    w[1].y = -100.6;
+    let p = c.placement_plan(&w).unwrap();
+    assert_eq!(p.paths, vec![c.paths[0].id, c.paths[1].id]);
+    assert_eq!(p.positions, vec![(id(1, 0), 0, 0), (id(1, 1), -1920, -101)]);
+    assert!(!p.allow_changes);
+    assert_eq!(p.activate, None);
+}
+#[test]
+fn placement_rejects_partial_duplicate_inactive_unknown_and_stale_layouts() {
+    let c = desktop();
+    let w = wanted(&c);
+    assert!(c.placement_plan(&[]).is_err());
+    assert!(c.placement_plan(&w[..1]).is_err());
+    for issue in 0..6 {
+        let mut w = w.clone();
+        match issue {
+            0 => w[1] = w[0].clone(),
+            1 => w[1].connector = c.paths[2].connector.clone(),
+            2 => w[1].connector = "unknown".into(),
+            3 => w[1].previous = Rect::new(10., 20., 1920., 1080.),
+            4 => w[1].previous = Rect::new(-1920., 120., 3840., 2160.),
+            _ => w[0].x = 100.,
+        }
+        assert!(c.placement_plan(&w).is_err(), "case {issue}");
+    }
+    for value in [
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        i32::MAX as f64 + 1.,
+        i32::MIN as f64 - 1.,
+    ] {
+        let mut w = w.clone();
+        w[1].x = value;
+        assert!(c.placement_plan(&w).is_err());
+    }
+}
+#[test]
+fn placement_deduplicates_clones_and_rejects_conflicting_positions() {
+    let mut c = desktop();
+    c.paths[1].id.source = c.paths[0].id.source;
+    c.sources.truncate(1);
+    let mut w = wanted(&c);
+    assert_eq!(c.placement_plan(&w).unwrap().positions.len(), 1);
+    w[1].x = 1920.;
+    assert!(c.placement_plan(&w).is_err());
+    // Non-primary clones exercise the shared-source conflict independently of origin.
+    let mut c = desktop();
+    c.paths.insert(2, path(1, 14, true));
+    let mut w = wanted(&c);
+    w[2].y = 999.;
+    assert!(c.placement_plan(&w).unwrap_err().contains("Cloned"));
+}
+#[test]
+fn placement_dry_run_validates_without_profile_or_display_writes() {
+    let c = desktop();
+    let (w, _) = moved(&c);
+    let mut b = fake(vec![c.clone(), c.clone()]);
+    let report = apply_with(&mut b, &w, true, || panic!("dry run saved a profile")).unwrap();
+    assert!(report
+        .iter()
+        .any(|line| line.contains("(-1920, 120) -> (1920, 0)")));
+    assert_eq!(b.calls, ["query", "validate", "query"]);
+}
+#[test]
+fn placement_saves_after_validation_then_applies_once_and_checks_the_result() {
+    let c = desktop();
+    let (w, after) = moved(&c);
+    let mut b = fake(vec![c.clone(), c.clone(), c.clone(), after]);
+    let mut saved = false;
+    apply_with(&mut b, &w, false, || {
+        saved = true;
+        Ok(())
+    })
+    .unwrap();
+    assert!(saved);
+    assert_eq!(
+        b.calls,
+        ["query", "validate", "query", "query", "apply", "query"]
+    );
+}
+#[test]
+fn placement_refusal_races_and_profile_failure_never_apply() {
+    let c = desktop();
+    let (w, _) = moved(&c);
+    let mut b = fake(vec![c.clone()]);
+    b.validate_ok = false;
+    assert!(apply_with(&mut b, &w, false, || panic!("saved rejected topology")).is_err());
+    assert_eq!(b.calls, ["query", "validate"]);
+    let mut changed = c.clone();
+    changed.details.push_str("changed DPI");
+    let mut b = fake(vec![c.clone(), changed.clone()]);
+    assert!(apply_with(&mut b, &w, false, || panic!("saved stale topology")).is_err());
+    assert_eq!(b.calls, ["query", "validate", "query"]);
+    let mut b = fake(vec![c.clone(), c.clone()]);
+    assert_eq!(
+        apply_with(&mut b, &w, false, || Err("disk full".into())).unwrap_err(),
+        "disk full"
+    );
+    assert_eq!(b.calls, ["query", "validate", "query"]);
+    let mut b = fake(vec![c.clone(), c.clone(), changed]);
+    assert!(apply_with(&mut b, &w, false, || Ok(()))
+        .unwrap_err()
+        .contains("while saving"));
+    assert_eq!(b.calls, ["query", "validate", "query", "query"]);
+}
+#[test]
+fn placement_reads_back_after_driver_failure_and_detects_false_success() {
+    let c = desktop();
+    let (w, after) = moved(&c);
+    let mut b = fake(vec![c.clone(), c.clone(), c.clone(), after.clone()]);
+    b.apply_ok = false;
+    assert_eq!(
+        apply_with(&mut b, &w, false, || Ok(())).unwrap_err(),
+        "driver failure"
+    );
+    assert_eq!(b.calls.last(), Some(&"query"));
+    for issue in 0..4 {
+        let mut after = after.clone();
+        match issue {
+            0 => after.sources[1].y = 999,
+            1 => after.sources[1].width = 3840,
+            2 => after.paths[1].active = false,
+            _ => after.paths[1].connector = "different panel".into(),
+        }
+        let mut b = fake(vec![c.clone(), c.clone(), c.clone(), after]);
+        assert!(
+            apply_with(&mut b, &w, false, || Ok(())).is_err(),
+            "case {issue}"
+        );
+    }
+}
+#[test]
+fn placement_noop_still_saves_physical_edits_but_never_calls_native_apply() {
+    let c = desktop();
+    let w = wanted(&c);
+    let mut b = fake(vec![c.clone(), c.clone()]);
+    apply_with(&mut b, &w, true, || panic!("dry saved")).unwrap();
+    assert_eq!(b.calls, ["query", "query"]);
+    let mut b = fake(vec![c.clone(), c.clone(), c.clone()]);
+    let mut saved = false;
+    apply_with(&mut b, &w, false, || {
+        saved = true;
+        Ok(())
+    })
+    .unwrap();
+    assert!(saved);
+    assert_eq!(b.calls, ["query", "query", "query"]);
+}

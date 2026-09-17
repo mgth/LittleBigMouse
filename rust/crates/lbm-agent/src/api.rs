@@ -117,6 +117,13 @@ pub enum Request {
     ApplyTopology {
         #[serde(rename = "LayoutId")]
         layout_id: String,
+        /// Required by the Windows placement path. Optional for older Linux clients.
+        #[serde(
+            rename = "LayoutRevision",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        layout_revision: Option<u64>,
         #[serde(rename = "Document")]
         document: Box<LayoutDocument>,
         /// Ask the compositor for the per-output scales that make every monitor's

@@ -394,7 +394,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         // The same rule as an edit: the settings are keyed by layout, and a frontend
         // whose displays have changed under it must not write over the new one.
         self.editable(layout_id)?;
-        wallpaper_settings::update(&paths.settings, layout_id, settings)
+        crate::wallpaper_cache::save_settings(&paths.settings, layout_id, settings)
             .map_err(|error| format!("the wallpaper settings could not be written: {error}"))?;
         Ok(self.wallpaper())
     }

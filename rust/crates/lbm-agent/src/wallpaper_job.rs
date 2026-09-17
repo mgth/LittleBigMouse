@@ -17,22 +17,42 @@ pub struct Job {
     pub images: PathBuf,
 }
 pub fn image_file(dir: &Path, pixels: &image::RgbaImage) -> Result<PathBuf, String> {
+    let _guard = crate::wallpaper_cache::FILES
+        .lock()
+        .map_err(|e| e.to_string())?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     pixels.dimensions().hash(&mut hash);
     pixels.as_raw().hash(&mut hash);
     let path = dir.join(format!("editor_{:016x}.png", hash.finish()));
-    if !path.exists() {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        let tmp = path.with_extension(format!(
-            "{}.{}.tmp",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        pixels
-            .save_with_format(&tmp, image::ImageFormat::Png)
-            .map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+    match std::fs::symlink_metadata(&path) {
+        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+            // A reused image can be queued for application. Restart its grace period
+            // under the same lock used by the collector's final age check.
+            std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .and_then(|f| f.set_modified(std::time::SystemTime::now()))
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(_) => return Err("The wallpaper cache entry is not a regular file.".into()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let tmp = path.with_extension(format!(
+                "{}.{}.tmp",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let result = pixels
+                .save_with_format(&tmp, image::ImageFormat::Png)
+                .map_err(|e| e.to_string())
+                .and_then(|()| std::fs::rename(&tmp, &path).map_err(|e| e.to_string()));
+            if result.is_err() {
+                let _ = std::fs::remove_file(&tmp);
+            }
+            result?;
+        }
+        Err(e) => return Err(e.to_string()),
     }
     Ok(path)
 }
@@ -69,8 +89,7 @@ impl Job {
         if generation.load(Ordering::SeqCst) != expected {
             return Err("The displays or wallpaper request changed. Reload and try again.".into());
         }
-        wallpaper_settings::update(&self.store, &self.layout.id, self.settings)
-            .map_err(|e| e.to_string())?;
+        crate::wallpaper_cache::save_settings(&self.store, &self.layout.id, self.settings)?;
         Ok(screens)
     }
 }

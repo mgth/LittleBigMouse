@@ -250,6 +250,9 @@ impl<W: AgentWorld> Agent<W> {
                             let lock = self.wallpaper_lock.clone();
                             tokio::spawn(async move {
                                 let _guard = lock.lock().await;
+                                let cache = job.images.clone();
+                                let store = job.store.clone();
+                                let mut applied_successfully = false;
                                 let result = async {
                                     let supported = tokio::time::timeout(
                                         std::time::Duration::from_secs(5),
@@ -266,6 +269,7 @@ impl<W: AgentWorld> Agent<W> {
                                     } else {
                                         crate::desktop::apply_checked(&screens).await
                                     };
+                                    applied_successfully = applied.is_ok();
                                     Ok(serde_json::json!({
                                         "Saved": true,
                                         "Applied": applied.is_ok(),
@@ -273,6 +277,9 @@ impl<W: AgentWorld> Agent<W> {
                                     }))
                                 }.await;
                                 client.send(api::answer(id, result));
+                                if applied_successfully {
+                                    crate::wallpaper_cache::cleanup(cache, store).await;
+                                }
                             });
                             return;
                         }
@@ -534,13 +541,17 @@ impl<W: AgentWorld> Agent<W> {
             if generation.load(Ordering::SeqCst) != expected {
                 return;
             }
+            let cache = job.images.clone();
+            let store = job.store.clone();
             let prepared = tokio::task::spawn_blocking(move || {
                 crate::wallpaper_job::screens(&job.layout, &job.settings, &job.images)
             })
             .await;
             match prepared {
                 Ok(Ok(screens)) if generation.load(Ordering::SeqCst) == expected => {
-                    crate::desktop::apply(&screens).await;
+                    if crate::desktop::apply(&screens).await {
+                        crate::wallpaper_cache::cleanup(cache, store).await;
+                    }
                 }
                 Ok(Err(error)) => eprintln!("[lbm-agent] wallpaper: {error}"),
                 Err(error) => eprintln!("[lbm-agent] wallpaper worker: {error}"),
@@ -561,8 +572,16 @@ impl<W: AgentWorld> Agent<W> {
         if screens.is_empty() {
             return;
         }
+        let pending = match crate::wallpaper_cache::pin(&screens) {
+            Ok(pending) => pending,
+            Err(e) => {
+                eprintln!("[lbm-agent] wallpaper: {e}");
+                return;
+            }
+        };
         let lock = self.wallpaper_lock.clone();
         tokio::spawn(async move {
+            let _pending = pending;
             let _guard = lock.lock().await;
             if generation.load(std::sync::atomic::Ordering::SeqCst) != expected {
                 return;

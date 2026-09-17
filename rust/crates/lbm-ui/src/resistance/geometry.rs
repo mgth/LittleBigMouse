@@ -150,20 +150,73 @@ pub fn grab(sections: &[BorderSection], at: f64, scale: f64) -> Grab {
     }
 }
 
-pub fn targets(monitors: &[Monitor], id: &str, side: Side, excluding: Option<usize>) -> Vec<f64> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SnapKind {
+    EdgeEnd,
+    Middle,
+    ScreenEdge,
+    Section,
+}
+impl SnapKind {
+    pub fn color(self) -> egui::Color32 {
+        match self {
+            Self::EdgeEnd | Self::Middle => egui::Color32::WHITE,
+            Self::ScreenEdge => egui::Color32::from_rgb(0x33, 0xc4, 0xd6),
+            Self::Section => egui::Color32::from_rgb(0xe8, 0xc3, 0x3a),
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Target {
+    pub mm: f64,
+    pub kind: SnapKind,
+}
+
+/// Stable precedence for coincident references: own geometry, other screens, then sections.
+pub fn references(
+    monitors: &[Monitor],
+    id: &str,
+    side: Side,
+    excluding: Option<usize>,
+) -> Vec<Target> {
     let Some(me) = monitors.iter().find(|m| m.id == id) else {
         return vec![];
     };
     let length = side.length(me.bounds);
     let origin = side.origin(me.bounds);
-    let mut targets = vec![0.0, length, length / 2.0];
+    let mut targets = vec![
+        Target {
+            mm: 0.,
+            kind: SnapKind::EdgeEnd,
+        },
+        Target {
+            mm: length,
+            kind: SnapKind::EdgeEnd,
+        },
+        Target {
+            mm: length / 2.,
+            kind: SnapKind::Middle,
+        },
+    ];
+    let mut add = |mm: f64, kind| {
+        if mm.is_finite()
+            && mm >= 0.
+            && mm <= length
+            && !targets.iter().any(|t| (t.mm - mm).abs() < 0.001)
+        {
+            targets.push(Target { mm, kind });
+        }
+    };
     for m in monitors {
         if m.id != id {
-            targets.extend([
-                side.origin(m.bounds) - origin,
+            add(side.origin(m.bounds) - origin, SnapKind::ScreenEdge);
+            add(
                 side.origin(m.bounds) + side.length(m.bounds) - origin,
-            ]);
+                SnapKind::ScreenEdge,
+            );
         }
+    }
+    for m in monitors {
         for parallel in Side::ALL
             .into_iter()
             .filter(|s| s.vertical() == side.vertical())
@@ -173,12 +226,18 @@ pub fn targets(monitors: &[Monitor], id: &str, side: Side, excluding: Option<usi
                     continue;
                 }
                 let offset = parallel.origin(m.bounds) - origin;
-                targets.extend([offset + s.from(), offset + s.to()]);
+                add(offset + s.from(), SnapKind::Section);
+                add(offset + s.to(), SnapKind::Section);
             }
         }
     }
-    targets.retain(|v| v.is_finite() && *v >= 0.0 && *v <= length);
     targets
+}
+pub fn targets(monitors: &[Monitor], id: &str, side: Side, excluding: Option<usize>) -> Vec<f64> {
+    references(monitors, id, side, excluding)
+        .iter()
+        .map(|t| t.mm)
+        .collect()
 }
 pub fn snap(value: f64, length: f64, tolerance: f64, targets: &[f64], enabled: bool) -> f64 {
     let value = value.clamp(0.0, length);

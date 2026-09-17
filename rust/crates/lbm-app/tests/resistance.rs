@@ -49,6 +49,50 @@ fn edit(
 fn section(from: f64, to: f64) -> BorderSection {
     BorderSection::new(from, to, 4.0, false, 9.0, true)
 }
+#[test]
+fn reference_feedback_is_projected_without_entering_the_saved_document() {
+    use lbm_overlay::{
+        scene::{self, Content, GuideKind},
+        Mode,
+    };
+    use lbm_ui::resistance::{Guide, SnapKind};
+    let layout = layout();
+    let document = settings::document(&layout);
+    for side in Side::ALL {
+        for (kind, native) in [
+            (SnapKind::Middle, GuideKind::Middle),
+            (SnapKind::ScreenEdge, GuideKind::ScreenEdge),
+            (SnapKind::Section, GuideKind::Section),
+        ] {
+            let guide = Guide {
+                monitor: layout.monitors()[0].id.clone(),
+                side,
+                mm: 120.,
+                layout_mm: 120.,
+                kind,
+            };
+            let r = lbm_app::resistance::overlay_reference(guide.clone()).unwrap();
+            assert_eq!(r.horizontal, side.vertical());
+            assert_eq!(r.kind, native);
+            let bands = scene::with_reference(&layout, Mode::Resistance, None, Some(r)).unwrap();
+            assert!(bands
+                .iter()
+                .any(|b| matches!(b.content,Content::Guide{kind,..} if kind==native)));
+            assert_eq!(
+                side.vertical(),
+                bands.last().unwrap().side == scene::Side::Top
+            );
+            let colors = kind.color().to_array();
+            assert_eq!(&colors[..3], &native.rgba()[..3]);
+            assert!(lbm_app::resistance::overlay_reference(Guide {
+                kind: SnapKind::EdgeEnd,
+                ..guide
+            })
+            .is_none());
+        }
+    }
+    assert_eq!(settings::document(&layout), document);
+}
 
 #[test]
 fn sections_survive_save_and_preview_documents_and_reach_the_compiled_links() {

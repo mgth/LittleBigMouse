@@ -60,8 +60,111 @@ impl Pixels {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Content {
-    Ruler { zero_mm: f64, measured_mm: f64 },
+    Ruler {
+        zero_mm: f64,
+        measured_mm: f64,
+    },
     Resistance(#[serde(with = "sections_wire")] Vec<BorderSection>),
+    /// Ratio across the destination panel, independent of its DPI and pixel origin.
+    Guide {
+        at: f64,
+        kind: GuideKind,
+    },
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GuideKind {
+    Middle,
+    ScreenEdge,
+    Section,
+}
+impl GuideKind {
+    pub fn rgba(self) -> [u8; 4] {
+        match self {
+            Self::Middle => [255, 255, 255, 217],
+            Self::ScreenEdge => [0x33, 0xc4, 0xd6, 217],
+            Self::Section => [0xe8, 0xc3, 0x3a, 217],
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Reference {
+    pub horizontal: bool,
+    pub layout_mm: f64,
+    pub kind: GuideKind,
+}
+
+/// Thin transparent windows remain inside the output, including a guide on its far edge.
+pub(crate) fn guide_rect(screen: Pixels, side: Side, depth: i32, at: f64) -> Pixels {
+    let length = if side.vertical() {
+        screen.width
+    } else {
+        screen.height
+    };
+    let depth = depth.clamp(1, length);
+    let start = ((at * f64::from(length)).round() as i32 - depth / 2).clamp(0, length - depth);
+    if side.vertical() {
+        Pixels {
+            x: screen.x + start,
+            width: depth,
+            ..screen
+        }
+    } else {
+        Pixels {
+            y: screen.y + start,
+            height: depth,
+            ..screen
+        }
+    }
+}
+
+/// Add the active snap reference only when resistance overlays were explicitly enabled.
+pub fn with_reference(
+    layout: &Layout,
+    mode: Mode,
+    selected: Option<&str>,
+    reference: Option<Reference>,
+) -> Result<Vec<Band>, String> {
+    let mut bands = from_layout(layout, mode, selected)?;
+    let Some(reference) = reference.filter(|_| mode == Mode::Resistance) else {
+        return Ok(bands);
+    };
+    if !reference.layout_mm.is_finite() || reference.layout_mm.abs() > 2_000_000. {
+        return Err("Invalid physical reference line.".into());
+    }
+    let side = if reference.horizontal {
+        Side::Top
+    } else {
+        Side::Left
+    };
+    let mut guides = Vec::new();
+    for band in bands.iter().filter(|b| b.side == side) {
+        let monitor = layout
+            .monitor(&band.monitor)
+            .ok_or("Reference monitor disappeared.")?;
+        let bounds = layout
+            .depth_projection(monitor)
+            .ok_or("No physical reference bounds.")?
+            .bounds();
+        let (origin, length) = if reference.horizontal {
+            (bounds.top(), bounds.height())
+        } else {
+            (bounds.left(), bounds.width())
+        };
+        let local = reference.layout_mm - origin;
+        if !(0.0..=length).contains(&local) {
+            continue;
+        }
+        let at = local / length;
+        let mut guide = band.clone();
+        guide.content = Content::Guide {
+            at,
+            kind: reference.kind,
+        };
+        guide.rect = guide_rect(band.screen, side, (2. * band.scale).round() as i32, at);
+        guides.push(guide);
+    }
+    bands.extend(guides);
+    Ok(bands)
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Band {

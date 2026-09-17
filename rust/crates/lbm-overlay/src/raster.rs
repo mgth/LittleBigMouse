@@ -85,6 +85,19 @@ pub fn render(band: &Band) -> Result<Image, String> {
     };
     let axis = band.axis_pixels();
     let depth = band.thickness();
+    if let Content::Guide { kind, .. } = band.content {
+        let dash = (4. * band.scale).round().max(1.) as i32;
+        for start in (0..axis).step_by((2 * dash) as usize) {
+            image.strip(
+                band.side,
+                start,
+                (start + dash).min(axis),
+                depth,
+                kind.rgba(),
+            );
+        }
+        return Ok(image);
+    }
     image.strip(band.side, 0, axis, depth, [20, 25, 32, 160]);
     match &band.content {
         Content::Ruler {
@@ -143,6 +156,7 @@ pub fn render(band: &Band) -> Result<Image, String> {
                 image.strip(band.side, end - 1, end, depth, [240, 245, 248, 255]);
             }
         }
+        Content::Guide { .. } => unreachable!("guides return before band rendering"),
     }
     // Miter the four corners so one edge never paints over its neighbour's marks.
     for y in 0..height {

@@ -166,10 +166,21 @@ pub(super) struct Gesture {
     preview: Option<BorderSection>,
     /// Resizing the window invalidates the pointer's millimetre conversion.
     band: egui::Rect,
-    length: f64,
+    bounds: lbm_layout::geo::Rect,
+    guide: Option<geometry::Target>,
 }
 impl Gesture {
-    fn update(&mut self, raw: f64, length: f64, scale: f64, targets: &[f64], snap: bool) {
+    fn update(
+        &mut self,
+        raw: f64,
+        length: f64,
+        scale: f64,
+        references: &[geometry::Target],
+        snap: bool,
+    ) {
+        self.guide = None;
+        let values: Vec<_> = references.iter().map(|t| t.mm).collect();
+        let targets = values.as_slice();
         let index = self.grab.index();
         let reference = if index.is_some() {
             (self.original.from() + self.original.to()) / 2.0
@@ -213,6 +224,45 @@ impl Gesture {
         if wanted.is_some() || self.grab == Grab::Draw {
             self.preview = wanted.map(|s| s.section(self.original));
         }
+        // Only an actually applied boundary can explain the snap. Do not mark the fixed
+        // end of a resize/draw, or the retained old preview after an invalid resize.
+        if snap {
+            if let Some(span) = wanted {
+                let candidates = match self.grab {
+                    Grab::Draw => [
+                        if raw < self.anchor {
+                            span.from
+                        } else {
+                            span.to
+                        },
+                        f64::NAN,
+                    ],
+                    Grab::From(_) => [
+                        if self.original.from() + raw - self.press <= self.original.to() {
+                            span.from
+                        } else {
+                            span.to
+                        },
+                        f64::NAN,
+                    ],
+                    Grab::To(_) => [
+                        if self.original.to() + raw - self.press >= self.original.from() {
+                            span.to
+                        } else {
+                            span.from
+                        },
+                        f64::NAN,
+                    ],
+                    Grab::Move(_) => [span.from, span.to],
+                };
+                self.guide = candidates.iter().find_map(|mm| {
+                    references
+                        .iter()
+                        .find(|t| (t.mm - mm).abs() < 0.001)
+                        .copied()
+                });
+            }
+        }
     }
     fn action(&self) -> Option<Action> {
         let section = self.preview?;
@@ -245,6 +295,17 @@ impl Editor {
     pub fn preview_action(&self) -> Option<Action> {
         self.gesture.as_ref().and_then(Gesture::action)
     }
+    pub fn guide(&self) -> Option<Guide> {
+        let g = self.gesture.as_ref()?;
+        let target = g.guide?;
+        Some(Guide {
+            monitor: g.monitor.clone(),
+            side: g.side,
+            mm: target.mm,
+            layout_mm: g.side.origin(g.bounds) + target.mm,
+            kind: target.kind,
+        })
+    }
     /// Preview stays local until release. Escape, focus loss, a changed layout or a
     /// changed projection discard it, so cancelled gestures never reach Save/Live.
     pub fn bands(
@@ -262,8 +323,7 @@ impl Editor {
                 .iter()
                 .find(|m| m.id == g.monitor)
                 .is_some_and(|m| {
-                    g.side.sections(&m.resistance) == g.expected
-                        && g.side.length(m.bounds) == g.length
+                    g.side.sections(&m.resistance) == g.expected && m.bounds == g.bounds
                 })
                 && placements
                     .iter()
@@ -325,7 +385,6 @@ impl Editor {
                 }
             }
             let mut drawn = Vec::new();
-            let mut lines = Vec::new();
             for (side, response) in responses {
                 let Some((rect, length, scale)) = measure(content, monitor, side) else {
                     continue;
@@ -387,7 +446,8 @@ impl Editor {
                             original,
                             preview: grab.index().map(|_| original),
                             band: rect,
-                            length,
+                            bounds: monitor.bounds,
+                            guide: None,
                         });
                     }
                 }
@@ -398,41 +458,13 @@ impl Editor {
                     .as_mut()
                     .filter(|g| g.monitor == *id && g.side == side)
                 {
-                    let targets = geometry::targets(monitors, id, side, g.grab.index());
+                    let targets = geometry::references(monitors, id, side, g.grab.index());
+                    g.guide = None;
                     if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
                         g.update(mm(pos, rect, side, length), length, scale, &targets, snap);
                     }
                     preview = g.preview;
                     replacing = g.grab.index();
-                    if snap {
-                        if let Some(s) = preview {
-                            for boundary in [s.from(), s.to()] {
-                                if targets.iter().any(|v| (*v - boundary).abs() < 0.001) {
-                                    let r = segment(
-                                        rect,
-                                        side,
-                                        Span {
-                                            from: boundary,
-                                            to: boundary,
-                                        },
-                                        length,
-                                    );
-                                    let area = ui.max_rect();
-                                    lines.push(if side.vertical() {
-                                        [
-                                            egui::pos2(area.left(), r.top()),
-                                            egui::pos2(area.right(), r.top()),
-                                        ]
-                                    } else {
-                                        [
-                                            egui::pos2(r.left(), area.top()),
-                                            egui::pos2(r.left(), area.bottom()),
-                                        ]
-                                    });
-                                }
-                            }
-                        }
-                    }
                     if response.drag_stopped_by(egui::PointerButton::Primary) {
                         result.action = g.action();
                     }
@@ -474,13 +506,12 @@ impl Editor {
                 });
             }
             paint(ui, content, &drawn);
-            for line in lines {
-                ui.painter()
-                    .line_segment(line, egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE));
-            }
         }
         if ui.input(|i| !i.pointer.primary_down()) {
             self.cancel();
+        }
+        if let Some(guide) = self.guide() {
+            draw_guide(ui, &guide, monitors, placements);
         }
         if ui.is_enabled()
             && !ui.ctx().egui_wants_keyboard_input()
@@ -493,6 +524,47 @@ impl Editor {
             }
         }
         result
+    }
+}
+fn draw_guide(
+    ui: &egui::Ui,
+    guide: &Guide,
+    monitors: &[Monitor],
+    placements: &[(String, egui::Rect)],
+) {
+    for (id, rect) in placements {
+        let Some(m) = monitors.iter().find(|m| m.id == *id) else {
+            continue;
+        };
+        let length = guide.side.length(m.bounds);
+        let local = guide.layout_mm - guide.side.origin(m.bounds);
+        if !length.is_finite() || length <= 0. || !(0.0..=length).contains(&local) {
+            continue;
+        }
+        let area = if guide.kind == SnapKind::EdgeEnd {
+            if *id != guide.monitor {
+                continue;
+            }
+            band(*rect, guide.side)
+        } else {
+            *rect
+        };
+        let position = (local / length) as f32;
+        let line = if guide.side.vertical() {
+            let y = rect.top() + position * rect.height();
+            [egui::pos2(area.left(), y), egui::pos2(area.right(), y)]
+        } else {
+            let x = rect.left() + position * rect.width();
+            [egui::pos2(x, area.top()), egui::pos2(x, area.bottom())]
+        };
+        ui.painter()
+            .with_clip_rect(ui.clip_rect().intersect(*rect))
+            .extend(egui::Shape::dashed_line(
+                &line,
+                egui::Stroke::new(1.5, guide.kind.color()),
+                4.,
+                4.,
+            ));
     }
 }
 struct Drawn {

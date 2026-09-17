@@ -61,6 +61,11 @@ enum Found {
     DetectionFailed {
         generation: u64,
     },
+    WallpaperPreview {
+        generation: u64,
+        document: Box<lbm_store::LayoutDocument>,
+        result: Result<Vec<lbm_wallpaper::render::Painted>, String>,
+    },
     Thumbnail {
         generation: u64,
         screen: String,
@@ -171,6 +176,10 @@ struct App {
     textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded wallpaper thumbnails, by screen id.
     wallpapers: HashMap<String, egui::TextureHandle>,
+    wallpaper: lbm_app::wallpaper_editor::Editor,
+    wallpaper_preview_requested: bool,
+    wallpaper_preview_busy: Option<u64>,
+    wallpaper_previewed: bool,
     /// What the bottom bar shows, from what the agent says.
     state: lbm_ui::State,
     /// What to ask the agent, when there is one to ask.
@@ -384,7 +393,7 @@ fn details_of(
         }
         // These modes use the selected-monitor properties panel instead of map rows.
         Mode::Info | Mode::Size | Mode::Resistance => Vec::new(),
-        // Not drawn by this window; the bar does not offer them.
+        // Wallpaper has its own image editor, with no text inside monitor frames.
         Mode::Vcp | Mode::Wallpaper => Vec::new(),
     }
 }
@@ -424,147 +433,17 @@ fn screens_of(layout: &Layout, mode: lbm_ui::mode::Mode) -> Vec<Screen> {
         .collect()
 }
 
-/// The thumbnails for one layout's screens, in the order they will be wanted.
-///
-/// Read-only, from the file the agent owns (`wallpaper.json`) and the C# frontend reads
-/// the same way — `WallpaperSettings.FilePath`, and the wire test that says outright
-/// "the agent writes what it is sent into wallpaper.json, and this side reads that".
-///
-/// Everything is done in quarter-pixels, as `MonitorFrameViewModel.cs:176-201` does:
-/// the screen's rectangle and the desktop's are divided by four and so is the picture,
-/// which is what keeps a wall of 4K wallpapers out of memory. A screen smaller than the
-/// divisor gets nothing, as there too.
-fn wallpapers(layout_id: &str, screens: &[Screen]) -> Vec<(String, image::RgbaImage)> {
-    use lbm_store::wallpaper_settings::{self, ScreenWallpaperKind, WallpaperMode};
-
-    if layout_id.is_empty() {
-        return Vec::new();
-    }
-    let all = wallpaper_settings::load(&wallpaper_settings::settings_path());
-    let Some(settings) = all.get(layout_id) else {
+/// Read-only thumbnails use the same physical rendering as the agent and editor.
+fn wallpapers(layout: &Layout) -> Vec<(String, image::RgbaImage)> {
+    let all = lbm_store::wallpaper_settings::load(&lbm_store::wallpaper_settings::settings_path());
+    let Some(settings) = all.get(&layout.id) else {
         return Vec::new();
     };
-
-    let shrink = lbm_ui::wallpaper::SHRINK;
-    let quarter = |r: Rect| lbm_ui::wallpaper::Rect {
-        x: (r.left() as i32) / shrink,
-        y: (r.top() as i32) / shrink,
-        w: (r.width() as i32) / shrink,
-        h: (r.height() as i32) / shrink,
-    };
-    // The desktop the spanned styles are cut out of: every screen's pixels together.
-    let desktop = screens
-        .iter()
-        .fold(None::<lbm_ui::wallpaper::Rect>, |box_, s| {
-            let r = quarter(s.pixels);
-            Some(match box_ {
-                None => r,
-                Some(b) => {
-                    let left = b.x.min(r.x);
-                    let top = b.y.min(r.y);
-                    lbm_ui::wallpaper::Rect {
-                        x: left,
-                        y: top,
-                        w: (b.x + b.w).max(r.x + r.w) - left,
-                        h: (b.y + b.h).max(r.y + r.h) - top,
-                    }
-                }
-            })
-        });
-
-    let mut made = Vec::new();
-    for screen in screens {
-        if screen.pixels.width() < shrink as f64 || screen.pixels.height() < shrink as f64 {
-            continue;
-        }
-        let here = quarter(screen.pixels);
-
-        let (path, style, colour) = match settings.mode {
-            WallpaperMode::Span => {
-                let Some(path) = settings.span_image_path.as_ref().filter(|p| !p.is_empty()) else {
-                    continue;
-                };
-                (path.clone(), lbm_ui::wallpaper::Style::Span, [0, 0, 0, 255])
-            }
-            WallpaperMode::PerScreen => {
-                let Some(wanted) = settings.per_screen.get(&screen.id) else {
-                    continue;
-                };
-                if wanted.kind == ScreenWallpaperKind::Color {
-                    // A colour is not a picture, and painting one into a texture to
-                    // show a flat rectangle would be work for nothing; the frame's own
-                    // background is already a flat rectangle. Left for when the frame
-                    // learns to take a colour.
-                    continue;
-                }
-                let Some(path) = wanted.image_path.as_ref().filter(|p| !p.is_empty()) else {
-                    continue;
-                };
-                (
-                    path.clone(),
-                    style_of(wanted.style),
-                    colour_of(&wanted.color),
-                )
-            }
-        };
-
-        // A picture that has been moved or deleted is not an error worth shouting
-        // about: the desktop keeps what it had, and so does the map.
-        let Ok(decoded) = image::open(&path) else {
-            continue;
-        };
-        let full = decoded.to_rgba8();
-        let source = lbm_ui::wallpaper::Size {
-            w: full.width() as i32,
-            h: full.height() as i32,
-        };
-        let Some(small) = lbm_ui::wallpaper::shrunk(source, shrink) else {
-            continue;
-        };
-        let picture = lbm_ui::wallpaper::apply(
-            full,
-            &[lbm_ui::wallpaper::Step::Resize(small)],
-            image::Rgba(colour),
-        );
-
-        let steps = match style {
-            lbm_ui::wallpaper::Style::Span | lbm_ui::wallpaper::Style::Tile => {
-                let Some(desktop) = desktop else { continue };
-                lbm_ui::wallpaper::across_the_desktop(style, small, here, desktop)
-            }
-            _ => lbm_ui::wallpaper::on_one_screen(style, small, here.size()),
-        };
-        made.push((
-            screen.id.clone(),
-            lbm_ui::wallpaper::apply(picture, &steps, image::Rgba(colour)),
-        ));
-    }
-    made
-}
-
-/// The store's style, as the view names it. Exhaustive on purpose: a style added to the
-/// store has to be answered for here rather than quietly drawn as something else.
-fn style_of(style: lbm_store::wallpaper_settings::WallpaperStyle) -> lbm_ui::wallpaper::Style {
-    use lbm_store::wallpaper_settings::WallpaperStyle as Stored;
-    use lbm_ui::wallpaper::Style;
-    match style {
-        Stored::Fill => Style::Fill,
-        Stored::Fit => Style::Fit,
-        Stored::Stretch => Style::Stretch,
-        Stored::Tile => Style::Tile,
-        Stored::Center => Style::Center,
-        Stored::Span => Style::Span,
-    }
-}
-
-/// `#RRGGBB`, and black for anything else — a wallpaper is never a reason to stop.
-fn colour_of(text: &str) -> [u8; 4] {
-    let hex = text.trim_start_matches('#');
-    if hex.len() != 6 {
-        return [0, 0, 0, 255];
-    }
-    let byte = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).unwrap_or(0);
-    [byte(0), byte(2), byte(4), 255]
+    lbm_wallpaper::render::paint(layout, settings, true)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| (p.id, p.pixels))
+        .collect()
 }
 
 impl App {
@@ -639,6 +518,10 @@ impl App {
             icons,
             textures: HashMap::new(),
             wallpapers: HashMap::new(),
+            wallpaper: Default::default(),
+            wallpaper_preview_requested: false,
+            wallpaper_preview_busy: None,
+            wallpaper_previewed: false,
             state: lbm_ui::State::default(),
             requests: None,
             next_id: 3,
@@ -677,6 +560,8 @@ impl App {
             }
             Event::Message(message) => self.agent_said(message),
             Event::Disconnected(why) => {
+                self.wallpaper.disconnect();
+                self.wallpaper_preview_busy = None;
                 self.screen_overlay_mode = lbm_overlay::Mode::Off;
                 self.screen_overlay.clear();
                 self.outputs = Default::default();
@@ -712,8 +597,7 @@ impl App {
                 waker.request_repaint();
                 return;
             };
-            let id = layout.id.clone();
-            let screens = screens_of(&layout, lbm_ui::mode::Mode::default());
+            let wallpaper_layout = layout.clone();
             if found
                 .send(Found::Displays {
                     generation,
@@ -729,7 +613,7 @@ impl App {
                 return;
             }
             waker.request_repaint();
-            for (screen, picture) in wallpapers(&id, &screens) {
+            for (screen, picture) in wallpapers(&wallpaper_layout) {
                 if found
                     .send(Found::Thumbnail {
                         generation,
@@ -1023,6 +907,10 @@ impl App {
     /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
         if let Message::Answer { id, result } = &message {
+            if self.wallpaper.answered(*id, result) {
+                self.wallpaper_preview_requested = self.wallpaper.error.is_none();
+                return;
+            }
             if let Some(changed) = self.outputs.answered(*id, result) {
                 if changed {
                     self.refresh.invalidate();
@@ -1166,16 +1054,15 @@ impl App {
     /// Which modes this window can offer right now.
     ///
     /// `vcp_enabled` is the user's setting, read off the layout the window holds — the
-    /// same `VcpControl` the C# button follows. `wallpaper_supported` is `false` until
-    /// the agent is asked: only it knows whether this desktop has a wallpaper service,
-    /// and a window that guessed would offer a picker that does nothing.
+    /// same `VcpControl` the C# button follows. The wallpaper editor also offers local
+    /// previews on unsupported desktops; only Apply needs the agent’s native service.
     fn offered(&self) -> lbm_ui::mode::Offered {
         lbm_ui::mode::Offered {
             vcp_enabled: self
                 .layout
                 .as_deref()
                 .is_some_and(|l| l.options.vcp_control),
-            wallpaper_supported: false,
+            wallpaper_supported: self.wallpaper.key.is_some(),
         }
     }
 
@@ -1273,6 +1160,190 @@ impl App {
             Some("Wait for the current operation to finish.")
         } else {
             None
+        }
+    }
+
+    fn wallpaper_key(&self) -> Option<lbm_app::wallpaper_editor::Key> {
+        let layout = self.layout.as_ref()?;
+        let stamp = self.agent.layout.as_ref()?;
+        if stamp.layout_id.as_deref() != Some(&layout.id) || self.refresh.pending() {
+            return None;
+        }
+        Some(lbm_app::wallpaper_editor::Key {
+            layout: layout.id.clone(),
+            revision: stamp.revision?,
+        })
+    }
+    fn wallpaper_request(&mut self, read: bool) {
+        let Some(requests) = &self.requests else {
+            return;
+        };
+        if self.wallpaper.busy() {
+            return;
+        }
+        let id = self.next_id;
+        let (method, extra) = if read {
+            let Some(key) = self.wallpaper_key() else {
+                return;
+            };
+            ("WallpaperSettings", self.wallpaper.read(id, key))
+        } else {
+            let Some(extra) = self.wallpaper.apply(id) else {
+                return;
+            };
+            ("ApplyWallpaper", extra)
+        };
+        self.next_id += 1;
+        if requests.send((id, method, extra)).is_err() {
+            self.wallpaper
+                .answered(id, &Err("The agent stopped listening.".into()));
+        }
+    }
+    fn sync_wallpaper(&mut self, ctx: &egui::Context) {
+        if let Some(key) = self.wallpaper_key() {
+            self.wallpaper.observes(&key);
+            if self.requests.is_some()
+                && !self.wallpaper.busy()
+                && (self.wallpaper.key.is_none()
+                    || (self.wallpaper.stale && !self.wallpaper.dirty()))
+            {
+                self.wallpaper_request(true);
+            }
+        } else if self.wallpaper.key.is_some() && !self.wallpaper.stale {
+            self.wallpaper.disconnect();
+        }
+        if self.wallpaper_preview_requested && self.wallpaper_preview_busy.is_none() {
+            self.wallpaper_preview_requested = false;
+            self.preview_wallpaper(ctx);
+        }
+    }
+    fn preview_wallpaper(&mut self, ctx: &egui::Context) {
+        if self.wallpaper_preview_busy.is_some() {
+            return;
+        }
+        let (Some(layout), Some(settings)) = (self.layout.clone(), self.wallpaper.draft.clone())
+        else {
+            return;
+        };
+        self.wallpaper.preview_generation += 1;
+        let generation = self.wallpaper.preview_generation;
+        self.wallpaper_preview_busy = Some(generation);
+        self.wallpaper_previewed = true;
+        self.wallpaper.error = None;
+        let found = self.found.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let document = Box::new(lbm_store::LayoutDocument::of(&layout));
+            let result = if settings.mode == lbm_store::wallpaper_settings::WallpaperMode::PerScreen
+                && settings.per_screen.is_empty()
+            {
+                Ok(Vec::new())
+            } else {
+                lbm_wallpaper::render::paint(&layout, &settings, true)
+            };
+            let _ = found.send(Found::WallpaperPreview {
+                generation,
+                document,
+                result,
+            });
+            ctx.request_repaint();
+        });
+    }
+    fn wallpaper_panel(&mut self, ui: &mut egui::Ui) {
+        if !matches!(self.view, View::Map | View::List)
+            || self.mode != lbm_ui::mode::Mode::Wallpaper
+        {
+            return;
+        }
+        let stable =
+            self.wallpaper_key().is_some() && self.requests.is_some() && !self.wallpaper.stale;
+        let can_apply = stable
+            && self.wallpaper.supported
+            && !self.wallpaper.busy()
+            && !self.dirty()
+            && !self.state.live
+            && !self.agent.previewing
+            && !self.agent.suspended
+            && !self.outputs.changing();
+        lbm_ui::properties::panel(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui,|ui|{
+            ui.heading("Wallpaper");
+            egui::ComboBox::from_id_salt("wallpaper-monitor")
+                .selected_text(self.selected.as_deref().unwrap_or("Select a screen"))
+                .show_ui(ui, |ui| {
+                    for screen in &self.screens {
+                        ui.selectable_value(
+                            &mut self.selected,
+                            Some(screen.id.clone()),
+                            &screen.name,
+                        );
+                    }
+                });
+            if !stable {
+                ui.label("The connection or displays changed. Your wallpaper edits are kept; reload before applying.");
+            }
+            if !self.wallpaper.supported {
+                ui.label("Desktop application is unavailable. You can still preview locally.");
+            }
+            if self.dirty() || self.state.live || self.agent.previewing {
+                ui.label("Save the physical layout and end Live before applying wallpaper.");
+            }
+            if self.wallpaper.busy() {
+                ui.label("Waiting for the agent…");
+            }
+            if self.wallpaper_preview_busy.is_some() {
+                ui.label("Preparing preview…");
+            }
+            if let Some(e) = &self.wallpaper.error {
+                ui.colored_label(ui.visuals().error_fg_color, e);
+            }
+            if let Some(status) = &self.wallpaper.status {
+                ui.label(status);
+            }
+            if ui
+                .add_enabled(
+                    !self.wallpaper.busy()
+                        && self.requests.is_some()
+                        && self.wallpaper_key().is_some(),
+                    egui::Button::new("Reload saved wallpaper (discard edits)"),
+                )
+                .clicked()
+            {
+                self.wallpaper_request(true);
+            }
+            let mut action = None;
+            let editable = !self.wallpaper.busy();
+            if let Some(settings) = &mut self.wallpaper.draft {
+                let before = settings.clone();
+                ui.add_enabled_ui(editable, |ui| {
+                    action = lbm_ui::wallpaper_editor::panel(
+                        ui,
+                        settings,
+                        self.selected.as_deref(),
+                        can_apply,
+                    );
+                });
+                if *settings != before {
+                    self.wallpaper.preview_generation += 1;
+                    self.wallpaper.status =
+                        Some("Wallpaper edits are not applied. Preview to update the map.".into());
+                }
+            }
+            match action {
+                Some(lbm_ui::wallpaper_editor::Action::Preview) => {
+                    self.wallpaper_preview_requested = true
+                }
+                Some(lbm_ui::wallpaper_editor::Action::Apply) => self.wallpaper_request(false),
+                Some(lbm_ui::wallpaper_editor::Action::Reset) => {
+                    self.wallpaper.reset();
+                    self.wallpaper_preview_requested = true;
+                }
+                None => {}
+            }
+            });
+        });
+        if self.wallpaper_preview_requested {
+            ui.ctx().request_repaint();
         }
     }
 
@@ -1622,6 +1693,9 @@ impl eframe::App for App {
                         self.layout = Some(layout);
                         self.excluded = excluded;
                         self.wallpapers.clear();
+                        self.wallpaper_previewed = false;
+                        self.wallpaper.preview_generation += 1;
+                        self.wallpaper_preview_busy = None;
                         self.drag = None;
                         self.selected = self
                             .selected
@@ -1638,12 +1712,52 @@ impl eframe::App for App {
                             std::time::Instant::now() + std::time::Duration::from_secs(2);
                         self.display_error = Some("Display detection failed; retrying".into());
                     }
+                    Found::WallpaperPreview {
+                        generation,
+                        document,
+                        result,
+                    } => {
+                        if self.wallpaper_preview_busy == Some(generation) {
+                            self.wallpaper_preview_busy = None;
+                        }
+                        if generation != self.wallpaper.preview_generation
+                            || !self
+                                .layout
+                                .as_ref()
+                                .is_some_and(|l| lbm_store::LayoutDocument::of(l) == *document)
+                        {
+                            continue;
+                        }
+                        match result {
+                            Ok(painted) => {
+                                self.wallpapers.clear();
+                                for p in painted {
+                                    let size =
+                                        [p.pixels.width() as usize, p.pixels.height() as usize];
+                                    let image =
+                                        egui::ColorImage::from_rgba_unmultiplied(size, &p.pixels);
+                                    self.wallpapers.insert(
+                                        p.id.clone(),
+                                        ctx.load_texture(
+                                            format!("wallpaper:{}", p.id),
+                                            image,
+                                            egui::TextureOptions::LINEAR,
+                                        ),
+                                    );
+                                }
+                            }
+                            Err(e) => self.wallpaper.error = Some(e),
+                        }
+                    }
                     Found::Thumbnail {
                         generation,
                         screen,
                         picture,
                     } => {
-                        if !self.refresh.accepts(generation) || self.refresh.pending() {
+                        if !self.refresh.accepts(generation)
+                            || self.refresh.pending()
+                            || self.wallpaper_previewed
+                        {
                             continue;
                         }
                         let size = [picture.width() as usize, picture.height() as usize];
@@ -1662,6 +1776,7 @@ impl eframe::App for App {
         }
 
         self.read_displays(&ctx, false);
+        self.sync_wallpaper(&ctx);
         if self.refresh.pending() && !self.dirty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
@@ -1819,6 +1934,7 @@ impl eframe::App for App {
         });
 
         self.properties(ui);
+        self.wallpaper_panel(ui);
 
         // The `Ui` handed to `App::ui` has no background of its own — the doc says so
         // outright — so the map would be drawn on nothing.
@@ -2361,5 +2477,43 @@ mod lifecycle_tests {
         assert!(app.refresh.pending());
         assert_eq!(app.refresh.begin(app.dirty()), None);
         assert!(app.dirty(), "changing resolution must not discard the edit");
+    }
+    #[test]
+    fn wallpaper_requests_belong_to_the_editor_and_reconnect_keeps_the_draft() {
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        layout.id = "A".into();
+        app.layout = Some(Box::new(layout));
+        app.agent.layout = Some(lbm_app::refresh::Stamp::from_snapshot(
+            &json!({"LayoutId":"A","LayoutRevision":1}),
+        ));
+        let generation = app.refresh.begin(false).unwrap();
+        assert!(app.refresh.complete(generation, "A"));
+        let (requests, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+        app.requests = Some(requests);
+        app.sync_wallpaper(&ctx);
+        let (id, method, extra) = incoming.try_recv().unwrap();
+        assert_eq!(method, "WallpaperSettings");
+        assert_eq!(extra["LayoutRevision"], 1);
+        app.sync_wallpaper(&ctx);
+        assert!(incoming.try_recv().is_err());
+        app.agent_said(Message::Answer{id,result:Ok(json!({"Settings":lbm_store::wallpaper_settings::LayoutWallpaperSettings::default(),"Supported":true}))});
+        assert!(app.wallpaper.supported);
+        assert!(app.wallpaper_preview_requested);
+        assert!(!app.state.waiting);
+        app.wallpaper.draft.as_mut().unwrap().mode =
+            lbm_store::wallpaper_settings::WallpaperMode::Span;
+        app.wallpaper_request(false);
+        let (id, method, _) = incoming.try_recv().unwrap();
+        assert_eq!(method, "ApplyWallpaper");
+        app.session_event(Event::Disconnected("test disconnect".into()));
+        app.agent_said(Message::Answer {
+            id,
+            result: Ok(json!({"Saved":true,"Applied":true})),
+        });
+        assert!(app.wallpaper.dirty());
+        assert!(app.wallpaper.stale);
+        assert!(!app.wallpaper.busy());
     }
 }

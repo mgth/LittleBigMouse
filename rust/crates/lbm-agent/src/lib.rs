@@ -45,9 +45,11 @@ pub mod supervise;
 #[cfg(any(target_os = "linux", windows))]
 pub mod tray;
 pub mod wallpaper;
+pub mod wallpaper_job;
 pub mod watch;
 #[cfg(any(windows, test))]
 mod windows_topology;
+pub mod windows_wallpaper;
 #[cfg(windows)]
 pub mod winpipe;
 #[cfg(windows)]

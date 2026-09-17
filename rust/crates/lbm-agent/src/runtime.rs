@@ -77,8 +77,9 @@ pub struct Agent<W> {
     bound: Option<bool>,
     /// The exclusion list the hook was last handed; `None` on a fresh connection.
     excluded: Option<Vec<String>>,
-    /// What the desktop was last told to show; `None`: unknown, so the next apply goes.
-    wallpaper_on_screen: Option<String>,
+    /// Retire prepared work when a newer request or rebuilt layout replaces it.
+    wallpaper_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -108,7 +109,8 @@ impl<W: AgentWorld> Agent<W> {
             shortcut: None,
             bound: None,
             excluded: None,
-            wallpaper_on_screen: None,
+            wallpaper_generation: Default::default(),
+            wallpaper_lock: Default::default(),
         }
     }
 
@@ -198,6 +200,85 @@ impl<W: AgentWorld> Agent<W> {
                 "Protocol": api::PROTOCOL,
             })),
             Request::Snapshot => serde_json::to_value(self.snapshot()).map_err(|e| e.to_string()),
+            Request::WallpaperSettings {
+                layout_id,
+                layout_revision,
+            } => {
+                if layout_revision != self.reconciler.rebuild_count() {
+                    Err("The displays changed; reload the wallpaper editor.".into())
+                } else {
+                    match self.world.wallpaper_settings(&layout_id) {
+                        Err(e) => Err(e),
+                        Ok(settings) => {
+                            tokio::spawn(async move {
+                                let supported = tokio::time::timeout(
+                                    std::time::Duration::from_secs(5),
+                                    crate::desktop::is_supported(),
+                                )
+                                .await
+                                .unwrap_or(false);
+                                client.send(api::answer(
+                                    id,
+                                    Ok(serde_json::json!({
+                                        "Settings": settings,
+                                        "Supported": supported
+                                    })),
+                                ));
+                            });
+                            return;
+                        }
+                    }
+                }
+            }
+            Request::ApplyWallpaper {
+                layout_id,
+                layout_revision,
+                settings,
+            } => {
+                if layout_revision != self.reconciler.rebuild_count()
+                    || self.snapshot().suspended
+                    || self.snapshot().previewing
+                {
+                    Err("The displays changed or the desktop is suspended; reload the wallpaper editor.".into())
+                } else {
+                    match self.world.wallpaper_job(&layout_id, *settings) {
+                        Err(e) => Err(e),
+                        Ok(job) => {
+                            use std::sync::atomic::Ordering;
+                            let generation = self.wallpaper_generation.clone();
+                            let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                            let lock = self.wallpaper_lock.clone();
+                            tokio::spawn(async move {
+                                let _guard = lock.lock().await;
+                                let result = async {
+                                    let supported = tokio::time::timeout(
+                                        std::time::Duration::from_secs(5),
+                                        crate::desktop::is_supported(),
+                                    ).await.unwrap_or(false);
+                                    if !supported {
+                                        return Err("This desktop has no supported wallpaper service.".into());
+                                    }
+                                    let g = generation.clone();
+                                    let screens = tokio::task::spawn_blocking(move || job.prepare(g, expected))
+                                        .await.map_err(|e| e.to_string())??;
+                                    let applied = if generation.load(Ordering::SeqCst) != expected {
+                                        Err("Settings saved, but the displays changed before application.".into())
+                                    } else {
+                                        crate::desktop::apply_checked(&screens).await
+                                    };
+                                    Ok(serde_json::json!({
+                                        "Saved": true,
+                                        "Applied": applied.is_ok(),
+                                        "Error": applied.err()
+                                    }))
+                                }.await;
+                                client.send(api::answer(id, result));
+                            });
+                            return;
+                        }
+                    }
+                }
+            }
             Request::DisplayOutputs => self
                 .world
                 .display_outputs()
@@ -248,8 +329,7 @@ impl<W: AgentWorld> Agent<W> {
                 Some(document) => self.edit(layout_id.as_deref(), &document).map(|()| {
                     // "Apply and start" saves the edit too, so the screens may have moved.
                     self.handle(Input::UserStart { keep_layout: true });
-                    let screens = self.world.wallpaper();
-                    self.paint_desktop(screens);
+                    self.repaint_desktop();
                 }),
                 None => {
                     self.handle(Input::UserStart { keep_layout });
@@ -267,8 +347,7 @@ impl<W: AgentWorld> Agent<W> {
                 .map(|()| {
                     // The screens moved: a span cut for where they were is wrong now.
                     // C# re-sliced on Saved for the same reason.
-                    let screens = self.world.wallpaper();
-                    self.paint_desktop(screens);
+                    self.repaint_desktop();
                     serde_json::Value::Null
                 }),
             Request::ApplyTopology {
@@ -357,9 +436,6 @@ impl<W: AgentWorld> Agent<W> {
                 .world
                 .save_wallpaper(&layout_id, *settings)
                 .map(|screens| {
-                    // An edit is the one apply that must not be skipped as "already
-                    // shown": the user changed something and is looking at the screen.
-                    self.wallpaper_on_screen = None;
                     self.paint_desktop(screens);
                     serde_json::Value::Null
                 }),
@@ -442,25 +518,55 @@ impl<W: AgentWorld> Agent<W> {
         self.world.edit(layout_id, document)
     }
 
-    /// C# `SendShortcutAsync`, when the options change it: the hook registers the
-    /// rescue shortcut at once and says if it cannot. Windows only, as in C#: nothing
-    /// registers one elsewhere (and every Load carries it anyway).
-    /// Show `screens`, unless the desktop is already showing exactly that.
+    /// Saved settings are rendered in a worker, including after layout Save/rebuild.
+    fn repaint_desktop(&mut self) {
+        let Some(job) = self.world.saved_wallpaper_job() else {
+            let screens = self.world.wallpaper();
+            self.paint_desktop(screens);
+            return;
+        };
+        use std::sync::atomic::Ordering;
+        let generation = self.wallpaper_generation.clone();
+        let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let lock = self.wallpaper_lock.clone();
+        tokio::spawn(async move {
+            let _guard = lock.lock().await;
+            if generation.load(Ordering::SeqCst) != expected {
+                return;
+            }
+            let prepared = tokio::task::spawn_blocking(move || {
+                crate::wallpaper_job::screens(&job.layout, &job.settings, &job.images)
+            })
+            .await;
+            match prepared {
+                Ok(Ok(screens)) if generation.load(Ordering::SeqCst) == expected => {
+                    crate::desktop::apply(&screens).await;
+                }
+                Ok(Err(error)) => eprintln!("[lbm-agent] wallpaper: {error}"),
+                Err(error) => eprintln!("[lbm-agent] wallpaper worker: {error}"),
+                _ => {}
+            }
+        });
+    }
+
+    /// Serialize background repainting with editor applications; obsolete work is skipped.
     ///
     /// The call reaches the desktop environment, which can take its time (or hang), so it
     /// goes to a task of its own: nothing the agent does may wait on a wallpaper. Nothing
     /// waits for the answer either — a desktop that refused is a background that stayed
     /// as it was, and the next apply tries again.
     fn paint_desktop(&mut self, screens: Vec<crate::desktop::ScreenWallpaper>) {
+        let generation = self.wallpaper_generation.clone();
+        let expected = generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
         if screens.is_empty() {
             return;
         }
-        let signature = crate::wallpaper::signature(&screens);
-        if self.wallpaper_on_screen.as_deref() == Some(signature.as_str()) {
-            return;
-        }
-        self.wallpaper_on_screen = Some(signature);
+        let lock = self.wallpaper_lock.clone();
         tokio::spawn(async move {
+            let _guard = lock.lock().await;
+            if generation.load(std::sync::atomic::Ordering::SeqCst) != expected {
+                return;
+            }
             crate::desktop::apply(&screens).await;
         });
     }
@@ -784,8 +890,7 @@ impl<W: AgentWorld> Agent<W> {
                 });
             }
             Effect::Wallpaper => {
-                let screens = self.world.wallpaper();
-                self.paint_desktop(screens);
+                self.repaint_desktop();
             }
             Effect::ProcessSeen(process) => {
                 if self.seen.add(&process) {

@@ -7,6 +7,8 @@ publish = false
 description = "The LittleBigMouse frontend (v7): state, actions and views, with no window of its own yet"
 
 [dependencies]
+lbm-wallpaper = { path = "../lbm-wallpaper" }
+lbm-store = { path = "../lbm-store" }
 egui = "0.36"
 # The layout model the map draws: millimetres, bezels, and the rectangles a monitor
 # occupies. The frontend reads the same model the agent computes from.

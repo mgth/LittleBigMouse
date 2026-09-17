@@ -1192,3 +1192,54 @@ async fn topology_dry_runs_keep_edits_and_failed_real_applications_rebuild() {
     }
     assert_eq!(commands.load(SeqCst), 2);
 }
+
+#[tokio::test]
+async fn wallpaper_editor_reads_the_agents_store_and_rejects_stale_or_invalid_updates() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({"Method":"Subscribe"})).await["Result"].clone();
+    let id = state["LayoutId"].as_str().unwrap();
+    let revision = state["LayoutRevision"].as_u64().unwrap();
+    let answer = frontend
+        .ask(json!({"Method":"WallpaperSettings","LayoutId":id,"LayoutRevision":revision}))
+        .await;
+    assert_eq!(
+        answer["Result"]["Settings"]["Mode"], "PerScreen",
+        "{answer}"
+    );
+    assert!(answer["Result"]["Supported"].is_boolean());
+    assert!(
+        !dir.path().join("wallpaper.json").exists(),
+        "a read never seeds settings"
+    );
+    for method in ["WallpaperSettings", "ApplyWallpaper"] {
+        let refused = frontend
+            .ask(json!({"Method":method,"LayoutId":id,"LayoutRevision":revision+1,"Settings":{"Mode":"PerScreen"}}))
+            .await;
+        assert!(
+            refused["Error"]
+                .as_str()
+                .unwrap()
+                .contains("displays changed"),
+            "{refused}"
+        );
+    }
+    let rejected=frontend.ask(json!({"Method":"ApplyWallpaper","LayoutId":id,"LayoutRevision":revision,"Settings":{"Mode":"Span","SpanImagePath":dir.path().join("missing.png")}})).await;
+    assert!(rejected["Error"].is_string(), "{rejected}");
+    assert!(!dir.path().join("wallpaper.json").exists());
+    std::fs::write(dir.path().join("wallpaper.json"), "corrupt").unwrap();
+    let rejected = frontend
+        .ask(json!({"Method":"WallpaperSettings","LayoutId":id,"LayoutRevision":revision}))
+        .await;
+    assert!(rejected["Error"].is_string());
+}

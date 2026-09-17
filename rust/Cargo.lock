@@ -2113,6 +2113,7 @@ dependencies = [
  "lbm-ipc",
  "lbm-layout",
  "lbm-store",
+ "lbm-wallpaper",
  "lbm-zones",
  "libc",
  "png 0.17.16",
@@ -2139,6 +2140,7 @@ dependencies = [
  "lbm-overlay",
  "lbm-store",
  "lbm-ui",
+ "lbm-wallpaper",
  "raw-window-handle",
  "serde_json",
  "tempfile",
@@ -2268,7 +2270,19 @@ dependencies = [
  "lbm-icons",
  "lbm-ipc",
  "lbm-layout",
+ "lbm-store",
+ "lbm-wallpaper",
  "serde_json",
+]
+
+[[package]]
+name = "lbm-wallpaper"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "lbm-layout",
+ "lbm-store",
+ "tempfile",
 ]
 
 [[package]]

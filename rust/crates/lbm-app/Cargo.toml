@@ -7,6 +7,7 @@ publish = false
 description = "The LittleBigMouse frontend's window: what lbm-ui draws, on screen"
 
 [dependencies]
+lbm-wallpaper = { path = "../lbm-wallpaper" }
 # The window. `lbm-ui` deliberately has none — it is driven headlessly through the
 # accessibility tree — so everything that needs winit and a GL context lives here and
 # nowhere else.

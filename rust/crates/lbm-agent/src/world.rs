@@ -103,6 +103,20 @@ pub trait AgentWorld: World {
     fn wallpaper(&self) -> Vec<crate::desktop::ScreenWallpaper> {
         Vec::new()
     }
+    /// Capture work so routine rebuilds also render outside the resident event loop.
+    fn saved_wallpaper_job(&self) -> Option<crate::wallpaper_job::Job> {
+        None
+    }
+    fn wallpaper_settings(&mut self, _id: &str) -> Result<LayoutWallpaperSettings, String> {
+        Err("this agent keeps no wallpaper".into())
+    }
+    fn wallpaper_job(
+        &mut self,
+        _id: &str,
+        _settings: LayoutWallpaperSettings,
+    ) -> Result<crate::wallpaper_job::Job, String> {
+        Err("this agent keeps no wallpaper".into())
+    }
 
     /// Records a frontend's wallpaper settings for `layout_id` and answers what the
     /// desktop should then show. Refused for another layout than the current one, as
@@ -318,7 +332,55 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         let Some(settings) = all.get(&layout.id).filter(|s| s.has_content()) else {
             return Vec::new();
         };
-        crate::wallpaper::screens(layout, settings, &paths.slices)
+        crate::wallpaper_job::screens(layout, settings, &paths.slices).unwrap_or_else(|error| {
+            eprintln!("[lbm-agent] wallpaper: {error}");
+            Vec::new()
+        })
+    }
+    fn saved_wallpaper_job(&self) -> Option<crate::wallpaper_job::Job> {
+        let paths = self.wallpaper.as_ref()?;
+        let layout = self.layout.as_ref()?;
+        if layout.is_virtual() {
+            return None;
+        }
+        let settings = wallpaper_settings::load(&paths.settings).remove(&layout.id)?;
+        if !settings.has_content() {
+            return None;
+        }
+        Some(crate::wallpaper_job::Job {
+            layout: layout.clone(),
+            settings,
+            store: paths.settings.clone(),
+            images: paths.slices.clone(),
+        })
+    }
+    fn wallpaper_settings(&mut self, id: &str) -> Result<LayoutWallpaperSettings, String> {
+        self.editable(id)?;
+        let paths = self
+            .wallpaper
+            .as_ref()
+            .ok_or("this agent keeps no wallpaper")?;
+        Ok(wallpaper_settings::load_checked(&paths.settings)
+            .map_err(|e| e.to_string())?
+            .remove(id)
+            .unwrap_or_default())
+    }
+    fn wallpaper_job(
+        &mut self,
+        id: &str,
+        settings: LayoutWallpaperSettings,
+    ) -> Result<crate::wallpaper_job::Job, String> {
+        self.editable(id)?;
+        let paths = self
+            .wallpaper
+            .as_ref()
+            .ok_or("this agent keeps no wallpaper")?;
+        Ok(crate::wallpaper_job::Job {
+            layout: self.layout.as_ref().ok_or("No layout")?.clone(),
+            settings,
+            store: paths.settings.clone(),
+            images: paths.slices.clone(),
+        })
     }
 
     fn save_wallpaper(
@@ -332,9 +394,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         // The same rule as an edit: the settings are keyed by layout, and a frontend
         // whose displays have changed under it must not write over the new one.
         self.editable(layout_id)?;
-        let mut all = wallpaper_settings::load(&paths.settings);
-        all.insert(layout_id.to_owned(), settings);
-        wallpaper_settings::save(&paths.settings, &all)
+        wallpaper_settings::update(&paths.settings, layout_id, settings)
             .map_err(|error| format!("the wallpaper settings could not be written: {error}"))?;
         Ok(self.wallpaper())
     }

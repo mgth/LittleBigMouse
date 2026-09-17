@@ -26,6 +26,7 @@ pub mod properties;
 pub mod resistance;
 pub mod shortcut;
 pub mod wallpaper;
+pub mod wallpaper_editor;
 
 /// What the engine is doing, in the agent's own words (its `Snapshot.Engine`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

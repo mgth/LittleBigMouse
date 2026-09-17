@@ -130,6 +130,25 @@ pub fn load(path: &Path) -> WallpaperSettings {
         Err(_) => WallpaperSettings::new(),
     }
 }
+/// Editor transactions must not overwrite an unreadable existing store with an empty one.
+pub fn load_checked(path: &Path) -> io::Result<WallpaperSettings> {
+    match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(io::Error::other),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(WallpaperSettings::new()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Serialize read/modify/write operations within the resident agent.
+pub fn update(path: &Path, id: &str, settings: LayoutWallpaperSettings) -> io::Result<()> {
+    static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = WRITER
+        .lock()
+        .map_err(|_| io::Error::other("wallpaper writer failed"))?;
+    let mut all = load_checked(path)?;
+    all.insert(id.to_owned(), settings);
+    save(path, &all)
+}
 
 /// C# `Save`: indented JSON, written beside the file and renamed over it.
 pub fn save(path: &Path, settings: &WallpaperSettings) -> io::Result<()> {

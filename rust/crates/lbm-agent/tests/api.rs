@@ -19,6 +19,90 @@ const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones><
 /// One monitor, a layout the user wants.
 struct Enabled(Option<LayoutState>);
 
+/// A compositor double behind the real output validation and the real API/runtime.
+struct OutputWorld {
+    state: Enabled,
+    live: Vec<lbm_layout::linux::LinuxMonitor>,
+    commands: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    fail_after_change: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+impl World for OutputWorld {
+    fn display_signature(&mut self) -> String {
+        lbm_display::linux::display_signature(&self.live)
+    }
+    fn rebuild_layout(&mut self) {
+        self.state.rebuild_layout();
+    }
+    fn layout(&self) -> Option<LayoutState> {
+        self.state.layout()
+    }
+    fn set_enabled(&mut self, enabled: bool) {
+        self.state.set_enabled(enabled);
+    }
+}
+impl AgentWorld for OutputWorld {
+    fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
+        None
+    }
+    fn save_layout(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    fn zones(&self) -> Option<(String, bool)> {
+        Some((ZONES.into(), false))
+    }
+    fn save_enabled(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    fn layout_id(&self) -> Option<String> {
+        Some("outputs".into())
+    }
+    fn display_outputs(&mut self) -> Result<lbm_ipc::displays::Outputs, String> {
+        Ok(lbm_agent::displays::outputs(self.live.clone()))
+    }
+    fn change_output(
+        &mut self,
+        connector: &str,
+        change: lbm_ipc::displays::Change,
+        signature: &str,
+    ) -> Result<lbm_ipc::displays::Outputs, String> {
+        use lbm_display::linux::{
+            topology::{change_checked_with, Change},
+            Backend,
+        };
+        use std::sync::atomic::Ordering::SeqCst;
+        let action = match change {
+            lbm_ipc::displays::Change::Primary => Change::Primary,
+            lbm_ipc::displays::Change::Attach => Change::Attach,
+            lbm_ipc::displays::Change::Detach => Change::Detach,
+        };
+        let live = std::cell::RefCell::new(&mut self.live);
+        change_checked_with(
+            Backend::KScreen,
+            action,
+            connector,
+            signature,
+            || Ok(live.borrow().to_vec()),
+            |_, _| {
+                self.commands.fetch_add(1, SeqCst);
+                let mut live = live.borrow_mut();
+                for m in live.iter_mut() {
+                    if action == Change::Primary {
+                        m.primary = m.connector_name == connector;
+                    } else if m.connector_name == connector {
+                        m.enabled = action == Change::Attach;
+                    }
+                }
+                if self.fail_after_change.load(SeqCst) {
+                    Err("partially applied".into())
+                } else {
+                    Ok(())
+                }
+            },
+        )
+        .map(lbm_agent::displays::outputs)
+    }
+}
+
 impl World for Enabled {
     fn display_signature(&mut self) -> String {
         "one-monitor".into()
@@ -447,6 +531,11 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
     let layout_id = state["LayoutId"].as_str().unwrap().to_owned();
     assert_eq!(state["Enabled"], false);
     assert_eq!(state["Previewing"], false);
+    let unsupported = frontend.ask(json!({"Method":"DisplayOutputs"})).await;
+    assert!(
+        unsupported["Error"].is_string(),
+        "fallback discovery must not control real outputs"
+    );
 
     // The editor moves the monitor and turns LoopX on.
     let mut edited = frontend_layout(dir.path());
@@ -464,6 +553,12 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
         .await;
     assert!(fake.hooked());
     assert_eq!(loads(&fake), 1);
+    let refused = frontend.ask(json!({"Method":"ChangeOutput", "LayoutId":layout_id,
+        "LayoutRevision":state["LayoutRevision"], "Signature":"unused", "Connector":"FALLBACK", "Change":"Detach"})).await;
+    assert!(refused["Error"]
+        .as_str()
+        .unwrap()
+        .contains("stop the engine"));
     assert!(!dir.path().join("config").join("layouts").exists());
 
     // The same edit again: the hook is not made to swap a layout for itself.
@@ -849,4 +944,128 @@ fn an_apply_without_the_scale_choice_does_not_adjust_scales() {
         ),
         other => panic!("{other:?}"),
     }
+}
+
+#[tokio::test]
+async fn monitor_actions_rebuild_the_layout_and_reject_stale_or_running_requests() {
+    use lbm_layout::linux::LinuxMonitor;
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst},
+        Arc,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let commands = Arc::new(AtomicUsize::new(0));
+    let fail = Arc::new(AtomicBool::new(false));
+    let world = OutputWorld {
+        state: Enabled(Some(LayoutState {
+            enabled: false,
+            is_virtual: false,
+            saved: true,
+        })),
+        live: vec![
+            LinuxMonitor {
+                connector_name: "DP-1".into(),
+                ..LinuxMonitor::fallback()
+            },
+            LinuxMonitor {
+                connector_name: "HDMI-1".into(),
+                primary: false,
+                ..LinuxMonitor::fallback()
+            },
+        ],
+        commands: commands.clone(),
+        fail_after_change: fail.clone(),
+    };
+    tokio::spawn(async move {
+        let timings = Timings {
+            debounce: Duration::from_millis(5),
+            stability_step: Duration::from_millis(5),
+            ..Default::default()
+        };
+        let mut agent = Agent::new(world, timings, hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let mut state = frontend.ask(json!({"Method":"Subscribe"})).await["Result"].clone();
+    if state["Engine"] != "Stopped" || state["HookConnected"] != true {
+        state = frontend
+            .state(|s| s["Engine"] == "Stopped" && s["HookConnected"] == true)
+            .await;
+    }
+    let outputs = frontend.ask(json!({"Method":"DisplayOutputs"})).await["Result"].clone();
+    let mut request = json!({"Method":"ChangeOutput", "LayoutId":"outputs", "LayoutRevision":state["LayoutRevision"],
+        "Connector":"HDMI-1", "Change":"Primary", "Signature":outputs["Signature"]});
+    for (field, value) in [
+        ("LayoutId", json!("other")),
+        ("LayoutRevision", json!(999)),
+        ("Signature", json!("stale")),
+    ] {
+        let mut stale = request.clone();
+        stale[field] = value;
+        assert!(frontend.ask(stale).await["Error"].is_string());
+    }
+    assert_eq!(commands.load(SeqCst), 0);
+    let result = frontend.ask(request.clone()).await;
+    assert_eq!(result["Result"]["Outputs"][1]["Primary"], true, "{result}");
+    let old_revision = state["LayoutRevision"].as_u64().unwrap();
+    state = frontend
+        .state(|s| s["LayoutRevision"].as_u64().unwrap() > old_revision)
+        .await;
+    assert_eq!(state["LayoutId"], "outputs", "same identity, new revision");
+    assert_eq!(commands.load(SeqCst), 1);
+
+    for action in ["Detach", "Attach"] {
+        let inventory = frontend.ask(json!({"Method":"DisplayOutputs"})).await["Result"].clone();
+        request["LayoutRevision"] = state["LayoutRevision"].clone();
+        request["Signature"] = inventory["Signature"].clone();
+        request["Change"] = json!(action);
+        let result = frontend.ask(request.clone()).await;
+        assert_eq!(
+            result["Result"]["Outputs"][1]["Enabled"],
+            action == "Attach",
+            "{result}"
+        );
+        let old = state["LayoutRevision"].as_u64().unwrap();
+        state = frontend
+            .state(|s| s["LayoutRevision"].as_u64().unwrap() > old)
+            .await;
+        if action == "Detach" {
+            let mut last = request.clone();
+            last["Connector"] = json!("DP-1");
+            last["LayoutRevision"] = state["LayoutRevision"].clone();
+            last["Signature"] = result["Result"]["Signature"].clone();
+            assert!(frontend.ask(last).await["Error"]
+                .as_str()
+                .unwrap()
+                .contains("last enabled"));
+        }
+    }
+    let inventory = frontend.ask(json!({"Method":"DisplayOutputs"})).await["Result"].clone();
+    request["LayoutRevision"] = state["LayoutRevision"].clone();
+    request["Signature"] = inventory["Signature"].clone();
+    request["Change"] = json!("Detach");
+    frontend.ask(json!({"Method":"Start"})).await;
+    frontend.state(|s| s["Engine"] == "Running").await;
+    assert!(frontend.ask(request.clone()).await["Error"]
+        .as_str()
+        .unwrap()
+        .contains("stop the engine"));
+    assert_eq!(commands.load(SeqCst), 3);
+    frontend.ask(json!({"Method":"Stop"})).await;
+    frontend
+        .state(|s| s["Engine"] == "Stopped" && s["Enabled"] == false)
+        .await;
+
+    fail.store(true, SeqCst);
+    assert_eq!(frontend.ask(request).await["Error"], "partially applied");
+    let old = state["LayoutRevision"].as_u64().unwrap();
+    frontend
+        .state(|s| s["LayoutRevision"].as_u64().unwrap() > old)
+        .await;
+    assert_eq!(commands.load(SeqCst), 4);
 }

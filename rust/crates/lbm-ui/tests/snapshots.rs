@@ -204,6 +204,36 @@ fn the_mode_bar() {
     harness.snapshot("mode-bar");
 }
 
+#[test]
+fn system_displays_include_a_detached_screen_and_a_concrete_confirmation() {
+    use lbm_ipc::displays::{Change, Output, Outputs};
+    let outputs = Outputs {
+        signature: "test".into(),
+        outputs: vec![
+            Output {
+                connector: "DP-1".into(),
+                name: "Main screen".into(),
+                enabled: true,
+                primary: true,
+            },
+            Output {
+                connector: "HDMI-1".into(),
+                name: "Side screen".into(),
+                enabled: false,
+                primary: false,
+            },
+        ],
+    };
+    let mut panel = lbm_ui::displays::Panel {
+        confirm: Some(("HDMI-1".into(), Change::Attach)),
+    };
+    let mut harness = harness((700.0, 500.0), |ui| {
+        panel.draw(ui, Some(&outputs), None, false, true, false);
+    });
+    harness.run();
+    harness.snapshot("system-displays");
+}
+
 /// The Location mode, in a frame big enough to hold its rows.
 ///
 /// The rows are **not** scaled with the frame — the name above them is, and the two are

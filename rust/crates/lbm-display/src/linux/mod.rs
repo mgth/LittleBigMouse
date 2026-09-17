@@ -27,6 +27,19 @@ pub enum Backend {
 }
 
 impl Backend {
+    /// A failed query is an error here: an empty/fallback desktop cannot authorize a change.
+    pub fn connected_outputs(self) -> Result<Vec<LinuxMonitor>, String> {
+        match self {
+            Backend::KScreen => {
+                let json = kscreen::run_kscreen_doctor().ok_or("kscreen-doctor did not answer")?;
+                kscreen::parse(&json, &drm::read_all()).map_err(|e| e.to_string())
+            }
+            Backend::XRandR => {
+                let text = xrandr::run_xrandr().ok_or("xrandr did not answer")?;
+                Ok(xrandr::parse_connected(&text, &drm::read_all()))
+            }
+        }
+    }
     /// C# `ILinuxMonitorSource.Name`.
     pub fn name(self) -> &'static str {
         match self {

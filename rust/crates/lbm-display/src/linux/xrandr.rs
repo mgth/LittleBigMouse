@@ -20,7 +20,7 @@ fn line() -> &'static Regex {
     static LINE: OnceLock<Regex> = OnceLock::new();
     LINE.get_or_init(|| {
         Regex::new(
-            r"^(?<name>\S+) connected(?<primary> primary)? (?<w>\d+)x(?<h>\d+)\+(?<x>-?\d+)\+(?<y>-?\d+)(?<rot> normal| left| inverted| right)?(?: \([^)]*\))?(?: (?<wmm>\d+)mm x (?<hmm>\d+)mm)?",
+            r"^(?<name>\S+) connected(?<primary> primary)? (?<w>\d+)x(?<h>\d+)(?<x>[+-]-?\d+)(?<y>[+-]-?\d+)(?<rot> normal| left| inverted| right)?(?: \([^)]*\))?(?: (?<wmm>\d+)mm x (?<hmm>\d+)mm)?",
         )
         .expect("a valid pattern")
     })
@@ -35,7 +35,10 @@ pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
         let Some(m) = line().captures(text) else {
             continue;
         };
-        let int = |name: &str| m.name(name).map(|g| g.as_str().parse::<i32>());
+        let int = |name: &str| {
+            m.name(name)
+                .map(|g| g.as_str().trim_start_matches('+').parse::<i32>())
+        };
         let (Some(Ok(width)), Some(Ok(height)), Some(Ok(x)), Some(Ok(y))) =
             (int("w"), int("h"), int("x"), int("y"))
         else {
@@ -84,6 +87,46 @@ pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
         monitors[primary].primary = true;
     }
     monitors
+}
+
+/// The monitor-actions list must also offer connected outputs without a mode.
+/// Keep the layout factory's historical active-only parser unchanged.
+pub fn parse_connected(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
+    let mut outputs = parse(stdout, edids);
+    for line in stdout.lines() {
+        let mut words = line.split_whitespace();
+        let Some(connector) = words.next() else {
+            continue;
+        };
+        if words.next() != Some("connected")
+            || outputs.iter().any(|m| m.connector_name == connector)
+        {
+            continue;
+        }
+        // A geometry we failed to parse must not be advertised as disabled.
+        let next = words.next().unwrap_or_default();
+        if !next.is_empty() && !next.starts_with('(') {
+            continue;
+        }
+        outputs.push(LinuxMonitor {
+            connector_name: connector.into(),
+            logical_x: 0.0,
+            logical_y: 0.0,
+            logical_width: 0.0,
+            logical_height: 0.0,
+            pixel_width: 0,
+            pixel_height: 0,
+            scale: 1.0,
+            width_mm: 0.0,
+            height_mm: 0.0,
+            primary: false,
+            enabled: false,
+            orientation: 0,
+            frequency: 0,
+            edid: edids.get(connector).map(|e| e.to_linux()),
+        });
+    }
+    outputs
 }
 
 /// C# `RunXRandR`: `xrandr --query`'s output, when it exits successfully.

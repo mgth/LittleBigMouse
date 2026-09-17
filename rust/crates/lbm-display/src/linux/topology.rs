@@ -425,6 +425,87 @@ pub fn change(backend: super::Backend, change_: Change, connector: &str) -> Resu
     Ok(())
 }
 
+/// Re-read before acting and after the tool exits. A successful process is not proof
+/// that the compositor accepted the requested state. No shell interpolation is used.
+pub fn change_checked(
+    backend: super::Backend,
+    action: Change,
+    connector: &str,
+    signature: &str,
+) -> Result<Vec<LinuxMonitor>, String> {
+    change_checked_with(
+        backend,
+        action,
+        connector,
+        signature,
+        || backend.connected_outputs(),
+        |program, args| {
+            let borrowed: Vec<_> = args.iter().map(String::as_str).collect();
+            let text = super::probe::run_with_stderr(program, &borrowed, APPLYING)
+                .ok_or_else(|| format!("{program} failed or did not answer"))?;
+            if text.to_lowercase().contains("failed") {
+                return Err(text);
+            }
+            Ok(())
+        },
+    )
+}
+
+pub fn change_checked_with(
+    backend: super::Backend,
+    action: Change,
+    connector: &str,
+    signature: &str,
+    mut query: impl FnMut() -> Result<Vec<LinuxMonitor>, String>,
+    run: impl FnOnce(&str, &[String]) -> Result<(), String>,
+) -> Result<Vec<LinuxMonitor>, String> {
+    let before = query()?;
+    if super::display_signature(&before) != signature {
+        return Err("the displays changed; refresh the output list".into());
+    }
+    let matches: Vec<_> = before
+        .iter()
+        .filter(|m| m.connector_name == connector)
+        .collect();
+    if connector.is_empty() || matches.len() != 1 {
+        return Err("the selected output is missing or ambiguous; refresh the output list".into());
+    }
+    let output = matches[0];
+    match action {
+        Change::Primary if !output.enabled => {
+            return Err("attach this screen before making it primary".into())
+        }
+        Change::Detach if is_the_only_screen(&before, connector) => {
+            return Err("the last enabled screen cannot be detached".into())
+        }
+        _ => {}
+    }
+    if achieved(output, action) {
+        return Ok(before);
+    }
+    let (program, args) = command(backend, action, connector);
+    run(program, &args)?;
+    let after = query()?;
+    if !after
+        .iter()
+        .any(|m| m.connector_name == connector && achieved(m, action))
+    {
+        return Err(
+            "the system did not confirm the requested display state; refresh the output list"
+                .into(),
+        );
+    }
+    Ok(after)
+}
+
+fn achieved(output: &LinuxMonitor, action: Change) -> bool {
+    match action {
+        Change::Primary => output.enabled && output.primary,
+        Change::Attach => output.enabled,
+        Change::Detach => !output.enabled,
+    }
+}
+
 /// Whether an apply really moves the screens.
 ///
 /// A dry run exists because this is the one place in the product where a mistake is not

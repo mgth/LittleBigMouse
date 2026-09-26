@@ -41,13 +41,28 @@ pub fn available() -> bool {
     uinput_ok && !enumerate_mice().is_empty()
 }
 
+/// True for a uinput-created node (sysfs under /devices/virtual/). Remote-desktop
+/// tools (RustDesk, input-leap…) inject through such devices with their own
+/// absolute positioning; grabbing them swallows their motion while their buttons
+/// still reach the compositor through our pointer, so clicks land at the wrong
+/// place. `LBM_EVDEV_SKIP_VIRTUAL=1` leaves them to the compositor; off by
+/// default since remappers (input-remapper…) re-emit the physical mouse this way.
+fn is_virtual_node(path: &std::path::Path) -> bool {
+    let Some(node) = path.file_name() else { return false };
+    std::fs::canonicalize(std::path::Path::new("/sys/class/input").join(node))
+        .map(|p| p.starts_with("/sys/devices/virtual"))
+        .unwrap_or(false)
+}
+
 /// Physical pointers we should route: a relative X/Y device carrying BTN_LEFT
 /// (a mouse — not an accelerometer or a touchpad-gesture-only node), excluding
-/// our own virtual device.
+/// our own virtual device and, when opted in, other uinput devices.
 fn enumerate_mice() -> Vec<Node> {
+    let skip_virtual = std::env::var("LBM_EVDEV_SKIP_VIRTUAL").is_ok_and(|v| v == "1");
     evdev::enumerate()
-        .filter(|(_, d)| {
+        .filter(|(path, d)| {
             d.name().map(|n| !n.contains(VIRTUAL_NAME)).unwrap_or(true)
+                && !(skip_virtual && is_virtual_node(path))
                 && d.supported_relative_axes()
                     .map(|a| {
                         a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y)

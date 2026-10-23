@@ -27,6 +27,7 @@ pub enum Modifier {
 #[derive(Clone, Copy, Default)]
 pub struct TouchGesture {
     bypass: bool,
+    pub overridden: bool,
     pub contact: bool,
 }
 
@@ -34,12 +35,14 @@ impl TouchGesture {
     pub const fn new() -> Self {
         Self {
             bypass: false,
+            overridden: false,
             contact: false,
         }
     }
-    pub fn accepts(&mut self, allowed: bool, down: bool, up: bool) -> bool {
+    pub fn accepts(&mut self, selected: bool, overridden: bool, down: bool, up: bool) -> bool {
         if !self.contact && (down || !self.bypass) {
-            self.bypass = !allowed;
+            self.bypass = !selected || overridden;
+            self.overridden = selected && overridden;
         }
         if down {
             self.contact = true;
@@ -160,13 +163,15 @@ mod tests {
     #[test]
     fn override_survives_modifier_release_and_trailing_moves() {
         let mut gesture = TouchGesture::new();
-        assert!(!gesture.accepts(false, true, false));
-        assert!(!gesture.accepts(true, false, false));
-        assert!(!gesture.accepts(true, false, true));
-        assert!(!gesture.accepts(true, false, false));
-        assert!(gesture.accepts(true, true, false));
+        assert!(!gesture.accepts(true, true, true, false));
+        assert!(!gesture.accepts(true, false, false, false));
+        assert!(!gesture.accepts(true, false, false, true));
+        assert!(!gesture.accepts(true, false, false, false));
+        assert!(gesture.overridden);
+        assert!(gesture.accepts(true, false, true, false));
+        assert!(!gesture.overridden);
         // Moving across a display boundary mid-drag does not change its policy.
-        assert!(gesture.accepts(false, false, false));
+        assert!(gesture.accepts(false, false, false, false));
         assert!(gesture.contact);
     }
 

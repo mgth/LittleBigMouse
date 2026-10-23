@@ -2,7 +2,7 @@
 //! State is stored in Cells; no borrow may span a Win32 call that can re-enter
 //! the mouse hook. Pending restoration is cleared only after a successful warp.
 use crate::geometry::Point;
-use crate::hook::hot_path::{count_event, restore_touch_position};
+use crate::hook::hot_path::{begin_touch, count_event, restore_touch_position};
 use crate::hook::touch::{is_pen, is_touch, NativeTouchResume, TouchResume};
 use crate::hook::touch_policy::{Modifier, TouchGesture};
 use crate::platform::cursor::Win32Cursor;
@@ -77,6 +77,8 @@ fn observe_native(shared: &crate::shared::Shared) {
         NATIVE.with(|v| v.set(NativeTouchResume::new()));
         return;
     }
+    begin_touch(&shared.engine, &mut Win32Cursor);
+    super::mouse::reset_movement();
     let allowed = shared
         .touch_policy
         .try_lock()
@@ -93,11 +95,22 @@ pub fn on_native_contact(contact: bool) -> bool {
     let Some(shared) = SHARED.get() else {
         return false;
     };
+    let allowed = shared
+        .touch_policy
+        .try_lock()
+        .ok()
+        .is_some_and(|policy| !modifier_held(policy.modifier));
+    NATIVE.with(|cell| {
+        let mut state = cell.get();
+        state.observe_contact(MOUSE_POSITION.with(Cell::get), allowed, contact);
+        cell.set(state);
+    });
     if !NATIVE.with(|v| v.get().pending()) {
         super::focus_restore::cancel_native();
         return false;
     }
-    super::focus_restore::native_contact(shared, contact)
+    shared.restore_keyboard_focus.load(Ordering::SeqCst)
+        && super::focus_restore::native_contact(shared, contact)
 }
 
 pub fn finish_native_focus() {
@@ -264,6 +277,31 @@ pub fn record_mouse_position(position: (i32, i32), warped: bool) {
 }
 
 fn on_promoted_touch(shared: &crate::shared::Shared, message: u32, ms: &MSLLHOOKSTRUCT) {
+    let (selected, overridden) = shared
+        .touch_policy
+        .try_lock()
+        .ok()
+        .map(|policy| {
+            (
+                policy.includes(ms.pt.x, ms.pt.y),
+                modifier_held(policy.modifier),
+            )
+        })
+        .unwrap_or((false, false));
+    on_promoted_touch_with_policy(shared, message, ms, selected, overridden);
+}
+
+fn on_promoted_touch_with_policy(
+    shared: &crate::shared::Shared,
+    message: u32,
+    ms: &MSLLHOOKSTRUCT,
+    selected: bool,
+    overridden: bool,
+) {
+    // The override changes restoration policy, not the absolute nature of touch.
+    // Otherwise our old zone/clip can pin the first tap to the mouse monitor.
+    begin_touch(&shared.engine, &mut Win32Cursor);
+    super::mouse::reset_movement();
     super::focus_restore::cancel_native();
     NATIVE.with(|cell| {
         let mut state = cell.get();
@@ -272,20 +310,20 @@ fn on_promoted_touch(shared: &crate::shared::Shared, message: u32, ms: &MSLLHOOK
     });
     let down = message == WM_LBUTTONDOWN;
     let up = message == WM_LBUTTONUP;
-    let allowed =
-        shared.touch_policy.try_lock().ok().is_some_and(|policy| {
-            policy.includes(ms.pt.x, ms.pt.y) && !modifier_held(policy.modifier)
-        });
     let accepted = GESTURE.with(|cell| {
         let mut gesture = cell.get();
-        let accepted = gesture.accepts(allowed, down, up);
+        let accepted = gesture.accepts(selected, overridden, down, up);
         cell.set(gesture);
         accepted
     });
     if !accepted {
         super::focus_restore::reset();
         TOUCH.with(|v| v.set(TouchResume::new()));
-        MOUSE_POSITION.with(|v| v.set(Some((ms.pt.x, ms.pt.y))));
+        // A temporary override must not replace the physical mouse's anchor.
+        // Unselected displays still use normal cursor ownership.
+        if !GESTURE.with(|v| v.get().overridden) {
+            MOUSE_POSITION.with(|v| v.set(Some((ms.pt.x, ms.pt.y))));
+        }
         count_event();
         return;
     }
@@ -324,6 +362,55 @@ mod tests {
         shared.want_hook.store(true, Ordering::SeqCst);
         shared.hooked.store(true, Ordering::SeqCst);
         shared
+    }
+
+    #[test]
+    fn override_then_normal_tap_keeps_original_mouse_anchor() {
+        for prior_tap in [false, true] {
+            let shared = enabled();
+            let touch = MSLLHOOKSTRUCT {
+                dwExtraInfo: 0xff51_5780,
+                pt: POINT { x: 2600, y: 2500 },
+                ..Default::default()
+            };
+            if prior_tap {
+                on_promoted_touch_with_policy(&shared, WM_LBUTTONDOWN, &touch, true, false);
+                on_promoted_touch_with_policy(&shared, WM_LBUTTONUP, &touch, true, false);
+            }
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONDOWN, &touch, true, true);
+            // Releasing the key before finger-up must not re-enable this gesture.
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONUP, &touch, true, false);
+            on_promoted_touch_with_policy(&shared, WM_MOUSEMOVE, &touch, true, false);
+            assert!(!TOUCH.with(|v| v.get().pending()));
+            assert_eq!(MOUSE_POSITION.with(Cell::get), Some((1600, 873)));
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONDOWN, &touch, true, false);
+            assert!(TOUCH.with(|v| v.get().in_contact()));
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONUP, &touch, true, false);
+            assert_eq!(TOUCH.with(|v| v.get().resume()), Some((1600, 873)));
+        }
+    }
+
+    #[test]
+    fn physical_mouse_and_unselected_displays_can_replace_override_anchor() {
+        for physical in [false, true] {
+            let shared = enabled();
+            let touch = MSLLHOOKSTRUCT {
+                dwExtraInfo: 0xff51_5780,
+                pt: POINT { x: 2600, y: 2500 },
+                ..Default::default()
+            };
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONDOWN, &touch, true, true);
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONUP, &touch, true, false);
+            if physical {
+                record_mouse_position((2600, 2500), false);
+            } else {
+                on_promoted_touch_with_policy(&shared, WM_LBUTTONDOWN, &touch, false, false);
+                on_promoted_touch_with_policy(&shared, WM_LBUTTONUP, &touch, false, false);
+            }
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONDOWN, &touch, true, false);
+            on_promoted_touch_with_policy(&shared, WM_LBUTTONUP, &touch, true, false);
+            assert_eq!(TOUCH.with(|v| v.get().resume()), Some((2600, 2500)));
+        }
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub struct NativeTouchResume {
     saved: Option<(i32, i32)>,
     bypass: bool,
     promoted: bool,
+    contact: bool,
 }
 
 impl NativeTouchResume {
@@ -28,6 +29,7 @@ impl NativeTouchResume {
             saved: None,
             bypass: false,
             promoted: false,
+            contact: false,
         }
     }
 
@@ -36,6 +38,19 @@ impl NativeTouchResume {
         if !self.promoted && !self.bypass && self.saved.is_none() {
             self.saved = cursor;
         }
+    }
+
+    /// Only a new contact can re-enable restoration after an override. Releasing
+    /// the modifier during the same drag or its trailing reports cannot do so.
+    pub fn observe_contact(&mut self, cursor: Option<(i32, i32)>, allowed: bool, contact: bool) {
+        if !contact && !self.contact {
+            return;
+        }
+        if contact && !self.contact {
+            self.bypass = false;
+        }
+        self.contact = contact;
+        self.observe(cursor, allowed);
     }
 
     pub fn promoted(&mut self) {
@@ -126,6 +141,24 @@ mod tests {
         state.observe(Some((10, 20)), false);
         state.observe(Some((10, 20)), true);
         assert_eq!(state.target(true), None);
+    }
+
+    #[test]
+    fn native_next_contact_rearms_after_override_without_physical_input() {
+        let mut state = NativeTouchResume::new();
+        let anchor = Some((10, 20));
+        state.observe_contact(anchor, true, false); // idle report is not a tap
+        assert!(!state.pending());
+        state.observe(anchor, false);
+        state.observe_contact(anchor, false, true);
+        state.observe_contact(anchor, true, true); // modifier released mid-drag
+        assert!(!state.pending());
+        state.observe_contact(anchor, true, false);
+        state.observe(anchor, true); // trailing raw report
+        assert!(!state.pending());
+        state.observe_contact(anchor, true, true); // next normal tap
+        state.observe_contact(anchor, true, false);
+        assert_eq!(state.target(true), anchor);
     }
 
     #[test]

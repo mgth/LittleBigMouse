@@ -93,7 +93,7 @@ pub fn on_input(hwnd: HWND, lparam: LPARAM) {
     // Native touch moves the cursor without WH_MOUSE_LL activity; count it so
     // the watchdog does not reinstall the hook and discard the saved anchor.
     crate::hook::hot_path::count_event();
-    let Some(shared) = crate::shared::SHARED.get().filter(|s| s.touch_active()) else {
+    let Some(_shared) = crate::shared::SHARED.get().filter(|s| s.touch_active()) else {
         return;
     };
     let mut cursor = CURSORINFO {
@@ -104,12 +104,8 @@ pub fn on_input(hwnd: HWND, lparam: LPARAM) {
         // Ignore idle HID reports while the mouse owns the visible cursor.
         super::touch_input::on_native_touch();
     }
-    if !shared
-        .restore_keyboard_focus
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        return;
-    }
+    // Contact boundaries also re-arm cursor restoration after an override,
+    // even when keyboard-focus restoration is disabled.
     // Decode without holding any RefCell borrow while invoking focus/Win32 UI
     // operations, which may re-enter the low-level mouse hook.
     let contacts = REPORTS.with(|storage| storage.borrow_mut().read(lparam, &header));

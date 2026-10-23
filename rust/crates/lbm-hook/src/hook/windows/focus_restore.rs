@@ -15,9 +15,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_MBUTTON, VK_MENU, VK_RBUTTON, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetAncestor, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, IsChild,
-    IsHungAppWindow, IsIconic, IsWindow, IsWindowVisible, PeekMessageW, SetForegroundWindow,
-    WindowFromPoint, GA_ROOT, GUITHREADINFO, MSG, PM_NOREMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    GetAncestor, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
+    IsChild, IsHungAppWindow, IsIconic, IsWindow, IsWindowVisible, PeekMessageW,
+    SetForegroundWindow, WindowFromPoint, GA_ROOT, GUITHREADINFO, MSG, PM_NOREMOVE, WM_LBUTTONDOWN,
+    WM_LBUTTONUP,
 };
 
 use crate::hook::focus_restore::{before_touch, FocusSnapshot, RestoreRequest, WindowIdentity};
@@ -42,6 +43,7 @@ thread_local! {
 struct NativeCapture {
     current: Option<FocusSnapshot>,
     previous: Option<FocusSnapshot>,
+    touched: Option<WindowIdentity>,
     generation: u32,
     input_time: Option<u32>,
     contact: bool,
@@ -74,6 +76,7 @@ pub fn native_contact(shared: &Shared, contact: bool) -> bool {
         capture = Some(NativeCapture {
             current,
             previous,
+            touched: None,
             generation: shared.touch_generation.load(Ordering::SeqCst),
             input_time: last_input_time(),
             contact: true,
@@ -88,6 +91,18 @@ pub fn native_contact(shared: &Shared, contact: bool) -> bool {
         return false;
     }
     let released = capture.contact && !contact;
+    // Remember activation during contact, before a release handler can bring
+    // another app forward. Never infer the touched app from post-release focus.
+    if contact && capture.touched.is_none() {
+        let mut point = POINT::default();
+        if unsafe { GetCursorPos(&mut point) }.is_ok() {
+            let hit = identity(unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) });
+            capture.touched = identity(unsafe { GetForegroundWindow() }).filter(|window| {
+                Some(*window) != capture.current.map(|snapshot| snapshot.window)
+                    && hit == Some(*window)
+            });
+        }
+    }
     capture.contact = contact;
     capture.input_time = last_input_time();
     NATIVE_CAPTURE.with(|v| v.set(Some(capture)));
@@ -113,11 +128,11 @@ pub fn finish_native(shared: &Shared, point: POINT) {
     let origin = before_touch(capture.current, capture.previous, hit);
     // A swipe may hide/reposition an AppBar before the settling timer runs.
     // Hit-testing then finds the desktop behind it, not the app that took focus.
-    // Input is still unchanged since release (checked above); prefer that active
-    // window when it differs from the captured origin. The worker still checks
-    // exact identities, input time, generation, and the touched app's rules.
+    // Use the app observed during contact to recognize its moved panel. An
+    // unrelated foreground window may have been opened by the touched button;
+    // adopting it here would defeat the worker's explicit-window-switch guard.
     let touched = native_release_target(
-        origin.map(|snapshot| snapshot.window),
+        capture.touched,
         hit,
         identity(unsafe { GetForegroundWindow() }),
     );
@@ -128,13 +143,22 @@ pub fn finish_native(shared: &Shared, point: POINT) {
 }
 
 fn native_release_target(
-    origin: Option<WindowIdentity>,
+    captured: Option<WindowIdentity>,
     hit: Option<WindowIdentity>,
     foreground: Option<WindowIdentity>,
 ) -> Option<WindowIdentity> {
-    foreground
-        .filter(|window| origin.is_some() && Some(*window) != origin)
-        .or(hit)
+    match captured {
+        Some(touched) => {
+            // A panel can move or expose another window in its own process.
+            // Prefer the actual hit when it still belongs to the touched app.
+            hit.filter(|window| window.process == touched.process)
+                .or_else(|| foreground.filter(|window| window.process == touched.process))
+                .or(Some(touched))
+        }
+        // Without evidence of an activated touch target, keep the hit-test.
+        // A newly foregrounded app alone is not evidence that it was touched.
+        None => hit,
+    }
 }
 
 fn hwnd(identity: WindowIdentity) -> HWND {
@@ -563,18 +587,80 @@ mod tests {
     fn native_swipe_uses_activated_panel_after_it_moves_away_from_release_point() {
         let window = |handle| WindowIdentity {
             handle,
-            process: 10,
+            process: handle as u32,
             thread: 20,
         };
         let origin = Some(window(1));
         let desktop = Some(window(2));
         let panel = Some(window(3));
-        assert_eq!(native_release_target(origin, desktop, panel), panel);
-        assert_eq!(native_release_target(origin, None, panel), panel);
+        assert_eq!(native_release_target(panel, desktop, panel), panel);
+        assert_eq!(native_release_target(panel, None, panel), panel);
         // A nonactivating touch still uses hit-testing, never the original editor.
-        assert_eq!(native_release_target(origin, panel, origin), panel);
-        assert_eq!(native_release_target(origin, panel, None), panel);
+        assert_eq!(native_release_target(None, panel, origin), panel);
+        assert_eq!(native_release_target(None, panel, None), panel);
         assert_eq!(native_release_target(None, desktop, panel), desktop);
+    }
+
+    #[test]
+    fn widget_opening_media_player_does_not_adopt_player_as_touch_target() {
+        let origin = WindowIdentity {
+            handle: 1,
+            process: 1,
+            thread: 1,
+        };
+        let widget = WindowIdentity {
+            handle: 2,
+            process: 2,
+            thread: 2,
+        };
+        let player = WindowIdentity {
+            handle: 3,
+            process: 3,
+            thread: 3,
+        };
+        let desktop = WindowIdentity {
+            handle: 4,
+            process: 4,
+            thread: 4,
+        };
+        for captured in [None, Some(widget)] {
+            let touched = native_release_target(captured, Some(widget), Some(player)).unwrap();
+            assert_eq!(touched, widget);
+            let request = RestoreRequest {
+                origin,
+                control: None,
+                touched,
+                input_time: 10,
+                generation: 1,
+                sequence: 1,
+            };
+            // Applies both after the release delay and when restoration is
+            // deferred until physical mouse movement.
+            assert!(!request.should_restore(Some(origin), Some(player), Some(10), true, 1, 1));
+            assert!(request.should_restore(Some(origin), Some(widget), Some(10), true, 1, 1));
+        }
+        // Hiding the widget or covering its release point must not adopt the
+        // newly opened app either when the contact target was captured.
+        for hit in [None, Some(desktop), Some(player)] {
+            assert_eq!(
+                native_release_target(Some(widget), hit, Some(player)),
+                Some(widget)
+            );
+        }
+        let panel = WindowIdentity {
+            handle: 5,
+            ..widget
+        };
+        assert_eq!(
+            native_release_target(Some(widget), Some(desktop), Some(panel)),
+            Some(panel)
+        );
+        // A different window in the widget process must also be respected when
+        // the original widget still occupies the release point.
+        assert_eq!(
+            native_release_target(Some(widget), Some(widget), Some(panel)),
+            Some(widget)
+        );
     }
 
     struct TestWindows {
@@ -870,6 +956,13 @@ mod tests {
             identity(unsafe { GetAncestor(WindowFromPoint(stale_point), GA_ROOT) }),
             Some(request.touched)
         );
+        // Model the panel observed while the finger was still in contact,
+        // before the AppBar moved away from the release point.
+        NATIVE_CAPTURE.with(|capture| {
+            let mut value = capture.get().unwrap();
+            value.touched = Some(request.touched);
+            capture.set(Some(value));
+        });
         finish_native(shared, stale_point);
         wait_for_editor();
         println!("Native swipe with stale hit-testing restored the original editor");

@@ -133,6 +133,14 @@ impl MouseEngine {
         self.managed_clip_rect = Rect::empty();
     }
 
+    /// Touch owns an absolute desktop position, including during a temporary
+    /// override. Drop mouse crossing history and release only our confinement
+    /// before Windows applies that position.
+    pub fn begin_touch(&mut self, env: &mut impl CursorEnv) {
+        self.restore_managed_clip(env);
+        self.reset();
+    }
+
     /// Return from touch without treating the absolute jump as a monitor crossing.
     /// Release only our own temporary confinement before asking Windows to warp.
     pub fn resume_after_touch(
@@ -140,8 +148,7 @@ impl MouseEngine {
         env: &mut impl CursorEnv,
         target: Point<i32>,
     ) -> Point<i32> {
-        self.restore_managed_clip(env);
-        self.reset();
+        self.begin_touch(env);
         env.set_mouse_location(target);
         env.get_mouse_location()
     }

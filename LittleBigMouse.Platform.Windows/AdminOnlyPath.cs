@@ -20,11 +20,12 @@ namespace LittleBigMouse.Platform.Windows;
 /// exe or drop a DLL beside it and be started as administrator at the next logon.
 /// </para>
 /// <para>
-/// The check reads the security descriptors: the exe and its folder must grant no write,
-/// delete or permission change to anyone else, and no folder above may let anyone else
-/// rename or replace what it holds. Anything it cannot read or prove counts as writable;
-/// deny entries are ignored, which can only make it stricter. Subfolders (runtimes\…) are
-/// not walked: the installer creates them under the folder, with the rights it inherits.
+/// The check reads the security descriptors: the exe's folder and everything in it, to
+/// the last file of the last subfolder, must grant no write, delete or permission change
+/// to anyone else, and no folder above may let anyone else rename or replace what it
+/// holds. No junction or symbolic link may stand anywhere on the way. Anything it cannot
+/// read or prove counts as writable; deny entries are ignored, which can only make it
+/// stricter.
 /// </para>
 /// </summary>
 public static class AdminOnlyPath
@@ -93,23 +94,43 @@ public static class AdminOnlyPath
     }
 
     /// <summary>
-    /// True when <paramref name="exe"/>, its folder and every folder above are out of reach
-    /// of anyone but the trusted accounts. False on any doubt.
+    /// True when <paramref name="exe"/>, everything in its folder and every folder above are
+    /// out of reach of anyone but the trusted accounts. False on any doubt.
     /// </summary>
     [SupportedOSPlatform("windows")]
-    public static bool IsAdminOnly(string exe)
+    public static bool IsAdminOnly(string exe) => IsAdminOnly(exe, ReadSecurity);
+
+    /// <summary>
+    /// <see cref="IsAdminOnly(string)"/> over any source of descriptors: the walk and the
+    /// link refusal are the file system's, the descriptors are <paramref name="read"/>'s.
+    /// </summary>
+    public static bool IsAdminOnly(string exe, Func<FileSystemInfo, Descriptor> read)
     {
-        const AccessControlSections Sections = AccessControlSections.Owner | AccessControlSections.Access;
         try
         {
             var file = new FileInfo(exe);
             if (!file.Exists || file.Directory is not { } folder) return false;
 
-            if (!OnlyTrustedHold(Read(file.GetAccessControl(Sections)), ReplaceRights)) return false;
-            if (!OnlyTrustedHold(Read(folder.GetAccessControl(Sections)), ReplaceRights)) return false;
+            // A junction or a symbolic link anywhere on the way hides where the program
+            // really lies: the folders checked below would not be the ones that hold it.
+            bool Holds(FileSystemInfo entry, int rights) =>
+                (entry.Attributes & FileAttributes.ReparsePoint) == 0 && OnlyTrustedHold(read(entry), rights);
+
+            // The whole application, not only the exe: it loads its assemblies, runtimes\…
+            // and plugins from its folder, and Windows checks each file against its own
+            // descriptor, so the folder's says nothing about the files it holds.
+            if (!Holds(folder, ReplaceRights)) return false;
+            var everything = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = 0,
+                IgnoreInaccessible = false,
+            };
+            foreach (var entry in folder.EnumerateFileSystemInfos("*", everything))
+                if (!Holds(entry, ReplaceRights)) return false;
 
             for (var above = folder.Parent; above is not null; above = above.Parent)
-                if (!OnlyTrustedHold(Read(above.GetAccessControl(Sections)), RenameRights)) return false;
+                if (!Holds(above, RenameRights)) return false;
 
             return true;
         }
@@ -119,6 +140,18 @@ public static class AdminOnlyPath
             // nothing proven, nothing elevated.
             return false;
         }
+    }
+
+    [SupportedOSPlatform("windows")]
+    static Descriptor ReadSecurity(FileSystemInfo entry)
+    {
+        const AccessControlSections Sections = AccessControlSections.Owner | AccessControlSections.Access;
+        return Read(entry switch
+        {
+            FileInfo f => f.GetAccessControl(Sections),
+            DirectoryInfo d => d.GetAccessControl(Sections),
+            _ => throw new ArgumentException($"Neither a file nor a folder: {entry.FullName}"),
+        });
     }
 
     [SupportedOSPlatform("windows")]

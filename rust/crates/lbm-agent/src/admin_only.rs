@@ -467,6 +467,7 @@ mod tests {
             let native = root.path().join(r"app/runtimes/win-x64/native");
             std::fs::create_dir_all(&native).unwrap();
             std::fs::write(root.path().join("app/lbm-agent.exe"), "").unwrap();
+            std::fs::write(root.path().join("app/LittleBigMouse.Hook.exe"), "").unwrap();
             std::fs::write(root.path().join("app/LittleBigMouse.Ui.Avalonia.dll"), "").unwrap();
             std::fs::write(native.join("av_libglesv2.dll"), "").unwrap();
             Install {
@@ -537,6 +538,14 @@ mod tests {
     fn a_writable_assembly_beside_a_protected_exe_is_not_admin_only() {
         let install = Install::new();
         install.writable("app/LittleBigMouse.Ui.Avalonia.dll");
+        assert!(!install.admin_only(&install.exe()));
+    }
+
+    #[test]
+    fn a_writable_hook_beside_a_protected_agent_is_not_admin_only() {
+        // HookLauncher::beside_agent starts it with the agent's rights.
+        let install = Install::new();
+        install.writable("app/LittleBigMouse.Hook.exe");
         assert!(!install.admin_only(&install.exe()));
     }
 

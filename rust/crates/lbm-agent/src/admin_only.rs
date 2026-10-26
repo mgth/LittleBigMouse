@@ -464,11 +464,22 @@ mod tests {
     impl Install {
         fn new() -> Self {
             let root = tempfile::tempdir().unwrap();
-            let native = root.path().join(r"app/runtimes/win-x64/native");
+            let native = root
+                .path()
+                .join("app")
+                .join("runtimes")
+                .join("win-x64")
+                .join("native");
             std::fs::create_dir_all(&native).unwrap();
-            std::fs::write(root.path().join("app/lbm-agent.exe"), "").unwrap();
-            std::fs::write(root.path().join("app/LittleBigMouse.Hook.exe"), "").unwrap();
-            std::fs::write(root.path().join("app/LittleBigMouse.Ui.Avalonia.dll"), "").unwrap();
+            std::fs::write(root.path().join("app").join("lbm-agent.exe"), "").unwrap();
+            std::fs::write(root.path().join("app").join("LittleBigMouse.Hook.exe"), "").unwrap();
+            std::fs::write(
+                root.path()
+                    .join("app")
+                    .join("LittleBigMouse.Ui.Avalonia.dll"),
+                "",
+            )
+            .unwrap();
             std::fs::write(native.join("av_libglesv2.dll"), "").unwrap();
             Install {
                 root,
@@ -476,8 +487,12 @@ mod tests {
             }
         }
 
+        /// Joined part by part, so the path has the platform's separators: `mklink` takes
+        /// a `/` for the start of a switch.
         fn at(&self, relative: &str) -> std::path::PathBuf {
-            self.root.path().join(relative)
+            relative
+                .split('/')
+                .fold(self.root.path().to_path_buf(), |path, part| path.join(part))
         }
 
         fn exe(&self) -> std::path::PathBuf {
@@ -512,16 +527,22 @@ mod tests {
             let (link, target) = (self.at(link), self.at(target));
             #[cfg(windows)]
             {
-                let status = std::process::Command::new("cmd.exe")
+                let output = std::process::Command::new("cmd.exe")
                     .arg("/c")
                     .arg("mklink")
                     .arg("/J")
                     .arg(&link)
                     .arg(&target)
-                    .stdout(std::process::Stdio::null())
-                    .status()
+                    .output()
                     .unwrap();
-                assert!(status.success());
+                assert!(
+                    output.status.success(),
+                    "mklink /J {} {}: {}{}",
+                    link.display(),
+                    target.display(),
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
             #[cfg(not(windows))]
             std::os::unix::fs::symlink(target, link).unwrap();

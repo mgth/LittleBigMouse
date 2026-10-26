@@ -8,11 +8,14 @@
 //! Downloads), any program running as the user, unelevated, can swap the exe or drop a DLL
 //! beside it and be started as administrator at the next logon.
 //!
-//! The check reads the security descriptors: the exe and its folder must grant no write,
-//! delete or permission change to anyone else, and no folder above may let anyone else
-//! rename or replace what it holds. Anything it cannot read or prove counts as writable;
-//! deny entries are ignored, which can only make it stricter. Subfolders are not walked:
-//! the installer creates them under the folder, with the rights it inherits.
+//! The check reads the security descriptors: the exe's folder and everything in it, to the
+//! last file of the last subfolder, must grant no write, delete or permission change to
+//! anyone else, and no folder above may let anyone else rename or replace what it holds.
+//! No junction or symbolic link may stand anywhere on the way. Anything it cannot read or
+//! prove counts as writable; deny entries are ignored, which can only make it stricter.
+
+use std::io;
+use std::path::Path;
 
 /// The kind of an access control entry, as far as this check cares.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,22 +96,72 @@ pub fn only_trusted_hold(descriptor: &Descriptor, rights: u32) -> bool {
         })
 }
 
-/// True when `exe`, its folder and every folder above are out of reach of anyone but the
-/// trusted accounts. False on any doubt.
+/// True when `exe`, everything in its folder and every folder above are out of reach of
+/// anyone but the trusted accounts. False on any doubt.
 #[cfg(windows)]
-pub fn is_admin_only(exe: &std::path::Path) -> bool {
+pub fn is_admin_only(exe: &Path) -> bool {
+    is_admin_only_with(exe, windows_read::read)
+}
+
+/// [`is_admin_only`] over any source of descriptors: the walk and the link refusal are the
+/// file system's, the descriptors are `read`'s.
+pub fn is_admin_only_with(exe: &Path, read: impl Fn(&Path) -> io::Result<Descriptor>) -> bool {
     let Some(folder) = exe.parent().filter(|_| exe.is_file()) else {
         return false;
     };
-    let holds = |path: &std::path::Path, rights| {
-        windows_read::read(path).is_ok_and(|descriptor| only_trusted_hold(&descriptor, rights))
+    // A junction or a symbolic link anywhere on the way hides where the program really
+    // lies: the folders checked would not be the ones that hold it.
+    let holds = |path: &Path, rights| {
+        !is_link(path) && read(path).is_ok_and(|descriptor| only_trusted_hold(&descriptor, rights))
     };
-    holds(exe, REPLACE_RIGHTS)
-        && holds(folder, REPLACE_RIGHTS)
+    // The whole application, not only the exe: the folder holds the UI's assemblies,
+    // runtimes\… and plugins, and Windows checks each file against its own descriptor,
+    // so the folder's says nothing about the files it holds.
+    holds(folder, REPLACE_RIGHTS)
+        && contents_hold(folder, &holds)
         && folder
             .ancestors()
             .skip(1)
             .all(|above| holds(above, RENAME_RIGHTS))
+}
+
+/// Every file and folder below `folder`, hidden ones included, holds [`REPLACE_RIGHTS`].
+fn contents_hold(folder: &Path, holds: &impl Fn(&Path, u32) -> bool) -> bool {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return false;
+    };
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let path = entry.path();
+        if !holds(&path, REPLACE_RIGHTS) {
+            return false;
+        }
+        // Links were refused above, so a folder here is a real one.
+        if entry.file_type().map_or(true, |kind| kind.is_dir()) && !contents_hold(&path, holds) {
+            return false;
+        }
+    }
+    true
+}
+
+/// A reparse point (junction, symbolic link, mount point) — or a path that cannot even be
+/// looked at, which proves nothing either.
+fn is_link(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::symlink_metadata(path) else {
+        return true;
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
+    }
 }
 
 #[cfg(windows)]
@@ -397,10 +450,139 @@ mod tests {
         assert!(!is_admin_only(file.path()));
     }
 
-    #[cfg(windows)]
+    // ---- The walk: a real tree, descriptors from a stand-in ----
+
+    /// An application tree in a temp folder, read through descriptors chosen per path:
+    /// Program Files' everywhere, a profile folder's for the paths marked writable. The
+    /// temp folder itself is not admin-only, so the stand-in is what makes a positive case
+    /// possible at all.
+    struct Install {
+        root: tempfile::TempDir,
+        writable: std::cell::RefCell<Vec<std::path::PathBuf>>,
+    }
+
+    impl Install {
+        fn new() -> Self {
+            let root = tempfile::tempdir().unwrap();
+            let native = root.path().join(r"app/runtimes/win-x64/native");
+            std::fs::create_dir_all(&native).unwrap();
+            std::fs::write(root.path().join("app/lbm-agent.exe"), "").unwrap();
+            std::fs::write(root.path().join("app/LittleBigMouse.Ui.Avalonia.dll"), "").unwrap();
+            std::fs::write(native.join("av_libglesv2.dll"), "").unwrap();
+            Install {
+                root,
+                writable: Default::default(),
+            }
+        }
+
+        fn at(&self, relative: &str) -> std::path::PathBuf {
+            self.root.path().join(relative)
+        }
+
+        fn exe(&self) -> std::path::PathBuf {
+            self.at("app/lbm-agent.exe")
+        }
+
+        fn writable(&self, relative: &str) {
+            self.writable.borrow_mut().push(self.at(relative));
+        }
+
+        fn read(&self, path: &Path) -> io::Result<Descriptor> {
+            Ok(if self.writable.borrow().iter().any(|w| w == path) {
+                owned_by(
+                    SYSTEM,
+                    vec![
+                        allow(SYSTEM, FULL_CONTROL),
+                        allow(ADMINISTRATORS, FULL_CONTROL),
+                        allow(SOME_USER, FULL_CONTROL),
+                    ],
+                )
+            } else {
+                owned_by(ADMINISTRATORS, program_files())
+            })
+        }
+
+        fn admin_only(&self, exe: &Path) -> bool {
+            is_admin_only_with(exe, |path| self.read(path))
+        }
+
+        /// A junction under Windows (no privilege needed), a symbolic link elsewhere.
+        fn link(&self, link: &str, target: &str) {
+            let (link, target) = (self.at(link), self.at(target));
+            #[cfg(windows)]
+            {
+                let status = std::process::Command::new("cmd.exe")
+                    .arg("/c")
+                    .arg("mklink")
+                    .arg("/J")
+                    .arg(&link)
+                    .arg(&target)
+                    .stdout(std::process::Stdio::null())
+                    .status()
+                    .unwrap();
+                assert!(status.success());
+            }
+            #[cfg(not(windows))]
+            std::os::unix::fs::symlink(target, link).unwrap();
+        }
+    }
+
     #[test]
-    fn a_missing_file_is_not_admin_only() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(!is_admin_only(&dir.path().join("lbm-agent.exe")));
+    fn a_protected_application_is_admin_only() {
+        let install = Install::new();
+        assert!(install.admin_only(&install.exe()));
+    }
+
+    #[test]
+    fn a_writable_assembly_beside_a_protected_exe_is_not_admin_only() {
+        let install = Install::new();
+        install.writable("app/LittleBigMouse.Ui.Avalonia.dll");
+        assert!(!install.admin_only(&install.exe()));
+    }
+
+    #[test]
+    fn a_writable_file_or_folder_deep_in_the_application_is_not_admin_only() {
+        let install = Install::new();
+        install.writable("app/runtimes/win-x64/native/av_libglesv2.dll");
+        assert!(!install.admin_only(&install.exe()));
+
+        let install = Install::new();
+        install.writable("app/runtimes/win-x64");
+        assert!(!install.admin_only(&install.exe()));
+    }
+
+    #[test]
+    fn a_replaceable_folder_above_is_not_admin_only() {
+        let install = Install::new();
+        let root = install.root.path().to_path_buf();
+        install.writable.borrow_mut().push(root);
+        assert!(!install.admin_only(&install.exe()));
+    }
+
+    #[test]
+    fn a_junction_above_the_application_is_not_admin_only() {
+        // The review's case: a protected "Program Files\LittleBigMouse" junction into a
+        // protected target whose own parent is replaceable. Every descriptor on the path as
+        // written is protected; only the link gives the target away.
+        let install = Install::new();
+        std::fs::create_dir(install.at("programs")).unwrap();
+        install.link("programs/app", "app");
+
+        assert!(install.admin_only(&install.exe()));
+        assert!(!install.admin_only(&install.at("programs/app/lbm-agent.exe")));
+    }
+
+    #[test]
+    fn a_link_inside_the_application_is_not_admin_only() {
+        let install = Install::new();
+        std::fs::create_dir(install.at("elsewhere")).unwrap();
+        install.link("app/plugins", "elsewhere");
+        assert!(!install.admin_only(&install.exe()));
+    }
+
+    #[test]
+    fn a_missing_exe_is_not_admin_only() {
+        let install = Install::new();
+        assert!(!install.admin_only(&install.at("app/missing.exe")));
     }
 }

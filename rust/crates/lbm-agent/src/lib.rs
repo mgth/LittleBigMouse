@@ -22,6 +22,7 @@
 //! - [`elevation`] (Windows): the one UAC consent, when it is wanted and possible.
 //! - `winpipe` (Windows): the per-session pipes, the hook's and the agent's.
 
+pub mod admin_only;
 pub mod api;
 pub mod autostart;
 pub mod desktop;

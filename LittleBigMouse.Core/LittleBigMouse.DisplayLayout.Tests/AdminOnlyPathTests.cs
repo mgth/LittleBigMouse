@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.AccessControl;
 using LittleBigMouse.Platform.Windows;
 using Xunit;
@@ -110,6 +111,130 @@ public class AdminOnlyPathTests
     {
         Ace[] readable = [.. ProgramFiles, Allow(AuthenticatedUsers, ReadAndExecute)];
         Assert.True(OnlyTrustedHold(new Descriptor(Administrators, readable), ReplaceRights));
+    }
+
+    // ---- The walk: a real tree, descriptors from a stand-in ----
+
+    /// <summary>
+    /// An application tree in the temp folder, read through descriptors chosen per path:
+    /// Program Files' everywhere, a profile folder's for the paths marked writable. The
+    /// temp folder itself is not admin-only, so the stand-in is what makes a positive
+    /// case possible at all.
+    /// </summary>
+    sealed class Install : IDisposable
+    {
+        public readonly string Root = Path.Combine(Path.GetTempPath(), "lbm-admin-only-" + Guid.NewGuid().ToString("N"));
+        public readonly HashSet<string> Writable = new(StringComparer.OrdinalIgnoreCase);
+        readonly List<string> _links = [];
+
+        public Install()
+        {
+            Directory.CreateDirectory(Path.Combine(Root, "app", "runtimes", "win-x64", "native"));
+            File.WriteAllText(Path.Combine(Root, "app", "LittleBigMouse.Ui.Avalonia.exe"), "");
+            File.WriteAllText(Path.Combine(Root, "app", "LittleBigMouse.Ui.Avalonia.dll"), "");
+            File.WriteAllText(Path.Combine(Root, "app", "runtimes", "win-x64", "native", "av_libglesv2.dll"), "");
+        }
+
+        public string Exe(string folder = "app") => Path.Combine(Root, folder, "LittleBigMouse.Ui.Avalonia.exe");
+
+        public string At(params string[] parts) => Path.Combine([Root, .. parts]);
+
+        public Descriptor Read(FileSystemInfo entry) =>
+            Writable.Contains(Path.TrimEndingDirectorySeparator(entry.FullName))
+                ? new Descriptor(LocalSystem, [Allow(LocalSystem, FullControl), Allow(Administrators, FullControl), Allow(SomeUser, FullControl)])
+                : new Descriptor(Administrators, ProgramFiles);
+
+        /// <summary>A junction under Windows (no privilege needed), a symbolic link elsewhere.</summary>
+        public void Link(string link, string target)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                using var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                })!;
+                mklink.WaitForExit();
+                Assert.Equal(0, mklink.ExitCode);
+            }
+            else
+            {
+                Directory.CreateSymbolicLink(link, target);
+            }
+            _links.Add(link);
+        }
+
+        public void Dispose()
+        {
+            foreach (var link in _links) Directory.Delete(link);
+            Directory.Delete(Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AProtectedApplicationIsAdminOnly()
+    {
+        using var install = new Install();
+        Assert.True(IsAdminOnly(install.Exe(), install.Read));
+    }
+
+    [Fact]
+    public void AWritableAssemblyBesideAProtectedExeIsNotAdminOnly()
+    {
+        using var install = new Install();
+        install.Writable.Add(install.At("app", "LittleBigMouse.Ui.Avalonia.dll"));
+        Assert.False(IsAdminOnly(install.Exe(), install.Read));
+    }
+
+    [Fact]
+    public void AWritableFileOrFolderDeepInTheApplicationIsNotAdminOnly()
+    {
+        using var install = new Install();
+        install.Writable.Add(install.At("app", "runtimes", "win-x64", "native", "av_libglesv2.dll"));
+        Assert.False(IsAdminOnly(install.Exe(), install.Read));
+
+        install.Writable.Clear();
+        install.Writable.Add(install.At("app", "runtimes", "win-x64"));
+        Assert.False(IsAdminOnly(install.Exe(), install.Read));
+    }
+
+    [Fact]
+    public void AReplaceableFolderAboveIsNotAdminOnly()
+    {
+        using var install = new Install();
+        install.Writable.Add(install.Root);
+        Assert.False(IsAdminOnly(install.Exe(), install.Read));
+    }
+
+    [Fact]
+    public void AJunctionAboveTheApplicationIsNotAdminOnly()
+    {
+        // The reviewer's case: a protected "Program Files\LittleBigMouse" junction into a
+        // protected target whose own parent is replaceable. Every descriptor on the path as
+        // written is protected; only the link gives the target away.
+        using var install = new Install();
+        Directory.CreateDirectory(install.At("programs"));
+        install.Link(install.At("programs", "app"), install.At("app"));
+
+        Assert.True(IsAdminOnly(install.Exe(), install.Read));
+        Assert.False(IsAdminOnly(Path.Combine(install.At("programs", "app"), "LittleBigMouse.Ui.Avalonia.exe"), install.Read));
+    }
+
+    [Fact]
+    public void ALinkInsideTheApplicationIsNotAdminOnly()
+    {
+        using var install = new Install();
+        Directory.CreateDirectory(install.At("elsewhere"));
+        install.Link(install.At("app", "plugins"), install.At("elsewhere"));
+        Assert.False(IsAdminOnly(install.Exe(), install.Read));
+    }
+
+    [Fact]
+    public void AMissingExeIsNotAdminOnly()
+    {
+        using var install = new Install();
+        Assert.False(IsAdminOnly(install.At("app", "missing.exe"), install.Read));
     }
 
     // ---- Real descriptors (Windows) ----

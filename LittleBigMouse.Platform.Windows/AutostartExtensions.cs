@@ -61,6 +61,17 @@ public static class AutostartExtensions
         // FIRST regardless of the option — back then running as admin was the whole
         // point — so an elevated app kept re-registering an elevated task even with
         // StartElevated off, and the elevation self-perpetuated across restarts.
+        //
+        // An elevated task runs its program at every logon with full rights and no prompt:
+        // from a folder the user can write to, that is administrator rights for whatever
+        // replaces the exe. Such a copy gets a plain task; the "Start elevated" option still
+        // asks UAC at startup (WindowsElevation), where the user sees the request.
+        if (elevated && !AdminOnlyPath.IsAdminOnly(ApplicationExe))
+        {
+            Console.Error.WriteLine(
+                $"[LittleBigMouse] Not registering an elevated logon task: '{ApplicationExe}' can be replaced without administrator rights.");
+            elevated = false;
+        }
         td.Principal.RunLevel = elevated ? TaskRunLevel.Highest : TaskRunLevel.LUA;
         td.Settings.DisallowStartIfOnBatteries = false;
         td.Settings.DisallowStartOnRemoteAppSession = true;

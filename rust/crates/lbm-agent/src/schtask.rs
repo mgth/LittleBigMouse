@@ -6,11 +6,17 @@
 //! agent's: it counts as scheduled, and the next save re-registers it on the agent (the
 //! plan: "la tâche 5.x qui lance `LittleBigMouse.Ui.Avalonia.exe` est migrée").
 //!
-//! It is registered through `schtasks.exe` from a task definition in XML rather than the
-//! Task Scheduler's COM interfaces: what the task is, is then one readable document. Its
-//! settings are C#'s — a logon trigger for this user, the requested run level (an elevated
-//! task, when refused, becomes a plain one rather than none), no battery condition, no
-//! time limit, not in a remote session — plus a restart on failure.
+//! What the task is, is one readable document: a definition in XML, handed to the Task
+//! Scheduler in memory (`ITaskFolder::RegisterTask`). Not through `schtasks /Create /XML`,
+//! which wants it in a file: the only folder at hand is `%TEMP%`, which every unelevated
+//! program of the user can write, and an elevated agent would register whatever had been
+//! swapped in between the write and the read. Its settings are C#'s — a logon trigger for
+//! this user, the requested run level (an elevated task, when refused, becomes a plain one
+//! rather than none), no battery condition, no time limit, not in a remote session — plus a
+//! restart on failure.
+//!
+//! An elevated task is registered only for an agent nobody else can replace
+//! ([`crate::admin_only`]): it runs at every logon with full rights and no prompt.
 
 use std::path::PathBuf;
 
@@ -118,28 +124,85 @@ impl ScheduledTask {
                 Err(_) => Ok(()),
             };
         }
+        let elevated = elevated && self.may_run_elevated();
         match self.register(&name, elevated) {
             Err(_) if elevated => self.register(&name, false),
             result => result,
         }
     }
 
+    /// From a folder the user can write to, an elevated task is administrator rights for
+    /// whatever replaces the agent. Such a copy gets a plain task; the `StartElevated`
+    /// option still asks UAC at startup ([`crate::elevation`]), where the user sees the
+    /// request.
+    fn may_run_elevated(&self) -> bool {
+        let admin_only = crate::admin_only::is_admin_only(&self.program);
+        if !admin_only {
+            eprintln!(
+                "[lbm-agent] not registering an elevated logon task: {} can be replaced \
+                 without administrator rights",
+                self.program.display()
+            );
+        }
+        admin_only
+    }
+
+    /// Registers (or replaces, a 5.x task included) the definition, in memory.
     fn register(&self, name: &str, elevated: bool) -> std::io::Result<()> {
-        // schtasks reads the definition as the UTF-16 document it says it is.
-        let file = std::env::temp_dir().join(format!("{name}-{}.xml", std::process::id()));
-        let mut bytes = vec![0xFF, 0xFE];
-        bytes.extend(self.xml(elevated).encode_utf16().flat_map(u16::to_le_bytes));
-        std::fs::write(&file, bytes)?;
-        let result = schtasks(&[
-            "/Create",
-            "/TN",
-            name,
-            "/XML",
-            &file.to_string_lossy(),
-            "/F",
-        ]);
-        let _ = std::fs::remove_file(&file);
-        result
+        use windows::core::{BSTR, VARIANT};
+        use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
+        use windows::Win32::System::TaskScheduler::{
+            ITaskService, TaskScheduler, TASK_CREATE_OR_UPDATE, TASK_LOGON_INTERACTIVE_TOKEN,
+        };
+
+        let _com = Com::enter()?;
+        let none = VARIANT::default();
+        // SAFETY: COM calls on interfaces this function owns, COM entered above.
+        unsafe {
+            let service: ITaskService =
+                CoCreateInstance(&TaskScheduler, None, CLSCTX_INPROC_SERVER)?;
+            service.Connect(&none, &none, &none, &none)?;
+            service.GetFolder(&BSTR::from("\\"))?.RegisterTask(
+                &BSTR::from(name),
+                &BSTR::from(self.xml(elevated)),
+                TASK_CREATE_OR_UPDATE.0,
+                &none,
+                &none,
+                TASK_LOGON_INTERACTIVE_TOKEN,
+                &none,
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// COM on this thread for as long as it lives: entered multithreaded, or found already
+/// entered in another mode (a window thread), which serves as well and is not ours to leave.
+#[cfg(windows)]
+struct Com(bool);
+
+#[cfg(windows)]
+impl Com {
+    fn enter() -> std::io::Result<Self> {
+        use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+        // SAFETY: plain COM initialisation of the calling thread.
+        let result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        if result == RPC_E_CHANGED_MODE {
+            return Ok(Com(false));
+        }
+        result.ok()?;
+        Ok(Com(true))
+    }
+}
+
+#[cfg(windows)]
+impl Drop for Com {
+    fn drop(&mut self) {
+        if self.0 {
+            // SAFETY: balances the successful CoInitializeEx of `enter`, on the same thread.
+            unsafe { windows::Win32::System::Com::CoUninitialize() };
+        }
     }
 }
 

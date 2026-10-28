@@ -48,6 +48,7 @@ libc = "0.2"
 version = "0.58"
 features = [
     "Win32_Foundation",
+    "Win32_Devices_HumanInterfaceDevice",
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Accessibility",

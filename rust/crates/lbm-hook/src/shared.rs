@@ -43,6 +43,12 @@ pub struct Shared {
     /// The panic shortcut as the layout spells it (`Ctrl+Alt+Shift+M`). Read by the
     /// listener whenever it is asked to reconcile.
     pub rescue_shortcut: Mutex<String>,
+    /// Opt-in Windows touchscreen/mouse separation.
+    pub touch_mouse_independent: AtomicBool,
+    pub restore_keyboard_focus: AtomicBool,
+    pub touch_policy: Mutex<std::sync::Arc<crate::hook::touch_policy::TouchPolicy>>,
+    /// Invalidates saved touch positions on every layout reload.
+    pub touch_generation: AtomicU32,
     /// How many times a `Load` has asked for the hook to come down. Taking it down
     /// tears the mouse, focus, desktop and display hooks apart and destroys the
     /// display window, so a `Load` that is immediately followed by a `Run` skips it —
@@ -74,6 +80,15 @@ pub struct Shared {
 }
 
 impl Shared {
+    /// Whether touchscreen policy should participate in the current input path.
+    pub fn touch_active(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        self.touch_mouse_independent.load(Ordering::SeqCst)
+            && self.want_hook.load(Ordering::SeqCst)
+            && !self.paused.load(Ordering::SeqCst)
+            && !self.suspended.load(Ordering::SeqCst)
+    }
+
     pub fn new() -> Self {
         Shared {
             hooked: AtomicBool::new(false),
@@ -84,6 +99,10 @@ impl Shared {
             pump_tid: AtomicU32::new(0),
             rescue_tid: AtomicU32::new(0),
             rescue_registered: AtomicBool::new(false),
+            touch_mouse_independent: AtomicBool::new(false),
+            restore_keyboard_focus: AtomicBool::new(false),
+            touch_policy: Mutex::new(std::sync::Arc::new(Default::default())),
+            touch_generation: AtomicU32::new(0),
             rescue_shortcut: Mutex::new(crate::shortcut::DEFAULT.to_string()),
             unhook_requests: AtomicU32::new(0),
             // C++ Hooker defaults, until a layout overrides them.

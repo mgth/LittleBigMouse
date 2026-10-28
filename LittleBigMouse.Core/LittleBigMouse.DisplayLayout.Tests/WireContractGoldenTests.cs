@@ -161,7 +161,7 @@ public class WireContractGoldenTests
         foreach (var name in new[]
                  {
                      "AdjustPointer", "AdjustSpeed", "LoopX", "LoopY", "Virtual",
-                     "RescueShortcut", "Priority", "PriorityUnhooked", "Algorithm",
+                     "RescueShortcut", "TouchMouseIndependent", "RestoreKeyboardFocus", "FocusRestoreDelay", "FocusRestoreOnMouseMove", "TouchAllDisplays", "TouchDisplayIds", "TouchOverrideModifier", "FocusKeepApps", "FocusRestoreApps", "TouchDisplayBounds", "Priority", "PriorityUnhooked", "Algorithm",
                      "MaxTravelDistance", "FreelookCheckInterval", "FreelookEnabled"
                  })
             Assert.True(root.Attribute(name) is not null, $"ZonesLayout lost attribute {name}");

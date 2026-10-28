@@ -76,6 +76,35 @@ pub fn compute_zones(layout: &Layout) -> ZonesLayout {
     zones.freelook_enabled = o.freelook_enabled;
     zones.adjust_pointer = o.adjust_pointer;
     zones.adjust_speed = o.adjust_speed;
+    zones.touch_mouse_independent = o.touch_mouse_independent;
+    zones.stylus_mouse_independent = o.stylus_mouse_independent;
+    zones.restore_keyboard_focus = o.restore_keyboard_focus;
+    zones.focus_restore_delay = o.focus_restore_delay;
+    zones.focus_restore_on_mouse_move = o.focus_restore_on_mouse_move;
+    zones.touch_all_displays = o.touch_all_displays;
+    zones.touch_display_ids = o.touch_display_ids.clone();
+    zones.touch_override_modifier = o.touch_override_modifier.clone();
+    zones.focus_keep_apps = o.focus_keep_apps.replace('\r', "").replace('\n', ";");
+    zones.focus_restore_apps = o.focus_restore_apps.replace('\r', "").replace('\n', ";");
+    if !o.touch_all_displays {
+        zones.touch_display_bounds = layout
+            .sorted_sources()
+            .into_iter()
+            .filter(|s| {
+                s.source.attached_to_desktop
+                    && layout
+                        .monitor(&s.monitor)
+                        .is_some_and(|m| m.active_source.as_deref() == Some(s.source.id.as_str()))
+                    && o.touch_display_ids.split(';').any(|id| id == s.source.id)
+            })
+            .map(|s| {
+                let b = s.source.in_pixel.bounds();
+                format!("{},{},{},{}", b.left(), b.top(), b.width(), b.height())
+            })
+            .collect::<Vec<_>>()
+            .join(";");
+    }
+
     zones.rescue_shortcut = o.rescue_shortcut.clone();
     zones.algorithm = o.algorithm.clone();
     zones.priority = Some(o.priority.clone());

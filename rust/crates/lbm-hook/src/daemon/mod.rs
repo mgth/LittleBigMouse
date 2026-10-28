@@ -222,6 +222,9 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
         // the layout and resets tracking, so it is exactly the right place to shrug off the poison —
         // this is what lets a Stop/Start (Load) heal crossing instead of staying broken.
         // Before the move: the layout is about to be handed to the engine.
+        let touch_mouse_independent = layout.touch_mouse_independent;
+        let restore_keyboard_focus = layout.restore_keyboard_focus;
+        let touch_policy = crate::hook::touch_policy::TouchPolicy::from_layout(&layout);
         adopt_rescue_shortcut(shared, &layout.rescue_shortcut);
         {
             let mut engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
@@ -232,6 +235,17 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
                 crate::platform::cursor::restore_managed_clip(&mut engine);
             }
             engine.load(layout);
+            *shared
+                .touch_policy
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = std::sync::Arc::new(touch_policy);
+            shared
+                .touch_mouse_independent
+                .store(touch_mouse_independent, Ordering::SeqCst);
+            shared
+                .restore_keyboard_focus
+                .store(restore_keyboard_focus, Ordering::SeqCst);
+            shared.touch_generation.fetch_add(1, Ordering::SeqCst);
         }
         // Kept for the edge prober, which re-parses rather than touching the
         // live engine.
@@ -563,6 +577,23 @@ mod tests {
 
         assert_eq!(shared.unhook_requests.load(Ordering::SeqCst), 1);
         assert!(!shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn touch_option_replays_and_old_layout_clears_it() {
+        let shared = Shared::new();
+        let line = LOAD_LINE.replace(
+            r#"<ZonesLayout Algorithm="Strait""#,
+            r#"<ZonesLayout TouchMouseIndependent="True" RestoreKeyboardFocus="True" Algorithm="Strait""#,
+        );
+        replay(&shared, &format!("{line}\n"));
+        assert!(shared.touch_mouse_independent.load(Ordering::SeqCst));
+        assert!(shared.restore_keyboard_focus.load(Ordering::SeqCst));
+        let generation = shared.touch_generation.load(Ordering::SeqCst);
+        replay(&shared, &format!("{LOAD_LINE}\n"));
+        assert!(!shared.touch_mouse_independent.load(Ordering::SeqCst));
+        assert!(!shared.restore_keyboard_focus.load(Ordering::SeqCst));
+        assert_ne!(shared.touch_generation.load(Ordering::SeqCst), generation);
     }
 
     #[test]

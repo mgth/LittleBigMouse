@@ -148,6 +148,16 @@
     "ShowMonitorActionWarning": true,
     "BorderValues": "PerModel",
     "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "TouchMouseIndependent": false,
+    "StylusMouseIndependent": false,
+    "RestoreKeyboardFocus": false,
+    "FocusRestoreDelay": 120,
+    "FocusRestoreOnMouseMove": false,
+    "TouchAllDisplays": true,
+    "TouchDisplayIds": "",
+    "TouchOverrideModifier": "None",
+    "FocusKeepApps": "",
+    "FocusRestoreApps": "",
     "HideTrayIcon": false,
     "ExcludedDefaultsVersion": 2
   }

@@ -1,4 +1,6 @@
-﻿using HLab.Geo;
+using System;
+using System.Linq;
+using HLab.Geo;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.DisplayLayout.Monitors.Extensions;
@@ -57,6 +59,34 @@ public static class ZonesLayoutFactory
 
         zones.AdjustPointer = layout.Options.AdjustPointer;
         zones.AdjustSpeed = layout.Options.AdjustSpeed;
+
+        zones.TouchMouseIndependent = layout.Options.TouchMouseIndependent;
+        zones.StylusMouseIndependent = layout.Options.StylusMouseIndependent;
+        zones.RestoreKeyboardFocus = layout.Options.RestoreKeyboardFocus;
+        zones.FocusRestoreDelay = layout.Options.FocusRestoreDelay;
+        zones.FocusRestoreOnMouseMove = layout.Options.FocusRestoreOnMouseMove;
+        zones.TouchAllDisplays = layout.Options.TouchAllDisplays;
+        zones.TouchDisplayIds = layout.Options.TouchDisplayIds;
+        zones.TouchOverrideModifier = layout.Options.TouchOverrideModifier;
+        zones.FocusKeepApps = layout.Options.FocusKeepApps.Replace("\r", "").Replace("\n", ";");
+        zones.FocusRestoreApps = layout.Options.FocusRestoreApps.Replace("\r", "").Replace("\n", ";");
+        // Separate from cursor-routing zones: sensor panels excluded from the layout
+        // can still participate in touchscreen focus restoration.
+        if (!layout.Options.TouchAllDisplays)
+        {
+            var selected = layout.Options.TouchDisplayIds
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.Ordinal);
+            zones.TouchDisplayBounds = string.Join(";", layout.PhysicalSources
+                .Where(s => s == s.Monitor.ActiveSource && s.Source.AttachedToDesktop
+                    && selected.Contains(s.Source.Id))
+                .Select(s =>
+                {
+                    var bounds = s.Source.InPixel.Bounds;
+                    return FormattableString.Invariant(
+                        $"{bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height}");
+                }));
+        }
 
         zones.RescueShortcut = layout.Options.RescueShortcut;
 

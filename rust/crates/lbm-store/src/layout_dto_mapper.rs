@@ -54,6 +54,22 @@ pub fn apply_global_options(o: &mut LayoutOptions, dto: Option<&GlobalOptionsDto
         &dto.show_monitor_action_warning,
     );
     keep(&mut o.border_values, &dto.border_values);
+    keep(&mut o.touch_mouse_independent, &dto.touch_mouse_independent);
+    keep(
+        &mut o.stylus_mouse_independent,
+        &dto.stylus_mouse_independent,
+    );
+    keep(&mut o.restore_keyboard_focus, &dto.restore_keyboard_focus);
+    keep(&mut o.focus_restore_delay, &dto.focus_restore_delay);
+    keep(
+        &mut o.focus_restore_on_mouse_move,
+        &dto.focus_restore_on_mouse_move,
+    );
+    keep(&mut o.touch_all_displays, &dto.touch_all_displays);
+    keep(&mut o.touch_display_ids, &dto.touch_display_ids);
+    keep(&mut o.touch_override_modifier, &dto.touch_override_modifier);
+    keep(&mut o.focus_keep_apps, &dto.focus_keep_apps);
+    keep(&mut o.focus_restore_apps, &dto.focus_restore_apps);
     keep(&mut o.rescue_shortcut, &dto.rescue_shortcut);
     keep(&mut o.hide_tray_icon, &dto.hide_tray_icon);
 }
@@ -325,6 +341,16 @@ pub fn to_global_options_dto(
         vcp_control: Some(o.vcp_control),
         show_monitor_action_warning: Some(o.show_monitor_action_warning),
         border_values: Some(o.border_values.clone()),
+        touch_mouse_independent: Some(o.touch_mouse_independent),
+        stylus_mouse_independent: Some(o.stylus_mouse_independent),
+        restore_keyboard_focus: Some(o.restore_keyboard_focus),
+        focus_restore_delay: Some(o.focus_restore_delay),
+        focus_restore_on_mouse_move: Some(o.focus_restore_on_mouse_move),
+        touch_all_displays: Some(o.touch_all_displays),
+        touch_display_ids: Some(o.touch_display_ids.clone()),
+        touch_override_modifier: Some(o.touch_override_modifier.clone()),
+        focus_keep_apps: Some(o.focus_keep_apps.clone()),
+        focus_restore_apps: Some(o.focus_restore_apps.clone()),
         rescue_shortcut: Some(o.rescue_shortcut.clone()),
         hide_tray_icon: Some(o.hide_tray_icon),
         excluded_defaults_version,

@@ -70,6 +70,16 @@ fn same_tracked_options(a: &LayoutOptions, b: &LayoutOptions) -> bool {
         && a.allow_discontinuity == b.allow_discontinuity
         && a.algorithm == b.algorithm
         && a.border_values == b.border_values
+        && a.touch_mouse_independent == b.touch_mouse_independent
+        && a.stylus_mouse_independent == b.stylus_mouse_independent
+        && a.restore_keyboard_focus == b.restore_keyboard_focus
+        && a.focus_restore_delay == b.focus_restore_delay
+        && a.focus_restore_on_mouse_move == b.focus_restore_on_mouse_move
+        && a.touch_all_displays == b.touch_all_displays
+        && a.touch_display_ids == b.touch_display_ids
+        && a.touch_override_modifier == b.touch_override_modifier
+        && a.focus_keep_apps == b.focus_keep_apps
+        && a.focus_restore_apps == b.focus_restore_apps
         && a.rescue_shortcut == b.rescue_shortcut
         && a.excluded_list == b.excluded_list
 }

@@ -12,7 +12,8 @@ use windows::Win32::System::Power::{RegisterPowerSettingNotification, POWERBROAD
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassExW, CW_USEDEFAULT,
     DEVICE_NOTIFY_WINDOW_HANDLE, PBT_POWERSETTINGCHANGE, SPI_SETWORKAREA, WINDOW_EX_STYLE,
-    WM_DISPLAYCHANGE, WM_POWERBROADCAST, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
+    WM_DISPLAYCHANGE, WM_INPUT, WM_INPUT_DEVICE_CHANGE, WM_POWERBROADCAST, WM_SETTINGCHANGE,
+    WM_TIMER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
 };
 
 use crate::shared::SHARED;
@@ -69,6 +70,7 @@ pub fn create_window() -> HWND {
         // window itself. On (re)registration Windows immediately re-pushes the current state; the
         // `suspended` dedup in `on_suspend`/`on_resume` absorbs that.
         if hwnd != HWND::default() {
+            super::native_touch::register(hwnd);
             let _ = RegisterPowerSettingNotification(
                 HANDLE(hwnd.0),
                 &GUID_CONSOLE_DISPLAY_STATE,
@@ -82,6 +84,7 @@ pub fn create_window() -> HWND {
 
 pub fn destroy_window(hwnd: HWND) {
     if hwnd != HWND::default() {
+        super::native_touch::unregister();
         unsafe {
             let _ = DestroyWindow(hwnd);
         }
@@ -95,6 +98,19 @@ unsafe extern "system" fn wnd_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     match msg {
+        WM_INPUT => {
+            crate::hook::guard(|| super::native_touch::on_input(hwnd, lparam));
+            // Required for foreground raw-input cleanup, also safe for INPUTSINK.
+            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+        }
+        WM_TIMER if wparam.0 == super::native_touch::RELEASE_TIMER => {
+            crate::hook::guard(|| super::native_touch::on_timer(hwnd));
+            LRESULT(0)
+        }
+        WM_INPUT_DEVICE_CHANGE => {
+            crate::hook::guard(super::native_touch::devices_changed);
+            LRESULT(0)
+        }
         WM_DISPLAYCHANGE => {
             crate::hook::guard(|| {
                 if let Some(shared) = SHARED.get() {
@@ -105,6 +121,9 @@ unsafe extern "system" fn wnd_proc(
         }
         WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => {
             crate::hook::guard(|| {
+                if super::touch_input::preserve_on_work_area_change() {
+                    return;
+                }
                 if let Some(shared) = SHARED.get() {
                     crate::hook::on_setting_changed(shared);
                 }

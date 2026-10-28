@@ -162,6 +162,32 @@ pub fn count_event() {
     MOUSE_EVENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Release mouse routing before absolute touch input, even when restoration is
+/// overridden. Never wait for a layout reload from the hook thread.
+pub fn begin_touch<E: CursorEnv>(engine: &Mutex<MouseEngine>, env: &mut E) {
+    let mut guard = match engine.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return,
+    };
+    guard.begin_touch(env);
+}
+
+/// Do not block the hook while a layout reload owns the engine. The caller retains
+/// its saved touch position on contention and retries on the next physical move.
+pub fn restore_touch_position<E: CursorEnv>(
+    engine: &Mutex<MouseEngine>,
+    env: &mut E,
+    target: Point<i32>,
+) -> Option<Point<i32>> {
+    let mut guard = match engine.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return None,
+    };
+    Some(guard.resume_after_touch(env, target))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,7 +215,11 @@ mod tests {
             self.pos
         }
         fn set_mouse_location(&mut self, location: Point<i32>) {
-            self.pos = location;
+            // Match Windows: SetCursorPos is clamped to the active clip.
+            self.pos = Point::new(
+                location.x().clamp(self.clip.left(), self.clip.right() - 1),
+                location.y().clamp(self.clip.top(), self.clip.bottom() - 1),
+            );
         }
         fn get_clip(&self) -> Rect<i32> {
             self.clip
@@ -263,6 +293,114 @@ mod tests {
         assert_eq!(routed, Routed::Passed);
         assert!(!routed.handled());
         assert_eq!(env.pos, before, "an interior move must not warp the cursor");
+    }
+
+    #[test]
+    fn overridden_touch_reaches_target_on_first_tap_without_a_return_warp() {
+        for algorithm in [
+            crate::zones::Algorithm::Strait,
+            crate::zones::Algorithm::CornerCrossing,
+        ] {
+            let engine = engine_mutex();
+            engine.lock().unwrap().layout.algorithm = algorithm;
+            let mut env = FakeCursor::new();
+            let desktop = env.clip;
+            route_move(&engine, &mut env, Point::new(-500, 700));
+            route_move(&engine, &mut env, Point::new(0, 1000));
+            assert_ne!(env.clip, desktop);
+
+            begin_touch(&engine, &mut env);
+            let touched = Point::new(-1500, 1200);
+            env.set_mouse_location(touched); // Windows applies the first tap.
+            assert_eq!(env.pos, touched);
+            assert_eq!(env.clip, desktop);
+            // With override held, there is no saved-position return. The next
+            // mouse report must adopt the touched monitor without remapping it.
+            assert_eq!(route_move(&engine, &mut env, touched), Routed::Passed);
+            assert_eq!(env.pos, touched);
+            assert_eq!(
+                route_move(&engine, &mut env, Point::new(-1499, 1200)),
+                Routed::Passed
+            );
+        }
+    }
+
+    #[test]
+    fn touch_begin_preserves_external_clip_and_never_waits_for_engine() {
+        let engine = engine_mutex();
+        let mut env = FakeCursor::new();
+        route_move(&engine, &mut env, Point::new(-500, 700));
+        route_move(&engine, &mut env, Point::new(0, 1000));
+        let app_clip = Rect::new(100, 100, 200, 200);
+        env.clip = app_clip;
+        let before = env.pos;
+        {
+            let _busy = engine.lock().unwrap();
+            begin_touch(&engine, &mut env);
+        }
+        begin_touch(&engine, &mut env);
+        assert_eq!(env.clip, app_clip);
+        assert_eq!(env.pos, before);
+    }
+
+    #[test]
+    fn touch_return_releases_owned_clip_and_forgets_the_touched_monitor() {
+        let engine = engine_mutex();
+        let mut env = FakeCursor::new();
+        let desktop = env.clip;
+        let saved = Point::new(-500, 700);
+        route_move(&engine, &mut env, saved);
+        assert_eq!(
+            route_move(&engine, &mut env, Point::new(0, 1000)),
+            Routed::Crossed
+        );
+        assert_ne!(env.clip, desktop);
+        // The previous direct warp clamps to the other monitor's edge.
+        env.set_mouse_location(saved);
+        assert_ne!(env.pos, saved);
+        assert_eq!(
+            restore_touch_position(&engine, &mut env, saved),
+            Some(saved)
+        );
+        assert_eq!(env.clip, desktop);
+        // A tiny subsequent move must not cross back from stale zone history.
+        assert_eq!(
+            route_move(&engine, &mut env, Point::new(-499, 700)),
+            Routed::Passed
+        );
+        assert_eq!(env.clip, desktop);
+    }
+
+    #[test]
+    fn touch_return_preserves_another_apps_clip() {
+        let engine = engine_mutex();
+        let mut env = FakeCursor::new();
+        route_move(&engine, &mut env, Point::new(-500, 700));
+        route_move(&engine, &mut env, Point::new(0, 1000));
+        let app_clip = Rect::new(100, 100, 200, 200);
+        env.clip = app_clip;
+        assert_eq!(
+            restore_touch_position(&engine, &mut env, Point::new(-500, 700)),
+            Some(Point::new(100, 299))
+        );
+        assert_eq!(env.clip, app_clip);
+    }
+
+    #[test]
+    fn touch_return_does_not_move_or_wait_when_engine_is_busy() {
+        let engine = engine_mutex();
+        let mut env = FakeCursor::new();
+        let held = engine.lock().unwrap();
+        assert_eq!(
+            restore_touch_position(&engine, &mut env, Point::new(-500, 700)),
+            None
+        );
+        assert_eq!(env.pos, Point::new(0, 0));
+        drop(held);
+        assert_eq!(
+            restore_touch_position(&engine, &mut env, Point::new(-500, 700)),
+            Some(Point::new(-500, 700))
+        );
     }
 
     #[test]

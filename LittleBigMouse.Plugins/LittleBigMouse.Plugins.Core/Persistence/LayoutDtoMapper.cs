@@ -38,6 +38,16 @@ public static class LayoutDtoMapper
         o.VcpControl = dto.VcpControl ?? o.VcpControl;
         o.ShowMonitorActionWarning = dto.ShowMonitorActionWarning ?? o.ShowMonitorActionWarning;
         o.BorderValues = dto.BorderValues ?? o.BorderValues;
+        o.TouchMouseIndependent = dto.TouchMouseIndependent ?? o.TouchMouseIndependent;
+        o.StylusMouseIndependent = dto.StylusMouseIndependent ?? o.StylusMouseIndependent;
+        o.RestoreKeyboardFocus = dto.RestoreKeyboardFocus ?? o.RestoreKeyboardFocus;
+        o.FocusRestoreDelay = dto.FocusRestoreDelay ?? o.FocusRestoreDelay;
+        o.FocusRestoreOnMouseMove = dto.FocusRestoreOnMouseMove ?? o.FocusRestoreOnMouseMove;
+        o.TouchAllDisplays = dto.TouchAllDisplays ?? o.TouchAllDisplays;
+        o.TouchDisplayIds = dto.TouchDisplayIds ?? o.TouchDisplayIds;
+        o.TouchOverrideModifier = dto.TouchOverrideModifier ?? o.TouchOverrideModifier;
+        o.FocusKeepApps = dto.FocusKeepApps ?? o.FocusKeepApps;
+        o.FocusRestoreApps = dto.FocusRestoreApps ?? o.FocusRestoreApps;
         o.RescueShortcut = dto.RescueShortcut ?? o.RescueShortcut;
         o.HideTrayIcon = dto.HideTrayIcon ?? o.HideTrayIcon;
     }
@@ -187,6 +197,16 @@ public static class LayoutDtoMapper
         VcpControl = o.VcpControl,
         ShowMonitorActionWarning = o.ShowMonitorActionWarning,
         BorderValues = o.BorderValues,
+        TouchMouseIndependent = o.TouchMouseIndependent,
+        StylusMouseIndependent = o.StylusMouseIndependent,
+        RestoreKeyboardFocus = o.RestoreKeyboardFocus,
+        FocusRestoreDelay = o.FocusRestoreDelay,
+        FocusRestoreOnMouseMove = o.FocusRestoreOnMouseMove,
+        TouchAllDisplays = o.TouchAllDisplays,
+        TouchDisplayIds = o.TouchDisplayIds,
+        TouchOverrideModifier = o.TouchOverrideModifier,
+        FocusKeepApps = o.FocusKeepApps,
+        FocusRestoreApps = o.FocusRestoreApps,
         RescueShortcut = o.RescueShortcut,
         HideTrayIcon = o.HideTrayIcon,
         ExcludedDefaultsVersion = excludedDefaultsVersion

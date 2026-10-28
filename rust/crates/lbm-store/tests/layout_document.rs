@@ -48,6 +48,17 @@ fn edited() -> Layout {
     layout.edit_options(|o| {
         o.loop_x = true;
         o.rescue_shortcut = "Ctrl+Alt+F12".to_owned();
+        o.touch_mouse_independent = true;
+        o.stylus_mouse_independent = true;
+
+        o.restore_keyboard_focus = true;
+        o.focus_restore_delay = 275;
+        o.focus_restore_on_mouse_move = true;
+        o.touch_all_displays = false;
+        o.touch_display_ids = "SRC1".into();
+        o.touch_override_modifier = "Alt".into();
+        o.focus_keep_apps = "notepad.exe".into();
+        o.focus_restore_apps = "control.exe".into();
         o.excluded_list = vec!["/usr/bin/steam".to_owned()];
     });
     layout
@@ -72,6 +83,21 @@ fn a_document_applied_elsewhere_gives_the_edited_layout() {
     assert_eq!(monitor.depth_ratio.y, 1.5);
     assert_eq!(monitor.border_resistance.right.sections.len(), 1);
     assert_eq!(agent.options.rescue_shortcut, "Ctrl+Alt+F12");
+    assert!(agent.options.touch_mouse_independent);
+    assert!(agent.options.stylus_mouse_independent);
+
+    assert!(agent.options.restore_keyboard_focus);
+    assert_eq!(agent.options.focus_restore_delay, 275);
+    assert!(agent.options.focus_restore_on_mouse_move);
+    assert!(!agent.options.touch_all_displays);
+    assert_eq!(agent.options.touch_display_ids, "SRC1");
+    assert_eq!(agent.options.touch_override_modifier, "Alt");
+    assert_eq!(agent.options.focus_keep_apps, "notepad.exe");
+    assert_eq!(agent.options.focus_restore_apps, "control.exe");
+    assert_eq!(
+        lbm_layout::zoning::compute_zones(&agent).touch_display_bounds,
+        "0,0,1920,1080"
+    );
     assert_eq!(agent.options.excluded_list, ["/usr/bin/steam"]);
     // An edit, not a load: saved when the agent saves it.
     assert!(!agent.saved());
@@ -128,6 +154,9 @@ fn on_the_wire_it_is_the_stores_json_in_one_object() {
     assert_eq!(keys, ["GlobalOptions", "Layout", "Models", "Excluded"]);
     assert_eq!(value["Layout"]["Options"]["LoopX"], true);
     assert_eq!(value["GlobalOptions"]["RescueShortcut"], "Ctrl+Alt+F12");
+    assert_eq!(value["GlobalOptions"]["TouchMouseIndependent"], true);
+    assert_eq!(value["GlobalOptions"]["StylusMouseIndependent"], true);
+    assert_eq!(value["GlobalOptions"]["RestoreKeyboardFocus"], true);
     assert!(value["Layout"]["Monitors"][MONITOR_ID].is_object());
 
     // Parts left out are left alone.

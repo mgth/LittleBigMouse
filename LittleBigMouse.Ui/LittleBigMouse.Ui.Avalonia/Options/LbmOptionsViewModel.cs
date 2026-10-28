@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -27,6 +27,29 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         IMainService mainService,
         ILittleBigMouseClientService daemon)
     {
+
+        mainService.WhenAnyValue(e => e.MonitorsLayout)
+            .Select(layout => layout == null
+                ? Observable.Return<IReadOnlyCollection<PhysicalSource>>(Array.Empty<PhysicalSource>())
+                : layout.PhysicalSources.ToObservableChangeSet().ToCollection())
+            .Switch()
+            .CombineLatest(this.WhenAnyValue(e => e.Model.TouchDisplayIds),
+                (sources, ids) => (sources, ids))
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(value =>
+            {
+                var selected = (value.ids ?? "").Split(';').ToHashSet(StringComparer.Ordinal);
+                TouchDisplays.Clear();
+                foreach (var source in value.sources.Where(s =>
+                    s.Source.AttachedToDesktop && s == s.Monitor.ActiveSource))
+                {
+                    var display = source.Source;
+                    TouchDisplays.Add(new TouchDisplayChoice(display.Id,
+                        $"Display {display.SourceNumber} — {display.DisplayName ?? source.Monitor.Model.PnpDeviceName} ({display.InPixel.Width} × {display.InPixel.Height})",
+                        selected.Contains(display.Id), SetTouchDisplay));
+                }
+            }).DisposeWith(this);
+
         // Turning a permission OFF must fix the current layout right away, not
         // wait for the next monitor move: compact resolves the existing overlaps
         // (AllowOverlaps) or closes the existing gaps (AllowDiscontinuity).
@@ -105,6 +128,8 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         // that silently does not exist is worse than none, because the user only finds
         // out at the moment they need it.
         daemon.DaemonEventReceived += OnDaemonEvent;
+        System.Reactive.Disposables.Disposable.Create(
+            () => daemon.DaemonEventReceived -= OnDaemonEvent).DisposeWith(this);
 
         // Send it as soon as it is recorded, not at the next Apply. It rides inside the
         // layout too — that is what gets one to a standalone daemon at boot — but
@@ -147,6 +172,21 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
     /// shown dead, so a Linux build has nothing that looks broken.
     /// </summary>
     public bool RescueShortcutSupported => OperatingSystem.IsWindows();
+
+
+    public bool TouchMouseIndependentSupported => OperatingSystem.IsWindows();
+    public IReadOnlyList<string> TouchModifiers { get; } = new[] { "None", "Ctrl", "Alt", "Shift", "Win" };
+    public ObservableCollection<TouchDisplayChoice> TouchDisplays { get; } = new();
+
+    void SetTouchDisplay(string id, bool enabled)
+    {
+        if (Model == null) return;
+        var ids = Model.TouchDisplayIds.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        if (enabled) ids.Add(id); else ids.Remove(id);
+        Model.TouchDisplayIds = string.Join(";", ids.OrderBy(value => value, StringComparer.Ordinal));
+    }
+
 
     /// <summary>Empty while the rescue shortcut is registered and working.</summary>
     public string ShortcutWarning

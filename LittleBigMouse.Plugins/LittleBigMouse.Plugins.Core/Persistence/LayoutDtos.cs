@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -29,6 +29,16 @@ public class GlobalOptionsDto
     public bool? ShowMonitorActionWarning { get; set; }
     public string? BorderValues { get; set; }
     public string? RescueShortcut { get; set; }
+    public bool? TouchMouseIndependent { get; set; }
+    public bool? StylusMouseIndependent { get; set; }
+    public bool? RestoreKeyboardFocus { get; set; }
+    public int? FocusRestoreDelay { get; set; }
+    public bool? FocusRestoreOnMouseMove { get; set; }
+    public bool? TouchAllDisplays { get; set; }
+    public string? TouchDisplayIds { get; set; }
+    public string? TouchOverrideModifier { get; set; }
+    public string? FocusKeepApps { get; set; }
+    public string? FocusRestoreApps { get; set; }
     public bool? HideTrayIcon { get; set; }
 
     /// <summary>

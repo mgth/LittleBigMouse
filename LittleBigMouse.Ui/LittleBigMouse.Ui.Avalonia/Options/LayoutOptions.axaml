@@ -248,6 +248,82 @@
 						</StackPanel>
 					</Border>
 
+					<Border Classes="SettingCard" IsVisible="{Binding TouchMouseIndependentSupported}">
+						<StackPanel>
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Mouse}"
+						                     Header="Keep mouse position after touch"
+						                     Description="After using the touchscreen, move the mouse to resume from its previous position.">
+							<ToggleSwitch IsChecked="{Binding Model.TouchMouseIndependent, Mode=TwoWay, FallbackValue=false}"/>
+						</controls:SettingRow>
+                        <StackPanel IsVisible="{Binding Model.TouchMouseIndependent, FallbackValue=false}">
+                            <Border Classes="SettingSeparator"/>
+                            <controls:SettingRow Header="Include stylus"
+                                Description="Keep the mouse position after pen use and apply the same typing-focus settings. Off by default.">
+                                <ToggleSwitch IsChecked="{Binding Model.StylusMouseIndependent, Mode=TwoWay, FallbackValue=false}"/>
+                            </controls:SettingRow>
+						<Border Classes="SettingSeparator"/>
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Mouse}"
+						                     Header="Restore keyboard focus after touch"
+						                     Description="Return typing to the previous app after touch. Requires mouse position independence."
+						                     IsEnabled="{Binding Model.TouchMouseIndependent, FallbackValue=false}">
+							<ToggleSwitch IsChecked="{Binding Model.RestoreKeyboardFocus, Mode=TwoWay, FallbackValue=false}"/>
+                        </controls:SettingRow>
+                            <StackPanel IsEnabled="{Binding Model.RestoreKeyboardFocus, FallbackValue=false}">
+                                <Border Classes="SettingSeparator"/>
+                                <controls:SettingRow Header="Restore when the mouse moves"
+                                    Description="Keep focus on the touched app until you move the physical mouse. When off, restore after the delay.">
+                                    <ToggleSwitch IsChecked="{Binding Model.FocusRestoreOnMouseMove, Mode=TwoWay}"/>
+                                </controls:SettingRow>
+                                <controls:SettingRow Header="Focus delay (ms)"
+                                    Description="Wait after lifting your finger. Default: 120 ms. Mouse-movement mode restores immediately."
+                                    IsEnabled="{Binding !Model.FocusRestoreOnMouseMove}">
+                                    <NumericUpDown Minimum="0" Maximum="5000" Increment="20" FormatString="0"
+                                        ClipValueToMinMax="True" Value="{Binding Model.FocusRestoreDelay, Mode=TwoWay}"/>
+                                </controls:SettingRow>
+                            </StackPanel>
+                            <Border Classes="SettingSeparator"/>
+                            <controls:SettingRow Header="Use on all displays"
+                                Description="Turn off to choose which displays use mouse independence and focus restoration.">
+                                <ToggleSwitch IsChecked="{Binding Model.TouchAllDisplays, Mode=TwoWay}"/>
+                            </controls:SettingRow>
+                            <StackPanel IsVisible="{Binding !Model.TouchAllDisplays}" Margin="14,0,14,12" Spacing="6">
+                                <TextBlock Text="Select displays below. No selection disables both features on every display."
+                                    TextWrapping="Wrap" FontSize="12"/>
+                                <ItemsControl ItemsSource="{Binding TouchDisplays}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="options:TouchDisplayChoice">
+                                            <CheckBox IsChecked="{Binding Selected, Mode=TwoWay}">
+                                                <TextBlock Text="{Binding Label}" TextWrapping="Wrap"/>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                            <Border Classes="SettingSeparator"/>
+                            <controls:SettingRow Header="Temporary override"
+                                Description="Hold this key before tapping to use the touchscreen app normally for that gesture.">
+                                <ComboBox ItemsSource="{Binding TouchModifiers}"
+                                    SelectedItem="{Binding Model.TouchOverrideModifier, Mode=TwoWay}" MinWidth="100"/>
+                            </controls:SettingRow>
+                            <Border Classes="SettingSeparator"/>
+                            <StackPanel Margin="14,10,14,14" Spacing="6"
+                                IsEnabled="{Binding Model.RestoreKeyboardFocus, FallbackValue=false}">
+                                <TextBlock Text="Per-app focus rules" FontWeight="SemiBold"/>
+                                <TextBlock Text="Executable names separated by semicolons, for example chrome.exe; notepad.exe. These rules only affect focus, independently of general app exclusions."
+                                    TextWrapping="Wrap" FontSize="12"/>
+                                <TextBlock Text="Keep focus in these touched apps"/>
+                                <TextBox Text="{Binding Model.FocusKeepApps, Mode=TwoWay}"
+                                    PlaceholderText="chrome.exe; notepad.exe"/>
+                                <TextBlock Text="Restore focus only after touching these apps"/>
+                                <TextBox Text="{Binding Model.FocusRestoreApps, Mode=TwoWay}"
+                                    PlaceholderText="Empty = all apps except the keep-focus list"/>
+                                <TextBlock Text="The keep-focus list takes precedence."
+                                    TextWrapping="Wrap" FontSize="12"/>
+                            </StackPanel>
+                        </StackPanel>
+						</StackPanel>
+					</Border>
+
 					<Border Classes="SettingCard" IsVisible="{Binding RescueShortcutSupported}">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"

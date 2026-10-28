@@ -1,10 +1,21 @@
-﻿using HLab.Geo;
+using HLab.Geo;
 using System.Text.Json.Serialization;
 
 namespace LittleBigMouse.Zoning
 {
     public class ZonesLayout : IZonesSerializable
     {
+        public bool TouchMouseIndependent {get;set;}
+        public bool StylusMouseIndependent {get;set;}
+        public bool RestoreKeyboardFocus {get;set;}
+        public int FocusRestoreDelay { get; set; } = 120;
+        public bool FocusRestoreOnMouseMove { get; set; } = false;
+        public bool TouchAllDisplays { get; set; } = true;
+        public string TouchDisplayIds { get; set; } = "";
+        public string TouchOverrideModifier { get; set; } = "None";
+        public string FocusKeepApps { get; set; } = "";
+        public string FocusRestoreApps { get; set; } = "";
+        public string TouchDisplayBounds { get; set; } = "";
         public bool AdjustPointer {get;set;}
         public bool AdjustSpeed {get;set;}
         public bool LoopX {get;set;}
@@ -69,6 +80,17 @@ namespace LittleBigMouse.Zoning
                 e => e.LoopY,
                 e => e.Virtual,
                 e => e.RescueShortcut,
+                e => e.TouchMouseIndependent,
+                e => e.StylusMouseIndependent,
+                e => e.RestoreKeyboardFocus,
+                e => e.FocusRestoreDelay,
+                e => e.FocusRestoreOnMouseMove,
+                e => e.TouchAllDisplays,
+                e => e.TouchDisplayIds,
+                e => e.TouchOverrideModifier,
+                e => e.FocusKeepApps,
+                e => e.FocusRestoreApps,
+                e => e.TouchDisplayBounds,
                 e => e.Priority,
                 e => e.PriorityUnhooked,
                 e => e.Algorithm,

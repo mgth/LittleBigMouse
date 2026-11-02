@@ -1,7 +1,7 @@
 #nullable enable
 using System;
+using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using Microsoft.Win32.TaskScheduler;
 
@@ -28,7 +28,36 @@ public static class AutostartExtensions
         if (!OperatingSystem.IsWindows()) return false;
 
         using var ts = new TaskService();
-        return ts.RootFolder.GetTasks(new Regex(ServiceName)).Any();
+        // By name, not by a pattern: an account name is not a regex.
+        using var task = ts.GetTask(ServiceName);
+        if (task == null) return false;
+        if (LaunchesExistingProgram(task.Definition)) return true;
+
+        // The task is the user's, not an install's: one registered by a copy since moved
+        // or uninstalled is still there, so the option reads on, but every logon fails
+        // with ERROR_FILE_NOT_FOUND (0x80070002) and nothing ever rewrites it — the
+        // toggle shows nothing to fix. Point it back at this executable, registered
+        // afresh rather than edited: a definition read back carries the account as a
+        // SID, which RegisterTaskDefinition rejects ("UserId").
+        var elevated = task.Definition.Principal.RunLevel == TaskRunLevel.Highest;
+        try
+        {
+            // False when it could not be rewritten (an elevated task, from a non-elevated
+            // process): the option then reads off, which is what logons get.
+            return layout.Schedule(elevated);
+        }
+        catch (Exception error)
+        {
+            // Never keep the layout from loading.
+            Console.Error.WriteLine($"[LittleBigMouse] Autostart task retarget failed: {error.Message}");
+            return false;
+        }
+    }
+
+    static bool LaunchesExistingProgram(TaskDefinition td)
+    {
+        var actions = td.Actions.OfType<ExecAction>().ToList();
+        return actions.Count > 0 && actions.All(a => File.Exists(a.Path?.Trim('"')));
     }
 
     /// <summary>

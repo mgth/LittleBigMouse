@@ -58,8 +58,9 @@
 //!
 //! Ctrl-override reads the modifier from keyboards WITHOUT grabbing them (evdev
 //! nodes are multi-reader; the compositor keeps them), plus the ctrl usages of
-//! the grabbed combined nodes. Hot-plug is handled by a periodic rescan (new
-//! mice would otherwise drive the cursor directly, next to the engine) and by
+//! the grabbed combined nodes. Hot-plug is handled by a rescan whenever
+//! /dev/input gains a node (new mice would otherwise drive the cursor directly,
+//! next to the engine) and by
 //! purging dead nodes — a removed device reports POLLERR forever and would
 //! otherwise turn the pump into a busy loop. Focus-based exclusion is handled
 //! by the [`super::focus`] watcher, common to all backends: it flips

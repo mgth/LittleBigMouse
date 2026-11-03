@@ -38,51 +38,52 @@ pub(super) struct ScanResult {
 /// grab. Gates the backend so a permission-less box falls back to portal/X11.
 pub fn available() -> bool {
     let uinput_ok = unsafe { libc::access(c"/dev/uinput".as_ptr(), libc::W_OK) == 0 };
-    uinput_ok && !enumerate_mice().is_empty()
+    uinput_ok && !enumerate().mice.is_empty()
 }
 
-/// Physical pointers we should route: a relative X/Y device carrying BTN_LEFT
-/// (a mouse — not an accelerometer or a touchpad-gesture-only node), excluding
-/// our own virtual device.
-fn enumerate_mice() -> Vec<Node> {
-    evdev::enumerate()
-        .filter(|(_, d)| {
-            d.name().map(|n| !n.contains(VIRTUAL_NAME)).unwrap_or(true)
-                && d.supported_relative_axes()
-                    .map(|a| {
-                        a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y)
-                    })
-                    .unwrap_or(false)
-                && d.supported_keys()
-                    .map(|k| k.contains(KeyCode::BTN_LEFT))
-                    .unwrap_or(false)
-        })
-        .collect()
+/// True for a uinput-created node (sysfs under /devices/virtual/). Remote-desktop
+/// tools (RustDesk, input-leap…) inject through such devices with their own
+/// absolute positioning; grabbing them swallows their motion while their buttons
+/// still reach the compositor through our pointer, so clicks land at the wrong
+/// place. `LBM_EVDEV_SKIP_VIRTUAL=1` leaves them to the compositor; off by
+/// default since remappers (input-remapper…) re-emit the physical mouse this way.
+fn is_virtual_node(path: &std::path::Path) -> bool {
+    let Some(node) = path.file_name() else { return false };
+    std::fs::canonicalize(std::path::Path::new("/sys/class/input").join(node))
+        .map(|p| p.starts_with("/sys/devices/virtual"))
+        .unwrap_or(false)
 }
 
-/// Keyboards observed (never grabbed) for the ctrl-override: any node declaring
-/// KEY_LEFTCTRL that is neither a routed mouse (grabbed — its ctrl usages come
-/// through the grabbed stream) nor one of our own virtual devices.
-fn enumerate_keyboards() -> Vec<Node> {
-    let is_mouse = |d: &Device| {
-        d.supported_relative_axes()
-            .map(|a| a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y))
+/// A relative X/Y device carrying BTN_LEFT: a mouse, not an accelerometer or a
+/// touchpad-gesture-only node.
+fn is_mouse(d: &Device) -> bool {
+    d.supported_relative_axes()
+        .map(|a| a.contains(RelativeAxisCode::REL_X) && a.contains(RelativeAxisCode::REL_Y))
+        .unwrap_or(false)
+        && d.supported_keys()
+            .map(|k| k.contains(KeyCode::BTN_LEFT))
             .unwrap_or(false)
-            && d.supported_keys()
-                .map(|k| k.contains(KeyCode::BTN_LEFT))
-                .unwrap_or(false)
-    };
-    evdev::enumerate()
-        .filter(|(_, d)| {
-            d.name()
-                .map(|n| !n.contains("LittleBigMouse virtual"))
-                .unwrap_or(true)
-                && d.supported_keys()
-                    .map(|k| k.contains(KeyCode::KEY_LEFTCTRL))
-                    .unwrap_or(false)
-                && !is_mouse(d)
-        })
-        .collect()
+}
+
+/// Sort one opened node into the scan: a mouse we should route (excluding our
+/// own virtual pointer and, when opted in, other uinput devices), a keyboard to
+/// observe for the ctrl-override (KEY_LEFTCTRL, not a mouse — a grabbed mouse's
+/// ctrl usages come through the grabbed stream — and not one of our own virtual
+/// devices), or neither, in which case the node is closed right here.
+fn classify(scan: &mut ScanResult, path: PathBuf, d: Device, skip_virtual: bool) {
+    if is_mouse(&d) {
+        if d.name().map(|n| !n.contains(VIRTUAL_NAME)).unwrap_or(true)
+            && !(skip_virtual && is_virtual_node(&path))
+        {
+            scan.mice.push((path, d));
+        }
+    } else if d.name().map(|n| !n.contains("LittleBigMouse virtual")).unwrap_or(true)
+        && d.supported_keys()
+            .map(|k| k.contains(KeyCode::KEY_LEFTCTRL))
+            .unwrap_or(false)
+    {
+        scan.keyboards.push((path, d));
+    }
 }
 
 /// A poll slot the kernel will never make readable again: the node was removed
@@ -140,39 +141,132 @@ pub(super) fn held_buttons_of(devices: &[Mouse]) -> u8 {
     mask
 }
 
-/// Cadence of the hot-plug rescan (matches the C# side's 2 s sysfs poll).
+/// Cadence of the hot-plug rescan when inotify is unavailable (matches the C#
+/// side's 2 s sysfs poll).
 ///
 /// The enumeration itself runs on a dedicated scanner thread: opening and
 /// querying every /dev/input node takes ~200 ms on some machines (nodes that
 /// block on open), and doing that inline in the pump froze the cursor at every
 /// rescan — a periodic "sticky mouse" felt in both algorithms.
+///
+/// Polling is the fallback only: every scan closes each node it opened, and the
+/// last close of a node nobody else holds (audio jack-detection nodes) runs
+/// `synchronize_rcu()` in the kernel — 10–30 ms each. Re-opening every node every
+/// 2 s kept the hook in uninterruptible sleep a sizeable share of the time and
+/// was felt as a laggy pointer, so normally we only scan when /dev/input changes.
 const RESCAN_EVERY: Duration = Duration::from_secs(2);
 
-/// One full enumeration pass: the mice to grab, then the keyboards to observe.
-/// The expensive call — this is the ~210 ms one on a bad machine, so it belongs
-/// to arm time or to the scanner thread, never to a pump cycle.
+/// How long /dev/input must stay quiet after a change before we scan: a
+/// hot-plug creates several nodes in a burst (eventN, mouseN, jsN), and one scan
+/// should cover all of them.
+const SETTLE: Duration = Duration::from_millis(300);
+
+/// How often a scanner idling on inotify wakes to check its stop flag.
+const STOP_CHECK: Duration = Duration::from_secs(1);
+
+/// One full enumeration pass: the mice to grab and the keyboards to observe,
+/// opening every node once. The expensive call — this is the ~210 ms one on a
+/// bad machine, so it belongs to arm time or to the scanner thread, never to a
+/// pump cycle.
 pub(super) fn enumerate() -> ScanResult {
-    ScanResult {
-        mice: enumerate_mice(),
-        keyboards: enumerate_keyboards(),
+    let skip_virtual = std::env::var("LBM_EVDEV_SKIP_VIRTUAL").is_ok_and(|v| v == "1");
+    let mut scan = ScanResult {
+        mice: Vec::new(),
+        keyboards: Vec::new(),
+    };
+    for (path, d) in evdev::enumerate() {
+        classify(&mut scan, path, d, skip_virtual);
+    }
+    scan
+}
+
+/// An inotify watch on /dev/input for nodes appearing. Removals need no watch:
+/// a removed node's poll slot reports POLLHUP and the pump purges it.
+struct DirWatch(libc::c_int);
+
+impl DirWatch {
+    fn new() -> Option<DirWatch> {
+        let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
+        if fd < 0 {
+            return None;
+        }
+        let watch = DirWatch(fd);
+        let mask = libc::IN_CREATE | libc::IN_MOVED_TO;
+        if unsafe { libc::inotify_add_watch(fd, c"/dev/input".as_ptr(), mask) } < 0 {
+            return None;
+        }
+        Some(watch)
+    }
+
+    /// Wait up to `timeout` for a change, draining whatever is queued. True when
+    /// something changed.
+    fn wait(&self, timeout: Duration) -> bool {
+        let mut pfd = libc::pollfd {
+            fd: self.0,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let ms = timeout.as_millis().min(libc::c_int::MAX as u128) as libc::c_int;
+        if unsafe { libc::poll(&mut pfd, 1, ms) } <= 0 {
+            return false;
+        }
+        // The events' contents don't matter, only that there were some.
+        let mut buf = [0u8; 4096];
+        let mut changed = false;
+        while unsafe { libc::read(self.0, buf.as_mut_ptr().cast(), buf.len()) } > 0 {
+            changed = true;
+        }
+        changed
+    }
+}
+
+impl Drop for DirWatch {
+    fn drop(&mut self) {
+        unsafe { libc::close(self.0) };
     }
 }
 
 /// Start the enumeration thread and hand back the channel the pump drains and
 /// the flag that stops it. The thread also exits on its next send once the
 /// receiver is gone, so a `Router` dropped without setting the flag still ends
-/// it within one cadence.
+/// it on the next hot-plug.
+///
+/// With inotify the thread scans once on start (covering nodes that appeared
+/// between the arm-time enumeration and the watch), then only when /dev/input
+/// gains a node. Without it, it falls back to the fixed-cadence poll.
 pub(super) fn spawn_scanner() -> (mpsc::Receiver<ScanResult>, Arc<AtomicBool>) {
     let (scan_tx, scan_rx) = mpsc::channel();
     let scan_stop = Arc::new(AtomicBool::new(false));
     let stop = scan_stop.clone();
-    std::thread::spawn(move || loop {
-        std::thread::sleep(RESCAN_EVERY);
-        if stop.load(Ordering::Relaxed) {
-            return;
+    std::thread::spawn(move || {
+        let watch = DirWatch::new();
+        if watch.is_none() {
+            eprintln!(
+                "[LittleBigMouse.Hook] evdev: inotify on /dev/input unavailable, polling every {}s",
+                RESCAN_EVERY.as_secs()
+            );
         }
-        if scan_tx.send(enumerate()).is_err() {
-            return;
+        let mut first = watch.is_some();
+        loop {
+            match &watch {
+                Some(w) if !first => {
+                    if !w.wait(STOP_CHECK) {
+                        if stop.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        continue;
+                    }
+                    while w.wait(SETTLE) {}
+                }
+                Some(_) => first = false,
+                None => std::thread::sleep(RESCAN_EVERY),
+            }
+            if stop.load(Ordering::Relaxed) {
+                return;
+            }
+            if scan_tx.send(enumerate()).is_err() {
+                return;
+            }
         }
     });
     (scan_rx, scan_stop)

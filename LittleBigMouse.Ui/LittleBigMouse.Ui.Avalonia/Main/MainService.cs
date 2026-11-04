@@ -147,7 +147,7 @@ public class MainService : ReactiveModel, IMainService
         // order (a Task.Run per event could invert Running/Stopped); the Safely wrapper keeps
         // one failed handler from stopping later events.
         void OnDaemonEvent(object? sender, LittleBigMouseServiceEventArgs args)
-            => Dispatcher.UIThread.Post(() => _ = DaemonEventReceivedSafelyAsync(args));
+            => PostToUi(() => _ = DaemonEventReceivedSafelyAsync(args));
 
         OwnedSubscription.Create<EventHandler<LittleBigMouseServiceEventArgs>>(
                 OnDaemonEvent,
@@ -175,7 +175,19 @@ public class MainService : ReactiveModel, IMainService
                          ?? _layoutFactory.Create();
 
         old?.Dispose();
+
+        // The first build may be late for a daemon that already connected and is waiting
+        // for a layout (cold logon). On the dispatcher: that is where daemon events, and the
+        // flag they set, live.
+        if (old is null)
+            PostToUi(() => _ = StartIfJustConnectedSafelyAsync());
     }
+
+    /// <summary>
+    /// Where daemon events and the state they set are handled. Tests run it inline: Avalonia's
+    /// UI dispatcher belongs to whichever thread touched it first, which a test cannot choose.
+    /// </summary>
+    internal Action<Action> PostToUi { get; set; } = action => Dispatcher.UIThread.Post(action);
 
     /// <summary>
     /// Sticky opt-out of LBM_VIRTUAL_LAYOUT: once the user explicitly comes back to the
@@ -317,11 +329,7 @@ public class MainService : ReactiveModel, IMainService
             // A daemon reporting itself stopped right after connecting has no layout yet: that
             // is not the user's Stop, it is a daemon waiting to be told what to do.
             case LittleBigMouseEvent.Stopped:
-                if (MonitorsLayout is not null && MonitorsLayout.Options.Enabled && _justConnected)
-                {
-                    _justConnected = false;
-                    await _engine.StartAsync();
-                }
+                await StartIfJustConnectedAsync();
                 break;
 
             case LittleBigMouseEvent.SettingsChanged:
@@ -372,6 +380,41 @@ public class MainService : ReactiveModel, IMainService
     /// between means "I have no layout", not "the user stopped me".
     /// </summary>
     bool _justConnected;
+
+    /// <summary>
+    /// Answer a daemon that connected and reported itself stopped: hand it the layout, if the
+    /// user wants it hooked.
+    /// <para>
+    /// Answering takes a layout, and at a cold logon the daemon can be up before the boot
+    /// sequence has built one: the UI launches it as soon as the services are resolved, and
+    /// the other bootloaders run on the same dispatcher as its events. That Stopped used to be
+    /// dropped on the spot, and nothing else ever asked again — the engine stayed stopped
+    /// until a manual Start. It is now left pending, and the first layout build answers it
+    /// (<see cref="UpdateLayout"/>). Later rebuilds go through the display-change path instead.
+    /// </para>
+    /// </summary>
+    async Task StartIfJustConnectedAsync()
+    {
+        if (!_justConnected) return;
+        if (MonitorsLayout is not { } layout) return;
+        if (_littleBigMouseClientService.State != LittleBigMouseEvent.Stopped) return;
+        if (!layout.Options.Enabled) return;
+
+        _justConnected = false;
+        await _engine.StartAsync();
+    }
+
+    async Task StartIfJustConnectedSafelyAsync()
+    {
+        try
+        {
+            await StartIfJustConnectedAsync();
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"Starting after the first layout build failed: {error}");
+        }
+    }
 
     async Task DaemonEventReceivedSafelyAsync(LittleBigMouseServiceEventArgs args)
     {

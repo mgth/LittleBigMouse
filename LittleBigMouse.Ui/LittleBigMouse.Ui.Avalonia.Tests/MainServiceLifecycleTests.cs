@@ -48,6 +48,8 @@ public sealed class MainServiceLifecycleTests
         public FakeNotification Notify { get; } = new();
         public FakeLayoutFactory Factory { get; }
         public MainService Service { get; }
+        public List<LittleBigMouse.Zoning.LittleBigMouseEvent> Traced { get; } = [];
+        public List<string> BootLog { get; } = [];
 
         public Fixture(bool enabled = true)
         {
@@ -65,7 +67,9 @@ public sealed class MainServiceLifecycleTests
                 options: Options,
                 engine: new EngineController(Daemon, Persistence, () => Service?.MonitorsLayout))
             {
-                PostToUi = action => action()
+                PostToUi = action => action(),
+                TraceDaemonEvent = Traced.Add,
+                BootLog = BootLog.Add
             };
         }
     }
@@ -181,6 +185,12 @@ public sealed class MainServiceLifecycleTests
         f.Service.UpdateLayout();
         Assert.Equal(1, f.Daemon.StartCount);
 
+        // The order is the whole diagnosis, and ui.log is the only place that keeps it.
+        Assert.Collection(f.BootLog,
+            line => Assert.Contains("no layout yet", line),
+            line => Assert.Contains("First layout built", line),
+            line => Assert.Contains("Starting the engine on the first layout build", line));
+
         // Only the first build answers a connection; a rebuild is the display-change path's.
         f.Daemon.State = LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped;
         f.Service.UpdateLayout();
@@ -200,6 +210,22 @@ public sealed class MainServiceLifecycleTests
         f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Connected);
         f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped);
         Assert.Equal(1, f.Daemon.StartCount);
+        Assert.Contains(f.BootLog, line => line.Contains("Starting the engine on the daemon's Stopped"));
+
+        f.Service.Dispose();
+    }
+
+    [Fact]
+    public void DaemonEventsGoThroughTheTraceTheTestsReplaced()
+    {
+        // The default writes to the user's real daemon-events.log: events a test made up
+        // would read as disconnects that never happened.
+        var f = new Fixture();
+
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Connected);
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped);
+
+        Assert.Equal([LittleBigMouse.Zoning.LittleBigMouseEvent.Connected, LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped], f.Traced);
 
         f.Service.Dispose();
     }
@@ -214,6 +240,7 @@ public sealed class MainServiceLifecycleTests
 
         f.Service.UpdateLayout();
         Assert.Equal(0, f.Daemon.StartCount);
+        Assert.Contains(f.BootLog, line => line.Contains("not enabled"));
 
         f.Service.Dispose();
     }

@@ -35,7 +35,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageReference Include="MessageBox.Avalonia" Version="12.0.0" />
     <PackageReference Include="ReactiveUI.Avalonia" Version="12.0.3" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
     <PackageReference Include="System.Resources.Extensions" Version="9.0.8" />
     <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="12.0.0.13" />
   </ItemGroup>

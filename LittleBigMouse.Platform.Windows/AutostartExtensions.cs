@@ -31,7 +31,24 @@ public static class AutostartExtensions
         // By name, not by a pattern: an account name is not a regex.
         using var task = ts.GetTask(ServiceName);
         if (task == null) return false;
-        if (LaunchesExistingProgram(task.Definition)) return true;
+
+        // Reading the definition is new here: before, only the task's existence was
+        // checked. A definition that cannot be read must not keep the layout from
+        // loading, so it falls back to that: the task exists, it is left as is.
+        bool launchesExistingProgram;
+        bool elevated;
+        try
+        {
+            var definition = task.Definition;
+            launchesExistingProgram = LaunchesExistingProgram(definition);
+            elevated = definition.Principal.RunLevel == TaskRunLevel.Highest;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"[LittleBigMouse] Autostart task unreadable, left as is: {error.Message}");
+            return true;
+        }
+        if (launchesExistingProgram) return true;
 
         // The task is the user's, not an install's: one registered by a copy since moved
         // or uninstalled is still there, so the option reads on, but every logon fails
@@ -39,7 +56,6 @@ public static class AutostartExtensions
         // toggle shows nothing to fix. Point it back at this executable, registered
         // afresh rather than edited: a definition read back carries the account as a
         // SID, which RegisterTaskDefinition rejects ("UserId").
-        var elevated = task.Definition.Principal.RunLevel == TaskRunLevel.Highest;
         try
         {
             // False when it could not be rewritten (an elevated task, from a non-elevated

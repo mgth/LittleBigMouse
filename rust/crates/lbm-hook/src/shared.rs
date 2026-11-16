@@ -120,16 +120,66 @@ impl Shared {
     ///   `Escape*Tarkov`) — users write wildcards spontaneously (#515) and they
     ///   used to silently never match. Without `*` this degrades to the exact
     ///   C++ behavior.
+    ///
+    /// And on Windows the match ignores case: the file system does, and the path
+    /// `QueryFullProcessImageNameW` reports often differs in casing from what the
+    /// user typed (`d:\games\` vs `D:\Games\`), so the entry silently never
+    /// matched (#741).
     pub fn is_excluded(&self, path: &str) -> bool {
         if path.is_empty() {
             return false;
         }
-        let path = path.replace('\\', "/");
+        let path = normalize_for_match(path);
         let excluded = self.excluded.lock().unwrap();
         excluded
             .iter()
-            .any(|line| line.len() > 1 && matches(&path, &line.replace('\\', "/")))
+            .any(|line| line.len() > 1 && matches(&path, &normalize_for_match(line)))
     }
+}
+
+/// Separators unified to `/`; case folded where the platform's paths ignore it.
+fn normalize_for_match(s: &str) -> String {
+    fold_case(&s.replace('\\', "/"))
+}
+
+/// Uppercase by the file system's rules, not Rust's Unicode ones: `LCMapStringEx`
+/// with `LCMAP_UPPERCASE` and no `LCMAP_LINGUISTIC_CASING` uses "file system
+/// rules (default)" — the OS uppercase table, which NTFS name comparison uses.
+#[cfg(windows)]
+fn fold_case(s: &str) -> String {
+    use windows::Win32::Foundation::LPARAM;
+    use windows::Win32::Globalization::{LCMapStringEx, LCMAP_UPPERCASE, LOCALE_NAME_INVARIANT};
+
+    let src: Vec<u16> = s.encode_utf16().collect();
+    if src.is_empty() {
+        return String::new();
+    }
+    let map = |dst: Option<&mut [u16]>| unsafe {
+        LCMapStringEx(
+            LOCALE_NAME_INVARIANT,
+            LCMAP_UPPERCASE,
+            &src,
+            dst,
+            None,
+            None,
+            LPARAM(0),
+        )
+    };
+    let mut dst = vec![0u16; map(None).max(0) as usize];
+    let written = map(Some(&mut dst));
+    if written <= 0 {
+        // Not expected for a plain uppercase mapping; any fold works as long as
+        // both sides of the match get the same one.
+        return s.to_uppercase();
+    }
+    dst.truncate(written as usize);
+    String::from_utf16_lossy(&dst)
+}
+
+/// Linux paths are case-sensitive: matched as written.
+#[cfg(not(windows))]
+fn fold_case(s: &str) -> String {
+    s.to_owned()
 }
 
 /// Unanchored ordered-substring match: every non-empty `*`-separated segment of
@@ -213,6 +263,23 @@ mod tests {
         assert!(shared.is_excluded(r"C:\Riot Games\League of Legends\lol.exe"));
         // segments must appear in order
         assert!(!shared.is_excluded(r"C:\League Games\Riot of Legends"));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_matching_ignores_case() {
+        // #741: the process path's casing rarely matches what the user typed.
+        let shared = Shared::new();
+        *shared.excluded.lock().unwrap() = vec![
+            r"D:\Games\Genshin Impact\".to_string(),
+            "*escapefrom*".to_string(),
+            r"\Éditeur Ünicode\".to_string(),
+        ];
+        assert!(shared.is_excluded(r"d:\games\genshin impact\GenshinImpact.exe"));
+        assert!(shared.is_excluded(r"C:\jeux\éditeur ünicode\game.exe"));
+        assert!(shared.is_excluded(r"D:\GAMES\Genshin Impact\GenshinImpact.exe"));
+        assert!(shared.is_excluded(r"Z:\games\EFT\EscapeFromTarkov.exe"));
+        assert!(!shared.is_excluded(r"C:\Windows\explorer.exe"));
     }
 
     #[test]

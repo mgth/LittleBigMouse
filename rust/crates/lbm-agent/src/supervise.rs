@@ -22,6 +22,29 @@ const HOOK_NAMES: &[&str] = &["LittleBigMouse.Hook.exe", "lbm-hook.exe"];
 #[cfg(not(windows))]
 const HOOK_NAMES: &[&str] = &["lbm-hook"];
 
+/// Frontends the tray's Open may find beside the agent when no `--ui` names one: the
+/// C# window first (the v6.0 frontend: installed, the agent sits next to it — C#
+/// `AgentLauncher.Find`), then the egui one (`lbm-app`).
+#[cfg(windows)]
+const FRONTEND_NAMES: &[&str] = &["LittleBigMouse.Ui.Avalonia.exe", "lbm-app.exe"];
+#[cfg(not(windows))]
+const FRONTEND_NAMES: &[&str] = &["LittleBigMouse.Ui.Avalonia", "lbm-app"];
+
+/// The frontend beside this executable, for the tray's Open when no `--ui` was given:
+/// the session's autostart entry and the scheduled task launch the agent bare, and an
+/// agent started that way had nothing to open.
+pub fn frontend_beside_agent() -> Option<PathBuf> {
+    first_beside(std::env::current_exe().ok()?.parent()?, FRONTEND_NAMES)
+}
+
+/// The first of `names` that is a file in `dir`.
+fn first_beside(dir: &Path, names: &[&str]) -> Option<PathBuf> {
+    names
+        .iter()
+        .map(|name| dir.join(name))
+        .find(|path| path.is_file())
+}
+
 /// Delays between launches of a hook that keeps dying before it could answer: the
 /// first retry comes with the next "unreachable" notice (~5 s), later ones wait longer.
 const BACKOFF: &[Duration] = &[
@@ -73,11 +96,7 @@ impl HookLauncher {
     /// The hook beside this executable (a deployed build, and the cargo target
     /// directory in the development tree alike — C#: `FindHookPath`).
     pub fn beside_agent(log: Option<PathBuf>) -> Option<Self> {
-        let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-        HOOK_NAMES
-            .iter()
-            .map(|name| dir.join(name))
-            .find(|path| path.is_file())
+        first_beside(std::env::current_exe().ok()?.parent()?, HOOK_NAMES)
             .map(|program| HookLauncher::new(program, Vec::new(), log))
     }
 
@@ -346,6 +365,25 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn the_first_frontend_present_beside_the_agent_is_the_one_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), None);
+        let egui = dir.path().join(FRONTEND_NAMES[1]);
+        std::fs::write(&egui, "").unwrap();
+        assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), Some(egui));
+        let window = dir.path().join(FRONTEND_NAMES[0]);
+        std::fs::write(&window, "").unwrap();
+        assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), Some(window));
+    }
+
+    #[test]
+    fn a_directory_named_like_a_frontend_is_not_one() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(FRONTEND_NAMES[0])).unwrap();
+        assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), None);
+    }
 
     fn process(root: &Path, pid: u32, comm: &str, uid: u32) {
         let dir = root.join(pid.to_string());

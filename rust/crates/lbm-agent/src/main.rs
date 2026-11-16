@@ -18,8 +18,8 @@
 //!   session autostart entry goes under `--config-dir` too (`autostart/`), never into the
 //!   user's.
 //! - `--no-tray`: no tray icon (a headless run).
-//! - `--ui PATH`: the frontend the tray opens. None by default until the UI is a frontend
-//!   of the agent (phase 4): today's UI still drives the hook itself.
+//! - `--ui PATH`: the frontend the tray opens (default: the one beside this executable —
+//!   the C# window, else `lbm-app`).
 //! - `--dump-displays`: the display discovery as JSON (the outputs, and the monitor
 //!   ids and layout id the model gives them); its C# twin is `DisplayDump` in the C#
 //!   test project, and on the same machine both must print the same values.
@@ -38,7 +38,7 @@ use lbm_agent::gap_guard::GapGuard;
 use lbm_agent::hook::HookClient;
 use lbm_agent::reconcile::Timings;
 use lbm_agent::runtime::Agent;
-use lbm_agent::supervise::HookLauncher;
+use lbm_agent::supervise::{frontend_beside_agent, HookLauncher};
 use lbm_agent::world::{Platform, SystemWorld};
 use lbm_ipc::instance::{self, InstanceLock};
 use lbm_store::{lbm_paths, JsonLayoutStore, LayoutPersistence};
@@ -329,7 +329,7 @@ fn run(options: Options) -> ExitCode {
         if !options.no_tray {
             tokio::spawn(lbm_agent::tray::run(
                 calls.clone(),
-                opener(options.ui.clone()),
+                opener(options.ui.clone().or_else(frontend_beside_agent)),
             ));
         }
         drop(calls);
@@ -358,7 +358,7 @@ fn run(options: Options) -> ExitCode {
 fn opener(ui: Option<PathBuf>) -> std::sync::Arc<dyn Fn() + Send + Sync> {
     std::sync::Arc::new(move || {
         let Some(ui) = &ui else {
-            eprintln!("[lbm-agent] no frontend to open (--ui)");
+            eprintln!("[lbm-agent] no frontend to open: none beside the agent, and no --ui");
             return;
         };
         // Its own process, reaped when it leaves; it brings its window forward itself when

@@ -185,8 +185,9 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   droit = menu, icône remise quand l'explorateur redémarre — `TaskbarCreated`). Icônes du
   C# (on / off / dead / paused, la veille de l'écran comprise), rendues une fois depuis ses
   SVG (`icons/render.sh`), prises à la taille des petites icônes du système sous Windows.
-  Ouvrir lance le frontend donné par `--ui`, aucun par défaut tant que l'UI pilote encore
-  le hook elle-même (phase 4). `--no-tray` pour une exécution sans tray. Sans hôte de tray,
+  Ouvrir lance le frontend donné par `--ui`, à défaut celui qui est à côté de l'agent
+  (la fenêtre C#, sinon `lbm-app`) — l'entrée autostart et la tâche planifiée lancent
+  l'agent sans argument. `--no-tray` pour une exécution sans tray. Sans hôte de tray,
   l'agent le dit et continue sans.
 - Démarrage avec la session sous Linux (`autostart`, qui n'existait pas) : une entrée XDG
   autostart `littlebigmouse-agent.desktop` lançant l'agent, tenue par les crochets de

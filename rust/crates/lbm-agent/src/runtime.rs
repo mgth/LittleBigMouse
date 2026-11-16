@@ -149,6 +149,8 @@ impl<W: AgentWorld> Agent<W> {
             .to_owned(),
             suspended: self.reconciler.suspended(),
             layout_id: self.world.layout_id(),
+            layout_revision: self.reconciler.rebuild_count(),
+            display_signature: self.reconciler.last_built_signature().to_owned(),
             enabled: layout.map(|l| l.enabled),
             saved: layout.map(|l| l.saved),
             load_at_startup: self.world.app_options().map(|(startup, _)| startup),

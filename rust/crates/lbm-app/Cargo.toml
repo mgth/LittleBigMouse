@@ -39,6 +39,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # the agent that binds them.
 lbm-ipc = { path = "../lbm-ipc" }
 serde_json.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "sync", "time", "macros", "io-util"] }
 
 [dev-dependencies]
 # The real agent, driving the fake hook, so the client is exercised against the server it

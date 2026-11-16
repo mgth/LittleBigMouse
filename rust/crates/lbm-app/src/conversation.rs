@@ -71,6 +71,8 @@ pub struct Conversation {
     /// going to be run. Kept so the window can show them — the one action in the product
     /// that cannot be undone is also the one worth reading before and after.
     pub topology: Option<Ran>,
+    /// The completed display build, separate from engine and preview transitions.
+    pub layout: Option<crate::refresh::Stamp>,
 }
 
 impl Conversation {
@@ -207,6 +209,7 @@ impl Conversation {
             .get("Engine")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("Dead");
+        self.layout = Some(crate::refresh::Stamp::from_snapshot(snapshot));
         // Through `update`, not written straight onto the state: the rule that ends a
         // live preview when the engine goes down lives there, and it needs the transition.
         let said = lbm_ui::Action::AgentSaid {

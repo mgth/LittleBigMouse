@@ -183,6 +183,14 @@ pub struct Snapshot {
     pub suspended: bool,
     /// The current layout's id (the store key of its profile).
     pub layout_id: Option<String>,
+    /// Changes after every completed rebuild, even when the same monitors remain
+    /// attached (resolution, rotation, scale or placement changed). Additive in v3.
+    #[serde(default)]
+    pub layout_revision: u64,
+    /// Configuration used for that build. Lets a reconnect distinguish an unchanged
+    /// desktop from a revision counter restarting on different display geometry.
+    #[serde(default)]
+    pub display_signature: String,
     /// Whether the user wants the engine on this layout.
     pub enabled: Option<bool>,
     /// Nothing edited since the layout was last saved.

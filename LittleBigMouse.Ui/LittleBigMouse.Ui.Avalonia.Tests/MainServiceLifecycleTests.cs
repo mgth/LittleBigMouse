@@ -194,6 +194,70 @@ public sealed class MainServiceLifecycleTests
     }
 
     [Fact]
+    public async Task AStateTakenBeforeTheUsersChangeDoesNotUndoIt()
+    {
+        // The user turns autostart on; before the agent has read that request, a state it
+        // published earlier (the engine pausing, say) arrives still saying off. Shown, it
+        // would put the box back to off, and the next option the user touches would send
+        // off to the agent for good: every SaveOptions carries the autostart.
+        await using var agent = FakeAgent.Start();
+        using var client = new AgentClient(agent.Endpoint);
+        var f = new Fixture(client);
+        client.Start();
+        await agent.AnswerAsync(await agent.NextRequestAsync(),
+            AgentFrames.Snapshot(loadAtStartup: false));
+        await FakeAgent.WaitFor(() => client.State is not null);
+
+        f.Options.LoadAtStartup = true;
+        var turnedOn = await agent.NextRequestAsync();
+        Assert.True(turnedOn.GetProperty("LoadAtStartup").GetBoolean());
+
+        // Read off the wire like any frame, while the request is still unanswered.
+        client.Receive(AgentFrames.State("Paused", loadAtStartup: false));
+        Assert.True(f.Options.LoadAtStartup);
+
+        f.Options.StartMinimized = true;
+        var next = await agent.NextRequestAsync();
+        Assert.True(next.GetProperty("Options").GetProperty("StartMinimized").GetBoolean());
+        Assert.True(next.GetProperty("LoadAtStartup").GetBoolean());
+
+        // Once both are answered, what the agent says is shown again. The answers are
+        // taken in on the client's thread, so the state is sent until one lands after them.
+        await agent.AnswerAsync(turnedOn, "null");
+        await agent.AnswerAsync(next, "null");
+        await FakeAgent.WaitFor(() =>
+        {
+            client.Receive(AgentFrames.State("Stopped", loadAtStartup: false));
+            return !f.Options.LoadAtStartup;
+        });
+    }
+
+    [Fact]
+    public async Task AChangeTheAgentRefusesShowsWhatTheAgentHolds()
+    {
+        // The agent did not record it (refused, or gone before answering): the window goes
+        // back to what the agent last said instead of showing a choice nobody holds.
+        await using var agent = FakeAgent.Start();
+        using var client = new AgentClient(agent.Endpoint);
+        var f = new Fixture(client);
+        client.Start();
+        await agent.AnswerAsync(await agent.NextRequestAsync(),
+            AgentFrames.Snapshot(loadAtStartup: false));
+        await FakeAgent.WaitFor(() => client.State is not null);
+
+        f.Options.LoadAtStartup = true;
+        await agent.ErrorAsync(await agent.NextRequestAsync(), "cannot write the entry");
+
+        await FakeAgent.WaitFor(() => !f.Options.LoadAtStartup);
+
+        // Going back is not the user asking for off: nothing is sent for it.
+        f.Options.StartMinimized = true;
+        var next = await agent.NextRequestAsync();
+        Assert.True(next.GetProperty("Options").GetProperty("StartMinimized").GetBoolean());
+        Assert.False(next.GetProperty("LoadAtStartup").GetBoolean());
+    }
+
+    [Fact]
     public void DisposingIsIdempotent()
     {
         // Shutdown paths overlap: the container disposes what it owns, and a caller may have

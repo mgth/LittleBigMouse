@@ -30,8 +30,9 @@ static class AgentFrames
         string engine = "Stopped",
         string? layoutId = null,
         bool hookConnected = true,
-        bool previewing = false)
-        => $$"""{"Event":"State","State":{{Snapshot(engine, layoutId, hookConnected, previewing)}}}""";
+        bool previewing = false,
+        bool loadAtStartup = false)
+        => $$"""{"Event":"State","State":{{Snapshot(engine, layoutId, hookConnected, previewing, loadAtStartup)}}}""";
 
     /// <summary>The hook said something, forwarded under the name the UI knows it by.</summary>
     public static string Hook(LittleBigMouseEvent hookEvent, string payload = "")

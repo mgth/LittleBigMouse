@@ -467,22 +467,16 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             if let Some(excluded) = excluded {
                 o.excluded_list = excluded.to_vec();
             }
-            if let Some(load_at_startup) = load_at_startup {
-                o.load_at_startup = load_at_startup;
-            }
         });
-        // C# `UpdateSchedule`: the session autostart follows the option, and the store
-        // keeps the rest.
-        if load_at_startup.is_some() {
-            self.persistence.platform().set_autostart(
-                layout,
-                layout.options.load_at_startup,
-                layout.options.start_elevated,
-            );
-        }
+        // C# `UpdateSchedule`, after the options: StartElevated may come in the same
+        // request. The option ends up as what the session will do; the rest is stored
+        // whatever became of the autostart.
+        let autostart = load_at_startup
+            .map(|requested| self.persistence.set_load_at_startup(layout, requested));
         self.persistence
             .save_live(&layout.options)
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        autostart.unwrap_or(Ok(()))
     }
 
     fn app_options(&self) -> Option<(bool, bool)> {
@@ -594,12 +588,16 @@ impl PersistencePlatform for Platform {
         self.autostart.as_ref().is_some_and(|a| a.scheduled())
     }
 
-    /// Every save aligns it (C#: `SetAutostart`).
-    fn set_autostart(&self, _layout: &Layout, enabled: bool, elevated: bool) {
-        if let Some(autostart) = &self.autostart {
-            if let Err(error) = autostart.schedule(enabled, elevated) {
-                eprintln!("[lbm-agent] cannot set the session autostart: {error}");
-            }
+    /// Every save aligns it (C#: `SetAutostart`). Without a way to start with the
+    /// session, asking for one is the error.
+    fn set_autostart(&self, _layout: &Layout, enabled: bool, elevated: bool) -> io::Result<()> {
+        match &self.autostart {
+            Some(autostart) => autostart.schedule(enabled, elevated),
+            None if enabled => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "this agent has no session autostart",
+            )),
+            None => Ok(()),
         }
     }
 }

@@ -543,6 +543,62 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
     assert!(!entry.exists(), "the session no longer starts the agent");
 }
 
+/// A session autostart that cannot be set up refuses the request, but only its own part:
+/// the other options of the same request are applied, stored, and reach the hook.
+#[tokio::test]
+async fn an_autostart_that_fails_does_not_keep_the_other_options_from_the_hook() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+    // The autostart directory is a file: no entry can be written in it.
+    std::fs::write(dir.path().join("autostart"), "not a directory").unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    frontend.ask(json!({ "Method": "Subscribe" })).await;
+    assert!(!fake.bound());
+
+    let refused = frontend
+        .ask(json!({
+            "Method": "SaveOptions",
+            "Options": { "BoundToAgent": true },
+            "Excluded": ["/usr/bin/steam"],
+            "LoadAtStartup": true,
+        }))
+        .await;
+    assert!(
+        refused["Error"].as_str().unwrap().contains("autostart"),
+        "{refused}"
+    );
+
+    // Stored...
+    let excluded = std::fs::read_to_string(dir.path().join("Excluded.txt")).unwrap();
+    assert!(excluded.lines().any(|l| l == "/usr/bin/steam"));
+    // ...told to the hook...
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !(fake.bound()
+            && fake
+                .excluded()
+                .is_some_and(|e| e.iter().any(|p| p == "/usr/bin/steam")))
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the hook never got the options the store holds");
+    // ...and the autostart reported as what the session does: nothing.
+    let state = frontend.ask(json!({ "Method": "Snapshot" })).await["Result"].clone();
+    assert_eq!(state["LoadAtStartup"], false);
+}
+
 /// A preview belongs to the connection that asked for it, and dies with it.
 ///
 /// A window that exits cleanly sends `EndPreview`. A window that is killed, crashes, or

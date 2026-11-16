@@ -281,15 +281,19 @@ impl<W: AgentWorld> Agent<W> {
                 options,
                 excluded,
                 load_at_startup,
-            } => self
-                .world
-                .save_options(options.as_ref(), excluded.as_deref(), load_at_startup)
-                .map(|()| {
-                    self.tell_shortcut();
-                    self.tell_binding();
-                    self.tell_excluded();
-                    serde_json::Value::Null
-                }),
+            } => {
+                let saved =
+                    self.world
+                        .save_options(options.as_ref(), excluded.as_deref(), load_at_startup);
+                // Told whatever the answer: a session autostart that could not be set
+                // up refuses the request, yet the other options were applied and stored
+                // — and the hook must run on what the store says. Each one is sent only
+                // if it changed, so a request refused outright sends nothing.
+                self.tell_shortcut();
+                self.tell_binding();
+                self.tell_excluded();
+                saved.map(|()| serde_json::Value::Null)
+            }
             Request::SaveWallpaper {
                 layout_id,
                 settings,

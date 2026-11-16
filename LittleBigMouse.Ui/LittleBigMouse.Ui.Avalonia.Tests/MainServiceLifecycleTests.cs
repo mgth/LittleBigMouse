@@ -48,10 +48,12 @@ public sealed class MainServiceLifecycleTests
         public FakeNotification Notify { get; } = new();
         public FakeLayoutFactory Factory { get; }
         public MainService Service { get; }
+        public List<LittleBigMouse.Zoning.LittleBigMouseEvent> Traced { get; } = [];
+        public List<string> BootLog { get; } = [];
 
-        public Fixture()
+        public Fixture(bool enabled = true)
         {
-            Factory = new FakeLayoutFactory(() => MainServiceFakes.NewLayout(Options));
+            Factory = new FakeLayoutFactory(() => MainServiceFakes.NewLayout(Options, enabled));
 
             Service = new MainService(
                 mainViewModelLocator: () => throw new NotSupportedException(),
@@ -63,7 +65,12 @@ public sealed class MainServiceLifecycleTests
                 processesCollector: new ProcessesCollector(),
                 updaterLocator: () => throw new NotSupportedException(),
                 options: Options,
-                engine: new EngineController(Daemon, Persistence, () => Service?.MonitorsLayout));
+                engine: new EngineController(Daemon, Persistence, () => Service?.MonitorsLayout))
+            {
+                PostToUi = action => action(),
+                TraceDaemonEvent = Traced.Add,
+                BootLog = BootLog.Add
+            };
         }
     }
 
@@ -159,6 +166,81 @@ public sealed class MainServiceLifecycleTests
         Assert.True(firstProbe.Disposed);
         Assert.False(secondProbe.Disposed);
         Assert.Equal(2, f.Factory.Creations);
+
+        f.Service.Dispose();
+    }
+
+    [Fact]
+    public void ADaemonThatConnectsBeforeTheFirstLayoutIsStartedOnceTheLayoutIsBuilt()
+    {
+        // A cold logon: the daemon is up and reports itself stopped while the boot sequence
+        // has not built a layout yet. That Stopped used to be dropped, and the engine stayed
+        // off until a manual Start.
+        var f = new Fixture();
+
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Connected);
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped);
+        Assert.Equal(0, f.Daemon.StartCount);
+
+        f.Service.UpdateLayout();
+        Assert.Equal(1, f.Daemon.StartCount);
+
+        // The order is the whole diagnosis, and ui.log is the only place that keeps it.
+        Assert.Collection(f.BootLog,
+            line => Assert.Contains("no layout yet", line),
+            line => Assert.Contains("First layout built", line),
+            line => Assert.Contains("Starting the engine on the first layout build", line));
+
+        // Only the first build answers a connection; a rebuild is the display-change path's.
+        f.Daemon.State = LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped;
+        f.Service.UpdateLayout();
+        Assert.Equal(1, f.Daemon.StartCount);
+
+        f.Service.Dispose();
+    }
+
+    [Fact]
+    public void ADaemonThatConnectsAfterTheFirstLayoutIsStartedOnce()
+    {
+        var f = new Fixture();
+
+        f.Service.UpdateLayout();
+        Assert.Equal(0, f.Daemon.StartCount);
+
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Connected);
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped);
+        Assert.Equal(1, f.Daemon.StartCount);
+        Assert.Contains(f.BootLog, line => line.Contains("Starting the engine on the daemon's Stopped"));
+
+        f.Service.Dispose();
+    }
+
+    [Fact]
+    public void DaemonEventsGoThroughTheTraceTheTestsReplaced()
+    {
+        // The default writes to the user's real daemon-events.log: events a test made up
+        // would read as disconnects that never happened.
+        var f = new Fixture();
+
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Connected);
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped);
+
+        Assert.Equal([LittleBigMouse.Zoning.LittleBigMouseEvent.Connected, LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped], f.Traced);
+
+        f.Service.Dispose();
+    }
+
+    [Fact]
+    public void ALayoutTheUserTurnedOffIsNotStartedWhenTheDaemonConnects()
+    {
+        var f = new Fixture(enabled: false);
+
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Connected);
+        f.Daemon.Raise(LittleBigMouse.Zoning.LittleBigMouseEvent.Stopped);
+
+        f.Service.UpdateLayout();
+        Assert.Equal(0, f.Daemon.StartCount);
+        Assert.Contains(f.BootLog, line => line.Contains("not enabled"));
 
         f.Service.Dispose();
     }

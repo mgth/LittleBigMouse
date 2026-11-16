@@ -30,10 +30,13 @@ libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 futures-util = { version = "0.3", default-features = false }
+# async-io, never tokio, for zbus and everything that forwards to it (ksni, ashpd): cargo
+# unifies features across the packages of one build, and a zbus built for tokio panics in
+# lbm-app's accessibility thread (accesskit_unix runs zbus outside any tokio runtime).
 # The tray (tray.rs): a StatusNotifierItem over D-Bus, no GTK.
-ksni = { version = "0.3.6", default-features = false, features = ["tokio"] }
+ksni = { version = "0.3.6", default-features = false, features = ["async-io"] }
 # System sleep from logind (sleep.rs), with the hook's zbus build.
-zbus = { version = "5", default-features = false, features = ["tokio"] }
+zbus = { version = "5", default-features = false, features = ["async-io"] }
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"

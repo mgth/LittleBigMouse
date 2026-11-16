@@ -24,6 +24,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Controls;
@@ -117,6 +118,21 @@ public class MonitorsLayoutPresenterViewModel
             owner, offerScale: OperatingSystem.IsLinux());
         if (!confirmed) return;
 
+        // The system change triggers a rebuild that re-imports the system layout and then
+        // loads the saved one: the current physical layout survives only if saved first.
+        // The agent writes it (v6: one writer, the store it reads) — and if it cannot, the
+        // system is left alone rather than rearranged around a layout about to be lost.
+        if (!layout.IsVirtual && !layout.Saved)
+        {
+            if (await SaveThroughAgentAsync(_agent, layout) is { } refused)
+            {
+                await MonitorWarningDialog.ShowNotAppliedAsync(owner, refused);
+                return;
+            }
+        }
+
+        // Computed after the save, synchronously up to SetLocations: what is applied is
+        // the layout just saved, with no await in between for an edit to slip into.
         // No pre-filtering: the whole topology goes to the controller, which may need to
         // translate it (kscreen refuses negative positions) before it can tell what
         // actually changes.
@@ -126,31 +142,24 @@ public class MonitorsLayoutPresenterViewModel
 
         if (locations.Count == 0) return;
 
-        // The system change triggers a rebuild that re-imports the system layout and then
-        // loads the saved one: the current physical layout survives only if saved first.
-        // The agent writes it (v6: one writer, the store it reads) — and if it cannot, the
-        // system is left alone rather than rearranged around a layout about to be lost.
-        if (!layout.IsVirtual && !layout.Saved)
-        {
-            if (await SaveThroughAgentAsync(layout) is { } refused)
-            {
-                await MonitorWarningDialog.ShowNotAppliedAsync(owner, refused);
-                return;
-            }
-        }
-
         if (!_controller.SetLocations(locations))
             await MonitorWarningDialog.ShowFailureAsync(owner, "apply the monitor layout");
     }
 
-    /// <summary>The Save button's request (LocationControlViewModel.SaveAsync).</summary>
-    /// <returns>Null once the agent has written it, else why it did not.</returns>
-    async Task<string?> SaveThroughAgentAsync(MonitorsLayout layout)
+    /// <summary>
+    /// The Save button's request (LocationControlViewModel.SaveAsync), for the layout as it
+    /// is now. The editor stays usable while the agent answers, so what the agent wrote is
+    /// the document SENT: an edit made meanwhile is not in it, and marking the layout saved
+    /// — then applying, then reloading the saved document — would drop that edit silently.
+    /// </summary>
+    /// <returns>Null once the agent has written exactly the current layout, else why not.</returns>
+    internal static async Task<string?> SaveThroughAgentAsync(AgentClient? agent, MonitorsLayout layout)
     {
-        if (_agent is null) return "no agent";
+        if (agent is null) return "no agent";
+        var sent = AgentDocument.Of(layout);
         try
         {
-            await _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout));
+            await agent.SaveLayoutAsync(layout.Id, sent);
         }
         catch (Exception error) when (error is AgentException
                                       or OperationCanceledException
@@ -160,9 +169,19 @@ public class MonitorsLayoutPresenterViewModel
             Console.Error.WriteLine($"Save before apply refused: {reason}");
             return reason;
         }
+
+        if (!SameDocument(sent, AgentDocument.Of(layout)))
+        {
+            Console.Error.WriteLine("Save before apply: the layout changed while it was being saved");
+            return "the layout changed while it was being saved";
+        }
+
         LayoutPersistence.MarkLayoutSaved(layout);
         return null;
     }
+
+    static bool SameDocument(AgentDocumentDto a, AgentDocumentDto b)
+        => JsonSerializer.Serialize(a) == JsonSerializer.Serialize(b);
 
     public MonitorsLayoutPresenterViewModel():this(new MainViewModelDesign())
     {

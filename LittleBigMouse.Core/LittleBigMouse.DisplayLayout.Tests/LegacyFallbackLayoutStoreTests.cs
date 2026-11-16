@@ -1,3 +1,4 @@
+using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins.Persistence;
 
 namespace LittleBigMouse.DisplayLayout.Tests;
@@ -60,7 +61,7 @@ public class LegacyFallbackLayoutStoreTests : IDisposable
     }
 
     [Fact]
-    public void Writes_go_to_the_agent_store_only()
+    public void Before_the_import_writes_are_dropped_so_the_agent_still_imports()
     {
         var json = new JsonLayoutStore(_dir);
         var store = new LegacyFallbackLayoutStore(json, () => new FakeLegacyStore());
@@ -69,7 +70,45 @@ public class LegacyFallbackLayoutStoreTests : IDisposable
         store.WriteLayout("LAYOUT1", new LayoutDto());
         store.WriteModels(new Dictionary<string, ModelDto> { ["TST1234"] = new() });
 
-        Assert.True(json.HoldsOptions);
-        Assert.Equal("Written", store.Read("LAYOUT1", []).GlobalOptions!.Priority);
+        Assert.False(json.HoldsOptions);
+        Assert.False(Directory.Exists(_dir));
+        Assert.Equal("FromRegistry", store.Read("LAYOUT1", []).GlobalOptions!.Priority);
+    }
+
+    /// <summary>
+    /// The write that made this matter: an ordinary load tops up an old excluded list and
+    /// records the version. Through the JSON store it created options.json, which is the
+    /// agent's "already imported" marker — the import was skipped and the 5.x layouts gone.
+    /// </summary>
+    [Fact]
+    public void An_excluded_list_top_up_during_a_load_does_not_complete_the_import()
+    {
+        var json = new JsonLayoutStore(Path.Combine(_dir, "store"));
+        var store = new LegacyFallbackLayoutStore(json, () => new FakeLegacyStore());
+        Directory.CreateDirectory(_dir);
+        var excluded = Path.Combine(_dir, "Excluded.txt");
+        File.WriteAllLines(excluded, ExcludedProcessDefaults.LegacyV0);
+        var persistence = new ExcludedListPersistence(store, () => excluded);
+
+        persistence.Load(new ILayoutOptions.Design(), store.Read("LAYOUT1", []).GlobalOptions);
+
+        Assert.Equal(ExcludedProcessDefaults.Version, persistence.AppliedDefaultsVersion);
+        Assert.False(json.HoldsOptions);
+        Assert.Equal("FromRegistry", store.Read("LAYOUT1", []).GlobalOptions!.Priority);
+    }
+
+    [Fact]
+    public void After_the_import_writes_go_to_the_agent_store_only()
+    {
+        var json = new JsonLayoutStore(_dir);
+        json.WriteGlobalOptions(new GlobalOptionsDto { Priority = "Imported" });
+        var store = new LegacyFallbackLayoutStore(json, () => new FakeLegacyStore());
+
+        store.WriteGlobalOptions(new GlobalOptionsDto { Priority = "Written" });
+        store.WriteLayout("LAYOUT1", new LayoutDto { Options = new LayoutOptionsDto { Enabled = true } });
+
+        var data = store.Read("LAYOUT1", []);
+        Assert.Equal("Written", data.GlobalOptions!.Priority);
+        Assert.True(data.Layout!.Options!.Enabled);
     }
 }

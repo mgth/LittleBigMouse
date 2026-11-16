@@ -83,7 +83,8 @@ Sur une machine qui a servi avec la 5.x :
    Paused, écran éteint).
 2. Le menu : Ouvrir, Start, Stop, Rafraîchir, Quitter. Start et Stop changent l'icône et
    l'état du hook ; Quitter fait partir le hook **puis** l'agent.
-3. Ouvrir ne fait rien tant que `--ui` ne nomme pas un frontend (voulu en phase 3).
+3. Ouvrir lance `LittleBigMouse.Ui.Avalonia.exe` posé à côté de l'agent, y compris pour
+   un agent lancé par la tâche planifiée (sans `--ui`).
 4. Redémarrer l'explorateur (`taskkill /f /im explorer.exe`, puis le relancer) : **l'icône
    revient** (`TaskbarCreated`).
 

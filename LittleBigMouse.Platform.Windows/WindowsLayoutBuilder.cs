@@ -43,7 +43,8 @@ internal static class WindowsLayoutBuilder
         }
         layout.Id = layout.ComputeId();
 
-        //retrieve saved layout (registry, via the shared persistence engine)
+        // retrieve the saved layout: the agent's JSON store (the 5.x registry until the
+        // agent has imported it), via the shared persistence engine
         persistence.Load(layout);
 
         // Place the monitors the stored layout did not cover (new or never-saved config)

@@ -5,10 +5,12 @@ using LittleBigMouse.DisplayLayout.Monitors;
 namespace LittleBigMouse.Plugins;
 
 /// <summary>
-/// Platform seam: persists the layout model and the app options. Windows stores them in the
-/// registry (HKCU\SOFTWARE\Mgth\LittleBigMouse), Linux in JSON files under
-/// ~/.config/LittleBigMouse. Shared UI code depends only on this interface; the entry points
-/// mirror the historical extension methods 1:1.
+/// Platform seam: persists the layout model and the app options, in the agent's JSON store
+/// on both systems (v6, D2): ~/.config/LittleBigMouse on Linux,
+/// %LOCALAPPDATA%\Mgth\LittleBigMouse on Windows, where the 5.x registry is read only until
+/// the agent has imported it. In v6 the window only reads through it: the agent is the
+/// only writer. Shared UI code depends only on this interface; the entry points mirror the
+/// historical extension methods 1:1.
 /// </summary>
 public interface ILayoutPersistence
 {

@@ -13,6 +13,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- JsonLayoutStore.LayoutPath (DomainOracleTests): the tests run the production
+         file naming, not a copy of it. -->
+    <InternalsVisibleTo Include="LittleBigMouse.DisplayLayout.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\HLab.Core\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
     <ProjectReference Include="..\..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
   </ItemGroup>

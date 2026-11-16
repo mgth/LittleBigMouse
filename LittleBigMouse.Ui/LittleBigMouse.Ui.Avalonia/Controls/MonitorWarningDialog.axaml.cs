@@ -84,16 +84,35 @@ public partial class MonitorWarningDialog : Window
         return (confirmed, confirmed && dialog.ScaleCheckBox.IsChecked == true);
     }
 
-    public static async Task ShowFailureAsync(Window? owner, string action)
+    public static Task ShowFailureAsync(Window? owner, string action) => ShowMessageAsync(
+        owner,
+        "Display change failed",
+        $"The system could not {action}.",
+        "LittleBigMouse stopped the operation and restored the last known desktop configuration. No partial monitor layout was intentionally applied.",
+        "Open the system display settings and confirm that every monitor is connected and using a supported mode, then try again.");
+
+    /// <summary>
+    /// The layout could not be saved before being applied: the system is left as it is,
+    /// since the rebuild that follows a display change would reload the saved layout and
+    /// drop the one on screen.
+    /// </summary>
+    public static Task ShowNotAppliedAsync(Window? owner, string reason) => ShowMessageAsync(
+        owner,
+        "Layout not applied",
+        "The layout could not be saved, so it was not applied.",
+        $"Applying it would rearrange the displays and then reload the last saved layout, losing this one. Nothing was changed. ({reason})",
+        "Check that LittleBigMouse is running (its icon in the notification area), then try again.");
+
+    static async Task ShowMessageAsync(Window? owner, string title, string heading, string body, string step)
     {
         var dialog = new MonitorWarningDialog
         {
-            Title = "Display change failed"
+            Title = title
         };
-        dialog.HeadingText.Text = $"The system could not {action}.";
-        dialog.BodyText.Text = "LittleBigMouse stopped the operation and restored the last known desktop configuration. No partial monitor layout was intentionally applied.";
+        dialog.HeadingText.Text = heading;
+        dialog.BodyText.Text = body;
         dialog.RecoveryTitle.Text = "What to do next:";
-        dialog.Step1.Text = "Open the system display settings and confirm that every monitor is connected and using a supported mode, then try again.";
+        dialog.Step1.Text = step;
         dialog.Step2.IsVisible = false;
         dialog.Step3.IsVisible = false;
         dialog.DontShowAgainCheckBox.IsVisible = false;

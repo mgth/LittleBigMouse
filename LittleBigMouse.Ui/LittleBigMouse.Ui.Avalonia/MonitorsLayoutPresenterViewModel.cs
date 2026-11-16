@@ -22,6 +22,7 @@
 */
 
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -33,6 +34,7 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using HLab.Base.ReactiveUI;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Persistence;
 using LittleBigMouse.Ui.Avalonia.Controls;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.MonitorFrame;
@@ -52,22 +54,21 @@ public class MonitorsLayoutPresenterViewModel
     // Nullable: only the greedy ctor is resolved by the DI container at runtime; the
     // design-mode path never invokes the apply command (same pattern as DefaultMonitorViewModel).
     readonly IDisplayController? _controller;
-    readonly ILayoutPersistence? _persistence;
+    readonly AgentClient? _agent;
 
     public MonitorsLayoutPresenterViewModel(IMainPluginsViewModel mainViewModel)
-        : this(mainViewModel, null, null, null)
+        : this(mainViewModel, null, null)
     {
     }
 
     public MonitorsLayoutPresenterViewModel(
         IMainPluginsViewModel mainViewModel,
         IDisplayController? controller,
-        ILayoutPersistence? persistence,
         AgentClient? agent)
     {
         MainViewModel = mainViewModel;
         _controller = controller;
-        _persistence = persistence;
+        _agent = agent;
 
         // Edge-prober reports ride the hook events the agent forwards. A report describes
         // one loaded layout: a model swap (rebuild, back-to-local) makes it stale, so it
@@ -127,10 +128,40 @@ public class MonitorsLayoutPresenterViewModel
 
         // The system change triggers a rebuild that re-imports the system layout and then
         // loads the saved one: the current physical layout survives only if saved first.
-        _persistence?.Save(layout);
+        // The agent writes it (v6: one writer, the store it reads) — and if it cannot, the
+        // system is left alone rather than rearranged around a layout about to be lost.
+        if (!layout.IsVirtual && !layout.Saved)
+        {
+            if (await SaveThroughAgentAsync(layout) is { } refused)
+            {
+                await MonitorWarningDialog.ShowNotAppliedAsync(owner, refused);
+                return;
+            }
+        }
 
         if (!_controller.SetLocations(locations))
             await MonitorWarningDialog.ShowFailureAsync(owner, "apply the monitor layout");
+    }
+
+    /// <summary>The Save button's request (LocationControlViewModel.SaveAsync).</summary>
+    /// <returns>Null once the agent has written it, else why it did not.</returns>
+    async Task<string?> SaveThroughAgentAsync(MonitorsLayout layout)
+    {
+        if (_agent is null) return "no agent";
+        try
+        {
+            await _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout));
+        }
+        catch (Exception error) when (error is AgentException
+                                      or OperationCanceledException
+                                      or IOException)
+        {
+            var reason = error is OperationCanceledException ? "no agent answered" : error.Message;
+            Console.Error.WriteLine($"Save before apply refused: {reason}");
+            return reason;
+        }
+        LayoutPersistence.MarkLayoutSaved(layout);
+        return null;
     }
 
     public MonitorsLayoutPresenterViewModel():this(new MainViewModelDesign())

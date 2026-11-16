@@ -118,10 +118,13 @@ evdev = "0.13"
 # "res" (X-Resource) resolves the pid of clients that do not set _NET_WM_PID
 # (focus watcher / process exclusion).
 x11rb = { version = "0.13", features = ["xinput", "randr", "res"] }
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "global_shortcuts", "input_capture", "tracing"] }
+# async-io, never tokio, for zbus and everything that forwards to it (ksni, ashpd): cargo
+# unifies features across the packages of one build, and a zbus built for tokio panics in
+# lbm-app's accessibility thread (accesskit_unix runs zbus outside any tokio runtime).
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "global_shortcuts", "input_capture", "tracing"] }
 # Already in the tree through ashpd; used directly by the evdev backend to ask
 # KWin for the real cursor position (scripting API) when arming.
-zbus = { version = "5", default-features = false, features = ["tokio"] }
+zbus = { version = "5", default-features = false, features = ["async-io"] }
 reis = { version = "0.7", features = ["tokio"] }
 futures = "0.3"
 # Portal signal diagnostics: ashpd traces every InputCapture signal it receives

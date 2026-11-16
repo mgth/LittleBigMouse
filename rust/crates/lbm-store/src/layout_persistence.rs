@@ -47,8 +47,11 @@ pub trait PersistencePlatform {
     }
 
     /// C# `SetAutostart`: align the session autostart with the options. A no-op where
-    /// not implemented (Linux).
-    fn set_autostart(&self, _layout: &Layout, _enabled: bool, _elevated: bool) {}
+    /// not implemented. What it could not do comes back as the error; whether the
+    /// session now starts the app is [`Self::is_autostart_scheduled`]'s to say.
+    fn set_autostart(&self, _layout: &Layout, _enabled: bool, _elevated: bool) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 /// C# `LayoutPersistence.ExcludedListFile`: `Excluded.txt` in the data directory, which
@@ -202,11 +205,7 @@ impl<S: LayoutStore, P: PersistencePlatform> LayoutPersistence<S, P> {
             return Ok(false);
         }
 
-        self.platform.set_autostart(
-            layout,
-            layout.options.load_at_startup,
-            layout.options.start_elevated,
-        );
+        self.align_autostart(layout);
 
         let global = self.save_global_options(&layout.options);
         let document = self
@@ -241,12 +240,46 @@ impl<S: LayoutStore, P: PersistencePlatform> LayoutPersistence<S, P> {
 
         self.store.write_layout(&layout.id, &dto)?;
 
-        self.platform.set_autostart(
+        self.align_autostart(layout);
+        Ok(true)
+    }
+
+    /// Every save re-asserts the session autostart the layout holds, as C# did. A
+    /// failure here is logged and nothing more: the option it re-asserts is already
+    /// what the session does (see [`Self::set_load_at_startup`]), so a failure leaves
+    /// things as they were.
+    fn align_autostart(&self, layout: &Layout) {
+        if let Err(error) = self.platform.set_autostart(
             layout,
             layout.options.load_at_startup,
             layout.options.start_elevated,
-        );
-        Ok(true)
+        ) {
+            eprintln!("[LittleBigMouse] cannot set the session autostart: {error}");
+        }
+    }
+
+    /// A frontend asks for the session to start the app, or not (C#: `UpdateSchedule`).
+    ///
+    /// The option then holds what the session WILL do, read back from the platform, not
+    /// what was asked: it is what the frontends show, and a task that could not be
+    /// registered shown as registered tells the user the app starts with the session
+    /// when it does not. A request that did not take is an error, so the frontend
+    /// learns it and goes back to the state the agent reports.
+    pub fn set_load_at_startup(&self, layout: &mut Layout, requested: bool) -> Result<(), String> {
+        let set = self
+            .platform
+            .set_autostart(layout, requested, layout.options.start_elevated);
+        let scheduled = self.platform.is_autostart_scheduled(layout);
+        layout.edit_options(|o| o.load_at_startup = scheduled);
+        match set {
+            Err(error) => Err(format!("cannot set the session autostart: {error}")),
+            Ok(()) if scheduled != requested => Err(if requested {
+                "the session autostart could not be set up".to_owned()
+            } else {
+                "the session autostart could not be removed".to_owned()
+            }),
+            Ok(()) => Ok(()),
+        }
     }
 
     /// C# `SaveLive`: the app-level options alone, and the excluded list.

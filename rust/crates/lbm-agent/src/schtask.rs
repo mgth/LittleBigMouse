@@ -17,8 +17,19 @@
 //!
 //! An elevated task is registered only for an agent nobody else can replace
 //! ([`crate::admin_only`]): it runs at every logon with full rights and no prompt.
+//!
+//! The agent is the task's only writer. The window (C#) used to register it too, on its
+//! own executable, from its local save: it no longer touches it, and shows what the agent
+//! says.
+//!
+//! The task is the account's, not an install's: one registered by a copy since moved or
+//! uninstalled stays, pointing at a program that is gone, and every logon fails with
+//! `ERROR_FILE_NOT_FOUND` (0x80070002) while the option reads on. Asking whether it is
+//! scheduled therefore reads what it launches, and such a task is pointed back at this
+//! agent, at its former run level and through the same guard as any registration — or
+//! answered "not scheduled" when it cannot be (C#: mgth/LittleBigMouse#739, on 5.x).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// C#'s task description.
 const DESCRIPTION: &str = "Multi-dpi aware monitors mouse crossover";
@@ -105,13 +116,148 @@ impl ScheduledTask {
 "#
         )
     }
+
+    /// Whether the session starts something, from the task `found` under this name: a
+    /// task that can only fail is handed to `retarget` (with its run level, `true` for
+    /// an elevated one) to launch this program instead, and counts as scheduled only if
+    /// that worked. `gone`: see [`Registered::launches`].
+    #[cfg(any(windows, test))]
+    fn scheduled_from(
+        &self,
+        found: Option<Registered>,
+        gone: impl Fn(&Path) -> bool,
+        retarget: impl FnOnce(bool) -> std::io::Result<()>,
+    ) -> bool {
+        let Some(task) = found else {
+            return false;
+        };
+        if task.launches(gone) {
+            return true;
+        }
+        eprintln!(
+            "[lbm-agent] the logon task launches {:?}, which is gone: pointing it at {}",
+            task.programs,
+            self.program.display()
+        );
+        match retarget(task.elevated) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("[lbm-agent] cannot retarget the logon task: {error}");
+                false
+            }
+        }
+    }
+}
+
+/// A registered task, as read back from the Task Scheduler.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Registered {
+    /// What each of its `Exec` actions launches, as stored (possibly quoted).
+    pub programs: Vec<String>,
+    /// Registered to run with the highest privileges available.
+    pub elevated: bool,
+}
+
+impl Registered {
+    /// Whether a logon can start anything: it launches some program, and none of them is
+    /// known to be gone. `gone` answers for one absolute path; a path it cannot judge — a
+    /// relative one, or one holding an environment variable the Task Scheduler expands —
+    /// counts as there: a task is rewritten on proof that it can only fail, not on doubt.
+    pub fn launches(&self, gone: impl Fn(&Path) -> bool) -> bool {
+        !self.programs.is_empty() && !self.programs.iter().any(|p| program_gone(p, &gone))
+    }
+}
+
+fn program_gone(program: &str, gone: &impl Fn(&Path) -> bool) -> bool {
+    let path = program.trim().trim_matches('"');
+    is_windows_absolute(path) && !path.contains('%') && gone(Path::new(path))
+}
+
+/// `C:\…` or `\\server\…`, read as Windows reads it (the tests run elsewhere too).
+fn is_windows_absolute(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    path.starts_with(r"\\")
+        || (bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && matches!(bytes[2], b'\\' | b'/'))
+}
+
+/// `path` is known not to exist: looking it up says so, rather than failing for another
+/// reason (a folder this account may not read).
+pub fn is_gone(path: &Path) -> bool {
+    matches!(std::fs::metadata(path), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
 }
 
 #[cfg(windows)]
 impl ScheduledTask {
-    /// C# `IsScheduled`: the task exists.
+    /// C# `IsScheduled`, made to mean what logons will do: the task exists and launches a
+    /// program that is there. One whose program is gone is pointed back at this agent;
+    /// one that cannot be read is taken as it is.
     pub fn is_scheduled(&self) -> bool {
-        schtasks(&["/Query", "/TN", &self.name()]).is_ok()
+        match self.registered() {
+            Ok(found) => self.scheduled_from(found, is_gone, |elevated| self.set(true, elevated)),
+            Err(error) => {
+                eprintln!("[lbm-agent] the logon task cannot be read, left as it is: {error}");
+                schtasks(&["/Query", "/TN", &self.name()]).is_ok()
+            }
+        }
+    }
+
+    /// The task registered under this name, read back: `None` when there is none.
+    fn registered(&self) -> std::io::Result<Option<Registered>> {
+        use windows::core::{Interface, BSTR, VARIANT};
+        use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
+        use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
+        use windows::Win32::System::TaskScheduler::{
+            IExecAction, ITaskService, TaskScheduler, TASK_ACTION_EXEC, TASK_ACTION_TYPE,
+            TASK_RUNLEVEL_HIGHEST, TASK_RUNLEVEL_TYPE,
+        };
+
+        let _com = Com::enter()?;
+        let none = VARIANT::default();
+        // SAFETY: COM calls on interfaces this function owns, COM entered above; every out
+        // pointer is a local that outlives its call.
+        unsafe {
+            let service: ITaskService =
+                CoCreateInstance(&TaskScheduler, None, CLSCTX_INPROC_SERVER)?;
+            service.Connect(&none, &none, &none, &none)?;
+            let folder = service.GetFolder(&BSTR::from("\\"))?;
+            let task = match folder.GetTask(&BSTR::from(self.name())) {
+                Ok(task) => task,
+                Err(error)
+                    if error.code() == ERROR_FILE_NOT_FOUND.to_hresult()
+                        || error.code() == ERROR_PATH_NOT_FOUND.to_hresult() =>
+                {
+                    return Ok(None)
+                }
+                Err(error) => return Err(error.into()),
+            };
+            let definition = task.Definition()?;
+
+            let actions = definition.Actions()?;
+            let mut count = 0;
+            actions.Count(&mut count)?;
+            let mut programs = Vec::new();
+            // The Task Scheduler's collections count from 1.
+            for index in 1..=count {
+                let action = actions.get_Item(index)?;
+                let mut kind = TASK_ACTION_TYPE::default();
+                action.Type(&mut kind)?;
+                if kind == TASK_ACTION_EXEC {
+                    let mut path = BSTR::new();
+                    action.cast::<IExecAction>()?.Path(&mut path)?;
+                    programs.push(path.to_string());
+                }
+            }
+
+            let mut run_level = TASK_RUNLEVEL_TYPE::default();
+            definition.Principal()?.RunLevel(&mut run_level)?;
+            Ok(Some(Registered {
+                programs,
+                elevated: run_level == TASK_RUNLEVEL_HIGHEST,
+            }))
+        }
     }
 
     /// C# `UpdateSchedule`: registered (replacing any older one, a 5.x task included) or
@@ -271,5 +417,105 @@ mod tests {
         let xml = odd.xml(false);
         assert!(xml.contains("<UserId>CORP\\R&amp;D</UserId>"));
         assert!(xml.contains("<Command>C:\\A&lt;B&gt;\\lbm-agent.exe</Command>"));
+    }
+
+    fn registered(programs: &[&str], elevated: bool) -> Registered {
+        Registered {
+            programs: programs.iter().map(|p| p.to_string()).collect(),
+            elevated,
+        }
+    }
+
+    /// Only the old install is gone.
+    fn old_install_gone(path: &Path) -> bool {
+        under(path, r"D:\Old\")
+    }
+
+    /// A prefix, read as text: these are Windows paths, and the tests run elsewhere too.
+    fn under(path: &Path, prefix: &str) -> bool {
+        path.to_string_lossy().starts_with(prefix)
+    }
+
+    #[test]
+    fn a_task_whose_program_is_there_launches() {
+        let task = registered(&[r"C:\Program Files\LittleBigMouse\lbm-agent.exe"], false);
+        assert!(task.launches(old_install_gone));
+        // Quoted, as a path with spaces may be stored.
+        let quoted = registered(
+            &[r#""C:\Program Files\LittleBigMouse\lbm-agent.exe""#],
+            false,
+        );
+        assert!(quoted.launches(|p| !under(p, r"C:\Program Files\")));
+    }
+
+    #[test]
+    fn a_task_whose_program_is_gone_does_not_launch() {
+        assert!(!registered(&[r"D:\Old\lbm-agent.exe"], false).launches(old_install_gone));
+        assert!(!registered(&[r#""D:\Old\lbm-agent.exe""#], false).launches(old_install_gone));
+        // One gone among several is a logon that fails.
+        let both = registered(&[r"C:\Keep\a.exe", r"D:\Old\b.exe"], false);
+        assert!(!both.launches(old_install_gone));
+        // A share is a path like any other.
+        assert!(!registered(&[r"\\server\share\lbm-agent.exe"], false).launches(|_| true));
+        // Nothing to launch is nothing started.
+        assert!(!registered(&[], false).launches(|_| false));
+    }
+
+    #[test]
+    fn a_path_that_cannot_be_judged_counts_as_there() {
+        let everything_gone = |_: &Path| true;
+        // Expanded by the Task Scheduler, not here.
+        assert!(
+            registered(&[r"%ProgramFiles%\LittleBigMouse\lbm-agent.exe"], false)
+                .launches(everything_gone)
+        );
+        // Looked up on the PATH.
+        assert!(registered(&["lbm-agent.exe"], false).launches(everything_gone));
+    }
+
+    #[test]
+    fn no_task_is_not_scheduled_and_nothing_is_registered() {
+        let scheduled = task().scheduled_from(None, |_| true, |_| panic!("registered"));
+        assert!(!scheduled);
+    }
+
+    #[test]
+    fn a_task_that_launches_is_scheduled_and_left_alone() {
+        // Another install still in place (a 5.x one included) is not this agent's to move.
+        let found = registered(&[r"C:\Elsewhere\LittleBigMouse.Ui.Avalonia.exe"], true);
+        let scheduled = task().scheduled_from(Some(found), |_| false, |_| panic!("registered"));
+        assert!(scheduled);
+    }
+
+    #[test]
+    fn a_task_whose_program_is_gone_is_retargeted_at_its_former_run_level() {
+        for elevated in [false, true] {
+            let mut asked = None;
+            let found = registered(&[r"D:\Old\lbm-agent.exe"], elevated);
+            let scheduled = task().scheduled_from(Some(found), old_install_gone, |e| {
+                asked = Some(e);
+                Ok(())
+            });
+            assert!(scheduled);
+            assert_eq!(asked, Some(elevated));
+        }
+    }
+
+    #[test]
+    fn a_task_that_cannot_be_retargeted_is_not_scheduled() {
+        // An elevated task, seen from an agent that may not replace it: every logon
+        // would fail, so the option must not read on.
+        let found = registered(&[r"D:\Old\lbm-agent.exe"], true);
+        let scheduled = task().scheduled_from(Some(found), old_install_gone, |_| {
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        });
+        assert!(!scheduled);
+    }
+
+    #[test]
+    fn only_a_missing_path_is_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_gone(dir.path()));
+        assert!(is_gone(&dir.path().join("lbm-agent.exe")));
     }
 }

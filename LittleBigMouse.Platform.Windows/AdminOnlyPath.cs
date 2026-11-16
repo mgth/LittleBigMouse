@@ -13,7 +13,8 @@ namespace LittleBigMouse.Platform.Windows;
 /// Administrators and TrustedInstaller can replace it, or anything loaded from its
 /// folder.
 /// <para>
-/// An elevated logon task (<see cref="AutostartExtensions"/>) runs its program with full
+/// An elevated logon task (5.x's <c>AutostartExtensions</c>; in v6 the agent's, which
+/// checks the same in <c>lbm-agent/src/admin_only.rs</c>) runs its program with full
 /// rights and no UAC prompt. If that program sits in a folder the user can write to (a
 /// folder chosen at the root of a drive inherits "Authenticated Users: Modify", a portable
 /// copy runs from Downloads), any program running as the user, unelevated, can swap the

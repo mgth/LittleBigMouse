@@ -23,6 +23,7 @@
 
 using System;
 using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -60,6 +61,7 @@ public class MainService : ReactiveModel, IMainService
     readonly ILayoutFactory _layoutFactory;
     readonly AgentClient _agent;
     readonly Action _leave;
+    readonly Action<Action> _postToUi;
     readonly Func<bool> _launchAgent;
 
     /// <summary>
@@ -117,6 +119,7 @@ public class MainService : ReactiveModel, IMainService
         TimeSpan agentPatience)
     {
         _leave = leave;
+        _postToUi = postToUi;
         _launchAgent = launchAgent;
         _agentPatience = agentPatience;
         _layoutFactory = layoutFactory;
@@ -153,9 +156,22 @@ public class MainService : ReactiveModel, IMainService
                 o => o.LoadAtStartup,
                 o => o.StartElevated)
             .Skip(1)
-            .Where(_ => !layoutPersistence.IsLoading)
+            .Where(_ => !layoutPersistence.IsLoading && !_showingAgentAutostart)
             .Subscribe(_ => SaveOptions(options))
             .DisposeWith(this);
+
+        // And what the window shows of it is what the agent says, not what this process
+        // could find: the agent may have pointed a stale task back at itself, or found it
+        // impossible to. What it says is shown, never sent back as a request.
+        void OnAgentState(object? sender, AgentState state) =>
+            postToUi(() => ShowAgentAutostart(options, state));
+
+        OwnedSubscription.Create<EventHandler<AgentState>>(
+                OnAgentState,
+                h => agent.StateChanged += h,
+                h => agent.StateChanged -= h)
+            .DisposeWith(this);
+        if (agent.State is { } known) OnAgentState(agent, known);
 
         // Platforms without a daemon reporting display changes (Linux) detect them in the
         // factory itself. The agent rebuilds its own layout on its own; this is the
@@ -169,13 +185,67 @@ public class MainService : ReactiveModel, IMainService
             .DisposeWith(this);
     }
 
+    /// <summary>Set while the agent's autostart state is being shown: not a user's change.</summary>
+    bool _showingAgentAutostart;
+
+    /// <summary>
+    /// <c>SaveOptions</c> requests sent and not answered yet. Each one carries the window's
+    /// <see cref="ILayoutOptions.LoadAtStartup"/>, so while one is out, what the window
+    /// holds is what the agent is about to record. A snapshot arriving meanwhile was taken
+    /// before the agent read it (the agent answers a request before it publishes the state
+    /// that follows), and showing it would undo the user's change — which the next option
+    /// saved would then send back for good.
+    /// </summary>
+    int _optionsInFlight;
+
+    void ShowAgentAutostart(ILayoutOptions options, AgentState state)
+    {
+        if (Volatile.Read(ref _optionsInFlight) > 0) return;
+        if (state.LoadAtStartup is not { } scheduled || options.LoadAtStartup == scheduled) return;
+        _showingAgentAutostart = true;
+        try
+        {
+            options.LoadAtStartup = scheduled;
+        }
+        finally
+        {
+            _showingAgentAutostart = false;
+        }
+    }
+
     /// <summary>The app-level options and the session autostart, recorded by the agent.</summary>
-    void SaveOptions(ILayoutOptions options) => _ = FireAndForget(
-        () => _agent.SaveOptionsAsync(
-            LayoutDtoMapper.ToGlobalOptionsDto(options, null),
-            [.. options.ExcludedList],
-            options.LoadAtStartup),
-        "Saving the options");
+    void SaveOptions(ILayoutOptions options)
+    {
+        // Counted before it goes out: a snapshot read off the wire right after must find it.
+        Interlocked.Increment(ref _optionsInFlight);
+        _ = SaveOptionsAsync(options);
+    }
+
+    async Task SaveOptionsAsync(ILayoutOptions options)
+    {
+        var recorded = false;
+        try
+        {
+            await _agent.SaveOptionsAsync(
+                LayoutDtoMapper.ToGlobalOptionsDto(options, null),
+                [.. options.ExcludedList],
+                options.LoadAtStartup);
+            recorded = true;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"Saving the options failed: {error}");
+        }
+        // Answered. Recorded, the agent now holds the window's value and says so in the
+        // state it publishes next — counted down here rather than posted, so that state is
+        // not taken for one that predates the request. Refused (or the agent gone), it holds
+        // what it last said: show that, now that nothing is on its way to change it.
+        if (Interlocked.Decrement(ref _optionsInFlight) == 0 && !recorded)
+            _postToUi(() =>
+            {
+                if (_agent.State is { } state) ShowAgentAutostart(options, state);
+            });
+    }
 
     public void UpdateLayout()
     {

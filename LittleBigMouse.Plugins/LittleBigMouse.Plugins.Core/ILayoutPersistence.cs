@@ -25,7 +25,7 @@ public interface ILayoutPersistence
     /// <summary>Persist the whole layout: options, monitors, models.</summary>
     bool Save(MonitorsLayout layout);
 
-    /// <summary>Persist only the Enabled flag (engine on/off) and align the autostart.</summary>
+    /// <summary>Persist only the Enabled flag (engine on/off).</summary>
     bool SaveEnabled(IMonitorsLayout layout);
 
     /// <summary>

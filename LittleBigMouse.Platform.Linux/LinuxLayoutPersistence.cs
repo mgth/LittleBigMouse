@@ -8,7 +8,6 @@ namespace LittleBigMouse.Platform.Linux;
 /// Linux implementation of <see cref="ILayoutPersistence"/>: the shared
 /// <see cref="LayoutPersistence"/> engine over <see cref="JsonLayoutStore"/> (JSON files
 /// under ~/.config/LittleBigMouse). The excluded-process list stays a plain text file in
-/// the XDG data dir — the daemon reads it. Autostart (systemd user unit / .desktop entry)
-/// is not implemented on Linux yet: the base no-op hooks apply.
+/// the XDG data dir — the daemon reads it. Autostart (the XDG entry) is the agent's.
 /// </summary>
 public class LinuxLayoutPersistence() : LayoutPersistence(new JsonLayoutStore());

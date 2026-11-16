@@ -17,10 +17,11 @@ static class AgentFrames
         string engine = "Stopped",
         string? layoutId = null,
         bool hookConnected = true,
-        bool previewing = false) => $$"""
+        bool previewing = false,
+        bool loadAtStartup = false) => $$"""
         {"AgentVersion":"0.1.0","HookConnected":{{Bool(hookConnected)}},"Engine":"{{engine}}",
          "Suspended":false,"LayoutId":{{(layoutId is null ? "null" : $"\"{layoutId}\"")}},
-         "Enabled":true,"Saved":true,"LoadAtStartup":false,"HideTrayIcon":false,
+         "Enabled":true,"Saved":true,"LoadAtStartup":{{Bool(loadAtStartup)}},"HideTrayIcon":false,
          "Previewing":{{Bool(previewing)}}}
         """;
 
@@ -29,8 +30,9 @@ static class AgentFrames
         string engine = "Stopped",
         string? layoutId = null,
         bool hookConnected = true,
-        bool previewing = false)
-        => $$"""{"Event":"State","State":{{Snapshot(engine, layoutId, hookConnected, previewing)}}}""";
+        bool previewing = false,
+        bool loadAtStartup = false)
+        => $$"""{"Event":"State","State":{{Snapshot(engine, layoutId, hookConnected, previewing, loadAtStartup)}}}""";
 
     /// <summary>The hook said something, forwarded under the name the UI knows it by.</summary>
     public static string Hook(LittleBigMouseEvent hookEvent, string payload = "")

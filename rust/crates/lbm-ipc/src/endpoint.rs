@@ -45,6 +45,18 @@ pub fn agent_pipe_name(session: u32) -> String {
     format!(r"\\.\pipe\LittleBigMouse-Agent-v1-session-{session}")
 }
 
+/// This process's logon session: the one whose pipes it binds and connects to.
+#[cfg(windows)]
+pub fn session_id() -> std::io::Result<u32> {
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+    let mut session = 0;
+    // SAFETY: plain query on this process, into a local.
+    unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut session) }
+        .map_err(std::io::Error::other)?;
+    Ok(session)
+}
+
 /// The endpoint [`ENDPOINT_VARIABLE`] names, if it is set.
 pub fn from_environment() -> Option<String> {
     std::env::var(ENDPOINT_VARIABLE).ok()

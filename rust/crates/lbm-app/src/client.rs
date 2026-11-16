@@ -5,6 +5,7 @@
 //! Tests and other synchronous callers can still connect directly without launching
 //! anything. Endpoint names are shared with the agent through lbm-ipc.
 
+use std::ffi::OsStr;
 use std::io::{self, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -131,15 +132,50 @@ pub const ENDPOINT_VARIABLE: &str = "LBM_AGENT_ENDPOINT";
 
 /// Where the agent listens, by the rules it binds with — or wherever
 /// [`ENDPOINT_VARIABLE`] says.
+///
+/// Windows: the agent's pipe of this logon session (`lbm-agent`'s `winpipe::agent_pipe`),
+/// never a file. The window decides from this endpoint's absence whether to start an
+/// agent, so a wrong default would start one beside the running agent and then never
+/// reach either.
 pub fn default_endpoint() -> Option<PathBuf> {
-    if let Some(named) = std::env::var_os(ENDPOINT_VARIABLE) {
-        if !named.is_empty() {
-            return Some(PathBuf::from(named));
+    let explicit = std::env::var_os(ENDPOINT_VARIABLE);
+    #[cfg(windows)]
+    let session = SessionEndpoint::Pipe(lbm_ipc::endpoint::session_id().ok());
+    #[cfg(not(windows))]
+    let session = SessionEndpoint::Socket {
+        runtime: std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+        data: Some(lbm_store::lbm_paths::data_dir()),
+    };
+    endpoint(explicit.as_deref(), session)
+}
+
+/// What this session's default endpoint is made from, on each platform.
+#[derive(Debug)]
+pub(crate) enum SessionEndpoint {
+    /// Windows: the logon session, when it could be read.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Pipe(Option<u32>),
+    /// Elsewhere: the agent's socket directories.
+    #[cfg_attr(windows, allow(dead_code))]
+    Socket {
+        runtime: Option<PathBuf>,
+        data: Option<PathBuf>,
+    },
+}
+
+/// The explicit endpoint when there is a non-empty one, else this session's.
+pub(crate) fn endpoint(explicit: Option<&OsStr>, session: SessionEndpoint) -> Option<PathBuf> {
+    if let Some(named) = explicit.filter(|named| !named.is_empty()) {
+        return Some(PathBuf::from(named));
+    }
+    match session {
+        SessionEndpoint::Pipe(session) => session
+            .map(lbm_ipc::endpoint::agent_pipe_name)
+            .map(PathBuf::from),
+        SessionEndpoint::Socket { runtime, data } => {
+            lbm_ipc::endpoint::agent_socket_path(runtime.as_deref(), data.as_deref())
         }
     }
-    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
-    let data = lbm_store::lbm_paths::data_dir();
-    lbm_ipc::endpoint::agent_socket_path(runtime.as_deref(), Some(&data))
 }
 
 /// Opens a connection to an agent that is **already running**.
@@ -195,4 +231,52 @@ fn open(
         .open(endpoint)?;
     let read = pipe.try_clone()?;
     Ok((Box::new(read), Box::new(pipe)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_defaults_to_the_agents_pipe_of_the_session_never_a_file() {
+        assert_eq!(
+            endpoint(None, SessionEndpoint::Pipe(Some(3))),
+            Some(PathBuf::from(r"\\.\pipe\LittleBigMouse-Agent-v1-session-3"))
+        );
+        // No session read: no endpoint, so nothing is launched against a guess.
+        assert_eq!(endpoint(None, SessionEndpoint::Pipe(None)), None);
+    }
+
+    #[test]
+    fn an_explicit_endpoint_wins_on_both_platforms_and_an_empty_one_does_not_count() {
+        let named = OsStr::new("/run/user/1000/lbm-test.sock");
+        assert_eq!(
+            endpoint(Some(named), SessionEndpoint::Pipe(Some(3))),
+            Some(PathBuf::from(named))
+        );
+        let socket = || SessionEndpoint::Socket {
+            runtime: Some(PathBuf::from("/run/user/1000")),
+            data: None,
+        };
+        assert_eq!(endpoint(Some(named), socket()), Some(PathBuf::from(named)));
+        assert_eq!(
+            endpoint(Some(OsStr::new("")), socket()),
+            Some(PathBuf::from("/run/user/1000/lbm-agent.sock"))
+        );
+    }
+
+    /// On the platform itself, with nothing named: what the agent's `winpipe::agent_pipe`
+    /// binds.
+    #[cfg(windows)]
+    #[test]
+    fn the_default_endpoint_on_windows_is_this_sessions_agent_pipe() {
+        if std::env::var_os(ENDPOINT_VARIABLE).is_some() {
+            return;
+        }
+        let session = lbm_ipc::endpoint::session_id().unwrap();
+        assert_eq!(
+            default_endpoint(),
+            Some(PathBuf::from(lbm_ipc::endpoint::agent_pipe_name(session)))
+        );
+    }
 }

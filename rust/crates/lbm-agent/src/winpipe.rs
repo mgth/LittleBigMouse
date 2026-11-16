@@ -24,15 +24,11 @@ use windows::Win32::Security::{
 };
 use windows::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
-use windows::Win32::System::Threading::{GetCurrentProcess, GetCurrentProcessId, OpenProcessToken};
+use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 /// This process's logon session.
 pub fn session_id() -> io::Result<u32> {
-    let mut session = 0;
-    // SAFETY: plain query on this process, into a local.
-    unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut session) }
-        .map_err(io::Error::other)?;
-    Ok(session)
+    lbm_ipc::endpoint::session_id()
 }
 
 /// The hook's pipe in this session (what C#'s `LocalIpcClient` connects to).

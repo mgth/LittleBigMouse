@@ -5,12 +5,13 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using LittleBigMouse.Plugins;
-using LittleBigMouse.Plugins.Persistence;
 
-namespace LittleBigMouse.Platform.Linux;
+namespace LittleBigMouse.Plugins.Persistence;
 
 /// <summary>
-/// Linux <see cref="ILayoutStore"/>: JSON files under ~/.config/LittleBigMouse (XDG).
+/// The JSON <see cref="ILayoutStore"/>, the agent's (`lbm_store::JsonLayoutStore`) on both
+/// systems (v6, decision D2): ~/.config/LittleBigMouse on Linux,
+/// %LOCALAPPDATA%\Mgth\LittleBigMouse on Windows (<see cref="LbmPaths.ConfigDir"/>).
 /// The structure mirrors the Windows registry tree so field semantics stay 1:1:
 /// <c>options.json</c> = the root key, <c>models.json</c> = the per-PnP "monitors" keys,
 /// <c>layouts/&lt;id&gt;.json</c> = one "Layouts\{id}" key with its monitors and sources.
@@ -31,6 +32,13 @@ public class JsonLayoutStore : ILayoutStore
     public JsonLayoutStore(string configDir) => _configDir = configDir;
 
     string OptionsPath => Path.Combine(_configDir, "options.json");
+
+    /// <summary>
+    /// Whether the store holds its options file. On Windows its absence is the agent's
+    /// "first launch" marker: the agent then imports the 5.x registry (D2, lbm-agent
+    /// <c>import_registry</c>), which writes it.
+    /// </summary>
+    public bool HoldsOptions => File.Exists(OptionsPath);
     string ModelsPath => Path.Combine(_configDir, "models.json");
 
     const string LayoutExtension = ".json";

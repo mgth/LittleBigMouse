@@ -56,6 +56,15 @@ Sur une machine qui a servi avec la 5.x :
 5. Relancer l'agent : le journal ne parle plus d'import (une seule fois).
 6. Une mise en page dont le nom de clé est un condensé (#589, plus de 255 caractères) est
    signalée comme non importée si son id n'a pas pu être reconstruit — vérifier le journal.
+7. La fenêtre lit le même magasin que l'agent : déplacer un écran, Enregistrer, fermer la
+   fenêtre, la rouvrir. **Attendu : la position est conservée**, et `layouts\*.json` a
+   changé alors que le registre, lui, n'a pas bougé.
+8. Avant tout import (`options.json` absent), ouvrir la fenêtre : elle montre la
+   disposition de la 5.x (lue dans le registre), pas une disposition par défaut.
+9. « Appliquer au système » avec une modification non enregistrée : l'agent l'écrit dans
+   `layouts\*.json` avant que les écrans bougent, et la disposition reste celle de
+   l'éditeur après la reconstruction. Agent arrêté : un message dit que rien n'a été
+   appliqué, et les écrans ne bougent pas.
 
 ## 3. Tubes et API
 

@@ -9,12 +9,15 @@ namespace LittleBigMouse.Platform.Windows;
 
 /// <summary>
 /// Windows implementation of <see cref="ILayoutPersistence"/>: the shared
-/// <see cref="LayoutPersistence"/> engine over <see cref="RegistryLayoutStore"/>
-/// (HKCU\SOFTWARE\Mgth\LittleBigMouse, byte-for-byte compatible with the historical
-/// registry layout). The scheduled task that starts with the session is the agent's
-/// (v6): this process neither registers nor reads it.
+/// <see cref="LayoutPersistence"/> engine over the agent's JSON store
+/// (%LOCALAPPDATA%\Mgth\LittleBigMouse, decision D2). The window reads what the agent
+/// writes: reading the 5.x registry instead showed a layout the agent no longer used, and
+/// lost every save the agent made. Until the agent's first launch imports the registry,
+/// the registry is read (<see cref="LegacyFallbackLayoutStore"/>). The scheduled task that
+/// starts with the session is the agent's too: this process neither registers nor reads it.
 /// </summary>
-public class WindowsLayoutPersistence() : LayoutPersistence(new RegistryLayoutStore())
+public class WindowsLayoutPersistence() : LayoutPersistence(
+    new LegacyFallbackLayoutStore(new JsonLayoutStore(), () => new RegistryLayoutStore()))
 {
     protected override bool IsElevated
     {

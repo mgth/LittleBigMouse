@@ -1,4 +1,3 @@
-using LittleBigMouse.Platform.Linux;
 using LittleBigMouse.Plugins.Persistence;
 
 namespace LittleBigMouse.DisplayLayout.Tests;

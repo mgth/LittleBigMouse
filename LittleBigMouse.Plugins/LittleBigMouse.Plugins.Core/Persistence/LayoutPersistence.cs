@@ -9,8 +9,8 @@ namespace LittleBigMouse.Plugins.Persistence;
 
 /// <summary>
 /// Platform-neutral persistence engine, and the only entry point the UI knows. A platform
-/// provides a dumb <see cref="ILayoutStore"/> (registry, JSON) plus the autostart/elevation
-/// hooks, and inherits the complete <see cref="ILayoutPersistence"/> behavior — no per-OS
+/// provides a dumb <see cref="ILayoutStore"/> (registry, JSON) plus the elevation hook,
+/// and inherits the complete <see cref="ILayoutPersistence"/> behavior — no per-OS
 /// mapping code, so Windows/Linux can no longer drift apart.
 /// <para>This class is the façade: what to load, in which order, and what counts as saved.
 /// The three responsibilities it orchestrates live next door:</para>
@@ -41,11 +41,10 @@ public abstract class LayoutPersistence : ILayoutPersistence
     /// <summary>Whether the current process runs elevated (administrator / root).</summary>
     protected virtual bool IsElevated => Environment.IsPrivilegedProcess;
 
-    /// <summary>Whether the app is registered to start with the user session.</summary>
-    protected virtual bool IsAutostartScheduled(IMonitorsLayout layout) => false;
-
-    /// <summary>Align the session autostart with the options. No-op where not implemented (Linux).</summary>
-    protected virtual void SetAutostart(IMonitorsLayout layout, bool enabled, bool elevated) { }
+    // No autostart hook (v6): starting with the session is the agent's — the scheduled
+    // task on Windows, the XDG entry on Linux. It registers it on its own executable,
+    // and the window shows LoadAtStartup as the agent reports it (MainService). A window
+    // that wrote it too registered the same task on ITS executable, at every local save.
 
     /// <summary>
     /// Full path of the excluded-processes list. It is a plain-text FILE in the app data
@@ -69,7 +68,7 @@ public abstract class LayoutPersistence : ILayoutPersistence
 
     /// <summary>
     /// The single choke point keeping virtual (foreign) layouts out of the local store
-    /// and the autostart scheduling. Guarding here rather than at the call sites means
+    /// and this machine's state. Guarding here rather than at the call sites means
     /// no UI path — current or future — can leak a client's configuration into this
     /// machine's state.
     /// </summary>
@@ -98,7 +97,6 @@ public abstract class LayoutPersistence : ILayoutPersistence
         {
             var data = ReadStore(layout);
 
-            layout.Options.LoadAtStartup = IsAutostartScheduled(layout);
             layout.Options.Elevated = IsElevated;
 
             // Global options first, then the per-layout ones: the layout overrides the app
@@ -213,8 +211,6 @@ public abstract class LayoutPersistence : ILayoutPersistence
     {
         if (RefuseVirtual(layout, nameof(Save))) return false;
 
-        SetAutostart(layout, layout.Options.LoadAtStartup, layout.Options.StartElevated);
-
         SaveGlobalOptions(layout.Options);
 
         _store.WriteLayout(layout.Id, LayoutDtoMapper.ToLayoutDto(layout));
@@ -250,8 +246,6 @@ public abstract class LayoutPersistence : ILayoutPersistence
         dto.Options.PriorityUnhooked = null;
 
         _store.WriteLayout(layout.Id, dto);
-
-        SetAutostart(layout, layout.Options.LoadAtStartup, layout.Options.StartElevated);
         return true;
     }
 

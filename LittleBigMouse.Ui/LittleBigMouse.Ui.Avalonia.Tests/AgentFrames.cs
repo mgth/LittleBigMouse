@@ -17,10 +17,11 @@ static class AgentFrames
         string engine = "Stopped",
         string? layoutId = null,
         bool hookConnected = true,
-        bool previewing = false) => $$"""
+        bool previewing = false,
+        bool loadAtStartup = false) => $$"""
         {"AgentVersion":"0.1.0","HookConnected":{{Bool(hookConnected)}},"Engine":"{{engine}}",
          "Suspended":false,"LayoutId":{{(layoutId is null ? "null" : $"\"{layoutId}\"")}},
-         "Enabled":true,"Saved":true,"LoadAtStartup":false,"HideTrayIcon":false,
+         "Enabled":true,"Saved":true,"LoadAtStartup":{{Bool(loadAtStartup)}},"HideTrayIcon":false,
          "Previewing":{{Bool(previewing)}}}
         """;
 

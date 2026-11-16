@@ -153,9 +153,22 @@ public class MainService : ReactiveModel, IMainService
                 o => o.LoadAtStartup,
                 o => o.StartElevated)
             .Skip(1)
-            .Where(_ => !layoutPersistence.IsLoading)
+            .Where(_ => !layoutPersistence.IsLoading && !_showingAgentAutostart)
             .Subscribe(_ => SaveOptions(options))
             .DisposeWith(this);
+
+        // And what the window shows of it is what the agent says, not what this process
+        // could find: the agent may have pointed a stale task back at itself, or found it
+        // impossible to. What it says is shown, never sent back as a request.
+        void OnAgentState(object? sender, AgentState state) =>
+            postToUi(() => ShowAgentAutostart(options, state));
+
+        OwnedSubscription.Create<EventHandler<AgentState>>(
+                OnAgentState,
+                h => agent.StateChanged += h,
+                h => agent.StateChanged -= h)
+            .DisposeWith(this);
+        if (agent.State is { } known) OnAgentState(agent, known);
 
         // Platforms without a daemon reporting display changes (Linux) detect them in the
         // factory itself. The agent rebuilds its own layout on its own; this is the
@@ -167,6 +180,23 @@ public class MainService : ReactiveModel, IMainService
                 h => layoutFactory.DisplayChanged += h,
                 h => layoutFactory.DisplayChanged -= h)
             .DisposeWith(this);
+    }
+
+    /// <summary>Set while the agent's autostart state is being shown: not a user's change.</summary>
+    bool _showingAgentAutostart;
+
+    void ShowAgentAutostart(ILayoutOptions options, AgentState state)
+    {
+        if (state.LoadAtStartup is not { } scheduled || options.LoadAtStartup == scheduled) return;
+        _showingAgentAutostart = true;
+        try
+        {
+            options.LoadAtStartup = scheduled;
+        }
+        finally
+        {
+            _showingAgentAutostart = false;
+        }
     }
 
     /// <summary>The app-level options and the session autostart, recorded by the agent.</summary>

@@ -161,6 +161,39 @@ public sealed class MainServiceLifecycleTests
     }
 
     [Fact]
+    public async Task TheWindowShowsTheAgentsAutostartWithoutSendingItBack()
+    {
+        // The session autostart is the agent's: the window shows what the agent says (it
+        // may have pointed a stale task back at itself, or found it impossible to), and
+        // showing it is not the user asking for it — an echo would re-register the task
+        // at every connection, and could undo a change the agent just made.
+        await using var agent = FakeAgent.Start();
+        using var client = new AgentClient(agent.Endpoint);
+        var f = new Fixture(client);
+        client.Start();
+        await agent.AnswerAsync(await agent.NextRequestAsync(),
+            AgentFrames.Snapshot(loadAtStartup: true));
+
+        await FakeAgent.WaitFor(() => f.Options.LoadAtStartup);
+
+        // A change of the user's still travels, and it is the first thing that does:
+        // nothing went out for what the agent said.
+        f.Options.StartMinimized = true;
+        var request = await agent.NextRequestAsync();
+        Assert.Equal("SaveOptions", request.GetProperty("Method").GetString());
+        var options = request.GetProperty("Options");
+        Assert.True(options.GetProperty("StartMinimized").GetBoolean());
+        Assert.True(request.GetProperty("LoadAtStartup").GetBoolean());
+        await agent.AnswerAsync(request, "null");
+
+        // And so does the autostart itself, when it is the user who turns it off.
+        f.Options.LoadAtStartup = false;
+        request = await agent.NextRequestAsync();
+        Assert.Equal("SaveOptions", request.GetProperty("Method").GetString());
+        Assert.False(request.GetProperty("LoadAtStartup").GetBoolean());
+    }
+
+    [Fact]
     public void DisposingIsIdempotent()
     {
         // Shutdown paths overlap: the container disposes what it owns, and a caller may have

@@ -532,7 +532,9 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
 /// Starting with the session: the XDG autostart entry (Linux), the scheduled task
 /// (Windows).
 pub trait SessionStart: Send + Sync + std::fmt::Debug {
-    /// Whether the session starts the agent (C#: `IsAutostartScheduled`).
+    /// Whether the session starts the agent (C#: `IsAutostartScheduled`). On Windows, a
+    /// task whose program is gone is pointed back at this agent on the way, or answered
+    /// `false` when it cannot be ([`crate::schtask`]).
     fn scheduled(&self) -> bool;
     /// Aligns it on the options (C#: `SetAutostart`).
     fn schedule(&self, enabled: bool, elevated: bool) -> io::Result<()>;

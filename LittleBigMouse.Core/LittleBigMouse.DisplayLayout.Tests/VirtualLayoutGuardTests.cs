@@ -11,8 +11,8 @@ namespace LittleBigMouse.DisplayLayout.Tests;
 /// A virtual (foreign) layout must never touch this machine's state: the persistence
 /// layer refuses to store or load it, and the zones sent to the daemon carry the
 /// Virtual flag the daemon keys its own hook refusal on. These guards are what keeps
-/// a client's exported configuration from leaking into the local store, the autostart
-/// scheduling or the crash-recovery file.
+/// a client's exported configuration from leaking into the local store or the
+/// crash-recovery file.
 /// </summary>
 public class VirtualLayoutGuardTests
 {

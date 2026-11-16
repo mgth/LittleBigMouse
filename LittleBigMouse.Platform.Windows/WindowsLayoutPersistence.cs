@@ -1,6 +1,5 @@
 #nullable enable
 using System.Security.Principal;
-using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
 using LittleBigMouse.Plugins.Persistence;
 
@@ -12,8 +11,8 @@ namespace LittleBigMouse.Platform.Windows;
 /// Windows implementation of <see cref="ILayoutPersistence"/>: the shared
 /// <see cref="LayoutPersistence"/> engine over <see cref="RegistryLayoutStore"/>
 /// (HKCU\SOFTWARE\Mgth\LittleBigMouse, byte-for-byte compatible with the historical
-/// registry layout), with autostart wired to the Task Scheduler
-/// (<see cref="AutostartExtensions"/>).
+/// registry layout). The scheduled task that starts with the session is the agent's
+/// (v6): this process neither registers nor reads it.
 /// </summary>
 public class WindowsLayoutPersistence() : LayoutPersistence(new RegistryLayoutStore())
 {
@@ -24,13 +23,5 @@ public class WindowsLayoutPersistence() : LayoutPersistence(new RegistryLayoutSt
             using var identity = WindowsIdentity.GetCurrent();
             return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
         }
-    }
-
-    protected override bool IsAutostartScheduled(IMonitorsLayout layout) => layout.IsScheduled();
-
-    protected override void SetAutostart(IMonitorsLayout layout, bool enabled, bool elevated)
-    {
-        if (enabled) layout.Schedule(elevated);
-        else layout.Unschedule();
     }
 }

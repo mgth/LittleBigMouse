@@ -89,8 +89,7 @@ static class OracleRun
     /// with the base hooks; this is the same engine over a store in a scratch directory, with
     /// the two hooks that read the machine pinned: the excluded-processes file lives in the
     /// scratch data directory instead of ~/.local/share, and the process counts as not
-    /// elevated whoever runs the suite (CI runners often are). Autostart keeps the base
-    /// no-ops, which is what Linux ships.
+    /// elevated whoever runs the suite (CI runners often are).
     /// </summary>
     sealed class OraclePersistence(ILayoutStore store, string excludedFile) : LayoutPersistence(store)
     {

@@ -183,6 +183,9 @@ struct App {
     wallpaper: lbm_app::wallpaper_editor::Editor,
     wallpaper_preview_requested: bool,
     wallpaper_picking: bool,
+    /// Where Browse was pressed (view, mode, screen), while its chooser is open. Checked
+    /// on every pass: any departure retires the choice, even if the user comes back.
+    wallpaper_choice_context: Option<(View, lbm_ui::mode::Mode, Option<String>)>,
     picker_parent: lbm_app::image_picker::Parent,
     wallpaper_preview_busy: Option<u64>,
     wallpaper_previewed: bool,
@@ -527,6 +530,7 @@ impl App {
             wallpaper: Default::default(),
             wallpaper_preview_requested: false,
             wallpaper_picking: false,
+            wallpaper_choice_context: None,
             picker_parent: Default::default(),
             wallpaper_preview_busy: None,
             wallpaper_previewed: false,
@@ -1267,13 +1271,12 @@ impl App {
         if self.wallpaper_picking {
             return;
         }
-        let Some(choice) = self.wallpaper.choose_file(self.selected.as_deref()) else {
+        let Some(choice) = self.begin_file_choice() else {
             return;
         };
         let found = self.found.clone();
         let ctx = ctx.clone();
         let parent = self.picker_parent;
-        self.wallpaper_picking = true;
         if let Err(e) = std::thread::Builder::new()
             .name("lbm-image-picker".into())
             .spawn(move || {
@@ -1287,7 +1290,29 @@ impl App {
             })
         {
             self.wallpaper_picking = false;
+            self.wallpaper_choice_context = None;
             self.wallpaper.error = Some(format!("Could not open the image chooser: {e}"));
+        }
+    }
+    fn wallpaper_choice_here(&self) -> (View, lbm_ui::mode::Mode, Option<String>) {
+        (self.view, self.mode, self.selected.clone())
+    }
+    fn begin_file_choice(&mut self) -> Option<lbm_app::wallpaper_editor::FileChoice> {
+        let choice = self.wallpaper.choose_file(self.selected.as_deref())?;
+        self.wallpaper_picking = true;
+        self.wallpaper_choice_context = Some(self.wallpaper_choice_here());
+        Some(choice)
+    }
+    /// The portal dialog is not modal: the user can leave Wallpaper or pick another
+    /// screen and come back before answering. Run on every pass, before answers land.
+    fn retire_departed_file_choice(&mut self) {
+        if self
+            .wallpaper_choice_context
+            .as_ref()
+            .is_some_and(|at| *at != self.wallpaper_choice_here())
+        {
+            self.wallpaper_choice_context = None;
+            self.wallpaper.abandon_file_choice();
         }
     }
     fn wallpaper_file_chosen(
@@ -1295,7 +1320,9 @@ impl App {
         choice: lbm_app::wallpaper_editor::FileChoice,
         result: lbm_app::image_picker::Selection,
     ) {
+        self.retire_departed_file_choice();
         self.wallpaper_picking = false;
+        self.wallpaper_choice_context = None;
         if matches!(self.view, View::Map | View::List)
             && self.mode == lbm_ui::mode::Mode::Wallpaper
             && self
@@ -1730,6 +1757,7 @@ impl eframe::App for App {
                 };
             }
         }
+        self.retire_departed_file_choice();
         let ctx = ui.ctx().clone();
         // The answer, when it has arrived. Nothing is polled: the thread asks for a
         // repaint after sending, so this runs on the pass that request causes.
@@ -2631,6 +2659,79 @@ mod lifecycle_tests {
                 .as_deref(),
             Some("/images/chosen.png")
         );
+    }
+    fn per_screen_app() -> App {
+        use lbm_store::wallpaper_settings::{
+            LayoutWallpaperSettings, ScreenWallpaperKind, ScreenWallpaperSettings, WallpaperMode,
+        };
+        let mut app = App::with_config(egui::Context::default(), None);
+        app.mode = lbm_ui::mode::Mode::Wallpaper;
+        let mut draft = LayoutWallpaperSettings {
+            mode: WallpaperMode::PerScreen,
+            ..Default::default()
+        };
+        for id in ["A", "B"] {
+            let screen = ScreenWallpaperSettings {
+                kind: ScreenWallpaperKind::Image,
+                ..Default::default()
+            };
+            draft.per_screen.insert(id.into(), screen);
+        }
+        app.wallpaper.draft = Some(draft);
+        app.selected = Some("A".into());
+        app
+    }
+    fn image_of(app: &App, id: &str) -> Option<String> {
+        app.wallpaper.draft.as_ref().unwrap().per_screen[id]
+            .image_path
+            .clone()
+    }
+    #[test]
+    fn leaving_wallpaper_and_coming_back_before_the_chooser_answers_retires_it() {
+        let mut app = per_screen_app();
+        let choice = app.begin_file_choice().unwrap();
+        app.mode = lbm_ui::mode::Mode::default();
+        app.retire_departed_file_choice(); // the pass that shows the other mode
+        app.mode = lbm_ui::mode::Mode::Wallpaper;
+        app.retire_departed_file_choice();
+        app.wallpaper_file_chosen(choice, Ok(Some("/images/late.png".into())));
+        assert!(!app.wallpaper_picking);
+        assert!(!app.wallpaper_preview_requested);
+        assert_eq!(image_of(&app, "A"), None);
+
+        // The same round trip through another view.
+        let choice = app.begin_file_choice().unwrap();
+        app.view = View::Settings;
+        app.retire_departed_file_choice();
+        app.view = View::Map;
+        app.wallpaper_file_chosen(choice, Ok(Some("/images/late.png".into())));
+        assert_eq!(image_of(&app, "A"), None);
+
+        // Staying put, the answer still lands.
+        let choice = app.begin_file_choice().unwrap();
+        app.retire_departed_file_choice();
+        app.wallpaper_file_chosen(choice, Ok(Some("/images/kept.png".into())));
+        assert!(app.wallpaper_preview_requested);
+        assert_eq!(image_of(&app, "A").as_deref(), Some("/images/kept.png"));
+    }
+    #[test]
+    fn selecting_another_screen_and_back_before_the_chooser_answers_retires_it() {
+        let mut app = per_screen_app();
+        let choice = app.begin_file_choice().unwrap();
+        app.selected = Some("B".into());
+        app.retire_departed_file_choice();
+        app.selected = Some("A".into());
+        app.retire_departed_file_choice();
+        app.wallpaper_file_chosen(choice, Ok(Some("/images/late.png".into())));
+        assert!(!app.wallpaper_preview_requested);
+        assert_eq!(image_of(&app, "A"), None);
+        assert_eq!(image_of(&app, "B"), None);
+
+        // A departure in the same pass as the answer is caught when it lands.
+        let choice = app.begin_file_choice().unwrap();
+        app.selected = Some("B".into());
+        app.wallpaper_file_chosen(choice, Ok(Some("/images/late.png".into())));
+        assert_eq!(image_of(&app, "B"), None);
     }
     #[test]
     fn a_new_agent_revision_retires_file_choices_before_the_next_frame() {

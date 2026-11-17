@@ -230,3 +230,15 @@ fn reselecting_the_same_repaired_file_refreshes_preview_without_making_it_dirty(
     assert!(!e.dirty());
     assert!(e.error.is_none());
 }
+#[test]
+fn an_abandoned_choice_never_lands_even_when_nothing_else_changed() {
+    let mut e = image_editor();
+    let before = e.draft.clone();
+    let choice = e.choose_file(Some("A")).unwrap();
+    e.abandon_file_choice();
+    assert!(!e.file_chosen(choice, Some("A"), Ok(Some("late.png".into()))));
+    assert_eq!(e.draft, before);
+    // A chooser opened afterwards is not affected.
+    let choice = e.choose_file(Some("A")).unwrap();
+    assert!(e.file_chosen(choice, Some("A"), Ok(Some("fresh.png".into()))));
+}

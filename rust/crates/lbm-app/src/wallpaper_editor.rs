@@ -21,6 +21,9 @@ pub struct Editor {
     pub error: Option<String>,
     pub status: Option<String>,
     pub preview_generation: u64,
+    /// Bumped whenever a pending file choice must not land, even if everything it
+    /// captured looks the same again by the time the chooser answers.
+    choice_generation: u64,
 }
 impl Editor {
     pub fn dirty(&self) -> bool {
@@ -132,6 +135,7 @@ impl Editor {
 pub struct FileChoice {
     key: Option<Key>,
     generation: u64,
+    choice: u64,
     draft: LayoutWallpaperSettings,
     screen: Option<String>,
 }
@@ -154,9 +158,15 @@ impl Editor {
         Some(FileChoice {
             key: self.key.clone(),
             generation: self.preview_generation,
+            choice: self.choice_generation,
             draft: draft.clone(),
             screen,
         })
+    }
+    /// Leaving the editor or its destination retires the open chooser for good: coming
+    /// back to the same mode and screen before it answers does not revive it.
+    pub fn abandon_file_choice(&mut self) {
+        self.choice_generation += 1;
     }
     /// A valid selection requests a local preview, including reselecting the same file.
     /// No IPC/save: reselecting a repaired file can clear a previous preview error.
@@ -169,6 +179,7 @@ impl Editor {
         if self.busy()
             || self.key != choice.key
             || self.preview_generation != choice.generation
+            || self.choice_generation != choice.choice
             || self.draft.as_ref() != Some(&choice.draft)
             || choice
                 .screen

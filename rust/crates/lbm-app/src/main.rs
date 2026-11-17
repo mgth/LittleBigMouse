@@ -51,6 +51,8 @@ enum Found {
         generation: u64,
         layout: Box<Layout>,
         reports: DisplayReports,
+        /// The model sizes before the stored profile was applied.
+        detected: lbm_app::properties::Detected,
         /// `None` when `Excluded.txt` does not exist yet.
         excluded: Option<Vec<String>>,
     },
@@ -124,6 +126,8 @@ struct App {
     saved: Option<lbm_app::saved::Reference>,
     screens: Vec<Screen>,
     reports: DisplayReports,
+    /// The model sizes as detected, which the size editor must not contradict.
+    detected: lbm_app::properties::Detected,
     property_error: Option<String>,
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
@@ -205,7 +209,7 @@ fn icons_root() -> Option<PathBuf> {
 ///
 /// The layout comes back whole rather than reduced to its screens, because the window
 /// keeps it: a drag writes a position into it and [`screens_of`] reads the result.
-fn detect() -> Option<(Box<Layout>, DisplayReports)> {
+fn detect() -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detected)> {
     let mut layout = Layout::new(LayoutOptions::default());
     let mut reports = HashMap::new();
 
@@ -266,8 +270,9 @@ fn detect() -> Option<(Box<Layout>, DisplayReports)> {
     if !built {
         return None;
     }
+    let detected = lbm_app::properties::Detected::of(&layout);
     read_stored(&mut layout);
-    Some((Box::new(layout), reports))
+    Some((Box::new(layout), reports, detected))
 }
 
 /// The stored profile onto the layout in memory: the app-wide options, the layout's own
@@ -606,6 +611,7 @@ impl App {
             saved: None,
             screens: Vec::new(),
             reports: HashMap::new(),
+            detected: Default::default(),
             property_error: None,
             selected: None,
             drag: None,
@@ -689,7 +695,7 @@ impl App {
         let found = self.found.clone();
         let waker = ctx.clone();
         std::thread::spawn(move || {
-            let Some((layout, reports)) = detect() else {
+            let Some((layout, reports, detected)) = detect() else {
                 let _ = found.send(Found::DetectionFailed { generation });
                 waker.request_repaint();
                 return;
@@ -701,6 +707,7 @@ impl App {
                     generation,
                     layout,
                     reports,
+                    detected,
                     excluded: lbm_app::settings::read_excluded(
                         lbm_store::layout_persistence::default_excluded_list_file(),
                     ),
@@ -1318,7 +1325,7 @@ impl App {
             });
             for edit in edits {
                 if let Some(layout) = self.layout.as_mut() {
-                    match lbm_app::properties::apply(layout, &id, edit) {
+                    match lbm_app::properties::apply(layout, &self.detected, &id, edit) {
                         Ok(()) => {
                             self.property_error = None;
                             self.screens = screens_of(layout, self.mode);
@@ -1411,6 +1418,7 @@ impl eframe::App for App {
                         generation,
                         layout,
                         reports,
+                        detected,
                         excluded,
                     } => {
                         if self.detecting == Some(generation) {
@@ -1426,6 +1434,7 @@ impl eframe::App for App {
                         self.saved = Some(lbm_app::saved::Reference::of(&layout));
                         self.screens = screens_of(&layout, self.mode);
                         self.reports = reports;
+                        self.detected = detected;
                         self.property_error = None;
                         self.layout = Some(layout);
                         self.excluded = excluded;

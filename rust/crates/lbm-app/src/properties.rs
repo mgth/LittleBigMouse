@@ -1,4 +1,6 @@
 //! Map oriented measurements back to the shared model and the monitor border policy.
+use std::collections::HashMap;
+
 use lbm_layout::model::Layout;
 use lbm_ui::properties::{Edit, Size};
 
@@ -13,7 +15,30 @@ pub fn size(layout: &Layout, id: &str) -> Option<Size> {
     })
 }
 
-pub fn apply(layout: &mut Layout, id: &str, edit: Edit) -> Result<(), String> {
+/// The model sizes as detected, before any stored profile is applied: what
+/// [`lbm_store::layout_migrations::normalize_stored_size`] compares a stored size against
+/// when the agent (or this window) applies a saved document to freshly detected screens.
+#[derive(Clone, Debug, Default)]
+pub struct Detected(HashMap<String, (f64, f64)>);
+
+impl Detected {
+    /// Read off a layout that has just been detected — before the store is applied.
+    pub fn of(layout: &Layout) -> Self {
+        Self(
+            layout
+                .models()
+                .iter()
+                .map(|m| {
+                    let size = &m.physical_size;
+                    (m.pnp_code.clone(), (size.width(), size.height()))
+                })
+                .collect(),
+        )
+    }
+}
+
+/// `detected` is only read for panel dimensions: see [`Detected`].
+pub fn apply(layout: &mut Layout, detected: &Detected, id: &str, edit: Edit) -> Result<(), String> {
     let monitor = layout
         .monitors()
         .iter()
@@ -69,6 +94,28 @@ pub fn apply(layout: &mut Layout, id: &str, edit: Edit) -> Result<(), String> {
             }
             if !changed.width().is_finite() || !changed.height().is_finite() {
                 return Err("dimensions are too large".into());
+            }
+            // The store migrates pre-5.4.1 sizes, saved oriented, by transposing any stored
+            // size whose landscape/portrait shape contradicts the detected panel (#507). An
+            // edit that crosses that line would be saved, then read back — by the agent's
+            // preview as by the next load — with its axes swapped: refuse it here, with the
+            // very rule the store applies, rather than show one size and run another.
+            let (intrinsic_width, intrinsic_height) = detected
+                .0
+                .get(&model_id)
+                .copied()
+                .unwrap_or((current.width(), current.height()));
+            let read_back = lbm_store::layout_migrations::normalize_stored_size(
+                intrinsic_width,
+                intrinsic_height,
+                changed.width(),
+                changed.height(),
+            );
+            if read_back != (changed.width(), changed.height()) {
+                return Err(
+                    "a panel cannot turn from landscape to portrait or back: rotate the display instead"
+                        .into(),
+                );
             }
             layout.edit_model(&model_id, |s, _| *s = changed);
         }

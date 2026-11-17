@@ -526,5 +526,9 @@ fn cross_with_both_edges_resisting_the_stricter_governs() {
     assert!(weak.is_some_and(|n| n > 0), "{weak:?}");
     assert!(strong > weak, "{strong:?} vs {weak:?}");
     assert_eq!(count(20.0, 60.0), strong, "the right edge is stricter");
-    assert_eq!(count(60.0, 20.0), count(60.0, 0.0), "the top edge is stricter");
+    assert_eq!(
+        count(60.0, 20.0),
+        count(60.0, 0.0),
+        "the top edge is stricter"
+    );
 }

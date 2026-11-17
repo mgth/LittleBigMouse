@@ -11,4 +11,5 @@ lbm-geom = { path = "../lbm-geom" }
 lbm-zones = { path = "../lbm-zones" }
 
 [dev-dependencies]
+lbm-layout = { path = "../lbm-layout" }
 roxmltree.workspace = true

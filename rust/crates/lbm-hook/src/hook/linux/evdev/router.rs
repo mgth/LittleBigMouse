@@ -11,11 +11,12 @@
 //! drains, routes and writes.
 
 use std::os::fd::AsRawFd;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use evdev::{uinput::VirtualDevice, EventType};
+use evdev::{uinput::VirtualDevice, Device, EventType};
 
 use crate::engine::cursor::CursorEnv;
 use crate::engine::event::MouseEventArg;
@@ -27,7 +28,8 @@ use lbm_ipc::protocol::Event;
 
 use super::cursor::EvdevCursor;
 use super::devices::{
-    self, held_buttons_of, purge_dead, slot_is_dead, Gone, Mouse, Node, ScanResult,
+    self, held_buttons_of, purge_dead, retry_grabs, set_aside, slot_is_dead, Gone, Mouse, Node,
+    ScanResult, REGRAB_EVERY,
 };
 use super::frame::{Frame, PumpBuffers};
 use super::probe::{
@@ -131,6 +133,24 @@ pub fn run(shared: &'static Shared) -> bool {
     }
 }
 
+/// A freshly grabbed node becomes a routed mouse: its per-device acceleration
+/// is resolved here, and the grab is logged. `how` qualifies the log line
+/// (empty at arm time).
+fn adopt(accel_cfg: &AccelConfig, path: PathBuf, dev: Device, how: &str) -> Mouse {
+    let id = dev.input_id();
+    let name = dev.name().unwrap_or("?").to_string();
+    let settings = accel_cfg.for_device(id.vendor(), id.product(), &name);
+    eprintln!(
+        "[LittleBigMouse.Hook] evdev: grabbed {name} ({path:?}, {how}accel {:?} speed {})",
+        settings.profile, settings.speed
+    );
+    (
+        path,
+        dev,
+        PointerAccel::new(settings.profile, settings.speed),
+    )
+}
+
 /// The grabbed devices, the virtual pointer + keyboard, and the authoritative cursor.
 struct Router {
     /// Each grabbed mouse carries its own acceleration state: velocities must
@@ -138,6 +158,11 @@ struct Router {
     devices: Vec<Mouse>,
     /// Observed (non-grabbed) keyboards feeding the ctrl-override state.
     keyboards: Vec<Node>,
+    /// Mice opened but not grabbed (another program holds them), kept open so
+    /// that the grab alone can be retried every [`REGRAB_EVERY`]. Never polled:
+    /// their events still go to the compositor.
+    pending: Vec<Node>,
+    regrab_at: Instant,
     /// Hot-plug scans arriving from the scanner thread.
     scan_rx: mpsc::Receiver<ScanResult>,
     scan_stop: Arc<AtomicBool>,
@@ -193,22 +218,15 @@ impl Router {
         let virt_kbd = build_virtual_keyboard()?;
 
         let mut devices = Vec::new();
+        let mut pending = Vec::new();
         for (path, mut dev) in scan.mice {
             dev.set_nonblocking(true)?;
             match dev.grab() {
-                Ok(()) => {
-                    let id = dev.input_id();
-                    let name = dev.name().unwrap_or("?").to_string();
-                    let settings = accel_cfg.for_device(id.vendor(), id.product(), &name);
-                    eprintln!("[LittleBigMouse.Hook] evdev: grabbed {name} ({path:?}, accel {:?} speed {})",
-                        settings.profile, settings.speed);
-                    devices.push((
-                        path,
-                        dev,
-                        PointerAccel::new(settings.profile, settings.speed),
-                    ));
+                Ok(()) => devices.push(adopt(&accel_cfg, path, dev, "")),
+                Err(e) => {
+                    eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}");
+                    set_aside(&mut pending, path, dev);
                 }
-                Err(e) => eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}"),
             }
         }
         if devices.is_empty() {
@@ -273,6 +291,8 @@ impl Router {
         let mut router = Router {
             devices,
             keyboards,
+            pending,
+            regrab_at: Instant::now() + REGRAB_EVERY,
             scan_rx,
             scan_stop,
             virt,
@@ -328,6 +348,7 @@ impl Router {
         }
 
         self.rescan();
+        self.regrab();
 
         let n_mice = self.devices.len();
         {
@@ -447,22 +468,17 @@ impl Router {
                 }
                 match dev.grab() {
                     Ok(()) => {
-                        let id = dev.input_id();
-                        let name = dev.name().unwrap_or("?").to_string();
-                        let settings = self.accel_cfg.for_device(id.vendor(), id.product(), &name);
-                        eprintln!("[LittleBigMouse.Hook] evdev: grabbed {name} ({path:?}, hot-plug, accel {:?} speed {})",
-                            settings.profile, settings.speed);
-                        self.devices.push((
-                            path,
-                            dev,
-                            PointerAccel::new(settings.profile, settings.speed),
-                        ));
+                        // An older open of the same path, set aside, is now
+                        // either the same device (its grab would fail on our
+                        // own grab forever) or a gone one: drop it either way.
+                        self.pending.retain(|(p, _)| *p != path);
+                        let mouse = adopt(&self.accel_cfg, path, dev, "hot-plug, ");
+                        self.devices.push(mouse);
                     }
-                    // Retried every rescan; only worth the noise when debugging.
-                    Err(e) if self.debug => {
-                        eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}")
+                    Err(e) => {
+                        eprintln!("[LittleBigMouse.Hook] evdev: cannot grab {path:?}: {e}");
+                        set_aside(&mut self.pending, path, dev);
                     }
-                    Err(_) => {}
                 }
             }
             for (path, dev) in scan.keyboards {
@@ -474,6 +490,29 @@ impl Router {
                 }
             }
         }
+    }
+
+    /// Retry the grab of the mice set aside, every [`REGRAB_EVERY`]: one that
+    /// another program held when we found it is routed once it lets go. Only
+    /// the grab ioctl runs here; the node is already open.
+    fn regrab(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let now = Instant::now();
+        if now < self.regrab_at {
+            return;
+        }
+        self.regrab_at = now + REGRAB_EVERY;
+        let Router {
+            pending,
+            devices,
+            accel_cfg,
+            ..
+        } = self;
+        retry_grabs(pending, |path, dev| {
+            devices.push(adopt(accel_cfg, path, dev, "released, "))
+        });
     }
 
     /// Run the engine over the accumulated motion and place the cursor at the

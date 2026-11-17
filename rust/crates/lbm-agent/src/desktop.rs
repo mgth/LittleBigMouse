@@ -8,6 +8,7 @@
 //! line of its own scripting language inside plasmashell. C# spawned `busctl` for that
 //! call; the agent already speaks D-Bus (`sleep.rs`), so it makes the call itself.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use lbm_store::wallpaper_settings::WallpaperStyle;
@@ -25,6 +26,29 @@ pub struct ScreenWallpaper {
     pub style: WallpaperStyle,
     /// `#RRGGBB`, as the settings hold it.
     pub color: String,
+}
+
+/// Complete native references, including stored desktops which are not connected.
+/// An unsupported plugin or incomplete answer prevents cache collection.
+pub(crate) async fn references() -> Result<BTreeSet<PathBuf>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let reply = plasma::evaluate(plasma::REFERENCES)
+            .await
+            .ok_or("Plasma references unavailable")?;
+        plasma::parse_references(&reply)
+    }
+    #[cfg(windows)]
+    {
+        // IDesktopWallpaper enumerates monitor wallpapers, but Windows also keeps
+        // pictures per virtual desktop. That is not a complete reference inventory.
+        // Keep the cache until all virtual desktops can be inspected reliably.
+        Err("Windows virtual-desktop wallpaper references are not yet supported".into())
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        Err("Desktop reference query unsupported".into())
+    }
 }
 
 /// Whether this desktop is one we know how to set. Plasma answers its own script.
@@ -148,6 +172,46 @@ mod plasma {
 
     use super::{file_url, fill_mode, plasma_color, ScreenWallpaper};
 
+    pub const REFERENCES: &str = include_str!("plasma_wallpaper_references.js");
+
+    pub fn parse_references(
+        reply: &str,
+    ) -> Result<std::collections::BTreeSet<std::path::PathBuf>, String> {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Reply {
+            version: u8,
+            paths: Vec<String>,
+        }
+        let reply: Reply = serde_json::from_str(reply).map_err(|e| e.to_string())?;
+        if reply.version != 1 {
+            return Err("Unknown Plasma reference format".into());
+        }
+        reply
+            .paths
+            .into_iter()
+            .map(|s| {
+                let path = if s.starts_with('/') {
+                    std::path::PathBuf::from(&s)
+                } else {
+                    let url = url::Url::parse(&s).map_err(|e| e.to_string())?;
+                    if url.scheme() != "file" || url.query().is_some() || url.fragment().is_some() {
+                        return Err("Non-local Plasma wallpaper reference".into());
+                    }
+                    url.to_file_path()
+                        .map_err(|_| "Invalid local wallpaper URL".to_owned())?
+                };
+                if !path.is_absolute()
+                    || s.contains('\0')
+                    || path.as_os_str().as_encoded_bytes().contains(&0)
+                {
+                    return Err("Invalid Plasma wallpaper path".into());
+                }
+                Ok(path)
+            })
+            .collect()
+    }
+
     /// plasmashell's scripting entry point — the same one `plasma-apply-wallpaperimage`
     /// and C#'s `busctl` call go through.
     #[zbus::proxy(
@@ -236,6 +300,39 @@ mod plasma {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn plasma_reference_urls_preserve_escaped_local_paths() {
+        let reply =
+            r#"{"version":1,"paths":["file:///tmp/%C3%A9cran%20%23%25.png","/tmp/plain.png"]}"#;
+        assert_eq!(
+            plasma::parse_references(reply).unwrap(),
+            BTreeSet::from([
+                PathBuf::from("/tmp/écran #%.png"),
+                PathBuf::from("/tmp/plain.png")
+            ])
+        );
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ambiguous_plasma_replies_abort_collection() {
+        for reply in [
+            "",
+            "ok",
+            "[]",
+            r#"{"version":2,"paths":[]}"#,
+            r#"{"version":1}"#,
+            r#"{"version":1,"paths":["relative.png"]}"#,
+            r#"{"version":1,"paths":["https://example.test/image.png"]}"#,
+            r#"{"version":1,"paths":["file://remote/image.png"]}"#,
+            r#"{"version":1,"paths":["file:///tmp/image.png#fragment"]}"#,
+            r#"{"version":1,"paths":["file:///tmp/%00.png"]}"#,
+            r#"{"version":1,"paths":[""]}"#,
+        ] {
+            assert!(plasma::parse_references(reply).is_err(), "{reply}");
+        }
+    }
 
     #[test]
     fn every_style_keeps_the_number_plasma_knows_it_by() {

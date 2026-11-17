@@ -520,12 +520,60 @@ et la qualification matérielle des lots précédents restent ouverts.
 Références : [Common Item Dialog Windows](https://learn.microsoft.com/en-us/windows/win32/shell/common-file-dialog),
 [FileChooser XDG](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.FileChooser.html).
 
+## Treizième lot : nettoyage prudent du cache Wallpaper
+
+- Après une application réussie depuis l'éditeur ou une reconstruction du layout,
+  l'agent recherche les images `editor_<hash>.png` et les temporaires de ce même
+  générateur datant de plus de 24 heures. Il reste dans le répertoire du cache,
+  sans récursion ; liens symboliques, dossiers, noms inconnus et anciens fichiers
+  `span_*` sont conservés. Les erreurs de nettoyage sont journalisées et ne changent
+  pas le résultat Apply, envoyé au frontend avant cette maintenance.
+- Toutes les sources de `wallpaper.json` sont protégées, y compris celles des layouts
+  débranchés, modes inactifs et écrans non affichés. Les chemins sont résolus pour
+  reconnaître leurs alias ; une référence manquante ou un fichier de réglages illisible
+  reporte la collecte entière. Les fichiers récents et datés dans le futur restent.
+- Sous Plasma, un script en lecture seule inspecte les containments enregistrés
+  (activités inactives et écrans débranchés compris) et les bureaux présents en mémoire.
+  Il conserve aussi les anciennes configurations Image d'un bureau actuellement en
+  couleur. Deux inventaires successifs doivent correspondre. Diaporama, extension
+  inconnue, configuration incomplète, URI non locale ou service indisponible empêchent
+  la suppression. Chaque lecture du service a un délai maximal de cinq secondes.
+- Publications d'images, réutilisations, écritures des réglages et suppression partagent
+  un verrou. Une réutilisation rafraîchit la date du fichier ; les applications héritées
+  en attente conservent explicitement leurs images jusqu'à leur fin ou leur abandon.
+  Les erreurs de génération effacent leur temporaire lorsque c'est possible.
+- Sous Windows, la suppression automatique reste désactivée : `IDesktopWallpaper`
+  expose les images par moniteur, mais cet inventaire ne prouve pas l'absence de
+  références sur les autres bureaux virtuels. Le mécanisme commun compile sur Windows ;
+  il faut compléter cet inventaire avant d'y autoriser la collecte.
+
+Contrôles : 306 tests Rust agent/store/wallpaper et 7 scénarios JavaScript du script
+Plasma passent. Les nouveaux cas couvrent l'âge, les fichiers étrangers, les liens,
+les références des profils inactifs, les images en attente, la réutilisation pendant
+une collecte, les inventaires modifiés ou illisibles et l'absence de service natif.
+Les trois tests inotify déjà bloqués par le quota de la machine restent explicitement
+exclus ; les deux essais sur Plasma réel restent ignorés. Les tests JavaScript se
+lancent avec `node crates/lbm-agent/tests/plasma_wallpaper_references.mjs` depuis `rust/`.
+Formatage et Clippy sans avertissement passent sur Linux et `x86_64-pc-windows-msvc`.
+Aucun fond d'écran réel n'a été modifié et aucun cache utilisateur n'a été nettoyé.
+
+Limites : qualifier le script sur Plasma réel avec plusieurs activités et écrans
+débranchés. Les deux lectures et la période de grâce réduisent les courses avec un
+autre logiciel, sans transaction atomique avec le bureau. La politique ne fixe pas
+de quota disque : les fichiers protégés ou récents restent, et le nettoyage attend
+une prochaine application réussie. L'ancien cache `span_*`, les diaporamas et les
+références des bureaux virtuels Windows restent à traiter.
+
+Références : [scripting Plasma et ConfigFile](https://develop.kde.org/docs/plasma/scripting/api/),
+[GetWallpaper Windows](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-idesktopwallpaper-getwallpaper),
+[images distinctes sur les bureaux Windows](https://support.microsoft.com/en-us/windows/experience/configure-multiple-desktops-in-windows).
+
 ## Suite, dans l'ordre
 
 1. Qualifier les fonds d'écran et overlays Linux/Windows, les changements de topologie
    à DPI mixtes et le premier périmètre egui sur matériel : veille, dock, UAC, reprise,
-   démarrage et mémoire ; nettoyer le cache en protégeant les fichiers encore utilisés
-   et compléter le rattachement du dialogue de fichiers sous Wayland.
+   démarrage et mémoire ; compléter le rattachement du dialogue de fichiers sous
+   Wayland et l'inventaire du cache pour les bureaux virtuels Windows et les diaporamas.
 2. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
    packaging et retrait de .NET une fois les fonctions conservées remplacées.
 

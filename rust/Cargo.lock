@@ -2121,6 +2121,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "url",
  "windows 0.58.0",
  "zbus",
 ]

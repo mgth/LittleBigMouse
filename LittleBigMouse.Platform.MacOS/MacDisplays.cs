@@ -81,14 +81,6 @@ public static class MacDisplays
 
             var rotation = (int)Math.Round(CG.CGDisplayRotation(id) / 90.0) & 3;
 
-            // CGDisplayScreenSize answers for the panel as built, ignoring rotation
-            // (a 16" 16:10 panel in portrait still reports ~345 x 215 mm). The shared
-            // mapping expects the current orientation, as kscreen/xrandr report it,
-            // and un-rotates it itself: turn the size to match first.
-            var (widthMm, heightMm) = rotation % 2 != 0
-                ? (sizeMm.Height, sizeMm.Width)
-                : (sizeMm.Width, sizeMm.Height);
-
             monitors.Add(new LinuxMonitor
             {
                 ConnectorName = NameOf(id),
@@ -99,8 +91,10 @@ public static class MacDisplays
                 PixelWidth = pixelWidth,
                 PixelHeight = pixelHeight,
                 Scale = Math.Round(scale, 4),
-                WidthMm = Math.Round(widthMm, 1),
-                HeightMm = Math.Round(heightMm, 1),
+                // CGDisplayScreenSize answers for the current orientation, like the
+                // kscreen/xrandr sizes the shared mapping expects (it un-rotates).
+                WidthMm = Math.Round(sizeMm.Width, 1),
+                HeightMm = Math.Round(sizeMm.Height, 1),
                 Primary = id == main,
                 Enabled = true,
                 Orientation = rotation,

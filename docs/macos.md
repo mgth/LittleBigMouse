@@ -94,7 +94,8 @@ rebuild changes the binary), remove the entry with **−**, then add it again.
 - **Scale changes** from the layout editor aren't applied. On macOS, scaling is a
   display-mode choice in System Settings.
 - **Reported sizes.** Some external monitors report a wrong physical size through
-  CoreGraphics. Correct it in the size editor, the same as on Windows.
+  CoreGraphics. Correct it in the size editor, the same as on Windows. Rotated
+  (portrait) displays are the first thing to check if a size looks transposed.
 
 ## Test checklist
 

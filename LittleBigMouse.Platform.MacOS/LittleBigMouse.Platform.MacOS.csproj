@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <Platforms>x64</Platforms>
+    <OutputType>Library</OutputType>
+    <Configurations>Debug;Release;ReleaseDebug</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
+    <ProjectReference Include="..\LittleBigMouse.Plugins\LittleBigMouse.Plugins.Core\LittleBigMouse.Plugins.csproj" />
+    <ProjectReference Include="..\HLab.Core\HLab.Geo\HLab.Geo.csproj" />
+    <!-- The neutral monitor record, its model mapping and the JSON layout store are
+         shared with Linux rather than copied: macOS discovery only has to produce
+         LinuxMonitor records. -->
+    <ProjectReference Include="..\LittleBigMouse.Platform.Linux\LittleBigMouse.Platform.Linux.csproj" />
+  </ItemGroup>
+
+</Project>

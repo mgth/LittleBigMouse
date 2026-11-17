@@ -9,6 +9,10 @@
 # the `input` group, or install a udev rule); without it the daemon falls back to
 # the Wayland portal / X11 backend.
 #
+# Also the macOS launcher (see docs/macos.md): there only the hook daemon is built
+# on the Rust side, and the daemon's event tap needs the Accessibility permission
+# for the app this script is run from (your terminal, the first time).
+#
 # Usage (from anywhere):
 #   ./run-lbm.sh [options]
 #
@@ -152,6 +156,10 @@ if [[ "$NO_BUILD" -eq 0 && "$SKIP_DAEMON" -eq 0 ]]; then
     if command -v cargo >/dev/null 2>&1; then
         CARGO_ARGS=(build --manifest-path "$RUST_DIR/Cargo.toml")
         [[ "$CONFIG" == "Release" ]] && CARGO_ARGS+=(--release)
+        # macOS: the daemon is the only Rust binary the app uses there, and the
+        # rest of the workspace (agent tray, Wayland pattern viewer) has no macOS
+        # backend.
+        [[ "$(uname -s)" == "Darwin" ]] && CARGO_ARGS+=(-p lbm-hook)
         cargo "${CARGO_ARGS[@]}" || warn "cargo build failed — staging existing binary"
     else
         warn "cargo not available — staging existing binary"

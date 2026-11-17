@@ -151,6 +151,13 @@ cargo test --manifest-path rust/Cargo.toml
 
 Both are what CI runs, before it builds anything for shipping.
 
+## macOS (experimental)
+
+A CoreGraphics event-tap backend for the hook daemon and a CoreGraphics display
+layer for the UI. Build with `./run-lbm.sh` (Xcode Command Line Tools, rustup and the
+.NET 10 SDK required), then grant the Accessibility permission when asked. Details,
+current gaps and a test checklist are in [docs/macos.md](docs/macos.md).
+
 ## Usage
 
 Documentation : https://littlebigmouse.mgth.fr/docs/ and https://github.com/mgth/LittleBigMouse/wiki

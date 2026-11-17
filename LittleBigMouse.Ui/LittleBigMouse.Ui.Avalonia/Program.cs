@@ -214,6 +214,21 @@ internal class Program
                 services.AddSingleton<LittleBigMouse.Plugins.IWallpaperService, LittleBigMouse.Platform.Windows.WindowsWallpaperService>();
                 services.AddSingleton<IVcpService, WindowsVcpService>();
             }
+            else if (OperatingSystem.IsMacOS())
+            {
+                // CoreGraphics discovery and arrangement; the JSON persistence and the
+                // monitor model mapping are the Linux ones (LittleBigMouse.Platform.MacOS).
+                services.AddSingleton<LittleBigMouse.Platform.MacOS.MacLayoutFactory>();
+                services.AddSingleton<LittleBigMouse.Plugins.ILayoutFactory>(sp =>
+                    sp.GetRequiredService<LittleBigMouse.Platform.MacOS.MacLayoutFactory>());
+                services.AddSingleton<LittleBigMouse.Plugins.IDisplayController, LittleBigMouse.Platform.MacOS.MacDisplayController>();
+                services.AddSingleton<LittleBigMouse.Plugins.ILayoutPersistence, LittleBigMouse.Platform.Linux.LinuxLayoutPersistence>();
+                services.AddSingleton<LittleBigMouse.Plugins.IMonitorInfoService, LittleBigMouse.Platform.MacOS.MacMonitorInfoService>();
+                services.AddSingleton<LittleBigMouse.Plugins.IWallpaperService, LittleBigMouse.Platform.MacOS.MacWallpaperService>();
+                // No DDC/CI path on macOS yet: ddcutil's sysfs probe finds nothing and
+                // monitors simply get no VCP sliders.
+                services.AddSingleton<IVcpService, DdcUtilVcpService>();
+            }
             else
             {
                 // The controller injects the concrete factory (NotifyDisplayChanged):

@@ -23,6 +23,10 @@ use crate::reconcile::{LayoutState, World};
 
 /// The world the runtime drives.
 pub trait AgentWorld: World {
+    /// Windows placements must not run against a live hook or preview.
+    fn topology_requires_stopped_engine(&self) -> bool {
+        false
+    }
     fn display_outputs(&mut self) -> Result<lbm_ipc::displays::Outputs, String> {
         Err("monitor actions are not available on this display backend".into())
     }
@@ -518,6 +522,42 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             said
         })
         .map(|applied| applied.commands)
+    }
+
+    fn topology_requires_stopped_engine(&self) -> bool {
+        #[cfg(windows)]
+        {
+            matches!(self.discovery, Discovery::Windows)
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    }
+
+    #[cfg(windows)]
+    fn apply_topology(
+        &mut self,
+        layout_id: &str,
+        document: &LayoutDocument,
+        adjust_scale: bool,
+        how: lbm_display::linux::topology::How,
+    ) -> Result<Vec<String>, String> {
+        if !matches!(self.discovery, Discovery::Windows) {
+            return Err("This discovery backend cannot change Windows display positions.".into());
+        }
+        let (mut edited, wanted) =
+            crate::windows_topology::prepare(self.editable(layout_id)?, document, adjust_scale)?;
+        let dry = how == lbm_display::linux::topology::How::DryRun;
+        let report = lbm_display::windows::topology::placement::apply(&wanted, dry, || {
+            self.persistence
+                .save(&mut edited)
+                .map_err(|e| e.to_string())?;
+            // The subsequent display notification reloads this saved physical layout.
+            self.layout = Some(edited.clone());
+            Ok(())
+        })?;
+        Ok(report)
     }
 
     fn set_preview(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {

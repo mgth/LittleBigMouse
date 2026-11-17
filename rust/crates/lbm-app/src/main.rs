@@ -788,7 +788,9 @@ impl App {
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
-        let (method, extra) = lbm_app::settings::apply_topology(layout, self.adjust_scale);
+        let (method, mut extra) = lbm_app::settings::apply_topology(layout, self.adjust_scale);
+        extra["LayoutRevision"] =
+            serde_json::json!(self.agent.layout.as_ref().and_then(|s| s.revision));
         self.send(method, extra);
     }
 
@@ -819,10 +821,16 @@ impl App {
                 if ran.dry {
                     ui.label(
                         egui::RichText::new(
-                            "Nothing has been run and nothing has been saved. The positions \
-                             below are a prediction: the real pass re-reads the compositor \
-                             after the scales are applied, and re-asserts whatever drifts — \
-                             neither can be known without changing something.",
+                            if cfg!(windows) {
+                                "No screens have moved and nothing has been saved. The proposed \
+                                 positions have been checked. Applying checks the displays again, saves \
+                                 this layout, then moves the screens without changing their scales."
+                            } else {
+                                "Nothing has been run and nothing has been saved. The positions \
+                                 below are a prediction: the real pass re-reads the compositor \
+                                 after the scales are applied, and re-asserts whatever drifts — \
+                                 neither can be known without changing something."
+                            },
                         )
                         .small()
                         .color(ui.visuals().weak_text_color()),
@@ -850,7 +858,9 @@ impl App {
             return;
         };
         self.agent.topology = None;
-        let (method, extra) = lbm_app::settings::dry_run_topology(layout, self.adjust_scale);
+        let (method, mut extra) = lbm_app::settings::dry_run_topology(layout, self.adjust_scale);
+        extra["LayoutRevision"] =
+            serde_json::json!(self.agent.layout.as_ref().and_then(|s| s.revision));
         self.send(method, extra);
     }
 
@@ -1691,6 +1701,14 @@ impl eframe::App for App {
         let mut apply = false;
         let mut dry_run = false;
         let mut adjust_scale = self.adjust_scale;
+        let topology_needs_stop = cfg!(windows)
+            && (self.agent.enabled != Some(false)
+                || self.agent.previewing
+                || self.agent.suspended
+                || matches!(
+                    self.state.engine,
+                    lbm_ui::Engine::Running | lbm_ui::Engine::Paused
+                ));
         if self.view == View::Displays && self.requests.is_some() && self.outputs.needs_read() {
             self.output_request("DisplayOutputs", serde_json::json!({}), false);
         }
@@ -1843,16 +1861,35 @@ impl eframe::App for App {
                                 .small()
                                 .color(ui.visuals().weak_text_color()),
                             );
-                            ui.checkbox(&mut adjust_scale, "Also adjust the scales");
+                            if cfg!(windows) {
+                                adjust_scale = false;
+                                ui.label("Windows keeps the current display scales.");
+                                if topology_needs_stop {
+                                    ui.label(
+                                        "Stop the engine and end Live preview before applying.",
+                                    );
+                                }
+                            } else {
+                                ui.checkbox(&mut adjust_scale, "Also adjust the scales");
+                            }
                             ui.separator();
                             // Offered **above** Apply, and on purpose: this is the one
                             // action in the window that cannot be undone, and reading
                             // the commands costs a click and changes nothing.
-                            if ui.button("Show what it would run").clicked() {
+                            if ui
+                                .add_enabled(
+                                    !topology_needs_stop,
+                                    egui::Button::new("Show what it would run"),
+                                )
+                                .clicked()
+                            {
                                 dry_run = true;
                                 ui.close();
                             }
-                            if ui.button("Apply").clicked() {
+                            if ui
+                                .add_enabled(!topology_needs_stop, egui::Button::new("Apply"))
+                                .clicked()
+                            {
                                 apply = true;
                                 ui.close();
                             }

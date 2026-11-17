@@ -228,11 +228,56 @@ portrait, détachement du principal, plusieurs moniteurs désactivés de même m
 rattachement après dock, clone, fréquences et DPI mixtes, refus du pilote et session
 distante. Aucun appel de modification Win32 n'a été exécuté depuis cette machine Linux.
 
+## Septième lot : placement global Windows
+
+- `Apply topology` relie le solveur millimètres → pixels aux chemins CCD des écrans
+  actifs. Les interfaces de moniteurs servent d'identités ; les noms `DISPLAYn` ne
+  servent pas à choisir une cible. Le plan couvre tous les écrans actifs, conserve
+  les chemins, les modes et le principal à l'origine. Les clones partagent une seule
+  position ; des positions contradictoires sont refusées.
+- Le document est appliqué à une copie du layout. L'aperçu calcule les déplacements,
+  valide les changements proposés avec Windows et restitue les coordonnées avant/après.
+  Il ne sauvegarde rien, ne modifie pas le layout courant et n'appelle pas
+  `SetDisplayConfig(APPLY)`. Une disposition déjà satisfaite évite les appels CCD
+  de validation/application, mais un Apply réel sauvegarde tout de même les éditions
+  physiques du profil.
+- Les bornes détectées sont comparées à une lecture CCD fraîche. Les coordonnées
+  non finies/hors plage, les identités ambiguës et les configurations incomplètes
+  sont refusées. La signature est relue après validation, puis après sauvegarde ;
+  une divergence empêche l'application. Une erreur de sauvegarde empêche également
+  toute application CCD. Le profil est écrit avant le changement système pour
+  survivre à la reconstruction du layout.
+- Une seule transaction CCD applique et persiste les positions, sans autoriser
+  Windows à ajuster automatiquement les modes. Une relecture vérifie les chemins,
+  l'état des moniteurs, le principal, les positions et les modes sources. Elle suit
+  aussi un échec du pilote. L'agent déclenche la reconstruction après une tentative
+  réelle, y compris en erreur ; les aperçus ne la déclenchent jamais.
+- Le frontend envoie `LayoutRevision` avec Apply et son aperçu. Windows exige une
+  révision courante et un moteur arrêté, sans aperçu ni suspension. Les anciens
+  clients Linux restent compatibles avec le champ absent. Le document transmis ne
+  peut pas rétablir un ancien état Enabled après Stop. Le menu Windows explique
+  l'arrêt nécessaire et garde les échelles actuelles ; `AdjustScale=true` est refusé
+  par l'agent Windows.
+
+Contrôles locaux : 95 tests de plateforme, 86 tests d'intégration de l'agent,
+3 tests du raccordement layout/Windows et 68 tests de l'application passent.
+Les nouveaux scénarios couvrent la copie du document, le maintien de Stop, les
+révisions périmées/absentes, les clones, les coordonnées négatives, les courses de
+configuration, les refus du pilote/de sauvegarde et les résultats partiels.
+Formatage, Clippy sans avertissement et compilation de toutes les cibles de test
+display/agent/app passent sur Linux et pour `x86_64-pc-windows-msvc`.
+
+Les appels Win32 restent à qualifier sur une session Windows réelle : écrans à
+gauche/au-dessus, portrait, fréquences et DPI mixtes, clone, dock pendant validation,
+refus de dispositions avec trou/recouvrement. Les tests locaux utilisent des backends
+simulés ; aucun écran réel n'a été déplacé. Un profil sauvegardé avant un refus du
+pilote reste sauvegardé, même si Windows n'a pas accepté le placement.
+
 ## Suite, dans l'ordre
 
-1. Porter le placement global `Apply topology` sous Windows, puis intégrer les règles
-   et bandes sur les vrais écrans et valider les DPI mixtes. Ce lot couvre les trois
-   actions individuelles de `Displays` ; le crate overlay reste un prototype Linux.
+1. Intégrer les règles et bandes sur les vrais écrans et valider les DPI mixtes.
+   Les actions individuelles de `Displays` et le placement global Windows sont
+   raccordés ; le crate overlay reste un prototype Linux.
 2. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
    périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
 3. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du

@@ -273,33 +273,51 @@ impl<W: AgentWorld> Agent<W> {
                 }),
             Request::ApplyTopology {
                 layout_id,
+                layout_revision,
                 document,
                 adjust_scale,
                 dry_run,
             } => {
                 use lbm_display::linux::topology::How;
                 let how = if dry_run { How::DryRun } else { How::ForReal };
-                self.world
-                    .apply_topology(&layout_id, &document, adjust_scale, how)
-                    .map(|commands| {
-                        for line in &commands {
-                            eprintln!(
-                                "[lbm-agent] {} {line}",
-                                if dry_run { "would run:" } else { "ran:" }
-                            );
-                        }
-                        // Nothing moved, so nothing to rebuild from — and sending
-                        // `DisplayChanged` anyway would throw away the frontend's edit
-                        // for a change that never happened.
-                        if !dry_run {
-                            // The topology changed under everyone: the layout has to be
-                            // rebuilt from what the system now says, as a hotplug would.
-                            let _ = self.inputs.send(Input::DisplayChanged);
-                        }
-                        // Self-describing: the answer says which it was, so a frontend
-                        // does not have to remember what it asked for to label it.
-                        serde_json::json!({ "Commands": commands, "DryRun": dry_run })
-                    })
+                let state = self.snapshot();
+                if self.world.topology_requires_stopped_engine()
+                    && (state.layout_id.as_deref() != Some(&layout_id)
+                        || layout_revision != Some(state.layout_revision))
+                {
+                    Err("the displays changed or the layout revision is missing; reload before applying Windows display positions".into())
+                } else if self.world.topology_requires_stopped_engine()
+                    && (state.enabled != Some(false)
+                        || state.previewing
+                        || state.suspended
+                        || matches!(
+                            self.reconciler.engine(),
+                            EngineState::Running | EngineState::Paused
+                        ))
+                {
+                    Err("stop the engine and end the preview before applying Windows display positions".into())
+                } else {
+                    let result = self
+                        .world
+                        .apply_topology(&layout_id, &document, adjust_scale, how)
+                        .map(|commands| {
+                            for line in &commands {
+                                eprintln!(
+                                    "[lbm-agent] {} {line}",
+                                    if dry_run { "would run:" } else { "ran:" }
+                                );
+                            }
+                            // Self-describing: the answer says which it was, so a frontend
+                            // does not have to remember what it asked for to label it.
+                            serde_json::json!({ "Commands": commands, "DryRun": dry_run })
+                        });
+                    // A driver may partially apply before reporting failure. Dry runs must
+                    // never rebuild: that would discard an edit for a change not performed.
+                    if !dry_run {
+                        let _ = self.inputs.send(Input::DisplayChanged);
+                    }
+                    result
+                }
             }
             Request::Preview {
                 layout_id,

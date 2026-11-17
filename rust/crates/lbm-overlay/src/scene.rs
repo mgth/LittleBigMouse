@@ -2,6 +2,7 @@ use lbm_layout::{
     geo::Rect,
     model::{BorderSection, Layout},
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Mode {
@@ -10,7 +11,7 @@ pub enum Mode {
     Rulers,
     Resistance,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Side {
     Top,
     Bottom,
@@ -23,7 +24,7 @@ impl Side {
         matches!(self, Self::Left | Self::Right)
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pixels {
     pub x: i32,
     pub y: i32,
@@ -57,14 +58,16 @@ impl Pixels {
         })
     }
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Content {
     Ruler { zero_mm: f64, measured_mm: f64 },
-    Resistance(Vec<BorderSection>),
+    Resistance(#[serde(with = "sections_wire")] Vec<BorderSection>),
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Band {
     pub monitor: String,
+    /// The enumerated output name/interface path, never a model or monitor label.
+    pub connector: String,
     pub screen: Pixels,
     pub rect: Pixels,
     pub side: Side,
@@ -240,6 +243,11 @@ pub fn from_layout(
             };
             bands.push(Band {
                 monitor: monitor.id.clone(),
+                connector: source
+                    .interface_path
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .ok_or("An attached screen has no output identity.")?,
                 screen,
                 rect,
                 side,
@@ -257,6 +265,38 @@ pub fn from_layout(
         return Err("Too many attached screens for overlays.".into());
     }
     Ok(bands)
+}
+
+mod sections_wire {
+    use super::*;
+    pub fn serialize<S: serde::Serializer>(
+        sections: &[BorderSection],
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        sections
+            .iter()
+            .map(|v| {
+                (
+                    v.from(),
+                    v.to(),
+                    v.move_resistance(),
+                    v.move_block(),
+                    v.drag(),
+                    v.drag_block(),
+                )
+            })
+            .collect::<Vec<_>>()
+            .serialize(s)
+    }
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+        d: D,
+    ) -> Result<Vec<BorderSection>, D::Error> {
+        let values = Vec::<(f64, f64, f64, bool, f64, bool)>::deserialize(d)?;
+        Ok(values
+            .into_iter()
+            .map(|(a, b, c, d, e, f)| BorderSection::new(a, b, c, d, e, f))
+            .collect())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

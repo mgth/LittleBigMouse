@@ -41,6 +41,146 @@ fn layout() -> Layout {
 fn rulers() -> Vec<Band> {
     scene::from_layout(&layout(), Mode::Rulers, Some("A")).unwrap()
 }
+
+#[test]
+fn scene_transport_preserves_connectors_physical_units_and_section_flags() {
+    let mut bands = rulers();
+    bands.extend(scene::from_layout(&layout(), Mode::Resistance, None).unwrap());
+    bands.last_mut().unwrap().content =
+        Content::Resistance(vec![BorderSection::new(12.5, 32., 2.5, true, 7., false)]);
+    let json = serde_json::to_vec(&bands).unwrap();
+    let decoded: Vec<Band> = serde_json::from_slice(&json).unwrap();
+    assert_eq!(decoded, bands);
+    assert_eq!(decoded[0].connector, "A");
+    assert_eq!(decoded[4].connector, "B");
+}
+
+#[cfg(target_os = "linux")]
+mod linux_geometry {
+    use super::*;
+    use lbm_overlay::linux::{server, validate, wayland_geometry, Server};
+    #[test]
+    fn wayland_session_never_falls_back_to_xwayland() {
+        assert_eq!(server(Some("wayland"), false), Server::Wayland);
+        assert_eq!(server(None, true), Server::Wayland);
+        assert_eq!(server(Some("x11"), true), Server::X11);
+        assert_eq!(server(None, false), Server::X11);
+    }
+    #[test]
+    fn fractional_buffers_preserve_millimetres_and_logical_edge_placement() {
+        for scale in [1., 1.25, 1.5, 1.75, 2.] {
+            for mut b in rulers().into_iter().skip(4) {
+                b.scale = scale;
+                let (logical, buffer) = wayland_geometry(&b, (scale * 120.) as u32).unwrap();
+                assert_eq!(logical.thickness(), 100);
+                assert_eq!(buffer.thickness(), (100. * scale) as i32);
+                assert_eq!(
+                    buffer.axis_pixels(),
+                    (logical.axis_pixels() as f64 * scale) as i32
+                );
+                assert!((buffer.pixel_at(10.) - b.pixel_at(10.) * scale).abs() < 1e-9);
+                assert_eq!(buffer.cross_pixels_per_mm, b.cross_pixels_per_mm * scale);
+                assert_eq!(buffer.content, b.content);
+                match b.side {
+                    Side::Top => assert_eq!(logical.rect.y, b.screen.y),
+                    Side::Bottom => assert_eq!(
+                        logical.rect.y + logical.rect.height,
+                        b.screen.y + b.screen.height
+                    ),
+                    Side::Left => assert_eq!(logical.rect.x, b.screen.x),
+                    Side::Right => assert_eq!(
+                        logical.rect.x + logical.rect.width,
+                        b.screen.x + b.screen.width
+                    ),
+                }
+                assert_eq!(
+                    raster::render(&buffer).unwrap().width,
+                    buffer.rect.width as usize
+                );
+            }
+        }
+    }
+    #[test]
+    fn resistance_uses_logical_thickness_and_refuses_stale_scale() {
+        let bands = scene::from_layout(&layout(), Mode::Resistance, None).unwrap();
+        for band in &bands[4..] {
+            let (logical, buffer) = wayland_geometry(band, 240).unwrap();
+            assert_eq!(logical.thickness(), 40);
+            assert_eq!(buffer.thickness(), 80);
+            assert!(wayland_geometry(band, 180)
+                .unwrap_err()
+                .contains("scale changed"));
+            assert!(wayland_geometry(band, 0).is_err());
+        }
+    }
+    #[test]
+    fn scene_validation_rejects_unbounded_or_inconsistent_native_requests() {
+        let bands = rulers();
+        validate(&bands).unwrap();
+        assert!(validate(&[]).is_err());
+        assert!(validate(&vec![bands[0].clone(); 65]).is_err());
+        for cause in 0..8 {
+            let mut b = bands[0].clone();
+            match cause {
+                0 => b.connector.clear(),
+                1 => b.rect.x -= 1,
+                2 => b.screen.x = i32::MAX,
+                3 => b.scale = f64::NAN,
+                4 => b.axis_mm = 0.,
+                5 => b.cross_pixels_per_mm = f64::INFINITY,
+                6 => {
+                    b.content = Content::Resistance(vec![BorderSection::new(
+                        20., 10., 0., false, 0., false,
+                    )])
+                }
+                _ => {
+                    b.content = Content::Ruler {
+                        zero_mm: f64::NAN,
+                        measured_mm: 200.,
+                    }
+                }
+            }
+            assert!(validate(&[b]).is_err(), "cause {cause}");
+        }
+    }
+}
+
+#[test]
+fn asynchronous_backend_error_is_reported_even_when_the_scene_is_unchanged() {
+    struct AsyncFake {
+        trace: Rc<RefCell<Vec<&'static str>>>,
+        fail: Rc<RefCell<bool>>,
+    }
+    impl Backend for AsyncFake {
+        fn present(&mut self, _: &[Band]) -> Result<(), String> {
+            self.trace.borrow_mut().push("present");
+            Ok(())
+        }
+        fn clear(&mut self) {
+            self.trace.borrow_mut().push("clear");
+        }
+        fn poll(&mut self) -> Result<(), String> {
+            if *self.fail.borrow() {
+                Err("layer-shell is unavailable".into())
+            } else {
+                Ok(())
+            }
+        }
+    }
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let fail = Rc::new(RefCell::new(false));
+    let mut manager = Manager::new(AsyncFake {
+        trace: trace.clone(),
+        fail: fail.clone(),
+    });
+    manager.sync(&rulers()).unwrap();
+    *fail.borrow_mut() = true;
+    assert_eq!(
+        manager.sync(&rulers()).unwrap_err(),
+        "layer-shell is unavailable"
+    );
+    assert_eq!(*trace.borrow(), ["present", "clear"]);
+}
 #[test]
 fn four_edge_windows_are_anchored_inside_each_screen_including_negative_portrait() {
     let bands = rulers();

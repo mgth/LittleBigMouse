@@ -2226,6 +2226,8 @@ dependencies = [
  "image",
  "lbm-layout",
  "libc",
+ "serde",
+ "serde_json",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",

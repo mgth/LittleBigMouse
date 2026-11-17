@@ -13,7 +13,7 @@ public class MonitorDebugPlugin(IMainService mainService) : Bootloader
             c.AddViewModeButton<MonitorDebugViewMode>(
                 "info",
                 "Icon/MonitorInfo",
-                "Info")
+                "Plugin.Info.Tooltip")
         );
         return Task.FromResult(BootState.Completed);
     }

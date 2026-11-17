@@ -10,6 +10,7 @@
     xmlns:annotations="clr-namespace:HLab.Mvvm.Annotations;assembly=HLab.Mvvm.Annotations"
     xmlns:monitorFrame="clr-namespace:LittleBigMouse.Ui.Avalonia.MonitorFrame"
     xmlns:converters1="clr-namespace:HLab.Base.Avalonia.Converters;assembly=HLab.Base.Avalonia"
+    xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
     mc:Ignorable="d" 
     HorizontalAlignment="Left"
     VerticalAlignment="Top"
@@ -33,8 +34,8 @@
 
     <UserControl.ContextMenu>
         <ContextMenu>
-            <MenuItem Header="Place from system config" Command="{Binding MonitorsPresenter.ResetLocationsFromSystem}"/>
-            <MenuItem Header="Apply layout to system config" Command="{Binding MonitorsPresenter.ApplyLocationsToSystem}" CommandParameter="{Binding $parent[Window]}"/>
+            <MenuItem Header="{loc:Tr MonitorFrame.ContextMenu.PlaceFromSystem}" Command="{Binding MonitorsPresenter.ResetLocationsFromSystem}"/>
+            <MenuItem Header="{loc:Tr MonitorFrame.ContextMenu.ApplyToSystem}" Command="{Binding MonitorsPresenter.ApplyLocationsToSystem}" CommandParameter="{Binding $parent[Window]}"/>
         </ContextMenu>
     </UserControl.ContextMenu>
 

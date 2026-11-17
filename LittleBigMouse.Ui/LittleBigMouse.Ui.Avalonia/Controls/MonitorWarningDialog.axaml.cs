@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using LittleBigMouse.Plugins.Localization;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
@@ -30,31 +31,33 @@ public partial class MonitorWarningDialog : Window
 
     public static Task<(bool Confirmed, bool DontShowAgain)> ShowAttachAsync(Window? owner)
     {
+        var t = LbmLocalizer.Current;
         var dialog = new MonitorWarningDialog
         {
-            Title = "Attach monitor"
+            Title = t.Get("Dialog.MonitorWarning.Attach.Title")
         };
-        dialog.HeadingText.Text = "Attach this monitor to the desktop?";
-        dialog.BodyText.Text = "LittleBigMouse will re-enable this monitor with its last saved position, resolution, orientation and refresh rate. If those no longer match your setup, a monitor may receive an unsupported mode or another screen may change resolution.";
-        dialog.RecoveryTitle.Text = "If a screen ends up black or misconfigured:";
-        dialog.ConfirmButton.Content = "Attach";
+        dialog.HeadingText.Text = t.Get("Dialog.MonitorWarning.Attach.Heading");
+        dialog.BodyText.Text = t.Get("Dialog.MonitorWarning.Attach.Body");
+        dialog.RecoveryTitle.Text = t.Get("Dialog.MonitorWarning.Attach.RecoveryTitle");
+        dialog.ConfirmButton.Content = t.Get("Dialog.MonitorWarning.Attach.Confirm");
 
         return dialog.ShowAsync(owner);
     }
 
     public static Task<(bool Confirmed, bool DontShowAgain)> ShowMakePrimaryAsync(Window? owner)
     {
+        var t = LbmLocalizer.Current;
         var dialog = new MonitorWarningDialog
         {
-            Title = "Make primary monitor"
+            Title = t.Get("Dialog.MonitorWarning.Primary.Title")
         };
-        dialog.HeadingText.Text = "Make this monitor the primary display?";
-        dialog.BodyText.Text = "Windows anchors the desktop on the primary display: every monitor position changes, open windows may move, and the taskbar goes to the new primary. LittleBigMouse will re-anchor its layout accordingly.";
-        dialog.RecoveryTitle.Text = "To revert:";
-        dialog.Step1.Text = "Use 'Make primary' on the previous monitor, or in Settings > System > Display select it and check 'Make this my main display'.";
+        dialog.HeadingText.Text = t.Get("Dialog.MonitorWarning.Primary.Heading");
+        dialog.BodyText.Text = t.Get("Dialog.MonitorWarning.Primary.Body");
+        dialog.RecoveryTitle.Text = t.Get("Dialog.MonitorWarning.Primary.RecoveryTitle");
+        dialog.Step1.Text = t.Get("Dialog.MonitorWarning.Primary.Step1");
         dialog.Step2.IsVisible = false;
         dialog.Step3.IsVisible = false;
-        dialog.ConfirmButton.Content = "Make primary";
+        dialog.ConfirmButton.Content = t.Get("Dialog.MonitorWarning.Primary.Confirm");
 
         return dialog.ShowAsync(owner);
     }
@@ -66,52 +69,66 @@ public partial class MonitorWarningDialog : Window
     /// </summary>
     public static async Task<(bool Confirmed, bool AdjustScale)> ShowApplyLayoutAsync(Window? owner, bool offerScale)
     {
+        var t = LbmLocalizer.Current;
         var dialog = new MonitorWarningDialog
         {
-            Title = "Apply layout to system"
+            Title = t.Get("Dialog.MonitorWarning.ApplyLayout.Title")
         };
-        dialog.HeadingText.Text = "Apply this layout to the system configuration?";
-        dialog.BodyText.Text = "Monitor positions will be recomputed from the physical layout and applied to the system immediately. The system cannot represent bezels or gaps: adjacent monitors become edge-to-edge, aligned on their physical crossing point.";
-        dialog.RecoveryTitle.Text = "If the result looks wrong:";
-        dialog.Step1.Text = "1. Rearrange the monitors in the system display settings, or use 'Place from system config' to re-import the system layout into LittleBigMouse.";
+        dialog.HeadingText.Text = t.Get("Dialog.MonitorWarning.ApplyLayout.Heading");
+        dialog.BodyText.Text = t.Get("Dialog.MonitorWarning.ApplyLayout.Body");
+        dialog.RecoveryTitle.Text = t.Get("Dialog.MonitorWarning.ApplyLayout.RecoveryTitle");
+        dialog.Step1.Text = t.Get("Dialog.MonitorWarning.ApplyLayout.Step1");
         dialog.Step2.IsVisible = false;
         dialog.Step3.IsVisible = false;
         dialog.DontShowAgainCheckBox.IsVisible = false;
         dialog.ScaleCheckBox.IsVisible = offerScale;
-        dialog.ConfirmButton.Content = "Apply";
+        dialog.ConfirmButton.Content = t.Get("Dialog.MonitorWarning.ApplyLayout.Confirm");
 
         var (confirmed, _) = await dialog.ShowAsync(owner);
         return (confirmed, confirmed && dialog.ScaleCheckBox.IsChecked == true);
     }
 
-    public static Task ShowFailureAsync(Window? owner, string action) => ShowMessageAsync(
-        owner,
-        "Display change failed",
-        $"The system could not {action}.",
-        "LittleBigMouse stopped the operation and restored the last known desktop configuration. No partial monitor layout was intentionally applied.",
-        "Open the system display settings and confirm that every monitor is connected and using a supported mode, then try again.");
+    /// <summary>
+    /// <paramref name="action"/> is already localized: one of the
+    /// <c>Dialog.MonitorWarning.Failure.Action.*</c> strings.
+    /// </summary>
+    public static Task ShowFailureAsync(Window? owner, string action)
+    {
+        var t = LbmLocalizer.Current;
+        return ShowMessageAsync(
+            owner,
+            t.Get("Dialog.MonitorWarning.Failure.Title"),
+            t.Format("Dialog.MonitorWarning.Failure.Heading", action),
+            t.Get("Dialog.MonitorWarning.Failure.Body"),
+            t.Get("Dialog.MonitorWarning.Failure.Step1"));
+    }
 
     /// <summary>
     /// The layout could not be saved before being applied: the system is left as it is,
     /// since the rebuild that follows a display change would reload the saved layout and
     /// drop the one on screen.
     /// </summary>
-    public static Task ShowNotAppliedAsync(Window? owner, string reason) => ShowMessageAsync(
-        owner,
-        "Layout not applied",
-        "The layout could not be saved, so it was not applied.",
-        $"Applying it would rearrange the displays and then reload the last saved layout, losing this one. Nothing was changed. ({reason})",
-        "Check that LittleBigMouse is running (its icon in the notification area), then try again.");
+    public static Task ShowNotAppliedAsync(Window? owner, string reason)
+    {
+        var t = LbmLocalizer.Current;
+        return ShowMessageAsync(
+            owner,
+            t.Get("Dialog.MonitorWarning.NotApplied.Title"),
+            t.Get("Dialog.MonitorWarning.NotApplied.Heading"),
+            t.Format("Dialog.MonitorWarning.NotApplied.Body", reason),
+            t.Get("Dialog.MonitorWarning.NotApplied.Step1"));
+    }
 
     static async Task ShowMessageAsync(Window? owner, string title, string heading, string body, string step)
     {
+        var t = LbmLocalizer.Current;
         var dialog = new MonitorWarningDialog
         {
             Title = title
         };
         dialog.HeadingText.Text = heading;
         dialog.BodyText.Text = body;
-        dialog.RecoveryTitle.Text = "What to do next:";
+        dialog.RecoveryTitle.Text = t.Get("Dialog.MonitorWarning.Failure.RecoveryTitle");
         dialog.Step1.Text = step;
         dialog.Step2.IsVisible = false;
         dialog.Step3.IsVisible = false;
@@ -119,7 +136,7 @@ public partial class MonitorWarningDialog : Window
         // The hidden CancelButton carries IsCancel: move it to the visible OK
         // button so Escape still closes the dialog.
         dialog.CancelButton.IsVisible = false;
-        dialog.ConfirmButton.Content = "OK";
+        dialog.ConfirmButton.Content = t.Get("Dialog.MonitorWarning.Failure.Confirm");
         dialog.ConfirmButton.IsCancel = true;
         dialog.ConfirmButton.IsDefault = true;
         await dialog.ShowAsync(owner);

@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
+             xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
              mc:Ignorable="d"
              d:DesignWidth="800"
              x:DataType="controls:LocationControlViewModel"
@@ -28,10 +29,10 @@
 			<StackPanel Orientation="Horizontal" Spacing="8">
 				<Path Data="{StaticResource Lbm.Icon.Virtual}" Width="14" Height="14"
 				      Stretch="Uniform" VerticalAlignment="Center"/>
-				<TextBlock Text="Virtual layout" FontWeight="SemiBold" VerticalAlignment="Center"/>
+				<TextBlock Text="{loc:Tr Control.Location.VirtualLayout}" FontWeight="SemiBold" VerticalAlignment="Center"/>
 				<TextBlock Text="{Binding DaemonLayoutInfo}" Opacity="0.75" VerticalAlignment="Center"
 				           IsVisible="{Binding DaemonLayoutInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-				<Button Content="Back to local layout"
+				<Button Content="{loc:Tr Control.Location.BackToLocal}"
 				        Command="{Binding BackToLocalLayoutCommand}"
 				        FontSize="12" Padding="8,2" VerticalAlignment="Center"/>
 			</StackPanel>
@@ -42,11 +43,11 @@
 		<Border Classes="Badge Virtual"
 		        IsVisible="{Binding AgentLayoutMismatch}"
 		        HorizontalAlignment="Center" VerticalAlignment="Center"
-		        ToolTip.Tip="The mouse engine is working on a different set of displays. Refreshing makes it read them again.">
+		        ToolTip.Tip="{loc:Tr Control.Location.AgentMismatch.Tooltip}">
 			<StackPanel Orientation="Horizontal" Spacing="8">
-				<TextBlock Text="The engine is on another layout" FontWeight="SemiBold"
+				<TextBlock Text="{loc:Tr Control.Location.AgentMismatch.Badge}" FontWeight="SemiBold"
 				           VerticalAlignment="Center"/>
-				<Button Content="Refresh"
+				<Button Content="{loc:Tr Control.Location.AgentMismatch.Refresh}"
 				        Command="{Binding RefreshCommand}"
 				        FontSize="12" Padding="8,2" VerticalAlignment="Center"/>
 			</StackPanel>
@@ -54,15 +55,14 @@
 
 		<StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
 
-			<Button Classes="ToolbarButton Menu">
-				<ToolTip.Tip>Export layout</ToolTip.Tip>
+			<Button Classes="ToolbarButton Menu" ToolTip.Tip="{loc:Tr Control.Location.Export.Tooltip}">
 				<Button.Flyout>
 					<MenuFlyout Placement="TopEdgeAlignedLeft">
-						<MenuItem Header="Export layout..." Click="ExportLayout_Click"/>
-						<MenuItem Header="Copy layout" Click="CopyLayout_Click"/>
-						<MenuItem Header="Open virtual layout..." Click="OpenVirtualLayout_Click"
+						<MenuItem Header="{loc:Tr Control.Location.Export.Item}" Click="ExportLayout_Click"/>
+						<MenuItem Header="{loc:Tr Control.Location.Copy.Item}" Click="CopyLayout_Click"/>
+						<MenuItem Header="{loc:Tr Control.Location.OpenVirtual.Item}" Click="OpenVirtualLayout_Click"
 						          IsVisible="{Binding Model.Options.DebugTools, FallbackValue=False}"
-						          ToolTip.Tip="View a layout exported by another user, without the hardware. Display only: it cannot be loaded as your own layout."/>
+						          ToolTip.Tip="{loc:Tr Control.Location.OpenVirtual.Tooltip}"/>
 					</MenuFlyout>
 				</Button.Flyout>
 				<Panel>
@@ -76,8 +76,8 @@
 			<Border Classes="ToolbarSeparator"/>
 
 			<Button Classes="ToolbarButton"
-				Command="{Binding SaveCommand}">
-				<ToolTip.Tip>Save</ToolTip.Tip>
+				Command="{Binding SaveCommand}"
+				ToolTip.Tip="{loc:Tr Control.Location.Save.Tooltip}">
 				<icons:IconView Height="22" Width="22" Path="Icon/Save"/>
 			</Button>
 
@@ -110,11 +110,11 @@
 					     which is not what a mode is. No tips in here — a tip inside a flyout
 					     lands on the pointer, over the item being clicked. -->
 					<MenuFlyout Placement="TopEdgeAlignedLeft">
-						<MenuItem Header="Apply on click"
+						<MenuItem Header="{loc:Tr Control.Location.ApplyMode.OnClick}"
 						          ToggleType="Radio" GroupName="ApplyMode"
 						          IsChecked="{Binding !LiveUpdate, Mode=OneWay}"
 						          Command="{Binding ManualUpdateCommand}"/>
-						<MenuItem Header="Live update"
+						<MenuItem Header="{loc:Tr Control.Location.ApplyMode.LiveUpdate}"
 						          ToggleType="Radio" GroupName="ApplyMode"
 						          IsChecked="{Binding LiveUpdate, Mode=OneWay}"
 						          IsEnabled="{Binding CanLiveUpdate}"
@@ -129,14 +129,14 @@
 			</Button>
 
 			<Button Classes="ToolbarButton"
-				Command="{Binding StopCommand}">
-				<ToolTip.Tip>Stop</ToolTip.Tip>
+				Command="{Binding StopCommand}"
+				ToolTip.Tip="{loc:Tr Control.Location.Stop.Tooltip}">
 				<icons:IconView Height="22" Width="22" Path="Icon/Stop"/>
 			</Button>
 
 			<Button Classes="ToolbarButton"
-				Command="{Binding UndoCommand}">
-				<ToolTip.Tip>Undo</ToolTip.Tip>
+				Command="{Binding UndoCommand}"
+				ToolTip.Tip="{loc:Tr Control.Location.Undo.Tooltip}">
 				<icons:IconView Height="22" Width="22" Path="Icon/Undo"/>
 			</Button>
 

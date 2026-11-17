@@ -37,7 +37,7 @@ public class BorderResistancePlugin(IMainService mainService) : Bootloader
             c.AddViewModeButton<BorderResistanceViewMode>(
                 "resistance",
                 "Icon/MonitorBorderResistance",
-                "Border resistance"
+                "Plugin.BorderResistance.Tooltip"
                 )
         );
         return Task.FromResult(BootState.Completed);

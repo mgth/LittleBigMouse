@@ -42,6 +42,7 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Plugins.Persistence;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Remote;
@@ -140,25 +141,32 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
             .Select(m => m?.IsVirtual ?? false)
             .ToProperty(this, e => e.IsVirtualLayout);
 
+        var langTick = LbmLocalizer.Current.Observe(string.Empty);
+
         _virtualLayoutOrigin = this.WhenAnyValue(e => e.Model)
+            .CombineLatest(langTick, (m, _) => m)
             .Select(m => m?.IsVirtual != true ? ""
                 : m.SourceOrigin is { Length: > 0 } origin
-                    ? $"Foreign layout, shown for inspection: {origin}"
-                    : "Foreign layout, shown for inspection")
+                    ? LbmLocalizer.Current.Format("Control.Location.VirtualOriginWithPath", origin)
+                    : LbmLocalizer.Current.Get("Control.Location.VirtualOrigin"))
             .ToProperty(this, e => e.VirtualLayoutOrigin);
 
         // The click means the same thing in both modes — hand the layout to the engine
         // and keep it — so only the second line has to say what the mode adds.
         _startTooltip = this.WhenAnyValue(e => e.Model)
-            .Select(m => m?.IsVirtual == true ? "Simulate" : "Apply and start")
+            .CombineLatest(langTick, (m, _) => m)
+            .Select(m => LbmLocalizer.Current.Get(m?.IsVirtual == true
+                ? "Control.Location.StartTooltip.Simulate"
+                : "Control.Location.StartTooltip.ApplyAndStart"))
             .ToProperty(this, e => e.StartTooltip);
 
         _startTooltipDetail = this.WhenAnyValue(e => e.Model, e => e.LiveUpdate)
-            .Select(t => t.Item1?.IsVirtual == true
-                ? "Send this layout to the daemon for validation. The input hook stays off — a foreign layout never drives the local mouse."
+            .CombineLatest(langTick, (t, _) => t)
+            .Select(t => LbmLocalizer.Current.Get(t.Item1?.IsVirtual == true
+                ? "Control.Location.StartTooltipDetail.Virtual"
                 : t.Item2
-                    ? "Live update is on: your changes are already being felt, but none of them is saved. This keeps them."
-                    : "Save the layout and hand it to the mouse engine. Use the arrow to have changes sent as you make them instead.")
+                    ? "Control.Location.StartTooltipDetail.Live"
+                    : "Control.Location.StartTooltipDetail.Manual"))
             .ToProperty(this, e => e.StartTooltipDetail);
 
         BackToLocalLayoutCommand = ReactiveCommand.Create(
@@ -185,7 +193,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
 
         // What it is for: the agent rebuilds from the displays it can see now (#443).
         RefreshCommand = ReactiveCommand.CreateFromTask(
-            () => Ask(() => _agent.RefreshAsync(), "Refresh"),
+            () => Ask(() => _agent.RefreshAsync(), "Control.Location.Request.Refresh"),
             this.WhenAnyValue(e => e.Dead, dead => !dead)
                 .ObserveOn(RxSchedulers.MainThreadScheduler));
 
@@ -396,7 +404,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
             Console.Error.WriteLine("A foreign layout cannot be simulated through the agent yet.");
             return;
         }
-        if (await Ask(() => _agent.StartEngineAsync(layout.Id, AgentDocument.Of(layout)), "Start"))
+        if (await Ask(() => _agent.StartEngineAsync(layout.Id, AgentDocument.Of(layout)), "Control.Location.Request.Start"))
             _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
     }
 
@@ -406,7 +414,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         // next tick would hook it straight back up. The agent records the user's Stop.
         LiveUpdate = false;
 
-        await Ask(() => _agent.StopEngineAsync(), "Stop");
+        await Ask(() => _agent.StopEngineAsync(), "Control.Location.Request.Stop");
     }
 
     /// <summary>
@@ -416,8 +424,9 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     /// a request that did not happen, so the honest answer is to say so where the load
     /// outcome is already shown and leave the model as it is.
     /// </summary>
+    /// <param name="whatKey">Localization key naming the request, for the status line.</param>
     /// <returns>True when the agent did it.</returns>
-    async Task<bool> Ask(Func<Task> request, string what)
+    async Task<bool> Ask(Func<Task> request, string whatKey)
     {
         try
         {
@@ -428,9 +437,16 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
                                       or OperationCanceledException
                                       or IOException)
         {
-            var reason = error is OperationCanceledException ? "no agent answered" : error.Message;
-            Console.Error.WriteLine($"{what} refused: {reason}");
-            _status.Say($"{what} refused: {reason}");
+            var t = LbmLocalizer.Current;
+            var noAnswer = error is OperationCanceledException;
+            // The log stays in English; the status line follows the UI language. The
+            // agent's own refusal (error.Message) is shown as the agent worded it.
+            Console.Error.WriteLine(
+                $"{t.GetForLanguage(LbmLocalizer.DefaultLanguage, whatKey)} refused: "
+                + (noAnswer ? "no agent answered" : error.Message));
+            _status.Say(t.Format("Control.Location.Request.Refused",
+                t.Get(whatKey),
+                noAnswer ? t.Get("Control.Location.Request.NoAgentAnswered") : error.Message));
             return false;
         }
     }
@@ -442,7 +458,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
     async Task SaveAsync()
     {
         if (Model is not { } layout || layout.Saved) return;
-        if (await Ask(() => _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout)), "Save"))
+        if (await Ask(() => _agent.SaveLayoutAsync(layout.Id, AgentDocument.Of(layout)), "Control.Location.Request.Save"))
             _postToUi(() => LayoutPersistence.MarkLayoutSaved(layout));
     }
 
@@ -456,7 +472,7 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
         await LoadAsync();
         if (Model is null || Model.IsVirtual) return;
         // The agent puts the engine back on the layout it holds — the saved one.
-        await Ask(() => _agent.EndPreviewAsync(), "Ending the preview");
+        await Ask(() => _agent.EndPreviewAsync(), "Control.Location.Request.EndPreview");
     }
 
     Task LoadAsync() =>

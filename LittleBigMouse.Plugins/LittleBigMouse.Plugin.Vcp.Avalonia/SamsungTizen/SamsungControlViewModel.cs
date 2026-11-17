@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugins.Localization;
 using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
@@ -53,16 +54,16 @@ public sealed class SamsungControlViewModel : ReactiveObject
             MacAddress = "";
             DeviceName = "Samsung Tizen";
             PictureMacro = "";
-            Status = "Enter the monitor IP address or run discovery.";
+            Status = LbmLocalizer.Current.Get("Vcp.Samsung.Status.EnterIp");
             Paired = false;
             ShowSetup = true;
             return;
         }
 
         Apply(configuration);
-        Status = string.IsNullOrWhiteSpace(configuration.Token)
-            ? "Address saved; pairing is required."
-            : "Associated with this monitor.";
+        Status = LbmLocalizer.Current.Get(string.IsNullOrWhiteSpace(configuration.Token)
+            ? "Vcp.Samsung.Status.PairingRequired"
+            : "Vcp.Samsung.Status.Associated");
     }
 
     public ObservableCollection<SamsungTizenDevice> DiscoveredDevices { get; } = [];
@@ -166,7 +167,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
         if (_service is null) return;
         await _operations.RunAsync(async cancellationToken =>
         {
-            Status = "Searching the local network…";
+            Status = LbmLocalizer.Current.Get("Vcp.Samsung.Status.Searching");
             var devices = await _service.DiscoverAsync(cancellationToken);
             DiscoveredDevices.Clear();
             foreach (var device in devices) DiscoveredDevices.Add(device);
@@ -174,9 +175,9 @@ public sealed class SamsungControlViewModel : ReactiveObject
             SelectedDevice = devices.Count == 1 ? devices[0] : null;
             Status = devices.Count switch
             {
-                0 => "No Samsung Tizen display found; enter its IP address.",
-                1 => "Display found. Select Pair to authorize LittleBigMouse.",
-                _ => $"{devices.Count} Samsung displays found; select one.",
+                0 => LbmLocalizer.Current.Get("Vcp.Samsung.Status.NoneFound"),
+                1 => LbmLocalizer.Current.Get("Vcp.Samsung.Status.OneFound"),
+                _ => LbmLocalizer.Current.Format("Vcp.Samsung.Status.ManyFound", devices.Count),
             };
         }, TimeSpan.FromSeconds(8));
     }
@@ -186,11 +187,11 @@ public sealed class SamsungControlViewModel : ReactiveObject
         if (_service is null || _monitor is null) return;
         await _operations.RunAsync(async cancellationToken =>
         {
-            Status = "Allow LittleBigMouse on the Samsung display…";
+            Status = LbmLocalizer.Current.Get("Vcp.Samsung.Status.AllowPrompt");
             var configuration = await _service.PairAsync(
                 _monitor.Id, IpAddress, MacAddress, cancellationToken);
             Apply(configuration);
-            Status = "Paired and connected over the local network.";
+            Status = LbmLocalizer.Current.Get("Vcp.Remote.PairedConnected");
         }, TimeSpan.FromSeconds(90));
     }
 
@@ -201,7 +202,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
         {
             _service.SaveManualAddress(_monitor.Id, IpAddress, MacAddress);
             await _service.PowerOnAsync(_monitor.Id, cancellationToken);
-            Status = "Wake-on-LAN sent.";
+            Status = LbmLocalizer.Current.Get("Vcp.Remote.WakeOnLanSent");
         }, TimeSpan.FromSeconds(5));
     }
 
@@ -225,7 +226,7 @@ public sealed class SamsungControlViewModel : ReactiveObject
             var sequence = SamsungTizenProtocol.ParseSequence(PictureMacro);
             _service.SavePictureMacro(_monitor.Id, PictureMacro);
             await _service.SendSequenceAsync(_monitor.Id, sequence, cancellationToken);
-            Status = $"Macro completed ({sequence.Count} keys).";
+            Status = LbmLocalizer.Current.Format("Vcp.Remote.MacroCompleted", sequence.Count);
         }, TimeSpan.FromSeconds(45));
     }
 

@@ -13,7 +13,7 @@ public class AboutMonitorPlugin(IMainService mainService) : Bootloader
             c.AddViewModeButton<MonitorAboutViewMode>(
                 "about",
                 "Icon/MonitorAbout",
-                "About")
+                "Plugin.About.Tooltip")
         );
         return Task.FromResult(BootState.Completed);
     }

@@ -30,6 +30,7 @@ using System.Windows.Input;
 using Avalonia.Controls;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
@@ -143,7 +144,7 @@ public class MonitorsLayoutPresenterViewModel
         if (locations.Count == 0) return;
 
         if (!_controller.SetLocations(locations))
-            await MonitorWarningDialog.ShowFailureAsync(owner, "apply the monitor layout");
+            await MonitorWarningDialog.ShowFailureAsync(owner, LbmLocalizer.Current.Get("Dialog.MonitorWarning.Failure.Action.ApplyLayout"));
     }
 
     /// <summary>

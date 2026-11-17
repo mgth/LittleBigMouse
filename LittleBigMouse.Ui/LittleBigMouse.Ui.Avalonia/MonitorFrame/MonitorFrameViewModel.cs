@@ -9,6 +9,7 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Dimensions;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Zoning;
 using ReactiveUI;
 using System;
@@ -298,7 +299,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       string TargetName(int id)
       {
          var target = report.Zones.FirstOrDefault(z => z.Id == id);
-         return target is null ? $"zone {id}"
+         return target is null ? LbmLocalizer.Current.Format("MonitorFrame.Probe.Zone", id)
             : string.IsNullOrEmpty(target.Name) ? target.DeviceId : target.Name;
       }
 
@@ -313,9 +314,10 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
          var to = Math.Clamp((run.To + 1 - origin) / span, 0.0, 1.0);
          if (to <= from) continue;
 
+         var localizedSide = LbmLocalizer.Current.Get($"MonitorFrame.Side.{edge.Side}");
          var tip = run.IsWall
-            ? $"{edge.Side}: wall — the cursor stops here"
-            : $"{edge.Side}: crosses into {TargetName(run.TargetId)}";
+            ? LbmLocalizer.Current.Format("MonitorFrame.Probe.Wall", localizedSide)
+            : LbmLocalizer.Current.Format("MonitorFrame.Probe.Crosses", localizedSide, TargetName(run.TargetId));
 
          strips.Add(edge.Side switch
          {

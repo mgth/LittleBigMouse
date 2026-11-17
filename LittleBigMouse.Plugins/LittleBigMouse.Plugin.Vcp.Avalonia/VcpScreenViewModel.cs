@@ -37,6 +37,7 @@ using HLab.Sys.Argyll;
 using HLab.Sys.Windows.MonitorVcp;
 using HLab.Sys.Windows.MonitorVcp.Avalonia;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Plugin.Vcp.Avalonia.Calibration;
 using LittleBigMouse.Plugin.Vcp.Avalonia.Patterns;
 using LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
@@ -308,7 +309,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       {
          _calibrations.Cancel();
          ArgyllProbe.Abort();
-         ArgyllProbe.Message = "Stopping…";
+         ArgyllProbe.Message = LbmLocalizer.Current.Get("Vcp.Calibration.Stopping");
       }).DisposeWith(this);
 
       _probeLut = this.WhenAnyValue(
@@ -723,7 +724,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
       var probe = ArgyllProbe;
       if (!probe.Installed)
       {
-         probe.Message = "ArgyllCMS (spotread) not found — install argyllcms";
+         probe.Message = LbmLocalizer.Current.Get("Vcp.Calibration.ArgyllMissing");
          return;
       }
 
@@ -812,10 +813,10 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
 
       var message = progress.Stage switch
       {
-         CalibrationStage.Initializing => "Initializing instrument — calibration may be requested…",
-         CalibrationStage.SettingBrightness => $"Measuring brightness {progress.Current} / {progress.Total}…",
-         CalibrationStage.SettingContrast => $"Measuring contrast {progress.Current} / {progress.Total}…",
-         CalibrationStage.Measuring => "Measuring…",
+         CalibrationStage.Initializing => LbmLocalizer.Current.Get("Vcp.Calibration.Initializing"),
+         CalibrationStage.SettingBrightness => LbmLocalizer.Current.Format("Vcp.Calibration.MeasuringBrightness", progress.Current, progress.Total),
+         CalibrationStage.SettingContrast => LbmLocalizer.Current.Format("Vcp.Calibration.MeasuringContrast", progress.Current, progress.Total),
+         CalibrationStage.Measuring => LbmLocalizer.Current.Get("Vcp.Calibration.Measuring"),
          _ => null,
       };
       if (message is not null) ScheduleOnUi(() => ArgyllProbe.Message = message);
@@ -865,9 +866,9 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
    };
 
    void SetCompletionMessage(CalibrationCompletion completion)
-      => ScheduleOnUi(() => ArgyllProbe.Message = completion == CalibrationCompletion.Converged
-          ? "White point tuning done"
-          : "White point tuning did not converge");
+      => ScheduleOnUi(() => ArgyllProbe.Message = LbmLocalizer.Current.Get(completion == CalibrationCompletion.Converged
+          ? "Vcp.Calibration.Converged"
+          : "Vcp.Calibration.NotConverged"));
 
    async Task RunCalibrationAsync(
        string operationName,
@@ -892,7 +893,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
                 ScheduleOnUi(() =>
                 {
                    TuneRunning = true;
-                   probe.Message = "Initializing instrument — calibration may be requested…";
+                   probe.Message = LbmLocalizer.Current.Get("Vcp.Calibration.Initializing");
                 });
              }
 
@@ -903,7 +904,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
              finally
              {
                 if (token.IsCancellationRequested)
-                   ScheduleOnUi(() => probe.Message = "Tuning stopped");
+                   ScheduleOnUi(() => probe.Message = LbmLocalizer.Current.Get("Vcp.Calibration.Stopped"));
                 if (showRunning) ScheduleOnUi(() => TuneRunning = false);
              }
           },
@@ -918,7 +919,7 @@ public class VcpScreenViewModel : ViewModel<PhysicalMonitor>
    void ReportCalibrationError(string operationName, Exception error)
    {
       Console.Error.WriteLine($"VCP calibration '{operationName}' failed: {error}");
-      ScheduleOnUi(() => ArgyllProbe.Message = $"Calibration failed: {error.Message}");
+      ScheduleOnUi(() => ArgyllProbe.Message = LbmLocalizer.Current.Format("Vcp.Calibration.Failed", error.Message));
    }
 
    void ScheduleOnUi(Action action)

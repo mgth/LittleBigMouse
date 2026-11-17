@@ -16,6 +16,7 @@
     <!-- JsonLayoutStore.LayoutPath (DomainOracleTests): the tests run the production
          file naming, not a copy of it. -->
     <InternalsVisibleTo Include="LittleBigMouse.DisplayLayout.Tests" />
+    <EmbeddedResource Include="Localization\Strings\*.json" />
   </ItemGroup>
 
   <ItemGroup>

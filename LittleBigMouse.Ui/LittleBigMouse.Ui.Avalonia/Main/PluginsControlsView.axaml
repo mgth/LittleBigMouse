@@ -5,6 +5,7 @@
              xmlns:avalonia="clr-namespace:HLab.Mvvm.Avalonia;assembly=HLab.Mvvm.Avalonia"
              xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="LittleBigMouse.Ui.Avalonia.Main.PluginsControlsView"
              x:DataType="main:MainViewModel"
@@ -16,7 +17,7 @@
 				<icons:IconView Height="22"
 				                Width="22"
 				                Path="Icon/Options"
-				                ToolTip.Tip="Options"/>
+				                ToolTip.Tip="{loc:Tr Toolbar.Options.Tooltip}"/>
 			</ToggleButton>
 
 			<Border Classes="ToolbarSeparator"/>
@@ -46,7 +47,7 @@
 				<icons:IconView Height="22"
 				                Width="22"
 				                Path="Icon/MonitorList"
-				                ToolTip.Tip="Switch to list view"
+				                ToolTip.Tip="{loc:Tr Toolbar.ListView.Tooltip}"
 				/>
 			</ToggleButton>
 		</StackPanel>

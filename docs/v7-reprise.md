@@ -98,8 +98,8 @@ interdits, et compilation de toutes les cibles de test du frontend et de l'agent
   l'inventaire historique de la fabrique de layouts. La lecture des positions négatives
   accepte également `1920x1080-1920-1080`, en conservant les fixtures au format `+-1920`.
 
-Limites : les commandes Windows ne sont pas encore portées ; l'agent les refuse
-explicitement. Les opérations système sont synchrones et bornées dans l'agent, comme
+Limites de ce lot : les commandes Windows n'étaient pas encore portées (voir le sixième
+lot ci-dessous). Les opérations Linux sont synchrones et bornées dans l'agent, comme
 les opérations de topologie existantes ; elles ne tournent pas sur le fil UI. Aucun
 écran réel n'a été détaché pendant la validation : les essais matériels restent à faire
 sous KScreen et X11 (principal, détacher/rattacher, dock et profils restaurés).
@@ -182,11 +182,57 @@ inspectées localement. Formatage, Clippy sans avertissement et compilation des 
 de test du frontend pour Windows passent. Les bandes sur les écrans réels et les essais
 matériels restent à faire.
 
+## Sixième lot : commandes d'écran sous Windows
+
+- `Displays` utilise désormais le backend Windows pour l'inventaire, `Make primary`,
+  `Attach` et `Detach`. Les gardes de l'agent et les confirmations du frontend restent
+  les mêmes : moteur arrêté, pas d'aperçu, bon layout/révision et inventaire récent.
+- L'inventaire CCD comprend les cibles connectées mais désactivées. Les chemins de
+  liaison possibles sont regroupés par cible ; le connecteur transmis par l'API est
+  le chemin d'interface du moniteur, jamais le nom recyclable `DISPLAYn`. Attacher
+  choisit une source libre pour cette cible précise, sans remplacer un autre écran
+  ni créer implicitement un clone. Windows choisit son mode et son placement initiaux.
+- Le changement de principal translate toutes les sources actives, une fois par
+  source, et place la source choisie à `(0,0)`. Résolutions, formats et modes cibles
+  sont conservés. Lors du détachement du principal, une source restante devient
+  l'origine. Le dernier moniteur actif ne peut pas être détaché, y compris en présence
+  de chemins candidats multiples ou d'écrans clonés.
+- Les trois actions utilisent une seule application de configuration CCD. Il n'y a
+  pas d'écritures DEVMODE en attente dans le registre. `SetDisplayConfig` valide
+  d'abord le plan sans le modifier ; une nouvelle lecture doit ensuite retrouver la
+  signature attendue avant l'application et l'enregistrement dans la base Windows.
+  Le changement de principal n'autorise pas l'ajustement automatique des modes ;
+  l'attachement et le détachement autorisent les ajustements nécessaires au pilote.
+- Une relecture suit même un échec du pilote. Un retour réussi seul ne suffit pas :
+  le moniteur demandé doit avoir l'état attendu, les autres doivent conserver leur
+  état d'activation et un changement de principal doit conserver modes sources et
+  positions relatives. Toute divergence est signalée ; la reconstruction habituelle
+  du layout suit la tentative. Les courses de taille des buffers CCD sont retentées
+  trois fois avant de signaler un bureau instable.
+
+Références API : [position de la source principale](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-displayconfig_source_mode),
+[validation et application CCD](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setdisplayconfig),
+[énumération des chemins et courses de buffers](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-querydisplayconfig).
+
+Contrôles locaux : 87 tests de détection/plateforme, 85 tests d'intégration de l'agent
+et un test du document IPC Windows passent. Les 17 nouveaux tests de planification
+et de transaction tournent sous Linux avec un backend simulé : identités, sources
+occupées, clones, dernier écran, translation, refus avant écriture, course pendant la
+validation et vérification après application. Clippy sans avertissement passe sur
+Linux et pour `x86_64-pc-windows-msvc`, sur les cibles de test display/agent/app.
+Deux tests supplémentaires de matérialisation des structures Win32 sont compilés
+pour Windows, mais n'ont pas été exécutés ici.
+
+Validation matérielle encore nécessaire sous Windows : écran principal à gauche/en
+portrait, détachement du principal, plusieurs moniteurs désactivés de même modèle,
+rattachement après dock, clone, fréquences et DPI mixtes, refus du pilote et session
+distante. Aucun appel de modification Win32 n'a été exécuté depuis cette machine Linux.
+
 ## Suite, dans l'ordre
 
-1. Porter les commandes d'écran principal/attachement/détachement sous Windows.
-   Intégrer les règles et bandes sur les vrais écrans, puis valider le backend Windows
-   et les DPI mixtes. Le crate overlay reste actuellement un prototype Linux.
+1. Porter le placement global `Apply topology` sous Windows, puis intégrer les règles
+   et bandes sur les vrais écrans et valider les DPI mixtes. Ce lot couvre les trois
+   actions individuelles de `Displays` ; le crate overlay reste un prototype Linux.
 2. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
    périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
 3. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du

@@ -392,10 +392,13 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     }
 
     fn display_outputs(&mut self) -> Result<lbm_ipc::displays::Outputs, String> {
-        let Discovery::Linux(backend) = self.discovery else {
-            return Err("monitor actions currently require KScreen or XRandR; the Windows backend is not implemented yet".into());
-        };
-        backend.connected_outputs().map(crate::displays::outputs)
+        match self.discovery {
+            Discovery::Linux(backend) => backend.connected_outputs().map(crate::displays::outputs),
+            #[cfg(windows)]
+            Discovery::Windows => lbm_display::windows::topology::connected_outputs()
+                .and_then(crate::displays::windows),
+            _ => Err("Monitor actions are not available on this display backend.".into()),
+        }
     }
 
     fn change_output(
@@ -404,17 +407,30 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         change: lbm_ipc::displays::Change,
         signature: &str,
     ) -> Result<lbm_ipc::displays::Outputs, String> {
-        let Discovery::Linux(backend) = self.discovery else {
-            return Err("monitor actions currently require KScreen or XRandR".into());
-        };
-        use lbm_display::linux::topology::{self, Change};
-        let action = match change {
-            lbm_ipc::displays::Change::Primary => Change::Primary,
-            lbm_ipc::displays::Change::Attach => Change::Attach,
-            lbm_ipc::displays::Change::Detach => Change::Detach,
-        };
-        topology::change_checked(backend, action, connector, signature)
-            .map(crate::displays::outputs)
+        match self.discovery {
+            Discovery::Linux(backend) => {
+                use lbm_display::linux::topology::{self, Change};
+                let action = match change {
+                    lbm_ipc::displays::Change::Primary => Change::Primary,
+                    lbm_ipc::displays::Change::Attach => Change::Attach,
+                    lbm_ipc::displays::Change::Detach => Change::Detach,
+                };
+                topology::change_checked(backend, action, connector, signature)
+                    .map(crate::displays::outputs)
+            }
+            #[cfg(windows)]
+            Discovery::Windows => {
+                use lbm_display::windows::topology::{self, Change};
+                let action = match change {
+                    lbm_ipc::displays::Change::Primary => Change::Primary,
+                    lbm_ipc::displays::Change::Attach => Change::Attach,
+                    lbm_ipc::displays::Change::Detach => Change::Detach,
+                };
+                topology::change_checked(action, connector, signature)
+                    .and_then(crate::displays::windows)
+            }
+            _ => Err("Monitor actions are not available on this display backend.".into()),
+        }
     }
 
     /// Save the edit, then move the screens to match it.

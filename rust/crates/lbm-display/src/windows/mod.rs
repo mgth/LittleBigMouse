@@ -40,6 +40,7 @@ pub mod ids;
 pub mod registry;
 #[cfg(windows)]
 mod sys;
+pub mod topology;
 pub mod tree;
 
 use lbm_layout::collation::invariant_compare;

@@ -1,7 +1,7 @@
 //! The resistance editor: values in the properties panel, intervals on the map.
 mod bands;
 pub mod geometry;
-pub use bands::{band, segment};
+pub use bands::{band, owner, segment};
 use geometry::{Span, MAX_SECTIONS};
 use lbm_layout::{
     geo::Rect,

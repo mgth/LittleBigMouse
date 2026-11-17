@@ -3,12 +3,17 @@ use super::{
     *,
 };
 
-/// Bands lie inside the visible panel, matching the coordinates used by the engine.
-pub fn band(content: egui::Rect, side: Side) -> egui::Rect {
-    let thickness = 12.0_f32
+fn thickness(content: egui::Rect) -> f32 {
+    12.0_f32
         .min(content.width() / 3.0)
         .min(content.height() / 3.0)
-        .max(0.0);
+        .max(0.0)
+}
+/// Bands lie inside the visible panel, matching the coordinates used by the engine.
+/// Each one spans its whole edge, so neighbouring bands cross in the corners; who
+/// answers there is [`owner`]'s call, not the drawing order.
+pub fn band(content: egui::Rect, side: Side) -> egui::Rect {
+    let thickness = thickness(content);
     match side {
         Side::Left => egui::Rect::from_min_max(
             content.min,
@@ -26,6 +31,105 @@ pub fn band(content: egui::Rect, side: Side) -> egui::Rect {
             egui::pos2(content.left(), content.bottom() - thickness),
             content.max,
         ),
+    }
+}
+/// The squares where a vertical and a horizontal band cross.
+const CORNERS: [(Side, Side); 4] = [
+    (Side::Left, Side::Top),
+    (Side::Right, Side::Top),
+    (Side::Left, Side::Bottom),
+    (Side::Right, Side::Bottom),
+];
+fn corner(content: egui::Rect, vertical: Side, horizontal: Side) -> egui::Rect {
+    let t = thickness(content);
+    let x = if vertical == Side::Left {
+        content.left()
+    } else {
+        content.right() - t
+    };
+    let y = if horizontal == Side::Top {
+        content.top()
+    } else {
+        content.bottom() - t
+    };
+    egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(t, t))
+}
+/// A band without its two corners: the part no other band covers.
+fn middle(content: egui::Rect, side: Side) -> egui::Rect {
+    let t = thickness(content);
+    let b = band(content, side);
+    if side.vertical() {
+        egui::Rect::from_min_max(
+            egui::pos2(b.left(), b.top() + t),
+            egui::pos2(b.right(), b.bottom() - t),
+        )
+    } else {
+        egui::Rect::from_min_max(
+            egui::pos2(b.left() + t, b.top()),
+            egui::pos2(b.right() - t, b.bottom()),
+        )
+    }
+}
+/// Distance from the panel's outer edge on that side.
+fn inset(content: egui::Rect, side: Side, at: egui::Pos2) -> f32 {
+    match side {
+        Side::Left => at.x - content.left(),
+        Side::Right => content.right() - at.x,
+        Side::Top => at.y - content.top(),
+        Side::Bottom => content.bottom() - at.y,
+    }
+}
+/// The band, its edge length in mm and its pixels per mm, when it can be drawn.
+fn measure(content: egui::Rect, monitor: &Monitor, side: Side) -> Option<(egui::Rect, f64, f64)> {
+    let length = side.length(monitor.bounds);
+    let rect = band(content, side);
+    let pixels = if side.vertical() {
+        rect.height()
+    } else {
+        rect.width()
+    };
+    (length.is_finite() && length > 0.0 && pixels > 0.0)
+        .then(|| (rect, length, f64::from(pixels) / length))
+}
+/// The edge that answers a pointer at `at`. Where two bands cross, the one with a
+/// section (or a section's handle) there wins, so a short section at the end of an
+/// edge stays reachable; otherwise, or when both have one, the corner is cut along
+/// its diagonal and the nearer edge wins.
+pub fn owner(content: egui::Rect, monitor: &Monitor, at: egui::Pos2) -> Option<Side> {
+    let candidates: Vec<_> = Side::ALL
+        .into_iter()
+        .filter(|side| {
+            measure(content, monitor, *side).is_some() && band(content, *side).contains(at)
+        })
+        .collect();
+    let holds = |side: Side| {
+        measure(content, monitor, side).is_some_and(|(rect, length, scale)| {
+            geometry::grab(
+                side.sections(&monitor.resistance),
+                mm(at, rect, side, length),
+                scale,
+            )
+            .index()
+            .is_some()
+        })
+    };
+    match candidates[..] {
+        [] => None,
+        [one] => Some(one),
+        [a, b] => Some(match (holds(a), holds(b)) {
+            (true, false) => a,
+            (false, true) => b,
+            _ => nearer(content, a, b, at),
+        }),
+        _ => None,
+    }
+}
+fn nearer(content: egui::Rect, a: Side, b: Side, at: egui::Pos2) -> Side {
+    let (ia, ib) = (inset(content, a, at), inset(content, b, at));
+    if ia < ib || (ia == ib && a.vertical()) {
+        a
+    } else {
+        b
     }
 }
 pub fn segment(band: egui::Rect, side: Side, span: Span, length: f64) -> egui::Rect {
@@ -169,26 +273,60 @@ impl Editor {
             let Some(monitor) = monitors.iter().find(|m| m.id == *id) else {
                 continue;
             };
-            for side in Side::ALL {
-                let length = side.length(monitor.bounds);
-                let rect = band(*content, side);
-                let pixels = if side.vertical() {
-                    rect.height()
-                } else {
-                    rect.width()
-                };
-                if !length.is_finite() || length <= 0.0 || pixels <= 0.0 {
-                    continue;
-                }
-                let scale = f64::from(pixels) / length;
-                let sections = side.sections(&monitor.resistance);
+            let content = *content;
+            // Corners are sensed apart, then handed to the edge that owns the pointer
+            // there, so no band hides another one's end.
+            let mut responses: Vec<(Side, egui::Response)> = Side::ALL
+                .into_iter()
+                .filter(|side| measure(content, monitor, *side).is_some())
+                .map(|side| {
+                    let response = ui.interact(
+                        middle(content, side),
+                        ui.id().with(("resistance-band", id, side)),
+                        egui::Sense::click_and_drag(),
+                    );
+                    (side, response)
+                })
+                .collect();
+            for (vertical, horizontal) in CORNERS {
                 let response = ui.interact(
-                    rect,
-                    ui.id().with(("resistance-band", id, side)),
+                    corner(content, vertical, horizontal),
+                    ui.id()
+                        .with(("resistance-corner", id, vertical, horizontal)),
                     egui::Sense::click_and_drag(),
                 );
-                ui.painter()
-                    .rect_filled(rect, 0.0, egui::Color32::from_gray(50));
+                // A gesture keeps the edge it started on until release.
+                let held = self
+                    .gesture
+                    .as_ref()
+                    .filter(|g| {
+                        g.monitor == *id
+                            && (g.side == vertical || g.side == horizontal)
+                            && (response.dragged() || response.drag_stopped())
+                    })
+                    .map(|g| g.side);
+                let at = if response.drag_started() {
+                    ui.input(|i| i.pointer.press_origin())
+                } else {
+                    response
+                        .interact_pointer_pos()
+                        .or_else(|| response.hover_pos())
+                };
+                let Some(side) = held.or_else(|| at.and_then(|at| owner(content, monitor, at)))
+                else {
+                    continue;
+                };
+                if let Some((_, owned)) = responses.iter_mut().find(|(s, _)| *s == side) {
+                    *owned = owned.union(response);
+                }
+            }
+            let mut drawn = Vec::new();
+            let mut lines = Vec::new();
+            for (side, response) in responses {
+                let Some((rect, length, scale)) = measure(content, monitor, side) else {
+                    continue;
+                };
+                let sections = side.sections(&monitor.resistance);
                 let snap = !ui.input(|i| i.modifiers.ctrl);
                 if response.clicked() || response.double_clicked() {
                     if let Some(pos) = response.interact_pointer_pos() {
@@ -276,7 +414,7 @@ impl Editor {
                                         length,
                                     );
                                     let area = ui.max_rect();
-                                    let line = if side.vertical() {
+                                    lines.push(if side.vertical() {
                                         [
                                             egui::pos2(area.left(), r.top()),
                                             egui::pos2(area.right(), r.top()),
@@ -286,11 +424,7 @@ impl Editor {
                                             egui::pos2(r.left(), area.top()),
                                             egui::pos2(r.left(), area.bottom()),
                                         ]
-                                    };
-                                    ui.painter().line_segment(
-                                        line,
-                                        egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE),
-                                    );
+                                    });
                                 }
                             }
                         }
@@ -299,19 +433,18 @@ impl Editor {
                         result.action = g.action();
                     }
                 }
-                for (index, s) in sections.iter().enumerate() {
-                    if replacing == Some(index) {
-                        continue;
-                    }
-                    let selected = self
-                        .selected
-                        .as_ref()
-                        .is_some_and(|k| k.monitor == *id && k.side == side && k.index == index);
-                    paint(ui, rect, side, length, scale, s, selected);
-                }
-                if let Some(s) = preview {
-                    paint(ui, rect, side, length, scale, &s, true);
-                }
+                let mut shown: Vec<(BorderSection, bool)> = sections
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| replacing != Some(*index))
+                    .map(|(index, s)| {
+                        let selected = self.selected.as_ref().is_some_and(|k| {
+                            k.monitor == *id && k.side == side && k.index == index
+                        });
+                        (*s, selected)
+                    })
+                    .collect();
+                shown.extend(preview.map(|s| (s, true)));
                 if let Some(at) = response.hover_pos() {
                     let value = mm(at, rect, side, length);
                     let tip = geometry::grab(sections, value, scale)
@@ -328,6 +461,18 @@ impl Editor {
                         .unwrap_or_else(|| format!("{} · drag to draw a section", side.label()));
                     response.on_hover_text(tip);
                 }
+                drawn.push(Drawn {
+                    side,
+                    rect,
+                    length,
+                    scale,
+                    shown,
+                });
+            }
+            paint(ui, content, &drawn);
+            for line in lines {
+                ui.painter()
+                    .line_segment(line, egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE));
             }
         }
         if ui.input(|i| !i.pointer.primary_down()) {
@@ -346,40 +491,104 @@ impl Editor {
         result
     }
 }
-fn paint(
-    ui: &egui::Ui,
-    rect: egui::Rect,
+struct Drawn {
     side: Side,
+    rect: egui::Rect,
     length: f64,
     scale: f64,
-    s: &BorderSection,
-    selected: bool,
-) {
-    let drawn = segment(rect, side, Span::from(s), length);
-    ui.painter().rect_filled(drawn, 0.0, color(s));
-    if selected {
-        ui.painter().rect_stroke(
-            drawn,
-            0.0,
-            egui::Stroke::new(1.5, egui::Color32::WHITE),
-            egui::StrokeKind::Inside,
-        );
+    /// The sections as shown: a gesture's preview replaces the section it edits.
+    shown: Vec<(BorderSection, bool)>,
+}
+/// Backgrounds first, then every edge's sections, so no band covers another's.
+/// Where sections of two edges meet in a corner, each keeps the half [`owner`]
+/// gives its edge.
+fn paint(ui: &egui::Ui, content: egui::Rect, drawn: &[Drawn]) {
+    let painter = ui.painter();
+    for d in drawn {
+        painter.rect_filled(d.rect, 0.0, egui::Color32::from_gray(50));
     }
-    let grip = geometry::grip(s, scale);
-    for span in [
-        Span {
-            from: s.from(),
-            to: s.from() + grip,
-        },
-        Span {
-            from: s.to() - grip,
-            to: s.to(),
-        },
-    ] {
-        ui.painter().rect_filled(
-            segment(rect, side, span, length).shrink(2.0),
-            0.0,
-            egui::Color32::from_white_alpha(100),
-        );
+    let drawn_rect =
+        |d: &Drawn, s: &BorderSection| segment(d.rect, d.side, Span::from(s), d.length);
+    for d in drawn {
+        for (s, _) in &d.shown {
+            painter.rect_filled(drawn_rect(d, s), 0.0, color(s));
+        }
     }
+    for (vertical, horizontal) in CORNERS {
+        let find = |side| drawn.iter().find(|d| d.side == side);
+        let (Some(v), Some(h)) = (find(vertical), find(horizontal)) else {
+            continue;
+        };
+        for (sv, _) in &v.shown {
+            for (sh, _) in &h.shown {
+                let shared = drawn_rect(v, sv).intersect(drawn_rect(h, sh));
+                if !shared.is_positive() {
+                    continue;
+                }
+                for (side, other, s) in [(vertical, horizontal, sv), (horizontal, vertical, sh)] {
+                    let half = clip(&shared, |p| {
+                        inset(content, other, p) - inset(content, side, p)
+                    });
+                    if half.len() >= 3 {
+                        painter.add(egui::Shape::convex_polygon(
+                            half,
+                            color(s),
+                            egui::Stroke::NONE,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    for d in drawn {
+        for (s, selected) in &d.shown {
+            let rect = drawn_rect(d, s);
+            if *selected {
+                painter.rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(1.5, egui::Color32::WHITE),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            let grip = geometry::grip(s, d.scale);
+            for span in [
+                Span {
+                    from: s.from(),
+                    to: s.from() + grip,
+                },
+                Span {
+                    from: s.to() - grip,
+                    to: s.to(),
+                },
+            ] {
+                painter.rect_filled(
+                    segment(d.rect, d.side, span, d.length).shrink(2.0),
+                    0.0,
+                    egui::Color32::from_white_alpha(100),
+                );
+            }
+        }
+    }
+}
+/// The part of `rect` where `f` is not negative (`f` linear: a half-plane).
+fn clip(rect: &egui::Rect, f: impl Fn(egui::Pos2) -> f32) -> Vec<egui::Pos2> {
+    let points = [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+    ];
+    let mut out = Vec::new();
+    for (i, p) in points.iter().enumerate() {
+        let q = points[(i + 1) % points.len()];
+        let (fp, fq) = (f(*p), f(q));
+        if fp >= 0.0 {
+            out.push(*p);
+        }
+        if (fp >= 0.0) != (fq >= 0.0) {
+            out.push(*p + (q - *p) * (fp / (fp - fq)));
+        }
+    }
+    out
 }

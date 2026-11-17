@@ -135,12 +135,23 @@ fn bands<'a>(
     monitors: &'a RefCell<Vec<Monitor>>,
     out: &'a RefCell<Vec<Action>>,
 ) -> Harness<'a> {
+    bands_in(
+        editor,
+        monitors,
+        out,
+        egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::vec2(600.0, 300.0)),
+    )
+}
+fn bands_in<'a>(
+    editor: &'a RefCell<Editor>,
+    monitors: &'a RefCell<Vec<Monitor>>,
+    out: &'a RefCell<Vec<Action>>,
+    content: egui::Rect,
+) -> Harness<'a> {
     Harness::builder()
         .with_size(egui::vec2(700.0, 420.0))
         .with_step_dt(1.0 / 60.0)
         .build_ui(move |ui| {
-            let content =
-                egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::vec2(600.0, 300.0));
             ui.interact(
                 content,
                 egui::Id::new("monitor"),
@@ -355,4 +366,122 @@ fn numeric_bounds_are_accessible_and_limited_by_neighbouring_sections() {
         .iter()
         .any(|a| matches!(a.edit,Edit::Replace{section:s,..} if s.from()==20.0 && s.to()==90.0)));
     assert!(h.get_by_label("Mirror").accesskit_node().is_disabled());
+}
+
+fn click(h: &mut Harness, at: egui::Pos2) {
+    h.drag_at(at);
+    h.step();
+    h.drop_at(at);
+    h.run();
+}
+/// Where `[from, to]` mm of `side` is drawn, on a 600 x 300 mm panel shown in `content`.
+fn centre(content: egui::Rect, side: Side, from: f64, to: f64) -> egui::Pos2 {
+    let length = if side.vertical() { 300.0 } else { 600.0 };
+    r::segment(r::band(content, side), side, g::Span::new(from, to), length).center()
+}
+#[test]
+fn a_short_section_at_either_end_of_any_edge_is_selected_through_the_crossing_band() {
+    // Full scale as in the review's reproduction, then a map shrunk to a quarter, where
+    // the corner covers a larger share of the edge.
+    for content in [
+        egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::vec2(600.0, 300.0)),
+        egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::vec2(150.0, 75.0)),
+    ] {
+        for side in Side::ALL {
+            let length = if side.vertical() { 300.0 } else { 600.0 };
+            for (from, to) in [(0.0, 10.0), (length - 10.0, length)] {
+                let editor = RefCell::new(Editor::default());
+                let monitors = RefCell::new(vec![monitor("a", 0.0, 0.0)]);
+                side.sections_mut(&mut monitors.borrow_mut()[0].resistance)
+                    .push(section(from, to));
+                let actions = RefCell::new(vec![]);
+                let mut h = bands_in(&editor, &monitors, &actions, content);
+                h.run();
+                let at = centre(content, side, from, to);
+                assert_eq!(
+                    r::owner(content, &monitors.borrow()[0], at),
+                    Some(side),
+                    "{side:?} [{from}, {to}] in {content:?}"
+                );
+                click(&mut h, at);
+                assert_eq!(
+                    editor.borrow().selected,
+                    Some(Selection {
+                        monitor: "a".into(),
+                        side,
+                        index: 0,
+                    }),
+                    "{side:?} [{from}, {to}] in {content:?}"
+                );
+            }
+        }
+    }
+}
+#[test]
+fn a_corner_held_by_both_edges_is_cut_along_its_diagonal_and_a_gesture_keeps_its_edge() {
+    let content = egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::vec2(600.0, 300.0));
+    let editor = RefCell::new(Editor::default());
+    let monitors = RefCell::new(vec![monitor("a", 0.0, 0.0)]);
+    monitors.borrow_mut()[0]
+        .resistance
+        .right
+        .sections
+        .push(section(250.0, 300.0));
+    monitors.borrow_mut()[0]
+        .resistance
+        .bottom
+        .sections
+        .push(section(590.0, 600.0));
+    let actions = RefCell::new(vec![]);
+    let mut h = bands_in(&editor, &monitors, &actions, content);
+    h.run();
+    // Bottom-right corner is (628..640, 328..340): nearer the right edge, then the bottom.
+    for (at, side) in [
+        (egui::pos2(638.0, 333.0), Side::Right),
+        (egui::pos2(633.0, 338.0), Side::Bottom),
+    ] {
+        assert_eq!(r::owner(content, &monitors.borrow()[0], at), Some(side));
+        click(&mut h, at);
+        assert_eq!(
+            editor.borrow().selected.as_ref().map(|s| s.side),
+            Some(side)
+        );
+    }
+
+    // A gesture started in the corner stays on its edge until release, even when the
+    // pointer is let go over a part only the bottom band covers.
+    let editor = RefCell::new(Editor::default());
+    let monitors = RefCell::new(vec![monitor("a", 0.0, 0.0)]);
+    monitors.borrow_mut()[0]
+        .resistance
+        .right
+        .sections
+        .push(section(250.0, 300.0));
+    let actions = RefCell::new(vec![]);
+    let mut h = bands_in(&editor, &monitors, &actions, content);
+    h.run();
+    // 299 mm on the right edge: that section's end handle, in the corner.
+    let (press, release) = (egui::pos2(638.0, 339.0), egui::pos2(600.0, 328.0));
+    assert_eq!(
+        r::owner(content, &monitors.borrow()[0], press),
+        Some(Side::Right)
+    );
+    assert_eq!(
+        r::owner(content, &monitors.borrow()[0], release),
+        Some(Side::Bottom)
+    );
+    drag(&mut h, press, release);
+    assert!(editor.borrow().active());
+    h.drop_at(release);
+    h.run();
+    let log = actions.borrow();
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].side, Side::Right);
+    let Edit::Replace { index: 0, section } = log[0].edit else {
+        panic!(
+            "expected the right section to be resized, got {:?}",
+            log[0].edit
+        );
+    };
+    assert_eq!((section.from(), section.to()), (250.0, 289.0));
 }

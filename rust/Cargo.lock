@@ -690,6 +690,7 @@ name = "lbm-engine"
 version = "0.1.0"
 dependencies = [
  "lbm-geom",
+ "lbm-layout",
  "lbm-zones",
  "roxmltree",
 ]

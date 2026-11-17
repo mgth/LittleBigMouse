@@ -295,6 +295,7 @@ impl MouseEngine {
         dist: i32,
     ) {
         // Extract everything from the arena before we mutate resistance state.
+        let bounds = self.layout.arena[zone].pixels_bounds();
         let links = self.side_links(zone, side);
         let Some(index) = at_pixel_index(links, coord) else {
             // No links on this side (malformed layout): can't cross here.
@@ -302,7 +303,19 @@ impl MouseEngine {
             return;
         };
         let link = &links[index];
-        let resistance_px = link.border_resistance_px;
+        // A diagonal exit through a corner reaches the side with `coord` already
+        // past its end, on a link that runs off the edge (#747): the compiler
+        // gives those a target whenever the neighbour extends beyond the corner,
+        // but no section can be drawn there, so their resistance is always 0. The
+        // cursor still leaves through the edge's last pixel, and the section drawn
+        // there governs — the same one a straight push into the corner meets, so
+        // the two kinds of push also drain a single resistance.
+        let (span_from, span_to) = match side {
+            Side::Left | Side::Right => (bounds.top(), bounds.bottom() - 1),
+            _ => (bounds.left(), bounds.right() - 1),
+        };
+        let gate = at_pixel_index(links, coord.clamp(span_from, span_to)).unwrap_or(index);
+        let resistance_px = links[gate].border_resistance_px;
 
         // Resolve the target BEFORE mapping the coordinate: the catch-all no-target link carries
         // i32::MIN/MAX sentinel bounds, so mapping through it is both meaningless and (pre-fix) an
@@ -313,7 +326,7 @@ impl MouseEngine {
         };
         let to_target = link.to_target_pixel(coord);
 
-        if !self.try_pass_border_pixel(env, zone, side, index, resistance_px, dist) {
+        if !self.try_pass_border_pixel(env, zone, side, gate, resistance_px, dist) {
             self.no_zone_matches(env, e);
             return;
         }
@@ -364,7 +377,7 @@ impl MouseEngine {
 
         let (zone_out, p_out_in_mm) = self.find_target_zone(Some(old_zone), trip, min_dist_squared);
         if let Some(zone_out) = zone_out {
-            if self.try_pass_border_cross(env, old_zone, trip) {
+            if self.try_pass_border_cross(env, old_zone, zone_out, trip) {
                 self.move_in_mm(env, e, p_out_in_mm, zone_out);
             } else {
                 self.no_zone_matches(env, e);
@@ -384,7 +397,7 @@ impl MouseEngine {
             if let Some(shifted) = shifted {
                 let (zone_out, p_out) = self.find_target_zone(None, shifted, min_dist_squared);
                 if let Some(zone_out) = zone_out {
-                    if self.try_pass_border_cross(env, old_zone, trip) {
+                    if self.try_pass_border_cross(env, old_zone, zone_out, trip) {
                         self.move_in_mm(env, e, p_out, zone_out);
                     } else {
                         self.no_zone_matches(env, e);
@@ -406,7 +419,7 @@ impl MouseEngine {
             if let Some(shifted) = shifted {
                 let (zone_out, p_out) = self.find_target_zone(None, shifted, min_dist_squared);
                 if let Some(zone_out) = zone_out {
-                    if self.try_pass_border_cross(env, old_zone, trip) {
+                    if self.try_pass_border_cross(env, old_zone, zone_out, trip) {
                         self.move_in_mm(env, e, p_out, zone_out);
                     } else {
                         self.no_zone_matches(env, e);
@@ -477,13 +490,16 @@ impl MouseEngine {
         (zone_out, p_out_in_mm)
     }
 
-    /// C++ `TryPassBorderCross`.
+    /// C++ `TryPassBorderCross`, plus the corner rule of [`Self::corner_link`].
     fn try_pass_border_cross(
         &mut self,
         env: &mut impl CursorEnv,
         zone: ZoneId,
+        zone_out: ZoneId,
         trip: Segment<f64>,
     ) -> bool {
+        // Links name main zones; a loop clone is reached through its main's links.
+        let zone_out = self.layout.arena[zone_out].main;
         let bounds = self.layout.arena[zone].physical_bounds();
         let mut p = Point::default();
 
@@ -518,11 +534,72 @@ impl MouseEngine {
                 let Some(index) = at_physical_index(links, pos) else {
                     return false;
                 };
-                let resistance = links[index].border_resistance;
+                let (side, index) = if links[index].target == Some(zone_out) {
+                    (side, index)
+                } else {
+                    self.corner_link(zone, side, trip.b())
+                        .unwrap_or((side, index))
+                };
+                let resistance = self.side_links(zone, side)[index].border_resistance;
                 return self.try_pass_border(env, zone, side, index, resistance, distance);
             }
         }
         false
+    }
+
+    /// The link that governs a trip cutting a corner (#747): it left `zone`
+    /// through `crossed`, whose link there does not lead where the cursor goes,
+    /// and ends past the adjacent side — a flick over the corner into a
+    /// neighbour that extends beyond it. The edge the cursor actually goes round
+    /// is that adjacent side, at the corner: the section drawn there is the one
+    /// a straight push into the corner meets, and it must hold this trip too.
+    fn corner_link(&self, zone: ZoneId, crossed: Side, end: Point<f64>) -> Option<(Side, usize)> {
+        let bounds = self.layout.arena[zone].physical_bounds();
+        // The adjacent side `end` lies beyond, and the corner's position along
+        // it: its start or its end, whichever touches the crossed side.
+        let (adjacent, corner, at_end) = match crossed {
+            Side::Top | Side::Bottom => {
+                let corner = if crossed == Side::Top {
+                    bounds.top()
+                } else {
+                    bounds.bottom()
+                };
+                let at_end = crossed == Side::Bottom;
+                if end.x() > bounds.right() {
+                    (Side::Right, corner, at_end)
+                } else if end.x() < bounds.left() {
+                    (Side::Left, corner, at_end)
+                } else {
+                    return None;
+                }
+            }
+            Side::Left | Side::Right => {
+                let corner = if crossed == Side::Left {
+                    bounds.left()
+                } else {
+                    bounds.right()
+                };
+                let at_end = crossed == Side::Right;
+                if end.y() < bounds.top() {
+                    (Side::Top, corner, at_end)
+                } else if end.y() > bounds.bottom() {
+                    (Side::Bottom, corner, at_end)
+                } else {
+                    return None;
+                }
+            }
+            Side::None => return None,
+        };
+        let links = self.side_links(zone, adjacent);
+        // Links are half-open `[from, to)`: the start of the side is found as
+        // is, but its end belongs to the link *before* the one starting there,
+        // which is the off-edge one this must not pick.
+        let index = if at_end {
+            links.iter().position(|l| corner <= l.to)
+        } else {
+            at_physical_index(links, corner)
+        }?;
+        Some((adjacent, index))
     }
 
     // --- resistance (C++ TryPassBorder / TryPassBorderPixel) -----------------

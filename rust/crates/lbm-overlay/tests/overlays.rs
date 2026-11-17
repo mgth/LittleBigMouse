@@ -104,6 +104,47 @@ fn references_cross_only_the_physical_panels_they_intersect_with_per_monitor_dpi
     assert_eq!(decoded, bands);
 }
 #[test]
+fn a_guide_leaving_a_screen_never_hands_its_surface_to_a_screen_of_another_dpi() {
+    // A (100 %) spans y = 0..180 mm and B (200 %) y = -75..300 mm. Going straight from a
+    // reference across both to one across B alone must not give A's guide surface to B.
+    let both = references(true, 90., scene::GuideKind::Section);
+    let only_b = references(true, 250., scene::GuideKind::Section);
+    let guide = |bands: &[Band]| -> Vec<String> {
+        bands
+            .iter()
+            .filter(|b| matches!(b.content, Content::Guide { .. }))
+            .map(|b| b.connector.clone())
+            .collect()
+    };
+    assert_eq!(guide(&both), ["A", "B"]);
+    assert_eq!(guide(&only_b), ["B"]);
+    let previous: Vec<_> = both.iter().map(Band::binding).collect();
+    let plan = scene::reuse(&previous, &only_b);
+    for (band, index) in only_b.iter().zip(&plan) {
+        let index = index.expect("every band keeps a surface of its own screen and role");
+        assert_eq!(both[index].binding(), band.binding());
+        assert_eq!(both[index].connector, band.connector);
+        assert_eq!(both[index].scale, band.scale);
+    }
+    let guide_index = plan.last().unwrap().unwrap();
+    assert_eq!(both[guide_index].connector, "B");
+    // A's guide surface is the only one left over, so it is released.
+    let mut used: Vec<_> = plan.iter().flatten().copied().collect();
+    used.sort();
+    let released: Vec<_> = (0..both.len()).filter(|i| !used.contains(i)).collect();
+    assert_eq!(released.len(), 1);
+    assert_eq!(both[released[0]].connector, "A");
+    assert!(matches!(both[released[0]].content, Content::Guide { .. }));
+
+    // A guide never takes the band of its own side, and the reverse transition creates
+    // A's guide surface instead of borrowing B's.
+    let back = scene::reuse(&only_b.iter().map(Band::binding).collect::<Vec<_>>(), &both);
+    assert_eq!(back.iter().filter(|i| i.is_none()).count(), 1);
+    let created = back.iter().position(Option::is_none).unwrap();
+    assert_eq!(both[created].connector, "A");
+    assert!(matches!(both[created].content, Content::Guide { .. }));
+}
+#[test]
 fn guide_endpoints_remain_inside_each_output_and_opt_in_controls_their_lifetime() {
     for (horizontal, mm) in [(false, 0.), (true, 180.), (true, -75.), (true, 300.)] {
         for b in references(horizontal, mm, scene::GuideKind::ScreenEdge) {

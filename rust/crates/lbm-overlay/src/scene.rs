@@ -166,6 +166,30 @@ pub fn with_reference(
     bands.extend(guides);
     Ok(bands)
 }
+/// What a native surface is bound to: one output and one role on it. A surface is only
+/// reused for the same binding, so it never moves to another screen, where Windows would
+/// give it that screen's DPI and report a display change.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Binding {
+    connector: String,
+    screen: Pixels,
+    side: Side,
+    guide: bool,
+}
+/// For each band, the previous surface with the same binding, each one used at most once.
+/// A band without one needs a new surface; previous surfaces left out are released.
+pub fn reuse(previous: &[Binding], bands: &[Band]) -> Vec<Option<usize>> {
+    let mut taken = vec![false; previous.len()];
+    bands
+        .iter()
+        .map(|band| {
+            let binding = band.binding();
+            let index = (0..previous.len()).find(|&i| !taken[i] && previous[i] == binding)?;
+            taken[index] = true;
+            Some(index)
+        })
+        .collect()
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Band {
     pub monitor: String,
@@ -180,6 +204,14 @@ pub struct Band {
     pub content: Content,
 }
 impl Band {
+    pub fn binding(&self) -> Binding {
+        Binding {
+            connector: self.connector.clone(),
+            screen: self.screen,
+            side: self.side,
+            guide: matches!(self.content, Content::Guide { .. }),
+        }
+    }
     pub fn axis_pixels(&self) -> i32 {
         if self.side.vertical() {
             self.rect.height

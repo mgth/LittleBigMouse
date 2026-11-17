@@ -26,6 +26,7 @@ using LittleBigMouse.Plugin.Vcp.Avalonia.SamsungTizen;
 using LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
 using LittleBigMouse.Plugin.Vcp.Calibration;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 using LittleBigMouse.Ui.Avalonia.Remote;
@@ -145,6 +146,7 @@ internal class Program
 
         try
         {
+            LbmLocalizer.Current.Initialize();
 
             // TODO (ReactiveUI 23): configure the exception handler via RxAppBuilder.WithExceptionHandler.
 
@@ -156,7 +158,12 @@ internal class Program
 
             services.AddSingleton<IApplicationUpdater, ApplicationUpdaterViewModel>();
             services.AddSingleton<IIconService, IconService>();
-            services.AddSingleton<ILocalizationService, LocalizationService>();
+            services.AddSingleton<ILocalizationService>(_ =>
+            {
+                var service = new LocalizationService();
+                service.Register(new LbmLocalizationProvider(LbmLocalizer.Current));
+                return service;
+            });
             services.AddSingleton<IMvvmService, MvvmService>();
             services.AddSingleton<IMessagesService, HLab.Core.MessageBus>();
             services.AddSingleton<IUserNotificationService, UserNotificationServiceAvalonia>();

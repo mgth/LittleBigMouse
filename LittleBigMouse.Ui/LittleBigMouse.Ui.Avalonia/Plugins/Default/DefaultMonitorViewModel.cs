@@ -24,6 +24,7 @@
 using Avalonia.Controls;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Ui.Avalonia.Controls;
 using LittleBigMouse.Platform.Windows;
@@ -113,7 +114,7 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowDetachAsync)) return;
 
         if (_controller?.DetachFromDesktop(Model.ActiveSource.Source) == false)
-            await MonitorWarningDialog.ShowFailureAsync(owner, "detach this monitor");
+            await MonitorWarningDialog.ShowFailureAsync(owner, LbmLocalizer.Current.Get("Dialog.MonitorWarning.Failure.Action.Detach"));
     }
 
     async Task AttachToDesktopAsync(Window? owner)
@@ -121,7 +122,7 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowAttachAsync)) return;
 
         if (_controller?.AttachToDesktop(Model.ActiveSource.Source) == false)
-            await MonitorWarningDialog.ShowFailureAsync(owner, "attach this monitor");
+            await MonitorWarningDialog.ShowFailureAsync(owner, LbmLocalizer.Current.Get("Dialog.MonitorWarning.Failure.Action.Attach"));
     }
 
     async Task MakePrimaryAsync(Window? owner)
@@ -129,7 +130,7 @@ public class DefaultMonitorViewModel : ViewModel<PhysicalMonitor>
         if (!await ConfirmAsync(owner, MonitorWarningDialog.ShowMakePrimaryAsync)) return;
 
         if (_controller?.SetPrimary(Model.ActiveSource.Source) == false)
-            await MonitorWarningDialog.ShowFailureAsync(owner, "make this monitor primary");
+            await MonitorWarningDialog.ShowFailureAsync(owner, LbmLocalizer.Current.Get("Dialog.MonitorWarning.Failure.Action.MakePrimary"));
     }
 
     async Task<bool> ConfirmAsync(Window? owner, Func<Window?, Task<(bool Confirmed, bool DontShowAgain)>> showDialog)

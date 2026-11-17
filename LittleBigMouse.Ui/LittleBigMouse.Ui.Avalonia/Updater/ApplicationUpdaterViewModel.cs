@@ -15,6 +15,7 @@ using Avalonia.Threading;
 using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using ReactiveUI;
 
 namespace LittleBigMouse.Ui.Avalonia.Updater;
@@ -149,11 +150,11 @@ public class ApplicationUpdaterViewModel : ViewModel, IApplicationUpdater
         }
         catch (Win32Exception)
         {
-            Message = "Update failed";
+            Message = LbmLocalizer.Current.Get("Updater.UpdateFailed");
         }
         catch (WebException)
         {
-            Message = "Download failed";
+            Message = LbmLocalizer.Current.Get("Updater.DownloadFailed");
         }
     }
 

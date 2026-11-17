@@ -1,4 +1,5 @@
 using Avalonia.Input;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Ui.Avalonia.Controls;
 using LittleBigMouse.Ui.Avalonia.Options;
 using Xunit;
@@ -189,7 +190,11 @@ public sealed class ShortcutBoxTests
         // something else owns it. On Linux the desktop owns it and can accept the
         // shortcut while giving it no key — not a refusal, not a collision, and
         // fixed somewhere the user has to be pointed at.
-        var message = LbmOptionsViewModel.ShortcutUnavailableMessage("Ctrl+Alt+Shift+M");
+        // Its own English localizer: LbmLocalizer.Current is shared with the
+        // localization tests, which switch it to zh-CN while this may run.
+        var english = new LbmLocalizer();
+        english.SetLanguage(LbmLocalizer.DefaultLanguage);
+        var message = LbmOptionsViewModel.ShortcutUnavailableMessage("Ctrl+Alt+Shift+M", english);
 
         Assert.Contains("Ctrl+Alt+Shift+M", message);
         Assert.Contains("NOT active", message);

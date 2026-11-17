@@ -1,7 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
         x:Class="LittleBigMouse.Ui.Avalonia.Controls.UnsavedChangesDialog"
-        Title="Unsaved layout"
+        Title="{loc:Tr Dialog.Unsaved.Title}"
         Width="480"
         SizeToContent="Height"
         CanResize="False"
@@ -16,7 +17,7 @@
 			      Fill="#E0A030" Width="26" Height="26" Stretch="Uniform"
 			      VerticalAlignment="Center"/>
 			<TextBlock x:Name="HeadingText"
-			           Text="Your layout has not been saved"
+			           Text="{loc:Tr Dialog.Unsaved.Heading}"
 			           FontSize="16" FontWeight="SemiBold"
 			           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
 			           VerticalAlignment="Center" TextWrapping="Wrap"/>
@@ -31,12 +32,12 @@
 		<TextBlock x:Name="SaveNote" TextWrapping="Wrap" FontSize="12"
 		           Foreground="{DynamicResource Lbm.Brushes.Text.Secondary}"
 		           IsVisible="False"
-		           Text="Live update is on, so this layout is the one currently driving the mouse — saving it keeps what you have been feeling."/>
+		           Text="{loc:Tr Dialog.Unsaved.SaveNote}"/>
 
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-			<Button x:Name="CancelButton" Content="Cancel" Click="OnCancelClick" IsCancel="True"/>
-			<Button x:Name="ContinueButton" Content="Keep unsaved" Click="OnContinueClick"/>
-			<Button x:Name="SaveButton" Content="Save" Click="OnSaveClick"
+			<Button x:Name="CancelButton" Content="{loc:Tr Dialog.Unsaved.Cancel}" Click="OnCancelClick" IsCancel="True"/>
+			<Button x:Name="ContinueButton" Content="{loc:Tr Dialog.Unsaved.KeepUnsaved}" Click="OnContinueClick"/>
+			<Button x:Name="SaveButton" Content="{loc:Tr Dialog.Unsaved.Save}" Click="OnSaveClick"
 			        IsVisible="False" IsDefault="True"/>
 		</StackPanel>
 

@@ -23,12 +23,15 @@
 
 using System;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using DynamicData;
+using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
-using LittleBigMouse.Plugins;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 
 namespace LittleBigMouse.Ui.Avalonia.Plugins.Debug;
 public struct MonitorDebugListValue
@@ -74,24 +77,49 @@ public class MonitorDebugViewModel : ViewModel<PhysicalMonitor>
 
     void AddValue(string name, string value, Action? handler = null, bool isTitle = false)
     {
+        var displayName = string.IsNullOrEmpty(name)
+            ? name
+            : LbmLocalizer.Current.GetOrFallback($"Debug.Field.{name}", name);
+        var displayValue = isTitle
+            ? LbmLocalizer.Current.GetOrFallback($"Debug.Section.{value}", value)
+            : value;
 
         Values.Add(new MonitorDebugListValue
         {
-            Name = name, 
-            Value = value,
+            Name = displayName,
+            Value = displayValue,
             Handler = handler,
             IsTitle = isTitle
         });
 
-        
+
         Grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
 
-        var labelName = new Label { Content = name };
-        var labelValue = new TextBox {
-            Text = value,
-            Background = isTitle?new SolidColorBrush(Colors.Gray):new SolidColorBrush(Color.FromArgb(0x80,0x00, 0x00, 0x00)),
+        var labelName = new Label();
+        if (!string.IsNullOrEmpty(name))
+        {
+            labelName.Bind(ContentControl.ContentProperty,
+                LbmLocalizer.Current.ObserveOrFallback($"Debug.Field.{name}", name).ToBinding())
+                .DisposeWith(this);
+            ToolTip.SetTip(labelName, name);
+        }
+
+        var labelValue = new TextBox
+        {
+            Background = isTitle ? new SolidColorBrush(Colors.Gray) : new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00)),
             IsReadOnly = true
         };
+        if (isTitle && !string.IsNullOrEmpty(value))
+        {
+            labelValue.Bind(TextBox.TextProperty,
+                LbmLocalizer.Current.ObserveOrFallback($"Debug.Section.{value}", value).ToBinding())
+                .DisposeWith(this);
+            ToolTip.SetTip(labelValue, value);
+        }
+        else
+        {
+            labelValue.Text = value;
+        }
 
         if (handler != null)
         {

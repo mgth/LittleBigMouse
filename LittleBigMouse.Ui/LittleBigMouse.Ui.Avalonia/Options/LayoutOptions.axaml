@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:options="clr-namespace:LittleBigMouse.Ui.Avalonia.Options"
              xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
+             xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
              mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="900"
              x:Class="LittleBigMouse.Ui.Avalonia.Options.LayoutOptions"
              x:DataType="options:LbmOptionsViewModel"
@@ -14,15 +15,15 @@
 
 			<Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Lbm.Brushes.Card.Separator}" Padding="18,12">
 				<Grid ColumnDefinitions="*,Auto">
-					<TextBlock Text="Settings" FontSize="15" FontWeight="SemiBold"
+					<TextBlock Text="{loc:Tr Options.Title}" FontSize="15" FontWeight="SemiBold"
 					           Foreground="{DynamicResource Lbm.Brushes.Text.Primary}"
 					           VerticalAlignment="Center"/>
 					<Border Grid.Column="1" Classes="Badge Success"
 					        IsVisible="{Binding Model.Elevated, FallbackValue=false}"
-					        ToolTip.Tip="LittleBigMouse is running with elevated privileges and can work over elevated apps.">
+					        ToolTip.Tip="{loc:Tr Options.Elevated.Tooltip}">
 						<StackPanel Orientation="Horizontal" Spacing="6">
 							<Path Data="{StaticResource Lbm.Icon.Shield}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center"/>
-							<TextBlock Text="Running elevated" VerticalAlignment="Center"/>
+							<TextBlock Text="{loc:Tr Options.Elevated.Badge}" VerticalAlignment="Center"/>
 						</StackPanel>
 					</Border>
 				</Grid>
@@ -36,13 +37,13 @@
 			        Margin="16,10,16,0">
 				<controls:SettingRow Icon="{StaticResource Lbm.Icon.Coffee}"
 				                     Classes.Compact="{Binding #SettingsScroll.Offset, Converter={x:Static controls:ScrollConverters.IsScrolled}}"
-				                     Header="Support LittleBigMouse"
-				                     Description="Free and open source — if it's useful to you, consider buying me a coffee">
+				                     Header="{loc:Tr Options.Support.Header}"
+				                     Description="{loc:Tr Options.Support.Description}">
 					<Button Click="Kofi_OnClick" ToolTip.Tip="ko-fi.com/mgth">
 						<StackPanel Orientation="Horizontal" Spacing="6">
 							<Path Data="{StaticResource Lbm.Icon.Coffee}" Width="13" Height="13" Stretch="Uniform"
 							      Fill="{DynamicResource Lbm.Brushes.Text.Primary}" VerticalAlignment="Center"/>
-							<TextBlock Text="Ko-fi" VerticalAlignment="Center"/>
+							<TextBlock Text="{loc:Tr Options.Support.Kofi}" VerticalAlignment="Center"/>
 						</StackPanel>
 					</Button>
 				</controls:SettingRow>
@@ -51,12 +52,28 @@
 			<ScrollViewer Grid.Row="2" x:Name="SettingsScroll">
 				<StackPanel Margin="16,2,16,18">
 
-					<TextBlock Classes="SectionHeader" Text="General"/>
+					<TextBlock Classes="SectionHeader" Text="{loc:Tr Options.Section.General}"/>
+
+					<Border Classes="SettingCard">
+						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Language}"
+						                     Header="{loc:Tr Options.Language.Header}"
+						                     Description="{loc:Tr Options.Language.Description}">
+							<ComboBox ItemsSource="{Binding LanguageList}"
+							          SelectedItem="{Binding SelectedLanguage}">
+								<ComboBox.ItemTemplate>
+									<DataTemplate>
+										<TextBlock x:DataType="options:ListItem"
+										           Text="{Binding Caption}"/>
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
+						</controls:SettingRow>
+					</Border>
 
 					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Update}"
-						                     Header="Check for updates automatically"
-						                     Description="Look for new versions online in the background">
+						                     Header="{loc:Tr Options.AutoUpdate.Header}"
+						                     Description="{loc:Tr Options.AutoUpdate.Description}">
 							<ToggleSwitch IsChecked="{Binding Model.AutoUpdate, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
@@ -64,25 +81,25 @@
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Startup}"
-							                     Header="Load at startup"
-							                     Description="Start LittleBigMouse when you sign in">
+							                     Header="{loc:Tr Options.LoadAtStartup.Header}"
+							                     Description="{loc:Tr Options.LoadAtStartup.Description}">
 								<ToggleSwitch IsChecked="{Binding Model.LoadAtStartup, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Classes="Sub"
-							                     Header="Start minimized to tray">
+							                     Header="{loc:Tr Options.StartMinimized.Header}">
 								<ToggleSwitch IsChecked="{Binding Model.StartMinimized, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Classes="Sub"
-							                     Header="Hide tray icon"
-							                     Description="Reopen the window by launching LittleBigMouse again">
+							                     Header="{loc:Tr Options.HideTrayIcon.Header}"
+							                     Description="{loc:Tr Options.HideTrayIcon.Description}">
 								<ToggleSwitch IsChecked="{Binding Model.HideTrayIcon, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Classes="Sub"
-							                     Header="Stop the mouse engine with LittleBigMouse"
-							                     Description="Off: the engine keeps routing the cursor if LittleBigMouse stops, and picks up again when it comes back">
+							                     Header="{loc:Tr Options.BoundToAgent.Header}"
+							                     Description="{loc:Tr Options.BoundToAgent.Description}">
 								<ToggleSwitch IsChecked="{Binding Model.BoundToAgent, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 						</StackPanel>
@@ -90,8 +107,8 @@
 
 					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"
-						                     Header="Start with elevated privileges"
-						                     Description="Keeps working over elevated apps (admin accounts only; one UAC prompt on manual launch, none at logon)">
+						                     Header="{loc:Tr Options.StartElevated.Header}"
+						                     Description="{loc:Tr Options.StartElevated.Description}">
 							<ToggleSwitch IsChecked="{Binding Model.StartElevated, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
@@ -99,10 +116,10 @@
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Priority}"
-							                     Header="Daemon priority"
-							                     Description="Process priority of the mouse engine"/>
+							                     Header="{loc:Tr Options.Priority.Header}"
+							                     Description="{loc:Tr Options.Priority.Description}"/>
 							<Border Classes="SettingSeparator"/>
-							<controls:SettingRow Classes="Sub" Header="While active (hooked)">
+							<controls:SettingRow Classes="Sub" Header="{loc:Tr Options.Priority.Active}">
 								<ComboBox ItemsSource="{Binding PriorityList}"
 								          SelectedItem="{Binding SelectedPriority}">
 									<ComboBox.ItemTemplate>
@@ -115,7 +132,7 @@
 								</ComboBox>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
-							<controls:SettingRow Classes="Sub" Header="While inactive (unhooked)">
+							<controls:SettingRow Classes="Sub" Header="{loc:Tr Options.Priority.Inactive}">
 								<ComboBox ItemsSource="{Binding PriorityList}"
 								          SelectedItem="{Binding SelectedPriorityUnhooked}">
 									<ComboBox.ItemTemplate>
@@ -132,8 +149,8 @@
 
 					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Vcp}"
-						                     Header="Enable VCP monitor control"
-						                     Description="Brightness, contrast, inputs and smart-TV remotes over DDC/CI (adds a panel per monitor)">
+						                     Header="{loc:Tr Options.VcpControl.Header}"
+						                     Description="{loc:Tr Options.VcpControl.Description}">
 							<ToggleSwitch IsChecked="{Binding Model.VcpControl, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
@@ -142,27 +159,27 @@
 					<Border Classes="SettingCard" Margin="24,0,0,0"
 					        IsVisible="{Binding Model.VcpControl, FallbackValue=false}">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Experimental}"
-						                     Header="Enable experimental features"
-						                     Description="Argyll color calibration and smart-TV remote test tools in the VCP panel">
+						                     Header="{loc:Tr Options.Experimental.Header}"
+						                     Description="{loc:Tr Options.Experimental.Description}">
 							<ToggleSwitch IsChecked="{Binding Model.ExperimentalFeatures, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
 
 					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Debug}"
-						                     Header="Activate debug tools"
-						                     Description="Extra tools for troubleshooting, like viewing exported layouts">
+						                     Header="{loc:Tr Options.DebugTools.Header}"
+						                     Description="{loc:Tr Options.DebugTools.Description}">
 							<ToggleSwitch IsChecked="{Binding Model.DebugTools, FallbackValue=false, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
 
-					<TextBlock Classes="SectionHeader" Text="Mouse"/>
+					<TextBlock Classes="SectionHeader" Text="{loc:Tr Options.Section.Mouse}"/>
 
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Algorithm}"
-							                     Header="Crossing algorithm"
-							                     Description="How the cursor jumps between screens"/>
+							                     Header="{loc:Tr Options.Algorithm.Header}"
+							                     Description="{loc:Tr Options.Algorithm.Description}"/>
 							<!-- AutoScrollToSelectedItem off: these lists hold two or three cards and are
 							     visible whole, so scrolling to the selection buys nothing — but the request
 							     travels up to the settings scroller, which then opens the panel part-way
@@ -187,8 +204,8 @@
 
 					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Ruler}"
-						                     Header="Max travel distance"
-						                     Description="Maximum crossing jump, in pixels">
+						                     Header="{loc:Tr Options.MaxTravelDistance.Header}"
+						                     Description="{loc:Tr Options.MaxTravelDistance.Description}">
 							<NumericUpDown Minimum="{Binding Model.MinimalMaxTravelDistance, FallbackValue=0}"
 							               Increment="10"
 							               Value="{Binding Model.MaxTravelDistance, FallbackValue=200}"
@@ -199,16 +216,16 @@
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Gamepad}"
-							                     Header="Pause in games"
-							                     Description="Pause crossing while a game captures the mouse"
-							                     ToolTip.Tip="While a game captures the mouse (hidden or confined cursor), LBM pauses so the game gets clean relative input. Turn off if LBM wrongly stays paused: some apps hide or confine the cursor without being games.">
+							                     Header="{loc:Tr Options.PauseInGames.Header}"
+							                     Description="{loc:Tr Options.PauseInGames.Description}"
+							                     ToolTip.Tip="{loc:Tr Options.PauseInGames.Tooltip}">
 								<ToggleSwitch IsChecked="{Binding Model.FreelookEnabled, FallbackValue=true, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Classes="Sub"
-							                     Header="Detection interval"
-							                     Description="Re-check mouse capture while gaming, in ms"
-							                     ToolTip.Tip="Lower values react faster, 0 checks on every mouse event."
+							                     Header="{loc:Tr Options.DetectionInterval.Header}"
+							                     Description="{loc:Tr Options.DetectionInterval.Description}"
+							                     ToolTip.Tip="{loc:Tr Options.DetectionInterval.Tooltip}"
 							                     IsEnabled="{Binding Model.FreelookEnabled, FallbackValue=true}">
 								<NumericUpDown Minimum="0" Maximum="1000" Increment="10"
 								               Value="{Binding Model.FreelookCheckInterval, FallbackValue=100}"
@@ -220,14 +237,14 @@
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.LoopH}"
-							                     Header="Horizontal loop"
-							                     Description="Re-enter from the opposite side"
+							                     Header="{loc:Tr Options.LoopX.Header}"
+							                     Description="{loc:Tr Options.LoopX.Description}"
 							                     IsEnabled="{Binding Model.LoopAllowed, FallbackValue=false}">
 								<ToggleSwitch IsChecked="{Binding Model.LoopX, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.LoopV}"
-							                     Header="Vertical loop"
+							                     Header="{loc:Tr Options.LoopY.Header}"
 							                     IsEnabled="{Binding Model.LoopAllowed, FallbackValue=false}">
 								<ToggleSwitch IsChecked="{Binding Model.LoopY, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
@@ -237,18 +254,18 @@
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Mouse}"
-							                     Header="Adjust pointer speed"
-							                     Description="Keep speed consistent across DPI"
+							                     Header="{loc:Tr Options.AdjustSpeed.Header}"
+							                     Description="{loc:Tr Options.AdjustSpeed.Description}"
 							                     IsEnabled="{Binding AdjustSpeedAllowed, FallbackValue=false}"
-							                     ToolTip.Tip="Adjust the pointer speed when the system doesn't consider the screens ratio.">
+							                     ToolTip.Tip="{loc:Tr Options.AdjustSpeed.Tooltip}">
 								<ToggleSwitch IsChecked="{Binding Model.AdjustSpeed, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Pointer}"
-							                     Header="Adjust pointer size"
-							                     Description="Keep size consistent across DPI"
+							                     Header="{loc:Tr Options.AdjustPointer.Header}"
+							                     Description="{loc:Tr Options.AdjustPointer.Description}"
 							                     IsEnabled="{Binding AdjustPointerAllowed, FallbackValue=false}"
-							                     ToolTip.Tip="Adjust the pointer size when the system doesn't consider the screens ratio.">
+							                     ToolTip.Tip="{loc:Tr Options.AdjustPointer.Tooltip}">
 								<ToggleSwitch IsChecked="{Binding Model.AdjustPointer, Mode=TwoWay, FallbackValue=false}"/>
 							</controls:SettingRow>
 						</StackPanel>
@@ -257,8 +274,8 @@
 					<Border Classes="SettingCard" IsVisible="{Binding RescueShortcutSupported}">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"
-							                     Header="Rescue shortcut"
-							                     Description="Frees the cursor when it gets trapped where you cannot click. Hold it for about a second. One key plus at least one of Ctrl, Alt, Shift or Win.">
+							                     Header="{loc:Tr Options.RescueShortcut.Header}"
+							                     Description="{loc:Tr Options.RescueShortcut.Description}">
 								<controls:ShortcutBox Shortcut="{Binding Model.RescueShortcut, Mode=TwoWay, FallbackValue=''}"
 								                      MinWidth="170" HorizontalAlignment="Right"/>
 							</controls:SettingRow>
@@ -271,26 +288,26 @@
 						</StackPanel>
 					</Border>
 
-					<TextBlock Classes="SectionHeader" Text="Layout"/>
+					<TextBlock Classes="SectionHeader" Text="{loc:Tr Options.Section.Layout}"/>
 
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Overlap}"
-							                     Header="Allow overlaps"
-							                     Description="Screens may overlap in the layout">
+							                     Header="{loc:Tr Options.AllowOverlaps.Header}"
+							                     Description="{loc:Tr Options.AllowOverlaps.Description}">
 								<ToggleSwitch IsChecked="{Binding Model.AllowOverlaps, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Gap}"
-							                     Header="Allow discontinuity"
-							                     Description="Gaps between monitors are allowed">
+							                     Header="{loc:Tr Options.AllowDiscontinuity.Header}"
+							                     Description="{loc:Tr Options.AllowDiscontinuity.Description}">
 								<ToggleSwitch IsChecked="{Binding Model.AllowDiscontinuity, FallbackValue=false, Mode=TwoWay}"/>
 							</controls:SettingRow>
 							<Border Classes="SettingSeparator"/>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Ruler}"
-							                     Header="Minimal edge overlap"
-							                     Description="Display surface two touching screens must share, in mm"
-							                     ToolTip.Tip="When compaction brings two monitors into contact, it guarantees at least this many millimeters of shared display surface along the edge — bezels excluded, the cursor cannot cross them. 0 only asks for contact (a corner counts).">
+							                     Header="{loc:Tr Options.MinimalEdgeOverlap.Header}"
+							                     Description="{loc:Tr Options.MinimalEdgeOverlap.Description}"
+							                     ToolTip.Tip="{loc:Tr Options.MinimalEdgeOverlap.Tooltip}">
 								<NumericUpDown Minimum="0" Increment="5"
 								               Value="{Binding Model.MinimalEdgeOverlap, FallbackValue=20}"
 								               ClipValueToMinMax="True"/>
@@ -301,8 +318,8 @@
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Ruler}"
-							                     Header="Border values"
-							                     Description="Where each monitor's bezel borders are stored"/>
+							                     Header="{loc:Tr Options.BorderValues.Header}"
+							                     Description="{loc:Tr Options.BorderValues.Description}"/>
 							<!-- AutoScrollToSelectedItem off: these lists hold two or three cards and are
 							     visible whole, so scrolling to the selection buys nothing — but the request
 							     travels up to the settings scroller, which then opens the panel part-way
@@ -327,19 +344,19 @@
 
 					<Border Classes="SettingCard">
 						<controls:SettingRow Icon="{StaticResource Lbm.Icon.Warning}"
-						                     Header="Warn before monitor actions"
-						                     Description="Ask for confirmation before attaching, detaching or making a monitor primary">
+						                     Header="{loc:Tr Options.WarnMonitorActions.Header}"
+						                     Description="{loc:Tr Options.WarnMonitorActions.Description}">
 							<ToggleSwitch IsChecked="{Binding Model.ShowMonitorActionWarning, FallbackValue=true, Mode=TwoWay}"/>
 						</controls:SettingRow>
 					</Border>
 
-					<TextBlock Classes="SectionHeader" Text="Excluded processes"/>
+					<TextBlock Classes="SectionHeader" Text="{loc:Tr Options.Section.Excluded}"/>
 
 					<Border Classes="SettingCard">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Excluded}"
-							                     Header="LBM pauses when these apps are focused"
-							                     Description="Add a process name or pattern"/>
+							                     Header="{loc:Tr Options.Excluded.Header}"
+							                     Description="{loc:Tr Options.Excluded.Description}"/>
 
 							<ListBox Classes="ProcessList"
 							         ItemsSource="{Binding Model.ExcludedList}"
@@ -351,7 +368,7 @@
 											<Button Grid.Column="1" Classes="IconButton"
 											        Command="{Binding $parent[ListBox].((options:LbmOptionsViewModel)DataContext).RemoveExcludedProcessCommand}"
 											        CommandParameter="{Binding}"
-											        ToolTip.Tip="Remove">
+											        ToolTip.Tip="{loc:Tr Options.Excluded.RemoveTooltip}">
 												<Path Data="{StaticResource Lbm.Icon.Trash}" Width="14" Height="14" Stretch="Uniform"/>
 											</Button>
 										</Grid>
@@ -360,23 +377,24 @@
 							</ListBox>
 
 							<Grid ColumnDefinitions="*,Auto" Margin="14,6,14,12">
-								<TextBox Watermark="game.exe or pattern"
+								<TextBox PlaceholderText="{loc:Tr Options.Excluded.Watermark}"
 								         Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
 								         FontSize="13"/>
 								<Button Grid.Column="1" Margin="8,0,0,0"
-								        Command="{Binding AddExcludedProcessCommand}">Exclude</Button>
+								        Command="{Binding AddExcludedProcessCommand}"
+								        Content="{loc:Tr Options.Excluded.ExcludeButton}"/>
 							</Grid>
 
 							<Button HorizontalAlignment="Left" Margin="14,0,14,12"
 							        Command="{Binding AddDefaultsCommand}"
-							        Content="Add defaults"
-							        ToolTip.Tip="Add the built-in default exclusions (Epic, Steam, Riot, Xbox game folders) that aren't already in the list"/>
+							        Content="{loc:Tr Options.Excluded.AddDefaults}"
+							        ToolTip.Tip="{loc:Tr Options.Excluded.AddDefaultsTooltip}"/>
 
 							<Border Classes="SettingSeparator"/>
 
 							<controls:SettingRow Classes="Sub"
-							                     Header="Seen processes"
-							                     Description="Click one to use it as pattern"/>
+							                     Header="{loc:Tr Options.SeenProcesses.Header}"
+							                     Description="{loc:Tr Options.SeenProcesses.Description}"/>
 							<ListBox Classes="ProcessList"
 							         ItemsSource="{Binding SeenProcesses}"
 							         SelectedValue="{Binding SelectedSeenProcess}"

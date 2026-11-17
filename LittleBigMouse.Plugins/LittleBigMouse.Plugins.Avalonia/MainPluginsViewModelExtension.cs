@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Reactive.Linq;
 using HLab.Mvvm.Annotations;
+using LittleBigMouse.Plugins.Localization;
 using ReactiveUI;
 
 namespace LittleBigMouse.Plugins.Avalonia;
@@ -32,8 +33,13 @@ public static class MainPluginsViewModelExtension
         {
             Command = rc,
             IconPath = iconPath,
-            ToolTipText = toolTypeText,
+            ToolTipText = LbmLocalizer.Current.Get(toolTypeText),
         };
+
+        LbmLocalizer.Current
+            .Observe(toolTypeText)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(text => command.ToolTipText = text);
 
         @this.WhenAnyValue(e => e.ContentViewMode).Subscribe(e =>
         {

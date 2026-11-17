@@ -8,6 +8,7 @@
     xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
     xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
     xmlns:borderResistancePlugin="clr-namespace:LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin"
+    xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
     mc:Ignorable="d"
     d:DesignHeight="300" d:DesignWidth="300"
     x:Name="UserControl"
@@ -114,7 +115,7 @@
 			VerticalAlignment="Bottom" HorizontalAlignment="Left"
 			Margin="22"
 			Padding="2"
-			ToolTip.Tip="Show the sections on the real screens"
+			ToolTip.Tip="{loc:Tr BorderResistance.ShowOnScreensTooltip}"
 			IsChecked="{Binding ShowOnScreens}">
 
 			<icons:IconView
@@ -155,7 +156,7 @@
 
 			<StackPanel Spacing="12">
 
-				<TextBlock Text="Section" FontWeight="SemiBold" FontSize="15"/>
+				<TextBlock Text="{loc:Tr BorderResistance.SectionTitle}" FontWeight="SemiBold" FontSize="15"/>
 
 				<!-- Two settings, two states each: the number says how hard the edge
 				     pushes back, the switch turns it into a wall outright. -->
@@ -163,22 +164,22 @@
 				      RowDefinitions="Auto,Auto,Auto"
 				      ColumnSpacing="12" RowSpacing="8">
 
-					<TextBlock Grid.Row="0" Grid.Column="1" Classes="caption" Text="resistance"/>
-					<TextBlock Grid.Row="0" Grid.Column="2" Classes="caption" Text="block"/>
+					<TextBlock Grid.Row="0" Grid.Column="1" Classes="caption" Text="{loc:Tr BorderResistance.Resistance}"/>
+					<TextBlock Grid.Row="0" Grid.Column="2" Classes="caption" Text="{loc:Tr BorderResistance.Block}"/>
 
-					<TextBlock Grid.Row="1" Grid.Column="0" Text="Move" VerticalAlignment="Center"/>
+					<TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr BorderResistance.Move}" VerticalAlignment="Center"/>
 					<controls:DoubleBox Grid.Row="1" Grid.Column="1"
 					                    PointerWheelChanged="OnMouseWheel"
-					                    ToolTip.Tip="Resistance in mm opposing a plain cursor move"
+					                    ToolTip.Tip="{loc:Tr BorderResistance.MoveTooltip}"
 					                    IsEnabled="{Binding !Selected.Model.MoveBlock}"
 					                    Value="{Binding Selected.Move}"/>
 					<ToggleSwitch Grid.Row="1" Grid.Column="2" Classes="compact"
 					              IsChecked="{Binding Selected.Model.MoveBlock}"/>
 
-					<TextBlock Grid.Row="2" Grid.Column="0" Text="Drag" VerticalAlignment="Center"/>
+					<TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr BorderResistance.Drag}" VerticalAlignment="Center"/>
 					<controls:DoubleBox Grid.Row="2" Grid.Column="1"
 					                    PointerWheelChanged="OnMouseWheel"
-					                    ToolTip.Tip="Resistance in mm opposing a move made with a mouse button held"
+					                    ToolTip.Tip="{loc:Tr BorderResistance.DragTooltip}"
 					                    IsEnabled="{Binding !Selected.Model.DragBlock}"
 					                    Value="{Binding Selected.Drag}"/>
 					<ToggleSwitch Grid.Row="2" Grid.Column="2" Classes="compact"
@@ -192,16 +193,16 @@
 					<!-- A crossing is defined per source edge, so a symmetric passage
 					     has to exist on both sides. Forgetting the other half is the
 					     easiest way to get a border that opens one way by accident. -->
-					<Button Grid.Column="0" Content="Mirror" HorizontalAlignment="Stretch"
+					<Button Grid.Column="0" Content="{loc:Tr BorderResistance.Mirror}" HorizontalAlignment="Stretch"
 					        HorizontalContentAlignment="Center" CornerRadius="6"
 					        IsEnabled="{Binding Selected.CanMirror}"
-					        ToolTip.Tip="Copy this section onto the facing edge of the monitor across it"
+					        ToolTip.Tip="{loc:Tr BorderResistance.MirrorTooltip}"
 					        Click="OnMirror"/>
 
-					<Button Grid.Column="1" Content="Delete" HorizontalAlignment="Stretch"
+					<Button Grid.Column="1" Content="{loc:Tr BorderResistance.Delete}" HorizontalAlignment="Stretch"
 					        HorizontalContentAlignment="Center" CornerRadius="6"
 					        Classes="danger"
-					        ToolTip.Tip="Remove this section (Delete)"
+					        ToolTip.Tip="{loc:Tr BorderResistance.DeleteTooltip}"
 					        Click="OnDelete"/>
 				</Grid>
 
@@ -209,7 +210,7 @@
 					IsVisible="{Binding Selected.Side.IsFullyBlocked}"
 					TextWrapping="Wrap" MaxWidth="230" FontSize="11"
 					Foreground="{StaticResource Section.Warning}"
-					Text="This edge is fully blocked in both modes. Ctrl still forces a crossing on Windows and X11, but not on Wayland."/>
+					Text="{loc:Tr BorderResistance.BlockedNote}"/>
 			</StackPanel>
 		</Border>
 		</Viewbox>

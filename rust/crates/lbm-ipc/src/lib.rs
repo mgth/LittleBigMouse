@@ -10,5 +10,6 @@
 pub mod endpoint;
 pub mod framing;
 pub mod instance;
+pub mod probe;
 pub mod protocol;
 pub mod shortcut;

@@ -154,8 +154,19 @@ pub enum Request {
     Refresh,
     /// Leave: the hook, then the agent.
     Quit,
-    /// Ask the hook for its edge report on the loaded layout (a `Probed` event).
+    /// Probe the agent's current/previewed zones (an XML `Probed` event).
     Probe,
+    /// Sweep an editor's document on a private copy: no save, preview or hook command.
+    /// The result is a JSON lbm_ipc::probe::Report under this request's Id, never a
+    /// broadcast. Legacy Probe/Probed keeps its existing XML contract.
+    ProbeLayout {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "LayoutRevision")]
+        layout_revision: u64,
+        #[serde(rename = "Document")]
+        document: Box<LayoutDocument>,
+    },
     /// The processes seen in the foreground this session, oldest first — what the
     /// exclusion list is picked from.
     SeenProcesses,

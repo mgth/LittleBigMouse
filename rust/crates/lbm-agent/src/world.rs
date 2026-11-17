@@ -53,6 +53,15 @@ pub trait AgentWorld: World {
         Err("this agent takes no edits".to_owned())
     }
 
+    /// Compile a copy of the displayed edit, without affecting the stored/previewed layout.
+    fn probe_zones(
+        &mut self,
+        _layout_id: &str,
+        _document: &LayoutDocument,
+    ) -> Result<String, String> {
+        Err("this agent cannot probe an edited layout".to_owned())
+    }
+
     /// The layout to preview: the current one with the edit applied, the current one
     /// left as it is. Refused as [`edit`](Self::edit) is.
     /// Apply the layout to the system display configuration. The screens really move —
@@ -359,6 +368,16 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     fn edit(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {
         document.apply(self.editable(layout_id)?);
         Ok(())
+    }
+
+    fn probe_zones(
+        &mut self,
+        layout_id: &str,
+        document: &LayoutDocument,
+    ) -> Result<String, String> {
+        let mut copy = self.editable(layout_id)?.clone();
+        document.apply(&mut copy);
+        Ok(compute_zones(&copy).serialize())
     }
 
     /// Save the edit, then move the screens to match it.

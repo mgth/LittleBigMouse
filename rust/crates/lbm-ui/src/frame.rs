@@ -187,6 +187,7 @@ pub struct Look<'a> {
     /// drawn small gets fewer rows, not smaller ones. Text that shrinks with the map
     /// would be unreadable on exactly the desktops that have most to say.
     pub details: &'a [(&'a str, String)],
+    pub probe: Option<crate::probe::Overlay<'a>>,
 }
 
 /// The view mode's rows, inside the lit part.
@@ -229,6 +230,7 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
         logo,
         wallpaper,
         details,
+        probe,
     } = *look;
     let fill = bezel_fill(ui.visuals(), selected);
     let painter = ui.painter();
@@ -273,6 +275,9 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
 
     if !details.is_empty() {
         write_details(ui, drawn.content, details);
+    }
+    if let Some(probe) = probe {
+        probe.draw(ui, drawn.content);
     }
 
     if let Some(logo) = logo {

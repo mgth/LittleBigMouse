@@ -113,6 +113,7 @@ pub fn draw<'a>(
                 logo: m.logo,
                 wallpaper: m.wallpaper,
                 details: m.details,
+                probe: m.probe,
             },
         );
     }
@@ -137,6 +138,7 @@ mod tests {
                 logo: None,
                 wallpaper: None,
                 details: &[],
+                probe: None,
             },
             MapMonitor {
                 id: "right",
@@ -146,6 +148,7 @@ mod tests {
                 logo: None,
                 wallpaper: None,
                 details: &[],
+                probe: None,
             },
         ]
     }
@@ -215,6 +218,7 @@ mod tests {
                 logo: None,
                 wallpaper: None,
                 details: &[],
+                probe: None,
             })
             .collect();
         let on_the_map = map::fit(map::extent(&four), win).ratio;

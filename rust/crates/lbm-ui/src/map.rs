@@ -42,6 +42,7 @@ pub struct MapMonitor<'a> {
     /// What the chosen view mode writes inside this screen — see
     /// [`crate::frame::Look::details`]. Empty in the default mode.
     pub details: &'a [(&'a str, String)],
+    pub probe: Option<crate::probe::Overlay<'a>>,
 }
 
 /// How the map sits in the window: one scale, and one corner.
@@ -272,6 +273,7 @@ pub fn draw<'a>(
                 logo: m.logo,
                 wallpaper: m.wallpaper,
                 details: m.details,
+                probe: m.probe,
             },
         );
         if response.clicked() {
@@ -315,6 +317,7 @@ mod tests {
                 logo: None,
                 wallpaper: None,
                 details: &[],
+                probe: None,
             },
             MapMonitor {
                 id: "right",
@@ -324,6 +327,7 @@ mod tests {
                 logo: None,
                 wallpaper: None,
                 details: &[],
+                probe: None,
             },
         ]
     }
@@ -394,6 +398,7 @@ mod tests {
                 logo: None,
                 wallpaper: None,
                 details: &[],
+                probe: None,
             },
             MapMonitor {
                 id: "left-of-it",
@@ -403,6 +408,7 @@ mod tests {
                 logo: None,
                 wallpaper: None,
                 details: &[],
+                probe: None,
             },
         ];
         let win = window(800.0, 600.0);

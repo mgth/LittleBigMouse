@@ -34,6 +34,7 @@ pub mod hook;
 #[cfg(any(target_os = "linux", windows))]
 pub mod icons;
 pub mod log;
+pub mod probe;
 pub mod reconcile;
 pub mod runtime;
 pub mod schtask;

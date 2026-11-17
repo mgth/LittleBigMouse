@@ -28,6 +28,8 @@ use lbm_ui::{drag, frame, list, map};
 /// One monitor, owned, because `MapMonitor` borrows.
 struct Screen {
     id: String,
+    /// The zone report names display sources, not physical monitor ids.
+    source_id: String,
     name: String,
     logo: Option<PathBuf>,
     mm_outside: Rect,
@@ -104,6 +106,8 @@ struct App {
     display_error: Option<String>,
     /// Everything the agent has said, and the requests still out.
     agent: lbm_app::conversation::Conversation,
+    probe: lbm_app::probe::Probe,
+    show_probe: bool,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
     /// **In memory only, and this window writes no file.** A drag changes this copy and
@@ -360,6 +364,7 @@ fn screens_of(layout: &Layout, mode: lbm_ui::mode::Mode) -> Vec<Screen> {
             let model = layout.model(&m.model);
             Some(Screen {
                 id: m.id.clone(),
+                source_id: m.active_source.clone().unwrap_or_default(),
                 name: model
                     .and_then(|model| model.pnp_device_name.clone())
                     .unwrap_or_else(|| m.id.clone()),
@@ -574,6 +579,8 @@ impl App {
             selected: None,
             drag: None,
             agent: lbm_app::conversation::Conversation::default(),
+            probe: lbm_app::probe::Probe::default(),
+            show_probe: true,
             excluded: None,
             pattern: String::new(),
             adjust_scale: false,
@@ -602,6 +609,7 @@ impl App {
         use lbm_app::session::Event;
         match event {
             Event::Connected { requests, snapshot } => {
+                self.probe = lbm_app::probe::Probe::default();
                 self.requests = Some(requests);
                 self.next_id = 3;
                 self.state = lbm_ui::State::default();
@@ -620,6 +628,7 @@ impl App {
             }
             Event::Message(message) => self.agent_said(message),
             Event::Disconnected(why) => {
+                self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.state = lbm_ui::State::default();
                 self.previewed = None;
@@ -945,6 +954,11 @@ impl App {
     /// The deciding is [`lbm_app::conversation`]'s, which has no window and no socket and
     /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
+        if let Message::Answer { id, result } = &message {
+            if self.probe.answered(*id, result) {
+                return;
+            }
+        }
         for effect in self.agent.said(message, &mut self.state) {
             match effect {
                 lbm_ui::Effect::Ask(press) => self.ask(press),
@@ -1105,8 +1119,42 @@ impl App {
                     .and_then(|p| p.to_str())
                     .and_then(|p| logos.get(p)),
                 details: &s.details,
+                probe: self.probe.overlay(&s.source_id, s.pixels),
             })
             .collect()
+    }
+
+    fn probe_tick(&mut self, ctx: &egui::Context) {
+        let now = std::time::Instant::now();
+        let key = if self.show_probe
+            && self.view != View::Settings
+            && self.requests.is_some()
+            && !self.refresh.pending()
+            && self.drag.is_none()
+        {
+            self.layout
+                .as_ref()
+                .zip(self.agent.layout.as_ref().and_then(|s| s.revision))
+                .map(|(layout, revision)| lbm_app::probe::Key::of(layout, revision))
+        } else {
+            None
+        };
+        self.probe.want(key, now);
+        if let Some(extra) = self.probe.ready(now) {
+            if let Some(requests) = &self.requests {
+                let id = self.next_id;
+                self.next_id += 1;
+                // This answer belongs to the report, never to a pending Save/Start.
+                self.probe.sent(id);
+                if requests.send((id, "ProbeLayout", extra)).is_err() {
+                    self.probe
+                        .answered(id, &Err("the agent stopped listening".into()));
+                }
+            }
+        }
+        if self.probe.waiting() {
+            ctx.request_repaint_after(lbm_app::probe::DEBOUNCE);
+        }
     }
 }
 
@@ -1220,6 +1268,8 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.view, View::Map, "Map");
                 ui.selectable_value(&mut self.view, View::List, "List");
+                ui.checkbox(&mut self.show_probe, "Show crossings")
+                    .on_hover_text("Green: a passage. Red: a wall. Resistance is bypassed for this geometric report. Probing does not start or change the mouse engine.");
                 // Asked when the panel is opened rather than on a timer: the list only
                 // grows, and nobody is looking at it the rest of the time.
                 if ui
@@ -1261,6 +1311,33 @@ impl eframe::App for App {
                 };
             });
         });
+
+        self.probe_tick(&ctx);
+        if self.show_probe && self.view != View::Settings {
+            egui::Panel::top("probe-status").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Green: passage · Red: wall · Resistance bypassed");
+                    if let Some(error) = self.probe.error.clone() {
+                        ui.label(format!("Crossings unavailable: {error}"));
+                        if ui.button("Retry crossings").clicked() {
+                            self.probe.retry(std::time::Instant::now());
+                            ctx.request_repaint();
+                        }
+                    } else if self.probe.waiting() {
+                        ui.label("Checking crossings…");
+                    } else if self.requests.is_none() {
+                        ui.label("Connect to the agent to show crossings");
+                    } else if self
+                        .agent
+                        .layout
+                        .as_ref()
+                        .is_some_and(|s| s.revision.is_none())
+                    {
+                        ui.label("Update the agent to show crossings");
+                    }
+                });
+            });
+        }
 
         if self.refresh.pending() {
             egui::Panel::top("display-change").show(ui, |ui| {
@@ -1491,6 +1568,34 @@ mod lifecycle_tests {
     use super::*;
     use lbm_app::session::Event;
     use serde_json::json;
+
+    #[test]
+    fn a_probe_answer_does_not_acknowledge_an_outstanding_save() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        layout.id = "A".into();
+        app.probe.want(
+            Some(lbm_app::probe::Key::of(&layout, 1)),
+            std::time::Instant::now(),
+        );
+        app.probe.sent(12);
+        app.agent.asking(13, "SaveLayout");
+        app.state.waiting = true;
+        app.agent_said(Message::Answer {
+            id: 12,
+            result: Ok(json!({"LayoutId":"A", "LayoutRevision":1, "Zones":[]})),
+        });
+        assert!(
+            app.state.waiting,
+            "only the save's own answer can settle it"
+        );
+        assert!(!app.probe.waiting());
+        app.agent_said(Message::Answer {
+            id: 13,
+            result: Ok(json!(null)),
+        });
+        assert!(!app.state.waiting);
+    }
 
     #[test]
     fn reconnect_keeps_the_edit_but_drops_live_mode_and_unacknowledged_saves() {

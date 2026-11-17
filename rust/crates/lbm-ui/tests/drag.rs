@@ -33,6 +33,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
         MapMonitor {
             id: "right",
@@ -42,6 +43,7 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             logo: None,
             wallpaper: None,
             details: &[],
+            probe: None,
         },
     ]
 }

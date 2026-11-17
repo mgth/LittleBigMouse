@@ -170,6 +170,20 @@ pub enum Request {
         #[serde(rename = "Settings")]
         settings: Box<lbm_store::wallpaper_settings::LayoutWallpaperSettings>,
     },
+    WallpaperSettings {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "LayoutRevision")]
+        layout_revision: u64,
+    },
+    ApplyWallpaper {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "LayoutRevision")]
+        layout_revision: u64,
+        #[serde(rename = "Settings")]
+        settings: Box<lbm_store::wallpaper_settings::LayoutWallpaperSettings>,
+    },
     /// The user's Stop.
     Stop,
     /// Rebuild the layout the automatic detection missed (#443).

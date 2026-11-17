@@ -250,6 +250,7 @@ fn per_screen(
                     continue;
                 };
                 screens.push(ScreenWallpaper {
+                    expected_size: None,
                     x: bounds.0,
                     y: bounds.1,
                     image: Some(PathBuf::from(path)),
@@ -258,6 +259,7 @@ fn per_screen(
                 });
             }
             ScreenWallpaperKind::Color => screens.push(ScreenWallpaper {
+                expected_size: None,
                 x: bounds.0,
                 y: bounds.1,
                 image: None,
@@ -320,6 +322,7 @@ fn span(
             let file = cut.get(&monitor.id)?;
             let (x, y) = pixel_bounds(layout, monitor)?;
             Some(ScreenWallpaper {
+                expected_size: None,
                 x,
                 y,
                 image: Some(file.clone()),

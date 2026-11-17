@@ -422,12 +422,70 @@ Les overlays natifs restent à qualifier sur bureau réel, notamment le clic tra
 le focus et le positionnement des traits aux bords à DPI mixtes. Aucun overlay n'a
 été ouvert sur les écrans réels pendant les vérifications.
 
+## Onzième lot : éditeur de fonds d'écran et backend Windows
+
+- Le mode Wallpaper est raccordé à un éditeur par écran : image ou couleur
+  `#RRGGBB`, Fill/Fit/Stretch/Tile/Center, et panorama commun dans l'espace physique.
+  Les chemins locaux peuvent être collés ou déposés dans la fenêtre. La sélection
+  du moniteur fonctionne depuis la carte, la liste et le panneau ; ce dernier
+  défile dans les petites fenêtres. Ouvrir le panneau ne modifie pas les réglages.
+- Preview met à jour les textures de la carte/liste sans écrire ni appeler le
+  bureau. Apply envoie les réglages à l'agent ; Undo restaure le dernier état
+  enregistré du fond d'écran, séparément de Save/Undo du layout. Les brouillons
+  restent présents après déconnexion ou changement d'écrans ; un rechargement
+  explicite permet de les abandonner. Les anciennes réponses et les aperçus calculés
+  sur une géométrie remplacée sont écartés. L'application attend un layout physique
+  sauvegardé et la fin de Live.
+- `WallpaperSettings` lit le fichier de l'agent, avec sa disponibilité native ;
+  `ApplyWallpaper` contrôle l'identité et la révision du layout, puis prépare et
+  enregistre les images hors de la boucle de l'agent. La réponse distingue
+  `Saved` et `Applied` : un refus du bureau après enregistrement reste visible.
+  Les mises à jour de `wallpaper.json` préservent les autres layouts et refusent
+  d'écraser un fichier illisible. Le protocole historique `SaveWallpaper` reste présent.
+- `lbm-wallpaper` partage les recettes existantes et le rendu entre aperçu, agent
+  et Windows : découpage physique tenant compte des bordures, coordonnées négatives,
+  portrait et DPI ; aplats et transparence ; prévisualisation limitée à 512 px par
+  axe. Les décodages et allocations sont bornés (source 32 Mpx, sortie 16 Mpx par
+  écran et 256 Mio pour l'ensemble des sorties). Les images d'aspect extrême ne
+  produisent plus de découpage nul. Les applications et repeints après Save ou
+  redétection sont sérialisés ; les travaux remplacés sont abandonnés avant application.
+- Windows utilise `IDesktopWallpaper`, avec préparation complète avant mutation,
+  nouvelle lecture des écrans et tentative de restauration après erreur. Des images
+  à la taille exacte de chaque dalle conservent les styles individuels malgré le
+  positionnement global de Windows. Si le bureau utilise Tile ou Span, tous les
+  écrans doivent être configurés pour passer à ces images indépendantes ; une
+  application partielle est refusée. Plasma vérifie que chaque cible correspond
+  à un écran unique avant ses écritures, et doit répondre `ok`.
+
+Contrôles locaux : 557 tests passent sur UI/app/agent/store/overlay/wallpaper.
+Trois tests inotify ont d'abord échoué car le quota de surveillance de la machine
+est épuisé (`ENOSPC`), puis ont été explicitement exclus de la passe finale ; ils
+ne sont pas considérés comme validés. Les tests nécessitant un bureau natif restent
+ignorés. Les 17 tests des anciennes recettes sont conservés dans la nouvelle crate.
+Les scénarios ajoutés couvrent les brouillons et réponses périmées, le transport API,
+les fichiers invalides, la géométrie, les styles et la restauration Windows simulée.
+Les captures `wallpaper-editor-wide.png` et `wallpaper-editor-narrow.png` sont
+inspectées. Formatage et Clippy sans avertissement passent sur toutes les cibles
+UI/app/agent/wallpaper, sous Linux et en compilation `x86_64-pc-windows-msvc`.
+Les tests isolent le bus de session : aucun fond d'écran réel n'a été modifié.
+
+Limites : le backend Windows est compilé et testé avec une interface simulée,
+mais reste à qualifier sur Windows réel, comme Plasma pour ce nouveau parcours.
+La sélection actuelle utilise un chemin ou un dépôt de fichier, sans dialogue natif.
+Les images générées sont conservées pour ne pas supprimer un fichier encore référencé
+par le bureau ; prévoir leur nettoyage après lecture fiable des références natives.
+Qualifier notamment le DPI mixte, le dock, le changement d'écran pendant Apply,
+les stratégies Windows qui interdisent les fonds d'écran et les échecs de restauration.
+La borne de sortie exclut actuellement les dalles 8K natives.
+
+Référence : [positionnement global de Windows](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/ne-shobjidl_core-desktop_wallpaper_position).
+
 ## Suite, dans l'ordre
 
-1. Porter l'éditeur de fond d'écran et son raccordement Windows `IDesktopWallpaper`.
-2. Qualifier les overlays Linux/Windows, les changements de topologie à DPI mixtes et
-   le premier périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
-3. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
+1. Qualifier les fonds d'écran et overlays Linux/Windows, les changements de topologie
+   à DPI mixtes et le premier périmètre egui sur matériel : veille, dock, UAC, reprise,
+   démarrage et mémoire ; compléter le dialogue de fichiers et le nettoyage du cache.
+2. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
    packaging et retrait de .NET une fois les fonctions conservées remplacées.
 
 Essais manuels encore nécessaires : lancement installé sans agent, agent élevé sous

@@ -7,6 +7,7 @@ publish = false
 description = "The resident process of LittleBigMouse v6: watches the system, loads the profiles, drives the hook"
 
 [dependencies]
+lbm-wallpaper = { path = "../lbm-wallpaper" }
 indexmap.workspace = true
 lbm-display = { path = "../lbm-display" }
 # The edge report (Probe): a pure function of the zones the agent already holds.
@@ -47,6 +48,7 @@ features = [
     "Win32_Security_Authorization",
     "Win32_System_Com",
     "Win32_System_Console",
+    "Win32_System_Com",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_LibraryLoader",
     "Win32_System_Pipes",

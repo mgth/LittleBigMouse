@@ -12,3 +12,4 @@ pub mod resistance;
 pub mod saved;
 pub mod session;
 pub mod settings;
+pub mod wallpaper_editor;

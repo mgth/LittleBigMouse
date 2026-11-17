@@ -1,9 +1,8 @@
 //! The desktop background, one screen at a time.
 //!
-//! Port of C#'s `IWallpaperService` and its Plasma implementation. The agent says what each
-//! screen should show — a file, or a colour — and the desktop environment is asked to show
-//! it; nothing here decides what that should be, and nothing here ever reads the desktop
-//! back (C#'s note: the wallpaper travels one way, out).
+//! The agent supplies an image or colour per screen. Plasma receives a script;
+//! Windows uses IDesktopWallpaper and reads the previous paths for rollback.
+//! These adapters apply the request; layout and rendering policy live elsewhere.
 //!
 //! Plasma has no per-screen wallpaper API: what it has is `evaluateScript`, which runs a
 //! line of its own scripting language inside plasmashell. C# spawned `busctl` for that
@@ -17,6 +16,8 @@ use lbm_store::wallpaper_settings::WallpaperStyle;
 /// its own screens by where they are, not by the names the layout uses.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScreenWallpaper {
+    /// Native dimensions expected by an editor transaction; legacy callers may omit them.
+    pub expected_size: Option<(u32, u32)>,
     pub x: f64,
     pub y: f64,
     /// The image to show; `None` shows `color` instead.
@@ -41,17 +42,44 @@ pub async fn apply(screens: &[ScreenWallpaper]) -> bool {
     if screens.is_empty() {
         return true;
     }
-    plasma::evaluate(&plasma::script(screens)).await.is_some()
+    plasma::evaluate(&plasma::script(screens)).await.as_deref() == Some("ok")
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+pub async fn is_supported() -> bool {
+    tokio::task::spawn_blocking(crate::windows_wallpaper::supported)
+        .await
+        .unwrap_or(false)
+}
+#[cfg(windows)]
+pub async fn apply(screens: &[ScreenWallpaper]) -> bool {
+    apply_checked(screens).await.is_ok()
+}
+
+pub async fn apply_checked(screens: &[ScreenWallpaper]) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let screens = screens.to_vec();
+        tokio::task::spawn_blocking(move || crate::windows_wallpaper::apply(&screens))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        if apply(screens).await {
+            Ok(())
+        } else {
+            Err("The desktop refused the wallpaper update.".into())
+        }
+    }
+}
+#[cfg(not(any(target_os = "linux", windows)))]
 pub async fn is_supported() -> bool {
     false
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", windows)))]
 pub async fn apply(_screens: &[ScreenWallpaper]) -> bool {
-    // Windows sets the background through IDesktopWallpaper; not ported yet.
     false
 }
 
@@ -176,10 +204,15 @@ mod plasma {
         format!(
             concat!(
                 "var targets={};",
-                "for(var i=0;i<screenCount;i++){{",
-                "var g=screenGeometry(i);",
+                "var matched=[];var used={{}};",
+                "for(var j=0;j<targets.length;j++){{var t=targets[j];var hits=[];",
+                "for(var i=0;i<screenCount;i++){{var g=screenGeometry(i);",
+                "if(Math.abs(g.x-t.x)<2&&Math.abs(g.y-t.y)<2)hits.push(i);}}",
+                "if(hits.length!==1||used[hits[0]])throw new Error(\"Wallpaper screen changed or ambiguous\");",
+                "used[hits[0]]=true;matched.push(hits[0]);}}",
                 "for(var j=0;j<targets.length;j++){{var t=targets[j];",
-                "if(Math.abs(g.x-t.x)<2&&Math.abs(g.y-t.y)<2){{",
+                "var i=matched[j];",
+
                 "var d=desktopForScreen(i);",
                 "if(t.image){{",
                 "d.wallpaperPlugin=\"org.kde.image\";",
@@ -192,7 +225,7 @@ mod plasma {
                 "d.writeConfig(\"Color\",t.color);",
                 "}}",
                 "d.reloadConfig();",
-                "}}}}}}",
+                "}}",
                 "print(\"ok\");"
             ),
             serde_json::Value::Array(targets)
@@ -252,6 +285,7 @@ mod tests {
     fn the_script_carries_the_screens_and_matches_them_by_position() {
         let script = super::plasma::script(&[
             ScreenWallpaper {
+                expected_size: None,
                 x: 0.0,
                 y: 0.0,
                 image: Some(PathBuf::from("/data/span_1.png")),
@@ -259,6 +293,7 @@ mod tests {
                 color: "#204060".to_owned(),
             },
             ScreenWallpaper {
+                expected_size: None,
                 x: 1920.0,
                 y: 0.0,
                 image: None,
@@ -306,6 +341,7 @@ mod tests {
     #[tokio::test]
     async fn plasma_runs_the_script_it_is_sent() {
         let nowhere = ScreenWallpaper {
+            expected_size: None,
             x: 500_000.0,
             y: 500_000.0,
             image: Some(PathBuf::from("/nowhere/none.png")),

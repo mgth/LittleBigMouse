@@ -118,8 +118,7 @@ impl Mode {
 
 /// Which modes this frontend can actually show, and why not when it cannot.
 ///
-/// A mode is offered when there is a view behind it. The two the C# itself makes
-/// conditional are here for the same reasons it has:
+/// A mode is offered when there is a view behind it. The C# gates were:
 ///
 /// * **Vcp** follows `ILayoutOptions.VcpControl` — a setting, off by default, which the
 ///   user turns on when they want the sliders (`VcpPlugin.cs:46`);
@@ -127,9 +126,8 @@ impl Mode {
 ///   Windows elsewhere; on any other desktop the button is not created at all
 ///   (`WallpaperPlugin.cs:20`).
 ///
-/// The rest are "not ported yet", which is a truth about this frontend and not about the
-/// user's machine, so the two are worded differently: one says what the user can do about
-/// it, the other says there is nothing to do yet.
+/// The egui wallpaper editor also supports local previews on unsupported desktops.
+/// Its availability follows the loaded agent/layout; native support gates Apply only.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Offered {
     /// The user turned VCP control on in the settings.
@@ -147,13 +145,13 @@ pub fn why_not(mode: Mode, offered: &Offered) -> Option<&'static str> {
             Some("VCP control is off in the settings — turn it on to see this")
         }
         Mode::Wallpaper if !offered.wallpaper_supported => {
-            Some("this desktop has no wallpaper service the agent can drive")
+            Some("connect to the agent and load the layout to open the wallpaper editor")
         }
         // Ported, but not yet. Named one by one rather than through a catch-all, so
         // that porting one is a line to delete here and the compiler finds the rest.
         Mode::Resistance => None,
         Mode::Vcp => Some("not ported yet: DDC/CI and the calibration plugin"),
-        Mode::Wallpaper => Some("not ported yet: the per-screen picture picker"),
+        Mode::Wallpaper => None,
     }
 }
 

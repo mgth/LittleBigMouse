@@ -32,12 +32,12 @@ use lbm_store::LayoutDocument;
 
 /// The document this window last loaded or last saved.
 #[derive(Clone, Debug)]
-pub struct Reference(LayoutDocument);
+pub struct Reference(LayoutDocument, Box<Layout>);
 
 impl Reference {
     /// Takes the reference: at a load, at an undo, and when a save comes back accepted.
     pub fn of(layout: &Layout) -> Reference {
-        Reference(crate::settings::document(layout))
+        Reference(crate::settings::document(layout), Box::new(layout.clone()))
     }
 
     /// Whether `layout` would save to the same document — nothing to save, nothing to
@@ -48,6 +48,13 @@ impl Reference {
     /// Save button is concerned.
     pub fn holds(&self, layout: &Layout) -> bool {
         self.0 == crate::settings::document(layout)
+    }
+
+    /// A first-run profile may not exist on disk. Restore the exact loaded/accepted
+    /// state before overlaying any newer stored profile, including default borders
+    /// whose absence from a DTO would not clear an edited ownership flag.
+    pub fn restore(&self, layout: &mut Layout) {
+        layout.clone_from(&self.1);
     }
 }
 

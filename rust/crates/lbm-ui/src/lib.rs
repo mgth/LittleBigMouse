@@ -22,6 +22,7 @@ pub mod map;
 pub mod mode;
 pub mod options;
 pub mod probe;
+pub mod properties;
 pub mod shortcut;
 pub mod wallpaper;
 

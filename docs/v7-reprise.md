@@ -112,10 +112,42 @@ utilise le vrai agent et la vérification de topologie avec un compositeur simul
 couvre les trois actions, le dernier écran, les requêtes périmées, le moteur actif et
 la reconstruction après un échec partiel.
 
+## Quatrième lot : Size et Info
+
+- Les modes `Size` et `Info` sont activés. Le moniteur sélectionné partage un panneau
+  de propriétés avec la carte et la liste ; il se place à droite dans une grande
+  fenêtre, en dessous dans une fenêtre étroite, avec redimensionnement et défilement.
+  Les champs gardent une taille lisible indépendamment du zoom de la carte, suivant
+  l'orientation proposée dans [#523](https://github.com/mgth/LittleBigMouse/issues/523).
+- `Size` édite largeur et hauteur de dalle, quatre bordures et dimensions extérieures,
+  en millimètres dans l'orientation affichée. Les dimensions restent partagées par
+  modèle ; les bordures suivent la politique existante, par modèle ou par moniteur.
+  La largeur extérieure ajuste les deux bordures latérales à parts égales, la hauteur
+  extérieure ajuste celle du bas, puis le layout applique son compactage habituel.
+- Le verrouillage des proportions est une aide de session ; les dimensions obtenues
+  sont enregistrées. Les valeurs invalides sont refusées avant mutation. Les champs
+  restent désactivés pendant une actualisation du bureau ou une action système.
+  Les modifications utilisent Save et Live existants et invalident les passages sondés.
+- `Info` montre séparément les données de détection et les valeurs du layout édité.
+  Les rapports Linux/Windows proviennent de la même détection que le layout, hors du
+  fil UI, avant l'application du profil enregistré. Les données absentes sont signalées
+  et les anciens résultats suivent le même rejet par génération que les écrans.
+- Undo restaure d'abord l'état chargé ou accepté par Save, puis relit le profil.
+  Cela corrige le premier lancement sans fichier : les dimensions et les bordures
+  modifiées ne restent plus en mémoire après annulation.
+
+Contrôles locaux : 222 tests frontend passent, avec douze captures de référence,
+dont les trois nouvelles vues Size large/étroite et Info inspectées visuellement.
+Les tests couvrent les quatre rotations, les deux politiques de bordures, les
+proportions, les dimensions extérieures, le document SaveLayout et Undo sans fichier.
+Formatage, Clippy sans avertissement et compilation des cibles de test du frontend
+pour Windows passent. Les captures ont été validées avec le moteur de rendu local ;
+la validation de l'application sur matériel Windows reste à faire.
+
 ## Suite, dans l'ordre
 
-1. Porter Size et Info, puis l'éditeur de sections de résistance. Examiner #523 pour
-   placer les champs dans une zone de propriétés lisible à toute échelle.
+1. Porter l'éditeur de sections de résistance, en réutilisant la zone de propriétés
+   lisible à toute échelle pour les valeurs et la carte pour les bandes spatiales.
 2. Porter les commandes d'écran principal/attachement/détachement sous Windows.
    Intégrer les règles et bandes sur les vrais écrans, puis valider le backend Windows
    et les DPI mixtes. Le crate overlay reste actuellement un prototype Linux.

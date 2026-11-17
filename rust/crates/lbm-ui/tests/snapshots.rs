@@ -193,7 +193,7 @@ fn a_monitor_frame_with_its_name() {
 /// The mode bar: what is offered and what is not.
 ///
 /// The tree test asserts which buttons are disabled; only a render says whether *disabled*
-/// looks disabled. Five of the seven are greyed here, which is the honest picture of the
+/// looks disabled. Three of the seven are greyed here, which is the honest picture of the
 /// port — and the reason the modes that are not ported yet are shown rather than dropped.
 #[test]
 fn the_mode_bar() {
@@ -202,6 +202,66 @@ fn the_mode_bar() {
     });
     harness.run();
     harness.snapshot("mode-bar");
+}
+
+#[test]
+fn size_and_info_properties_stay_readable_beside_or_below_the_map() {
+    use lbm_ui::properties::{self, Size};
+    let size = Size {
+        physical: lbm_layout::model::DisplaySize::from_rect(Rect::new(0.0, 0.0, 600.0, 340.0))
+            .with_borders(lbm_layout::geo::Thickness {
+                left: 10.0,
+                top: 11.0,
+                right: 12.0,
+                bottom: 13.0,
+            }),
+        locked: true,
+        per_monitor_borders: true,
+        model: "SAM1234".into(),
+    };
+    let rows = vec![
+        ("Discovery".into(), "kscreen".into()),
+        ("ConnectorName".into(), "DP-1".into()),
+        ("PixelWidth".into(), "3840".into()),
+        ("Edid / Model".into(), "Studio display".into()),
+        ("Edid / SerialNumber".into(), "Not reported".into()),
+        (
+            "InterfacePath".into(),
+            "a-long-device-path-that-must-stay-readable-without-expanding-the-properties-panel"
+                .into(),
+        ),
+    ];
+    let screens = two_screens();
+    let mut results = egui_kittest::SnapshotResults::new();
+    for (width, height, info, name) in [
+        (1100.0, 650.0, false, "size-properties-wide"),
+        (480.0, 440.0, false, "size-properties-narrow"),
+        (1100.0, 650.0, true, "info-properties"),
+    ] {
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, height))
+            .build_ui(|ui| {
+                properties::panel(ui, |ui| {
+                    ui.heading(if info { "Info" } else { "Size" });
+                    ui.label("Left screen");
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        if info {
+                            ui.heading("Detected · last display refresh");
+                            properties::rows(ui, &rows);
+                        } else {
+                            properties::size(ui, &size);
+                        }
+                    });
+                });
+                egui::CentralPanel::default().show(ui, |ui| {
+                    let fit = map::fit(map::extent(&screens), ui.max_rect());
+                    map::draw(ui, &screens, &fit, Some("left"));
+                });
+            });
+        harness.run();
+        harness.snapshot(name);
+        results.extend(harness.take_snapshot_results());
+    }
 }
 
 #[test]

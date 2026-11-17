@@ -4,24 +4,25 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:updater="clr-namespace:LittleBigMouse.Ui.Avalonia.Updater"
+        xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
         mc:Ignorable="d" 
         Width="400"
         MaxHeight="560"
         WindowStartupLocation="CenterScreen"
 		SizeToContent="Height"
-        Title="Update Little Big Mouse"
+        Title="{loc:Tr Updater.Title}"
 		Icon="{Binding MainIcon}"
         d:DesignHeight="300" d:DesignWidth="300"
         x:DataType="updater:ApplicationUpdaterViewModel"
         >
     <DockPanel Margin="10">
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-            <Label>Current Version :</Label>
+            <Label Content="{loc:Tr Updater.CurrentVersion}"/>
             <Label Content="{Binding CurrentVersion}"/>
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-            <Label>Online version :</Label>
+            <Label Content="{loc:Tr Updater.OnlineVersion}"/>
             <Label Content="{Binding NewVersion}"/>
         </StackPanel>
 
@@ -30,16 +31,16 @@
             <Button Background="Transparent" BorderThickness="0" Padding="5"
                     VerticalAlignment="Center" HorizontalAlignment="Left"
                     Click="Kofi_OnClick"
-                    ToolTip.Tip="If Little Big Mouse is useful to you, support its development on Ko-fi">
+                    ToolTip.Tip="{loc:Tr Updater.SupportTooltip}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Path Data="{StaticResource Lbm.Icon.Coffee}" Width="14" Height="14" Stretch="Uniform"
                           Fill="{DynamicResource SystemAccentColor}" VerticalAlignment="Center"/>
-                    <TextBlock Text="Support on Ko-fi" Foreground="{DynamicResource SystemAccentColor}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{loc:Tr Updater.SupportText}" Foreground="{DynamicResource SystemAccentColor}" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button FontWeight="Bold" IsDefault="True" Padding="5" Command="{Binding UpdateCommand}"> Update </Button>
-                <Button Padding="5" Click="ButtonBase_OnClick"> Cancel </Button>
+                <Button FontWeight="Bold" IsDefault="True" Padding="5" Command="{Binding UpdateCommand}" Content="{loc:Tr Updater.Update}"/>
+                <Button Padding="5" Click="ButtonBase_OnClick" Content="{loc:Tr Updater.Cancel}"/>
             </StackPanel>
         </Grid>
         <ProgressBar DockPanel.Dock="Bottom" Height="20" Value="{Binding Progress}" Maximum="100" Margin="20"/>

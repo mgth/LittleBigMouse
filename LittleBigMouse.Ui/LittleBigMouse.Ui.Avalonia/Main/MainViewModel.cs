@@ -17,6 +17,7 @@ using HLab.Mvvm.Annotations;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
 using ReactiveUI;
@@ -139,8 +140,8 @@ public class MainViewModel : ViewModel, IMainViewModel, IMainPluginsViewModel
 
         var result = await MessageBoxManager
             .GetMessageBoxStandard(
-                "Exit LittleBigMouse?",
-                "LittleBigMouse will stop controlling mouse transitions until it is started again.",
+                LbmLocalizer.Current.Get("Main.ExitConfirm.Title"),
+                LbmLocalizer.Current.Get("Main.ExitConfirm.Message"),
                 ButtonEnum.YesNo,
                 Icon.Question, WindowStartupLocation.CenterOwner
                 )

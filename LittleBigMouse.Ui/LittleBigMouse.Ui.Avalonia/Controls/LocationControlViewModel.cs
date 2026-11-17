@@ -40,6 +40,7 @@ using LittleBigMouse.DisplayLayout;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Monitors.Extensions;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Remote;
 using LittleBigMouse.Zoning;
@@ -139,25 +140,32 @@ public class LocationControlViewModel : ViewModel<MonitorsLayout>, ISavable
             .Select(m => m?.IsVirtual ?? false)
             .ToProperty(this, e => e.IsVirtualLayout);
 
+        var langTick = LbmLocalizer.Current.Observe(string.Empty);
+
         _virtualLayoutOrigin = this.WhenAnyValue(e => e.Model)
+            .CombineLatest(langTick, (m, _) => m)
             .Select(m => m?.IsVirtual != true ? ""
                 : m.SourceOrigin is { Length: > 0 } origin
-                    ? $"Foreign layout, shown for inspection: {origin}"
-                    : "Foreign layout, shown for inspection")
+                    ? LbmLocalizer.Current.Format("Control.Location.VirtualOriginWithPath", origin)
+                    : LbmLocalizer.Current.Get("Control.Location.VirtualOrigin"))
             .ToProperty(this, e => e.VirtualLayoutOrigin);
 
         // The click means the same thing in both modes — hand the layout to the engine
         // and keep it — so only the second line has to say what the mode adds.
         _startTooltip = this.WhenAnyValue(e => e.Model)
-            .Select(m => m?.IsVirtual == true ? "Simulate" : "Apply and start")
+            .CombineLatest(langTick, (m, _) => m)
+            .Select(m => LbmLocalizer.Current.Get(m?.IsVirtual == true
+                ? "Control.Location.StartTooltip.Simulate"
+                : "Control.Location.StartTooltip.ApplyAndStart"))
             .ToProperty(this, e => e.StartTooltip);
 
         _startTooltipDetail = this.WhenAnyValue(e => e.Model, e => e.LiveUpdate)
-            .Select(t => t.Item1?.IsVirtual == true
-                ? "Send this layout to the daemon for validation. The input hook stays off — a foreign layout never drives the local mouse."
+            .CombineLatest(langTick, (t, _) => t)
+            .Select(t => LbmLocalizer.Current.Get(t.Item1?.IsVirtual == true
+                ? "Control.Location.StartTooltipDetail.Virtual"
                 : t.Item2
-                    ? "Live update is on: your changes are already being felt, but none of them is saved. This keeps them."
-                    : "Save the layout and hand it to the mouse engine. Use the arrow to have changes sent as you make them instead.")
+                    ? "Control.Location.StartTooltipDetail.Live"
+                    : "Control.Location.StartTooltipDetail.Manual"))
             .ToProperty(this, e => e.StartTooltipDetail);
 
         BackToLocalLayoutCommand = ReactiveCommand.Create(

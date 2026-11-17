@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using LittleBigMouse.Plugins.Localization;
 
 namespace LittleBigMouse.Ui.Avalonia.Controls;
 
@@ -65,11 +66,13 @@ public partial class UnsavedChangesDialog : Window
     {
         var dialog = new UnsavedChangesDialog();
 
-        dialog.BodyText.Text = leaving
-            ? "Your changes to the layout will be lost. The mouse engine keeps the layout you last applied."
-            : "Your changes stay in LittleBigMouse and come back with the window, but they are not saved: they are lost if LittleBigMouse exits or the computer restarts. The mouse engine keeps the layout you last applied.";
+        dialog.BodyText.Text = LbmLocalizer.Current.Get(leaving
+            ? "Dialog.Unsaved.Body.Leaving"
+            : "Dialog.Unsaved.Body.Closing");
 
-        dialog.ContinueButton.Content = leaving ? "Lose changes" : "Keep unsaved";
+        dialog.ContinueButton.Content = LbmLocalizer.Current.Get(leaving
+            ? "Dialog.Unsaved.LoseChanges"
+            : "Dialog.Unsaved.KeepUnsaved");
 
         dialog.SaveButton.IsVisible = canSave;
         dialog.SaveNote.IsVisible = canSave;

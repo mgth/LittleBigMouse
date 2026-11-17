@@ -41,7 +41,7 @@ public class VcpPlugin(IMainService mainService, ILayoutOptions options) : Bootl
             c.AddViewModeButton<MonitorVcpViewMode>(
                 "vcp",
                 "Icon/MonitorVcp",
-                "Vcp control",
+                "Plugin.Vcp.Tooltip",
                 // Off by default: the panel only shows for users who opted in.
                 options.WhenAnyValue(o => o.VcpControl))
         );

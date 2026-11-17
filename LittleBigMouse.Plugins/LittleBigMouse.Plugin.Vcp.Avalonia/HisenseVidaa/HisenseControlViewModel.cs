@@ -2,6 +2,7 @@
 using System.Windows.Input;
 using Avalonia.Threading;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugins.Localization;
 using ReactiveUI;
 
 namespace LittleBigMouse.Plugin.Vcp.Avalonia.HisenseVidaa;
@@ -175,7 +176,8 @@ public sealed class HisenseControlViewModel : ReactiveObject, IDisposable
         }
     }
 
-    public string TrafficButtonText => Listening ? "Stop listening" : "Start listening";
+    public string TrafficButtonText => LbmLocalizer.Current.Get(
+        Listening ? "Vcp.Hisense.StopListening" : "Vcp.Hisense.StartListening");
 
     public bool Paired
     {

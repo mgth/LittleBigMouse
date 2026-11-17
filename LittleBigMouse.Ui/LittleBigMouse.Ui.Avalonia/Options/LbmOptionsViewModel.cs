@@ -12,6 +12,7 @@ using HLab.Base.ReactiveUI;
 using HLab.Mvvm.ReactiveUI;
 using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using Avalonia.Threading;
 using LittleBigMouse.Ui.Avalonia.Main;
 using LittleBigMouse.Ui.Avalonia.Remote;
@@ -27,6 +28,37 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         IMainService mainService,
         ILittleBigMouseClientService daemon)
     {
+        LanguageList =
+        [
+            LocalizedItem(LbmLocalizer.AutoLanguage, "Options.Language.Auto"),
+            LocalizedItem(LbmLocalizer.DefaultLanguage, "Options.Language.English"),
+            LocalizedItem(LbmLocalizer.SimplifiedChinese, "Options.Language.ChineseSimplified")
+        ];
+
+        AlgorithmList =
+        [
+            LocalizedItem("Strait", "Options.Algorithm.Strait.Caption", "Options.Algorithm.Strait.Description"),
+            LocalizedItem("Cross", "Options.Algorithm.Cross.Caption", "Options.Algorithm.Cross.Description")
+        ];
+
+        BorderValuesList =
+        [
+            LocalizedItem("PerModel", "Options.BorderValues.PerModel.Caption", "Options.BorderValues.PerModel.Description"),
+            LocalizedItem("PerMonitor", "Options.BorderValues.PerMonitor.Caption", "Options.BorderValues.PerMonitor.Description")
+        ];
+
+        PriorityList =
+        [
+            LocalizedItem("Idle", "Options.Priority.Idle"),
+            LocalizedItem("Below", "Options.Priority.Below"),
+            LocalizedItem("Normal", "Options.Priority.Normal"),
+            LocalizedItem("Above", "Options.Priority.Above"),
+            LocalizedItem("High", "Options.Priority.High"),
+            LocalizedItem("Realtime", "Options.Priority.Realtime")
+        ];
+
+        _selectedLanguage = LanguageList.Find(e => e.Id == LbmLocalizer.Current.Preference) ?? LanguageList[0];
+
         // Turning a permission OFF must fix the current layout right away, not
         // wait for the next monitor move: compact resolves the existing overlaps
         // (AllowOverlaps) or closes the existing gaps (AllowDiscontinuity).
@@ -136,7 +168,7 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
     {
         if (e.Event != LittleBigMouseEvent.ShortcutUnavailable) return;
         Dispatcher.UIThread.Post(() => ShortcutWarning =
-            $"{e.Payload} is already taken by another application — the rescue shortcut is NOT active.");
+            LbmLocalizer.Current.Format("Options.RescueShortcut.Warning", e.Payload));
     }
 
     /// <summary>
@@ -220,27 +252,48 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
     public bool AdjustPointerAllowed => _adjustPointerAllowed.Value;
     readonly ObservableAsPropertyHelper<bool> _adjustPointerAllowed;
 
-    public List<ListItem> AlgorithmList { get; } =
-    [
-        new("Strait", "Strait", "Simple and highly CPU-efficient transition."),
-        new("Cross", "Corner crossing", "In direction-friendly manner, allows traversal through corners.")
-    ];
+    ListItem LocalizedItem(string id, string captionKey, string descriptionKey = "")
+    {
+        var item = new ListItem(
+            id,
+            LbmLocalizer.Current.Get(captionKey),
+            string.IsNullOrEmpty(descriptionKey) ? "" : LbmLocalizer.Current.Get(descriptionKey));
 
-    public List<ListItem> BorderValuesList { get; } =
-    [
-        new("PerModel", "Per model", "Borders are shared by all monitors of the same make/model."),
-        new("PerMonitor", "Per monitor", "Each physical monitor keeps its own borders.")
-    ];
+        LbmLocalizer.Current
+            .Observe(captionKey)
+            .Subscribe(value => item.Caption = value)
+            .DisposeWith(this);
 
-    public List<ListItem> PriorityList { get; } =
-    [
-        new("Idle", "Idle", ""),
-        new("Below", "Below", ""),
-        new("Normal", "Normal", ""),
-        new("Above", "Above", ""),
-        new("High", "High", ""),
-        new("Realtime", "Realtime", "")
-    ];
+        if (!string.IsNullOrEmpty(descriptionKey))
+        {
+            LbmLocalizer.Current
+                .Observe(descriptionKey)
+                .Subscribe(value => item.Description = value)
+                .DisposeWith(this);
+        }
+
+        return item;
+    }
+
+    public List<ListItem> LanguageList { get; }
+
+    public ListItem? SelectedLanguage
+    {
+        get => _selectedLanguage;
+        set
+        {
+            if (value == null || Equals(_selectedLanguage, value)) return;
+            this.RaiseAndSetIfChanged(ref _selectedLanguage, value);
+            LbmLocalizer.Current.SetLanguage(value.Id, persist: true);
+        }
+    }
+    ListItem? _selectedLanguage;
+
+    public List<ListItem> AlgorithmList { get; }
+
+    public List<ListItem> BorderValuesList { get; }
+
+    public List<ListItem> PriorityList { get; }
 
     public ListItem? SelectedAlgorithm
     {

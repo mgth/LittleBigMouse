@@ -3,6 +3,7 @@
              xmlns:main="clr-namespace:LittleBigMouse.Ui.Avalonia.Main"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:controls="clr-namespace:LittleBigMouse.Ui.Avalonia.Controls"
+             xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
              x:Class="LittleBigMouse.Ui.Avalonia.App"
              RequestedThemeVariant="Default"
 			 x:DataType="main:TrayIconViewModel"
@@ -73,6 +74,7 @@
 			<StreamGeometry x:Key="Lbm.Icon.Coffee">M2,21H20V19H2M20,8H18V5H20M20,3H4V13A4,4 0 0,0 8,17H14A4,4 0 0,0 18,13V10H20A2,2 0 0,0 22,8V5C22,3.89 21.1,3 20,3Z</StreamGeometry>
 			<StreamGeometry x:Key="Lbm.Icon.Virtual">M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z</StreamGeometry>
 			<StreamGeometry x:Key="Lbm.Icon.Vcp">M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z</StreamGeometry>
+			<StreamGeometry x:Key="Lbm.Icon.Language">M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,19.93C7.05,19.44 4,16.08 4,12C4,11.38 4.08,10.79 4.21,10.21L9,15V16A2,2 0 0,0 11,18M17.9,17.39C17.64,16.58 16.9,16 16,16H15V13A1,1 0 0,0 14,12H8V10H10A1,1 0 0,0 11,9V7H13A2,2 0 0,0 15,5V4.59C17.93,5.77 20,8.64 20,12C20,14.08 19.2,15.97 17.9,17.39Z</StreamGeometry>
 
 			<ControlTheme x:Key="{x:Type controls:SettingRow}" TargetType="controls:SettingRow">
 				<Setter Property="Padding" Value="14,10"/>
@@ -114,7 +116,7 @@
 				<Setter Property="Content"
 				        Value="{Binding $self.Shortcut, Converter={x:Static controls:ShortcutDisplay.Readable}}"/>
 				<Style Selector="^[IsRecording=True]">
-					<Setter Property="Content" Value="Press the combination…"/>
+					<Setter Property="Content" Value="{loc:Tr Control.ShortcutBox.Recording}"/>
 					<Setter Property="Background" Value="{DynamicResource Lbm.Brushes.Accent.Faint}"/>
 					<Setter Property="BorderBrush" Value="{DynamicResource Lbm.Brushes.Accent}"/>
 				</Style>

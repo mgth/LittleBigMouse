@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.Plugin.Layout.Avalonia.BorderResistancePlugin;
@@ -51,8 +52,9 @@ public static class BorderSectionBrushes
 
     public static string Describe(double move, bool moveBlock, double drag, bool dragBlock)
     {
-        var m = moveBlock ? "blocked" : $"{move:0.#} mm";
-        var d = dragBlock ? "blocked" : $"{drag:0.#} mm";
-        return $"Move: {m}\nDrag: {d}";
+        var blocked = LbmLocalizer.Current.Get("BorderResistance.BlockedValue");
+        var m = moveBlock ? blocked : $"{move:0.#} mm";
+        var d = dragBlock ? blocked : $"{drag:0.#} mm";
+        return LbmLocalizer.Current.Format("BorderResistance.DescribeFormat", m, d);
     }
 }

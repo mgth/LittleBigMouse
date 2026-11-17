@@ -7,6 +7,7 @@
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
              xmlns:default="clr-namespace:LittleBigMouse.Ui.Avalonia.Plugins.Default"
              xmlns:monitors="clr-namespace:LittleBigMouse.DisplayLayout.Monitors;assembly=LittleBigMouse.DisplayLayout"
+             xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
              mc:Ignorable="d"
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
@@ -240,21 +241,21 @@
 		</StackPanel>
 
 		<StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom">
-			<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}" CommandParameter="{Binding $parent[Window]}">Attach</Button>
-			<DropDownButton IsVisible="{Binding DetachVisible}" Content="Actions">
+			<Button IsVisible="{Binding !Attached}" Command="{Binding AttachCommand}" CommandParameter="{Binding $parent[Window]}" Content="{loc:Tr DefaultMonitor.Attach}"/>
+			<DropDownButton IsVisible="{Binding DetachVisible}" Content="{loc:Tr DefaultMonitor.Actions}">
 				<DropDownButton.Flyout>
 					<MenuFlyout>
-						<MenuItem Header="Detach" Command="{Binding DetachCommand}" CommandParameter="{Binding $parent[Window]}"/>
-						<MenuItem Header="Make primary" Command="{Binding MakePrimaryCommand}" CommandParameter="{Binding $parent[Window]}"/>
-						<MenuItem Header="Exclude from mouse layout"
-						          ToolTip.Tip="The monitor stays on the desktop but the cursor can never travel onto it — for displays that are not really monitors (pump LCDs, sensor panels…)"
+						<MenuItem Header="{loc:Tr DefaultMonitor.Detach}" Command="{Binding DetachCommand}" CommandParameter="{Binding $parent[Window]}"/>
+						<MenuItem Header="{loc:Tr DefaultMonitor.MakePrimary}" Command="{Binding MakePrimaryCommand}" CommandParameter="{Binding $parent[Window]}"/>
+						<MenuItem Header="{loc:Tr DefaultMonitor.Exclude}"
+						          ToolTip.Tip="{loc:Tr DefaultMonitor.Exclude.Tooltip}"
 						          ToggleType="CheckBox" IsChecked="{Binding Excluded}"
 						          Command="{Binding ToggleExcludedCommand}"/>
 					</MenuFlyout>
 				</DropDownButton.Flyout>
 			</DropDownButton>
-			<Label IsVisible="{Binding Primary}">Primary</Label>
-			<Label IsVisible="{Binding Excluded}" Opacity="0.7">Mouse excluded</Label>
+			<Label IsVisible="{Binding Primary}" Content="{loc:Tr DefaultMonitor.Primary}"/>
+			<Label IsVisible="{Binding Excluded}" Opacity="0.7" Content="{loc:Tr DefaultMonitor.MouseExcluded}"/>
 		</StackPanel>
 
 	</Grid>

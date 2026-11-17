@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Localization\Strings\*.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\HLab.Core\HLab.Mvvm.Annotations\HLab.Mvvm.Annotations.csproj" />
     <ProjectReference Include="..\..\LittleBigMouse.Core\LittleBigMouse.DisplayLayout\LittleBigMouse.DisplayLayout.csproj" />
   </ItemGroup>

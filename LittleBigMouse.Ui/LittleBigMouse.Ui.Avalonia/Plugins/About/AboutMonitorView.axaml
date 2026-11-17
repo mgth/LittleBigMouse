@@ -7,6 +7,7 @@
              xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
              xmlns:about="clr-namespace:LittleBigMouse.Ui.Avalonia.Plugins.About"
              xmlns:icons="clr-namespace:HLab.Icons.Avalonia.Icons;assembly=HLab.Icons.Avalonia"
+             xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
              mc:Ignorable="d"
              d:DesignHeight="300" d:DesignWidth="300"
              x:Name="UserControl"
@@ -26,7 +27,7 @@
 
     <icons:IconView HorizontalAlignment="Center" Margin="0,0,0,20" Path="Icon/lbm_logo" Height="50"/>
 
-    <TextBlock HorizontalAlignment="Center" Margin="0,0,0,20"  FontStyle="Italic" Text="DPI Aware mouse move across screens for Windows 10 / 11" TextWrapping="Wrap" FontSize="15"/>
+    <TextBlock HorizontalAlignment="Center" Margin="0,0,0,20" FontStyle="Italic" Text="{loc:Tr AboutMonitor.Tagline}" TextWrapping="Wrap" FontSize="15"/>
 
     </StackPanel>
 </UserControl>

@@ -3,6 +3,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 
 namespace LittleBigMouse.Plugin.Wallpaper.Avalonia;
 
@@ -21,7 +22,7 @@ public partial class WallpaperFrameView : UserControl,
 
         var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Choose a wallpaper image",
+            Title = LbmLocalizer.Current.Get("Wallpaper.ChooseImageTitle"),
             AllowMultiple = false,
             FileTypeFilter = [FilePickerFileTypes.ImageAll],
         });

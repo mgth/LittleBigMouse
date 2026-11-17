@@ -37,7 +37,7 @@ public class ScreenSizePlugin(IMainService mainService) : Bootloader
             c.AddViewModeButton<ScreenSizeViewMode>(
                 "size",
                 "Icon/MonitorSize",
-                "Size"
+                "Plugin.Size.Tooltip"
                 )
         );
         return Task.FromResult(BootState.Completed);

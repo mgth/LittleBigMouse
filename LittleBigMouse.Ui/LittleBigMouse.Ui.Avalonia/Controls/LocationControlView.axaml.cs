@@ -25,6 +25,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using HLab.Mvvm.Annotations;
 using LittleBigMouse.Plugins;
+using LittleBigMouse.Plugins.Localization;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
 using System;
@@ -66,7 +67,7 @@ public partial class LocationControlView : UserControl
             var files = await provider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 AllowMultiple = false,
-                FileTypeFilter = new FilePickerFileType[]{ new ("Layout export")
+                FileTypeFilter = new FilePickerFileType[]{ new (LbmLocalizer.Current.Get("Control.Location.Picker.LayoutExport"))
                 {
                     Patterns = new[] { "*.json", "*.gz" },
                     AppleUniformTypeIdentifiers = new[] { "public.json", "org.gnu.gnu-zip-archive" },
@@ -86,7 +87,7 @@ public partial class LocationControlView : UserControl
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Open virtual layout failed", ex);
+            await ShowErrorAsync(LbmLocalizer.Current.Get("Control.Location.Error.OpenVirtual"), ex);
         }
     }
 
@@ -120,7 +121,7 @@ public partial class LocationControlView : UserControl
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Export failed", ex);
+            await ShowErrorAsync(LbmLocalizer.Current.Get("Control.Location.Error.Export"), ex);
         }
     }
 
@@ -141,7 +142,7 @@ public partial class LocationControlView : UserControl
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Copy failed", ex);
+            await ShowErrorAsync(LbmLocalizer.Current.Get("Control.Location.Error.Copy"), ex);
         }
     }
 

@@ -4,6 +4,7 @@ using System.Reactive.Disposables;
 using System.Threading.Tasks;
 using HLab.UserNotification;
 using LittleBigMouse.DisplayLayout.Monitors;
+using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
@@ -71,13 +72,13 @@ public sealed class TrayIconController(IUserNotificationService notify, ILayoutO
             OnOptionChanged, h => options.PropertyChanged += h, h => options.PropertyChanged -= h));
 
         if (menu.CheckUpdateAsync is { } checkUpdate)
-            await notify.AddMenuAsync(-1, "Check for update", "Icon/lbm_on", checkUpdate);
+            await notify.AddMenuAsync(-1, LbmLocalizer.Current.Get("Tray.CheckForUpdate"), "Icon/lbm_on", checkUpdate);
 
-        await notify.AddMenuAsync(-1, "Open", "Icon/lbm_off", menu.OpenAsync);
-        await notify.AddMenuAsync(-1, "Start", "Icon/Start", menu.StartAsync);
-        await notify.AddMenuAsync(-1, "Stop", "Icon/Stop", menu.StopAsync);
-        await notify.AddMenuAsync(-1, "Refresh", "Icon/Refresh", menu.RefreshAsync);
-        await notify.AddMenuAsync(-1, "Exit", "Icon/sys/Close", menu.QuitAsync);
+        await notify.AddMenuAsync(-1, LbmLocalizer.Current.Get("Tray.Open"), "Icon/lbm_off", menu.OpenAsync);
+        await notify.AddMenuAsync(-1, LbmLocalizer.Current.Get("Tray.Start"), "Icon/Start", menu.StartAsync);
+        await notify.AddMenuAsync(-1, LbmLocalizer.Current.Get("Tray.Stop"), "Icon/Stop", menu.StopAsync);
+        await notify.AddMenuAsync(-1, LbmLocalizer.Current.Get("Tray.Refresh"), "Icon/Refresh", menu.RefreshAsync);
+        await notify.AddMenuAsync(-1, LbmLocalizer.Current.Get("Tray.Exit"), "Icon/sys/Close", menu.QuitAsync);
 
         // Apply the initial "hide tray icon" preference BEFORE loading the icon bitmap.
         // SetIconAsync queues a dispatcher lambda that checks _visible; if Visible=false

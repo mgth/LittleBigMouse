@@ -12,7 +12,7 @@ public class MonitorLocationPlugin(IMainService mainService) : Bootloader
             c.AddViewModeButton<MonitorLocationViewMode>(
                 "location",
                 "Icon/MonitorLocation",
-                "Location"
+                "Plugin.Location.Tooltip"
 
         ));
         return Task.FromResult(BootState.Completed);

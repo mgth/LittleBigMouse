@@ -21,7 +21,7 @@ public class WallpaperPlugin(IMainService mainService, IWallpaperService wallpap
                 c.AddViewModeButton<WallpaperViewMode>(
                     "wallpaper",
                     "Icon/Wallpaper",
-                    "Wallpaper"
+                    "Plugin.Wallpaper.Tooltip"
                 )
             );
         return Task.FromResult(BootState.Completed);

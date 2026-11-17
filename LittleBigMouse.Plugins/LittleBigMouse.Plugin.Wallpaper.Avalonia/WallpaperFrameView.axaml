@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:wallpaper="clr-namespace:LittleBigMouse.Plugin.Wallpaper.Avalonia"
     xmlns:converters="clr-namespace:HLab.Mvvm.Avalonia.Converters;assembly=HLab.Mvvm.Avalonia"
+    xmlns:loc="clr-namespace:LittleBigMouse.Plugins.Avalonia.Localization;assembly=LittleBigMouse.Plugins.Avalonia"
     mc:Ignorable="d"
     d:DesignHeight="300" d:DesignWidth="400"
     x:Name="UserControl"
@@ -36,16 +37,16 @@
 		<StackPanel Spacing="8" MinWidth="160">
 
 			<StackPanel Orientation="Horizontal" Spacing="12">
-				<RadioButton Content="Per screen" IsChecked="{Binding IsPerScreenMode}" />
-				<RadioButton Content="Span" IsChecked="{Binding IsSpanMode}" />
+				<RadioButton Content="{loc:Tr Wallpaper.PerScreen}" IsChecked="{Binding IsPerScreenMode}" />
+				<RadioButton Content="{loc:Tr Wallpaper.Span}" IsChecked="{Binding IsSpanMode}" />
 			</StackPanel>
 
 			<!-- Per-screen: image or solid color for this monitor -->
 			<StackPanel Spacing="6" IsVisible="{Binding IsPerScreenMode}">
 
 				<StackPanel Orientation="Horizontal" Spacing="12">
-					<RadioButton Content="Image" IsChecked="{Binding IsImageKind}" />
-					<RadioButton Content="Color" IsChecked="{Binding IsColorKind}" />
+					<RadioButton Content="{loc:Tr Wallpaper.Image}" IsChecked="{Binding IsImageKind}" />
+					<RadioButton Content="{loc:Tr Wallpaper.Color}" IsChecked="{Binding IsColorKind}" />
 				</StackPanel>
 
 				<StackPanel Spacing="6" IsVisible="{Binding IsImageKind}">
@@ -77,7 +78,7 @@
 					Click="OnPickSpanImage"
 					HorizontalAlignment="Stretch" />
 				<TextBlock
-					Text="One image across all screens, sliced to match the physical layout."
+					Text="{loc:Tr Wallpaper.SpanDescription}"
 					FontSize="10"
 					Opacity="0.7"
 					TextWrapping="Wrap"

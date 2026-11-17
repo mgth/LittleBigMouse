@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using LittleBigMouse.Plugins.Localization;
 
 namespace LittleBigMouse.Ui.Avalonia.Main;
 
@@ -32,8 +33,8 @@ public partial class BootFailureView : Window
 
         DetailsText.Text = _details;
         LogText.Text = logFile is null
-            ? "This report was also written to the standard error output."
-            : $"This report was also written to {logFile}.";
+            ? LbmLocalizer.Current.Get("BootFailure.LogText.Stderr")
+            : LbmLocalizer.Current.Format("BootFailure.LogText.File", logFile);
         OpenLogButton.IsVisible = logFile is not null;
     }
 

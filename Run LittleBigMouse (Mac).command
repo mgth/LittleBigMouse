@@ -70,7 +70,7 @@ for d in /usr/local/share/dotnet /opt/homebrew/bin "$HOME/.dotnet"; do
 done
 has_net10() { command -v dotnet >/dev/null 2>&1 && dotnet --list-sdks 2>/dev/null | grep -Eq '^(1[0-9]|[2-9][0-9])\.'; }
 if ! has_net10; then
-    warn ".NET 10 SDK not found — installing"
+    warn ".NET SDK 10+ not found — installing"
     if command -v brew >/dev/null 2>&1 || [[ -x /opt/homebrew/bin/brew ]]; then
         command -v brew >/dev/null 2>&1 || eval "$(/opt/homebrew/bin/brew shellenv)"
         warn "Homebrew may ask for your Mac password."
@@ -83,7 +83,7 @@ if ! has_net10; then
         PATH="$HOME/.dotnet:$PATH"
         export DOTNET_ROOT="$HOME/.dotnet"
     fi
-    has_net10 || fail "The .NET 10 SDK still isn't visible. Open a new Terminal window and try again."
+    has_net10 || fail "The .NET SDK (10 or newer) still isn't visible. Open a new Terminal window and try again."
 fi
 ok "dotnet $(dotnet --version)"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1

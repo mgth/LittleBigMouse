@@ -13,6 +13,9 @@
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<StartupObject>LittleBigMouse.Ui.Avalonia.Program</StartupObject>
 		<Title>Little Big Mouse</Title>
+		<!-- Run on a newer .NET when 10 is not installed (e.g. Homebrew's dotnet-sdk
+		     cask ships only the latest major). Has no effect when .NET 10 is present. -->
+		<RollForward>Major</RollForward>
 	</PropertyGroup>
 	<ItemGroup>
 		<None Remove="Assets\**" />

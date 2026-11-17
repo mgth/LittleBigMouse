@@ -349,8 +349,19 @@ fn cross_the_bottom_corner_is_held_like_the_top_one() {
 /// Pushes from the edge without ever settling back inside (which would re-arm
 /// the resistance), cycling through `pushes`; the number of pushes it took.
 fn pushes_to_cross(engine: &mut MouseEngine, pushes: &[(i32, i32)]) -> Option<usize> {
+    pushes_from(engine, (1915, 3), pushes)
+}
+
+fn pushes_from(
+    engine: &mut MouseEngine,
+    settle: (i32, i32),
+    pushes: &[(i32, i32)],
+) -> Option<usize> {
     let mut cursor = Cursor::new();
-    engine.on_mouse_move(&mut cursor, &mut MouseEventArg::new(Point::new(1915, 3)));
+    engine.on_mouse_move(
+        &mut cursor,
+        &mut MouseEventArg::new(Point::new(settle.0, settle.1)),
+    );
     (0..1000).find(|i| {
         let (x, y) = pushes[i % pushes.len()];
         let mut event = MouseEventArg::new(Point::new(x, y));
@@ -448,4 +459,72 @@ fn cross_a_flick_round_the_top_corner_is_held_by_the_top_section() {
         flick.0,
         flick.1
     ));
+}
+
+// --- review of #760 ----------------------------------------------------------------
+
+/// The last `px` pixels of the primary's top edge, ending at the corner, in mm.
+fn top_corner(resistance: f64, blocked: bool) -> BorderSection {
+    let length = 88.0 * PRIMARY_MM.0 / 1920.0;
+    BorderSection::new(
+        PRIMARY_MM.0 - length,
+        PRIMARY_MM.0,
+        resistance,
+        blocked,
+        0.0,
+        false,
+    )
+}
+
+/// The reporter's screens with sections on both edges meeting at the corner.
+fn both_edges(top: Option<BorderSection>, right: Option<BorderSection>) -> MouseEngine {
+    let mut borders = BorderResistance::default();
+    borders.top.sections.extend(top);
+    borders.right.sections.extend(right);
+    compile_with(
+        "Cross",
+        borders,
+        LayoutRect::new(1920.0, -406.0, 1080.0, 1920.0),
+        LayoutRect::new(PRIMARY_MM.0, -22.0, PORTRAIT_MM.0, PORTRAIT_MM.1),
+    )
+}
+
+/// The received point stops short of the portrait (x < 1920): Cross reaches it
+/// by projecting the direction further. The corner is cut all the same.
+#[test]
+fn cross_a_flick_projected_past_the_corner_is_held_by_the_section() {
+    let flick = ((1915, 10), (1919, -20));
+    let mut open = layout("Cross", None);
+    assert!(
+        crosses(&mut open, &mut Cursor::new(), flick.0, flick.1),
+        "the projection reaches the portrait"
+    );
+    let mut engine = layout("Cross", blocked_corner());
+    assert!(!crosses(&mut engine, &mut Cursor::new(), flick.0, flick.1));
+}
+
+/// The corner rule adds the adjacent edge's section; it must not take away
+/// the one on the edge the trip actually crossed.
+#[test]
+fn cross_a_blocked_top_corner_still_holds_with_the_right_edge_open() {
+    let mut engine = both_edges(Some(top_corner(0.0, true)), None);
+    assert!(!crosses(&mut engine, &mut Cursor::new(), FLICK.0, FLICK.1));
+}
+
+/// Both edges resisting: the stricter one governs, whichever edge carries it.
+#[test]
+fn cross_with_both_edges_resisting_the_stricter_governs() {
+    let push = [(1925, -20)];
+    let count = |top: f64, right: f64| {
+        let top = (top > 0.0).then(|| top_corner(top, false));
+        let right =
+            (right > 0.0).then(|| BorderSection::new(0.0, SECTION_MM, right, false, 0.0, false));
+        pushes_from(&mut both_edges(top, right), (1915, 3), &push)
+    };
+    let weak = count(20.0, 0.0);
+    let strong = count(0.0, 60.0);
+    assert!(weak.is_some_and(|n| n > 0), "{weak:?}");
+    assert!(strong > weak, "{strong:?} vs {weak:?}");
+    assert_eq!(count(20.0, 60.0), strong, "the right edge is stricter");
+    assert_eq!(count(60.0, 20.0), count(60.0, 0.0), "the top edge is stricter");
 }

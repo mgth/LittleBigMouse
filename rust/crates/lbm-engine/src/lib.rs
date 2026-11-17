@@ -377,7 +377,7 @@ impl MouseEngine {
 
         let (zone_out, p_out_in_mm) = self.find_target_zone(Some(old_zone), trip, min_dist_squared);
         if let Some(zone_out) = zone_out {
-            if self.try_pass_border_cross(env, old_zone, zone_out, trip) {
+            if self.try_pass_border_cross(env, old_zone, zone_out, trip, p_out_in_mm) {
                 self.move_in_mm(env, e, p_out_in_mm, zone_out);
             } else {
                 self.no_zone_matches(env, e);
@@ -387,17 +387,20 @@ impl MouseEngine {
 
         if self.layout.loop_x {
             let width = self.layout.width();
-            let shifted = if trip.b().x() < trip.a().x() {
-                Some(trip + Point::new(width, 0.0))
+            let shift = if trip.b().x() < trip.a().x() {
+                Some(Point::new(width, 0.0))
             } else if trip.b().x() > trip.a().x() {
-                Some(trip - Point::new(width, 0.0))
+                Some(Point::new(-width, 0.0))
             } else {
                 None
             };
-            if let Some(shifted) = shifted {
+            if let Some(shift) = shift {
+                let shifted = trip + shift;
                 let (zone_out, p_out) = self.find_target_zone(None, shifted, min_dist_squared);
                 if let Some(zone_out) = zone_out {
-                    if self.try_pass_border_cross(env, old_zone, zone_out, trip) {
+                    // The destination, brought back next to the zone it is left from.
+                    let destination = p_out - shift;
+                    if self.try_pass_border_cross(env, old_zone, zone_out, trip, destination) {
                         self.move_in_mm(env, e, p_out, zone_out);
                     } else {
                         self.no_zone_matches(env, e);
@@ -409,17 +412,20 @@ impl MouseEngine {
 
         if self.layout.loop_y {
             let height = self.layout.height();
-            let shifted = if trip.b().y() < trip.a().y() {
-                Some(trip + Point::new(0.0, height))
+            let shift = if trip.b().y() < trip.a().y() {
+                Some(Point::new(0.0, height))
             } else if trip.b().y() > trip.a().y() {
-                Some(trip - Point::new(0.0, height))
+                Some(Point::new(0.0, -height))
             } else {
                 None
             };
-            if let Some(shifted) = shifted {
+            if let Some(shift) = shift {
+                let shifted = trip + shift;
                 let (zone_out, p_out) = self.find_target_zone(None, shifted, min_dist_squared);
                 if let Some(zone_out) = zone_out {
-                    if self.try_pass_border_cross(env, old_zone, zone_out, trip) {
+                    // The destination, brought back next to the zone it is left from.
+                    let destination = p_out - shift;
+                    if self.try_pass_border_cross(env, old_zone, zone_out, trip, destination) {
                         self.move_in_mm(env, e, p_out, zone_out);
                     } else {
                         self.no_zone_matches(env, e);
@@ -497,6 +503,7 @@ impl MouseEngine {
         zone: ZoneId,
         zone_out: ZoneId,
         trip: Segment<f64>,
+        destination: Point<f64>,
     ) -> bool {
         // Links name main zones; a loop clone is reached through its main's links.
         let zone_out = self.layout.arena[zone_out].main;
@@ -534,11 +541,17 @@ impl MouseEngine {
                 let Some(index) = at_physical_index(links, pos) else {
                     return false;
                 };
-                let (side, index) = if links[index].target == Some(zone_out) {
-                    (side, index)
-                } else {
-                    self.corner_link(zone, side, trip.b())
-                        .unwrap_or((side, index))
+                // Cutting a corner goes past two sections: the crossed edge's,
+                // and the adjacent edge's at the corner. The stricter one holds,
+                // so the corner rule can add a resistance but never lift one.
+                let (side, index) = match self.corner_link(zone, side, destination) {
+                    Some(corner)
+                        if links[index].target != Some(zone_out)
+                            && self.stricter(env, zone, corner, (side, index)) =>
+                    {
+                        corner
+                    }
+                    _ => (side, index),
                 };
                 let resistance = self.side_links(zone, side)[index].border_resistance;
                 return self.try_pass_border(env, zone, side, index, resistance, distance);
@@ -547,12 +560,29 @@ impl MouseEngine {
         false
     }
 
-    /// The link that governs a trip cutting a corner (#747): it left `zone`
-    /// through `crossed`, whose link there does not lead where the cursor goes,
-    /// and ends past the adjacent side — a flick over the corner into a
-    /// neighbour that extends beyond it. The edge the cursor actually goes round
-    /// is that adjacent side, at the corner: the section drawn there is the one
-    /// a straight push into the corner meets, and it must hold this trip too.
+    /// Whether link `a` of `zone` resists more than link `b` in the current
+    /// mode (moving or dragging).
+    fn stricter(
+        &self,
+        env: &impl CursorEnv,
+        zone: ZoneId,
+        a: (Side, usize),
+        b: (Side, usize),
+    ) -> bool {
+        let drag = env.buttons_down() as usize;
+        let resistance = |(side, index): (Side, usize)| {
+            self.side_links(zone, side)[index].border_resistance[drag]
+        };
+        resistance(a) > resistance(b)
+    }
+
+    /// The adjacent edge's link at the corner, for a trip that cuts it (#747):
+    /// it left `zone` through `crossed`, whose link there does not lead where
+    /// the cursor goes, and its `destination` — where Cross resolved it, which
+    /// may lie well past the received point — is beyond the adjacent side: a
+    /// flick over the corner into a neighbour that extends beyond it. The
+    /// section drawn on that side at the corner is the one a straight push into
+    /// the corner meets, and it must hold this trip too.
     fn corner_link(&self, zone: ZoneId, crossed: Side, end: Point<f64>) -> Option<(Side, usize)> {
         let bounds = self.layout.arena[zone].physical_bounds();
         // The adjacent side `end` lies beyond, and the corner's position along

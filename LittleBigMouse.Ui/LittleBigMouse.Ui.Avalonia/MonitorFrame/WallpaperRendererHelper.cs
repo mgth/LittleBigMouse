@@ -2,294 +2,180 @@
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using HLab.ColorTools;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Diagnostics;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using LittleBigMouse.Plugin.Wallpaper.Avalonia;
+using SkiaSharp;
 using System;
-using System.Diagnostics;
-using System.IO;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using AvaloniaColor = Avalonia.Media.Color;
-using AvaloniaPoint = Avalonia.Point;
 using AvaloniaSize = Avalonia.Size;
-using Color = SixLabors.ImageSharp.Color;
-using Point = SixLabors.ImageSharp.Point;
-using Size = SixLabors.ImageSharp.Size;
 
 namespace LittleBigMouse.Ui.Avalonia.MonitorFrame;
 
+/// <summary>
+/// Renders the per-monitor wallpaper preview of the layout editor. Every mode first
+/// shrinks the source by <c>shrink</c>, as the monitor frames are drawn at that scale,
+/// then places it the way the OS does. The geometry is the one the ImageSharp
+/// version used (see the <see cref="Placement"/> functions).
+/// </summary>
 public static class WallpaperRendererHelper
 {
-    public static Task<Bitmap> GetWallpaperFillAsync(string path, AvaloniaSize size, int shrink) 
-        => Image.LoadAsync(path)
-            .MutateFluent(e => e.Shrink(shrink).Fill(size.ToImageSharp()))
-            .ToBitmapAsync();
+    public static Task<Bitmap> GetWallpaperFillAsync(string path, AvaloniaSize size, int shrink)
+        => RenderAsync(path, shrink, image => Draw(image, Fill(SizeOf(image), size.ToPixels()), SKColors.Transparent));
 
-    public static Task<Bitmap> GetWallpaperCenterAsync(string path, AvaloniaSize size, ColorRGB<double> color, int shrink) 
-        => Image.LoadAsync(path)
-            .MutateFluent(e => e.Shrink(shrink).Center(size.ToImageSharp(),color.ToImageSharp()))
-            .ToBitmapAsync();
+    public static Task<Bitmap> GetWallpaperCenterAsync(string path, AvaloniaSize size, ColorRGB<double> color, int shrink)
+        => RenderAsync(path, shrink, image => Draw(image, Center(SizeOf(image), size.ToPixels()), color.ToSkia()));
 
     public static Task<Bitmap> GetWallpaperFitAsync(string path, AvaloniaSize size, ColorRGB<double> color, int shrink)
-        => Image.LoadAsync(path)
-            .MutateFluent(e => e.Shrink(shrink).Fit(size.ToImageSharp(), color.ToImageSharp()))
-            .ToBitmapAsync();
+        => RenderAsync(path, shrink, image => Draw(image, Fit(SizeOf(image), size.ToPixels()), color.ToSkia()));
 
-    public static Task<Bitmap> GetWallpaperStretchAsync(string path, AvaloniaSize size, int shrink) 
-        => Image.LoadAsync(path)
-            .MutateFluent(e => e.Shrink(shrink).Stretch(size.ToImageSharp()))
-            .ToBitmapAsync();
+    public static Task<Bitmap> GetWallpaperStretchAsync(string path, AvaloniaSize size, int shrink)
+        => RenderAsync(path, shrink, image => Draw(image, Stretch(SizeOf(image), size.ToPixels()), SKColors.Transparent));
 
-    public static Task<Bitmap> GetWallpaperTileAsync(string path, Rect target, Rect fullArea, int shrink) 
-        => MakeTileWall(path, fullArea.Size.ToImageSharp(), shrink)
-            .MutateFluent(e => e.SpanOrigin(target.ToImageSharp(),fullArea.ToImageSharp()))
-            .ToBitmapAsync();
+    public static Task<Bitmap> GetWallpaperTileAsync(string path, Rect target, Rect fullArea, int shrink)
+        => RenderAsync(path, shrink, image => DrawTiles(image, Tile(target.ToPixels(), fullArea.ToPixels())));
 
-    public static Task<Bitmap> GetWallpaperSpanAsync(string path, Rect target, Rect fullArea, int shrink) 
-        => Image.LoadAsync(path)
-            .MutateFluent(e => e.Shrink(shrink).SpanCenter(target.ToImageSharp(),fullArea.ToImageSharp()))
-            .ToBitmapAsync();
+    public static Task<Bitmap> GetWallpaperSpanAsync(string path, Rect target, Rect fullArea, int shrink)
+        => RenderAsync(path, shrink, image => Draw(image, Span(SizeOf(image), target.ToPixels(), fullArea.ToPixels()), SKColors.Transparent));
 
-
-
-    static async Task<Image> MakeTileWall(string path, Size size, int shrink)
-    {
-        using var source =/*await (*/await Image.LoadAsync(path).MutateFluent(ctx => ctx.Shrink(shrink));//).ToRgba32Async();
-
-        return await Task.Run(() =>
+    static Task<Bitmap> RenderAsync(string path, int shrink, Func<SKImage, SKBitmap> render)
+        => Task.Run(() =>
         {
-            var img = new Image<Rgba32>(size.Width, size.Height);
-
-            img.Mutate(e =>
-            {
-                for (var x = 0; x < size.Width; x += source.Width)
-                for (var y = 0; y < size.Height; y += source.Height)
-                {
-                    var w = Math.Min(source.Width, size.Width - x);
-                    var h = Math.Min(source.Height, size.Height - y);
-
-                    e = e.DrawImage(source,new Point(x,y), new Rectangle(0, 0,w,h),1.0f);
-                }
-            });
-            
-            return img;
+            using var source = WallpaperImage.Load(path);
+            using var shrunk = Shrink(source, shrink);
+            using var result = render(shrunk);
+            // The Bitmap copies the pixels: the Skia buffer can go right after.
+            return new Bitmap(PixelFormat.Bgra8888, AlphaFormat.Premul, result.GetPixels(),
+                new PixelSize(result.Width, result.Height), new Vector(96, 96), result.RowBytes);
         });
+
+    /// <summary>Where to draw which part of the (shrunk) source on a canvas of a given size.</summary>
+    internal readonly record struct Placement(SKSizeI Canvas, SKRect Source, SKRect Dest);
+
+    internal static SKImage Shrink(SKImage image, int shrink)
+    {
+        var width = Math.Max(1, image.Width / shrink);
+        var height = Math.Max(1, image.Height / shrink);
+        var shrunk = WallpaperImage.CreateCanvas(width, height, SKColors.Transparent);
+        WallpaperImage.Draw(shrunk, image, SKRect.Create(image.Width, image.Height), SKRect.Create(width, height));
+        shrunk.SetImmutable();
+        using (shrunk) return SKImage.FromBitmap(shrunk);
     }
 
-    static Color ToImageSharp(this AvaloniaColor color)
+    internal static SKBitmap Draw(SKImage image, Placement placement, SKColor background)
     {
-        return Color.FromRgba(color.R, color.G, color.B, color.A);
-    }
-   
-    static Color ToImageSharp(this ColorRGB<double> color)
-    {
-      var c = color.To<byte>();
-      return Color.FromRgba(c.Red, c.Green, c.Blue, c.Alpha);
+        var bitmap = WallpaperImage.CreateCanvas(placement.Canvas.Width, placement.Canvas.Height, background);
+        WallpaperImage.Draw(bitmap, image, placement.Source, placement.Dest);
+        return bitmap;
     }
 
-    static Size ToImageSharp(this AvaloniaSize size)
+    /// <summary>Scales to cover the screen and crops the centred overflow.</summary>
+    internal static Placement Fill(SKSizeI source, SKSizeI target)
     {
-        return new Size((int)size.Width,(int)size.Height);
-    }
-    static Point ToImageSharp(this AvaloniaPoint point)
-    {
-        return new Point((int)point.X,(int)point.Y);
-    }
-    static Rectangle ToImageSharp(this Rect rect)
-    {
-        return new Rectangle(rect.Position.ToImageSharp(),rect.Size.ToImageSharp());
-    }
+        var ratio = Math.Max(target.Width / (double)source.Width, target.Height / (double)source.Height);
 
-    public static async Task<Bitmap> ToBitmapAsync(this Task<Image> source)
-    {
-        return await (await source).ToBitmapAsync();
-    }
-    public static async Task<Image> ToRgba32Async(this Image source)
-    {
-        if (source is Image<Rgba32> img)
-        {
-            return img;
-        }
+        var w = (int)(target.Width / ratio);
+        var h = (int)(target.Height / ratio);
 
-        return await Task.Run(source.CloneAs<Rgba32>);
+        var crop = SKRect.Create((source.Width - w) / 2, (source.Height - h) / 2, w, h);
+        return new Placement(target, crop, SKRect.Create(target.Width, target.Height));
     }
 
-    public static Task<Bitmap> ToBitmapAsync(this Image source)
+    /// <summary>
+    /// Unscaled and centred on the background colour. A source larger than the screen
+    /// is cropped from its top-left corner, as the ImageSharp version did.
+    /// </summary>
+    internal static Placement Center(SKSizeI source, SKSizeI target)
     {
-        if (source is Image<Rgba32> img)
-        {
-            return img.ToBitmapAsync();
-        }
+        var w = Math.Min(source.Width, target.Width);
+        var h = Math.Min(source.Height, target.Height);
 
-        var result = source.CloneAs<Rgba32>();
-        source.Dispose();
-        return result.ToBitmapAsync();
+        return new Placement(target, SKRect.Create(w, h),
+            SKRect.Create((target.Width - w) / 2, (target.Height - h) / 2, w, h));
     }
 
-    public static async Task<Bitmap> ToBitmapAsync(this Image<Rgba32> source)
+    /// <summary>Scales to fit inside the screen and letterboxes with the background colour.</summary>
+    internal static Placement Fit(SKSizeI source, SKSizeI target)
     {
-        await using var ms = new MemoryStream(source.Height*source.Width*(source.PixelType.BitsPerPixel>>3));
+        var ratio = Math.Min(target.Width / (double)source.Width, target.Height / (double)source.Height);
 
-        await source.SaveAsBmpAsync(ms);
-        //await source.SaveAsJpegAsync(ms);
-        //await source.SaveAsPngAsync(ms);
+        var w = (int)(ratio * source.Width);
+        var h = (int)(ratio * source.Height);
 
-        //_source.SaveAsync(ms, PngFormat.Instance);
-        //await Bench("BMP ", () => _source.SaveAsBmpAsync(ms));
-        //ms.Position = 0;
-        //await Bench("GIF ", () => _source.SaveAsGifAsync(ms));
-        //ms.Position = 0;
-        //await Bench("JPEG", () => _source.SaveAsJpegAsync(ms));
-        //ms.Position = 0;
-        //await Bench("PBM ", () => _source.SaveAsPbmAsync(ms));
-        //ms.Position = 0;
-        //await Bench("WEBP", () => _source.SaveAsWebpAsync(ms));
-        //ms.Position = 0;
-        //await Bench("TIFF", () => _source.SaveAsTiffAsync(ms));
-        //ms.Position = 0;
-        //await Bench("TGA ", () => _source.SaveAsTgaAsync(ms));
-        //ms.Position = 0;
-        //await Bench("PNG ", () => _source.SaveAsPngAsync(ms));
-
-        ms.Position = 0;
-        var result = new Bitmap(ms);
-        source.Dispose();
-        return result;
+        return new Placement(target, SKRect.Create(source.Width, source.Height),
+            SKRect.Create((target.Width - w) / 2, (target.Height - h) / 2, w, h));
     }
 
-    public static Bitmap GetBitmapFromImage(Image<Rgba32> image)
+    internal static Placement Stretch(SKSizeI source, SKSizeI target)
+        => new(target, SKRect.Create(source.Width, source.Height), SKRect.Create(target.Width, target.Height));
+
+    /// <summary>
+    /// This screen's part of the source scaled to cover the whole virtual desktop.
+    /// Match how Windows "Span" actually crops the cover-scaled image over the virtual desktop.
+    /// Measured against real Span output (grid wallpaper, screen capture): the horizontal
+    /// overflow is centered, but the VERTICAL overflow is split 1/3 top : 2/3 bottom (not
+    /// centered). Verified across image heights 1000..2400: visible band top = (H - fullArea.H)/3.
+    /// </summary>
+    internal static Placement Span(SKSizeI source, SKRectI target, SKRectI fullArea)
     {
-        var size = new PixelSize(image.Width, image.Height);
+        var ratio = Math.Max(fullArea.Width / (double)source.Width, fullArea.Height / (double)source.Height);
+        var resized = new SKSizeI((int)(ratio * source.Width), (int)(ratio * source.Height));
 
-        var wb = new WriteableBitmap(size, new Vector(96,96), PixelFormat.Bgra8888);
+        var offsetX = (resized.Width - fullArea.Width) / 2;
+        var offsetY = (resized.Height - fullArea.Height) / 3;
 
-        var pixels = new byte[image.Width * image.Height * 4];
-        image.CopyPixelDataTo(pixels);
+        var crop = Clamp(Offset(target, -fullArea.Left + offsetX, -fullArea.Top + offsetY), resized);
 
-        Marshal.Copy(pixels, 0, wb.Lock().Address, image.Width * image.Height * 4);
-
-        return wb;
-    }
-    static async Task<Image> MutateFluent(this Task<Image> image, Action<IImageProcessingContext> action)
-    {
-        return await (await image).MutateFluent(action);
-    }
-
-    static async Task<Image> MutateFluent(this Image image, Action<IImageProcessingContext> action)
-    {
-        await System.Threading.Tasks.Task.Run(() => image.Mutate(action));
-        return image;
-    }
-
-    static IImageProcessingContext Shrink(this IImageProcessingContext ctx, int shrink)
-    {
-        if (shrink == 1) return ctx;
-
-        var source = ctx.GetCurrentSize();
-
-        var resize = new Size((int)(source.Width / shrink),(int)(source.Height / shrink));
-
-        return ctx.Resize(resize);
+        // The crop is in the resized image: bring it back to the source.
+        var kx = source.Width / (float)resized.Width;
+        var ky = source.Height / (float)resized.Height;
+        return new Placement(crop.Size,
+            SKRect.Create(crop.Left * kx, crop.Top * ky, crop.Width * kx, crop.Height * ky),
+            SKRect.Create(crop.Width, crop.Height));
     }
 
-    static IImageProcessingContext Fill(this IImageProcessingContext ctx, Size target)
+    /// <summary>
+    /// The tiles start at the top-left corner of the virtual desktop. The result is this
+    /// screen's part of that tiled desktop, in desktop pixels.
+    /// </summary>
+    internal static SKRectI Tile(SKRectI target, SKRectI fullArea)
+        => Clamp(Offset(target, -fullArea.Left, -fullArea.Top), fullArea.Size);
+
+    internal static SKBitmap DrawTiles(SKImage image, SKRectI crop)
     {
-        var source = ctx.GetCurrentSize();
-
-        var ratio = Math.Max( target.Width / (double)source.Width, target.Height / (double)source.Height);
-
-        var w = (int)(target.Width/ratio);
-        var h = (int)(target.Height/ratio);
-
-        var crop = new Rectangle(
-            (source.Width - w) / 2,
-            (source.Height - h) / 2,
-            w, h);
-
-        return ctx.Crop(crop).Resize(target);
-    }
-
-    static IImageProcessingContext Center(this IImageProcessingContext ctx, Size target, Color color)
-    {
-        var source = ctx.GetCurrentSize();
-        var width = Math.Min(source.Width, target.Width);
-        var height = Math.Min(source.Height, target.Height);
-
-        var crop = new Rectangle(0,0, width, height);
-
-        return ctx.Crop(crop).Pad(target.Width, target.Height, color);
-     }
-
-    static IImageProcessingContext Fit(this IImageProcessingContext ctx, Size target, Color color)
-    {
-        var source = ctx.GetCurrentSize();
-
-        var ratio = Math.Min( target.Width / (double)source.Width, target.Height / (double)source.Height);
-
-        var resize = new Size((int)(ratio * source.Width),(int)(ratio * source.Height));
-
-        var x = (target.Width - resize.Width) / 2;
-        var y = (target.Height - resize.Height) / 2;
-
-        return ctx.Resize(resize).Pad(target.Width, target.Height, color);
-    }
-
-    static IImageProcessingContext Stretch(this IImageProcessingContext ctx, Size target)
-    {
-        return ctx.Resize(target);
-    }
-
-    static IImageProcessingContext SpanOrigin(this IImageProcessingContext ctx, Rectangle target, Rectangle fullArea)
-    {
-        var source = ctx.GetCurrentSize();
-
-        var ratio = Math.Max((double)fullArea.Width / (double)source.Width, (double)fullArea.Height / (double)source.Height);
-        var resize = new Size((int)(ratio * source.Width),(int)(ratio * source.Height));
-
-        target.Offset(-fullArea.X,-fullArea.Y);
-
-        return ctx
-            .Resize(resize)
-            .CropClamped(target, resize);
-    }
-
-    static IImageProcessingContext SpanCenter(this IImageProcessingContext ctx, Rectangle target, Rectangle fullArea)
-    {
-        var source = ctx.GetCurrentSize();
-
-        var ratio = Math.Max((double)fullArea.Width / (double)source.Width, (double)fullArea.Height / (double)source.Height);
-        var resize = new Size((int)(ratio * source.Width),(int)(ratio * source.Height));
-
-        // Match how Windows "Span" actually crops the cover-scaled image over the virtual desktop.
-        // Measured against real Span output (grid wallpaper, screen capture): the horizontal
-        // overflow is centered, but the VERTICAL overflow is split 1/3 top : 2/3 bottom (not
-        // centered). Verified across image heights 1000..2400: visible band top = (H - fullArea.H)/3.
-        var offsetX = (resize.Width - fullArea.Width) / 2;
-        var offsetY = (resize.Height - fullArea.Height) / 3;
-
-        target.Offset(-fullArea.X + offsetX,-fullArea.Y + offsetY);
-
-        return ctx
-            .Resize(resize)
-            .CropClamped(target, resize);
+        var bitmap = WallpaperImage.CreateCanvas(crop.Width, crop.Height, SKColors.Transparent);
+        using var canvas = new SKCanvas(bitmap);
+        // The shader maps canvas pixel p to desktop pixel p + crop.Location.
+        using var shader = image.ToShader(SKShaderTileMode.Repeat, SKShaderTileMode.Repeat,
+            new SKSamplingOptions(SKFilterMode.Nearest), SKMatrix.CreateTranslation(-crop.Left, -crop.Top));
+        using var paint = new SKPaint { Shader = shader };
+        canvas.DrawRect(SKRect.Create(crop.Width, crop.Height), paint);
+        return bitmap;
     }
 
     // Integer truncation in the ratio/resize math above (and in the source Rect -> pixel
-    // conversions) can leave the crop rectangle up to 1px past the resized image. ImageSharp
-    // then throws "Crop rectangle should be smaller than the source bounds", which surfaces on
-    // a background thread and takes down the whole UI (see issue #492). Clamp to the image
-    // bounds so the Span/Tile wallpaper modes can never crash on edge-case geometry.
-    static IImageProcessingContext CropClamped(this IImageProcessingContext ctx, Rectangle target, Size bounds)
+    // conversions) can leave the crop rectangle up to 1px past the resized image. That used
+    // to throw on a background thread and take down the whole UI (see issue #492). Clamp to
+    // the image bounds so the Span/Tile wallpaper modes can never crash on edge-case geometry.
+    static SKRectI Clamp(SKRectI target, SKSizeI bounds)
     {
-        return ctx.Crop(Rectangle.Intersect(target, new Rectangle(0, 0, bounds.Width, bounds.Height)));
+        var crop = SKRectI.Intersect(target, SKRectI.Create(bounds));
+        if (crop.Width < 1 || crop.Height < 1)
+            throw new ArgumentException($"The screen {target} lies outside the wallpaper ({bounds.Width}x{bounds.Height}).");
+        return crop;
     }
 
-    public static void ImageSharpDebugStats()
-    {
-        Debug.WriteLine(@$"Number of undisposed ImageSharp buffers: {MemoryDiagnostics.TotalUndisposedAllocationCount}");
+    static SKRectI Offset(SKRectI rect, int dx, int dy)
+        => SKRectI.Create(rect.Left + dx, rect.Top + dy, rect.Width, rect.Height);
 
+    static SKSizeI SizeOf(SKImage image) => new(image.Width, image.Height);
+
+    static SKSizeI ToPixels(this AvaloniaSize size) => new((int)size.Width, (int)size.Height);
+
+    static SKRectI ToPixels(this Rect rect)
+        => SKRectI.Create((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
+
+    static SKColor ToSkia(this ColorRGB<double> color)
+    {
+        var c = color.To<byte>();
+        return new SKColor(c.Red, c.Green, c.Blue, c.Alpha);
     }
 }
-

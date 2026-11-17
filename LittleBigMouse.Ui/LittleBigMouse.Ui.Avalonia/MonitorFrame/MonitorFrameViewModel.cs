@@ -206,10 +206,6 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       };
 
       ApplyWallpaper(bitmap, generation);
-
-#if DEBUG
-      WallpaperRendererHelper.ImageSharpDebugStats();
-#endif
    }
 
    async Task SetWallpaperSafely(
@@ -226,7 +222,7 @@ public class MonitorFrameViewModel : ViewModel<PhysicalMonitor>, IMvvmContextPro
       }
    }
 
-   // The wallpaper renderers await ImageSharp I/O + Task.Run without capturing the UI context, so
+   // The wallpaper renderers decode and draw in Task.Run without capturing the UI context, so
    // the continuation here can resume off the UI thread. Assigning the UI-bound Wallpaper property
    // off-thread does not refresh the Image, so marshal the assignment back to the UI thread.
    void ApplyWallpaper(IImage? bitmap, long generation)

@@ -99,7 +99,27 @@ fn current_mode(output: &Value) -> (i32, i32, i32) {
 
 /// C# `KScreenMonitorSource.Query`, on a `kscreen-doctor --json` document: the
 /// connected outputs, in the document's order, with their EDIDs from `edids`.
+///
+/// When no output has priority 1, one is chosen to anchor the layout: this is the
+/// layout's view, not the system's state (see [`parse_reported`]).
 pub fn parse(json: &str, edids: &EdidMap) -> Result<Vec<LinuxMonitor>, KScreenError> {
+    let mut monitors = parse_reported(json, edids)?;
+    // No priority-1 output (older Plasma, odd configs): fall back to the enabled output
+    // at the logical origin, the model needs a primary to anchor on.
+    if !monitors.is_empty() && !monitors.iter().any(|m| m.primary) {
+        let primary = monitors
+            .iter()
+            .position(|m| m.enabled && m.logical_x == 0.0 && m.logical_y == 0.0)
+            .or_else(|| monitors.iter().position(|m| m.enabled))
+            .ok_or(KScreenError::NoEnabledOutput)?;
+        monitors[primary].primary = true;
+    }
+    Ok(monitors)
+}
+
+/// [`parse`] without the anchoring fallback: `primary` is exactly priority 1, the state
+/// `kscreen-doctor output.<name>.priority.1` sets. The monitor actions read this one.
+pub fn parse_reported(json: &str, edids: &EdidMap) -> Result<Vec<LinuxMonitor>, KScreenError> {
     let doc: Value = serde_json::from_str(json).map_err(|e| KScreenError::Json(e.to_string()))?;
     let Some(outputs) = get(&doc, "outputs") else {
         return Ok(Vec::new());
@@ -162,17 +182,6 @@ pub fn parse(json: &str, edids: &EdidMap) -> Result<Vec<LinuxMonitor>, KScreenEr
             orientation,
             frequency,
         });
-    }
-
-    // No priority-1 output (older Plasma, odd configs): fall back to the enabled output
-    // at the logical origin, the model needs a primary to anchor on.
-    if !monitors.is_empty() && !monitors.iter().any(|m| m.primary) {
-        let primary = monitors
-            .iter()
-            .position(|m| m.enabled && m.logical_x == 0.0 && m.logical_y == 0.0)
-            .or_else(|| monitors.iter().position(|m| m.enabled))
-            .ok_or(KScreenError::NoEnabledOutput)?;
-        monitors[primary].primary = true;
     }
 
     Ok(monitors)

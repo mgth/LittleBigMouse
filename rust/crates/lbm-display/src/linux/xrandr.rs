@@ -29,7 +29,17 @@ fn line() -> &'static Regex {
 /// C# `XRandRMonitorSource.Query`, on `xrandr --query` output: the outputs with a
 /// geometry, in xrandr's order, with their EDIDs from `edids`. A number too large for
 /// an `int` skips its line (C#'s `int.Parse` would throw).
+///
+/// When xrandr reports no primary, one is chosen to anchor the layout (see
+/// [`anchor_primary`]): this is the layout's view, not the system's state.
 pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
+    let mut monitors = parse_reported(stdout, edids);
+    anchor_primary(&mut monitors);
+    monitors
+}
+
+/// [`parse`] without the anchoring fallback: `primary` is exactly what xrandr printed.
+fn parse_reported(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
     let mut monitors = Vec::new();
     for text in stdout.split('\n') {
         let Some(m) = line().captures(text) else {
@@ -77,8 +87,12 @@ pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
         });
     }
 
-    // xrandr marks no output as primary under some compositors: pick the one at (0,0),
-    // the model needs a primary to anchor and place monitors.
+    monitors
+}
+
+/// xrandr marks no output as primary under some compositors: pick the one at (0,0),
+/// the model needs a primary to anchor and place monitors.
+fn anchor_primary(monitors: &mut [LinuxMonitor]) {
     if !monitors.is_empty() && !monitors.iter().any(|m| m.primary) {
         let primary = monitors
             .iter()
@@ -86,13 +100,16 @@ pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
             .unwrap_or(0);
         monitors[primary].primary = true;
     }
-    monitors
 }
 
 /// The monitor-actions list must also offer connected outputs without a mode.
 /// Keep the layout factory's historical active-only parser unchanged.
+///
+/// This is the system's state, not the layout's: no primary is invented when xrandr
+/// reports none, and a disabled output keeps the `primary` marker xrandr prints for it
+/// (it does so whether or not the output has a mode).
 pub fn parse_connected(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
-    let mut outputs = parse(stdout, edids);
+    let mut outputs = parse_reported(stdout, edids);
     for line in stdout.lines() {
         let mut words = line.split_whitespace();
         let Some(connector) = words.next() else {
@@ -103,8 +120,12 @@ pub fn parse_connected(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
         {
             continue;
         }
+        let mut next = words.next().unwrap_or_default();
+        let primary = next == "primary";
+        if primary {
+            next = words.next().unwrap_or_default();
+        }
         // A geometry we failed to parse must not be advertised as disabled.
-        let next = words.next().unwrap_or_default();
         if !next.is_empty() && !next.starts_with('(') {
             continue;
         }
@@ -119,7 +140,7 @@ pub fn parse_connected(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
             scale: 1.0,
             width_mm: 0.0,
             height_mm: 0.0,
-            primary: false,
+            primary,
             enabled: false,
             orientation: 0,
             frequency: 0,

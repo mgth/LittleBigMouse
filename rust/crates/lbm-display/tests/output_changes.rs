@@ -1,6 +1,6 @@
 //! Real command generation/validation with a compositor double, never the test desktop.
 use lbm_display::linux::{
-    display_signature,
+    display_signature, kscreen,
     topology::{change_checked_with, Change},
     xrandr, Backend,
 };
@@ -156,4 +156,92 @@ fn a_successful_exit_without_a_changed_state_is_not_success() {
         |_, _| Err("compositor refused".into()),
     );
     assert_eq!(failed.unwrap_err(), "compositor refused");
+}
+
+#[test]
+fn a_detached_output_that_keeps_the_primary_marker_stays_in_the_inventory() {
+    // xrandr prints `primary` whether or not the output has a mode.
+    let text = "DP-1 connected primary (normal left inverted right x axis y axis)\nHDMI-1 connected 1920x1080+0+0";
+    let live = xrandr::parse_connected(text, &Default::default());
+    assert_eq!(live.len(), 2);
+    let dp1 = live.iter().find(|m| m.connector_name == "DP-1").unwrap();
+    assert!(!dp1.enabled);
+    assert!(dp1.primary, "the system's primary flag is kept");
+    assert!(
+        !live
+            .iter()
+            .find(|m| m.connector_name == "HDMI-1")
+            .unwrap()
+            .primary
+    );
+
+    // Detaching the primary is confirmed by that inventory, not taken for a failure.
+    let before = xrandr::parse_connected(
+        "DP-1 connected primary 1920x1080+0+0\nHDMI-1 connected 1920x1080+1920+0",
+        &Default::default(),
+    );
+    let sent = Cell::new(false);
+    let after = change_checked_with(
+        Backend::XRandR,
+        Change::Detach,
+        "DP-1",
+        &display_signature(&before),
+        || {
+            Ok(if sent.get() {
+                live.clone()
+            } else {
+                before.clone()
+            })
+        },
+        |_, _| {
+            sent.set(true);
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert!(sent.get());
+    assert_eq!(after, live);
+}
+
+#[test]
+fn the_layouts_anchoring_primary_is_not_the_systems_primary() {
+    // No `primary` at all: layout discovery anchors one, the actions inventory does not.
+    let text = "DP-1 connected 1920x1080+0+0\nHDMI-1 connected 1920x1080+1920+0";
+    assert!(xrandr::parse(text, &Default::default())[0].primary);
+    let live = xrandr::parse_connected(text, &Default::default());
+    assert!(live.iter().all(|m| !m.primary));
+
+    let json = r#"{"outputs": [
+        {"connected": true, "enabled": true, "name": "DP-1", "pos": {"x": 0, "y": 0}},
+        {"connected": true, "enabled": true, "name": "HDMI-1", "pos": {"x": 1920, "y": 0}}]}"#;
+    assert!(kscreen::parse(json, &Default::default()).unwrap()[0].primary);
+    let reported = kscreen::parse_reported(json, &Default::default()).unwrap();
+    assert!(reported.iter().all(|m| !m.primary));
+
+    // So Make primary on that output really asks the compositor.
+    for (backend, before) in [(Backend::XRandR, live), (Backend::KScreen, reported)] {
+        let mut after = before.clone();
+        after[0].primary = true;
+        let calls = Cell::new(0);
+        let result = change_checked_with(
+            backend,
+            Change::Primary,
+            "DP-1",
+            &display_signature(&before),
+            || {
+                Ok(if calls.get() > 0 {
+                    after.clone()
+                } else {
+                    before.clone()
+                })
+            },
+            |_, _| {
+                calls.set(calls.get() + 1);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(calls.get(), 1, "{backend:?}");
+        assert_eq!(result, after);
+    }
 }

@@ -1276,12 +1276,18 @@ impl App {
         };
         let found = self.found.clone();
         let ctx = ctx.clone();
-        let parent = self.picker_parent;
+        let parent = self.picker_parent.clone();
         if let Err(e) = std::thread::Builder::new()
             .name("lbm-image-picker".into())
             .spawn(move || {
-                let result = std::panic::catch_unwind(||lbm_app::image_picker::choose(parent, choice.current_path()))
-                    .unwrap_or_else(|_|Err("The image chooser stopped unexpectedly. You can paste a path or drop an image.".into()));
+                // The worker owns its request; an unwind does not resume a mutated
+                // editor. Native parent resources are released by their guards.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    lbm_app::image_picker::choose(parent, choice.current_path())
+                }))
+                .unwrap_or_else(|_| {
+                    Err("The image chooser stopped unexpectedly. You can paste a path or drop an image.".into())
+                });
                 let _ = found.send(Found::WallpaperFile {
                     choice: Box::new(choice),
                     result,
@@ -1742,6 +1748,7 @@ impl eframe::App for App {
         }
         {
             use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            self.picker_parent = lbm_app::image_picker::Parent::None;
             if let Ok(handle) = _frame.window_handle() {
                 self.picker_parent = match handle.as_raw() {
                     RawWindowHandle::Win32(h) => {
@@ -1755,6 +1762,10 @@ impl eframe::App for App {
                     }
                     _ => lbm_app::image_picker::Parent::None,
                 };
+            }
+            #[cfg(target_os = "linux")]
+            if let Some(window) = _frame.winit_window() {
+                self.picker_parent = lbm_app::image_picker::Parent::Window(window.clone());
             }
         }
         self.retire_departed_file_choice();

@@ -264,11 +264,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "281e6645758940dee594495e28807a7672ce40f11ebf4df6c22c4fcd59e2689f"
 dependencies = [
  "enumflags2",
+ "futures-channel",
  "futures-util",
  "getrandom 0.4.3",
  "serde",
  "serde_repr",
  "tracing",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "zbus",
 ]
 
@@ -2148,6 +2152,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "wayland-backend",
+ "wayland-client",
  "windows 0.58.0",
 ]
 

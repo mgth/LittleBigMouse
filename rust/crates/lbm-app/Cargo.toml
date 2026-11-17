@@ -55,7 +55,9 @@ tempfile.workspace = true
 # async-io, never tokio, like lbm-hook and lbm-agent: cargo unifies ashpd/zbus features
 # across one build, and both runtimes at once do not compile (zbus on tokio would also
 # panic in accesskit's thread). The picker still drives it from a tokio block_on.
-ashpd = { version = "0.13", default-features = false, features = ["async-io", "file_chooser"] }
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "file_chooser", "wayland"] }
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
 url = "2"
 
 [target.'cfg(windows)'.dependencies.windows]

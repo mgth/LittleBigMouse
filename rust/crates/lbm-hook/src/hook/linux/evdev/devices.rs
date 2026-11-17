@@ -146,6 +146,78 @@ pub(super) fn held_buttons_of(devices: &[Mouse]) -> u8 {
     mask
 }
 
+/// How often the pump retries the grab of a mouse it holds open but could not
+/// grab (`EBUSY`: another program grabbed it first). The fixed-cadence rescan
+/// used to provide this retry for free, by reopening every node. Now only the
+/// grab ioctl is retried, and only on the nodes that need it.
+pub(super) const REGRAB_EVERY: Duration = Duration::from_secs(2);
+
+/// A node the router may grab. Generic purely so that the retry bookkeeping
+/// can be tested without opening a device.
+pub(super) trait Grabbable {
+    fn grab(&mut self) -> std::io::Result<()>;
+    /// Throw away what the node queued while it was not ours: those events also
+    /// reached the compositor, which has already acted on them. Replaying them
+    /// would move the cursor a second time.
+    fn discard_queued(&mut self);
+}
+
+impl Grabbable for Device {
+    fn grab(&mut self) -> std::io::Result<()> {
+        Device::grab(self)
+    }
+
+    fn discard_queued(&mut self) {
+        // The node is non-blocking: each read takes what is queued, and fails
+        // with WouldBlock once nothing is. The bound only guards against a
+        // device that never runs dry.
+        for _ in 0..64 {
+            let drained = match self.fetch_events() {
+                Ok(events) => events.count(),
+                Err(_) => 0,
+            };
+            if drained == 0 {
+                return;
+            }
+        }
+    }
+}
+
+/// Set a mouse aside after a failed grab, keeping it open for [`retry_grabs`].
+/// A fresh open of a path already set aside replaces the older one: the path
+/// may now name another device, the old one having gone and its minor having
+/// been reused.
+pub(super) fn set_aside<D>(pending: &mut Vec<(PathBuf, D)>, path: PathBuf, dev: D) {
+    match pending.iter_mut().find(|(p, _)| *p == path) {
+        Some(slot) => slot.1 = dev,
+        None => pending.push((path, dev)),
+    }
+}
+
+/// Retry the grab of every mouse set aside, keeping their order.
+/// - Grabbed: it leaves `pending`, its queue discarded, and goes to `adopt`.
+/// - `ENODEV`: the device is gone; it is dropped, which closes the node.
+/// - Any other error, `EBUSY` above all: it stays for the next round.
+pub(super) fn retry_grabs<D: Grabbable>(
+    pending: &mut Vec<(PathBuf, D)>,
+    mut adopt: impl FnMut(PathBuf, D),
+) {
+    let mut i = 0;
+    while i < pending.len() {
+        match pending[i].1.grab() {
+            Ok(()) => {
+                let (path, mut dev) = pending.remove(i);
+                dev.discard_queued();
+                adopt(path, dev);
+            }
+            Err(e) if e.raw_os_error() == Some(libc::ENODEV) => {
+                pending.remove(i);
+            }
+            Err(_) => i += 1,
+        }
+    }
+}
+
 /// Cadence of the hot-plug rescan when inotify is unavailable (matches the C#
 /// side's 2 s sysfs poll).
 ///
@@ -185,19 +257,30 @@ pub(super) fn enumerate() -> ScanResult {
     scan
 }
 
-/// An inotify watch on /dev/input for nodes appearing. Removals need no watch:
-/// a removed node's poll slot reports POLLHUP and the pump purges it.
+/// An inotify watch on /dev/input for nodes appearing, or changing owner or
+/// mode. Removals need no watch: a removed node's poll slot reports POLLHUP and
+/// the pump purges it.
+///
+/// `IN_ATTRIB` is not optional. devtmpfs creates a node `root:root 0600`, and
+/// only then does udev hand it to the `input` group. A scan that lands in
+/// between cannot open the node, so it does not see it at all, and without a
+/// second event nothing would ever look again. The same holds for a node whose
+/// permissions are granted later, while the hook runs.
 struct DirWatch(libc::c_int);
 
 impl DirWatch {
     fn new() -> Option<DirWatch> {
+        DirWatch::on(c"/dev/input")
+    }
+
+    fn on(dir: &std::ffi::CStr) -> Option<DirWatch> {
         let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
         if fd < 0 {
             return None;
         }
         let watch = DirWatch(fd);
-        let mask = libc::IN_CREATE | libc::IN_MOVED_TO;
-        if unsafe { libc::inotify_add_watch(fd, c"/dev/input".as_ptr(), mask) } < 0 {
+        let mask = libc::IN_CREATE | libc::IN_MOVED_TO | libc::IN_ATTRIB;
+        if unsafe { libc::inotify_add_watch(fd, dir.as_ptr(), mask) } < 0 {
             return None;
         }
         Some(watch)
@@ -238,7 +321,12 @@ impl Drop for DirWatch {
 ///
 /// With inotify the thread scans once on start (covering nodes that appeared
 /// between the arm-time enumeration and the watch), then only when /dev/input
-/// gains a node. Without it, it falls back to the fixed-cadence poll.
+/// gains a node or a node's permissions change. Without it, it falls back to
+/// the fixed-cadence poll.
+///
+/// A mouse the scan could open but not grab (another program holds it) is no
+/// reason to scan again: the router keeps that node open and retries the grab
+/// on it alone ([`retry_grabs`]).
 pub(super) fn spawn_scanner() -> (mpsc::Receiver<ScanResult>, Arc<AtomicBool>) {
     let (scan_tx, scan_rx) = mpsc::channel();
     let scan_stop = Arc::new(AtomicBool::new(false));
@@ -328,5 +416,161 @@ mod tests {
 
         assert!(mice.is_empty());
         assert!(keyboards.is_empty());
+    }
+
+    /// A node whose grab answers from a script, and remembers whether its
+    /// queue was discarded.
+    struct Scripted {
+        name: &'static str,
+        answers: std::collections::VecDeque<Option<i32>>,
+        discarded: bool,
+    }
+
+    /// `None` is a successful grab, `Some(errno)` a failed one.
+    fn scripted(name: &'static str, answers: &[Option<i32>]) -> (PathBuf, Scripted) {
+        (
+            PathBuf::from(format!("/dev/input/{name}")),
+            Scripted {
+                name,
+                answers: answers.iter().copied().collect(),
+                discarded: false,
+            },
+        )
+    }
+
+    impl Grabbable for Scripted {
+        fn grab(&mut self) -> std::io::Result<()> {
+            match self.answers.pop_front().expect("grab retried too often") {
+                None => Ok(()),
+                Some(errno) => Err(std::io::Error::from_raw_os_error(errno)),
+            }
+        }
+
+        fn discard_queued(&mut self) {
+            self.discarded = true;
+        }
+    }
+
+    fn names(pending: &[(PathBuf, Scripted)]) -> Vec<&'static str> {
+        pending.iter().map(|(_, d)| d.name).collect()
+    }
+
+    /// The three outcomes of a retry: a released mouse is adopted, a busy one
+    /// waits for the next round, a gone one is dropped. Order is kept.
+    #[test]
+    fn a_retry_adopts_the_released_keeps_the_busy_and_drops_the_gone() {
+        let mut pending = vec![
+            scripted("busy", &[Some(libc::EBUSY)]),
+            scripted("released", &[None]),
+            scripted("gone", &[Some(libc::ENODEV)]),
+            scripted("busy2", &[Some(libc::EBUSY)]),
+        ];
+        let mut adopted = Vec::new();
+
+        retry_grabs(&mut pending, |path, dev| adopted.push((path, dev)));
+
+        assert_eq!(names(&pending), vec!["busy", "busy2"]);
+        assert_eq!(adopted.len(), 1);
+        assert_eq!(adopted[0].0, PathBuf::from("/dev/input/released"));
+        assert!(
+            adopted[0].1.discarded,
+            "events queued before the grab already reached the compositor"
+        );
+    }
+
+    /// A mouse held by another program is picked up on the round after it
+    /// lets go, without being reopened.
+    #[test]
+    fn a_busy_mouse_is_adopted_once_released() {
+        let mut pending = vec![scripted(
+            "held",
+            &[Some(libc::EBUSY), Some(libc::EBUSY), None],
+        )];
+        let mut adopted = Vec::new();
+
+        for _ in 0..2 {
+            retry_grabs(&mut pending, |path, dev| adopted.push((path, dev)));
+            assert!(adopted.is_empty());
+            assert_eq!(names(&pending), vec!["held"]);
+        }
+        retry_grabs(&mut pending, |path, dev| adopted.push((path, dev)));
+
+        assert!(pending.is_empty());
+        assert_eq!(adopted.len(), 1);
+    }
+
+    /// A second open of a path set aside replaces the first: the path may name
+    /// another device by now. Other paths are untouched.
+    #[test]
+    fn setting_aside_a_known_path_replaces_the_older_open() {
+        let mut pending = Vec::new();
+        let (path, old) = scripted("event7", &[]);
+        set_aside(&mut pending, path.clone(), old);
+        let (other, dev) = scripted("event8", &[]);
+        set_aside(&mut pending, other, dev);
+        let (_, mut fresh) = scripted("event7", &[]);
+        fresh.name = "event7-fresh";
+
+        set_aside(&mut pending, path, fresh);
+
+        assert_eq!(names(&pending), vec!["event7-fresh", "event8"]);
+    }
+
+    /// A scratch directory under the system temp dir, removed on drop.
+    struct ScratchDir(PathBuf);
+
+    impl ScratchDir {
+        fn new(tag: &str) -> ScratchDir {
+            let dir =
+                std::env::temp_dir().join(format!("lbm-dirwatch-{tag}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir(&dir).unwrap();
+            ScratchDir(dir)
+        }
+
+        fn watch(&self) -> DirWatch {
+            let c = std::ffi::CString::new(self.0.as_os_str().as_encoded_bytes()).unwrap();
+            DirWatch::on(&c).expect("inotify watch")
+        }
+    }
+
+    impl Drop for ScratchDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const NOTICE: Duration = Duration::from_secs(2);
+    const QUIET: Duration = Duration::from_millis(50);
+
+    #[test]
+    fn the_watch_sees_a_node_appear_and_then_goes_quiet() {
+        let dir = ScratchDir::new("create");
+        let watch = dir.watch();
+        assert!(!watch.wait(QUIET), "nothing happened yet");
+
+        std::fs::write(dir.0.join("event9"), b"").unwrap();
+
+        assert!(watch.wait(NOTICE));
+        assert!(!watch.wait(QUIET), "the change was drained");
+    }
+
+    /// udev hands a node to the `input` group only after devtmpfs created it.
+    /// A scan between the two cannot open the node, so the permission change
+    /// itself must trigger the next scan.
+    #[test]
+    fn the_watch_sees_a_permission_change() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = ScratchDir::new("attrib");
+        let node = dir.0.join("event9");
+        std::fs::write(&node, b"").unwrap();
+        std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let watch = dir.watch();
+        assert!(!watch.wait(QUIET));
+
+        std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o660)).unwrap();
+
+        assert!(watch.wait(NOTICE));
     }
 }

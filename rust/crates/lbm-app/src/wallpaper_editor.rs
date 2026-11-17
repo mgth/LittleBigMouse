@@ -21,6 +21,9 @@ pub struct Editor {
     pub error: Option<String>,
     pub status: Option<String>,
     pub preview_generation: u64,
+    /// Bumped whenever a pending file choice must not land, even if everything it
+    /// captured looks the same again by the time the chooser answers.
+    choice_generation: u64,
 }
 impl Editor {
     pub fn dirty(&self) -> bool {
@@ -123,5 +126,93 @@ impl Editor {
         self.error = None;
         self.status = None;
         self.preview_generation += 1;
+    }
+}
+
+/// A returned path belongs to the draft and destination captured when Browse was pressed.
+/// Comparing the generation also rejects edit/undo/reload cycles returning to identical data.
+#[derive(Clone)]
+pub struct FileChoice {
+    key: Option<Key>,
+    generation: u64,
+    choice: u64,
+    draft: LayoutWallpaperSettings,
+    screen: Option<String>,
+}
+impl Editor {
+    pub fn choose_file(&self, selected: Option<&str>) -> Option<FileChoice> {
+        use lbm_store::wallpaper_settings::{ScreenWallpaperKind, WallpaperMode};
+        if self.busy() {
+            return None;
+        }
+        let draft = self.draft.as_ref()?;
+        let screen = if draft.mode == WallpaperMode::Span {
+            None
+        } else {
+            let id = selected?;
+            if draft.per_screen.get(id)?.kind != ScreenWallpaperKind::Image {
+                return None;
+            }
+            Some(id.to_owned())
+        };
+        Some(FileChoice {
+            key: self.key.clone(),
+            generation: self.preview_generation,
+            choice: self.choice_generation,
+            draft: draft.clone(),
+            screen,
+        })
+    }
+    /// Leaving the editor or its destination retires the open chooser for good: coming
+    /// back to the same mode and screen before it answers does not revive it.
+    pub fn abandon_file_choice(&mut self) {
+        self.choice_generation += 1;
+    }
+    /// A valid selection requests a local preview, including reselecting the same file.
+    /// No IPC/save: reselecting a repaired file can clear a previous preview error.
+    pub fn file_chosen(
+        &mut self,
+        choice: FileChoice,
+        selected: Option<&str>,
+        result: crate::image_picker::Selection,
+    ) -> bool {
+        if self.busy()
+            || self.key != choice.key
+            || self.preview_generation != choice.generation
+            || self.choice_generation != choice.choice
+            || self.draft.as_ref() != Some(&choice.draft)
+            || choice
+                .screen
+                .as_deref()
+                .is_some_and(|id| Some(id) != selected)
+        {
+            return false;
+        }
+        let path = match result {
+            Ok(Some(path)) => path,
+            Ok(None) => return false,
+            Err(error) => {
+                self.error = Some(error);
+                return false;
+            }
+        };
+        let draft = self.draft.as_mut().unwrap();
+        let dest = match choice.screen {
+            Some(id) => &mut draft.per_screen.get_mut(&id).unwrap().image_path,
+            None => &mut draft.span_image_path,
+        };
+        *dest = Some(path);
+        self.preview_generation += 1;
+        self.error = None;
+        self.status = Some("Image selected. Preview is local; Apply updates the desktop.".into());
+        true
+    }
+}
+impl FileChoice {
+    pub fn current_path(&self) -> Option<&str> {
+        match &self.screen {
+            Some(id) => self.draft.per_screen.get(id)?.image_path.as_deref(),
+            None => self.draft.span_image_path.as_deref(),
+        }
     }
 }

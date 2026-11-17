@@ -480,11 +480,52 @@ La borne de sortie exclut actuellement les dalles 8K natives.
 
 Référence : [positionnement global de Windows](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/ne-shobjidl_core-desktop_wallpaper_position).
 
+## Douzième lot : sélection native des images
+
+- L'éditeur Wallpaper propose `Browse…` pour l'image d'un écran et le panorama.
+  Windows utilise `IFileOpenDialog` et Linux le portail XDG FileChooser, avec un
+  filtre PNG/JPEG/BMP/GIF et une sélection unique. Le dossier de l'image actuelle
+  sert de point de départ lorsqu'il existe ; Windows conserve également son
+  historique natif. Le collage de chemin et le dépôt de fichier restent disponibles.
+- Le dialogue et le décodage s'exécutent dans un thread dédié. Une seule sélection
+  peut être ouverte à la fois ; l'annulation laisse le brouillon intact. Un portail
+  indisponible ou un fichier invalide produit une erreur visible. Les URI du portail
+  sont converties en chemins locaux en préservant espaces, Unicode et caractères
+  échappés ; les adresses distantes sont refusées. Le décodeur partagé contrôle le
+  format et les limites mémoire avant d'adopter le chemin.
+- Une réponse appartient au layout, au brouillon et au moniteur capturés à
+  l'ouverture. Déconnexion, nouvelle révision, rechargement, Undo, édition du
+  brouillon, changement de destination ou sortie de l'éditeur empêchent son adoption.
+  Les révisions reçues de l'agent invalident immédiatement les réponses, y compris
+  lorsque sélection et changement d'écrans arrivent dans la même passe UI.
+- Choisir une image déclenche seulement son aperçu local. Aucune requête Save ou
+  Apply n'est envoyée. Choisir à nouveau le même fichier rafraîchit l'aperçu sans
+  rendre les réglages modifiés, notamment après réparation d'une image absente.
+
+Contrôles locaux : 254 tests UI/application passent, incluant les scénarios de
+sélection obsolète, d'annulation, de chemin Unicode, de fichier invalide et de
+portail indisponible. Ce dernier test utilise un processus enfant avec un bus
+inexistant ; aucun dialogue natif ni fond d'écran réel n'a été ouvert ou modifié.
+Les deux captures de l'éditeur ont été actualisées et inspectées. Formatage et
+Clippy sans avertissement passent sur toutes les cibles de test UI/application
+pour Linux et `x86_64-pc-windows-msvc`.
+
+Qualification restante : ouvrir/annuler/valider les vrais dialogues Windows et
+Plasma/GNOME, vérifier le focus et la fermeture de l'application. Sous Windows et
+X11, l'identifiant de la fenêtre est transmis au sélecteur. Sous Wayland, le portail
+ouvre actuellement un dialogue autonome, sans parent exporté par xdg-foreign ;
+son rattachement à la fenêtre reste à compléter. Le nettoyage du cache d'images
+et la qualification matérielle des lots précédents restent ouverts.
+
+Références : [Common Item Dialog Windows](https://learn.microsoft.com/en-us/windows/win32/shell/common-file-dialog),
+[FileChooser XDG](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.FileChooser.html).
+
 ## Suite, dans l'ordre
 
 1. Qualifier les fonds d'écran et overlays Linux/Windows, les changements de topologie
    à DPI mixtes et le premier périmètre egui sur matériel : veille, dock, UAC, reprise,
-   démarrage et mémoire ; compléter le dialogue de fichiers et le nettoyage du cache.
+   démarrage et mémoire ; nettoyer le cache en protégeant les fichiers encore utilisés
+   et compléter le rattachement du dialogue de fichiers sous Wayland.
 2. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
    packaging et retrait de .NET une fois les fonctions conservées remplacées.
 

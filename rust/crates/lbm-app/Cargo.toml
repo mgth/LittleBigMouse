@@ -41,6 +41,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # the agent that binds them.
 lbm-ipc = { path = "../lbm-ipc" }
 serde_json.workspace = true
+raw-window-handle = "0.6"
 tokio = { workspace = true, features = ["rt", "net", "sync", "time", "macros", "io-util"] }
 
 [dev-dependencies]
@@ -50,5 +51,13 @@ lbm-agent = { path = "../lbm-agent" }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time"] }
 tempfile.workspace = true
 
-[target.'cfg(windows)'.dependencies]
-raw-window-handle = "0.6"
+[target.'cfg(target_os = "linux")'.dependencies]
+# async-io, never tokio, like lbm-hook and lbm-agent: cargo unifies ashpd/zbus features
+# across one build, and both runtimes at once do not compile (zbus on tokio would also
+# panic in accesskit's thread). The picker still drives it from a tokio block_on.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "file_chooser"] }
+url = "2"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"]

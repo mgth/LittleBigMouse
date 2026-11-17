@@ -89,6 +89,7 @@ enum View {
     Map,
     List,
     Settings,
+    Displays,
 }
 
 struct App {
@@ -108,6 +109,7 @@ struct App {
     agent: lbm_app::conversation::Conversation,
     probe: lbm_app::probe::Probe,
     show_probe: bool,
+    outputs: lbm_app::displays::Displays,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
     /// **In memory only, and this window writes no file.** A drag changes this copy and
@@ -581,6 +583,7 @@ impl App {
             agent: lbm_app::conversation::Conversation::default(),
             probe: lbm_app::probe::Probe::default(),
             show_probe: true,
+            outputs: Default::default(),
             excluded: None,
             pattern: String::new(),
             adjust_scale: false,
@@ -609,6 +612,7 @@ impl App {
         use lbm_app::session::Event;
         match event {
             Event::Connected { requests, snapshot } => {
+                self.outputs = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = Some(requests);
                 self.next_id = 3;
@@ -628,6 +632,7 @@ impl App {
             }
             Event::Message(message) => self.agent_said(message),
             Event::Disconnected(why) => {
+                self.outputs = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.state = lbm_ui::State::default();
@@ -955,6 +960,12 @@ impl App {
     /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
         if let Message::Answer { id, result } = &message {
+            if let Some(changed) = self.outputs.answered(*id, result) {
+                if changed {
+                    self.refresh.invalidate();
+                }
+                return;
+            }
             if self.probe.answered(*id, result) {
                 return;
             }
@@ -967,6 +978,7 @@ impl App {
         }
         if let Some(stamp) = self.agent.layout.clone() {
             if self.refresh.observe(stamp, false, self.dirty()) {
+                self.outputs.invalidate();
                 self.state.live = false;
                 self.previewed = None;
                 self.drag = None;
@@ -1127,7 +1139,7 @@ impl App {
     fn probe_tick(&mut self, ctx: &egui::Context) {
         let now = std::time::Instant::now();
         let key = if self.show_probe
-            && self.view != View::Settings
+            && matches!(self.view, View::Map | View::List)
             && self.requests.is_some()
             && !self.refresh.pending()
             && self.drag.is_none()
@@ -1154,6 +1166,86 @@ impl App {
         }
         if self.probe.waiting() {
             ctx.request_repaint_after(lbm_app::probe::DEBOUNCE);
+        }
+    }
+
+    fn output_blocked(&self) -> Option<&'static str> {
+        if self.requests.is_none() {
+            Some("Connect to the agent to change displays.")
+        } else if self.refresh.pending() {
+            Some("Wait for the screen configuration to reload.")
+        } else if self.dirty() {
+            Some("Save or undo your edits before changing system displays.")
+        } else if self.state.is_virtual || self.layout.as_ref().is_some_and(|l| l.is_virtual()) {
+            Some("A foreign layout cannot change system displays.")
+        } else if self.agent.enabled != Some(false)
+            || self.agent.previewing
+            || self.state.live
+            || self.agent.suspended
+            || matches!(
+                self.state.engine,
+                lbm_ui::Engine::Running | lbm_ui::Engine::Paused
+            )
+        {
+            Some("Stop the engine and end the preview before changing displays.")
+        } else if self.layout.is_none()
+            || self
+                .agent
+                .layout
+                .as_ref()
+                .and_then(|s| s.revision)
+                .is_none()
+        {
+            Some("A current layout and an up-to-date agent are required.")
+        } else if self.state.waiting {
+            Some("Wait for the current operation to finish.")
+        } else {
+            None
+        }
+    }
+
+    fn output_request(&mut self, method: &'static str, extra: serde_json::Value, change: bool) {
+        let Some(requests) = &self.requests else {
+            return;
+        };
+        if self.outputs.busy() {
+            return;
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        self.outputs.sent(id, change);
+        if requests.send((id, method, extra)).is_err() {
+            self.outputs
+                .answered(id, &Err("the agent stopped listening".into()));
+        }
+    }
+
+    fn output_action(&mut self, action: lbm_ui::displays::Did) {
+        use lbm_ui::displays::Did;
+        match action {
+            Did::Refresh => {
+                self.outputs.invalidate();
+                self.output_request("DisplayOutputs", serde_json::json!({}), false);
+            }
+            Did::Stop => {
+                self.state.live = false;
+                self.send("Stop", serde_json::json!({}));
+            }
+            Did::Change(connector, change) if self.output_blocked().is_none() => {
+                let Some(layout) = &self.layout else {
+                    return;
+                };
+                let Some(revision) = self.agent.layout.as_ref().and_then(|s| s.revision) else {
+                    return;
+                };
+                if let Some(extra) = self
+                    .outputs
+                    .request(&layout.id, revision, &connector, change)
+                {
+                    self.output_request("ChangeOutput", extra, true);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -1268,6 +1360,7 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.view, View::Map, "Map");
                 ui.selectable_value(&mut self.view, View::List, "List");
+                ui.selectable_value(&mut self.view, View::Displays, "Displays");
                 ui.checkbox(&mut self.show_probe, "Show crossings")
                     .on_hover_text("Green: a passage. Red: a wall. Resistance is bypassed for this geometric report. Probing does not start or change the mouse engine.");
                 // Asked when the panel is opened rather than on a timer: the list only
@@ -1287,7 +1380,7 @@ impl eframe::App for App {
                 // What the frames show inside them — a second axis over Map/List, as in
                 // C# where `ContentViewMode` and the list toggle are separate. Not on the
                 // settings view, which has no frames to write in.
-                if self.view != View::Settings {
+                if matches!(self.view, View::Map | View::List) {
                     ui.separator();
                     if let Some(chosen) = lbm_ui::mode::bar(ui, self.mode, &self.offered()) {
                         self.mode = chosen;
@@ -1313,7 +1406,7 @@ impl eframe::App for App {
         });
 
         self.probe_tick(&ctx);
-        if self.show_probe && self.view != View::Settings {
+        if self.show_probe && matches!(self.view, View::Map | View::List) {
             egui::Panel::top("probe-status").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Green: passage · Red: wall · Resistance bypassed");
@@ -1358,7 +1451,7 @@ impl eframe::App for App {
         }
 
         egui::Panel::bottom("controls").show(ui, |ui| {
-            if self.refresh.pending() {
+            if self.refresh.pending() || self.outputs.changing() {
                 ui.disable();
             }
             // Without an agent every button is disabled on its own — `can` asks for a
@@ -1394,9 +1487,41 @@ impl eframe::App for App {
         let mut apply = false;
         let mut dry_run = false;
         let mut adjust_scale = self.adjust_scale;
+        if self.view == View::Displays && self.requests.is_some() && self.outputs.needs_read() {
+            self.output_request("DisplayOutputs", serde_json::json!({}), false);
+        }
+        let mut output_action = None;
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
-                if self.refresh.pending() {
+                if self.view == View::Displays {
+                    let blocked = self.output_blocked();
+                    let busy = self.outputs.busy();
+                    let can_stop = self.requests.is_some()
+                        && !self.state.waiting
+                        && (self.agent.enabled == Some(true)
+                            || self.agent.previewing
+                            || matches!(
+                                self.state.engine,
+                                lbm_ui::Engine::Running | lbm_ui::Engine::Paused
+                            ));
+                    let warn = self
+                        .layout
+                        .as_ref()
+                        .is_none_or(|l| l.options.show_monitor_action_warning);
+                    output_action = self.outputs.panel.draw(
+                        ui,
+                        self.outputs.outputs.as_ref(),
+                        blocked,
+                        busy,
+                        warn,
+                        can_stop,
+                    );
+                    if let Some(error) = &self.outputs.error {
+                        ui.colored_label(ui.visuals().error_fg_color, error);
+                    }
+                    return (None, None);
+                }
+                if self.refresh.pending() || self.outputs.changing() {
                     ui.disable();
                 }
                 if self.view == View::Settings {
@@ -1511,11 +1636,16 @@ impl eframe::App for App {
                     }
                     // Returned above, before the screens were borrowed: the panel edits
                     // the very options they were read from.
-                    View::Settings => unreachable!("handled before the monitors are built"),
+                    View::Settings | View::Displays => {
+                        unreachable!("handled before the monitors are built")
+                    }
                 }
             })
             .inner;
         self.adjust_scale = adjust_scale;
+        if let Some(action) = output_action {
+            self.output_action(action);
+        }
         if dry_run {
             self.dry_run_topology();
         }
@@ -1568,6 +1698,58 @@ mod lifecycle_tests {
     use super::*;
     use lbm_app::session::Event;
     use serde_json::json;
+
+    #[test]
+    fn output_changes_wait_for_saved_edits_and_reload_after_their_own_answer() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        layout.id = "A".into();
+        app.saved = Some(lbm_app::saved::Reference::of(&layout));
+        app.layout = Some(Box::new(layout));
+        let (requests, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+        app.requests = Some(requests);
+        app.agent.enabled = Some(false);
+        app.agent.layout = Some(lbm_app::refresh::Stamp::from_snapshot(
+            &json!({"LayoutId":"A", "LayoutRevision":1}),
+        ));
+        let inventory = json!({"Signature":"live", "Outputs":[{"Connector":"DP-1", "Name":"Main", "Enabled":true, "Primary":false}]});
+        app.outputs.sent(99, false);
+        app.refresh.complete(app.refresh.begin(false).unwrap(), "A");
+        app.agent_said(Message::Answer {
+            id: 99,
+            result: Ok(inventory.clone()),
+        });
+        let action =
+            lbm_ui::displays::Did::Change("DP-1".into(), lbm_ipc::displays::Change::Primary);
+        app.layout
+            .as_mut()
+            .unwrap()
+            .edit_options(|o| o.loop_x = true);
+        app.output_action(action.clone());
+        assert!(
+            incoming.try_recv().is_err(),
+            "dirty edits cannot cause an output change"
+        );
+        app.saved = Some(lbm_app::saved::Reference::of(app.layout.as_ref().unwrap()));
+        assert_eq!(app.output_blocked(), None);
+        app.output_action(action);
+        let (id, method, request) = incoming.try_recv().unwrap();
+        assert_eq!(method, "ChangeOutput");
+        assert_eq!(request["Signature"], "live");
+        assert_eq!(request["LayoutId"], "A");
+        assert!(app.outputs.changing());
+        app.state.waiting = true;
+        app.agent_said(Message::Answer {
+            id,
+            result: Ok(inventory),
+        });
+        assert!(app.state.waiting, "output replies never settle Save/Start");
+        assert!(!app.outputs.busy());
+        assert!(
+            app.refresh.pending(),
+            "reread the desktop after an output action"
+        );
+    }
 
     #[test]
     fn a_probe_answer_does_not_acknowledge_an_outstanding_save() {

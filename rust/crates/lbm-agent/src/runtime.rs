@@ -198,6 +198,42 @@ impl<W: AgentWorld> Agent<W> {
                 "Protocol": api::PROTOCOL,
             })),
             Request::Snapshot => serde_json::to_value(self.snapshot()).map_err(|e| e.to_string()),
+            Request::DisplayOutputs => self
+                .world
+                .display_outputs()
+                .and_then(|outputs| serde_json::to_value(outputs).map_err(|e| e.to_string())),
+            Request::ChangeOutput {
+                layout_id,
+                layout_revision,
+                signature,
+                connector,
+                change,
+            } => {
+                let state = self.snapshot();
+                if state.layout_id.as_deref() != Some(&layout_id)
+                    || state.layout_revision != layout_revision
+                {
+                    Err("the displays changed; reload the layout before changing an output".into())
+                } else if state.enabled != Some(false)
+                    || state.previewing
+                    || state.suspended
+                    || matches!(
+                        self.reconciler.engine(),
+                        EngineState::Running | EngineState::Paused
+                    )
+                {
+                    Err("stop the engine and end the preview before changing an output".into())
+                } else if self.world.layout().is_none_or(|l| l.is_virtual) {
+                    Err("a foreign layout cannot change system outputs".into())
+                } else {
+                    let result = self.world.change_output(&connector, change, &signature);
+                    // Even a failed tool may have partially changed the desktop.
+                    let _ = self.inputs.send(Input::DisplayChanged);
+                    result.and_then(|outputs| {
+                        serde_json::to_value(outputs).map_err(|e| e.to_string())
+                    })
+                }
+            }
             Request::Subscribe => {
                 let snapshot = serde_json::to_value(self.snapshot()).map_err(|e| e.to_string());
                 self.subscribers.push(client.clone());

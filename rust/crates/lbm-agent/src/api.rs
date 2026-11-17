@@ -70,6 +70,21 @@ pub enum Request {
     },
     /// The agent's state now.
     Snapshot,
+    /// Connected outputs, including disabled ones. Unsupported backends return an error.
+    DisplayOutputs,
+    /// Change one system output after checking the editor's revision and fresh inventory.
+    ChangeOutput {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "LayoutRevision")]
+        layout_revision: u64,
+        #[serde(rename = "Signature")]
+        signature: String,
+        #[serde(rename = "Connector")]
+        connector: String,
+        #[serde(rename = "Change")]
+        change: lbm_ipc::displays::Change,
+    },
     /// The state now, then a `State` event whenever it changes.
     Subscribe,
     /// The user's Start; `KeepLayout` from an editor's "apply and start", which sends

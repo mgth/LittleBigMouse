@@ -74,17 +74,54 @@ l'agent passent, dont huit captures de référence. Formatage, Clippy avec avert
 interdits, et compilation de toutes les cibles de test du frontend et de l'agent pour
 `x86_64-pc-windows-msvc` passent. La validation sur matériel Windows reste à faire.
 
+## Troisième lot : actions sur les écrans système
+
+- La vue `Displays` liste les sorties connectées, y compris celles désactivées qui ne
+  figurent plus sur la carte. Elle propose `Make primary`, `Attach`, `Detach` et une
+  actualisation explicite. L'option existante `ShowMonitorActionWarning` gouverne la
+  confirmation, qui nomme la sortie et l'effet demandé ; Annuler ne transmet rien.
+- Les requêtes v3 additives `DisplayOutputs` et `ChangeOutput` passent par l'agent.
+  La seconde porte l'identifiant/révision du layout et la signature de la liste lue.
+  L'agent refuse les configurations périmées, layouts étrangers, moteur actif ou
+  suspendu et aperçu en cours. La fenêtre demande aussi d'enregistrer ou d'annuler
+  ses éditions et propose Stop. Le détachement du dernier écran actif reste interdit,
+  même lorsque les confirmations sont désactivées.
+- KScreen et XRandR sont les backends disponibles pour ces actions. Avant l'exécution,
+  une lecture fraîche vérifie l'identité de la sortie et la signature ; après, une
+  nouvelle lecture doit confirmer le résultat. Un retour de processus seul ne vaut
+  pas succès. Une erreur reste affichée jusqu'à une nouvelle demande de lecture.
+- La reconstruction du layout suit chaque tentative transmise à la plateforme, y
+  compris un échec partiellement appliqué. La carte et la liste se rechargent par le
+  mécanisme du premier lot. Les anciennes réponses et confirmations sont invalidées ;
+  les réponses de ce panneau ne peuvent pas acquitter Save/Start.
+- L'inventaire XRandR inclut désormais les sorties connectées sans mode, sans modifier
+  l'inventaire historique de la fabrique de layouts. La lecture des positions négatives
+  accepte également `1920x1080-1920-1080`, en conservant les fixtures au format `+-1920`.
+
+Limites : les commandes Windows ne sont pas encore portées ; l'agent les refuse
+explicitement. Les opérations système sont synchrones et bornées dans l'agent, comme
+les opérations de topologie existantes ; elles ne tournent pas sur le fil UI. Aucun
+écran réel n'a été détaché pendant la validation : les essais matériels restent à faire
+sous KScreen et X11 (principal, détacher/rattacher, dock et profils restaurés).
+
+Contrôles locaux : 211 tests frontend, 70 tests de détection/plateforme et 85 tests
+d'intégration de l'agent passent. Les neuf captures de référence incluent le nouveau
+panneau et sa confirmation, inspectés localement. Formatage, Clippy sans avertissement
+et compilation des cibles de test app/agent pour Windows passent. Le test de transport
+utilise le vrai agent et la vérification de topologie avec un compositeur simulé : il
+couvre les trois actions, le dernier écran, les requêtes périmées, le moteur actif et
+la reconstruction après un échec partiel.
+
 ## Suite, dans l'ordre
 
-1. Donner un parcours egui aux commandes primaire / attachement / détachement déjà
-   présentes dans la couche plateforme ; vérifier les changements réels de topologie.
-2. Porter Size et Info, puis l'éditeur de sections de résistance. Examiner #523 pour
+1. Porter Size et Info, puis l'éditeur de sections de résistance. Examiner #523 pour
    placer les champs dans une zone de propriétés lisible à toute échelle.
-3. Intégrer les règles et bandes sur les vrais écrans, puis valider le backend Windows
+2. Porter les commandes d'écran principal/attachement/détachement sous Windows.
+   Intégrer les règles et bandes sur les vrais écrans, puis valider le backend Windows
    et les DPI mixtes. Le crate overlay reste actuellement un prototype Linux.
-4. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
+3. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
    périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
-5. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
+4. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
    packaging et retrait de .NET une fois les fonctions conservées remplacées.
 
 Essais manuels encore nécessaires : lancement installé sans agent, agent élevé sous

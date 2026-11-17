@@ -7,6 +7,7 @@
 //! current-session named pipe (Windows) or a 0600 Unix-domain socket (Linux)
 //! stays in the hook crate, next to the daemon state it serves.
 
+pub mod displays;
 pub mod endpoint;
 pub mod framing;
 pub mod instance;

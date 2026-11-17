@@ -20,7 +20,7 @@ fn line() -> &'static Regex {
     static LINE: OnceLock<Regex> = OnceLock::new();
     LINE.get_or_init(|| {
         Regex::new(
-            r"^(?<name>\S+) connected(?<primary> primary)? (?<w>\d+)x(?<h>\d+)\+(?<x>-?\d+)\+(?<y>-?\d+)(?<rot> normal| left| inverted| right)?(?: \([^)]*\))?(?: (?<wmm>\d+)mm x (?<hmm>\d+)mm)?",
+            r"^(?<name>\S+) connected(?<primary> primary)? (?<w>\d+)x(?<h>\d+)(?<x>[+-]-?\d+)(?<y>[+-]-?\d+)(?<rot> normal| left| inverted| right)?(?: \([^)]*\))?(?: (?<wmm>\d+)mm x (?<hmm>\d+)mm)?",
         )
         .expect("a valid pattern")
     })
@@ -29,13 +29,26 @@ fn line() -> &'static Regex {
 /// C# `XRandRMonitorSource.Query`, on `xrandr --query` output: the outputs with a
 /// geometry, in xrandr's order, with their EDIDs from `edids`. A number too large for
 /// an `int` skips its line (C#'s `int.Parse` would throw).
+///
+/// When xrandr reports no primary, one is chosen to anchor the layout (see
+/// [`anchor_primary`]): this is the layout's view, not the system's state.
 pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
+    let mut monitors = parse_reported(stdout, edids);
+    anchor_primary(&mut monitors);
+    monitors
+}
+
+/// [`parse`] without the anchoring fallback: `primary` is exactly what xrandr printed.
+fn parse_reported(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
     let mut monitors = Vec::new();
     for text in stdout.split('\n') {
         let Some(m) = line().captures(text) else {
             continue;
         };
-        let int = |name: &str| m.name(name).map(|g| g.as_str().parse::<i32>());
+        let int = |name: &str| {
+            m.name(name)
+                .map(|g| g.as_str().trim_start_matches('+').parse::<i32>())
+        };
         let (Some(Ok(width)), Some(Ok(height)), Some(Ok(x)), Some(Ok(y))) =
             (int("w"), int("h"), int("x"), int("y"))
         else {
@@ -74,8 +87,12 @@ pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
         });
     }
 
-    // xrandr marks no output as primary under some compositors: pick the one at (0,0),
-    // the model needs a primary to anchor and place monitors.
+    monitors
+}
+
+/// xrandr marks no output as primary under some compositors: pick the one at (0,0),
+/// the model needs a primary to anchor and place monitors.
+fn anchor_primary(monitors: &mut [LinuxMonitor]) {
     if !monitors.is_empty() && !monitors.iter().any(|m| m.primary) {
         let primary = monitors
             .iter()
@@ -83,7 +100,54 @@ pub fn parse(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
             .unwrap_or(0);
         monitors[primary].primary = true;
     }
-    monitors
+}
+
+/// The monitor-actions list must also offer connected outputs without a mode.
+/// Keep the layout factory's historical active-only parser unchanged.
+///
+/// This is the system's state, not the layout's: no primary is invented when xrandr
+/// reports none, and a disabled output keeps the `primary` marker xrandr prints for it
+/// (it does so whether or not the output has a mode).
+pub fn parse_connected(stdout: &str, edids: &EdidMap) -> Vec<LinuxMonitor> {
+    let mut outputs = parse_reported(stdout, edids);
+    for line in stdout.lines() {
+        let mut words = line.split_whitespace();
+        let Some(connector) = words.next() else {
+            continue;
+        };
+        if words.next() != Some("connected")
+            || outputs.iter().any(|m| m.connector_name == connector)
+        {
+            continue;
+        }
+        let mut next = words.next().unwrap_or_default();
+        let primary = next == "primary";
+        if primary {
+            next = words.next().unwrap_or_default();
+        }
+        // A geometry we failed to parse must not be advertised as disabled.
+        if !next.is_empty() && !next.starts_with('(') {
+            continue;
+        }
+        outputs.push(LinuxMonitor {
+            connector_name: connector.into(),
+            logical_x: 0.0,
+            logical_y: 0.0,
+            logical_width: 0.0,
+            logical_height: 0.0,
+            pixel_width: 0,
+            pixel_height: 0,
+            scale: 1.0,
+            width_mm: 0.0,
+            height_mm: 0.0,
+            primary,
+            enabled: false,
+            orientation: 0,
+            frequency: 0,
+            edid: edids.get(connector).map(|e| e.to_linux()),
+        });
+    }
+    outputs
 }
 
 /// C# `RunXRandR`: `xrandr --query`'s output, when it exits successfully.

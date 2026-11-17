@@ -73,6 +73,9 @@ pub struct Conversation {
     pub topology: Option<Ran>,
     /// The completed display build, separate from engine and preview transitions.
     pub layout: Option<crate::refresh::Stamp>,
+    pub enabled: Option<bool>,
+    pub previewing: bool,
+    pub suspended: bool,
 }
 
 impl Conversation {
@@ -210,6 +213,9 @@ impl Conversation {
             .and_then(serde_json::Value::as_str)
             .unwrap_or("Dead");
         self.layout = Some(crate::refresh::Stamp::from_snapshot(snapshot));
+        self.enabled = snapshot["Enabled"].as_bool();
+        self.previewing = snapshot["Previewing"].as_bool().unwrap_or(false);
+        self.suspended = snapshot["Suspended"].as_bool().unwrap_or(false);
         // Through `update`, not written straight onto the state: the rule that ends a
         // live preview when the engine goes down lives there, and it needs the transition.
         let said = lbm_ui::Action::AgentSaid {

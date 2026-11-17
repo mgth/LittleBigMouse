@@ -27,6 +27,7 @@ pub mod api;
 pub mod autostart;
 pub mod desktop;
 pub mod discovery;
+pub mod displays;
 pub mod elevation;
 pub mod fake_hook;
 pub mod gap_guard;

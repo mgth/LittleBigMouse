@@ -23,6 +23,17 @@ use crate::reconcile::{LayoutState, World};
 
 /// The world the runtime drives.
 pub trait AgentWorld: World {
+    fn display_outputs(&mut self) -> Result<lbm_ipc::displays::Outputs, String> {
+        Err("monitor actions are not available on this display backend".into())
+    }
+    fn change_output(
+        &mut self,
+        _connector: &str,
+        _change: lbm_ipc::displays::Change,
+        _signature: &str,
+    ) -> Result<lbm_ipc::displays::Outputs, String> {
+        Err("monitor actions are not available on this display backend".into())
+    }
     /// The zones to hand the hook — the previewed layout's while there is one, else the
     /// current layout's — serialized, and whether the layout is foreign (simulated:
     /// loaded, never run). `None` before the first layout.
@@ -378,6 +389,32 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         let mut copy = self.editable(layout_id)?.clone();
         document.apply(&mut copy);
         Ok(compute_zones(&copy).serialize())
+    }
+
+    fn display_outputs(&mut self) -> Result<lbm_ipc::displays::Outputs, String> {
+        let Discovery::Linux(backend) = self.discovery else {
+            return Err("monitor actions currently require KScreen or XRandR; the Windows backend is not implemented yet".into());
+        };
+        backend.connected_outputs().map(crate::displays::outputs)
+    }
+
+    fn change_output(
+        &mut self,
+        connector: &str,
+        change: lbm_ipc::displays::Change,
+        signature: &str,
+    ) -> Result<lbm_ipc::displays::Outputs, String> {
+        let Discovery::Linux(backend) = self.discovery else {
+            return Err("monitor actions currently require KScreen or XRandR".into());
+        };
+        use lbm_display::linux::topology::{self, Change};
+        let action = match change {
+            lbm_ipc::displays::Change::Primary => Change::Primary,
+            lbm_ipc::displays::Change::Attach => Change::Attach,
+            lbm_ipc::displays::Change::Detach => Change::Detach,
+        };
+        topology::change_checked(backend, action, connector, signature)
+            .map(crate::displays::outputs)
     }
 
     /// Save the edit, then move the screens to match it.

@@ -4,6 +4,7 @@
 //! client, which has to be exercised against a real agent rather than a double.
 pub mod client;
 pub mod conversation;
+pub mod displays;
 pub mod probe;
 pub mod refresh;
 pub mod saved;

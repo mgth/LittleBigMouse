@@ -13,3 +13,8 @@ pub use windows::{cursor, display, init, paths, process, set_process_priority};
 pub mod linux;
 #[cfg(target_os = "linux")]
 pub use linux::{cursor, display, init, paths, process, set_process_priority};
+
+#[cfg(target_os = "macos")]
+pub mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::{cursor, display, init, paths, process, set_process_priority};

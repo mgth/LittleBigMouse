@@ -410,7 +410,8 @@ mod transport {
     }
 }
 
-#[cfg(target_os = "linux")]
+// Unix-domain socket transport: Linux and macOS alike.
+#[cfg(unix)]
 mod transport {
     use super::*;
     use std::os::unix::fs::PermissionsExt;

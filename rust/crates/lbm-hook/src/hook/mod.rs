@@ -35,6 +35,13 @@ pub use linux::{
     register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
 };
 
+#[cfg(target_os = "macos")]
+pub mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::{
+    register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
+};
+
 /// Start the panic-shortcut listener: a global hotkey that frees a cursor trapped
 /// where no click can reach the UI. `on_fire` runs on the listener's own thread.
 ///

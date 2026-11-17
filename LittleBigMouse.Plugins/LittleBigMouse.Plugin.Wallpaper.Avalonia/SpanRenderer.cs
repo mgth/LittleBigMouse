@@ -2,8 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using LittleBigMouse.DisplayLayout.Wallpaper;
 using LittleBigMouse.Plugins;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace LittleBigMouse.Plugin.Wallpaper.Avalonia;
 
@@ -24,12 +23,12 @@ public static class SpanRenderer
         var mtime = File.GetLastWriteTimeUtc(sourcePath).Ticks;
 
         var result = new Dictionary<string, string>();
-        Image? image = null;
+        SKImage? image = null;
         try
         {
             foreach (var slice in slices)
             {
-                var crop = new Rectangle(
+                var crop = SKRectI.Create(
                     (int)Math.Round(slice.SourcePx.X),
                     (int)Math.Round(slice.SourcePx.Y),
                     Math.Max(1, (int)Math.Round(slice.SourcePx.Width)),
@@ -37,21 +36,21 @@ public static class SpanRenderer
                 var outputWidth = Math.Max(1, (int)Math.Round(slice.OutputPx.Width));
                 var outputHeight = Math.Max(1, (int)Math.Round(slice.OutputPx.Height));
 
-                var hash = Hash($"{sourcePath}|{mtime}|{slice.Id}|{crop}|{outputWidth}x{outputHeight}");
+                var hash = Hash($"{sourcePath}|{mtime}|{slice.Id}|{crop.Left},{crop.Top},{crop.Width}x{crop.Height}|{outputWidth}x{outputHeight}");
                 var file = Path.Combine(OutputDir, $"span_{hash}.png");
 
                 if (!File.Exists(file))
                 {
-                    image ??= Image.Load(sourcePath);
+                    image ??= WallpaperImage.Load(sourcePath);
                     // Rounding may push the crop 1px past the image edge: clamp.
-                    crop = Rectangle.Intersect(crop, new Rectangle(0, 0, image.Width, image.Height));
+                    crop = SKRectI.Intersect(crop, SKRectI.Create(0, 0, image.Width, image.Height));
                     if (crop.Width < 1 || crop.Height < 1) continue;
 
-                    using var sliceImage = image.Clone(ctx => ctx
-                        .Crop(crop)
-                        .Resize(outputWidth, outputHeight));
+                    using var sliceImage = WallpaperImage.CreateCanvas(
+                        outputWidth, outputHeight, SKColors.Transparent, opaque: image.AlphaType == SKAlphaType.Opaque);
+                    WallpaperImage.Draw(sliceImage, image, crop, SKRect.Create(outputWidth, outputHeight));
                     var tmp = file + ".tmp";
-                    sliceImage.SaveAsPng(tmp);
+                    WallpaperImage.SavePng(sliceImage, tmp);
                     File.Move(tmp, file, overwrite: true);
                 }
 

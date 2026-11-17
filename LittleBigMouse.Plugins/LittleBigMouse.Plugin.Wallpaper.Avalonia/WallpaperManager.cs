@@ -6,7 +6,6 @@ using LittleBigMouse.DisplayLayout.Monitors;
 using LittleBigMouse.DisplayLayout.Wallpaper;
 using LittleBigMouse.Plugins;
 using ReactiveUI;
-using SixLabors.ImageSharp;
 
 namespace LittleBigMouse.Plugin.Wallpaper.Avalonia;
 
@@ -213,7 +212,7 @@ public class WallpaperManager : ReactiveObject, IDisposable
             return new WallpaperSpanSlicer.ScreenInput(m.Id, m.DepthProjection.Bounds, outputPx);
         }).ToList();
 
-        var info = Image.Identify(path);
+        var info = WallpaperImage.Identify(path);
         var slices = WallpaperSpanSlicer.ComputeSlices(
             new HLab.Geo.Size(info.Width, info.Height), boundsMm, inputs);
 

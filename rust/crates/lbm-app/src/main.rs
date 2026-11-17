@@ -129,6 +129,7 @@ struct App {
     /// The model sizes as detected, which the size editor must not contradict.
     detected: lbm_app::properties::Detected,
     property_error: Option<String>,
+    resistance: lbm_ui::resistance::Editor,
     selected: Option<String>,
     /// The screen the pointer is holding, while it holds it.
     drag: Option<Drag>,
@@ -378,9 +379,9 @@ fn details_of(
             rows
         }
         // These modes use the selected-monitor properties panel instead of map rows.
-        Mode::Info | Mode::Size => Vec::new(),
+        Mode::Info | Mode::Size | Mode::Resistance => Vec::new(),
         // Not drawn by this window; the bar does not offer them.
-        Mode::Resistance | Mode::Vcp | Mode::Wallpaper => Vec::new(),
+        Mode::Vcp | Mode::Wallpaper => Vec::new(),
     }
 }
 
@@ -613,6 +614,7 @@ impl App {
             reports: HashMap::new(),
             detected: Default::default(),
             property_error: None,
+            resistance: lbm_ui::resistance::Editor::default(),
             selected: None,
             drag: None,
             agent: lbm_app::conversation::Conversation::default(),
@@ -928,6 +930,7 @@ impl App {
         self.screens = screens_of(layout, self.mode);
         self.drag = None;
         self.property_error = None;
+        self.resistance.clear();
     }
 
     /// Applies what the user did to the excluded list. `true` when it changed, which is
@@ -1109,6 +1112,7 @@ impl App {
                 if self.selected.as_ref() != Some(&id) {
                     self.property_error = None;
                 }
+                self.resistance.select_monitor(&id);
                 self.selected = Some(id);
                 self.drag = None;
             }
@@ -1174,7 +1178,11 @@ impl App {
                     .and_then(|p| p.to_str())
                     .and_then(|p| logos.get(p)),
                 details: &s.details,
-                probe: self.probe.overlay(&s.source_id, s.pixels),
+                probe: if self.mode == lbm_ui::mode::Mode::Resistance {
+                    None
+                } else {
+                    self.probe.overlay(&s.source_id, s.pixels)
+                },
             })
             .collect()
     }
@@ -1182,6 +1190,7 @@ impl App {
     fn probe_tick(&mut self, ctx: &egui::Context) {
         let now = std::time::Instant::now();
         let key = if self.show_probe
+            && self.mode != lbm_ui::mode::Mode::Resistance
             && matches!(self.view, View::Map | View::List)
             && self.requests.is_some()
             && !self.refresh.pending()
@@ -1251,7 +1260,9 @@ impl App {
         if !matches!(self.view, View::Map | View::List)
             || !matches!(
                 self.mode,
-                lbm_ui::mode::Mode::Size | lbm_ui::mode::Mode::Info
+                lbm_ui::mode::Mode::Size
+                    | lbm_ui::mode::Mode::Info
+                    | lbm_ui::mode::Mode::Resistance
             )
         {
             return;
@@ -1279,6 +1290,7 @@ impl App {
                     }
                 });
             if previous != self.selected {
+                self.resistance.clear();
                 self.property_error = None;
             }
             let Some(id) = self.selected.clone() else {
@@ -1287,10 +1299,28 @@ impl App {
             };
             let blocked = self.refresh.pending() || self.outputs.changing() || self.drag.is_some();
             let mut edits = Vec::new();
+            let mut section_edit = None;
             ui.push_id(("properties", &id), |ui| {
                 egui::ScrollArea::vertical()
                     .id_salt("monitor-properties-scroll")
                     .show(ui, |ui| {
+                        if self.mode == lbm_ui::mode::Mode::Resistance {
+                            let monitors = lbm_app::resistance::monitors(layout);
+                            section_edit = ui
+                                .add_enabled_ui(
+                                    !blocked && !layout.is_virtual() && !self.resistance.active(),
+                                    |ui| {
+                                        self.resistance.panel(
+                                            ui,
+                                            &monitors,
+                                            &id,
+                                            layout.options.max_travel_distance,
+                                        )
+                                    },
+                                )
+                                .inner;
+                            return;
+                        }
                         if self.mode == lbm_ui::mode::Mode::Info {
                             ui.heading("Detected · last display refresh");
                             let report = layout
@@ -1323,6 +1353,9 @@ impl App {
                             .inner;
                     });
             });
+            if let Some(action) = section_edit {
+                self.section_edit(action);
+            }
             for edit in edits {
                 if let Some(layout) = self.layout.as_mut() {
                     match lbm_app::properties::apply(layout, &self.detected, &id, edit) {
@@ -1339,6 +1372,22 @@ impl App {
                 ui.colored_label(ui.visuals().error_fg_color, error);
             }
         });
+    }
+
+    fn section_edit(&mut self, action: lbm_ui::resistance::Action) {
+        if self.refresh.pending() || self.outputs.changing() {
+            return;
+        }
+        if let Some(layout) = self.layout.as_mut() {
+            match lbm_app::resistance::apply(layout, action) {
+                Ok(selected) => {
+                    self.resistance.selected = selected;
+                    self.property_error = None;
+                    self.probe.want(None, std::time::Instant::now());
+                }
+                Err(error) => self.property_error = Some(error),
+            }
+        }
     }
 
     fn output_request(&mut self, method: &'static str, extra: serde_json::Value, change: bool) {
@@ -1435,6 +1484,7 @@ impl eframe::App for App {
                         self.screens = screens_of(&layout, self.mode);
                         self.reports = reports;
                         self.detected = detected;
+                        self.resistance.clear();
                         self.property_error = None;
                         self.layout = Some(layout);
                         self.excluded = excluded;
@@ -1498,12 +1548,15 @@ impl eframe::App for App {
         }
         let logos = self.textures.clone();
 
+        let previous_view = self.view;
+        let previous_mode = self.mode;
         egui::Panel::top("modes").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.view, View::Map, "Map");
                 ui.selectable_value(&mut self.view, View::List, "List");
                 ui.selectable_value(&mut self.view, View::Displays, "Displays");
-                ui.checkbox(&mut self.show_probe, "Show crossings")
+                ui.add_enabled(self.mode != lbm_ui::mode::Mode::Resistance, egui::Checkbox::new(&mut self.show_probe, "Show crossings"))
+                    .on_disabled_hover_text("Switch away from Border resistance to show the geometric crossing report.")
                     .on_hover_text("Green: a passage. Red: a wall. Resistance is bypassed for this geometric report. Probing does not start or change the mouse engine.");
                 // Asked when the panel is opened rather than on a timer: the list only
                 // grows, and nobody is looking at it the rest of the time.
@@ -1526,6 +1579,7 @@ impl eframe::App for App {
                     ui.separator();
                     if let Some(chosen) = lbm_ui::mode::bar(ui, self.mode, &self.offered()) {
                         self.mode = chosen;
+                        self.drag = None;
                         // The rows are built with the screens, so changing the mode is
                         // reading them off the layout again.
                         if let Some(layout) = self.layout.as_deref() {
@@ -1547,8 +1601,14 @@ impl eframe::App for App {
             });
         });
 
+        if previous_view != self.view || previous_mode != self.mode || self.refresh.pending() {
+            self.resistance.cancel();
+        }
         self.probe_tick(&ctx);
-        if self.show_probe && matches!(self.view, View::Map | View::List) {
+        if self.show_probe
+            && self.mode != lbm_ui::mode::Mode::Resistance
+            && matches!(self.view, View::Map | View::List)
+        {
             egui::Panel::top("probe-status").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Green: passage · Red: wall · Resistance bypassed");
@@ -1635,6 +1695,17 @@ impl eframe::App for App {
             self.output_request("DisplayOutputs", serde_json::json!({}), false);
         }
         let mut output_action = None;
+        let resistance_mode = self.mode == lbm_ui::mode::Mode::Resistance;
+        let section_monitors = if resistance_mode {
+            self.layout
+                .as_deref()
+                .map(lbm_app::resistance::monitors)
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let mut section_editor = std::mem::take(&mut self.resistance);
+        let mut section_action = None;
         let acted = egui::CentralPanel::default()
             .show(ui, |ui| {
                 if self.view == View::Displays {
@@ -1735,6 +1806,29 @@ impl eframe::App for App {
                         }
 
                         let gesture = map::draw(ui, &shown, &fit, self.selected.as_deref());
+                        if resistance_mode {
+                            if self.layout.as_ref().is_none_or(|l| l.is_virtual()) {
+                                ui.disable();
+                            }
+                            let placements = shown
+                                .iter()
+                                .map(|m| (m.id.to_owned(), fit.place(m).content))
+                                .collect::<Vec<_>>();
+                            let interaction =
+                                section_editor.bands(ui, &section_monitors, &placements);
+                            section_action = interaction.action;
+                            let picked =
+                                interaction
+                                    .monitor
+                                    .map(Did::Clicked)
+                                    .or_else(|| match gesture {
+                                        Some(map::Gesture::Clicked(id)) => {
+                                            Some(Did::Clicked(id.to_owned()))
+                                        }
+                                        _ => None,
+                                    });
+                            return (picked, None);
+                        }
                         // The presenter's context menu, as the C# has it. Right-click on
                         // the map, not a button in the bar: this is the one action in the
                         // window that moves the user's real screens, and it should take
@@ -1776,6 +1870,22 @@ impl eframe::App for App {
                     }
                     View::List => {
                         let picked = list::draw(ui, at, &monitors, self.selected.as_deref());
+                        if resistance_mode {
+                            if self.layout.as_ref().is_none_or(|l| l.is_virtual()) {
+                                ui.disable();
+                            }
+                            let placements = monitors
+                                .iter()
+                                .find(|m| Some(m.id) == self.selected.as_deref())
+                                .map(|m| {
+                                    let fit = map::fit_in(list::panes(at).screen, m.mm_outside);
+                                    vec![(m.id.to_owned(), fit.place(m).content)]
+                                })
+                                .unwrap_or_default();
+                            let interaction =
+                                section_editor.bands(ui, &section_monitors, &placements);
+                            section_action = interaction.action;
+                        }
                         (picked.map(|id| Did::Clicked(id.to_owned())), None)
                     }
                     // Returned above, before the screens were borrowed: the panel edits
@@ -1786,6 +1896,10 @@ impl eframe::App for App {
                 }
             })
             .inner;
+        self.resistance = section_editor;
+        if let Some(action) = section_action {
+            self.section_edit(action);
+        }
         self.adjust_scale = adjust_scale;
         if let Some(action) = output_action {
             self.output_action(action);
@@ -1842,6 +1956,57 @@ mod lifecycle_tests {
     use super::*;
     use lbm_app::session::Event;
     use serde_json::json;
+
+    #[test]
+    fn resistance_edits_are_previewed_and_a_stale_desktop_cannot_be_edited() {
+        use lbm_ui::resistance::{Action, Edit, Side};
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(
+            &mut layout,
+            &[lbm_layout::linux::LinuxMonitor::fallback()],
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let action = Action::new(
+            &lbm_app::resistance::monitors(&layout)[0],
+            Side::Right,
+            Edit::Insert(lbm_layout::model::BorderSection::new(
+                10.0, 50.0, 3.0, false, 0.0, true,
+            )),
+        );
+        app.saved = Some(lbm_app::saved::Reference::of(&layout));
+        let id = layout.id.clone();
+        app.layout = Some(Box::new(layout));
+        let generation = app.refresh.begin(false).unwrap();
+        app.refresh.complete(generation, &id);
+        let (requests, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+        app.requests = Some(requests);
+        app.state.live = true;
+        app.section_edit(action);
+        assert!(app.dirty());
+        app.preview_tick(&ctx);
+        let (_, method, request) = incoming.try_recv().unwrap();
+        assert_eq!(method, "Preview");
+        let document: lbm_store::LayoutDocument =
+            serde_json::from_value(request["Document"].clone()).unwrap();
+        assert_eq!(
+            document,
+            lbm_app::settings::document(app.layout.as_ref().unwrap())
+        );
+        let action = Action::new(
+            &lbm_app::resistance::monitors(app.layout.as_ref().unwrap())[0],
+            Side::Right,
+            Edit::Delete(0),
+        );
+        app.refresh.invalidate();
+        app.section_edit(action);
+        assert_eq!(
+            document,
+            lbm_app::settings::document(app.layout.as_ref().unwrap())
+        );
+    }
 
     #[test]
     fn output_changes_wait_for_saved_edits_and_reload_after_their_own_answer() {

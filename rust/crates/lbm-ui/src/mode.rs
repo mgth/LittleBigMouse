@@ -151,7 +151,7 @@ pub fn why_not(mode: Mode, offered: &Offered) -> Option<&'static str> {
         }
         // Ported, but not yet. Named one by one rather than through a catch-all, so
         // that porting one is a line to delete here and the compiler finds the rest.
-        Mode::Resistance => Some("not ported yet: the border section editor"),
+        Mode::Resistance => None,
         Mode::Vcp => Some("not ported yet: DDC/CI and the calibration plugin"),
         Mode::Wallpaper => Some("not ported yet: the per-screen picture picker"),
     }

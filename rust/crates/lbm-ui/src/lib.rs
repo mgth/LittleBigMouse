@@ -23,6 +23,7 @@ pub mod mode;
 pub mod options;
 pub mod probe;
 pub mod properties;
+pub mod resistance;
 pub mod shortcut;
 pub mod wallpaper;
 

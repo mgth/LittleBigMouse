@@ -58,9 +58,8 @@ fn what_is_not_ported_is_shown_and_disabled() {
     assert!(!disabled(Mode::About.label()), "About is drawn today");
     assert!(!disabled(Mode::Info.label()));
     assert!(!disabled(Mode::Size.label()));
-    for mode in [Mode::Resistance, Mode::Vcp] {
-        assert!(disabled(mode.label()), "{} is not ported", mode.label());
-    }
+    assert!(!disabled(Mode::Resistance.label()));
+    assert!(disabled(Mode::Vcp.label()), "VCP is not ported");
 }
 
 #[test]

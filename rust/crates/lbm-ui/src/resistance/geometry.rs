@@ -1,0 +1,270 @@
+//! Interval rules shared by the band gestures, numeric editor and layout adapter.
+use super::{Monitor, Selection, Side};
+use lbm_layout::model::BorderSection;
+
+pub const MIN_LENGTH: f64 = 2.0;
+pub const MAX_SECTIONS: usize = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Span {
+    pub from: f64,
+    pub to: f64,
+}
+impl Span {
+    pub fn new(a: f64, b: f64) -> Self {
+        Self {
+            from: a.min(b),
+            to: a.max(b),
+        }
+    }
+    pub fn length(self) -> f64 {
+        self.to - self.from
+    }
+    pub fn section(self, mut section: BorderSection) -> BorderSection {
+        section.set_from(self.from);
+        section.set_to(self.to);
+        section
+    }
+}
+impl From<&BorderSection> for Span {
+    fn from(s: &BorderSection) -> Self {
+        Self {
+            from: s.from(),
+            to: s.to(),
+        }
+    }
+}
+
+pub fn gap(sections: &[BorderSection], excluding: Option<usize>, at: f64, length: f64) -> Span {
+    let mut free = Span {
+        from: 0.0,
+        to: length,
+    };
+    for (i, s) in sections.iter().enumerate() {
+        if Some(i) == excluding {
+            continue;
+        }
+        if s.from() < at && s.to() > at {
+            return Span { from: at, to: at };
+        }
+        if s.to() <= at {
+            free.from = free.from.max(s.to());
+        }
+        if s.from() >= at {
+            free.to = free.to.min(s.from());
+        }
+    }
+    free
+}
+
+pub fn clamp(wanted: Span, free: Span) -> Option<Span> {
+    let result = Span {
+        from: wanted.from.max(free.from),
+        to: wanted.to.min(free.to),
+    };
+    (result.length() >= MIN_LENGTH).then_some(result)
+}
+
+pub fn largest(sections: &[BorderSection], wanted: Span) -> Option<Span> {
+    let mut sorted: Vec<_> = sections.iter().collect();
+    sorted.sort_by(|a, b| a.from().total_cmp(&b.from()));
+    let mut cursor = wanted.from;
+    let mut best = Span {
+        from: cursor,
+        to: cursor,
+    };
+    for s in sorted {
+        if s.to() <= wanted.from || s.from() >= wanted.to {
+            continue;
+        }
+        if s.from() - cursor > best.length() {
+            best = Span {
+                from: cursor,
+                to: s.from().min(wanted.to),
+            };
+        }
+        cursor = cursor.max(s.to());
+    }
+    if wanted.to - cursor > best.length() {
+        best = Span {
+            from: cursor,
+            to: wanted.to,
+        };
+    }
+    (best.length() >= MIN_LENGTH).then_some(best)
+}
+
+pub fn shifted(current: Span, wanted: f64, free: Span) -> Option<Span> {
+    if free.length() < current.length() {
+        return None;
+    }
+    let from = wanted.clamp(free.from, free.to - current.length());
+    Some(Span {
+        from,
+        to: from + current.length(),
+    })
+}
+
+/// Containment is half-open: touching sections each retain their own near handle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Grab {
+    Draw,
+    From(usize),
+    To(usize),
+    Move(usize),
+}
+impl Grab {
+    pub fn index(self) -> Option<usize> {
+        match self {
+            Self::Draw => None,
+            Self::From(i) | Self::To(i) | Self::Move(i) => Some(i),
+        }
+    }
+}
+pub fn grip(s: &BorderSection, scale: f64) -> f64 {
+    (6.0 / scale).min((s.to() - s.from()) / 3.0)
+}
+pub fn grab(sections: &[BorderSection], at: f64, scale: f64) -> Grab {
+    let containing = sections.iter().position(|s| at >= s.from() && at < s.to());
+    let near = || {
+        sections
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| {
+                let d = (at - s.from()).abs().min((at - s.to()).abs());
+                (d <= grip(s, scale)).then_some((i, d))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i)
+    };
+    let Some(i) = containing.or_else(near) else {
+        return Grab::Draw;
+    };
+    let s = &sections[i];
+    if at <= s.from() + grip(s, scale) {
+        Grab::From(i)
+    } else if at >= s.to() - grip(s, scale) {
+        Grab::To(i)
+    } else {
+        Grab::Move(i)
+    }
+}
+
+pub fn targets(monitors: &[Monitor], id: &str, side: Side, excluding: Option<usize>) -> Vec<f64> {
+    let Some(me) = monitors.iter().find(|m| m.id == id) else {
+        return vec![];
+    };
+    let length = side.length(me.bounds);
+    let origin = side.origin(me.bounds);
+    let mut targets = vec![0.0, length, length / 2.0];
+    for m in monitors {
+        if m.id != id {
+            targets.extend([
+                side.origin(m.bounds) - origin,
+                side.origin(m.bounds) + side.length(m.bounds) - origin,
+            ]);
+        }
+        for parallel in Side::ALL
+            .into_iter()
+            .filter(|s| s.vertical() == side.vertical())
+        {
+            for (i, s) in parallel.sections(&m.resistance).iter().enumerate() {
+                if m.id == id && parallel == side && Some(i) == excluding {
+                    continue;
+                }
+                let offset = parallel.origin(m.bounds) - origin;
+                targets.extend([offset + s.from(), offset + s.to()]);
+            }
+        }
+    }
+    targets.retain(|v| v.is_finite() && *v >= 0.0 && *v <= length);
+    targets
+}
+pub fn snap(value: f64, length: f64, tolerance: f64, targets: &[f64], enabled: bool) -> f64 {
+    let value = value.clamp(0.0, length);
+    if !enabled {
+        return value;
+    }
+    targets
+        .iter()
+        .copied()
+        .filter(|t| (*t - value).abs() < tolerance)
+        .min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs()))
+        .unwrap_or(value)
+}
+pub fn snap_move(from: f64, length: f64, tolerance: f64, targets: &[f64]) -> f64 {
+    targets
+        .iter()
+        .flat_map(|t| [*t, *t - length])
+        .filter(|t| (*t - from).abs() <= tolerance)
+        .min_by(|a, b| (a - from).abs().total_cmp(&(b - from).abs()))
+        .unwrap_or(from)
+}
+
+/// Same nearest-facing-edge rule as Avalonia, including bezel gaps and travel limit.
+pub fn mirror(
+    monitors: &[Monitor],
+    selected: &Selection,
+    travel: f64,
+) -> Option<(Selection, BorderSection)> {
+    let source = monitors.iter().find(|m| m.id == selected.monitor)?;
+    let section = selected
+        .side
+        .sections(&source.resistance)
+        .get(selected.index)?;
+    let side = selected.side;
+    let target = monitors
+        .iter()
+        .filter(|m| m.id != source.id && !m.excluded)
+        .filter_map(|m| {
+            let a = source.bounds;
+            let b = m.bounds;
+            let distance = match side {
+                Side::Left => a.left() - b.right(),
+                Side::Right => b.left() - a.right(),
+                Side::Top => a.top() - b.bottom(),
+                Side::Bottom => b.top() - a.bottom(),
+            };
+            let overlap = side.origin(b) < side.origin(a) + side.length(a)
+                && side.origin(b) + side.length(b) > side.origin(a);
+            (distance >= 0.0 && distance <= travel && overlap).then_some((m, distance))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1))?
+        .0;
+    let opposite = side.opposite();
+    let sections = opposite.sections(&target.resistance);
+    if sections.len() >= MAX_SECTIONS {
+        return None;
+    }
+    let offset = side.origin(source.bounds) - side.origin(target.bounds);
+    let length = side.length(target.bounds);
+    let wanted = Span {
+        from: (offset + section.from()).clamp(0.0, length),
+        to: (offset + section.to()).clamp(0.0, length),
+    };
+    let free = largest(sections, wanted)?;
+    Some((
+        Selection {
+            monitor: target.id.clone(),
+            side: opposite,
+            index: sections.len(),
+        },
+        free.section(*section),
+    ))
+}
+
+pub fn fully_blocked(sections: &[BorderSection], length: f64) -> bool {
+    if length <= 0.0 {
+        return false;
+    }
+    let mut sorted: Vec<_> = sections.iter().collect();
+    sorted.sort_by(|a, b| a.from().total_cmp(&b.from()));
+    let mut covered: f64 = 0.0;
+    for s in sorted {
+        if !s.move_block() || !s.drag_block() || s.from() > covered + 0.001 {
+            return false;
+        }
+        covered = covered.max(s.to());
+    }
+    covered >= length - 0.001
+}

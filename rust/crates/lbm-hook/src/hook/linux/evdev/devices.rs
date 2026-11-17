@@ -48,7 +48,9 @@ pub fn available() -> bool {
 /// place. `LBM_EVDEV_SKIP_VIRTUAL=1` leaves them to the compositor; off by
 /// default since remappers (input-remapper…) re-emit the physical mouse this way.
 fn is_virtual_node(path: &std::path::Path) -> bool {
-    let Some(node) = path.file_name() else { return false };
+    let Some(node) = path.file_name() else {
+        return false;
+    };
     std::fs::canonicalize(std::path::Path::new("/sys/class/input").join(node))
         .map(|p| p.starts_with("/sys/devices/virtual"))
         .unwrap_or(false)
@@ -77,7 +79,10 @@ fn classify(scan: &mut ScanResult, path: PathBuf, d: Device, skip_virtual: bool)
         {
             scan.mice.push((path, d));
         }
-    } else if d.name().map(|n| !n.contains("LittleBigMouse virtual")).unwrap_or(true)
+    } else if d
+        .name()
+        .map(|n| !n.contains("LittleBigMouse virtual"))
+        .unwrap_or(true)
         && d.supported_keys()
             .map(|k| k.contains(KeyCode::KEY_LEFTCTRL))
             .unwrap_or(false)

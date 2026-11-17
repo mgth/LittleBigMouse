@@ -236,6 +236,17 @@ impl PumpBuffers {
     ///
     /// uinput appends the closing `SYN_REPORT` itself, so the emitted frame is
     /// ABS_X, ABS_Y, passthrough…, SYN_REPORT.
+    ///
+    /// A low-resolution wheel detent leaves with its v120 beside it (#734). The
+    /// virtual pointer declares the hi-res wheel codes, so hi-res mice keep
+    /// their granularity — but libinput only emulates hi-res scrolling for a
+    /// device that does *not* declare them
+    /// (`src/libinput-plugin-mouse-wheel-lowres.c`). Through our pointer, a
+    /// REL_WHEEL with no hi-res data only reaches libinput's legacy axis event,
+    /// which KWin 6 ignores: a plain wheel, or one behind keyd, scrolled nothing.
+    /// This is that plugin's synthesis — `value * 120`, appended after the
+    /// detent — applied per axis to the reports that carry no hi-res data of
+    /// their own, so a hi-res mouse is never counted twice.
     pub fn pointer_frame(&mut self, ax: i32, ay: i32) -> &[InputEvent] {
         self.batch.clear();
         self.batch.push(InputEvent::new(
@@ -248,7 +259,35 @@ impl PumpBuffers {
             AbsoluteAxisCode::ABS_Y.0,
             ay,
         ));
-        self.batch.append(&mut self.passthrough);
+        let carries = |code: RelativeAxisCode| {
+            self.passthrough
+                .iter()
+                .any(|e| e.event_type() == EventType::RELATIVE && e.code() == code.0)
+        };
+        let synthesize = (
+            !carries(RelativeAxisCode::REL_WHEEL_HI_RES),
+            !carries(RelativeAxisCode::REL_HWHEEL_HI_RES),
+        );
+        for ev in self.passthrough.drain(..) {
+            self.batch.push(ev);
+            if ev.event_type() != EventType::RELATIVE {
+                continue;
+            }
+            let hi_res = match ev.code() {
+                c if c == RelativeAxisCode::REL_WHEEL.0 && synthesize.0 => {
+                    RelativeAxisCode::REL_WHEEL_HI_RES
+                }
+                c if c == RelativeAxisCode::REL_HWHEEL.0 && synthesize.1 => {
+                    RelativeAxisCode::REL_HWHEEL_HI_RES
+                }
+                _ => continue,
+            };
+            self.batch.push(InputEvent::new(
+                EventType::RELATIVE.0,
+                hi_res.0,
+                ev.value().saturating_mul(120),
+            ));
+        }
         &self.batch
     }
 
@@ -533,6 +572,7 @@ mod tests {
                 InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, 200),
                 key(KeyCode::BTN_LEFT.0, 1),
                 rel(RelativeAxisCode::REL_WHEEL, 1),
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
             ])
         );
         assert!(
@@ -546,6 +586,130 @@ mod tests {
     fn an_idle_frame_is_just_the_absolute_point() {
         let mut bufs = PumpBuffers::new();
         assert_eq!(bufs.pointer_frame(1, 2).len(), 2);
+    }
+
+    // --- low-resolution wheels (#734) ---------------------------------------
+
+    /// The absolute point every frame below starts with.
+    fn origin() -> [InputEvent; 2] {
+        [
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_X.0, 0),
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, 0),
+        ]
+    }
+
+    /// The pointer frame composed from `events`, after the absolute point.
+    fn wheel_frame(events: &[InputEvent]) -> Vec<(u16, u16, i32)> {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+        feed(&mut bufs, &mut env, events);
+        shape(&bufs.pointer_frame(0, 0)[2..])
+    }
+
+    /// A plain wheel, or one behind an intermediate virtual device (keyd, KVM
+    /// software), reports only REL_WHEEL. The virtual pointer declares the
+    /// hi-res codes, so libinput's own emulation stays off and such a detent
+    /// reaches no compositor reading the v120 API: it must carry its v120.
+    #[test]
+    fn a_lowres_detent_carries_its_v120() {
+        assert_eq!(
+            wheel_frame(&[rel(RelativeAxisCode::REL_WHEEL, -1)]),
+            shape(&[
+                rel(RelativeAxisCode::REL_WHEEL, -1),
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, -120),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_lowres_horizontal_detent_carries_its_v120() {
+        assert_eq!(
+            wheel_frame(&[rel(RelativeAxisCode::REL_HWHEEL, 1)]),
+            shape(&[
+                rel(RelativeAxisCode::REL_HWHEEL, 1),
+                rel(RelativeAxisCode::REL_HWHEEL_HI_RES, 120),
+            ])
+        );
+    }
+
+    /// A fast spin can report several detents at once: 120 per detent.
+    #[test]
+    fn several_detents_in_one_report_scale_the_v120() {
+        assert_eq!(
+            wheel_frame(&[rel(RelativeAxisCode::REL_WHEEL, 3)]),
+            shape(&[
+                rel(RelativeAxisCode::REL_WHEEL, 3),
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 360),
+            ])
+        );
+    }
+
+    /// A hi-res mouse reports both codes: synthesizing beside them would turn
+    /// every detent into two.
+    #[test]
+    fn a_hires_report_passes_verbatim() {
+        let report = [
+            rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
+            rel(RelativeAxisCode::REL_WHEEL, 1),
+        ];
+        assert_eq!(wheel_frame(&report), shape(&report));
+    }
+
+    /// A hi-res wheel turned slowly: the report completing a detent carries
+    /// only part of it in hi-res, the rest came in earlier reports. Any hi-res
+    /// data in the report means the source speaks v120 itself.
+    #[test]
+    fn partial_hires_motion_suppresses_the_synthesis() {
+        let report = [
+            rel(RelativeAxisCode::REL_WHEEL_HI_RES, 40),
+            rel(RelativeAxisCode::REL_WHEEL, 1),
+        ];
+        assert_eq!(wheel_frame(&report), shape(&report));
+    }
+
+    /// Each axis is judged on its own: vertical hi-res data says nothing about
+    /// a horizontal wheel that has none.
+    #[test]
+    fn each_axis_is_judged_on_its_own() {
+        assert_eq!(
+            wheel_frame(&[
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+                rel(RelativeAxisCode::REL_HWHEEL, -1),
+            ]),
+            shape(&[
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+                rel(RelativeAxisCode::REL_HWHEEL, -1),
+                rel(RelativeAxisCode::REL_HWHEEL_HI_RES, -120),
+            ])
+        );
+    }
+
+    /// The check is per report: a hi-res report must not leave anything behind
+    /// that keeps the next, low-res one from being completed.
+    #[test]
+    fn the_hires_check_does_not_outlive_its_report() {
+        let (mut bufs, mut env) = (PumpBuffers::new(), cursor());
+        feed(
+            &mut bufs,
+            &mut env,
+            &[
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+            ],
+        );
+        bufs.pointer_frame(0, 0);
+        feed(&mut bufs, &mut env, &[rel(RelativeAxisCode::REL_WHEEL, 1)]);
+
+        assert_eq!(
+            shape(bufs.pointer_frame(0, 0)),
+            shape(&[
+                origin()[0],
+                origin()[1],
+                rel(RelativeAxisCode::REL_WHEEL, 1),
+                rel(RelativeAxisCode::REL_WHEEL_HI_RES, 120),
+            ])
+        );
     }
 
     // --- poll set and device errors -------------------------------------------
@@ -594,6 +758,8 @@ mod tests {
             rel(RelativeAxisCode::REL_Y, -1),
             key(KeyCode::BTN_LEFT.0, 1),
             key(KeyCode::KEY_A.0, 1),
+            // A low-res detent: the frame grows a synthesized v120 (#734).
+            rel(RelativeAxisCode::REL_WHEEL, 1),
             syn(),
         ];
         // The shape of one pump cycle, minus the devices and the uinput writes.

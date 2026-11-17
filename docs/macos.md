@@ -15,6 +15,14 @@ runtime data and the daemon's socket in `~/.local/share/LittleBigMouse`.
 
 ## Build and run
 
+**One click:** double-click `Run LittleBigMouse (Mac).command` in Finder. It
+installs what's missing (Xcode Command Line Tools, Rust, the .NET 10 SDK), fetches
+the submodules, pulls the latest commits of the branch, builds, launches, and on
+the first run opens the Accessibility settings. The build log is written to
+`~/Desktop/LittleBigMouse-build.log`.
+
+**By hand:**
+
 Prerequisites:
 
 - Xcode Command Line Tools (`xcode-select --install`)

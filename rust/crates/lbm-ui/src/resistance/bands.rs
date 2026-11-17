@@ -241,6 +241,10 @@ pub struct Interaction {
     pub action: Option<Action>,
 }
 impl Editor {
+    /// The uncommitted gesture, for drawing on a copy of the layout on real screens.
+    pub fn preview_action(&self) -> Option<Action> {
+        self.gesture.as_ref().and_then(Gesture::action)
+    }
     /// Preview stays local until release. Escape, focus loss, a changed layout or a
     /// changed projection discard it, so cancelled gestures never reach Save/Live.
     pub fn bands(

@@ -10,9 +10,19 @@ description = "Overlay surfaces for the rulers and resistance bands: placed to t
 name = "lbm-overlay-spike"
 path = "src/main.rs"
 
-# Linux-only, as lbm-pattern is: the Avalonia windows went through XWayland, which
+[dependencies]
+lbm-layout = { path = "../lbm-layout" }
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader"]
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# The standalone Linux spike: the Avalonia windows went through XWayland, which
 # KWin rescales on any screen whose scale differs from the global factor — which is
-# exactly what a ruler cannot survive. A stub elsewhere until the Windows spike.
+# exactly what a ruler cannot survive. The library's Windows backend is separate.
 [target.'cfg(target_os = "linux")'.dependencies]
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client"] }

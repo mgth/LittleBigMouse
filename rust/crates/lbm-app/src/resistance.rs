@@ -1,4 +1,22 @@
 //! The UI sends an edit against an exact side snapshot; only this adapter writes the layout.
+/// Own edge ends already have a band boundary and need no line across the other panels.
+pub fn overlay_reference(
+    guide: lbm_ui::resistance::Guide,
+) -> Option<lbm_overlay::scene::Reference> {
+    use lbm_overlay::scene::{GuideKind, Reference};
+    use lbm_ui::resistance::SnapKind;
+    let kind = match guide.kind {
+        SnapKind::EdgeEnd => return None,
+        SnapKind::Middle => GuideKind::Middle,
+        SnapKind::ScreenEdge => GuideKind::ScreenEdge,
+        SnapKind::Section => GuideKind::Section,
+    };
+    Some(Reference {
+        horizontal: guide.side.vertical(),
+        layout_mm: guide.layout_mm,
+        kind,
+    })
+}
 use lbm_layout::model::{BorderSection, Layout};
 use lbm_ui::resistance::{geometry, Action, Edit, Monitor, Selection};
 

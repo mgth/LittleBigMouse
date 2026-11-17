@@ -2,6 +2,7 @@
 mod bands;
 pub mod geometry;
 pub use bands::{band, owner, segment};
+pub use geometry::SnapKind;
 use geometry::{Span, MAX_SECTIONS};
 use lbm_layout::{
     geo::Rect,
@@ -118,6 +119,15 @@ pub struct Editor {
     side: Side,
     gesture: Option<bands::Gesture>,
 }
+/// Ephemeral feedback in physical layout coordinates, shared by every view of the gesture.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Guide {
+    pub monitor: String,
+    pub side: Side,
+    pub mm: f64,
+    pub layout_mm: f64,
+    pub kind: SnapKind,
+}
 impl Editor {
     pub fn active(&self) -> bool {
         self.gesture.is_some()
@@ -176,6 +186,7 @@ impl Editor {
             sections.len()
         ));
         ui.small("Drag on an empty band to draw. Drag a section or its end handles to move or resize. Double-click to fill the free space. Ctrl suspends snapping; Esc cancels the gesture.");
+        ui.small("Snap guides: white = midpoint · cyan = screen edge · yellow = section boundary.");
         let mut action = None;
         for (i, s) in sections.iter().enumerate() {
             let selected = self.selected.as_ref().is_some_and(|s| s.index == i);

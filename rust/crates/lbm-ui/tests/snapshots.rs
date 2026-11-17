@@ -393,3 +393,54 @@ fn resistance_values_and_bands_stay_readable_in_map_and_list() {
         results.extend(harness.take_snapshot_results());
     }
 }
+
+#[test]
+fn resistance_reference_reaches_the_offset_screen_and_disappears_with_ctrl() {
+    use lbm_layout::model::{BorderResistance, BorderSection};
+    use lbm_ui::resistance::{Editor, Monitor, SnapKind};
+    use std::cell::RefCell;
+    let mut screens = two_screens();
+    screens[1].mm_outside = Rect::new(700., 40., 640., 380.);
+    screens[1].mm_content = Rect::new(720., 60., 600., 340.);
+    let mut monitors: Vec<_> = screens
+        .iter()
+        .map(|s| Monitor {
+            id: s.id.into(),
+            bounds: s.mm_content,
+            excluded: false,
+            resistance: BorderResistance::default(),
+        })
+        .collect();
+    monitors[1]
+        .resistance
+        .left
+        .sections
+        .push(BorderSection::new(100., 200., 0., true, 0., false));
+    let editor = RefCell::new(Editor::default());
+    let source = RefCell::new(egui::Rect::NOTHING);
+    let mut h = harness((1100., 550.), |ui| {
+        ui.label("Snap guides: white = midpoint · cyan = screen edge · yellow = section boundary");
+        let fit = map::fit(map::extent(&screens), ui.available_rect_before_wrap());
+        map::draw(ui, &screens, &fit, Some("left"));
+        let placements: Vec<_> = screens
+            .iter()
+            .map(|s| (s.id.to_owned(), fit.place(s).content))
+            .collect();
+        *source.borrow_mut() = placements[0].1;
+        editor.borrow_mut().bands(ui, &monitors, &placements);
+    });
+    h.run();
+    let r = *source.borrow();
+    let at = |mm: f32| egui::pos2(r.right() - 6., r.top() + mm / 340. * r.height());
+    h.drag_at(at(70.));
+    h.step();
+    h.hover_at(at(138.));
+    h.step();
+    assert_eq!(editor.borrow().guide().unwrap().kind, SnapKind::Section);
+    assert_eq!(editor.borrow().guide().unwrap().layout_mm, 160.);
+    h.snapshot("resistance-reference-map");
+    h.event(egui::Event::ModifiersChanged(egui::Modifiers::CTRL));
+    h.step();
+    assert!(editor.borrow().guide().is_none());
+    h.snapshot("resistance-reference-ctrl");
+}

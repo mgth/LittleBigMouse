@@ -322,7 +322,7 @@ l'absence de vol du focus, les échelles 100/150/200 %, la réduction/fermeture,
 changements de DPI, le dock et les jeux plein écran. Les bureaux clonés sont refusés
 pour éviter des dessins contradictoires sur les mêmes pixels. Le raccordement Linux
 fait l'objet du neuvième lot ci-dessous. Les lignes de référence traversant les
-écrans pendant l'accrochage des sections restent à raccorder.
+écrans pendant l'accrochage des sections sont raccordées dans le dixième lot.
 
 ## Neuvième lot : overlays Linux intégrés à egui
 
@@ -378,12 +378,55 @@ les pixels logiques ne correspondent pas aux coordonnées du serveur. Les overla
 Windows restent eux aussi à qualifier sur matériel. Aucun bureau réel n'a été
 modifié pendant les tests.
 
+## Dixième lot : repères d'accrochage des sections
+
+- Le geste publie désormais le repère atteint, son type et sa position physique
+  dans le layout. Blanc : milieu de l'écran ; cyan : bord d'un autre écran ; jaune :
+  limite d'une section. Une légende accompagne l'éditeur. Les cibles coïncidentes
+  gardent une priorité stable : géométrie propre, autres écrans, puis sections.
+- Le repère suit la borne mobile pendant un dessin ou un redimensionnement, y
+  compris lorsqu'elle dépasse l'autre borne. Le déplacement d'une section examine
+  d'abord son début, puis sa fin. Une borne fixe ou un redimensionnement invalide
+  ne conserve plus une ligne trompeuse. Les extrémités propres à l'écran ne
+  produisent pas de ligne traversant les autres dalles.
+- La carte et la vue agrandie dessinent la référence en pointillés sur les panneaux
+  traversés, après les bandes pour garder la ligne visible. Chaque panneau utilise
+  son origine physique et ses dimensions ; le repère atteint donc aussi une section
+  sur un écran décalé ou éloigné. Les traits restent limités aux panneaux affichés.
+- Lorsque `Resistance on screens` est activé, la même référence rejoint les overlays
+  Windows, Wayland et X11. Les lignes utilisent des surfaces minces transparentes
+  aux clics, avec des intervalles entièrement transparents entre les tirets. Elles
+  suivent le rapport pixels/mm et le DPI de chaque écran, restent dans ses bornes
+  aux extrémités et conservent leur position intérieure sous Wayland fractionnaire.
+  La limite de transport passe à 80 surfaces : quatre bandes et une référence par
+  écran, pour les seize écrans déjà pris en charge.
+- Ctrl retire le repère sans annuler le geste ; le relâchement, Échap, la perte de
+  focus, une modification des sections ou de la géométrie l'effacent. Les règles
+  existantes de fermeture des overlays restent applicables. Le rafraîchissement
+  natif reste limité à 20 Hz ; les repères ne sont ni enregistrés ni envoyés à
+  Save/Live, et le mode règles ne reçoit pas les références des sections.
+
+Contrôles locaux : 276 tests passent (177 UI, 75 application, 24 overlays), dont
+les scénarios de capture et d'annulation, les priorités de cibles, les deux axes,
+les coordonnées négatives, le portrait, les DPI mixtes et les échelles fractionnaires.
+Les nouvelles captures `resistance-reference-map.png` et
+`resistance-reference-ctrl.png` ont été inspectées ; les trois captures de l'éditeur
+ont été mises à jour pour sa légende. La suite finale utilise le même environnement
+de rendu que les références régénérées : des essais avec un autre environnement
+avaient produit des écarts d'anticrénelage de un à deux pixels dans les vues étroites.
+L'image CPU de référence des règles et bandes reste inchangée. Formatage et Clippy
+sans avertissement passent sur toutes les cibles de test UI/app/overlay pour Linux
+et `x86_64-pc-windows-msvc`.
+
+Les overlays natifs restent à qualifier sur bureau réel, notamment le clic traversant,
+le focus et le positionnement des traits aux bords à DPI mixtes. Aucun overlay n'a
+été ouvert sur les écrans réels pendant les vérifications.
+
 ## Suite, dans l'ordre
 
-1. Raccorder les lignes de référence des sections pendant leur accrochage. Qualifier
-   les overlays Linux/Windows et les changements de topologie sur matériel à DPI mixtes.
-2. Porter l'éditeur de fond d'écran et `IDesktopWallpaper`, puis qualifier le premier
-   périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
+1. Porter l'éditeur de fond d'écran et son raccordement Windows `IDesktopWallpaper`.
+2. Qualifier les overlays Linux/Windows, les changements de topologie à DPI mixtes et
+   le premier périmètre egui sur matériel (veille, dock, UAC, reprise, démarrage et mémoire).
 3. VCP/mires, calibration, télécommandes, import/export et mise à jour ; bascule du
    packaging et retrait de .NET une fois les fonctions conservées remplacées.
 

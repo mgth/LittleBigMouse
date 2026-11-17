@@ -1,7 +1,7 @@
 //! Native layered windows, owned and updated on egui's UI thread.
 use crate::{
     raster,
-    scene::{Band, Pixels},
+    scene::{self, Band, Binding, Pixels},
     Backend,
 };
 use std::{
@@ -150,6 +150,7 @@ impl Drop for Bitmap {
 }
 struct Window {
     hwnd: HWND,
+    binding: Binding,
     shown: Option<Band>,
 }
 impl Window {
@@ -173,7 +174,11 @@ impl Window {
             )
             .map_err(|e| e.to_string())?
         };
-        Ok(Self { hwnd, shown: None })
+        Ok(Self {
+            hwnd,
+            binding: band.binding(),
+            shown: None,
+        })
     }
     fn present(&mut self, band: &Band) -> Result<(), String> {
         if self.shown.as_ref() == Some(band) {
@@ -268,13 +273,26 @@ impl Backend for Native {
             return Err("No frontend window to own the screen overlays.".into());
         }
         let _dpi = Dpi::enter()?;
-        self.windows.truncate(bands.len());
-        for (i, band) in bands.iter().enumerate() {
-            if i == self.windows.len() {
-                self.windows.push(Window::new(band, self.owner)?);
+        // Reconcile by screen and role, never by index: a guide that stops crossing one
+        // screen must not hand its window to the next screen's guide (WM_DPICHANGED).
+        let previous: Vec<_> = self.windows.iter().map(|w| w.binding.clone()).collect();
+        let plan = scene::reuse(&previous, bands);
+        let mut old: Vec<_> = std::mem::take(&mut self.windows)
+            .into_iter()
+            .map(Some)
+            .collect();
+        for (band, index) in bands.iter().zip(plan) {
+            let window = match index.and_then(|i| old[i].take()) {
+                Some(window) => window,
+                None => Window::new(band, self.owner)?,
+            };
+            self.windows.push(window);
+            if let Some(window) = self.windows.last_mut() {
+                window.present(band)?;
             }
-            self.windows[i].present(band)?;
         }
+        // Windows no band kept are destroyed here.
+        drop(old);
         if self.invalidated() {
             return Err("Displays changed while showing overlays. Reload the screens.".into());
         }

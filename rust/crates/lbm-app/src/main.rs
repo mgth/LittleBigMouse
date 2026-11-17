@@ -1496,10 +1496,15 @@ impl App {
         if let (Some(drag), Some((x, y))) = (&self.drag, movement) {
             drawn.offset_location(&drag.id, lbm_layout::geo::Vector::new(x, y));
         }
-        let result = lbm_overlay::scene::from_layout(
+        let reference = self
+            .resistance
+            .guide()
+            .and_then(lbm_app::resistance::overlay_reference);
+        let result = lbm_overlay::scene::with_reference(
             &drawn,
             self.screen_overlay_mode,
             self.selected.as_deref(),
+            reference,
         )
         .and_then(|bands| self.screen_overlay.sync(&bands));
         if let Err(error) = result {

@@ -41,6 +41,212 @@ fn layout() -> Layout {
 fn rulers() -> Vec<Band> {
     scene::from_layout(&layout(), Mode::Rulers, Some("A")).unwrap()
 }
+fn references(horizontal: bool, layout_mm: f64, kind: scene::GuideKind) -> Vec<Band> {
+    scene::with_reference(
+        &layout(),
+        Mode::Resistance,
+        None,
+        Some(scene::Reference {
+            horizontal,
+            layout_mm,
+            kind,
+        }),
+    )
+    .unwrap()
+}
+#[test]
+fn references_cross_only_the_physical_panels_they_intersect_with_per_monitor_dpi() {
+    let bands = references(true, 90., scene::GuideKind::Section);
+    let guides: Vec<_> = bands
+        .iter()
+        .filter(|b| matches!(b.content, Content::Guide { .. }))
+        .collect();
+    assert_eq!(guides.len(), 2);
+    assert_eq!(
+        guides[0].rect,
+        Pixels {
+            x: 0,
+            y: 359,
+            width: 1280,
+            height: 2
+        }
+    );
+    assert_eq!(
+        guides[1].rect,
+        Pixels {
+            x: -800,
+            y: 358,
+            width: 800,
+            height: 4
+        }
+    );
+    assert_eq!(guides[1].screen.height, 1500); // negative-origin portrait at 200%
+    assert_eq!(
+        references(true, -50., scene::GuideKind::ScreenEdge).len(),
+        9
+    );
+    assert_eq!(
+        references(true, 900., scene::GuideKind::ScreenEdge).len(),
+        8
+    );
+    let vertical = references(false, 100., scene::GuideKind::Middle);
+    assert_eq!(vertical.len(), 9);
+    assert_eq!(
+        vertical.last().unwrap().rect,
+        Pixels {
+            x: 399,
+            y: 0,
+            width: 2,
+            height: 720
+        }
+    );
+    let decoded: Vec<Band> = serde_json::from_slice(&serde_json::to_vec(&bands).unwrap()).unwrap();
+    assert_eq!(decoded, bands);
+}
+#[test]
+fn a_guide_leaving_a_screen_never_hands_its_surface_to_a_screen_of_another_dpi() {
+    // A (100 %) spans y = 0..180 mm and B (200 %) y = -75..300 mm. Going straight from a
+    // reference across both to one across B alone must not give A's guide surface to B.
+    let both = references(true, 90., scene::GuideKind::Section);
+    let only_b = references(true, 250., scene::GuideKind::Section);
+    let guide = |bands: &[Band]| -> Vec<String> {
+        bands
+            .iter()
+            .filter(|b| matches!(b.content, Content::Guide { .. }))
+            .map(|b| b.connector.clone())
+            .collect()
+    };
+    assert_eq!(guide(&both), ["A", "B"]);
+    assert_eq!(guide(&only_b), ["B"]);
+    let previous: Vec<_> = both.iter().map(Band::binding).collect();
+    let plan = scene::reuse(&previous, &only_b);
+    for (band, index) in only_b.iter().zip(&plan) {
+        let index = index.expect("every band keeps a surface of its own screen and role");
+        assert_eq!(both[index].binding(), band.binding());
+        assert_eq!(both[index].connector, band.connector);
+        assert_eq!(both[index].scale, band.scale);
+    }
+    let guide_index = plan.last().unwrap().unwrap();
+    assert_eq!(both[guide_index].connector, "B");
+    // A's guide surface is the only one left over, so it is released.
+    let mut used: Vec<_> = plan.iter().flatten().copied().collect();
+    used.sort();
+    let released: Vec<_> = (0..both.len()).filter(|i| !used.contains(i)).collect();
+    assert_eq!(released.len(), 1);
+    assert_eq!(both[released[0]].connector, "A");
+    assert!(matches!(both[released[0]].content, Content::Guide { .. }));
+
+    // A guide never takes the band of its own side, and the reverse transition creates
+    // A's guide surface instead of borrowing B's.
+    let back = scene::reuse(&only_b.iter().map(Band::binding).collect::<Vec<_>>(), &both);
+    assert_eq!(back.iter().filter(|i| i.is_none()).count(), 1);
+    let created = back.iter().position(Option::is_none).unwrap();
+    assert_eq!(both[created].connector, "A");
+    assert!(matches!(both[created].content, Content::Guide { .. }));
+}
+#[test]
+fn guide_endpoints_remain_inside_each_output_and_opt_in_controls_their_lifetime() {
+    for (horizontal, mm) in [(false, 0.), (true, 180.), (true, -75.), (true, 300.)] {
+        for b in references(horizontal, mm, scene::GuideKind::ScreenEdge) {
+            assert!(b.rect.x >= b.screen.x && b.rect.y >= b.screen.y);
+            assert!(b.rect.x + b.rect.width <= b.screen.x + b.screen.width);
+            assert!(b.rect.y + b.rect.height <= b.screen.y + b.screen.height);
+        }
+    }
+    let r = scene::Reference {
+        horizontal: true,
+        layout_mm: 90.,
+        kind: scene::GuideKind::Middle,
+    };
+    assert!(scene::with_reference(&layout(), Mode::Off, None, Some(r))
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        scene::with_reference(&layout(), Mode::Rulers, Some("A"), Some(r)).unwrap(),
+        rulers()
+    );
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut manager = Manager::new(Fake(trace.clone()));
+    let base = scene::with_reference(&layout(), Mode::Resistance, None, None).unwrap();
+    let guides = scene::with_reference(&layout(), Mode::Resistance, None, Some(r)).unwrap();
+    for bands in [&base, &guides, &guides, &base] {
+        manager.sync(bands).unwrap();
+    }
+    assert_eq!(trace.borrow().calls, ["present", "present", "present"]);
+    assert!(scene::with_reference(
+        &layout(),
+        Mode::Resistance,
+        None,
+        Some(scene::Reference {
+            layout_mm: f64::NAN,
+            ..r
+        })
+    )
+    .is_err());
+}
+#[test]
+fn guide_dashes_have_transparent_gaps_and_the_reference_palette_without_corner_miters() {
+    for horizontal in [false, true] {
+        for kind in [
+            scene::GuideKind::Middle,
+            scene::GuideKind::ScreenEdge,
+            scene::GuideKind::Section,
+        ] {
+            let bands = references(horizontal, 90., kind);
+            let guide = bands
+                .iter()
+                .find(|b| matches!(b.content, Content::Guide { .. }))
+                .unwrap();
+            let image = raster::render(guide).unwrap();
+            let [r, g, b, a] = kind.rgba();
+            let premultiply = |v: u8| (u16::from(v) * u16::from(a) / 255) as u8;
+            let pixel = |axis: usize| {
+                let offset = if horizontal {
+                    axis * 4
+                } else {
+                    axis * image.width * 4
+                };
+                &image.bgra[offset..offset + 4]
+            };
+            assert_eq!(
+                pixel(0),
+                [premultiply(b), premultiply(g), premultiply(r), a]
+            );
+            assert_eq!(pixel(4), [0, 0, 0, 0]);
+            assert_eq!(pixel(8), pixel(0));
+        }
+    }
+}
+#[cfg(target_os = "linux")]
+#[test]
+fn wayland_guides_keep_their_interior_position_and_fractional_buffer_scale() {
+    for horizontal in [true, false] {
+        let mm = if horizontal { 90. } else { -100. };
+        let mut bands = references(horizontal, mm, scene::GuideKind::Section);
+        let b = bands
+            .iter_mut()
+            .find(|b| b.monitor == "B" && matches!(b.content, Content::Guide { .. }))
+            .unwrap();
+        for scale in [1., 1.25, 1.5, 2.] {
+            b.scale = scale;
+            let (logical, buffer) =
+                lbm_overlay::linux::wayland_geometry(b, (scale * 120.) as u32).unwrap();
+            assert_eq!(logical.thickness(), 2);
+            assert_eq!(buffer.thickness(), (2. * scale).round() as i32);
+            if horizontal {
+                assert_eq!(logical.rect.y, 359);
+            } else {
+                assert_eq!(logical.rect.x, -401);
+            }
+            assert_eq!(buffer.content, b.content);
+        }
+        b.content = Content::Guide {
+            at: f64::NAN,
+            kind: scene::GuideKind::Middle,
+        };
+        assert!(lbm_overlay::linux::validate(std::slice::from_ref(b)).is_err());
+    }
+}
 
 #[test]
 fn scene_transport_preserves_connectors_physical_units_and_section_flags() {
@@ -118,7 +324,7 @@ mod linux_geometry {
         let bands = rulers();
         validate(&bands).unwrap();
         assert!(validate(&[]).is_err());
-        assert!(validate(&vec![bands[0].clone(); 65]).is_err());
+        assert!(validate(&vec![bands[0].clone(); 81]).is_err());
         for cause in 0..8 {
             let mut b = bands[0].clone();
             match cause {

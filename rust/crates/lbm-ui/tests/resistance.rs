@@ -77,6 +77,108 @@ fn snapping_uses_visible_edges_and_parallel_sections_even_on_distant_screens() {
     assert_eq!(g::snap_move(38.0, 40.0, 4.0, &[80.0]), 40.0);
 }
 #[test]
+fn coincident_references_keep_the_geometry_color_and_ignore_the_edited_section() {
+    let mut monitors = vec![monitor("a", 0., 0.), monitor("b", 2000., 60.)];
+    monitors[0]
+        .resistance
+        .right
+        .sections
+        .push(section(30., 70.));
+    monitors[1]
+        .resistance
+        .left
+        .sections
+        .extend([section(0., 50.), section(90., 100.)]);
+    let targets = g::references(&monitors, "a", Side::Right, Some(0));
+    let kind = |mm| targets.iter().find(|t| t.mm == mm).unwrap().kind;
+    assert_eq!(kind(0.), r::SnapKind::EdgeEnd);
+    assert_eq!(kind(60.), r::SnapKind::ScreenEdge);
+    assert_eq!(kind(110.), r::SnapKind::Section);
+    assert_eq!(kind(150.), r::SnapKind::Middle);
+    assert_eq!(targets.iter().filter(|t| t.mm == 150.).count(), 1);
+    assert!(!targets.iter().any(|t| [30., 70.].contains(&t.mm)));
+}
+
+#[test]
+fn the_active_boundary_publishes_a_physical_guide_and_ctrl_release_clear_it() {
+    let editor = RefCell::new(Editor::default());
+    let mut m = vec![monitor("a", 0., -75.), monitor("b", 2000., -15.)];
+    m[1].resistance.left.sections.push(section(0., 50.));
+    let monitors = RefCell::new(m);
+    let actions = RefCell::new(vec![]);
+    let mut h = bands(&editor, &monitors, &actions);
+    h.run();
+    drag(&mut h, egui::pos2(634., 90.), egui::pos2(634., 148.));
+    let guide = editor.borrow().guide().unwrap();
+    assert_eq!(guide.kind, r::SnapKind::Section);
+    assert_eq!(guide.mm, 110.);
+    assert_eq!(guide.layout_mm, 35.);
+    assert!(actions.borrow().is_empty());
+    h.event(egui::Event::ModifiersChanged(egui::Modifiers::CTRL));
+    h.step();
+    assert!(editor.borrow().guide().is_none());
+    h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    h.step();
+    assert_eq!(editor.borrow().guide(), Some(guide));
+    h.drop_at(egui::pos2(634., 148.));
+    h.run();
+    assert!(editor.borrow().guide().is_none());
+    assert_eq!(actions.borrow().len(), 1);
+}
+
+#[test]
+fn fixed_endpoints_do_not_claim_a_snap_and_moves_can_mark_the_far_end() {
+    for (existing, from, to, expected) in [
+        (None, 190., 240., None), // draw from the midpoint, moving end remains free
+        (Some(section(50., 150.)), 91., 105., None), // resize start, fixed end is the midpoint
+        (Some(section(50., 130.)), 130., 147., Some(150.)), // move's far end catches the midpoint
+        (Some(section(50., 130.)), 91., 190., Some(150.)), // crossing a resize's fixed endpoint
+    ] {
+        let editor = RefCell::new(Editor::default());
+        let mut m = monitor("a", 0., 0.);
+        if let Some(s) = existing {
+            m.resistance.right.sections.push(s);
+        }
+        let monitors = RefCell::new(vec![m]);
+        let actions = RefCell::new(vec![]);
+        let mut h = bands(&editor, &monitors, &actions);
+        h.run();
+        drag(&mut h, egui::pos2(634., from), egui::pos2(634., to));
+        assert_eq!(
+            editor.borrow().guide().map(|g| g.mm),
+            expected,
+            "from {from}, to {to}"
+        );
+    }
+}
+
+#[test]
+fn reference_lifetime_follows_escape_focus_geometry_and_section_changes() {
+    for reason in 0..4 {
+        let editor = RefCell::new(Editor::default());
+        let monitors = RefCell::new(vec![monitor("a", 0., 0.)]);
+        let actions = RefCell::new(vec![]);
+        let mut h = bands(&editor, &monitors, &actions);
+        h.run();
+        drag(&mut h, egui::pos2(634., 90.), egui::pos2(634., 188.));
+        assert!(editor.borrow().guide().is_some());
+        match reason {
+            0 => h.key_press(egui::Key::Escape),
+            1 => h.input_mut().focused = false,
+            2 => monitors.borrow_mut()[0].bounds = Rect::new(0., 10., 600., 300.),
+            _ => monitors.borrow_mut()[0]
+                .resistance
+                .right
+                .sections
+                .push(section(0., 20.)),
+        }
+        h.step();
+        assert!(editor.borrow().guide().is_none());
+        assert!(editor.borrow().preview_action().is_none());
+        assert!(actions.borrow().is_empty());
+    }
+}
+#[test]
 fn mirroring_keeps_the_largest_free_piece_and_respects_travel_and_exclusion() {
     let mut monitors = vec![monitor("a", 0.0, 0.0), monitor("b", 620.0, 60.0)];
     monitors[0]

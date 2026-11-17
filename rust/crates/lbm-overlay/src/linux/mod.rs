@@ -48,7 +48,7 @@ fn selected_server() -> Server {
 }
 
 pub fn validate(bands: &[Band]) -> Result<(), String> {
-    if bands.is_empty() || bands.len() > 64 {
+    if bands.is_empty() || bands.len() > 80 {
         return Err("Invalid number of overlay bands.".into());
     }
     for b in bands {
@@ -79,6 +79,13 @@ pub fn validate(bands: &[Band]) -> Result<(), String> {
             return Err("Invalid overlay geometry or output identity.".into());
         }
         match &b.content {
+            Content::Guide { at, .. }
+                if !at.is_finite()
+                    || !(0.0..=1.0).contains(at)
+                    || !matches!(b.side, Side::Top | Side::Left) =>
+            {
+                return Err("Invalid reference line geometry.".into())
+            }
             Content::Ruler {
                 zero_mm,
                 measured_mm,
@@ -121,25 +128,29 @@ pub fn wayland_geometry(band: &Band, preferred: u32) -> Result<(Band, Band), Str
         40
     };
     let depth = depth.min(screen.width / 3).min(screen.height / 3).max(1);
-    logical.rect = match band.side {
-        Side::Top => Pixels {
-            height: depth,
-            ..screen
-        },
-        Side::Bottom => Pixels {
-            y: screen.y + screen.height - depth,
-            height: depth,
-            ..screen
-        },
-        Side::Left => Pixels {
-            width: depth,
-            ..screen
-        },
-        Side::Right => Pixels {
-            x: screen.x + screen.width - depth,
-            width: depth,
-            ..screen
-        },
+    logical.rect = if let Content::Guide { at, .. } = band.content {
+        crate::scene::guide_rect(screen, band.side, 2, at)
+    } else {
+        match band.side {
+            Side::Top => Pixels {
+                height: depth,
+                ..screen
+            },
+            Side::Bottom => Pixels {
+                y: screen.y + screen.height - depth,
+                height: depth,
+                ..screen
+            },
+            Side::Left => Pixels {
+                width: depth,
+                ..screen
+            },
+            Side::Right => Pixels {
+                x: screen.x + screen.width - depth,
+                width: depth,
+                ..screen
+            },
+        }
     };
     let mut buffer = logical.clone();
     buffer.rect = Pixels {

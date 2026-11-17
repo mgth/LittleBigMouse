@@ -33,7 +33,15 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         [
             LocalizedItem(LbmLocalizer.AutoLanguage, "Options.Language.Auto"),
             LocalizedItem(LbmLocalizer.DefaultLanguage, "Options.Language.English"),
-            LocalizedItem(LbmLocalizer.SimplifiedChinese, "Options.Language.ChineseSimplified")
+            LocalizedItem(LbmLocalizer.SimplifiedChinese, "Options.Language.ChineseSimplified"),
+            LocalizedItem(LbmLocalizer.German, "Options.Language.German"),
+            LocalizedItem(LbmLocalizer.French, "Options.Language.French"),
+            LocalizedItem(LbmLocalizer.Spanish, "Options.Language.Spanish"),
+            LocalizedItem(LbmLocalizer.BrazilianPortuguese, "Options.Language.PortugueseBrazil"),
+            LocalizedItem(LbmLocalizer.Italian, "Options.Language.Italian"),
+            LocalizedItem(LbmLocalizer.Polish, "Options.Language.Polish"),
+            LocalizedItem(LbmLocalizer.Japanese, "Options.Language.Japanese"),
+            LocalizedItem(LbmLocalizer.Korean, "Options.Language.Korean")
         ];
 
         AlgorithmList =

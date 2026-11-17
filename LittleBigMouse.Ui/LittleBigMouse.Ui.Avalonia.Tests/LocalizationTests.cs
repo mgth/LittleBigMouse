@@ -23,18 +23,34 @@ public sealed class LocalizationTests : IDisposable
         LbmLocalizer.Current.SetLanguage(_previousPreference, persist: false);
     }
 
-    [Fact]
-    public void EmbeddedCatalogsHaveIdenticalNonEmptyKeySets()
+    public static TheoryData<string> Languages()
+    {
+        var data = new TheoryData<string>();
+        foreach (var language in new LbmLocalizer().AvailableLanguages) data.Add(language);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void EveryCatalogHasTheEnglishKeysNonEmptyWithTheSamePlaceholders(string language)
     {
         var assembly = typeof(LbmLocalizer).Assembly;
-        var en = LoadCatalog(assembly, "en");
-        var zh = LoadCatalog(assembly, "zh-CN");
+        var en = LoadCatalog(assembly, LbmLocalizer.DefaultLanguage);
+        var catalog = LoadCatalog(assembly, language);
 
         Assert.NotEmpty(en);
-        Assert.Equal(en.Keys.OrderBy(k => k), zh.Keys.OrderBy(k => k));
-        Assert.All(en, kv => Assert.False(string.IsNullOrWhiteSpace(kv.Value), $"Empty en value for '{kv.Key}'"));
-        Assert.All(zh, kv => Assert.False(string.IsNullOrWhiteSpace(kv.Value), $"Empty zh-CN value for '{kv.Key}'"));
+        Assert.Equal(en.Keys.OrderBy(k => k), catalog.Keys.OrderBy(k => k));
+        Assert.All(catalog, kv => Assert.False(string.IsNullOrWhiteSpace(kv.Value), $"Empty {language} value for '{kv.Key}'"));
+        // A missing {0} drops the value silently; an extra {1} makes string.Format throw.
+        Assert.All(en, kv => Assert.True(
+            Placeholders(kv.Value).SequenceEqual(Placeholders(catalog[kv.Key])),
+            $"{language} '{kv.Key}' does not use the placeholders of the English text"));
     }
+
+    static IEnumerable<string> Placeholders(string text)
+        => System.Text.RegularExpressions.Regex.Matches(text, @"\{\d+(?:[,:][^}]*)?\}")
+            .Select(m => m.Value)
+            .Order();
 
     [Theory]
     [InlineData("zh-CN", "zh-CN")]
@@ -43,7 +59,20 @@ public sealed class LocalizationTests : IDisposable
     [InlineData("zh-TW", "zh-CN")]
     [InlineData("zh", "zh-CN")]
     [InlineData("en-US", "en")]
-    [InlineData("fr-FR", "en")]
+    [InlineData("de-DE", "de")]
+    [InlineData("de-AT", "de")]
+    [InlineData("fr-FR", "fr")]
+    [InlineData("fr-CA", "fr")]
+    [InlineData("es-ES", "es")]
+    [InlineData("es-MX", "es")]
+    [InlineData("pt-BR", "pt-BR")]
+    [InlineData("pt-PT", "pt-BR")]
+    [InlineData("it-IT", "it")]
+    [InlineData("pl-PL", "pl")]
+    [InlineData("ja-JP", "ja")]
+    [InlineData("ko-KR", "ko")]
+    [InlineData("ru-RU", "en")]
+    [InlineData("nl-NL", "en")]
     public void ResolveLanguageMapsCulturesPredictably(string input, string expected)
     {
         Assert.Equal(expected, LbmLocalizer.ResolveLanguage(input, CultureInfo.InvariantCulture));

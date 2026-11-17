@@ -20,8 +20,24 @@ public sealed class LbmLocalizer : INotifyPropertyChanged
     public const string AutoLanguage = "auto";
     public const string DefaultLanguage = "en";
     public const string SimplifiedChinese = "zh-CN";
+    public const string German = "de";
+    public const string French = "fr";
+    public const string Spanish = "es";
+    public const string BrazilianPortuguese = "pt-BR";
+    public const string Italian = "it";
+    public const string Polish = "pl";
+    public const string Japanese = "ja";
+    public const string Korean = "ko";
 
-    static readonly string[] SupportedLanguages = [DefaultLanguage, SimplifiedChinese];
+    /// <summary>
+    /// One embedded <c>Strings/{tag}.json</c> per entry. Apart from Chinese, a culture
+    /// maps to its catalog by its primary subtag alone (fr-CA → fr, pt-PT → pt-BR).
+    /// </summary>
+    static readonly string[] SupportedLanguages =
+    [
+        DefaultLanguage, SimplifiedChinese, German, French, Spanish,
+        BrazilianPortuguese, Italian, Polish, Japanese, Korean
+    ];
 
     readonly Assembly _resourceAssembly;
     readonly ConcurrentDictionary<string, IReadOnlyDictionary<string, string>> _catalogs = new(StringComparer.OrdinalIgnoreCase);
@@ -192,9 +208,11 @@ public sealed class LbmLocalizer : INotifyPropertyChanged
             return SimplifiedChinese;
         }
 
-        if (lower == "en" || lower.StartsWith("en-", StringComparison.Ordinal))
+        var primary = lower.Split('-', '_')[0];
+        foreach (var language in SupportedLanguages)
         {
-            return DefaultLanguage;
+            if (string.Equals(language.Split('-')[0], primary, StringComparison.OrdinalIgnoreCase))
+                return language;
         }
 
         return DefaultLanguage;

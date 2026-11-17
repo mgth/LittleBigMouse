@@ -52,7 +52,10 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time
 tempfile.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "file_chooser"] }
+# async-io, never tokio, like lbm-hook and lbm-agent: cargo unifies ashpd/zbus features
+# across one build, and both runtimes at once do not compile (zbus on tokio would also
+# panic in accesskit's thread). The picker still drives it from a tokio block_on.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "file_chooser"] }
 url = "2"
 
 [target.'cfg(windows)'.dependencies.windows]

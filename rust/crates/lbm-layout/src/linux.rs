@@ -60,6 +60,15 @@ impl LinuxEdid {
     pub fn monitor_serial(&self) -> Option<&str> {
         non_empty(&self.serial_number).or(self.serial.as_deref())
     }
+
+    /// The model's PnP code: manufacturer and product, when a manufacturer is known.
+    pub fn pnp_code(&self) -> Option<String> {
+        let manufacturer = non_empty(&self.manufacturer_code)?;
+        Some(format!(
+            "{manufacturer}{}",
+            self.product_code.as_deref().unwrap_or("")
+        ))
+    }
 }
 
 /// [`Monitor::serial_number`] of a monitor whose EDID could not be read.
@@ -87,13 +96,9 @@ pub fn add_monitor(layout: &mut Layout, monitor: &LinuxMonitor) {
     let edid = monitor.edid.as_ref();
     let connector = monitor.connector_name.as_str();
     let manufacturer = edid.and_then(|e| non_empty(&e.manufacturer_code));
-    let pnp_code = match manufacturer {
-        Some(m) => format!(
-            "{m}{}",
-            edid.and_then(|e| e.product_code.as_deref()).unwrap_or("")
-        ),
-        None => connector.to_owned(),
-    };
+    let pnp_code = edid
+        .and_then(LinuxEdid::pnp_code)
+        .unwrap_or_else(|| connector.to_owned());
     let mut monitor_id = match edid {
         Some(e) => format!("{pnp_code}_{}", e.monitor_serial().unwrap_or("")),
         None => connector.to_owned(),

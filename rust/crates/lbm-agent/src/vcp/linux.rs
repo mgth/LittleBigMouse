@@ -6,6 +6,18 @@ use std::{
     time::Duration,
 };
 
+const PRESET: u8 = 0x14;
+/// The controls of a colour preset: changing one can switch the monitor to "custom".
+const RGB: [u8; 6] = [0x16, 0x18, 0x1a, 0x6c, 0x6e, 0x70];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Reading {
+    value: u16,
+    maximum: u16,
+    /// ddcutil reported a plain continuous value (`C`), not a structured one.
+    plain: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Bus {
     path: PathBuf,
@@ -85,9 +97,13 @@ impl Service {
                     .value = write.value;
                 state.note = Some("Command sent. The monitor may stop answering after changing input or power; refresh when it is available again.".into());
             } else {
-                // A colour preset can change gain, brightness and contrast as well.
-                let codes = if write.code == 0x14 {
+                // A colour preset can change gain, brightness and contrast as well, and
+                // changing a gain can make the monitor leave its preset.
+                let has_preset = state.features.iter().any(|f| f.code == PRESET);
+                let codes = if write.code == PRESET {
                     state.features.iter().map(|f| f.code).collect::<Vec<_>>()
+                } else if has_preset && RGB.contains(&write.code) {
+                    vec![write.code, PRESET]
                 } else {
                     vec![write.code]
                 };
@@ -96,22 +112,24 @@ impl Service {
                 args.push("--brief".into());
                 let (_, output, _) = self.output(&bus, args).await?;
                 let mut read = values(&output);
-                let actual = *read.get(&write.code).ok_or("The command was sent, but its value could not be read back. Refresh the controls.")?;
-                state.features.retain_mut(|f| {
-                    if !codes.contains(&f.code) {
-                        return true;
-                    }
-                    let Some((value, maximum)) = read.remove(&f.code) else {
-                        return false;
-                    };
-                    f.value = value;
-                    f.maximum = maximum;
-                    !vcp::continuous(f.code) || (maximum > 0 && value <= maximum)
-                });
-                state.note = (actual.0 != write.value).then(|| {
+                let actual = *read.get(&write.code).ok_or("The command was sent, but its value could not be read back. Refresh the monitor controls.")?;
+                state.features = std::mem::take(&mut state.features)
+                    .into_iter()
+                    .filter_map(|f| {
+                        if !codes.contains(&f.code) {
+                            return Some(f);
+                        }
+                        match read.remove(&f.code) {
+                            Some(reading) => feature(f.code, reading, f.choices),
+                            // A preset that did not answer after a gain change stays as is.
+                            None => (write.code != PRESET && f.code != write.code).then_some(f),
+                        }
+                    })
+                    .collect();
+                state.note = (actual.value != write.value).then(|| {
                     format!(
                         "The monitor returned {} for {} (requested {}).",
-                        actual.0,
+                        actual.value,
                         vcp::name(write.code),
                         write.value
                     )
@@ -146,22 +164,14 @@ impl Service {
         }
         let mut features = vec![];
         for code in codes {
-            let Some((value, maximum)) = read.remove(&code) else {
+            let Some(reading) = read.remove(&code) else {
                 continue;
             };
-            if vcp::continuous(code) && (maximum == 0 || value > maximum) {
-                continue;
-            }
             let choices = available.get(&code).cloned().unwrap_or_default();
             if !vcp::continuous(code) && choices.is_empty() {
                 continue;
             }
-            features.push(Feature {
-                code,
-                value,
-                maximum,
-                choices,
-            });
+            features.extend(feature(code, reading, choices));
         }
         if features.is_empty() {
             return Err("The monitor returned no usable controls.".into());
@@ -235,12 +245,44 @@ fn diagnostic(stderr: &str, stdout: &str) -> String {
     }
 }
 
-/// The serial the layout gives this EDID: both sides must read it the same way.
-fn serial(edid: &[u8]) -> Option<String> {
-    lbm_display::edid::parse("", edid)
-        .to_linux()
-        .monitor_serial()
-        .map(str::to_owned)
+/// Whether this EDID is the monitor the layout knows, read the way the layout reads it.
+fn is_target(edid: &[u8], target: &Target) -> bool {
+    let detected = lbm_display::edid::parse("", edid).to_linux();
+    target
+        .serial
+        .as_deref()
+        .is_none_or(|serial| detected.monitor_serial() == Some(serial))
+        && target
+            .model
+            .as_ref()
+            .is_none_or(|model| detected.pnp_code().as_ref() == Some(model))
+}
+/// A control as the panel offers it. `None` when the reading makes no sense for it.
+fn feature(code: u8, reading: Reading, choices: Vec<Choice>) -> Option<Feature> {
+    // Only the older, plain volume is a level from 0 up.
+    let structured_volume = code == vcp::VOLUME && !reading.plain;
+    let feature = if structured_volume {
+        Feature {
+            code,
+            value: reading.value,
+            minimum: vcp::VOLUME_LEVELS.0,
+            maximum: reading.maximum.min(vcp::VOLUME_LEVELS.1),
+            choices: vcp::volume_choices(),
+        }
+    } else {
+        Feature {
+            code,
+            value: reading.value,
+            minimum: 0,
+            maximum: reading.maximum,
+            choices,
+        }
+    };
+    let usable = !vcp::continuous(code)
+        || (feature.maximum > 0
+            && feature.maximum >= feature.minimum
+            && feature.accepts(feature.value));
+    usable.then_some(feature)
 }
 fn find_bus(root: &Path, target: &Target) -> Result<Bus, String> {
     let mut found = vec![];
@@ -296,11 +338,9 @@ fn find_bus(root: &Path, target: &Target) -> Result<Bus, String> {
             found.push(Bus { path, number, edid });
         }
     }
-    // Match the EDID serial even when only one connector remains: a monitor can
-    // have been unplugged and replaced while the UI still holds the old layout.
-    if let Some(expected) = &target.serial {
-        found.retain(|b| serial(&b.edid).as_ref() == Some(expected));
-    }
+    // Match the EDID even when only one connector remains: a monitor can have been
+    // unplugged and replaced while the UI still holds the old layout.
+    found.retain(|b| is_target(&b.edid, target));
     if found.len() != 1 {
         return Err(format!("Cannot uniquely identify the DDC/CI adapter for {}. Refresh the display layout and check that the monitor is connected.", target.connector));
     }
@@ -362,7 +402,7 @@ fn choice_label(code: u8, value: u16, reported: &str) -> String {
     }
 }
 /// Brief reads can include diagnostics or an unsupported code between valid lines.
-fn values(output: &str) -> BTreeMap<u8, (u16, u16)> {
+fn values(output: &str) -> BTreeMap<u8, Reading> {
     output
         .lines()
         .filter_map(|line| {
@@ -371,24 +411,36 @@ fn values(output: &str) -> BTreeMap<u8, (u16, u16)> {
                 return None;
             }
             let code = u8::from_str_radix(t.get(1)?, 16).ok()?;
-            match *t.get(2)? {
-                "C" => Some((code, (t.get(3)?.parse().ok()?, t.get(4)?.parse().ok()?))),
+            let reading = match *t.get(2)? {
+                "C" => Reading {
+                    value: t.get(3)?.parse().ok()?,
+                    maximum: t.get(4)?.parse().ok()?,
+                    plain: true,
+                },
                 "CNC" if t.len() >= 7 => {
                     let byte = |i: usize| u8::from_str_radix(t[i].strip_prefix('x')?, 16).ok();
-                    Some((
-                        code,
-                        (
-                            u16::from_be_bytes([byte(5)?, byte(6)?]),
-                            u16::from_be_bytes([byte(3)?, byte(4)?]),
-                        ),
-                    ))
+                    let (high, low) = (byte(5)?, byte(6)?);
+                    // Only a true continuous value spans both bytes. Elsewhere, as for
+                    // mute, SH is a separate field and the state is SL.
+                    let whole = vcp::continuous(code) && code != vcp::VOLUME;
+                    Reading {
+                        value: if whole {
+                            u16::from_be_bytes([high, low])
+                        } else {
+                            low.into()
+                        },
+                        maximum: u16::from_be_bytes([byte(3)?, byte(4)?]),
+                        plain: false,
+                    }
                 }
-                "SNC" | "NC" => {
-                    let v = t.get(3)?.strip_prefix('x')?;
-                    Some((code, (u16::from_str_radix(v, 16).ok()?, 255)))
-                }
-                _ => None,
-            }
+                "SNC" | "NC" => Reading {
+                    value: u16::from_str_radix(t.get(3)?.strip_prefix('x')?, 16).ok()?,
+                    maximum: 255,
+                    plain: false,
+                },
+                _ => return None,
+            };
+            Some((code, reading))
         })
         .collect()
 }
@@ -404,9 +456,9 @@ mod tests {
         assert_eq!(caps[&0x8d][1].label, "Sound on");
         let read =
             values("diagnostic\nVCP 10 C 9 100\nVCP 12 ERR\nVCP 60 SNC x0f\nVCP 6C C 25 50\n");
-        assert_eq!(read[&0x10], (9, 100));
-        assert_eq!(read[&0x60], (15, 255));
-        assert_eq!(read[&0x6c], (25, 50));
+        assert_eq!((read[&0x10].value, read[&0x10].maximum), (9, 100));
+        assert_eq!((read[&0x60].value, read[&0x60].maximum), (15, 255));
+        assert_eq!((read[&0x6c].value, read[&0x6c].maximum), (25, 50));
         assert!(!read.contains_key(&0x12));
     }
     fn edid(serial: u32) -> Vec<u8> {
@@ -457,6 +509,96 @@ mod tests {
         }
     }
     #[test]
+    fn another_model_with_the_same_serial_is_not_the_monitor_of_the_layout() {
+        let product = |code| {
+            let mut bytes = edid(0);
+            bytes[8..10].copy_from_slice(&[0x10, 0xac]);
+            bytes[10] = code;
+            bytes
+        };
+        let target = target_of(Some(&product(1)));
+        assert!(target.model.is_some());
+        let root = tempfile::tempdir().unwrap();
+        connector_with(root.path(), "card0", &product(2));
+        assert!(find_bus(root.path(), &target).is_err());
+        let root = tempfile::tempdir().unwrap();
+        connector_with(root.path(), "card0", &product(1));
+        assert_eq!(find_bus(root.path(), &target).unwrap().number, 9);
+    }
+    #[test]
+    fn structured_replies_keep_their_fields_apart() {
+        // MCCS 2.2 mute: SH says the picture is on, SL that the sound is off.
+        let read = values("VCP 8D CNC x00 x00 x02 x01\nVCP 10 CNC x01 x00 x00 xfa\n");
+        assert_eq!(read[&0x8d].value, 1);
+        assert_eq!((read[&0x10].value, read[&0x10].maximum), (250, 256));
+    }
+    #[test]
+    fn only_a_plain_volume_is_a_level_from_zero() {
+        let structured = |value| Reading {
+            value,
+            maximum: 255,
+            plain: false,
+        };
+        let volume = feature(vcp::VOLUME, structured(40), vec![]).unwrap();
+        assert_eq!((volume.minimum, volume.maximum), (1, 254));
+        assert!(!volume.choices.is_empty());
+        for special in [0, 255] {
+            let volume = feature(vcp::VOLUME, structured(special), vec![]).unwrap();
+            assert!(volume.accepts(special), "{special}");
+            assert_eq!(volume.value, special);
+        }
+        let plain = Reading {
+            value: 0,
+            maximum: 100,
+            plain: true,
+        };
+        let volume = feature(vcp::VOLUME, plain, vec![]).unwrap();
+        assert_eq!((volume.minimum, volume.maximum), (0, 100));
+        assert!(volume.choices.is_empty());
+    }
+    #[tokio::test]
+    async fn a_gain_change_also_reads_back_the_preset_it_may_have_left() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        connector(dir.path(), "card0", 42);
+        let executable = dir.path().join("ddcutil-test");
+        let preset = dir.path().join("preset");
+        std::fs::write(&preset, "05").unwrap();
+        let script = format!(
+            r#"#!/bin/sh
+case "$1" in
+capabilities) printf 'Feature: 14 (Color Preset)\n Values:\n 05: sRGB\n 0b: User 1\nFeature: 16 (Red)\n';;
+getvcp) printf 'VCP 14 SNC x%s\nVCP 16 C 50 100\n' "$(cat '{0}')";;
+setvcp) printf 0b > '{0}';;
+esac
+"#,
+            preset.display()
+        );
+        std::fs::write(&executable, script).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut service = Service {
+            tool: executable,
+            drm: dir.path().into(),
+            ..Default::default()
+        };
+        let target = Target {
+            connector: "DP-1".into(),
+            serial: None,
+            model: None,
+        };
+        let state = service.execute(target.clone(), None).await.unwrap();
+        let preset_value =
+            |m: &Monitor| m.features.iter().find(|f| f.code == PRESET).unwrap().value;
+        assert_eq!(preset_value(&state), 5);
+        let write = Write {
+            token: state.token,
+            code: 0x16,
+            value: 50,
+        };
+        let state = service.execute(target, Some(write)).await.unwrap();
+        assert_eq!(preset_value(&state), 0x0b);
+    }
+    #[test]
     fn a_monitor_detected_without_an_edid_has_no_serial_to_compare() {
         let target = target_of(None);
         assert_eq!(target.serial, None);
@@ -471,6 +613,7 @@ mod tests {
         let mut target = Target {
             connector: "DP-1".into(),
             serial: Some("0000002B".into()),
+            model: None,
         };
         assert!(find_bus(root.path(), &target).is_err());
         target.serial = Some("0000002A".into());
@@ -516,6 +659,7 @@ esac
         let target = Target {
             connector: "DP-1".into(),
             serial: Some("0000002A".into()),
+            model: None,
         };
         let state = service.execute(target.clone(), None).await.unwrap();
         assert_eq!(state.features[0].maximum, 80);

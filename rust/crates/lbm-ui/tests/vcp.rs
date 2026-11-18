@@ -39,6 +39,7 @@ fn harness(width: f32) -> Harness<'static, State> {
                         .map(|code| Feature {
                             code,
                             value: 30,
+                            minimum: 0,
                             maximum: if code == 0x10 { 80 } else { 100 },
                             choices: vec![],
                         })
@@ -46,6 +47,7 @@ fn harness(width: f32) -> Harness<'static, State> {
                             Feature {
                                 code: 0x60,
                                 value: 15,
+                                minimum: 0,
                                 maximum: 255,
                                 choices: vec![
                                     Choice {
@@ -61,6 +63,7 @@ fn harness(width: f32) -> Harness<'static, State> {
                             Feature {
                                 code: 0xd6,
                                 value: 1,
+                                minimum: 0,
                                 maximum: 255,
                                 choices: vec![
                                     Choice {
@@ -126,6 +129,46 @@ fn input_switch_waits_for_apply_and_cancel_sends_nothing() {
     assert!(
         matches!(h.state().actions.last(), Some(Action::Set(w)) if w.code == 0x60 && w.value == 17)
     );
+}
+#[test]
+fn a_special_volume_is_shown_without_being_rewritten_and_can_be_chosen() {
+    let mut h = harness(300.);
+    {
+        let volume = h
+            .state_mut()
+            .monitor
+            .features
+            .iter_mut()
+            .find(|f| f.code == lbm_ipc::vcp::VOLUME)
+            .unwrap();
+        volume.value = 255;
+        volume.minimum = 1;
+        volume.maximum = 100;
+        volume.choices = lbm_ipc::vcp::volume_choices();
+    }
+    h.run();
+    assert!(h.state().actions.is_empty(), "drawing it writes nothing");
+    let volume = |h: &Harness<'static, State>| {
+        h.state()
+            .monitor
+            .features
+            .iter()
+            .find(|f| f.code == lbm_ipc::vcp::VOLUME)
+            .unwrap()
+            .value
+    };
+    assert_eq!(volume(&h), 255);
+    let slider = h
+        .get_all_by_label("Volume")
+        .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Slider)
+        .unwrap();
+    assert_eq!(slider.accesskit_node().min_numeric_value(), Some(1.));
+    h.get_by_label("Default level").click();
+    h.run();
+    assert!(matches!(
+        h.state().actions.last(),
+        Some(Action::Set(w)) if w.code == lbm_ipc::vcp::VOLUME && w.value == 0
+    ));
 }
 #[test]
 #[cfg(not(windows))]

@@ -134,6 +134,9 @@ fn control(ui: &mut egui::Ui, f: &mut Feature) -> Option<u16> {
     };
     if vcp::continuous(f.code) {
         let mut commit = false;
+        // A special value lies outside the range: showing it must not rewrite it.
+        let mut level = f.value.clamp(f.minimum, f.maximum.max(f.minimum));
+        let range = f.minimum..=f.maximum.max(f.minimum);
         ui.horizontal(|ui| {
             ui.add_sized(
                 [65., 28.],
@@ -144,7 +147,7 @@ fn control(ui: &mut egui::Ui, f: &mut Feature) -> Option<u16> {
                 ui.visuals_mut().selection.bg_fill = color.gamma_multiply(0.3);
                 ui.visuals_mut().selection.stroke.color = color;
                 let response = ui.add(
-                    egui::Slider::new(&mut f.value, 0..=f.maximum)
+                    egui::Slider::new(&mut level, range.clone())
                         .show_value(false)
                         .trailing_fill(true),
                 );
@@ -156,12 +159,12 @@ fn control(ui: &mut egui::Ui, f: &mut Feature) -> Option<u16> {
             let response = ui
                 .add_sized(
                     [45., 28.],
-                    egui::DragValue::new(&mut f.value)
-                        .range(0..=f.maximum)
+                    egui::DragValue::new(&mut level)
+                        .range(range.clone())
                         .speed(1.)
                         .update_while_editing(false),
                 )
-                .on_hover_text(format!("Hardware range: 0–{}", f.maximum));
+                .on_hover_text(format!("Hardware range: {}–{}", f.minimum, f.maximum));
             response.widget_info(|| {
                 egui::WidgetInfo::labeled(
                     egui::WidgetType::DragValue,
@@ -171,7 +174,24 @@ fn control(ui: &mut egui::Ui, f: &mut Feature) -> Option<u16> {
             });
             commit |= response.drag_stopped() || (response.changed() && !response.dragged());
         });
-        commit.then_some(f.value)
+        if level != f.value.clamp(*range.start(), *range.end()) {
+            f.value = level;
+        }
+        let mut special = None;
+        if !f.choices.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                for choice in &f.choices {
+                    if ui
+                        .selectable_label(f.value == choice.value, &choice.label)
+                        .clicked()
+                        && f.value != choice.value
+                    {
+                        special = Some(choice.value);
+                    }
+                }
+            });
+        }
+        special.or(commit.then_some(f.value))
     } else {
         ui.label(name);
         let mut value = f.value;

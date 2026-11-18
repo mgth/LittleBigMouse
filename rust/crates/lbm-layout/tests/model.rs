@@ -212,3 +212,43 @@ fn landscape_monitor_size_is_untouched() {
     );
     assert_eq!(single_sizes(&l), ((597.0, 336.0), (597.0, 336.0)));
 }
+
+#[test]
+fn a_section_without_a_stored_mode_keeps_its_legacy_meaning() {
+    use lbm_layout::model::{BorderSection, ResistanceDefaults, ResistanceMode};
+    let defaults = ResistanceDefaults {
+        movement: 11.0,
+        drag: 23.0,
+        ..Default::default()
+    };
+    let free_then_custom = BorderSection::new(0.0, 10.0, 0.0, false, 7.0, false);
+    assert_eq!(free_then_custom.move_mode(), ResistanceMode::Free);
+    assert_eq!(free_then_custom.drag_mode(), ResistanceMode::Custom);
+    assert_eq!(free_then_custom.resolved(defaults), free_then_custom);
+
+    let blocked = BorderSection::new(0.0, 10.0, 3.0, true, 0.0, true);
+    assert_eq!(blocked.move_mode(), ResistanceMode::Block);
+    assert_eq!(blocked.drag_mode(), ResistanceMode::Block);
+    assert_eq!(blocked.resolved(defaults), blocked);
+}
+
+#[test]
+fn modes_resolve_at_use_and_never_overwrite_the_custom_value() {
+    use lbm_layout::model::{BorderSection, ResistanceDefaults, ResistanceMode};
+    let defaults = ResistanceDefaults {
+        movement: 11.0,
+        drag: 23.0,
+        ..Default::default()
+    };
+    let mut section = BorderSection::new(0.0, 10.0, 4.0, false, 9.0, false);
+    section.set_move_mode(ResistanceMode::Resist);
+    section.set_drag_mode(ResistanceMode::Free);
+    let resolved = section.resolved(defaults);
+    assert_eq!((resolved.move_resistance(), resolved.drag()), (11.0, 0.0));
+    assert_eq!((section.move_resistance(), section.drag()), (4.0, 9.0));
+
+    // The older block switches stay authoritative: using one drops the stored mode.
+    assert!(section.set_move_block(true));
+    assert_eq!(section.stored_move_mode(), None);
+    assert_eq!(section.move_mode(), ResistanceMode::Block);
+}

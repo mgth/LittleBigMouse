@@ -119,6 +119,16 @@ pub struct LayoutDto {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct LayoutOptionsDto {
+    /// Defaults used by section channels in Resist mode, in millimetres.
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "finite")]
+    pub default_move_resistance: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "finite")]
+    pub default_drag_resistance: Option<f64>,
+    /// Independently apply each default to crossings outside explicit sections.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_move_without_section: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_drag_without_section: Option<bool>,
     /// C# `LayoutOptionsDto.AllowOverlaps`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_overlaps: Option<bool>,
@@ -317,6 +327,11 @@ pub struct BorderSideDto {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct BorderSectionDto {
+    /// Absent in legacy documents: infer Block, Free or Custom from the old fields.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub move_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drag_mode: Option<String>,
     /// C# `BorderSectionDto.From`.
     #[serde(skip_serializing_if = "Option::is_none", serialize_with = "finite")]
     pub from: Option<f64>,

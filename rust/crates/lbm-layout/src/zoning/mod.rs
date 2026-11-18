@@ -118,6 +118,8 @@ pub struct ZonesLayout {
     pub max_travel_distance: f64,
     pub freelook_check_interval: f64,
     pub freelook_enabled: bool,
+    /// Applied only where the source edge has no explicit section.
+    pub unsectioned_resistance: ResistanceValues,
     /// Main zones first, then loop clones.
     pub zones: Vec<Zone>,
     /// Indices of the main zones, filled by [`ZonesLayout::init`].
@@ -139,6 +141,7 @@ impl Default for ZonesLayout {
             max_travel_distance: 200.0,
             freelook_check_interval: 100.0,
             freelook_enabled: true,
+            unsectioned_resistance: ResistanceValues::default(),
             zones: Vec::new(),
             main_zones: Vec::new(),
         }
@@ -249,7 +252,8 @@ impl ZonesLayout {
     /// wherever a section of this edge starts or ends; each interval gets the
     /// nearest zone fully covering it in the edge's direction, within the
     /// travel limit (the later zone wins a tie), and the resistance of the
-    /// section covering its midpoint. Adjacent intervals merge only when they
+    /// section covering its midpoint, or the optional layout defaults if uncovered.
+    /// Adjacent intervals merge only when they
     /// lead to the same zone with the same resistances.
     fn compute_links(&self, this: usize, edge: Edge) -> Vec<ZoneLink> {
         let me = &self.zones[this];
@@ -298,7 +302,7 @@ impl ZonesLayout {
                     };
                 }
             }
-            ResistanceValues::default()
+            self.unsectioned_resistance
         };
 
         let mut links: Vec<ZoneLink> = Vec::new();

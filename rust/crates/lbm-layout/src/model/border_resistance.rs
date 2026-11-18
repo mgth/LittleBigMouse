@@ -2,6 +2,82 @@ use crate::geo::dotnet::max;
 
 use super::size::{dotnet_equals, set_if_changed};
 
+/// How a section handles one kind of crossing, independently of the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResistanceMode {
+    Block,
+    Resist,
+    Free,
+    Custom,
+}
+
+impl ResistanceMode {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Block => "Block",
+            Self::Resist => "Resist",
+            Self::Free => "Free",
+            Self::Custom => "Custom",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "Block" => Some(Self::Block),
+            "Resist" => Some(Self::Resist),
+            "Free" => Some(Self::Free),
+            "Custom" => Some(Self::Custom),
+            _ => None,
+        }
+    }
+
+    fn value(self, custom: f64, default: f64) -> f64 {
+        match self {
+            Self::Resist => default,
+            Self::Free => 0.,
+            Self::Block | Self::Custom => custom,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResistanceDefaults {
+    pub movement: f64,
+    pub drag: f64,
+    pub move_without_section: bool,
+    pub drag_without_section: bool,
+}
+
+impl Default for ResistanceDefaults {
+    fn default() -> Self {
+        Self {
+            movement: 5.,
+            drag: 15.,
+            move_without_section: false,
+            drag_without_section: false,
+        }
+    }
+}
+
+impl ResistanceDefaults {
+    /// Only uncovered intervals inherit these values; even an explicit Free section wins.
+    pub fn without_section(self) -> ResistanceValues {
+        ResistanceValues {
+            move_resistance: if self.move_without_section {
+                self.movement
+            } else {
+                0.
+            },
+            drag: if self.drag_without_section {
+                self.drag
+            } else {
+                0.
+            },
+            ..Default::default()
+        }
+    }
+}
+
 /// One stretch of a monitor edge with its own resistances: C#'s `BorderSection`.
 ///
 /// `from` and `to` are millimetres from the edge's starting corner (the top for
@@ -15,9 +91,45 @@ pub struct BorderSection {
     move_block: bool,
     drag: f64,
     drag_block: bool,
+    move_mode: Option<ResistanceMode>,
+    drag_mode: Option<ResistanceMode>,
 }
 
 impl BorderSection {
+    pub fn move_mode(&self) -> ResistanceMode {
+        self.move_mode
+            .unwrap_or_else(|| legacy_mode(self.move_resistance, self.move_block))
+    }
+    pub fn drag_mode(&self) -> ResistanceMode {
+        self.drag_mode
+            .unwrap_or_else(|| legacy_mode(self.drag, self.drag_block))
+    }
+    pub fn set_move_mode(&mut self, mode: ResistanceMode) {
+        self.move_mode = Some(mode);
+        self.move_block = mode == ResistanceMode::Block;
+    }
+    pub fn set_drag_mode(&mut self, mode: ResistanceMode) {
+        self.drag_mode = Some(mode);
+        self.drag_block = mode == ResistanceMode::Block;
+    }
+    /// Resolve defaults at consumption time; preserve the editable custom values.
+    pub fn resolved(&self, defaults: ResistanceDefaults) -> Self {
+        Self::new(
+            self.from,
+            self.to,
+            self.move_mode()
+                .value(self.move_resistance, defaults.movement),
+            self.move_block,
+            self.drag_mode().value(self.drag, defaults.drag),
+            self.drag_block,
+        )
+    }
+    pub fn stored_move_mode(&self) -> Option<ResistanceMode> {
+        self.move_mode
+    }
+    pub fn stored_drag_mode(&self) -> Option<ResistanceMode> {
+        self.drag_mode
+    }
     pub fn from(&self) -> f64 {
         self.from
     }
@@ -49,7 +161,7 @@ impl BorderSection {
         set_if_changed(&mut self.move_resistance, max(0.0, value))
     }
     pub fn set_move_block(&mut self, value: bool) -> bool {
-        let changed = self.move_block != value;
+        let changed = self.move_mode.take().is_some() || self.move_block != value;
         self.move_block = value;
         changed
     }
@@ -57,7 +169,7 @@ impl BorderSection {
         set_if_changed(&mut self.drag, max(0.0, value))
     }
     pub fn set_drag_block(&mut self, value: bool) -> bool {
-        let changed = self.drag_block != value;
+        let changed = self.drag_mode.take().is_some() || self.drag_block != value;
         self.drag_block = value;
         changed
     }
@@ -82,8 +194,18 @@ impl BorderSection {
     }
 }
 
+fn legacy_mode(value: f64, blocked: bool) -> ResistanceMode {
+    if blocked {
+        ResistanceMode::Block
+    } else if value == 0. {
+        ResistanceMode::Free
+    } else {
+        ResistanceMode::Custom
+    }
+}
+
 /// One edge of a monitor: the sections drawn on it, in insertion order.
-/// Wherever no section covers the edge, it offers no resistance.
+/// Uncovered intervals use the layout's optional defaults for unsectioned crossings.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BorderSide {
     pub sections: Vec<BorderSection>,
@@ -96,6 +218,20 @@ pub struct BorderResistance {
     pub top: BorderSide,
     pub right: BorderSide,
     pub bottom: BorderSide,
+}
+
+impl BorderResistance {
+    pub fn resolved(&self, defaults: ResistanceDefaults) -> Self {
+        let side = |s: &BorderSide| BorderSide {
+            sections: s.sections.iter().map(|s| s.resolved(defaults)).collect(),
+        };
+        Self {
+            left: side(&self.left),
+            top: side(&self.top),
+            right: side(&self.right),
+            bottom: side(&self.bottom),
+        }
+    }
 }
 
 /// The resistances governing one stretch of edge once the link compiler has

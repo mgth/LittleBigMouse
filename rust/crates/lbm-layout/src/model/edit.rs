@@ -63,6 +63,7 @@ fn same_tracked_options(a: &LayoutOptions, b: &LayoutOptions) -> bool {
         && a.adjust_speed == b.adjust_speed
         && a.home_cinema == b.home_cinema
         && dotnet_equals(a.max_travel_distance, b.max_travel_distance)
+        && a.resistance_defaults == b.resistance_defaults
         && dotnet_equals(a.freelook_check_interval, b.freelook_check_interval)
         && a.freelook_enabled == b.freelook_enabled
         && dotnet_equals(a.minimal_edge_overlap, b.minimal_edge_overlap)

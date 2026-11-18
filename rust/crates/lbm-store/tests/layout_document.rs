@@ -139,3 +139,50 @@ fn on_the_wire_it_is_the_stores_json_in_one_object() {
     assert_eq!(after.layout, before.layout);
     assert_eq!(after.excluded, Some(Vec::new()));
 }
+
+#[test]
+fn resistance_modes_and_defaults_from_a_file_are_only_taken_when_valid() {
+    use lbm_layout::model::{BorderSide, LayoutOptions, ResistanceDefaults, ResistanceMode};
+    use lbm_store::layout_dto_mapper::{apply_layout_options, apply_side, to_side_dto};
+    use lbm_store::layout_dtos::{BorderSectionDto, BorderSideDto, LayoutOptionsDto};
+
+    let mut options = LayoutOptions::default();
+    apply_layout_options(
+        &mut options,
+        Some(&LayoutOptionsDto {
+            default_move_resistance: Some(-1.0),
+            default_drag_resistance: Some(f64::INFINITY),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(options.resistance_defaults, ResistanceDefaults::default());
+
+    let stored = |mode: &str| BorderSideDto {
+        sections: Some(vec![BorderSectionDto {
+            from: Some(0.0),
+            to: Some(10.0),
+            r#move: Some(4.0),
+            move_mode: Some(mode.to_owned()),
+            ..Default::default()
+        }]),
+        ..Default::default()
+    };
+    let mut side = BorderSide::default();
+    apply_side(&mut side, Some(&stored("Resist")), 100.0);
+    assert_eq!(side.sections[0].move_mode(), ResistanceMode::Resist);
+    let written = to_side_dto(&side);
+    assert_eq!(
+        written.sections.unwrap()[0].move_mode.as_deref(),
+        Some("Resist")
+    );
+
+    // A mode from a newer version falls back on what the older members say.
+    apply_side(&mut side, Some(&stored("Magnetic")), 100.0);
+    assert_eq!(side.sections[0].stored_move_mode(), None);
+    assert_eq!(side.sections[0].move_mode(), ResistanceMode::Custom);
+    assert_eq!(
+        to_side_dto(&side).sections.unwrap()[0].move_mode,
+        None,
+        "a legacy section stays legacy when saved"
+    );
+}

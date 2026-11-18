@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::ipc::protocol;
 use crate::shared::Shared;
 
+pub mod focus_restore;
 /// Platform-neutral core of the per-report hot path (dedup, non-blocking route),
 /// shared by the Windows callback and exercised by `benches/mouse_hook.rs`.
 pub mod hot_path;

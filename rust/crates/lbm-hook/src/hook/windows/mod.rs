@@ -7,6 +7,7 @@
 //! `WM_BREAK_LOOP` (re-reconcile) or `WM_QUIT` (stop).
 
 pub mod display;
+pub mod focus_restore;
 pub mod mouse;
 mod native_touch;
 pub mod rescue_key;
@@ -186,6 +187,7 @@ impl Hooker {
 
     /// C++ `Hooker::UnhookMouse`.
     fn unhook_mouse(&mut self, shared: &Shared) {
+        focus_restore::reset();
         if self.mouse_hook == HHOOK::default() {
             return;
         }
@@ -286,12 +288,15 @@ fn pump_messages() -> bool {
     }
 }
 
-/// Nothing listens to the touchscreen until the user turns the feature on. Pump
-/// thread only.
+/// Only what the options ask for runs: nothing listens to the touchscreen and no
+/// focus worker exists until the user turns the feature on. Pump thread only.
 fn apply_touch_options() {
     let Some(shared) = SHARED.get() else {
         return;
     };
+    if shared.restore_keyboard_focus.load(Ordering::SeqCst) {
+        focus_restore::start(shared);
+    }
     native_touch::sync(shared.touch_mouse_independent.load(Ordering::SeqCst));
 }
 

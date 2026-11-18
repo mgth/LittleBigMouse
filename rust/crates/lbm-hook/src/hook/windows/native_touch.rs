@@ -9,12 +9,14 @@ use windows::Win32::UI::Input::{
     RID_DEVICE_INFO, RID_HEADER, RID_INPUT, RIM_TYPEHID,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorInfo, GetMessageTime, CURSORINFO, CURSOR_SUPPRESSED,
+    GetCursorInfo, GetMessageTime, KillTimer, SetTimer, CURSORINFO, CURSOR_SUPPRESSED,
 };
 
+pub const RELEASE_TIMER: usize = 0x4c424d54;
 const MAX_PACKET: usize = 65536;
 const MAX_DEVICES: usize = 8;
 const MAX_REPORTS: usize = 32;
+const CURSOR_SETTLE_MS: u32 = 50;
 
 struct Device {
     key: isize,
@@ -39,6 +41,12 @@ thread_local! {
 pub fn devices_changed() {
     LAST_TOUCH_DEVICE.with(|v| v.set(None));
     REPORTS.with(|v| *v.borrow_mut() = Reports::default());
+    super::focus_restore::cancel_native();
+}
+
+pub fn on_timer(hwnd: HWND) {
+    let _ = unsafe { KillTimer(hwnd, RELEASE_TIMER) };
+    super::touch_input::finish_native_focus();
 }
 
 /// The pump's window, which receives the reports once [`sync`] asks for them.
@@ -95,7 +103,7 @@ fn unregister() {
     let _ = unsafe { RegisterRawInputDevices(&[device], size_of::<RAWINPUTDEVICE>() as u32) };
 }
 
-pub fn on_input(lparam: LPARAM) {
+pub fn on_input(hwnd: HWND, lparam: LPARAM) {
     let mut header = RAWINPUTHEADER::default();
     let mut size = size_of::<RAWINPUTHEADER>() as u32;
     let read = unsafe {
@@ -127,13 +135,22 @@ pub fn on_input(lparam: LPARAM) {
         // Ignore idle HID reports while the mouse owns the visible cursor.
         super::touch_input::on_native_touch();
     }
-    // Contact boundaries re-arm cursor restoration after an override. Decode first:
-    // no RefCell borrow may span a call that can re-enter the mouse hook.
+    // Contact boundaries re-arm cursor restoration after an override, and time focus
+    // restoration. Decode first: no RefCell borrow may span a call that can re-enter
+    // the mouse hook.
     let contacts = REPORTS.with(|storage| storage.borrow_mut().read(lparam, &header));
     // The clock of `MSLLHOOKSTRUCT::time`, which promoted messages are stamped with.
     let time = unsafe { GetMessageTime() } as u32;
     for contact in contacts.into_iter().flatten() {
-        super::touch_input::on_native_contact(contact, time);
+        if contact {
+            let _ = unsafe { KillTimer(hwnd, RELEASE_TIMER) };
+        }
+        if super::touch_input::on_native_contact(contact, time) {
+            // Cursor relocation can arrive after the HID release.
+            unsafe {
+                SetTimer(hwnd, RELEASE_TIMER, CURSOR_SETTLE_MS, None);
+            }
+        }
     }
 }
 

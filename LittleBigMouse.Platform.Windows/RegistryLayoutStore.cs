@@ -82,9 +82,15 @@ public class RegistryLayoutStore : ILayoutStore
         ShowMonitorActionWarning = root.TryGetBool("ShowMonitorActionWarning") ?? root.TryGetBool("ShowAttachDetachWarning"),
         BorderValues = root.TryGetString("BorderValues"),
         TouchMouseIndependent = root.TryGetBool("TouchMouseIndependent"),
+        StylusMouseIndependent = root.TryGetBool("StylusMouseIndependent"),
+        RestoreKeyboardFocus = root.TryGetBool("RestoreKeyboardFocus"),
+        FocusRestoreDelay = root.TryGetInt("FocusRestoreDelay"),
+        FocusRestoreOnMouseMove = root.TryGetBool("FocusRestoreOnMouseMove"),
         TouchAllDisplays = root.TryGetBool("TouchAllDisplays"),
         TouchDisplayIds = root.TryGetString("TouchDisplayIds"),
         TouchOverrideModifier = root.TryGetString("TouchOverrideModifier"),
+        FocusKeepApps = root.TryGetString("FocusKeepApps"),
+        FocusRestoreApps = root.TryGetString("FocusRestoreApps"),
         RescueShortcut = root.TryGetString("RescueShortcut"),
         HideTrayIcon = root.TryGetBool("HideTrayIcon"),
         ExcludedDefaultsVersion = root.TryGetInt("ExcludedDefaultsVersion")
@@ -285,9 +291,15 @@ public class RegistryLayoutStore : ILayoutStore
         Set(root, "ShowMonitorActionWarning", o.ShowMonitorActionWarning);
         Set(root, "BorderValues", o.BorderValues);
         Set(root, "TouchMouseIndependent", o.TouchMouseIndependent);
+        Set(root, "StylusMouseIndependent", o.StylusMouseIndependent);
+        Set(root, "RestoreKeyboardFocus", o.RestoreKeyboardFocus);
+        Set(root, "FocusRestoreDelay", o.FocusRestoreDelay);
+        Set(root, "FocusRestoreOnMouseMove", o.FocusRestoreOnMouseMove);
         Set(root, "TouchAllDisplays", o.TouchAllDisplays);
         Set(root, "TouchDisplayIds", o.TouchDisplayIds);
         Set(root, "TouchOverrideModifier", o.TouchOverrideModifier);
+        Set(root, "FocusKeepApps", o.FocusKeepApps);
+        Set(root, "FocusRestoreApps", o.FocusRestoreApps);
         Set(root, "RescueShortcut", o.RescueShortcut);
         Set(root, "HideTrayIcon", o.HideTrayIcon);
         Set(root, "ExcludedDefaultsVersion", o.ExcludedDefaultsVersion);

@@ -275,6 +275,46 @@
 							<StackPanel IsVisible="{Binding Model.TouchMouseIndependent, FallbackValue=false}">
 								<Border Classes="SettingSeparator"/>
 								<controls:SettingRow Classes="Sub"
+								                     Header="{loc:Tr Options.Touch.Stylus.Header}"
+								                     Description="{loc:Tr Options.Touch.Stylus.Description}">
+									<ToggleSwitch IsChecked="{Binding Model.StylusMouseIndependent, Mode=TwoWay, FallbackValue=false}"/>
+								</controls:SettingRow>
+								<Border Classes="SettingSeparator"/>
+								<controls:SettingRow Classes="Sub"
+								                     Header="{loc:Tr Options.Touch.RestoreFocus.Header}"
+								                     Description="{loc:Tr Options.Touch.RestoreFocus.Description}">
+									<ToggleSwitch IsChecked="{Binding Model.RestoreKeyboardFocus, Mode=TwoWay, FallbackValue=false}"/>
+								</controls:SettingRow>
+								<StackPanel IsVisible="{Binding Model.RestoreKeyboardFocus, FallbackValue=false}">
+									<Border Classes="SettingSeparator"/>
+									<controls:SettingRow Classes="Sub"
+									                     Header="{loc:Tr Options.Touch.RestoreOnMove.Header}"
+									                     Description="{loc:Tr Options.Touch.RestoreOnMove.Description}">
+										<ToggleSwitch IsChecked="{Binding Model.FocusRestoreOnMouseMove, Mode=TwoWay}"/>
+									</controls:SettingRow>
+									<Border Classes="SettingSeparator"/>
+									<controls:SettingRow Classes="Sub"
+									                     Header="{loc:Tr Options.Touch.FocusDelay.Header}"
+									                     Description="{loc:Tr Options.Touch.FocusDelay.Description}"
+									                     IsEnabled="{Binding !Model.FocusRestoreOnMouseMove}">
+										<NumericUpDown Minimum="0" Maximum="5000" Increment="20" FormatString="0"
+										               ClipValueToMinMax="True" Value="{Binding Model.FocusRestoreDelay, Mode=TwoWay}"/>
+									</controls:SettingRow>
+									<Border Classes="SettingSeparator"/>
+									<StackPanel Margin="14,10,14,14" Spacing="6">
+										<TextBlock Text="{loc:Tr Options.Touch.AppRules.Title}" FontWeight="SemiBold"/>
+										<TextBlock Text="{loc:Tr Options.Touch.AppRules.Description}" TextWrapping="Wrap" FontSize="12"/>
+										<TextBlock Text="{loc:Tr Options.Touch.AppRules.Keep}"/>
+										<TextBox Text="{Binding Model.FocusKeepApps, Mode=TwoWay}"
+										         PlaceholderText="chrome.exe; notepad.exe"/>
+										<TextBlock Text="{loc:Tr Options.Touch.AppRules.Restore}"/>
+										<TextBox Text="{Binding Model.FocusRestoreApps, Mode=TwoWay}"
+										         PlaceholderText="{loc:Tr Options.Touch.AppRules.RestorePlaceholder}"/>
+										<TextBlock Text="{loc:Tr Options.Touch.AppRules.Precedence}" TextWrapping="Wrap" FontSize="12"/>
+									</StackPanel>
+								</StackPanel>
+								<Border Classes="SettingSeparator"/>
+								<controls:SettingRow Classes="Sub"
 								                     Header="{loc:Tr Options.Touch.AllDisplays.Header}"
 								                     Description="{loc:Tr Options.Touch.AllDisplays.Description}">
 									<ToggleSwitch IsChecked="{Binding Model.TouchAllDisplays, Mode=TwoWay}"/>

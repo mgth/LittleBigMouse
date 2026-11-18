@@ -13,7 +13,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassExW, CW_USEDEFAULT,
     DEVICE_NOTIFY_WINDOW_HANDLE, PBT_POWERSETTINGCHANGE, SPI_SETWORKAREA, WINDOW_EX_STYLE,
     WM_DISPLAYCHANGE, WM_INPUT, WM_INPUT_DEVICE_CHANGE, WM_POWERBROADCAST, WM_SETTINGCHANGE,
-    WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
+    WM_TIMER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
 };
 
 use crate::shared::SHARED;
@@ -99,9 +99,13 @@ unsafe extern "system" fn wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_INPUT => {
-            crate::hook::guard(|| super::native_touch::on_input(lparam));
+            crate::hook::guard(|| super::native_touch::on_input(hwnd, lparam));
             // Required for foreground raw-input cleanup, also safe for INPUTSINK.
             unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+        }
+        WM_TIMER if wparam.0 == super::native_touch::RELEASE_TIMER => {
+            crate::hook::guard(|| super::native_touch::on_timer(hwnd));
+            LRESULT(0)
         }
         WM_INPUT_DEVICE_CHANGE => {
             crate::hook::guard(super::native_touch::devices_changed);

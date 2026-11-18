@@ -223,6 +223,7 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
         // this is what lets a Stop/Start (Load) heal crossing instead of staying broken.
         // Before the move: the layout is about to be handed to the engine.
         let touch_mouse_independent = layout.touch_mouse_independent;
+        let restore_keyboard_focus = layout.restore_keyboard_focus;
         let touch_policy = crate::hook::touch_policy::TouchPolicy::from_layout(&layout);
         adopt_rescue_shortcut(shared, &layout.rescue_shortcut);
         {
@@ -241,6 +242,9 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
             shared
                 .touch_mouse_independent
                 .store(touch_mouse_independent, Ordering::SeqCst);
+            shared
+                .restore_keyboard_focus
+                .store(restore_keyboard_focus, Ordering::SeqCst);
             shared.touch_generation.fetch_add(1, Ordering::SeqCst);
         }
         hook::touch_options_changed(shared);
@@ -581,13 +585,15 @@ mod tests {
         let shared = Shared::new();
         let line = LOAD_LINE.replace(
             r#"<ZonesLayout Algorithm="Strait""#,
-            r#"<ZonesLayout TouchMouseIndependent="True" Algorithm="Strait""#,
+            r#"<ZonesLayout TouchMouseIndependent="True" RestoreKeyboardFocus="True" Algorithm="Strait""#,
         );
         replay(&shared, &format!("{line}\n"));
         assert!(shared.touch_mouse_independent.load(Ordering::SeqCst));
+        assert!(shared.restore_keyboard_focus.load(Ordering::SeqCst));
         let generation = shared.touch_generation.load(Ordering::SeqCst);
         replay(&shared, &format!("{LOAD_LINE}\n"));
         assert!(!shared.touch_mouse_independent.load(Ordering::SeqCst));
+        assert!(!shared.restore_keyboard_focus.load(Ordering::SeqCst));
         assert_ne!(shared.touch_generation.load(Ordering::SeqCst), generation);
     }
 

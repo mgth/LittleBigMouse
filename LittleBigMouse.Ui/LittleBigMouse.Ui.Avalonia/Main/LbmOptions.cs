@@ -290,6 +290,38 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _touchMouseIndependent;
 
     [DataMember]
+    public bool StylusMouseIndependent
+    {
+        get => _stylusMouseIndependent;
+        set => SetUnsavedValue(ref _stylusMouseIndependent, value);
+    }
+    bool _stylusMouseIndependent;
+
+    [DataMember]
+    public bool RestoreKeyboardFocus
+    {
+        get => _restoreKeyboardFocus;
+        set => SetUnsavedValue(ref _restoreKeyboardFocus, value);
+    }
+    bool _restoreKeyboardFocus;
+
+    [DataMember]
+    public int FocusRestoreDelay
+    {
+        get => _focusRestoreDelay;
+        set => SetUnsavedValue(ref _focusRestoreDelay, Math.Clamp(value, 0, 5000));
+    }
+    int _focusRestoreDelay = 120;
+
+    [DataMember]
+    public bool FocusRestoreOnMouseMove
+    {
+        get => _focusRestoreOnMouseMove;
+        set => SetUnsavedValue(ref _focusRestoreOnMouseMove, value);
+    }
+    bool _focusRestoreOnMouseMove = false;
+
+    [DataMember]
     public bool TouchAllDisplays
     {
         get => _touchAllDisplays;
@@ -312,6 +344,22 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
         set => SetUnsavedValue(ref _touchOverrideModifier, value ?? "");
     }
     string _touchOverrideModifier = "None";
+
+    [DataMember]
+    public string FocusKeepApps
+    {
+        get => _focusKeepApps;
+        set => SetUnsavedValue(ref _focusKeepApps, value ?? "");
+    }
+    string _focusKeepApps = "";
+
+    [DataMember]
+    public string FocusRestoreApps
+    {
+        get => _focusRestoreApps;
+        set => SetUnsavedValue(ref _focusRestoreApps, value ?? "");
+    }
+    string _focusRestoreApps = "";
 
     public ObservableCollection<string> ExcludedList { get; } = new();
 

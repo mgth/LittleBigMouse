@@ -633,13 +633,18 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         excluded: Option<&[String]>,
         load_at_startup: Option<bool>,
     ) -> Result<(), String> {
-        let layout = self.layout.as_mut().ok_or("no layout yet")?;
-        layout.edit_options(|o| {
+        let apply = |o: &mut LayoutOptions| {
             apply_global_options(o, options);
             if let Some(excluded) = excluded {
                 o.excluded_list = excluded.to_vec();
             }
-        });
+        };
+        // The hook runs the preview while there is one: it must see the options too.
+        if let Some(preview) = self.preview.as_mut() {
+            preview.edit_options(apply);
+        }
+        let layout = self.layout.as_mut().ok_or("no layout yet")?;
+        layout.edit_options(apply);
         // C# `UpdateSchedule`, after the options: StartElevated may come in the same
         // request. The option ends up as what the session will do; the rest is stored
         // whatever became of the autostart.

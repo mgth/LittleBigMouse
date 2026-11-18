@@ -17,18 +17,19 @@ pub fn is_pen(extra: usize) -> bool {
 /// when they are available. An override anywhere in a native burst cancels it.
 ///
 /// Promotion only speaks for its own gesture. The hook callback can overtake the
-/// queued `WM_INPUT` of the same tap, so a promotion is paired with one raw contact,
-/// before or after it, and the next contact starts a gesture of its own.
+/// queued `WM_INPUT` of the same tap, so each promoted button press is paired with
+/// one raw contact, before or after it. A contact left over once they are all
+/// paired starts a gesture of its own.
 #[derive(Clone, Copy, Default)]
 pub struct NativeTouchResume {
     saved: Option<(i32, i32)>,
     bypass: bool,
     promoted: bool,
     contact: bool,
-    /// A raw contact began and no promotion has claimed it yet.
+    /// A raw contact began and no promoted press has claimed it yet.
     unclaimed_contact: bool,
-    /// The current promotion has been paired with its raw contact.
-    promotion_paired: bool,
+    /// Promoted presses whose raw contact has not been reported yet.
+    awaited_contacts: u8,
 }
 
 impl NativeTouchResume {
@@ -39,7 +40,7 @@ impl NativeTouchResume {
             promoted: false,
             contact: false,
             unclaimed_contact: false,
-            promotion_paired: false,
+            awaited_contacts: 0,
         }
     }
 
@@ -65,20 +66,20 @@ impl NativeTouchResume {
     }
 
     fn begin_contact(&mut self) {
-        if self.promoted && !self.promotion_paired {
-            // The report of the tap that was already promoted, arriving late.
-            self.promotion_paired = true;
+        if self.awaited_contacts > 0 {
+            // The report of a tap already promoted, arriving late.
+            self.awaited_contacts -= 1;
         } else {
             self.promoted = false;
-            self.promotion_paired = false;
             self.unclaimed_contact = true;
         }
     }
 
-    pub fn promoted(&mut self) {
-        if !self.promoted {
-            self.promotion_paired = self.unclaimed_contact;
-            self.unclaimed_contact = false;
+    /// A promoted mouse message; `press` when it is the button press that opens
+    /// the gesture, as moves and releases can trail behind it.
+    pub fn promoted(&mut self, press: bool) {
+        if press && !std::mem::take(&mut self.unclaimed_contact) {
+            self.awaited_contacts = self.awaited_contacts.saturating_add(1);
         }
         self.promoted = true;
         self.saved = None;
@@ -219,7 +220,7 @@ mod tests {
             if raw_first {
                 state.observe(Some((10, 20)), true);
             }
-            state.promoted();
+            state.promoted(true);
             state.observe(Some((10, 20)), true);
             assert_eq!(state.target(true), None);
         }
@@ -231,9 +232,9 @@ mod tests {
         let mut state = NativeTouchResume::new();
         // Override tap in an app that gets promoted mouse messages...
         state.observe_contact(anchor, false, true);
-        state.promoted();
+        state.promoted(true);
         state.observe_contact(anchor, false, false);
-        state.promoted();
+        state.promoted(false);
         assert!(!state.pending());
         // ...then a plain tap in an app consuming native touch.
         state.observe_contact(anchor, true, true);
@@ -248,7 +249,7 @@ mod tests {
         let mut state = NativeTouchResume::new();
         state.observe_contact(anchor, true, true);
         state.observe_contact(anchor, true, false);
-        state.promoted();
+        state.promoted(true);
         assert!(!state.pending());
         state.observe_contact(anchor, true, true);
         state.observe_contact(anchor, true, false);
@@ -260,11 +261,49 @@ mod tests {
         // The hook callback can overtake the queued WM_INPUT of the same tap.
         let anchor = Some((10, 20));
         let mut state = NativeTouchResume::new();
-        state.promoted();
+        state.promoted(true);
         state.observe_contact(anchor, true, true);
         state.observe(anchor, true);
         state.observe_contact(anchor, true, false);
         assert!(!state.pending());
+        state.observe_contact(anchor, true, true);
+        state.observe_contact(anchor, true, false);
+        assert_eq!(state.target(true), anchor);
+    }
+
+    #[test]
+    fn a_second_promoted_tap_keeps_priority_over_its_late_contact() {
+        let anchor = Some((10, 20));
+        let mut state = NativeTouchResume::new();
+        // First tap: its raw contact is paired with its promotion.
+        state.observe_contact(anchor, true, true);
+        state.promoted(true);
+        state.observe_contact(anchor, true, false);
+        state.promoted(false);
+        // Second tap, with the override: mouse callbacks overtake its WM_INPUT.
+        state.promoted(true);
+        state.promoted(false);
+        // Finger and key are up by the time the raw reports are handled.
+        state.observe(anchor, true);
+        state.observe_contact(anchor, true, true);
+        state.observe(anchor, true);
+        state.observe_contact(anchor, true, false);
+        assert_eq!(state.target(true), None);
+    }
+
+    #[test]
+    fn two_taps_promoted_ahead_of_their_contacts_are_both_paired() {
+        let anchor = Some((10, 20));
+        let mut state = NativeTouchResume::new();
+        for _ in 0..2 {
+            state.promoted(true);
+            state.promoted(false);
+        }
+        for _ in 0..2 {
+            state.observe_contact(anchor, true, true);
+            state.observe_contact(anchor, true, false);
+            assert!(!state.pending());
+        }
         state.observe_contact(anchor, true, true);
         state.observe_contact(anchor, true, false);
         assert_eq!(state.target(true), anchor);

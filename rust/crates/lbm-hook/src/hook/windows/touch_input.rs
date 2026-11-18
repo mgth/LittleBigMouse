@@ -15,7 +15,6 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, LLMHF_INJECTED, MSLLHOOKSTRUCT, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_RBUTTONDOWN,
 };
 fn modifier_held(modifier: Modifier) -> bool {
     let held = |key: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY|
@@ -265,7 +264,7 @@ fn on_promoted_touch_with_policy(
     super::mouse::reset_movement();
     NATIVE.with(|cell| {
         let mut state = cell.get();
-        state.promoted(matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN), ms.time);
+        state.promoted(ms.time);
         cell.set(state);
     });
     let down = message == WM_LBUTTONDOWN;

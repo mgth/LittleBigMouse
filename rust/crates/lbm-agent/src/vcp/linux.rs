@@ -113,19 +113,19 @@ impl Service {
                 let (_, output, _) = self.output(&bus, args).await?;
                 let mut read = values(&output);
                 let actual = *read.get(&write.code).ok_or("The command was sent, but its value could not be read back. Refresh the monitor controls.")?;
+                // What could not be read back is unknown now, and showing its old value
+                // would make selecting that value again do nothing.
+                let before = state.features.len();
                 state.features = std::mem::take(&mut state.features)
                     .into_iter()
                     .filter_map(|f| {
                         if !codes.contains(&f.code) {
                             return Some(f);
                         }
-                        match read.remove(&f.code) {
-                            Some(reading) => feature(f.code, reading, f.choices),
-                            // A preset that did not answer after a gain change stays as is.
-                            None => (write.code != PRESET && f.code != write.code).then_some(f),
-                        }
+                        feature(f.code, read.remove(&f.code)?, f.choices)
                     })
                     .collect();
+                let lost = state.features.len() < before;
                 state.note = (actual.value != write.value).then(|| {
                     format!(
                         "The monitor returned {} for {} (requested {}).",
@@ -134,6 +134,10 @@ impl Service {
                         write.value
                     )
                 });
+                if lost && state.note.is_none() {
+                    state.note =
+                        Some("Some controls could not be read back. Refresh to show them.".into());
+                }
             }
             self.cached = Some((target, bus, state.clone()));
             return Ok(state);
@@ -266,7 +270,11 @@ fn feature(code: u8, reading: Reading, choices: Vec<Choice>) -> Option<Feature> 
             code,
             value: reading.value,
             minimum: vcp::VOLUME_LEVELS.0,
-            maximum: reading.maximum.min(vcp::VOLUME_LEVELS.1),
+            // MCCS defines the levels: a reply may well leave its maximum at zero.
+            maximum: match reading.maximum {
+                0 => vcp::VOLUME_LEVELS.1,
+                maximum => maximum.min(vcp::VOLUME_LEVELS.1),
+            },
             choices: vcp::volume_choices(),
         }
     } else {
@@ -555,6 +563,52 @@ mod tests {
         let volume = feature(vcp::VOLUME, plain, vec![]).unwrap();
         assert_eq!((volume.minimum, volume.maximum), (0, 100));
         assert!(volume.choices.is_empty());
+        // MCCS 2.2a gives the levels directly in SL, with no maximum in the reply.
+        let read = values("VCP 62 CNC x00 x00 x00 x20\n");
+        let volume = feature(vcp::VOLUME, read[&vcp::VOLUME], vec![]).unwrap();
+        assert_eq!((volume.value, volume.minimum, volume.maximum), (32, 1, 254));
+    }
+    #[tokio::test]
+    async fn a_preset_that_cannot_be_read_back_is_no_longer_shown_as_current() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        connector(dir.path(), "card0", 42);
+        let executable = dir.path().join("ddcutil-test");
+        let written = dir.path().join("written");
+        let script = format!(
+            r#"#!/bin/sh
+case "$1" in
+capabilities) printf 'Feature: 14 (Color Preset)\n Values:\n 05: sRGB\n 0b: User 1\nFeature: 16 (Red)\n';;
+getvcp) if [ -e '{0}' ]; then printf 'VCP 14 ERR\n'; else printf 'VCP 14 SNC x05\n'; fi
+        printf 'VCP 16 C 50 100\n';;
+setvcp) : > '{0}';;
+esac
+"#,
+            written.display()
+        );
+        std::fs::write(&executable, script).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut service = Service {
+            tool: executable,
+            drm: dir.path().into(),
+            ..Default::default()
+        };
+        let target = Target {
+            connector: "DP-1".into(),
+            serial: None,
+            model: None,
+        };
+        let state = service.execute(target.clone(), None).await.unwrap();
+        assert!(state.features.iter().any(|f| f.code == PRESET));
+        let write = Write {
+            token: state.token,
+            code: 0x16,
+            value: 50,
+        };
+        let state = service.execute(target, Some(write)).await.unwrap();
+        assert!(state.features.iter().all(|f| f.code != PRESET));
+        assert!(state.features.iter().any(|f| f.code == 0x16));
+        assert!(state.note.is_some());
     }
     #[tokio::test]
     async fn a_gain_change_also_reads_back_the_preset_it_may_have_left() {

@@ -17,6 +17,8 @@ pub struct Published {
     pub retained: bool,
 }
 pub struct Client {
+    /// The certificate of the device this connection reached.
+    pub fingerprint: String,
     writer: Writer,
     events: broadcast::Sender<Result<Published, String>>,
     reader: tokio::task::JoinHandle<()>,
@@ -42,8 +44,12 @@ impl Client {
         pass: &str,
         topics: &[String],
     ) -> Result<Self, String> {
-        let stream = network::tls(c, 36669, true).await?;
-        Self::open(Box::new(stream), id, user, pass, topics).await
+        let (stream, fingerprint) = network::tls(c, 36669, true).await?;
+        // The access token goes in MQTT CONNECT: check who is asking for it before.
+        network::trusted(c, &fingerprint)?;
+        let mut client = Self::open(Box::new(stream), id, user, pass, topics).await?;
+        client.fingerprint = fingerprint;
+        Ok(client)
     }
     async fn open(
         mut stream: Stream,
@@ -137,6 +143,7 @@ impl Client {
             }
         });
         Ok(Self {
+            fingerprint: String::new(),
             writer,
             events,
             reader,

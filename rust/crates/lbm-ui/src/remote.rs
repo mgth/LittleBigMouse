@@ -12,6 +12,7 @@ pub struct Panel {
     ip: String,
     mac: String,
     certificate: String,
+    controller: String,
     uuid: String,
     pin: String,
     sequence: String,
@@ -29,6 +30,7 @@ impl Default for Panel {
             ip: String::new(),
             mac: String::new(),
             certificate: String::new(),
+            controller: String::new(),
             uuid: String::new(),
             pin: String::new(),
             sequence: String::new(),
@@ -50,6 +52,7 @@ impl Panel {
         self.ip = c.ip_address.clone();
         self.mac = c.mac_address.clone();
         self.certificate = c.certificate_path.clone();
+        self.controller = c.controller_mac.clone();
         self.uuid = c.device_uuid.clone();
         self.sequence = c.r#macro.clone();
         self.setup = !c.paired;
@@ -162,9 +165,12 @@ impl Panel {
                             &mut self.certificate,
                             "Default certificate if left empty",
                         );
-                        if !c.controller_mac.is_empty() {
-                            ui.small(format!("Controller · {}", c.controller_mac));
-                        }
+                        field(
+                            ui,
+                            "Controller MAC · this computer",
+                            &mut self.controller,
+                            "Detected automatically on Linux",
+                        );
                     }
                     if ui.button("Save address").clicked() {
                         action = Some(Action::Save {
@@ -172,6 +178,7 @@ impl Panel {
                             mac_address: self.mac.clone(),
                             certificate_path: self.certificate.clone(),
                             device_uuid: self.uuid.clone(),
+                            controller_mac: self.controller.clone(),
                         });
                     }
                     if self.brand == Brand::Samsung {
@@ -184,18 +191,23 @@ impl Panel {
                         }
                         ui.weak("Accept LittleBigMouse on the Samsung screen.");
                     } else {
+                        // The agent talks to the saved display: the form must be showing it.
+                        let saved = !c.ip_address.is_empty() && self.ip.trim() == c.ip_address;
+                        if !saved {
+                            ui.weak("Save this address before pairing.");
+                        }
                         if ui
-                            .add_enabled(
-                                !c.ip_address.is_empty(),
-                                egui::Button::new("Request VIDAA PIN"),
-                            )
+                            .add_enabled(saved, egui::Button::new("Request VIDAA PIN"))
                             .clicked()
                         {
                             action = Some(Action::RequestPin);
                         }
                         field(ui, "PIN displayed on the screen", &mut self.pin, "4 digits");
                         if ui
-                            .add_enabled(self.pin.len() == 4, egui::Button::new("Pair VIDAA"))
+                            .add_enabled(
+                                saved && self.pin.len() == 4,
+                                egui::Button::new("Pair VIDAA"),
+                            )
                             .clicked()
                         {
                             action = Some(Action::Pair {

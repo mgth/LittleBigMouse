@@ -56,7 +56,7 @@ impl Service {
                     self.store.save(id, brand, c)?;
                     self.samsung.insert(id.into(), client);
                 } else {
-                    self.ensure_hisense(id, &c).await?;
+                    self.ensure_hisense(id, &mut c).await?;
                 }
                 state.note = Some("Remote connection established.".into());
             }
@@ -76,6 +76,7 @@ impl Service {
                 mac_address,
                 certificate_path,
                 device_uuid,
+                controller_mac,
             } => {
                 let ip = network::address(&ip_address)?.to_string();
                 let mac = if mac_address.trim().is_empty() {
@@ -91,13 +92,17 @@ impl Service {
                     c.legacy_authorized = false;
                     c.controller_mac_address.clear();
                     c.protocol_version = None;
+                    c.certificate_fingerprint.clear();
                 }
                 c.ip_address = ip;
                 c.mac_address = mac;
                 c.device_uuid = device_uuid;
                 if brand == Brand::Hisense {
                     c.client_certificate_path = self.certificate(&certificate_path)?;
-                    c.controller_mac_address = network::controller_mac(&c.ip_address).await?;
+                    c.controller_mac_address = network::chosen_controller(
+                        network::controller_mac(&c.ip_address).await,
+                        &controller_mac,
+                    )?;
                 }
                 self.store.save(id, brand, c)?;
                 self.samsung.remove(id);
@@ -109,20 +114,21 @@ impl Service {
                 mac_address,
                 pin,
             } if brand == Brand::Samsung => {
-                let ip = network::address(&ip_address)?.to_string();
-                if c.ip_address != ip {
-                    c.token.clear();
-                }
-                c.ip_address = ip;
-                let (device, _, _) = network::probe(&c.ip_address, brand).await?;
-                c.name = device.name;
-                c.mac_address = if device.mac_address.is_empty() {
+                // A new pairing on its own copy: without the token the TV may have revoked,
+                // and the saved association stays until this one is accepted.
+                let mut paired = c.clone();
+                paired.token.clear();
+                paired.certificate_fingerprint.clear();
+                paired.ip_address = network::address(&ip_address)?.to_string();
+                let (device, _, _) = network::probe(&paired.ip_address, brand).await?;
+                paired.name = device.name;
+                paired.mac_address = if device.mac_address.is_empty() {
                     mac_address
                 } else {
                     device.mac_address
                 };
-                let client = samsung::Client::connect(&mut c).await?;
-                self.store.save(id, brand, c)?;
+                let client = samsung::Client::connect(&mut paired).await?;
+                self.store.save(id, brand, paired)?;
                 self.samsung.insert(id.into(), client);
                 state.note = Some("Samsung paired with this monitor.".into());
                 let _ = pin;
@@ -132,6 +138,12 @@ impl Service {
                     return Err("This remote does not use a PIN.".into());
                 }
                 network::address(&c.ip_address)?;
+                // The PIN belongs to the display the form shows, which must be the saved one.
+                if let Action::Pair { ip_address, .. } = &command.action {
+                    if network::address(ip_address)?.to_string() != c.ip_address {
+                        return Err("Save this address before pairing it.".into());
+                    }
+                }
                 c.client_certificate_path = self.certificate(&c.client_certificate_path)?;
                 let request = matches!(command.action, Action::RequestPin);
                 if request || !self.hisense.get(id).is_some_and(|client| client.alive()) {
@@ -187,7 +199,7 @@ impl Service {
                 if brand != Brand::Hisense {
                     return Err("This command requires a VIDAA device.".into());
                 }
-                self.ensure_hisense(id, &c).await?;
+                self.ensure_hisense(id, &mut c).await?;
                 hisense::command(self.hisense.get(id).unwrap(), &c, action, &mut state).await?;
             }
         }
@@ -196,9 +208,14 @@ impl Service {
         self.states.insert(state_key, state.clone());
         Ok(state)
     }
-    async fn ensure_hisense(&mut self, id: &str, c: &Saved) -> Result<(), String> {
+    async fn ensure_hisense(&mut self, id: &str, c: &mut Saved) -> Result<(), String> {
         if !self.hisense.get(id).is_some_and(|client| client.alive()) {
             let client = hisense::reopen(c).await?;
+            // An association older than this check learns its device here.
+            if c.certificate_fingerprint != client.fingerprint {
+                c.certificate_fingerprint = client.fingerprint.clone();
+                self.store.save(id, Brand::Hisense, c.clone())?;
+            }
             self.hisense.insert(id.into(), client);
         }
         Ok(())
@@ -297,6 +314,56 @@ fn sequence_steps(sequence: &str) -> Result<Vec<(String, Duration)>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn service_with(brand: Brand, saved: Saved) -> (tempfile::TempDir, Service) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut service = Service::new(dir.path().into());
+        service.store.save("screen", brand, saved).unwrap();
+        (dir, service)
+    }
+    #[tokio::test]
+    async fn a_vidaa_pin_only_goes_to_the_saved_display() {
+        let (_dir, mut service) = service_with(
+            Brand::Hisense,
+            Saved {
+                ip_address: "192.0.2.1".into(),
+                ..Default::default()
+            },
+        );
+        let command = Command {
+            brand: Brand::Hisense,
+            action: Action::Pair {
+                ip_address: "192.0.2.2".into(),
+                mac_address: String::new(),
+                pin: "1234".into(),
+            },
+        };
+        let error = service.inner("screen", command).await.err().unwrap();
+        assert!(error.contains("Save this address"), "{error}");
+    }
+    #[tokio::test]
+    async fn a_failed_samsung_pairing_keeps_the_saved_association() {
+        let saved = Saved {
+            ip_address: "192.0.2.1".into(),
+            token: "still-valid".into(),
+            certificate_fingerprint: "known".into(),
+            ..Default::default()
+        };
+        let (_dir, mut service) = service_with(Brand::Samsung, saved);
+        let command = Command {
+            brand: Brand::Samsung,
+            action: Action::Pair {
+                // Nothing listens on the loopback's Samsung port.
+                ip_address: "127.0.0.1".into(),
+                mac_address: String::new(),
+                pin: String::new(),
+            },
+        };
+        assert!(service.inner("screen", command).await.is_err());
+        let kept = service.store.get("screen", Brand::Samsung).unwrap();
+        assert_eq!(kept.ip_address, "192.0.2.1");
+        assert_eq!(kept.token, "still-valid");
+        assert_eq!(kept.certificate_fingerprint, "known");
+    }
     #[test]
     fn macros_are_bounded_and_preserve_per_key_delays() {
         let steps = sequence_steps("KEY_MENU,700,KEY_DOWN,KEY_ENTER").unwrap();

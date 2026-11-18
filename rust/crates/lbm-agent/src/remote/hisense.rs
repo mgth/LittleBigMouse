@@ -68,6 +68,9 @@ pub async fn reopen(c: &Saved) -> Result<Client, String> {
     Client::connect(c, &id, &user, &pass, &topics(&c.client_id, legacy(c))).await
 }
 pub async fn begin(c: &mut Saved, request_pin: bool) -> Result<Client, String> {
+    // Pairing starts over with credentials derived on the spot, none of them a stored
+    // secret, and this is where the user says that this device is the right one.
+    c.certificate_fingerprint.clear();
     if c.controller_mac_address.is_empty() {
         c.controller_mac_address = network::controller_mac(&c.ip_address).await?;
     }
@@ -133,6 +136,7 @@ pub async fn begin(c: &mut Saved, request_pin: bool) -> Result<Client, String> {
         }
         found.ok_or("VIDAA rejected the authentication variants. Check its date, time and pairing settings.")?
     };
+    c.certificate_fingerprint = client.fingerprint.clone();
     if request_pin {
         let action = if legacy(c) {
             "gettvstate"

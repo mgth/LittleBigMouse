@@ -1,5 +1,6 @@
 use super::store::Saved;
 use lbm_ipc::remote::{Brand, Device};
+use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, net::Ipv4Addr, time::Duration};
 use tokio::net::{TcpStream, UdpSocket};
 
@@ -23,11 +24,32 @@ pub fn mac(value: &str) -> Result<String, String> {
         .collect::<Vec<_>>()
         .join(":"))
 }
+/// Whether the device presenting `fingerprint` may receive this association's secrets.
+/// Devices have self-signed certificates, so the first one seen is the one remembered.
+pub fn trusted(c: &Saved, fingerprint: &str) -> Result<(), String> {
+    if c.certificate_fingerprint.is_empty() || c.certificate_fingerprint == fingerprint {
+        Ok(())
+    } else {
+        Err(format!(
+            "The device at {} is not the one that was paired: its certificate changed. Pair it again if you trust it.",
+            c.ip_address
+        ))
+    }
+}
+fn fingerprint(certificate: &native_tls::Certificate) -> Result<String, String> {
+    let der = certificate.to_der().map_err(|e| e.to_string())?;
+    Ok(Sha256::digest(der)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+/// A connection to the device, with the fingerprint of the certificate it presented.
+/// Nothing has been sent yet: the caller checks [`trusted`] first.
 pub async fn tls(
     c: &Saved,
     port: u16,
     hisense: bool,
-) -> Result<tokio_native_tls::TlsStream<TcpStream>, String> {
+) -> Result<(tokio_native_tls::TlsStream<TcpStream>, String), String> {
     let ip = address(&c.ip_address)?;
     let mut builder = native_tls::TlsConnector::builder();
     // Only an explicit device IPv4 endpoint uses its self-signed certificate.
@@ -62,13 +84,20 @@ pub async fn tls(
             )
         })?
         .map_err(|e| format!("Cannot reach {ip}:{port}: {e}"))?;
-    tokio::time::timeout(
+    let stream = tokio::time::timeout(
         Duration::from_secs(10),
         connector.connect(&ip.to_string(), socket),
     )
     .await
     .map_err(|_| "The remote TLS handshake timed out.".to_string())?
-    .map_err(|e| format!("Remote TLS connection: {e}"))
+    .map_err(|e| format!("Remote TLS connection: {e}"))?;
+    let certificate = stream
+        .get_ref()
+        .peer_certificate()
+        .map_err(|e| e.to_string())?
+        .ok_or("The remote device presented no certificate.")?;
+    let fingerprint = fingerprint(&certificate)?;
+    Ok((stream, fingerprint))
 }
 async fn http(ip: Ipv4Addr, port: u16, path: &str) -> Result<String, String> {
     let client = reqwest::Client::builder()
@@ -140,7 +169,7 @@ pub async fn probe(ip: &str, brand: Brand) -> Result<(Device, Option<u32>, Strin
             if get("vidaa_support") != "1" && get("transport_protocol").is_empty() {
                 continue;
             }
-            let hardware_mac = ["mac", "macwifi", "wifi_mac", "macaddress"]
+            let hardware_mac = ["mac", "macwifi", "wifi_mac", "macaddress", "macethernet"]
                 .into_iter()
                 .map(get)
                 .find(|s| !s.is_empty())
@@ -231,7 +260,51 @@ pub async fn controller_mac(ip: &str) -> Result<String, String> {
             .trim(),
     )
 }
+/// This computer's MAC: detected when possible, else the one the user gave.
+pub fn chosen_controller(detected: Result<String, String>, given: &str) -> Result<String, String> {
+    match detected {
+        Ok(detected) => Ok(detected),
+        Err(error) if given.trim().is_empty() => Err(error),
+        Err(_) => mac(given),
+    }
+}
 #[cfg(not(target_os = "linux"))]
 pub async fn controller_mac(_: &str) -> Result<String, String> {
     Err("Enter the controller MAC address to pair this VIDAA display.".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn secrets_only_go_to_the_certificate_seen_when_pairing() {
+        let mut saved = Saved {
+            ip_address: "192.168.1.20".into(),
+            ..Default::default()
+        };
+        assert!(trusted(&saved, "first").is_ok(), "nothing remembered yet");
+        saved.certificate_fingerprint = "first".into();
+        assert!(trusted(&saved, "first").is_ok());
+        assert!(trusted(&saved, "other")
+            .unwrap_err()
+            .contains("Pair it again"));
+    }
+    #[test]
+    fn a_detected_controller_wins_and_the_given_one_is_the_fallback() {
+        let detected = || Ok("AA:AA:AA:AA:AA:AA".to_owned());
+        let missing = || Err("cannot detect".to_owned());
+        assert_eq!(
+            chosen_controller(detected(), "bb-bb-bb-bb-bb-bb").unwrap(),
+            "AA:AA:AA:AA:AA:AA"
+        );
+        assert_eq!(
+            chosen_controller(missing(), "bb-bb-bb-bb-bb-bb").unwrap(),
+            "BB:BB:BB:BB:BB:BB"
+        );
+        assert_eq!(
+            chosen_controller(missing(), " ").unwrap_err(),
+            "cannot detect"
+        );
+        assert!(chosen_controller(missing(), "nonsense").is_err());
+    }
 }

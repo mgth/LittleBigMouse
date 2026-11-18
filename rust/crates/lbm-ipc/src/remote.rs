@@ -25,6 +25,9 @@ pub enum Action {
         mac_address: String,
         certificate_path: String,
         device_uuid: String,
+        /// This computer's MAC, where the agent cannot detect it.
+        #[serde(default)]
+        controller_mac: String,
     },
     Pair {
         ip_address: String,

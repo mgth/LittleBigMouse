@@ -33,6 +33,9 @@ pub struct Saved {
     pub access_token: String,
     pub refresh_token: String,
     pub legacy_authorized: bool,
+    /// SHA-256 of the device's certificate, remembered so that its secrets only ever go
+    /// back to the same device.
+    pub certificate_fingerprint: String,
 }
 impl Saved {
     pub fn public(&self, brand: Brand) -> Config {
@@ -163,7 +166,12 @@ impl Store {
         if !text.starts_with("LBM1.") {
             return Ok(text.into_bytes());
         }
-        let encoded = text.strip_prefix("LBM1.aesgcm.").ok_or("This pairing file uses an encryption format unavailable here. Pair this display again.")?;
+        if let Some(encoded) = text.strip_prefix("LBM1.dpapi.") {
+            return read_dpapi(encoded);
+        }
+        let encoded = text
+            .strip_prefix("LBM1.aesgcm.")
+            .ok_or(UNAVAILABLE_FORMAT)?;
         let bytes = STANDARD
             .decode(encoded.trim())
             .map_err(|_| "Invalid encrypted remote settings")?;
@@ -203,6 +211,44 @@ impl Store {
         Ok(key)
     }
 }
+const UNAVAILABLE_FORMAT: &str =
+    "This pairing file uses an encryption format unavailable here. Pair this display again.";
+
+#[cfg(windows)]
+fn read_dpapi(encoded: &str) -> Result<Vec<u8>, String> {
+    let protected = STANDARD
+        .decode(encoded.trim())
+        .map_err(|_| "Invalid encrypted remote settings")?;
+    unprotect(&protected)
+}
+#[cfg(not(windows))]
+fn read_dpapi(_: &str) -> Result<Vec<u8>, String> {
+    Err(UNAVAILABLE_FORMAT.into())
+}
+
+/// What the C# frontend wrote on Windows: DPAPI, for the current user.
+#[cfg(windows)]
+fn unprotect(protected: &[u8]) -> Result<Vec<u8>, String> {
+    use windows::Win32::{
+        Foundation::{LocalFree, HLOCAL},
+        Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB},
+    };
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: protected.len() as u32,
+        pbData: protected.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: `input` borrows `protected` for the call, and the buffer Windows allocates
+    // for `output` is copied, then released exactly once.
+    unsafe {
+        CryptUnprotectData(&input, None, None, None, None, 0, &mut output)
+            .map_err(|e| format!("Cannot decrypt the saved remote association: {e}"))?;
+        let plain = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
+        let _ = LocalFree(HLOCAL(output.pbData.cast()));
+        Ok(plain)
+    }
+}
+
 fn private_options() -> std::fs::OpenOptions {
     let mut o = std::fs::OpenOptions::new();
     o.write(true);
@@ -254,6 +300,39 @@ mod tests {
                 0o600
             );
         }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn an_association_protected_by_this_windows_user_is_imported() {
+        use windows::Win32::{
+            Foundation::{LocalFree, HLOCAL},
+            Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB},
+        };
+        let plain = br#"{"SAM1":{"IpAddress":"192.168.1.20","Token":"from-csharp"}}"#;
+        let input = CRYPT_INTEGER_BLOB {
+            cbData: plain.len() as u32,
+            pbData: plain.as_ptr() as *mut u8,
+        };
+        let mut output = CRYPT_INTEGER_BLOB::default();
+        // SAFETY: as in `unprotect`, with the output copied before it is released.
+        let protected = unsafe {
+            CryptProtectData(&input, None, None, None, None, 0, &mut output).unwrap();
+            let bytes = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
+            let _ = LocalFree(HLOCAL(output.pbData.cast()));
+            bytes
+        };
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("samsung-tizen.json"),
+            format!("LBM1.dpapi.{}", STANDARD.encode(protected)),
+        )
+        .unwrap();
+        let mut store = Store::new(dir.path().into());
+        assert_eq!(
+            store.get("SAM1", Brand::Samsung).unwrap().token,
+            "from-csharp"
+        );
+        assert!(store.warning.is_none());
     }
     #[test]
     fn unreadable_legacy_file_can_be_repaired_without_overwriting_it() {

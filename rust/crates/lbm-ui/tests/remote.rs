@@ -3,7 +3,7 @@ use egui_kittest::{
     kittest::{NodeT, Queryable},
     Harness,
 };
-use lbm_ipc::remote::{Action, Brand, Command, Config, State};
+use lbm_ipc::remote::{Action, Brand, Command, Config, Device, State};
 use lbm_ui::remote::{Did, Panel};
 struct TestState {
     panel: Panel,
@@ -85,6 +85,59 @@ fn unpaired_hisense_offers_pin_setup_and_disables_navigation() {
             action: Action::RequestPin
         })
     );
+}
+#[test]
+fn a_vidaa_pin_waits_until_the_selected_display_is_saved() {
+    let mut h = harness(Brand::Hisense, false, 300.);
+    h.state_mut().state.devices = vec![Device {
+        ip_address: "192.168.1.30".into(),
+        name: "Other TV".into(),
+        ..Default::default()
+    }];
+    h.run();
+    assert!(!h
+        .get_by_label("Request VIDAA PIN")
+        .accesskit_node()
+        .is_disabled());
+    h.get_by_label("Other TV · 192.168.1.30").click();
+    h.run();
+    assert!(h
+        .get_by_label("Request VIDAA PIN")
+        .accesskit_node()
+        .is_disabled());
+    h.get_by_label("Save address").click();
+    h.run();
+    assert!(matches!(
+        &h.state().commands.last().unwrap().action,
+        Action::Save { ip_address, .. } if ip_address == "192.168.1.30"
+    ));
+    h.state_mut().state.hisense.ip_address = "192.168.1.30".into();
+    h.run();
+    assert!(!h
+        .get_by_label("Request VIDAA PIN")
+        .accesskit_node()
+        .is_disabled());
+}
+#[test]
+fn the_controller_mac_can_be_given_when_it_cannot_be_detected() {
+    let mut h = harness(Brand::Hisense, false, 300.);
+    h.run();
+    let field = "Controller MAC · this computer";
+    let is_input =
+        |n: &egui_kittest::Node<'_>| n.accesskit_node().role() == egui::accesskit::Role::TextInput;
+    h.get_all_by_label(field).find(is_input).unwrap().focus();
+    h.run();
+    h.get_all_by_label(field)
+        .find(is_input)
+        .unwrap()
+        .type_text("11:22:33:44:55:66");
+    h.run();
+    h.get_by_label("Save address").click();
+    h.run();
+    assert!(matches!(
+        &h.state().commands.last().unwrap().action,
+        Action::Save { controller_mac, .. } if controller_mac == "11:22:33:44:55:66"
+    ));
 }
 #[test]
 #[cfg(not(windows))]

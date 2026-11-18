@@ -19,7 +19,10 @@ impl Client {
         !self.task.is_finished()
     }
     pub async fn connect(c: &mut Saved) -> Result<Self, String> {
-        let tls = network::tls(c, 8002, false).await?;
+        let (tls, fingerprint) = network::tls(c, 8002, false).await?;
+        // The token goes in the first request: check who is asking for it before.
+        network::trusted(c, &fingerprint)?;
+        c.certificate_fingerprint = fingerprint;
         Self::channel(c, tls).await
     }
     async fn channel(

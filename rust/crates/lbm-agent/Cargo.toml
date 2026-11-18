@@ -28,6 +28,7 @@ tokio = { workspace = true, features = ["io-util", "macros", "net", "process", "
 base64 = "0.22"
 aes-gcm = "0.10"
 md-5 = "0.10"
+sha2 = "0.11"
 getrandom = "0.3"
 native-tls = "0.2"
 tokio-native-tls = "0.3"
@@ -57,6 +58,7 @@ features = [
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
     "Win32_System_Com",
     "Win32_System_Console",
     "Win32_System_Diagnostics_ToolHelp",

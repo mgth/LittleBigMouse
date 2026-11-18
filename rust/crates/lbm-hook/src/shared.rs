@@ -47,6 +47,10 @@ pub struct Shared {
     /// The panic shortcut as the layout spells it (`Ctrl+Alt+Shift+M`). Read by the
     /// listener whenever it is asked to reconcile.
     pub rescue_shortcut: Mutex<String>,
+    /// The shortcut the hook last could not arm, until the wanted one is reconsidered.
+    /// Kept because the answer can come before anybody listens: the portal's arrives
+    /// while the hook is starting, and it is not asked again.
+    pub rescue_unavailable: Mutex<Option<String>>,
     /// How many times a `Load` has asked for the hook to come down. Taking it down
     /// tears the mouse, focus, desktop and display hooks apart and destroys the
     /// display window, so a `Load` that is immediately followed by a `Run` skips it —
@@ -95,6 +99,7 @@ impl Shared {
             rescue_tid: AtomicU32::new(0),
             rescue_registered: AtomicBool::new(false),
             rescue_shortcut: Mutex::new(crate::shortcut::DEFAULT.to_string()),
+            rescue_unavailable: Mutex::new(None),
             unhook_requests: AtomicU32::new(0),
             // C++ Hooker defaults, until a layout overrides them.
             priority: AtomicU8::new(Priority::Normal.as_u8()),
@@ -113,6 +118,18 @@ impl Shared {
         if let Some(server) = self.server.get() {
             server.broadcast(event);
         }
+    }
+
+    /// `shortcut` could not be armed: remembered for whoever connects later, and said
+    /// to whoever is listening now.
+    pub fn report_rescue_unavailable(&self, shortcut: &str) {
+        *self
+            .rescue_unavailable
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(shortcut.to_owned());
+        self.broadcast(&Event::ShortcutUnavailable {
+            shortcut: shortcut.to_owned(),
+        });
     }
 
     /// C++ `LittleBigMouseDaemon::Excluded` — is `path` covered by an exclusion

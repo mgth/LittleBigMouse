@@ -34,7 +34,6 @@ use futures::StreamExt;
 use tokio::sync::watch;
 
 use crate::shared::Shared;
-use lbm_ipc::protocol::Event;
 
 /// Our id for the one shortcut we bind. Also what the desktop lists it under.
 const ID: &str = "rescue";
@@ -144,9 +143,7 @@ async fn after_failure(
         // would only get the same one. Said every time, not once: saving a shortcut
         // clears the warning, and without this the window would then show a rescue
         // that no key can trigger.
-        shared.broadcast(&Event::ShortcutUnavailable {
-            shortcut: wanted.to_string(),
-        });
+        shared.report_rescue_unavailable(wanted);
         superseded(generation).await;
         return pause;
     }
@@ -222,9 +219,7 @@ async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::E
                     "[LittleBigMouse.Hook] rescue: registered with no key — give it one in \
                      the desktop's shortcut settings, under {DESCRIPTION:?}"
                 );
-                shared.broadcast(&Event::ShortcutUnavailable {
-                    shortcut: wanted.to_string(),
-                });
+                shared.report_rescue_unavailable(wanted);
             }
             trigger => eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}"),
         }
@@ -287,6 +282,7 @@ async fn listen(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lbm_ipc::protocol::Event;
 
     const PATIENCE: Duration = Duration::from_secs(5);
 

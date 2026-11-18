@@ -16,6 +16,8 @@
 	</ItemGroup>
 
   <ItemGroup>
+    <!-- SkiaSharp at the exact version Avalonia renders with. -->
+    <PackageReference Include="Avalonia.Skia" Version="12.1.1" />
   </ItemGroup>
 
 	<ItemGroup>

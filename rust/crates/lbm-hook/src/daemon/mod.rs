@@ -47,6 +47,16 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
             Command::Listen => {
                 server.set_listening(client_id);
                 send_state(server, Some(client_id), shared);
+                // Said once, possibly to nobody: the portal answers while the hook is
+                // starting, and is not asked again.
+                let unavailable = shared
+                    .rescue_unavailable
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .clone();
+                if let Some(shortcut) = unavailable {
+                    server.send_to(client_id, &Event::ShortcutUnavailable { shortcut });
+                }
             }
             Command::Run => run(shared),
             Command::Stop => {
@@ -476,6 +486,32 @@ mod tests {
 
         assert_eq!(shared.unhook_requests.load(Ordering::SeqCst), 1);
         assert!(!shared.want_hook.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn a_client_arriving_later_hears_the_shortcut_could_not_be_armed() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        shared.report_rescue_unavailable("Ctrl+Alt+F9");
+
+        let mut agent = crate::testing::Listening::to(shared).await;
+
+        assert_eq!(
+            agent.next("what was said before it came").await,
+            Event::ShortcutUnavailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn a_shortcut_reconsidered_is_no_longer_reported() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        shared.report_rescue_unavailable("Ctrl+Alt+F9");
+        hook::rescue_shortcut_changed(shared);
+
+        let mut agent = crate::testing::Listening::to(shared).await;
+
+        agent.stays_quiet().await;
     }
 
     #[test]

@@ -26,6 +26,11 @@
 # Build from here (`cargo build`, `cargo test`) or with
 # `--manifest-path rust/Cargo.toml` from the repository root; both pick up the
 # repository's .cargo/config.toml and rust-toolchain.toml.
+#
+# Cargo.lock holds `blocking` at 1.6.2 on purpose: from 1.7.0 an idle thread of its
+# pool never exits and wakes every 500 ms (smol-rs/blocking#83), in every process
+# using zbus. After a `cargo update`, put it back until that is fixed:
+# `cargo update -p blocking --precise 1.6.2`.
 
 [workspace]
 resolver = "2"

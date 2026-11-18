@@ -113,10 +113,7 @@ fn the_experimental_switch_is_there_only_while_vcp_is() {
     harness.get_by_label("Advanced").click();
     harness.run();
     harness
-        .get_by_role_and_label(
-            egui::accesskit::Role::CheckBox,
-            "Enable VCP monitor control",
-        )
+        .get_by_role_and_label(egui::accesskit::Role::CheckBox, "Enable Display Lab")
         .click();
     harness.run();
     assert!(options.borrow().vcp_control);

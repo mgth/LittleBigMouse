@@ -359,6 +359,44 @@ async fn a_frontend_sees_the_agent_and_drives_it() {
     .expect("the hook was told to quit");
 }
 
+/// The hook says it once, and usually with no window open: the state is what keeps it.
+#[tokio::test]
+async fn a_window_opened_later_learns_the_shortcut_could_not_be_armed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    tokio::spawn(async move {
+        let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut first = Frontend::connect(&api_endpoint).await;
+    first.ask(json!({ "Method": "Subscribe" })).await;
+    first.state(|s| s["HookConnected"] == true).await;
+    fake.broadcast(&Event::ShortcutUnavailable {
+        shortcut: "Ctrl+Alt+F9".to_string(),
+    });
+    first.hook("ShortcutUnavailable").await;
+
+    let mut later = Frontend::connect(&api_endpoint).await;
+    let state = later.ask(json!({ "Method": "Subscribe" })).await;
+    assert_eq!(state["Result"]["ShortcutUnavailable"], "Ctrl+Alt+F9");
+
+    // The user gave it a key: the windows already open are told, the next ones never hear
+    // of the warning.
+    fake.broadcast(&Event::ShortcutAvailable {
+        shortcut: "Ctrl+Alt+F9".to_string(),
+    });
+    later.state(|s| s["ShortcutUnavailable"].is_null()).await;
+    let mut last = Frontend::connect(&api_endpoint).await;
+    let state = last.ask(json!({ "Method": "Subscribe" })).await;
+    assert_eq!(state["Result"]["ShortcutUnavailable"], Value::Null);
+}
+
 #[tokio::test]
 async fn a_subscriber_hears_the_hook_and_what_it_saw() {
     let dir = tempfile::tempdir().unwrap();
@@ -1355,4 +1393,54 @@ async fn wallpaper_editor_reads_the_agents_store_and_rejects_stale_or_invalid_up
         .ask(json!({"Method":"WallpaperSettings","LayoutId":id,"LayoutRevision":revision}))
         .await;
     assert!(rejected["Error"].is_string());
+}
+
+#[tokio::test]
+async fn vcp_checks_the_current_layout_setting_and_monitor_before_hardware_access() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({"Method":"Snapshot"})).await["Result"].clone();
+    let id = state["LayoutId"].as_str().unwrap();
+    let revision = state["LayoutRevision"].as_u64().unwrap();
+    for write in [Value::Null, json!({"Token":1,"Code":16,"Value":40})] {
+        let mut request = json!({"Method":"Vcp", "LayoutId":id,"LayoutRevision":revision+1,"Monitor":"missing","Write":write});
+        let answer = frontend.ask(request.clone()).await;
+        assert!(
+            answer["Error"]
+                .as_str()
+                .unwrap()
+                .contains("displays changed"),
+            "{answer}"
+        );
+        request["LayoutRevision"] = json!(revision);
+        let answer = frontend.ask(request.clone()).await;
+        assert!(
+            answer["Error"].as_str().unwrap().contains("Enable VCP"),
+            "{answer}"
+        );
+    }
+    let answer = frontend
+        .ask(json!({"Method":"SaveOptions","Options":{"VcpControl":true}}))
+        .await;
+    assert!(answer.get("Error").is_none(), "{answer}");
+    let answer = frontend
+        .ask(json!({"Method":"Vcp", "LayoutId":id,"LayoutRevision":revision,"Monitor":"missing"}))
+        .await;
+    assert!(
+        answer["Error"]
+            .as_str()
+            .unwrap()
+            .contains("no longer connected"),
+        "{answer}"
+    );
 }

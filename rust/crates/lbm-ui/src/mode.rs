@@ -70,7 +70,7 @@ impl Mode {
             Mode::Location => "Location",
             Mode::Resistance => "Border resistance",
             Mode::Size => "Size",
-            Mode::Vcp => "Vcp control",
+            Mode::Vcp => "Display Lab",
             Mode::Wallpaper => "Wallpaper",
         }
     }
@@ -85,7 +85,7 @@ impl Mode {
                 "The parts of each border the mouse may cross, and the parts it may not."
             }
             Mode::Size => "The physical size of a screen and of its bezel.",
-            Mode::Vcp => "Brightness, contrast and colour, over DDC/CI.",
+            Mode::Vcp => "Monitor controls.",
             Mode::Wallpaper => "The desktop picture, per screen or spanned across them.",
         }
     }
@@ -117,7 +117,7 @@ pub fn why_not(mode: Mode, offered: &Offered) -> Option<&'static str> {
         // What the window can draw today.
         Mode::Default | Mode::Location | Mode::Size | Mode::Info => None,
         Mode::Vcp if !offered.vcp_enabled => {
-            Some("VCP control is off in the settings — turn it on to see this")
+            Some("Display Lab is off in the settings — turn it on to see this")
         }
         Mode::Wallpaper if !offered.wallpaper_supported => {
             Some("connect to the agent and load the layout to open the wallpaper editor")
@@ -125,7 +125,7 @@ pub fn why_not(mode: Mode, offered: &Offered) -> Option<&'static str> {
         // Ported, but not yet. Named one by one rather than through a catch-all, so
         // that porting one is a line to delete here and the compiler finds the rest.
         Mode::Resistance => None,
-        Mode::Vcp => Some("not ported yet: DDC/CI and the calibration plugin"),
+        Mode::Vcp => None,
         Mode::Wallpaper => None,
     }
 }
@@ -265,6 +265,6 @@ mod tests {
             vcp_enabled: true,
             ..nothing
         };
-        assert!(why_not(Mode::Vcp, &on).unwrap().contains("not ported"));
+        assert_eq!(why_not(Mode::Vcp, &on), None);
     }
 }

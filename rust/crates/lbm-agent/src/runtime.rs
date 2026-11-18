@@ -41,6 +41,7 @@ fn hook_event(message: Event) -> HookEvent {
         Event::LoadFailed => HookEvent::LoadFailed,
         Event::Rescued => HookEvent::Rescued,
         Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
+        Event::ShortcutAvailable { .. } => HookEvent::ShortcutAvailable,
         // The handshake never comes through here: the connection answers it and
         // reports what it learned as `HookSignal::Greeted`. An event this version does
         // not know is one it has nothing to do about.
@@ -72,6 +73,8 @@ pub struct Agent<W> {
     on_the_wire: Option<String>,
     /// The rescue shortcut the hook was last told (Windows).
     shortcut: Option<String>,
+    /// The shortcut the hook last said it could not arm, on this connection.
+    shortcut_unavailable: Option<String>,
     /// Whether the hook was last told it belongs to this agent; `None` on a fresh
     /// connection, so a hook that just adopted us is always told.
     bound: Option<bool>,
@@ -80,6 +83,7 @@ pub struct Agent<W> {
     /// Retire prepared work when a newer request or rebuilt layout replaces it.
     wallpaper_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
     wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
+    vcp: std::sync::Arc<tokio::sync::Mutex<crate::vcp::Service>>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -107,10 +111,12 @@ impl<W: AgentWorld> Agent<W> {
             sleep: None,
             on_the_wire: None,
             shortcut: None,
+            shortcut_unavailable: None,
             bound: None,
             excluded: None,
             wallpaper_generation: Default::default(),
             wallpaper_lock: Default::default(),
+            vcp: Default::default(),
         }
     }
 
@@ -158,6 +164,10 @@ impl<W: AgentWorld> Agent<W> {
             load_at_startup: self.world.app_options().map(|(startup, _)| startup),
             hide_tray_icon: self.world.app_options().map(|(_, hidden)| hidden),
             previewing: self.reconciler.previewing(),
+            shortcut_unavailable: unavailable_now(
+                self.shortcut_unavailable.as_deref(),
+                self.world.rescue_shortcut().as_deref(),
+            ),
         }
     }
 
@@ -283,6 +293,40 @@ impl<W: AgentWorld> Agent<W> {
                             });
                             return;
                         }
+                    }
+                }
+            }
+            Request::Vcp {
+                layout_id,
+                layout_revision,
+                monitor,
+                write,
+            } => {
+                let state = self.snapshot();
+                if state.layout_id.as_deref() != Some(&layout_id)
+                    || state.layout_revision != layout_revision
+                    || state.suspended
+                {
+                    Err("The displays changed or are suspended; reload before controlling the monitor.".into())
+                } else {
+                    match self.world.vcp_target(&monitor) {
+                        Err(error) => Err(error),
+                        Ok(target) => match self.vcp.clone().try_lock_owned() {
+                            Err(_) => Err(
+                                "A monitor request is already running. Try again when it finishes."
+                                    .into(),
+                            ),
+                            Ok(mut service) => {
+                                tokio::spawn(async move {
+                                    let result =
+                                        service.execute(target, write).await.and_then(|state| {
+                                            serde_json::to_value(state).map_err(|e| e.to_string())
+                                        });
+                                    client.send(api::answer(id, result));
+                                });
+                                return;
+                            }
+                        },
                     }
                 }
             }
@@ -671,6 +715,8 @@ impl<W: AgentWorld> Agent<W> {
             text: shortcut.clone(),
         }]));
         self.shortcut = Some(shortcut);
+        // The hook starts over on it, and says so only if it fails again.
+        self.shortcut_unavailable = None;
     }
 
     /// Forwards what the hook said to the subscribers (see [`api`]).
@@ -757,6 +803,8 @@ impl<W: AgentWorld> Agent<W> {
                         eprintln!("[lbm-agent] hook connected");
                         self.forward("Connected", "");
                         self.hook_connected = true;
+                        // A hook repeats this to whoever starts listening to it.
+                        self.shortcut_unavailable = None;
                         self.on_the_wire = None;
                         self.bound = None;
                         self.excluded = None;
@@ -780,6 +828,17 @@ impl<W: AgentWorld> Agent<W> {
                     Some(HookSignal::Message(message)) => {
                         // C#: EventTrace.
                         eprintln!("[lbm-agent] hook: {}", message.name());
+                        match &message {
+                            Event::ShortcutUnavailable { shortcut } => {
+                                self.shortcut_unavailable = Some(shortcut.clone());
+                            }
+                            Event::ShortcutAvailable { shortcut }
+                                if self.shortcut_unavailable.as_ref() == Some(shortcut) =>
+                            {
+                                self.shortcut_unavailable = None;
+                            }
+                            _ => {}
+                        }
                         self.forward(message.name(), &message.payload());
                         Input::Hook(hook_event(message))
                     }
@@ -788,6 +847,7 @@ impl<W: AgentWorld> Agent<W> {
                         eprintln!("[lbm-agent] hook connection lost");
                         self.forward("Dead", "");
                         self.hook_connected = false;
+                        self.shortcut_unavailable = None;
                         self.on_the_wire = None;
                         Input::Hook(HookEvent::Dead)
                     }
@@ -939,5 +999,45 @@ impl<W: AgentWorld> Agent<W> {
                 }
             }
         }
+    }
+}
+
+/// What the hook said about the shortcut, if it is about the one wanted now: a verdict on
+/// a combination since replaced says nothing of this one. With no layout yet, the hook is
+/// on its own and what it said stands. An empty option means the default, for the hook too.
+fn unavailable_now(said: Option<&str>, current: Option<&str>) -> Option<String> {
+    let said = said?;
+    let current = current.map(|text| {
+        if text.trim().is_empty() {
+            lbm_ipc::shortcut::DEFAULT
+        } else {
+            text
+        }
+    });
+    current
+        .is_none_or(|current| current == said)
+        .then(|| said.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unavailable_now;
+
+    #[test]
+    fn a_verdict_only_speaks_for_the_shortcut_it_was_about() {
+        let said = Some("Ctrl+Alt+F9");
+        assert_eq!(unavailable_now(said, Some("Ctrl+Alt+F9")).as_deref(), said);
+        assert_eq!(unavailable_now(said, Some("Ctrl+Alt+F8")), None);
+        assert_eq!(unavailable_now(said, None).as_deref(), said);
+        assert_eq!(unavailable_now(None, Some("Ctrl+Alt+F9")), None);
+    }
+
+    #[test]
+    fn an_empty_option_is_the_default_shortcut() {
+        let default = lbm_ipc::shortcut::DEFAULT;
+        assert_eq!(
+            unavailable_now(Some(default), Some("  ")).as_deref(),
+            Some(default)
+        );
     }
 }

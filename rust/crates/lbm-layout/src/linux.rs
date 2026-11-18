@@ -55,6 +55,27 @@ pub struct LinuxEdid {
     pub video_interface: Option<String>,
 }
 
+impl LinuxEdid {
+    /// What identifies this physical monitor: its serial string, else the binary serial.
+    pub fn monitor_serial(&self) -> Option<&str> {
+        non_empty(&self.serial_number).or(self.serial.as_deref())
+    }
+
+    /// The model's PnP code: manufacturer and product, when a manufacturer is known.
+    pub fn pnp_code(&self) -> Option<String> {
+        let manufacturer = non_empty(&self.manufacturer_code)?;
+        Some(format!(
+            "{manufacturer}{}",
+            self.product_code.as_deref().unwrap_or("")
+        ))
+    }
+}
+
+/// [`Monitor::serial_number`] of a monitor whose EDID could not be read.
+///
+/// [`Monitor::serial_number`]: crate::model::Monitor::serial_number
+pub const UNKNOWN_SERIAL: &str = "N/A";
+
 fn non_empty(s: &Option<String>) -> Option<&str> {
     s.as_deref().filter(|s| !s.is_empty())
 }
@@ -75,20 +96,11 @@ pub fn add_monitor(layout: &mut Layout, monitor: &LinuxMonitor) {
     let edid = monitor.edid.as_ref();
     let connector = monitor.connector_name.as_str();
     let manufacturer = edid.and_then(|e| non_empty(&e.manufacturer_code));
-    let pnp_code = match manufacturer {
-        Some(m) => format!(
-            "{m}{}",
-            edid.and_then(|e| e.product_code.as_deref()).unwrap_or("")
-        ),
-        None => connector.to_owned(),
-    };
+    let pnp_code = edid
+        .and_then(LinuxEdid::pnp_code)
+        .unwrap_or_else(|| connector.to_owned());
     let mut monitor_id = match edid {
-        Some(e) => format!(
-            "{pnp_code}_{}",
-            non_empty(&e.serial_number)
-                .or(e.serial.as_deref())
-                .unwrap_or("")
-        ),
+        Some(e) => format!("{pnp_code}_{}", e.monitor_serial().unwrap_or("")),
         None => connector.to_owned(),
     };
     if layout.monitors().iter().any(|m| m.id == monitor_id) {
@@ -128,9 +140,8 @@ pub fn add_monitor(layout: &mut Layout, monitor: &LinuxMonitor) {
     let mut physical_monitor = Monitor::new(monitor_id.clone(), &model);
     physical_monitor.device_id = Some(connector.to_owned());
     physical_monitor.serial_number = Some(
-        edid.and_then(|e| non_empty(&e.serial_number))
-            .or(edid.and_then(|e| e.serial.as_deref()))
-            .unwrap_or("N/A")
+        edid.and_then(LinuxEdid::monitor_serial)
+            .unwrap_or(UNKNOWN_SERIAL)
             .to_owned(),
     );
 

@@ -26,9 +26,13 @@ pub struct Shared {
     /// Set from the display-state power notification; deduplicates its repeated current-state
     /// pushes (the listener window — and its registration — is recreated every hook/unhook cycle).
     pub suspended: AtomicBool,
-    /// Exit requested (`Quit`). The Linux event loops poll this; the Windows pump
+    /// Exit requested (`Quit`). The Linux event loops read this; the Windows pump
     /// exits through WM_QUIT instead and never reads it.
     pub want_quit: AtomicBool,
+    /// Signalled after `want_hook` or `want_quit` is requested, for a Linux backend
+    /// with nothing else to wait on (the Windows pump has `WM_BREAK_LOOP`).
+    #[cfg(target_os = "linux")]
+    pub wake: crate::hook::linux::wake::Wake,
     /// Thread id of the message pump, for `PostThreadMessageW`
     /// (C++ `Hooker::_currentThreadId`). Zero until the pump starts.
     pub pump_tid: AtomicU32,
@@ -49,6 +53,10 @@ pub struct Shared {
     pub touch_policy: Mutex<std::sync::Arc<crate::hook::touch_policy::TouchPolicy>>,
     /// Invalidates saved touch positions on every layout reload.
     pub touch_generation: AtomicU32,
+    /// The shortcut the hook last could not arm, until the wanted one is reconsidered.
+    /// Kept because the answer can come before anybody listens: the portal's arrives
+    /// while the hook is starting, and it is not asked again.
+    pub rescue_unavailable: Mutex<Option<String>>,
     /// How many times a `Load` has asked for the hook to come down. Taking it down
     /// tears the mouse, focus, desktop and display hooks apart and destroys the
     /// display window, so a `Load` that is immediately followed by a `Run` skips it —
@@ -100,6 +108,8 @@ impl Shared {
             paused: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             want_quit: AtomicBool::new(false),
+            #[cfg(target_os = "linux")]
+            wake: crate::hook::linux::wake::Wake::new(),
             pump_tid: AtomicU32::new(0),
             rescue_tid: AtomicU32::new(0),
             rescue_registered: AtomicBool::new(false),
@@ -108,6 +118,7 @@ impl Shared {
             touch_policy: Mutex::new(std::sync::Arc::new(Default::default())),
             touch_generation: AtomicU32::new(0),
             rescue_shortcut: Mutex::new(crate::shortcut::DEFAULT.to_string()),
+            rescue_unavailable: Mutex::new(None),
             unhook_requests: AtomicU32::new(0),
             // C++ Hooker defaults, until a layout overrides them.
             priority: AtomicU8::new(Priority::Normal.as_u8()),
@@ -126,6 +137,31 @@ impl Shared {
         if let Some(server) = self.server.get() {
             server.broadcast(event);
         }
+    }
+
+    /// `shortcut` could not be armed: remembered for whoever connects later, and said
+    /// to whoever is listening now.
+    pub fn report_rescue_unavailable(&self, shortcut: &str) {
+        *self
+            .rescue_unavailable
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(shortcut.to_owned());
+        self.broadcast(&Event::ShortcutUnavailable {
+            shortcut: shortcut.to_owned(),
+        });
+    }
+
+    /// `shortcut` is armed: nothing is left to repeat, and whoever kept the warning hears
+    /// that it no longer holds. Said on every success and not only after a failure here:
+    /// the agent may still hold a verdict this hook has already forgotten.
+    pub fn report_rescue_available(&self, shortcut: &str) {
+        *self
+            .rescue_unavailable
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = None;
+        self.broadcast(&Event::ShortcutAvailable {
+            shortcut: shortcut.to_owned(),
+        });
     }
 
     /// C++ `LittleBigMouseDaemon::Excluded` — is `path` covered by an exclusion

@@ -2,6 +2,7 @@ using Avalonia.Input;
 using LittleBigMouse.Plugins.Localization;
 using LittleBigMouse.Ui.Avalonia.Controls;
 using LittleBigMouse.Ui.Avalonia.Options;
+using LittleBigMouse.Ui.Avalonia.Remote;
 using Xunit;
 
 namespace LittleBigMouse.Ui.Avalonia.Tests;
@@ -202,5 +203,18 @@ public sealed class ShortcutBoxTests
             Assert.Contains("already taken", message);
         else
             Assert.Contains("shortcut settings", message);
+    }
+
+    [Fact]
+    public void The_agents_state_gives_a_window_opened_later_the_warning()
+    {
+        var english = new LbmLocalizer();
+        english.SetLanguage(LbmLocalizer.DefaultLanguage);
+        var state = new AgentState("0.1.0", true, "Stopped", false, null, null, null, null, null, false);
+
+        Assert.Equal("", LbmOptionsViewModel.ShortcutWarningFor(null, english));
+        Assert.Equal("", LbmOptionsViewModel.ShortcutWarningFor(state, english));
+        Assert.Contains("Ctrl+Alt+F9", LbmOptionsViewModel.ShortcutWarningFor(
+            state with { ShortcutUnavailable = "Ctrl+Alt+F9" }, english));
     }
 }

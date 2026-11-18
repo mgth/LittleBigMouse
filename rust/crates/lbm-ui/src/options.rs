@@ -601,12 +601,12 @@ pub fn panel(
                     &mut options.priority_unhooked,
                 );
             });
-            group(ui, "Monitor control", |ui| {
+            group(ui, "Display Lab", |ui| {
                 what.app |= toggle(
                     ui,
                     Icon::Vcp,
-                    "Enable VCP monitor control",
-                    "Brightness, contrast and colour over DDC/CI",
+                    "Enable Display Lab",
+                    "Monitor controls",
                     &mut options.vcp_control,
                 );
                 if options.vcp_control {

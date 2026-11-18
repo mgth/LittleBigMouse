@@ -16,3 +16,5 @@ pub mod screen_input;
 pub mod session;
 pub mod settings;
 pub mod wallpaper_editor;
+
+pub mod vcp;

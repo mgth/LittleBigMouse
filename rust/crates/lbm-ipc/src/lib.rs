@@ -14,3 +14,5 @@ pub mod instance;
 pub mod probe;
 pub mod protocol;
 pub mod shortcut;
+
+pub mod vcp;

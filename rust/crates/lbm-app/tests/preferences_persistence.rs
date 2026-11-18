@@ -74,7 +74,7 @@ fn display_lab_survives_stale_layout_saves_unrelated_settings_and_restart() {
     save_options(&mut agent, &defaults, &current);
     assert!(enabled(dir.path(), &stale.id));
 
-    // Another window had VCP control disabled when it opened, then moved a monitor.
+    // Another window had Display Lab disabled when it opened, then moved a monitor.
     let monitor = stale.monitors()[0].id.clone();
     stale.set_location(&monitor, lbm_layout::geo::Point::new(123., 45.));
     let Request::SaveLayout {
@@ -88,7 +88,7 @@ fn display_lab_survives_stale_layout_saves_unrelated_settings_and_restart() {
     agent.save_layout().unwrap();
     assert!(
         enabled(dir.path(), &stale.id),
-        "a layout save overwrote VCP control"
+        "a layout save overwrote Display Lab"
     );
 
     // The same stale window changes a different preference.
@@ -97,14 +97,14 @@ fn display_lab_survives_stale_layout_saves_unrelated_settings_and_restart() {
     save_options(&mut agent, &defaults, &unrelated);
     assert!(
         enabled(dir.path(), &stale.id),
-        "an unrelated preference overwrote VCP control"
+        "an unrelated preference overwrote Display Lab"
     );
     drop(agent);
     let mut restarted = world(dir.path());
     restarted.save_layout().unwrap();
     assert!(
         enabled(dir.path(), &stale.id),
-        "VCP control was lost on restart"
+        "Display Lab was lost on restart"
     );
 
     // Intentional disabling must still persist, rather than being forced on.

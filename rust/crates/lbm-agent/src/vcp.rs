@@ -23,7 +23,11 @@ pub fn target(layout: &Layout, monitor: &str) -> Result<Target, String> {
             .device_id
             .clone()
             .ok_or("This monitor has no hardware connector.")?,
-        serial: m.serial_number.clone().filter(|s| !s.is_empty()),
+        // Without an EDID the layout knows no serial, so there is nothing to compare.
+        serial: m
+            .serial_number
+            .clone()
+            .filter(|s| !s.is_empty() && s != lbm_layout::linux::UNKNOWN_SERIAL),
     })
 }
 

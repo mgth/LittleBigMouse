@@ -235,27 +235,12 @@ fn diagnostic(stderr: &str, stdout: &str) -> String {
     }
 }
 
-fn serials(edid: &[u8]) -> Vec<String> {
-    if edid.len() < 128 {
-        return vec![];
-    }
-    let mut result = vec![];
-    let numeric = u32::from_le_bytes(edid[12..16].try_into().unwrap());
-    if numeric != 0 {
-        result.push(numeric.to_string());
-        result.push(format!("{numeric:08X}"));
-    }
-    for offset in [54, 72, 90, 108] {
-        let d = &edid[offset..offset + 18];
-        if d[..4] == [0, 0, 0, 0xff] {
-            result.push(
-                String::from_utf8_lossy(&d[5..18])
-                    .trim_matches(['\0', '\n', '\r', ' '])
-                    .to_string(),
-            );
-        }
-    }
-    result
+/// The serial the layout gives this EDID: both sides must read it the same way.
+fn serial(edid: &[u8]) -> Option<String> {
+    lbm_display::edid::parse("", edid)
+        .to_linux()
+        .monitor_serial()
+        .map(str::to_owned)
 }
 fn find_bus(root: &Path, target: &Target) -> Result<Bus, String> {
     let mut found = vec![];
@@ -313,8 +298,8 @@ fn find_bus(root: &Path, target: &Target) -> Result<Bus, String> {
     }
     // Match the EDID serial even when only one connector remains: a monitor can
     // have been unplugged and replaced while the UI still holds the old layout.
-    if let Some(serial) = &target.serial {
-        found.retain(|b| serials(&b.edid).contains(serial));
+    if let Some(expected) = &target.serial {
+        found.retain(|b| serial(&b.edid).as_ref() == Some(expected));
     }
     if found.len() != 1 {
         return Err(format!("Cannot uniquely identify the DDC/CI adapter for {}. Refresh the display layout and check that the monitor is connected.", target.connector));
@@ -424,13 +409,60 @@ mod tests {
         assert_eq!(read[&0x6c], (25, 50));
         assert!(!read.contains_key(&0x12));
     }
-    fn connector(root: &Path, card: &str, serial: u32) {
+    fn edid(serial: u32) -> Vec<u8> {
+        let mut edid = vec![0; 128];
+        edid[12..16].copy_from_slice(&serial.to_le_bytes());
+        edid
+    }
+    fn connector_with(root: &Path, card: &str, edid: &[u8]) {
         let p = root.join(format!("{card}-DP-1"));
         std::fs::create_dir_all(p.join("i2c-9")).unwrap();
         std::fs::write(p.join("status"), "connected\n").unwrap();
-        let mut edid = vec![0; 128];
-        edid[12..16].copy_from_slice(&serial.to_le_bytes());
         std::fs::write(p.join("edid"), edid).unwrap();
+    }
+    fn connector(root: &Path, card: &str, serial: u32) {
+        connector_with(root, card, &edid(serial));
+    }
+    /// The target of a monitor detected with this EDID, through the real layout.
+    fn target_of(edid: Option<&[u8]>) -> Target {
+        let mut layout = lbm_layout::model::Layout::new(lbm_layout::model::LayoutOptions {
+            vcp_control: true,
+            ..Default::default()
+        });
+        lbm_layout::linux::add_monitor(
+            &mut layout,
+            &lbm_layout::linux::LinuxMonitor {
+                connector_name: "DP-1".into(),
+                edid: edid.map(|e| lbm_display::edid::parse("DP-1", e).to_linux()),
+                ..lbm_layout::linux::LinuxMonitor::fallback()
+            },
+        );
+        let id = layout.monitors()[0].id.clone();
+        crate::vcp::target(&layout, &id).unwrap()
+    }
+    #[test]
+    fn the_bus_is_matched_with_the_serial_the_layout_read_from_the_same_edid() {
+        let mut spaced = edid(0);
+        spaced[54..58].copy_from_slice(&[0, 0, 0, 0xff]);
+        spaced[59..69].copy_from_slice(b"ABC123   \n");
+        for bytes in [edid(42), edid(0), spaced] {
+            let root = tempfile::tempdir().unwrap();
+            connector_with(root.path(), "card0", &bytes);
+            let target = target_of(Some(&bytes));
+            assert_eq!(find_bus(root.path(), &target).unwrap().number, 9);
+            // The same connector with another monitor behind it is refused.
+            let root = tempfile::tempdir().unwrap();
+            connector(root.path(), "card0", 7);
+            assert!(find_bus(root.path(), &target).is_err(), "{target:?}");
+        }
+    }
+    #[test]
+    fn a_monitor_detected_without_an_edid_has_no_serial_to_compare() {
+        let target = target_of(None);
+        assert_eq!(target.serial, None);
+        let root = tempfile::tempdir().unwrap();
+        connector(root.path(), "card0", 42);
+        assert_eq!(find_bus(root.path(), &target).unwrap().number, 9);
     }
     #[test]
     fn duplicate_connectors_and_replaced_monitors_cannot_pick_an_arbitrary_bus() {
@@ -438,15 +470,15 @@ mod tests {
         connector(root.path(), "card0", 42);
         let mut target = Target {
             connector: "DP-1".into(),
-            serial: Some("43".into()),
+            serial: Some("0000002B".into()),
         };
         assert!(find_bus(root.path(), &target).is_err());
-        target.serial = Some("42".into());
+        target.serial = Some("0000002A".into());
         assert_eq!(find_bus(root.path(), &target).unwrap().number, 9);
         connector(root.path(), "card1", 43);
         target.serial = None;
         assert!(find_bus(root.path(), &target).is_err());
-        target.serial = Some("43".into());
+        target.serial = Some("0000002B".into());
         assert!(find_bus(root.path(), &target)
             .unwrap()
             .path
@@ -483,7 +515,7 @@ esac
         };
         let target = Target {
             connector: "DP-1".into(),
-            serial: Some("42".into()),
+            serial: Some("0000002A".into()),
         };
         let state = service.execute(target.clone(), None).await.unwrap();
         assert_eq!(state.features[0].maximum, 80);

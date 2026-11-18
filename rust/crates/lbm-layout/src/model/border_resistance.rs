@@ -157,20 +157,37 @@ impl BorderSection {
     pub fn set_to(&mut self, value: f64) -> bool {
         set_if_changed(&mut self.to, max(0.0, value))
     }
+    /// A new value is only used in `Custom`, so it takes an inheriting or free channel
+    /// there. Editors write every field back: an unchanged one leaves the mode alone.
     pub fn set_move_resistance(&mut self, value: f64) -> bool {
-        set_if_changed(&mut self.move_resistance, max(0.0, value))
+        let changed = set_if_changed(&mut self.move_resistance, max(0.0, value));
+        if changed {
+            self.move_mode = mode_after_new_value(self.move_mode);
+        }
+        changed
     }
+    /// A changed switch replaces the stored mode, which the older fields then imply.
     pub fn set_move_block(&mut self, value: bool) -> bool {
-        let changed = self.move_mode.take().is_some() || self.move_block != value;
-        self.move_block = value;
+        let changed = self.move_block != value;
+        if changed {
+            self.move_mode = None;
+            self.move_block = value;
+        }
         changed
     }
     pub fn set_drag(&mut self, value: f64) -> bool {
-        set_if_changed(&mut self.drag, max(0.0, value))
+        let changed = set_if_changed(&mut self.drag, max(0.0, value));
+        if changed {
+            self.drag_mode = mode_after_new_value(self.drag_mode);
+        }
+        changed
     }
     pub fn set_drag_block(&mut self, value: bool) -> bool {
-        let changed = self.drag_mode.take().is_some() || self.drag_block != value;
-        self.drag_block = value;
+        let changed = self.drag_block != value;
+        if changed {
+            self.drag_mode = None;
+            self.drag_block = value;
+        }
         changed
     }
 
@@ -191,6 +208,13 @@ impl BorderSection {
         s.set_drag(drag);
         s.set_drag_block(drag_block);
         s
+    }
+}
+
+fn mode_after_new_value(mode: Option<ResistanceMode>) -> Option<ResistanceMode> {
+    match mode {
+        Some(ResistanceMode::Resist | ResistanceMode::Free) => Some(ResistanceMode::Custom),
+        other => other,
     }
 }
 

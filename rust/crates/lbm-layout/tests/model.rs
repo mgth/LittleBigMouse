@@ -252,3 +252,29 @@ fn modes_resolve_at_use_and_never_overwrite_the_custom_value() {
     assert_eq!(section.stored_move_mode(), None);
     assert_eq!(section.move_mode(), ResistanceMode::Block);
 }
+
+#[test]
+fn only_a_real_change_of_a_channel_touches_its_stored_mode() {
+    use lbm_layout::model::{BorderSection, ResistanceMode};
+    let mut section = BorderSection::new(0.0, 10.0, 4.0, false, 9.0, false);
+    section.set_move_mode(ResistanceMode::Resist);
+    section.set_drag_mode(ResistanceMode::Free);
+
+    // Editors write every field back: what did not change must mean nothing.
+    assert!(!section.set_move_resistance(4.0));
+    assert!(!section.set_drag(9.0));
+    assert!(!section.set_move_block(false));
+    assert!(!section.set_drag_block(false));
+    assert_eq!(section.stored_move_mode(), Some(ResistanceMode::Resist));
+    assert_eq!(section.stored_drag_mode(), Some(ResistanceMode::Free));
+
+    // A new value is only used in Custom; each channel moves on its own.
+    assert!(section.set_move_resistance(6.0));
+    assert_eq!(section.stored_move_mode(), Some(ResistanceMode::Custom));
+    assert_eq!(section.stored_drag_mode(), Some(ResistanceMode::Free));
+
+    // A blocked channel stays blocked while its value is edited.
+    section.set_drag_mode(ResistanceMode::Block);
+    assert!(section.set_drag(12.0));
+    assert_eq!(section.stored_drag_mode(), Some(ResistanceMode::Block));
+}

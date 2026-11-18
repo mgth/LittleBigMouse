@@ -8,7 +8,9 @@ use windows::Win32::UI::Input::{
     RAWINPUTHEADER, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE, RIDI_DEVICEINFO,
     RID_DEVICE_INFO, RID_HEADER, RID_INPUT, RIM_TYPEHID,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetCursorInfo, CURSORINFO, CURSOR_SUPPRESSED};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetCursorInfo, GetMessageTime, CURSORINFO, CURSOR_SUPPRESSED,
+};
 
 const MAX_PACKET: usize = 65536;
 const MAX_DEVICES: usize = 8;
@@ -128,8 +130,10 @@ pub fn on_input(lparam: LPARAM) {
     // Contact boundaries re-arm cursor restoration after an override. Decode first:
     // no RefCell borrow may span a call that can re-enter the mouse hook.
     let contacts = REPORTS.with(|storage| storage.borrow_mut().read(lparam, &header));
+    // The clock of `MSLLHOOKSTRUCT::time`, which promoted messages are stamped with.
+    let time = unsafe { GetMessageTime() } as u32;
     for contact in contacts.into_iter().flatten() {
-        super::touch_input::on_native_contact(contact);
+        super::touch_input::on_native_contact(contact, time);
     }
 }
 

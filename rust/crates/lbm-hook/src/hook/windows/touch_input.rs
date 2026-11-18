@@ -91,7 +91,7 @@ fn observe_native(shared: &crate::shared::Shared) {
     });
 }
 
-pub fn on_native_contact(contact: bool) {
+pub fn on_native_contact(contact: bool, time: u32) {
     let Some(shared) = SHARED.get() else {
         return;
     };
@@ -102,7 +102,7 @@ pub fn on_native_contact(contact: bool) {
         .is_some_and(|policy| !modifier_held(policy.modifier));
     NATIVE.with(|cell| {
         let mut state = cell.get();
-        state.observe_contact(MOUSE_POSITION.with(Cell::get), allowed, contact);
+        state.observe_contact(MOUSE_POSITION.with(Cell::get), allowed, contact, time);
         cell.set(state);
     });
 }
@@ -265,7 +265,7 @@ fn on_promoted_touch_with_policy(
     super::mouse::reset_movement();
     NATIVE.with(|cell| {
         let mut state = cell.get();
-        state.promoted(matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN));
+        state.promoted(matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN), ms.time);
         cell.set(state);
     });
     let down = message == WM_LBUTTONDOWN;

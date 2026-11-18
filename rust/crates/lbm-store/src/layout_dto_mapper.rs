@@ -63,6 +63,26 @@ pub fn apply_global_options(o: &mut LayoutOptions, dto: Option<&GlobalOptionsDto
 pub fn apply_layout_options(o: &mut LayoutOptions, dto: Option<&LayoutOptionsDto>) {
     let Some(dto) = dto else { return };
 
+    if let Some(value) = dto
+        .default_move_resistance
+        .filter(|v| v.is_finite() && *v >= 0.)
+    {
+        o.resistance_defaults.movement = value;
+    }
+    if let Some(value) = dto
+        .default_drag_resistance
+        .filter(|v| v.is_finite() && *v >= 0.)
+    {
+        o.resistance_defaults.drag = value;
+    }
+    keep(
+        &mut o.resistance_defaults.move_without_section,
+        &dto.default_move_without_section,
+    );
+    keep(
+        &mut o.resistance_defaults.drag_without_section,
+        &dto.default_drag_without_section,
+    );
     keep(&mut o.allow_overlaps, &dto.allow_overlaps);
     keep(&mut o.allow_discontinuity, &dto.allow_discontinuity);
     keep(&mut o.algorithm, &dto.algorithm);
@@ -290,14 +310,29 @@ pub fn apply_side(side: &mut BorderSide, dto: Option<&BorderSideDto>, edge_lengt
     side.sections = layout_migrations::sections(dto, edge_length_mm)
         .iter()
         .map(|s| {
-            BorderSection::new(
+            let mut section = BorderSection::new(
                 s.from.unwrap_or(0.0),
                 s.to.unwrap_or(0.0),
                 s.r#move.unwrap_or(0.0),
                 s.move_block.unwrap_or(false),
                 s.drag.unwrap_or(0.0),
                 s.drag_block.unwrap_or(false),
-            )
+            );
+            if let Some(mode) = s
+                .move_mode
+                .as_deref()
+                .and_then(lbm_layout::model::ResistanceMode::parse)
+            {
+                section.set_move_mode(mode);
+            }
+            if let Some(mode) = s
+                .drag_mode
+                .as_deref()
+                .and_then(lbm_layout::model::ResistanceMode::parse)
+            {
+                section.set_drag_mode(mode);
+            }
+            section
         })
         .collect();
 }
@@ -356,6 +391,10 @@ pub fn to_layout_dto(layout: &Layout) -> LayoutDto {
 /// to the app level only; the layout copy is read as a fallback and then dropped.
 pub fn to_layout_options_dto(o: &LayoutOptions) -> LayoutOptionsDto {
     LayoutOptionsDto {
+        default_move_resistance: Some(o.resistance_defaults.movement),
+        default_drag_resistance: Some(o.resistance_defaults.drag),
+        default_move_without_section: Some(o.resistance_defaults.move_without_section),
+        default_drag_without_section: Some(o.resistance_defaults.drag_without_section),
         allow_overlaps: Some(o.allow_overlaps),
         allow_discontinuity: Some(o.allow_discontinuity),
         algorithm: Some(o.algorithm.clone()),
@@ -382,6 +421,8 @@ pub fn to_side_dto(side: &BorderSide) -> BorderSideDto {
             side.sections
                 .iter()
                 .map(|s| BorderSectionDto {
+                    move_mode: s.stored_move_mode().map(|mode| mode.name().into()),
+                    drag_mode: s.stored_drag_mode().map(|mode| mode.name().into()),
                     from: Some(s.from()),
                     to: Some(s.to()),
                     r#move: Some(s.move_resistance()),

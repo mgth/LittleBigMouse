@@ -33,7 +33,9 @@ pub fn compute_zones(layout: &Layout) -> ZonesLayout {
         let index = zones.zones.len();
         zones.zones.push(Zone::new(
             index,
-            monitor.border_resistance.clone(),
+            monitor
+                .border_resistance
+                .resolved(layout.options.resistance_defaults),
             Some(source.source.id.clone()),
             name,
             source.source.in_pixel.bounds(),
@@ -71,6 +73,7 @@ pub fn compute_zones(layout: &Layout) -> ZonesLayout {
     }
 
     let o = &layout.options;
+    zones.unsectioned_resistance = o.resistance_defaults.without_section();
     zones.max_travel_distance = o.max_travel_distance;
     zones.freelook_check_interval = o.freelook_check_interval;
     zones.freelook_enabled = o.freelook_enabled;

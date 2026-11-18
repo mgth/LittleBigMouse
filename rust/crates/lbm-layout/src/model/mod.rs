@@ -11,7 +11,10 @@ mod ratio;
 mod size;
 mod source;
 
-pub use border_resistance::{BorderResistance, BorderSection, BorderSide, ResistanceValues};
+pub use border_resistance::{
+    BorderResistance, BorderSection, BorderSide, ResistanceDefaults, ResistanceMode,
+    ResistanceValues,
+};
 pub use layout::{DpiAwareness, Layout, LayoutSource};
 pub use monitor::{Monitor, MonitorModel};
 pub use options::{LayoutOptions, PER_MODEL, PER_MONITOR};

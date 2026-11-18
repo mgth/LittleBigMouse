@@ -477,6 +477,58 @@ fn numeric_bounds_are_accessible_and_limited_by_neighbouring_sections() {
     assert!(h.get_by_label("Mirror").accesskit_node().is_disabled());
 }
 
+#[test]
+fn the_panel_keeps_stored_modes_unless_their_own_value_is_edited() {
+    use lbm_layout::model::ResistanceMode::{Custom, Free, Resist};
+    for (field, expected_span, expected_modes) in [
+        ("From", (10.0, 90.0), (Resist, Free)),
+        ("Move resistance", (40.0, 90.0), (Custom, Free)),
+        ("Drag resistance", (40.0, 90.0), (Resist, Custom)),
+    ] {
+        let mut stored = BorderSection::new(40.0, 90.0, 4.0, false, 9.0, false);
+        stored.set_move_mode(Resist);
+        stored.set_drag_mode(Free);
+        let mut monitors = vec![monitor("a", 0.0, 0.0)];
+        monitors[0].resistance.right.sections = vec![stored];
+        let mut editor = Editor::default();
+        editor.selected = Some(Selection {
+            monitor: "a".into(),
+            side: Side::Right,
+            index: 0,
+        });
+        let actions = RefCell::new(vec![]);
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(420.0, 700.0))
+            .build_ui(|ui| {
+                if let Some(a) = editor.panel(ui, &monitors, "a", 200.0) {
+                    actions.borrow_mut().push(a);
+                }
+            });
+        h.run();
+        h.get_all_by_label(field)
+            .find(|n| n.accesskit_node().role() != egui::accesskit::Role::Label)
+            .unwrap()
+            .focus();
+        h.run();
+        h.get_all_by_label(field)
+            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::SpinButton)
+            .unwrap()
+            .type_text("10");
+        h.key_press(egui::Key::Enter);
+        h.run();
+        let actions = actions.borrow();
+        let Some(Edit::Replace { section, .. }) = actions.last().map(|a| &a.edit) else {
+            panic!("{field}: expected a replacement, got {:?}", actions.last());
+        };
+        assert_eq!((section.from(), section.to()), expected_span, "{field}");
+        assert_eq!(
+            (section.move_mode(), section.drag_mode()),
+            expected_modes,
+            "{field}"
+        );
+    }
+}
+
 fn click(h: &mut Harness, at: egui::Pos2) {
     h.drag_at(at);
     h.step();

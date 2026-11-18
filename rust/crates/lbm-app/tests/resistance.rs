@@ -49,6 +49,197 @@ fn edit(
 fn section(from: f64, to: f64) -> BorderSection {
     BorderSection::new(from, to, 4.0, false, 9.0, true)
 }
+
+#[test]
+fn unsectioned_crossings_use_independent_defaults_but_explicit_sections_always_win() {
+    use lbm_layout::model::{ResistanceDefaults, ResistanceMode};
+    for movement in [false, true] {
+        for drag in [false, true] {
+            for loops in [false, true] {
+                let mut edited = layout();
+                let saved = Reference::of(&edited);
+                edited.edit_options(|o| {
+                    o.resistance_defaults = ResistanceDefaults {
+                        movement: 7.5,
+                        drag: 18.,
+                        move_without_section: movement,
+                        drag_without_section: drag,
+                    };
+                    o.loop_x = loops;
+                    o.loop_y = loops;
+                });
+                for (from, to, mode) in [
+                    (100., 140., ResistanceMode::Free),
+                    (160., 200., ResistanceMode::Custom),
+                    (220., 240., ResistanceMode::Block),
+                    (260., 280., ResistanceMode::Resist),
+                ] {
+                    let mut s = section(from, to);
+                    s.set_move_mode(mode);
+                    s.set_drag_mode(mode);
+                    edit(&mut edited, Side::Right, Edit::Insert(s)).unwrap();
+                }
+                let document = serde_json::to_string(&settings::document(&edited)).unwrap();
+                let document: lbm_store::LayoutDocument = serde_json::from_str(&document).unwrap();
+                let mut landed = layout();
+                // Loading an explicit false must also turn a previously enabled switch off.
+                landed.options.resistance_defaults.move_without_section = !movement;
+                landed.options.resistance_defaults.drag_without_section = !drag;
+                document.apply(&mut landed);
+                assert_eq!(settings::document(&landed), settings::document(&edited));
+                let zones = lbm_layout::zoning::compute_zones(&landed);
+                let source = landed.monitors()[0].active_source.as_ref().unwrap();
+                let zone = zones
+                    .zones
+                    .iter()
+                    .find(|z| z.device_id.as_ref() == Some(source))
+                    .unwrap();
+                let inherited = (
+                    if movement { 7.5 } else { 0. },
+                    if drag { 18. } else { 0. },
+                    false,
+                    false,
+                );
+                for (y, expected) in [
+                    (80., inherited),
+                    (120., (0., 0., false, false)),
+                    (150., inherited),
+                    (180., (4., 9., false, false)),
+                    (210., inherited),
+                    (230., (4., 9., true, true)),
+                    (250., inherited),
+                    (270., (7.5, 18., false, false)),
+                    (290., inherited),
+                ] {
+                    let link = zone
+                        .right_links
+                        .iter()
+                        .find(|l| l.from <= y && y < l.to)
+                        .unwrap();
+                    assert!(link.target.is_some());
+                    assert_eq!(
+                        (
+                            link.border_resistance,
+                            link.drag_resistance,
+                            link.move_block,
+                            link.drag_block
+                        ),
+                        expected,
+                        "at {y}, Move={movement}, Drag={drag}, loops={loops}"
+                    );
+                }
+                // The other screen has no section at all: all its crossings inherit.
+                let other = landed.monitors()[1].active_source.as_ref().unwrap();
+                let other = zones
+                    .zones
+                    .iter()
+                    .find(|z| z.device_id.as_ref() == Some(other))
+                    .unwrap();
+                let links: Vec<_> = other
+                    .left_links
+                    .iter()
+                    .filter(|l| l.target.is_some())
+                    .collect();
+                assert!(!links.is_empty());
+                for link in links {
+                    assert_eq!(
+                        (
+                            link.border_resistance,
+                            link.drag_resistance,
+                            link.move_block,
+                            link.drag_block
+                        ),
+                        inherited
+                    );
+                }
+                saved.restore(&mut edited);
+                assert!(saved.holds(&edited));
+                assert!(!edited.options.resistance_defaults.move_without_section);
+                assert!(!edited.options.resistance_defaults.drag_without_section);
+            }
+        }
+    }
+}
+
+#[test]
+fn resistance_modes_survive_saving_and_defaults_reach_links_and_real_screen_bands() {
+    use lbm_layout::model::{ResistanceDefaults, ResistanceMode::*};
+    for (movement, move_value, move_block) in [
+        (Block, 4., true),
+        (Resist, 11., false),
+        (Free, 0., false),
+        (Custom, 4., false),
+    ] {
+        for (drag, drag_value, drag_block) in [
+            (Block, 9., true),
+            (Resist, 23., false),
+            (Free, 0., false),
+            (Custom, 9., false),
+        ] {
+            let mut edited = layout();
+            let saved = Reference::of(&edited);
+            let mut section = section(80., 180.);
+            section.set_move_mode(movement);
+            section.set_drag_mode(drag);
+            edit(&mut edited, Side::Right, Edit::Insert(section)).unwrap();
+            edited.mark_saved();
+            edited.edit_options(|o| {
+                o.resistance_defaults = ResistanceDefaults {
+                    movement: 11.,
+                    drag: 23.,
+                    ..Default::default()
+                }
+            });
+            assert!(!edited.saved());
+            assert!(!saved.holds(&edited));
+            let document = serde_json::to_string(&settings::document(&edited)).unwrap();
+            let document: lbm_store::LayoutDocument = serde_json::from_str(&document).unwrap();
+            let mut landed = layout();
+            document.apply(&mut landed);
+            assert_eq!(settings::document(&landed), settings::document(&edited));
+            let monitor = &landed.monitors()[0];
+            assert_eq!(monitor.border_resistance.right.sections[0], section);
+            let source = monitor.active_source.as_ref().unwrap();
+            let zones = lbm_layout::zoning::compute_zones(&landed);
+            let zone = zones
+                .zones
+                .iter()
+                .find(|z| z.device_id.as_ref() == Some(source))
+                .unwrap();
+            assert!(
+                zone.right_links.iter().any(|l| l.target.is_some()
+                    && l.border_resistance == move_value
+                    && l.drag_resistance == drag_value
+                    && l.move_block == move_block
+                    && l.drag_block == drag_block),
+                "{movement:?}/{drag:?}"
+            );
+            let bands =
+                lbm_overlay::scene::from_layout(&landed, lbm_overlay::Mode::Resistance, None)
+                    .unwrap();
+            let band = bands
+                .iter()
+                .find(|b| b.monitor == monitor.id && b.side == lbm_overlay::scene::Side::Right)
+                .unwrap();
+            let lbm_overlay::scene::Content::Resistance(sections) = &band.content else {
+                panic!("resistance band")
+            };
+            assert_eq!(
+                (
+                    sections[0].move_resistance(),
+                    sections[0].drag(),
+                    sections[0].move_block(),
+                    sections[0].drag_block()
+                ),
+                (move_value, drag_value, move_block, drag_block)
+            );
+            // Custom values remain available after Free, Block or inherited resistance.
+            assert_eq!((section.move_resistance(), section.drag()), (4., 9.));
+            saved.restore(&mut edited);
+            assert!(saved.holds(&edited));
+        }
+    }
+}
 #[test]
 fn reference_feedback_is_projected_without_entering_the_saved_document() {
     use lbm_overlay::{

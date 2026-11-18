@@ -369,7 +369,12 @@ pub fn from_layout(
                 {
                     return Err("An attached screen contains invalid resistance sections.".into());
                 }
-                Content::Resistance(sections.clone())
+                Content::Resistance(
+                    sections
+                        .iter()
+                        .map(|s| s.resolved(layout.options.resistance_defaults))
+                        .collect(),
+                )
             };
             let cross_pixels_per_mm = if side.vertical() {
                 screen.width as f64 / bounds.width()

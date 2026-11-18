@@ -297,6 +297,17 @@ fn diff(path: &str, expected: &Value, actual: &Value, out: &mut Vec<String>) {
                 match (e.get(k), a.get(k)) {
                     (Some(ev), Some(av)) => diff(&p, ev, av, out),
                     (Some(_), None) => out.push(format!("{p}: missing")),
+                    // The .NET recordings predate the layout-wide resistance defaults.
+                    // They must be present with their exact initial values; existing
+                    // sections still compile byte-for-byte to the recorded zones.
+                    (None, Some(value))
+                        if path.ends_with(".Options")
+                            && ((k == "DefaultMoveResistance" && value.as_f64() == Some(5.))
+                                || (k == "DefaultDragResistance"
+                                    && value.as_f64() == Some(15.))
+                                || ((k == "DefaultMoveWithoutSection"
+                                    || k == "DefaultDragWithoutSection")
+                                    && value.as_bool() == Some(false))) => {}
                     (None, Some(_)) => out.push(format!("{p}: unexpected")),
                     (None, None) => {}
                 }

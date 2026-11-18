@@ -5,6 +5,11 @@ namespace LittleBigMouse.Zoning
 {
     public class ZonesLayout : IZonesSerializable
     {
+        public bool TouchMouseIndependent {get;set;}
+        public bool TouchAllDisplays { get; set; } = true;
+        public string TouchDisplayIds { get; set; } = "";
+        public string TouchOverrideModifier { get; set; } = "None";
+        public string TouchDisplayBounds { get; set; } = "";
         public bool AdjustPointer {get;set;}
         public bool AdjustSpeed {get;set;}
         public bool LoopX {get;set;}
@@ -69,6 +74,11 @@ namespace LittleBigMouse.Zoning
                 e => e.LoopY,
                 e => e.Virtual,
                 e => e.RescueShortcut,
+                e => e.TouchMouseIndependent,
+                e => e.TouchAllDisplays,
+                e => e.TouchDisplayIds,
+                e => e.TouchOverrideModifier,
+                e => e.TouchDisplayBounds,
                 e => e.Priority,
                 e => e.PriorityUnhooked,
                 e => e.Algorithm,

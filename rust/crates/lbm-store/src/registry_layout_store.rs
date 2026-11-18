@@ -206,6 +206,10 @@ pub fn read_global_options<K: RegistryKey>(root: &K, layout_key: Option<&K>) -> 
         show_monitor_action_warning: try_get_bool(root, "ShowMonitorActionWarning")
             .or_else(|| try_get_bool(root, "ShowAttachDetachWarning")),
         border_values: try_get_string(root, "BorderValues"),
+        touch_mouse_independent: try_get_bool(root, "TouchMouseIndependent"),
+        touch_all_displays: try_get_bool(root, "TouchAllDisplays"),
+        touch_display_ids: try_get_string(root, "TouchDisplayIds"),
+        touch_override_modifier: try_get_string(root, "TouchOverrideModifier"),
         rescue_shortcut: try_get_string(root, "RescueShortcut"),
         hide_tray_icon: try_get_bool(root, "HideTrayIcon"),
         excluded_defaults_version: try_get_int(root, "ExcludedDefaultsVersion"),

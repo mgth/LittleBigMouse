@@ -38,6 +38,10 @@ public static class LayoutDtoMapper
         o.VcpControl = dto.VcpControl ?? o.VcpControl;
         o.ShowMonitorActionWarning = dto.ShowMonitorActionWarning ?? o.ShowMonitorActionWarning;
         o.BorderValues = dto.BorderValues ?? o.BorderValues;
+        o.TouchMouseIndependent = dto.TouchMouseIndependent ?? o.TouchMouseIndependent;
+        o.TouchAllDisplays = dto.TouchAllDisplays ?? o.TouchAllDisplays;
+        o.TouchDisplayIds = dto.TouchDisplayIds ?? o.TouchDisplayIds;
+        o.TouchOverrideModifier = dto.TouchOverrideModifier ?? o.TouchOverrideModifier;
         o.RescueShortcut = dto.RescueShortcut ?? o.RescueShortcut;
         o.HideTrayIcon = dto.HideTrayIcon ?? o.HideTrayIcon;
     }
@@ -187,6 +191,10 @@ public static class LayoutDtoMapper
         VcpControl = o.VcpControl,
         ShowMonitorActionWarning = o.ShowMonitorActionWarning,
         BorderValues = o.BorderValues,
+        TouchMouseIndependent = o.TouchMouseIndependent,
+        TouchAllDisplays = o.TouchAllDisplays,
+        TouchDisplayIds = o.TouchDisplayIds,
+        TouchOverrideModifier = o.TouchOverrideModifier,
         RescueShortcut = o.RescueShortcut,
         HideTrayIcon = o.HideTrayIcon,
         ExcludedDefaultsVersion = excludedDefaultsVersion

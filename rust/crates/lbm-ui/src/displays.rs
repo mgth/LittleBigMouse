@@ -1,4 +1,5 @@
-//! System outputs stay reachable even when detached from the desktop/map.
+//! System commands for the selected monitor and for every detached output, which no
+//! map or selector can reach. Guards use the entire output inventory.
 use lbm_ipc::displays::{Change, Outputs};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -10,6 +11,7 @@ pub enum Did {
 
 #[derive(Default)]
 pub struct Panel {
+    pub selected: Option<String>,
     pub confirm: Option<(String, Change)>,
 }
 
@@ -22,6 +24,16 @@ pub fn caption(change: Change) -> &'static str {
 }
 
 impl Panel {
+    /// A detached output is not on the map, so it stays offered without any selection.
+    pub fn wanted(&self, outputs: Option<&Outputs>) -> bool {
+        self.selected.is_some()
+            || outputs.is_some_and(|outputs| outputs.outputs.iter().any(|o| !o.enabled))
+    }
+
+    fn shows(&self, output: &lbm_ipc::displays::Output) -> bool {
+        !output.enabled || self.selected.as_ref() == Some(&output.connector)
+    }
+
     pub fn draw(
         &mut self,
         ui: &mut egui::Ui,
@@ -31,10 +43,24 @@ impl Panel {
         warn: bool,
         can_stop: bool,
     ) -> Option<Did> {
+        let confirmable = self.confirm.as_ref().is_none_or(|(connector, _)| {
+            outputs.is_some_and(|outputs| {
+                outputs
+                    .outputs
+                    .iter()
+                    .any(|o| &o.connector == connector && self.shows(o))
+            })
+        });
+        if !confirmable {
+            self.confirm = None;
+        }
+        if !self.wanted(outputs) {
+            return None;
+        }
         let mut did = None;
-        ui.heading("System displays");
+        ui.heading("System display");
         ui.label("These actions change the desktop configuration immediately.");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui
                 .add_enabled(!busy, egui::Button::new("Refresh outputs"))
                 .clicked()
@@ -61,8 +87,9 @@ impl Panel {
             return did;
         };
         let enabled = outputs.outputs.iter().filter(|o| o.enabled).count();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for output in &outputs.outputs {
+        ui.vertical(|ui| {
+            let shown: Vec<_> = outputs.outputs.iter().filter(|o| self.shows(o)).collect();
+            for output in shown {
                 ui.push_id(&output.connector, |ui| {
                     ui.group(|ui| {
                         ui.label(format!("{} · {}", output.name, output.connector));
@@ -73,7 +100,7 @@ impl Panel {
                         } else {
                             "Attached"
                         });
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             for (change, available) in [
                                 (Change::Primary, output.enabled && !output.primary),
                                 (Change::Attach, !output.enabled),
@@ -108,7 +135,7 @@ impl Panel {
                     Change::Attach => "This screen will join the desktop.",
                     Change::Primary => "This screen will become the primary display.",
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
                             !busy && blocked.is_none(),

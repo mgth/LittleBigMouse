@@ -7,6 +7,7 @@ publish = false
 description = "The LittleBigMouse frontend (v7): state, actions and views, with no window of its own yet"
 
 [dependencies]
+lbm-icons = { path = "../lbm-icons" }
 lbm-wallpaper = { path = "../lbm-wallpaper" }
 lbm-store = { path = "../lbm-store" }
 egui = "0.36"
@@ -26,10 +27,6 @@ egui_kittest = "0.36"
 # The oracle's scenario inputs, so the map is exercised on real desktops and not only
 # on rectangles chosen by whoever wrote the test.
 serde_json.workspace = true
-# The frame places the logo; this is what turns a `Logo` string into pixels. A
-# dev-dependency because the loading belongs to whoever owns the egui context, not to
-# the view — but the two have to be shown to meet.
-lbm-icons = { path = "../lbm-icons" }
 
 # Rendering, for the reference snapshots. **Linux only, and not by taste.**
 # `egui_kittest`'s snapshot feature renders through wgpu, and wgpu cannot enter this

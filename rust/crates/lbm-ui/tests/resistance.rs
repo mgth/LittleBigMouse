@@ -42,10 +42,13 @@ fn creation_resize_and_move_stop_at_neighbours_and_reject_slivers() {
 #[test]
 fn shared_boundaries_belong_to_the_section_starting_there() {
     let sections = [section(0.0, 80.0), section(80.0, 160.0)];
-    assert_eq!(g::grab(&sections, 79.0, 2.0), g::Grab::To(0));
-    assert_eq!(g::grab(&sections, 80.0, 2.0), g::Grab::From(1));
-    assert_eq!(g::grab(&sections, 81.0, 2.0), g::Grab::From(1));
-    assert_eq!(g::grab(&sections, 120.0, 2.0), g::Grab::Move(1));
+    assert_eq!(g::grab(&sections, 79.0, 2.0, 300.0, 12.0), g::Grab::To(0));
+    assert_eq!(g::grab(&sections, 80.0, 2.0, 300.0, 12.0), g::Grab::From(1));
+    assert_eq!(g::grab(&sections, 81.0, 2.0, 300.0, 12.0), g::Grab::From(1));
+    assert_eq!(
+        g::grab(&sections, 120.0, 2.0, 300.0, 12.0),
+        g::Grab::Move(1)
+    );
 }
 #[test]
 fn snapping_uses_visible_edges_and_parallel_sections_even_on_distant_screens() {
@@ -299,7 +302,8 @@ fn a_draw_gesture_commits_only_on_release() {
         panic!("expected a new section");
     };
     assert!((s.from() - 50.0).abs() < 0.001 && (s.to() - 110.0).abs() < 0.001);
-    assert!(s.move_block() && !s.drag_block());
+    assert_eq!(s.move_mode(), lbm_layout::model::ResistanceMode::Resist);
+    assert_eq!(s.drag_mode(), lbm_layout::model::ResistanceMode::Resist);
 }
 #[test]
 fn escape_focus_loss_and_layout_change_discard_a_gesture() {
@@ -384,7 +388,7 @@ fn the_panel_exposes_creation_blocks_mirror_and_deletion() {
         });
     h.run();
     assert!(!h.get_by_label("Mirror").accesskit_node().is_disabled());
-    h.get_by_label("Block drags").click();
+    h.get_by_label("Drag: Block").click();
     h.run();
     assert!(actions
         .borrow()
@@ -425,7 +429,9 @@ fn double_click_fills_a_gap_and_delete_uses_the_selected_section() {
     let Edit::Insert(s) = action.edit else {
         panic!("expected insertion");
     };
-    assert_eq!(s, section(0.0, 300.0));
+    assert_eq!((s.from(), s.to()), (0., 300.));
+    assert_eq!(s.move_mode(), lbm_layout::model::ResistanceMode::Resist);
+    assert_eq!(s.drag_mode(), lbm_layout::model::ResistanceMode::Resist);
     monitors.borrow_mut()[0].resistance.right.sections.push(s);
     editor.borrow_mut().selected = Some(Selection {
         monitor: "a".into(),
@@ -478,55 +484,45 @@ fn numeric_bounds_are_accessible_and_limited_by_neighbouring_sections() {
 }
 
 #[test]
-fn the_panel_keeps_stored_modes_unless_their_own_value_is_edited() {
-    use lbm_layout::model::ResistanceMode::{Custom, Free, Resist};
-    for (field, expected_span, expected_modes) in [
-        ("From", (10.0, 90.0), (Resist, Free)),
-        ("Move resistance", (40.0, 90.0), (Custom, Free)),
-        ("Drag resistance", (40.0, 90.0), (Resist, Custom)),
-    ] {
-        let mut stored = BorderSection::new(40.0, 90.0, 4.0, false, 9.0, false);
-        stored.set_move_mode(Resist);
-        stored.set_drag_mode(Free);
-        let mut monitors = vec![monitor("a", 0.0, 0.0)];
-        monitors[0].resistance.right.sections = vec![stored];
-        let mut editor = Editor::default();
-        editor.selected = Some(Selection {
-            monitor: "a".into(),
-            side: Side::Right,
-            index: 0,
+fn editing_a_bound_in_the_panel_keeps_the_stored_modes() {
+    use lbm_layout::model::ResistanceMode::{Free, Resist};
+    let mut stored = BorderSection::new(40.0, 90.0, 4.0, false, 9.0, false);
+    stored.set_move_mode(Resist);
+    stored.set_drag_mode(Free);
+    let mut monitors = vec![monitor("a", 0.0, 0.0)];
+    monitors[0].resistance.right.sections = vec![stored];
+    let mut editor = Editor::default();
+    editor.selected = Some(Selection {
+        monitor: "a".into(),
+        side: Side::Right,
+        index: 0,
+    });
+    let actions = RefCell::new(vec![]);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(420.0, 700.0))
+        .build_ui(|ui| {
+            if let Some(a) = editor.panel(ui, &monitors, "a", 200.0) {
+                actions.borrow_mut().push(a);
+            }
         });
-        let actions = RefCell::new(vec![]);
-        let mut h = Harness::builder()
-            .with_size(egui::vec2(420.0, 700.0))
-            .build_ui(|ui| {
-                if let Some(a) = editor.panel(ui, &monitors, "a", 200.0) {
-                    actions.borrow_mut().push(a);
-                }
-            });
-        h.run();
-        h.get_all_by_label(field)
-            .find(|n| n.accesskit_node().role() != egui::accesskit::Role::Label)
-            .unwrap()
-            .focus();
-        h.run();
-        h.get_all_by_label(field)
-            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::SpinButton)
-            .unwrap()
-            .type_text("10");
-        h.key_press(egui::Key::Enter);
-        h.run();
-        let actions = actions.borrow();
-        let Some(Edit::Replace { section, .. }) = actions.last().map(|a| &a.edit) else {
-            panic!("{field}: expected a replacement, got {:?}", actions.last());
-        };
-        assert_eq!((section.from(), section.to()), expected_span, "{field}");
-        assert_eq!(
-            (section.move_mode(), section.drag_mode()),
-            expected_modes,
-            "{field}"
-        );
-    }
+    h.run();
+    h.get_all_by_label("From")
+        .find(|n| n.accesskit_node().role() != egui::accesskit::Role::Label)
+        .unwrap()
+        .focus();
+    h.run();
+    h.get_all_by_label("From")
+        .find(|n| n.accesskit_node().role() == egui::accesskit::Role::SpinButton)
+        .unwrap()
+        .type_text("10");
+    h.key_press(egui::Key::Enter);
+    h.run();
+    let actions = actions.borrow();
+    let Some(Edit::Replace { section, .. }) = actions.last().map(|a| &a.edit) else {
+        panic!("expected a replacement, got {:?}", actions.last());
+    };
+    assert_eq!((section.from(), section.to()), (10.0, 90.0));
+    assert_eq!((section.move_mode(), section.drag_mode()), (Resist, Free));
 }
 
 fn click(h: &mut Harness, at: egui::Pos2) {
@@ -645,4 +641,85 @@ fn a_corner_held_by_both_edges_is_cut_along_its_diagonal_and_a_gesture_keeps_its
         );
     };
     assert_eq!((section.from(), section.to()), (250.0, 289.0));
+}
+#[test]
+fn corner_caps_widen_without_hiding_short_sections_or_stealing_shared_boundaries() {
+    assert_eq!(g::grip(0., 90., 1., 300., 12.), 12.);
+    assert_eq!(g::grip(4., 90., 1., 300., 12.), 8.);
+    assert_eq!(g::grip(100., 90., 1., 300., 12.), 6.);
+    assert_eq!(g::grip(300., 90., 1., 300., 12.), 12.);
+    assert_eq!(g::grip(0., 9., 1., 300., 12.), 3.);
+    assert_eq!(g::grip(0., 90., 2., 300., 24.), 12.);
+    let sections = [section(0., 9.), section(9., 80.)];
+    assert_eq!(g::grab(&sections, 4.5, 1., 300., 12.), g::Grab::Move(0));
+    assert_eq!(g::grab(&sections, 9., 1., 300., 12.), g::Grab::From(1));
+}
+
+#[test]
+fn both_halves_of_every_mitre_resize_their_own_edge_and_keep_capture() {
+    for (corner, direction, vertical, horizontal) in [
+        (
+            egui::pos2(40., 40.),
+            egui::vec2(1., 1.),
+            Side::Left,
+            Side::Top,
+        ),
+        (
+            egui::pos2(640., 40.),
+            egui::vec2(-1., 1.),
+            Side::Right,
+            Side::Top,
+        ),
+        (
+            egui::pos2(40., 340.),
+            egui::vec2(1., -1.),
+            Side::Left,
+            Side::Bottom,
+        ),
+        (
+            egui::pos2(640., 340.),
+            egui::vec2(-1., -1.),
+            Side::Right,
+            Side::Bottom,
+        ),
+    ] {
+        for side in [vertical, horizontal] {
+            let editor = RefCell::new(Editor::default());
+            let mut m = monitor("a", 0., 0.);
+            for edge in Side::ALL {
+                let length = edge.length(m.bounds);
+                edge.sections_mut(&mut m.resistance)
+                    .push(section(0., length));
+            }
+            let monitors = RefCell::new(vec![m]);
+            let actions = RefCell::new(vec![]);
+            let mut h = bands(&editor, &monitors, &actions);
+            h.run();
+            h.event(egui::Event::ModifiersChanged(egui::Modifiers::CTRL));
+            let (offset, movement, sign) = if side.vertical() {
+                (egui::vec2(3., 9.), egui::vec2(50., 20.), direction.y)
+            } else {
+                (egui::vec2(9., 3.), egui::vec2(20., 50.), direction.x)
+            };
+            let from = corner + offset * direction;
+            let to = from + movement * direction;
+            drag(&mut h, from, to);
+            let preview = editor
+                .borrow()
+                .preview_action()
+                .expect("corner starts resize");
+            assert_eq!(preview.side, side);
+            h.drop_at(to);
+            h.run();
+            let actions = actions.borrow();
+            assert_eq!(actions.len(), 1, "corner {corner:?}, side {side:?}");
+            assert_eq!(actions[0].side, side);
+            let Edit::Replace { section: s, .. } = actions[0].edit else {
+                panic!("resize")
+            };
+            let length = side.length(monitors.borrow()[0].bounds);
+            assert_eq!(s.from(), if sign > 0. { 20. } else { 0. });
+            assert_eq!(s.to(), if sign > 0. { length } else { length - 20. });
+        }
+    }
 }

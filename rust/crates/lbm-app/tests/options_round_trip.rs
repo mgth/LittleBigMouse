@@ -147,7 +147,14 @@ fn the_agent_understands_the_request_the_window_sends() {
         ..Default::default()
     };
 
-    let (method, extra) = lbm_app::settings::save_options(&edited, None);
+    let (method, extra) = lbm_app::settings::save_options(
+        &LayoutOptions {
+            priority: "Idle".into(),
+            ..Default::default()
+        },
+        &edited,
+        None,
+    );
     assert_eq!(method, "SaveOptions");
 
     // Exactly what the writer thread puts on the wire: the method, the id, and the rest.
@@ -223,7 +230,7 @@ fn saving_the_layout_carries_no_excluded_list() {
                 document.layout.is_some(),
                 "the layout itself did not travel"
             );
-            assert!(document.global_options.is_some());
+            assert!(document.global_options.is_none());
         }
         other => panic!("the frame parsed as something else: {other:?}"),
     }
@@ -299,7 +306,7 @@ fn frame(id: u64, method: &str, extra: serde_json::Value) -> serde_json::Value {
 fn an_unread_excluded_list_is_absent_and_a_read_empty_one_is_present() {
     let options = LayoutOptions::default();
 
-    let (_, unread) = lbm_app::settings::save_options(&options, None);
+    let (_, unread) = lbm_app::settings::save_options(&options, &options, None);
     let parsed: lbm_agent::api::RequestFrame =
         serde_json::from_value(frame(1, "SaveOptions", unread)).expect("parsed");
     match parsed.request {
@@ -311,7 +318,7 @@ fn an_unread_excluded_list_is_absent_and_a_read_empty_one_is_present() {
     }
 
     let empty: Vec<String> = Vec::new();
-    let (_, read) = lbm_app::settings::save_options(&options, Some(&empty));
+    let (_, read) = lbm_app::settings::save_options(&options, &options, Some(&empty));
     let parsed: lbm_agent::api::RequestFrame =
         serde_json::from_value(frame(2, "SaveOptions", read)).expect("parsed");
     match parsed.request {
@@ -328,7 +335,11 @@ fn an_unread_excluded_list_is_absent_and_a_read_empty_one_is_present() {
 #[test]
 fn the_excluded_list_reaches_the_agent_as_it_is() {
     let list = vec![r"\steamapps\".to_owned(), "game.exe".to_owned()];
-    let (_, extra) = lbm_app::settings::save_options(&LayoutOptions::default(), Some(&list));
+    let (_, extra) = lbm_app::settings::save_options(
+        &LayoutOptions::default(),
+        &LayoutOptions::default(),
+        Some(&list),
+    );
     let parsed: lbm_agent::api::RequestFrame =
         serde_json::from_value(frame(5, "SaveOptions", extra)).expect("parsed");
     match parsed.request {

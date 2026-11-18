@@ -12,6 +12,7 @@ fn opening_does_not_configure_a_screen_and_apply_is_an_explicit_action() {
     let mut h = Harness::builder()
         .with_size(egui::vec2(620., 600.))
         .build_ui(|ui| {
+            lbm_ui::theme::install(ui.ctx());
             if let Some(a) = panel(ui, &mut settings.borrow_mut(), Some("A"), false, true) {
                 actions.borrow_mut().push(a);
             }
@@ -49,6 +50,7 @@ fn snapshot(width: f32) {
     let mut h = Harness::builder()
         .with_size(egui::vec2(width, 640.))
         .build_ui(|ui| {
+            lbm_ui::theme::install(ui.ctx());
             lbm_ui::properties::panel(ui, |ui| {
                 ui.heading("Wallpaper");
                 panel(ui, &mut settings, None, true, true);
@@ -86,6 +88,7 @@ fn browse_is_an_explicit_action_and_cannot_open_two_choosers() {
         let mut h = Harness::builder()
             .with_size(egui::vec2(620., 600.))
             .build_ui(|ui| {
+                lbm_ui::theme::install(ui.ctx());
                 if let Some(a) = panel(ui, &mut settings.borrow_mut(), None, false, can_browse) {
                     actions.borrow_mut().push(a);
                 }

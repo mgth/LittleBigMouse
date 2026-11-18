@@ -42,64 +42,23 @@ fn harness<'a>(app: impl FnMut(&mut egui::Ui) + 'a) -> Harness<'a> {
 }
 
 #[test]
-fn every_screen_has_a_row_to_click() {
+fn the_selected_screen_is_drawn_without_a_duplicate_list() {
     let all = screens();
-    let harness = harness(|ui| {
-        list::draw(ui, ui.max_rect(), &all, None);
-    });
-
-    for name in ["Left screen", "Right screen"] {
-        assert!(harness.query_by_label(name).is_some(), "{name} has no row");
-    }
-}
-
-#[test]
-fn clicking_a_row_picks_that_screen() {
-    let all = screens();
-    let picked = std::cell::Cell::new(None);
-    let mut harness = harness(|ui| {
-        if let Some(id) = list::draw(ui, ui.max_rect(), &all, None) {
-            picked.set(Some(id));
-        }
-    });
-
-    harness.get_by_label("Right screen").click();
-    harness.run();
-
-    assert_eq!(picked.get(), Some("right"));
-}
-
-/// The pane draws the chosen screen and only it — the whole difference from the map.
-/// With one chosen, its name appears twice (its row, and the frame beside it); the other
-/// appears once.
-#[test]
-fn only_the_chosen_screen_is_drawn_beside_the_list() {
-    let all = screens();
-    let harness = harness(|ui| {
+    let h = harness(|ui| {
         list::draw(ui, ui.max_rect(), &all, Some("right"));
     });
-
-    assert_eq!(
-        harness.get_all_by_label("Right screen").count(),
-        2,
-        "the chosen screen should be in the list and drawn beside it"
-    );
-    assert_eq!(
-        harness.get_all_by_label("Left screen").count(),
-        1,
-        "the screen that was not chosen should only be a row"
-    );
+    assert_eq!(h.get_all_by_label("Right screen").count(), 1);
+    assert!(h.query_by_label("Left screen").is_none());
 }
 
-/// Nothing chosen draws no screen at all, rather than picking one for the user.
 #[test]
-fn nothing_chosen_draws_no_screen() {
+fn no_selection_points_to_the_properties_combo() {
     let all = screens();
-    let harness = harness(|ui| {
+    let h = harness(|ui| {
         list::draw(ui, ui.max_rect(), &all, None);
     });
-
-    for name in ["Left screen", "Right screen"] {
-        assert_eq!(harness.get_all_by_label(name).count(), 1, "{name}");
-    }
+    assert!(h
+        .query_by_label("Select a screen in the properties panel.")
+        .is_some());
+    assert!(h.query_by_label("Right screen").is_none());
 }

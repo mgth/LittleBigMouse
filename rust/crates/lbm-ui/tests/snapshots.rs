@@ -41,6 +41,7 @@ fn harness<'a>(size: (f32, f32), mut app: impl FnMut(&mut egui::Ui) + 'a) -> Har
     Harness::builder()
         .with_size(egui::vec2(size.0, size.1))
         .build_ui(move |ui| {
+            lbm_ui::theme::install(ui.ctx());
             egui::CentralPanel::default().show(ui, &mut app);
         })
 }
@@ -70,6 +71,152 @@ fn two_screens() -> Vec<MapMonitor<'static>> {
             probe: None,
         },
     ]
+}
+
+/// The two toolbars together with their canvas, at desktop and compact widths.
+/// Individual component snapshots cannot catch wrapping that consumes the map.
+#[test]
+fn studio_workspace() {
+    let mut results = egui_kittest::SnapshotResults::new();
+    for (width, height, name) in [
+        (1120.0, 720.0, "workspace-wide"),
+        (560.0, 600.0, "workspace-narrow"),
+    ] {
+        let mut logos = None;
+        let state = lbm_ui::State {
+            engine: lbm_ui::Engine::Running,
+            hook_connected: true,
+            saved: false,
+            ..Default::default()
+        };
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, height))
+            .build_ui(|ui| {
+                lbm_ui::theme::install(ui.ctx());
+                let logos = logos.get_or_insert_with(|| {
+                    let assets = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../../LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Assets");
+                    let (catalogue, _) = lbm_icons::catalogue(&assets);
+                    ["PHL", "SAM"].map(|code| {
+                        let path = format!("icon/pnp/{code}");
+                        let source =
+                            std::fs::read(lbm_icons::resolve(&catalogue, &path).unwrap()).unwrap();
+                        let color =
+                            frame::logo_colour(&ui.ctx().style_of(egui::Theme::Dark).visuals);
+                        let tree = lbm_icons::load(
+                            &source,
+                            lbm_icons::Rgba(color.r(), color.g(), color.b(), color.a()),
+                        )
+                        .unwrap();
+                        let logo = lbm_icons::render_logo(&tree, 512).unwrap();
+                        ui.ctx().load_texture(
+                            path,
+                            egui::ColorImage::from_rgba_premultiplied(logo.size, &logo.pixels),
+                            egui::TextureOptions::LINEAR,
+                        )
+                    })
+                });
+                let mut screens = two_screens();
+                for ((screen, logo), name) in screens
+                    .iter_mut()
+                    .zip(logos.iter())
+                    .zip(["PHL 328P6VU", "Odyssey G80SD"])
+                {
+                    screen.name = name;
+                    screen.logo = Some(logo);
+                }
+                egui::Panel::top("navigation")
+                    .frame(lbm_ui::theme::toolbar())
+                    .show(ui, |ui| {
+                        lbm_ui::mode::toolbar(
+                            ui,
+                            lbm_ui::mode::Mode::Default,
+                            &lbm_ui::mode::Offered::default(),
+                            false,
+                        );
+                    });
+                egui::Panel::bottom("engine")
+                    .frame(lbm_ui::theme::toolbar())
+                    .show(ui, |ui| {
+                        lbm_ui::bottom_bar_with_agent(ui, &state, |ui| {
+                            lbm_ui::theme::status(ui, "Agent connected", lbm_ui::theme::ACCENT);
+                        });
+                    });
+                lbm_ui::properties::panel(ui, |ui| {
+                    ui.heading("Screens");
+                    let mut selected = Some("left".to_owned());
+                    let mut single = false;
+                    lbm_ui::properties::monitor_selector(
+                        ui,
+                        &mut selected,
+                        &[("left", "PHL 328P6VU"), ("right", "Odyssey G80SD")],
+                        &mut single,
+                    );
+                });
+                egui::CentralPanel::default()
+                    .frame(
+                        egui::Frame::new()
+                            .fill(lbm_ui::theme::BACKGROUND)
+                            .inner_margin(14),
+                    )
+                    .show(ui, |ui| {
+                        let fit = map::fit(map::extent(&screens), ui.max_rect());
+                        map::draw(ui, &screens, &fit, Some("left"));
+                    });
+            });
+        harness.run();
+        harness.snapshot(name);
+        results.extend(harness.take_snapshot_results());
+    }
+}
+
+#[test]
+fn settings_cards() {
+    use lbm_ui::options::{self, Page};
+    let mut results = egui_kittest::SnapshotResults::new();
+    for (page, name) in [
+        (Page::General, "settings-cards"),
+        (Page::Mouse, "settings-mouse"),
+        (Page::Layout, "settings-layout"),
+        (Page::Applications, "settings-applications"),
+        (Page::Advanced, "settings-advanced"),
+        (Page::Layout, "settings-narrow"),
+    ] {
+        let mut page = page;
+        let mut options = lbm_layout::model::LayoutOptions::default();
+        let mut recording = lbm_ui::shortcut::Recording::default();
+        let mut open = true;
+        let mut pattern = String::new();
+        let size = if name == "settings-narrow" {
+            (360.0, 640.0)
+        } else {
+            (720.0, 760.0)
+        };
+        let mut harness = harness(size, |ui| {
+            let bounds = ui.max_rect();
+            let screens = two_screens();
+            let fit = map::fit(map::extent(&screens), bounds);
+            map::draw(ui, &screens, &fit, None);
+            options::drawer(ui.ctx(), bounds, &mut open, &mut page, true, |ui, page| {
+                if page == Page::Applications {
+                    lbm_ui::excluded::panel(
+                        ui,
+                        Some(&[
+                            "game.exe".into(),
+                            "/home/user/Games/Steam/steamapps/common/Example Game/bin/game".into(),
+                        ]),
+                        &mut pattern,
+                        &["/usr/bin/example".into()],
+                    );
+                } else {
+                    options::panel(ui, &mut options, false, &mut recording, None, page);
+                }
+            });
+        });
+        harness.run();
+        harness.snapshot(name);
+        results.extend(harness.take_snapshot_results());
+    }
 }
 
 /// The bar, running, with a screen selected — the state a user spends their time in.
@@ -197,7 +344,7 @@ fn a_monitor_frame_with_its_name() {
 /// port — and the reason the modes that are not ported yet are shown rather than dropped.
 #[test]
 fn the_mode_bar() {
-    let mut harness = harness((760.0, 50.0), |ui| {
+    let mut harness = harness((760.0, 60.0), |ui| {
         lbm_ui::mode::bar(ui, lbm_ui::mode::Mode::Location, &Default::default());
     });
     harness.run();
@@ -241,6 +388,7 @@ fn size_and_info_properties_stay_readable_beside_or_below_the_map() {
         let mut harness = Harness::builder()
             .with_size(egui::vec2(width, height))
             .build_ui(|ui| {
+                lbm_ui::theme::install(ui.ctx());
                 properties::panel(ui, |ui| {
                     ui.heading(if info { "Info" } else { "Size" });
                     ui.label("Left screen");
@@ -249,7 +397,7 @@ fn size_and_info_properties_stay_readable_beside_or_below_the_map() {
                             ui.heading("Detected · last display refresh");
                             properties::rows(ui, &rows);
                         } else {
-                            properties::size(ui, &size);
+                            properties::size(ui, "left", &size);
                         }
                     });
                 });
@@ -284,14 +432,51 @@ fn system_displays_include_a_detached_screen_and_a_concrete_confirmation() {
             },
         ],
     };
-    let mut panel = lbm_ui::displays::Panel {
-        confirm: Some(("HDMI-1".into(), Change::Attach)),
-    };
-    let mut harness = harness((700.0, 500.0), |ui| {
-        panel.draw(ui, Some(&outputs), None, false, true, false);
-    });
-    harness.run();
-    harness.snapshot("system-displays");
+    let mut results = egui_kittest::SnapshotResults::new();
+    for (width, height, name) in [
+        (1100., 780., "system-displays"),
+        (480., 640., "system-displays-narrow"),
+    ] {
+        let mut panel = lbm_ui::displays::Panel {
+            selected: Some("HDMI-1".into()),
+            confirm: Some(("HDMI-1".into(), Change::Attach)),
+        };
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, height))
+            .build_ui(|ui| {
+                lbm_ui::theme::install(ui.ctx());
+                lbm_ui::properties::panel(ui, |ui| {
+                    ui.heading("Location");
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.label("Side screen · HDMI-1");
+                        ui.strong("Physical position");
+                        lbm_ui::properties::location(
+                            ui,
+                            "right",
+                            &lbm_ui::properties::Location {
+                                x: 0.,
+                                y: 0.,
+                                scale_x: 100.,
+                                scale_y: 100.,
+                            },
+                        );
+                        ui.add_space(12.);
+                        ui.separator();
+                        panel.draw(ui, Some(&outputs), None, false, true, false);
+                    });
+                });
+                egui::CentralPanel::default().show(ui, |ui| {
+                    let mut screens = two_screens();
+                    screens[0].name = "Main screen";
+                    screens[1].name = "Side screen";
+                    let fit = map::fit(map::extent(&screens), ui.max_rect());
+                    map::draw(ui, &screens, &fit, Some("right"));
+                });
+            });
+        harness.run();
+        harness.snapshot(name);
+        results.extend(harness.take_snapshot_results());
+    }
 }
 
 /// The Location mode, in a frame big enough to hold its rows.
@@ -362,8 +547,10 @@ fn resistance_values_and_bands_stay_readable_in_map_and_list() {
         let mut harness = Harness::builder()
             .with_size(egui::vec2(width, height))
             .build_ui(|ui| {
+                lbm_ui::theme::install(ui.ctx());
                 lbm_ui::properties::panel(ui, |ui| {
                     ui.heading("Border resistance");
+                    lbm_ui::resistance::defaults(ui, &mut editor.defaults);
                     ui.label("Left screen");
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         editor.panel(ui, &monitors, "left", 200.0);
@@ -373,7 +560,7 @@ fn resistance_values_and_bands_stay_readable_in_map_and_list() {
                     let placements = if list {
                         lbm_ui::list::draw(ui, ui.max_rect(), &screens, Some("left"));
                         let fit = map::fit_in(
-                            lbm_ui::list::panes(ui.max_rect()).screen,
+                            lbm_ui::list::screen_rect(ui.max_rect()),
                             screens[0].mm_outside,
                         );
                         vec![("left".into(), fit.place(&screens[0]).content)]
@@ -443,4 +630,111 @@ fn resistance_reference_reaches_the_offset_screen_and_disappears_with_ctrl() {
     h.step();
     assert!(editor.borrow().guide().is_none());
     h.snapshot("resistance-reference-ctrl");
+}
+
+#[test]
+fn resistance_mitres_and_short_caps_at_two_scales() {
+    use lbm_layout::model::{BorderResistance, BorderSection};
+    use lbm_ui::resistance::{Editor, Monitor, Selection, Side};
+    let mut screens = two_screens();
+    screens[1].mm_outside = Rect::new(700., 0., 340., 210.);
+    screens[1].mm_content = Rect::new(710., 10., 320., 190.);
+    let monitors: Vec<_> = screens
+        .iter()
+        .map(|s| {
+            let mut resistance = BorderResistance::default();
+            for side in Side::ALL {
+                let length = side.length(s.mm_content);
+                let (move_block, drag_block) = match side {
+                    Side::Left => (true, true),
+                    Side::Top => (true, false),
+                    Side::Right => (false, true),
+                    Side::Bottom => (false, false),
+                };
+                let make = |a, b| BorderSection::new(a, b, 6., move_block, 0., drag_block);
+                *side.sections_mut(&mut resistance) = vec![
+                    make(0., length * 0.4),
+                    make(length * 0.5, length * 0.5 + 9.),
+                    make(length * 0.6, length),
+                ];
+            }
+            Monitor {
+                id: s.id.into(),
+                bounds: s.mm_content,
+                excluded: false,
+                resistance,
+            }
+        })
+        .collect();
+    let mut editor = Editor::default();
+    editor.selected = Some(Selection {
+        monitor: "left".into(),
+        side: Side::Top,
+        index: 0,
+    });
+    let mut h = harness((1050., 460.), |ui| {
+        let fit = map::fit(map::extent(&screens), ui.max_rect());
+        map::draw(ui, &screens, &fit, Some("left"));
+        let placements = screens
+            .iter()
+            .map(|s| (s.id.into(), fit.place(s).content))
+            .collect::<Vec<_>>();
+        editor.bands(ui, &monitors, &placements);
+    });
+    h.run();
+    h.snapshot("resistance-mitres");
+}
+
+#[test]
+fn desktop_wallpapers_remain_below_the_glass_reflection_in_map_and_list() {
+    let mut results = egui_kittest::SnapshotResults::new();
+    for list_view in [false, true] {
+        let mut textures = None;
+        let mut h = harness((1050., 540.), |ui| {
+            let textures = textures.get_or_insert_with(|| {
+                [
+                    egui::ColorImage::new(
+                        [256, 144],
+                        (0..144)
+                            .flat_map(|y| {
+                                (0..256).map(move |x| {
+                                    if y > 95 {
+                                        egui::Color32::from_rgb(18, 65, 59)
+                                    } else {
+                                        egui::Color32::from_rgb(
+                                            40 + (x / 2) as u8,
+                                            80 + y as u8,
+                                            140 + (y / 2) as u8,
+                                        )
+                                    }
+                                })
+                            })
+                            .collect(),
+                    ),
+                    egui::ColorImage::filled([256, 144], egui::Color32::from_rgb(32, 64, 96)),
+                ]
+                .map(|image| {
+                    ui.ctx()
+                        .load_texture("desktop-test", image, egui::TextureOptions::LINEAR)
+                })
+            });
+            let mut screens = two_screens();
+            for (screen, texture) in screens.iter_mut().zip(textures.iter()) {
+                screen.wallpaper = Some(texture);
+            }
+            if list_view {
+                lbm_ui::list::draw(ui, ui.max_rect(), &screens, Some("left"));
+            } else {
+                let fit = map::fit(map::extent(&screens), ui.max_rect());
+                map::draw(ui, &screens, &fit, Some("left"));
+            }
+        });
+        h.run();
+        h.snapshot(if list_view {
+            "desktop-wallpaper-list"
+        } else {
+            "desktop-wallpaper-map"
+        });
+        results.extend(h.take_snapshot_results());
+    }
 }

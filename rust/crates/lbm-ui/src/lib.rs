@@ -17,14 +17,21 @@ pub mod displays;
 pub mod drag;
 pub mod excluded;
 pub mod frame;
+pub mod icons;
+pub mod inline;
 pub mod list;
 pub mod map;
 pub mod mode;
 pub mod options;
+pub mod placement;
 pub mod probe;
 pub mod properties;
 pub mod resistance;
+mod settings_icons;
 pub mod shortcut;
+mod support;
+pub mod theme;
+mod toolbar;
 pub mod wallpaper;
 pub mod wallpaper_editor;
 
@@ -242,23 +249,43 @@ pub fn label(press: Press) -> &'static str {
 
 /// The bottom bar, as a function of the state. Returns what the user pressed.
 pub fn bottom_bar(ui: &mut egui::Ui, state: &State) -> Option<Action> {
+    bottom_bar_with_agent(ui, state, |_| {})
+}
+
+/// Agent connection status sits beside the engine status in the same wrapping row.
+pub fn bottom_bar_with_agent(
+    ui: &mut egui::Ui,
+    state: &State,
+    agent_status: impl FnOnce(&mut egui::Ui),
+) -> Option<Action> {
     let mut pressed = None;
-    ui.horizontal(|ui| {
-        ui.label(match state.engine {
-            Engine::Running => "Running",
-            Engine::Stopped => "Stopped",
-            Engine::Paused => "Paused",
-            Engine::Dead => "No engine",
-        });
+    ui.horizontal_wrapped(|ui| {
+        let (status, color) = match state.engine {
+            Engine::Running => ("Running", theme::ACCENT),
+            Engine::Stopped => ("Stopped", theme::MUTED),
+            Engine::Paused => ("Paused", theme::AMBER),
+            Engine::Dead => ("No engine", theme::MUTED),
+        };
+        theme::status(ui, status, color);
+        agent_status(ui);
+        ui.separator();
         // Save and Undo first, as the window has them: what you do to the layout comes
         // before what you do to the engine.
         for press in [Press::Save, Press::Undo, Press::Start, Press::Stop] {
-            if ui
-                .add_enabled(
-                    !state.waiting && can(state, press),
-                    egui::Button::new(label(press)),
-                )
-                .clicked()
+            let icon = match press {
+                Press::Save => icons::Icon::Save,
+                Press::Undo => icons::Icon::Undo,
+                Press::Start => icons::Icon::Play,
+                _ => icons::Icon::Stop,
+            };
+            if icons::button(
+                ui,
+                icon,
+                label(press),
+                None,
+                !state.waiting && can(state, press),
+            )
+            .clicked()
             {
                 pressed = Some(Action::Pressed(press));
             }
@@ -412,3 +439,7 @@ mod tests {
         assert_eq!(Engine::from_agent("Running"), Engine::Running);
     }
 }
+
+pub mod monitor_info;
+
+pub mod about;

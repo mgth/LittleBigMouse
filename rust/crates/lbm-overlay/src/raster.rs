@@ -1,5 +1,7 @@
 //! Small, deterministic CPU renderer. BGRA pixels are premultiplied for layered windows.
 use crate::scene::{ticks, Band, Content, Side};
+use ab_glyph::{point, Font, FontRef, OutlinedGlyph, ScaleFont};
+use std::sync::OnceLock;
 
 pub struct Image {
     pub width: usize,
@@ -30,36 +32,83 @@ impl Image {
             Side::Right => self.fill(self.width as i32 - depth, start, depth, end - start, color),
         }
     }
-    fn digits(&mut self, text: &str, x: i32, y: i32, unit: i32, color: [u8; 4]) {
-        // A compact measuring-instrument font, identical on every platform and DPI.
-        const GLYPHS: [[u8; 7]; 11] = [
-            [14, 17, 19, 21, 25, 17, 14],
-            [4, 12, 4, 4, 4, 4, 14],
-            [14, 17, 1, 2, 4, 8, 31],
-            [30, 1, 1, 14, 1, 1, 30],
-            [2, 6, 10, 18, 31, 2, 2],
-            [31, 16, 16, 30, 1, 1, 30],
-            [14, 16, 16, 30, 17, 17, 14],
-            [31, 1, 2, 4, 8, 8, 8],
-            [14, 17, 17, 14, 17, 17, 14],
-            [14, 17, 17, 15, 1, 1, 14],
-            [0, 0, 0, 31, 0, 0, 0],
-        ];
-        for (i, c) in text.bytes().enumerate() {
-            let index = if c == b'-' { 10 } else { (c - b'0') as usize };
-            for (row, bits) in GLYPHS[index].iter().enumerate() {
-                for col in 0..5 {
-                    if bits & (1 << (4 - col)) != 0 {
-                        self.fill(
-                            x + (i as i32 * 6 + col) * unit,
-                            y + row as i32 * unit,
-                            unit,
-                            unit,
-                            color,
-                        );
-                    }
+    fn text(&mut self, label: &Label, x: i32, y: i32, color: [u8; 4]) {
+        for glyph in &label.glyphs {
+            let bounds = glyph.px_bounds();
+            glyph.draw(|gx, gy, coverage| {
+                let x = x + bounds.min.x as i32 - label.left + gx as i32;
+                let y = y + bounds.min.y as i32 - label.top + gy as i32;
+                if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
+                    return;
                 }
+                // Source-over in premultiplied BGRA: partial glyph coverage must
+                // blend with the translucent ruler, not punch holes through it.
+                let alpha = (coverage * f32::from(color[3])).round() as u16;
+                let offset = (y as usize * self.width + x as usize) * 4;
+                let pixel = &mut self.bgra[offset..offset + 4];
+                for (dst, src) in pixel.iter_mut().zip([color[2], color[1], color[0], 255]) {
+                    *dst = ((u16::from(src) * alpha + u16::from(*dst) * (255 - alpha) + 127) / 255)
+                        as u8;
+                }
+            });
+        }
+    }
+}
+
+/// Use the same bundled proportional face as egui, rasterized at native pixel
+/// resolution (including fractional display scales), with no bitmap enlargement.
+struct Label {
+    glyphs: Vec<OutlinedGlyph>,
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+}
+impl Label {
+    fn new(text: &str, ink_height: f32) -> Self {
+        static FONT: OnceLock<FontRef<'static>> = OnceLock::new();
+        let font = FONT.get_or_init(|| {
+            FontRef::try_from_slice(epaint_default_fonts::UBUNTU_LIGHT)
+                .expect("bundled Ubuntu font is valid")
+        });
+        let zero = font
+            .outline(font.glyph_id('0'))
+            .expect("font contains digits");
+        let scale = ink_height * font.height_unscaled() / zero.bounds.height().abs();
+        let scaled = font.as_scaled(scale);
+        let mut glyphs = Vec::new();
+        let mut cursor = 0.;
+        let mut previous = None;
+        for c in text.chars() {
+            let id = scaled.glyph_id(c);
+            if let Some(previous) = previous {
+                cursor += scaled.kern(previous, id);
             }
+            if let Some(glyph) =
+                font.outline_glyph(id.with_scale_and_position(scale, point(cursor, 0.)))
+            {
+                glyphs.push(glyph);
+            }
+            cursor += scaled.h_advance(id);
+            previous = Some(id);
+        }
+        let mut left = 0;
+        let mut top = 0;
+        let mut right = 0;
+        let mut bottom = 0;
+        for glyph in &glyphs {
+            let bounds = glyph.px_bounds();
+            left = left.min(bounds.min.x as i32);
+            top = top.min(bounds.min.y as i32);
+            right = right.max(bounds.max.x as i32);
+            bottom = bottom.max(bounds.max.y as i32);
+        }
+        Self {
+            glyphs,
+            left,
+            top,
+            width: right - left,
+            height: bottom - top,
         }
     }
 }
@@ -126,22 +175,23 @@ pub fn render(band: &Band) -> Result<Image, String> {
                 let stroke = band.scale.round().max(1.) as i32;
                 image.strip(band.side, position, position + stroke, length, color);
                 if let Some(label) = tick.label {
-                    let unit = ((tick.label_mm * band.cross_pixels_per_mm / 7.).round() as i32)
-                        .clamp(1, 8);
-                    let tw = label.len() as i32 * 6 * unit;
-                    let th = 7 * unit;
+                    let label = Label::new(
+                        &label,
+                        (tick.label_mm * band.cross_pixels_per_mm).clamp(7., 56.) as f32,
+                    );
+                    let (tw, th) = (label.width, label.height);
                     let (x, y) = match band.side {
                         Side::Top => (position + stroke + 1, (length - th).max(1)),
                         Side::Bottom => (position + stroke + 1, (depth - length).max(1)),
                         Side::Left => ((length - tw).max(1), position + stroke + 1),
                         Side::Right => ((depth - length).max(1), position + stroke + 1),
                     };
-                    image.digits(&label, x, y, unit, color);
+                    image.text(&label, x, y, color);
                 }
             }
         }
         Content::Resistance(sections) => {
-            for s in sections {
+            for (index, s) in sections.iter().enumerate() {
                 let start = band.pixel_at(s.from()).round().clamp(0., axis as f64) as i32;
                 let end = band.pixel_at(s.to()).round().clamp(0., axis as f64) as i32;
                 let color = match (s.move_block(), s.drag_block()) {
@@ -152,8 +202,54 @@ pub fn render(band: &Band) -> Result<Image, String> {
                     _ => [112, 112, 112, 210],
                 };
                 image.strip(band.side, start, end, depth, color);
-                image.strip(band.side, start, start + 1, depth, [240, 245, 248, 255]);
-                image.strip(band.side, end - 1, end, depth, [240, 245, 248, 255]);
+                let stroke = (2. * band.scale).round().max(1.) as i32;
+                if band.selected == Some(index) {
+                    if band.side.vertical() {
+                        image.fill(0, start, stroke, end - start, [255, 255, 255, 255]);
+                        image.fill(
+                            depth - stroke,
+                            start,
+                            stroke,
+                            end - start,
+                            [255, 255, 255, 255],
+                        );
+                    } else {
+                        image.fill(start, 0, end - start, stroke, [255, 255, 255, 255]);
+                        image.fill(
+                            start,
+                            depth - stroke,
+                            end - start,
+                            stroke,
+                            [255, 255, 255, 255],
+                        );
+                    }
+                }
+                let grip = |boundary: i32| {
+                    (6. * band.scale)
+                        .max(f64::from(depth) / 2.)
+                        .max(f64::from(depth - boundary.min(axis - boundary)))
+                        .min(f64::from(end - start) / 3.)
+                };
+                for (a, b) in [
+                    (start, start + grip(start).round() as i32),
+                    (end - grip(end).round() as i32, end),
+                ] {
+                    let (x, y, w, h) = if band.side.vertical() {
+                        (0, a, depth, b - a)
+                    } else {
+                        (a, 0, b - a, depth)
+                    };
+                    let radius = (2. * band.scale)
+                        .min(f64::from(w) / 2.)
+                        .min(f64::from(h) / 2.);
+                    for row in 0..h {
+                        let d =
+                            (radius - (f64::from(row) + 0.5).min(f64::from(h - row) - 0.5)).max(0.);
+                        let inset =
+                            (radius - (radius * radius - d * d).max(0.).sqrt()).round() as i32;
+                        image.fill(x + inset, y + row, w - 2 * inset, 1, [255, 255, 255, 208]);
+                    }
+                }
             }
         }
         Content::Guide { .. } => unreachable!("guides return before band rendering"),

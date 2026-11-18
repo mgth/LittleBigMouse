@@ -322,6 +322,23 @@ pub fn description(s: &BorderSection) -> String {
     format!("Move: {movement}\nDrag: {drag}")
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ExternalPhase {
+    Press,
+    Move,
+    Release,
+    Expand,
+    Delete,
+}
+pub struct ExternalPointer<'a> {
+    pub monitor: &'a str,
+    pub side: Side,
+    pub at: f64,
+    pub length: f64,
+    pub thickness: f64,
+    pub snap: bool,
+}
+
 /// A freshly drawn section follows both layout defaults.
 fn new_section() -> BorderSection {
     let mut section = BorderSection::default();

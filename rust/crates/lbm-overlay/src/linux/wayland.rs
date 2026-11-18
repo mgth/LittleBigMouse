@@ -1,5 +1,10 @@
 //! Output-bound layer-shell surfaces, logical placement and fractional-scale buffers.
-use crate::{raster, scene::Band, Backend};
+use crate::{
+    input::{Input, Kind},
+    raster,
+    scene::Band,
+    Backend,
+};
 use std::{
     collections::HashMap,
     io::Write,
@@ -11,14 +16,17 @@ use wayland_client::{
     protocol::{
         wl_buffer::{self, WlBuffer},
         wl_compositor::WlCompositor,
+        wl_keyboard::{self, WlKeyboard},
         wl_output::{self, WlOutput},
+        wl_pointer::{self, WlPointer},
         wl_region::WlRegion,
         wl_registry::{self, WlRegistry},
+        wl_seat::{self, WlSeat},
         wl_shm::{Format, WlShm},
         wl_shm_pool::WlShmPool,
         wl_surface::WlSurface,
     },
-    Connection, Dispatch, EventQueue, QueueHandle,
+    Connection, Dispatch, EventQueue, Proxy, QueueHandle, WEnum,
 };
 use wayland_protocols::{
     wp::{
@@ -55,6 +63,7 @@ struct Tag {
 }
 #[derive(Default)]
 struct SurfaceState {
+    band: Option<Band>,
     size: Option<(u32, u32)>,
     scale: Option<u32>,
 }
@@ -67,6 +76,17 @@ struct State {
     armed: bool,
     changed: bool,
     closed: bool,
+    pointer: Option<WlPointer>,
+    keyboard: Option<WlKeyboard>,
+    focus: Option<Tag>,
+    keyboard_focus: Option<Tag>,
+    position: (f64, f64),
+    pressed: bool,
+    ctrl: bool,
+    shift: bool,
+    ctrl_mask: u32,
+    shift_mask: u32,
+    input: Vec<Input>,
 }
 struct Surface {
     surface: WlSurface,
@@ -116,6 +136,7 @@ impl Host {
             .ok();
         let mut state = State::default();
         let mut outputs = HashMap::new();
+        let _seat = globals.bind::<WlSeat, _, _>(&q, 1..=8, ()).map_err(err)?;
         for global in globals.contents().clone_list() {
             if global.interface == "wl_output" && global.version >= 2 {
                 let output = globals.registry().bind::<WlOutput, _, _>(
@@ -173,12 +194,15 @@ impl Host {
             generation: self.state.generation,
             index: self.surfaces.len(),
         };
-        let surface = self.compositor.create_surface(&q, ());
+        let surface = self.compositor.create_surface(&q, tag);
         let layer = self.shell.get_layer_surface(
             &surface,
             Some(&self.outputs[&id].0),
             Layer::Overlay,
-            "littlebigmouse-overlays".into(),
+            // KWin derives the window type from the layer-shell namespace.
+            // All instruments are OSDs, avoiding normal window animations.
+            // Pointer regions and keyboard interactivity are configured separately.
+            "on-screen-display".into(),
             &q,
             tag,
         );
@@ -194,13 +218,25 @@ impl Host {
         layer.set_size(r.width as u32, r.height as u32);
         // -1 includes panel-exclusive areas: these instruments follow physical screen edges.
         layer.set_exclusive_zone(-1);
-        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        layer.set_keyboard_interactivity(
+            if matches!(band.content, crate::scene::Content::Guide { .. }) {
+                KeyboardInteractivity::None
+            } else {
+                KeyboardInteractivity::OnDemand
+            },
+        );
         let region = self.compositor.create_region(&q, ());
+        for r in crate::input::regions(&logical) {
+            region.add(r.x, r.y, r.width, r.height);
+        }
         surface.set_input_region(Some(&region));
         region.destroy();
         surface.set_buffer_scale(1);
         viewport.set_destination(r.width, r.height);
-        self.state.surfaces.push(SurfaceState::default());
+        self.state.surfaces.push(SurfaceState {
+            band: Some(logical.clone()),
+            ..Default::default()
+        });
         surface.commit();
         self.surfaces.push(Surface {
             surface,
@@ -242,9 +278,10 @@ impl Host {
             let (_, integer_scale) = self.output(band)?;
             let state = &self.state.surfaces[index];
             let preferred = if self.fractional.is_some() {
-                state.scale.ok_or_else(|| {
-                    err("The compositor did not provide a preferred buffer scale.")
-                })?
+                // KWin may publish the preferred scale only after the first buffer
+                // maps the surface. Start with the enumerated output scale, then
+                // validate the compositor's answer when it arrives.
+                state.scale.unwrap_or((band.scale * 120.).round() as u32)
             } else {
                 integer_scale
             };
@@ -316,34 +353,55 @@ impl Backend for Host {
             .iter()
             .map(|b| super::wayland_geometry(b, (b.scale * 120.).round() as u32).map(|(b, _)| b))
             .collect::<Result<Vec<_>, _>>()?;
-        let rebuild = geometry.len() != self.surfaces.len()
-            || geometry
-                .iter()
-                .zip(&self.surfaces)
-                .any(|(b, s)| b.rect != s.logical.rect || b.connector != s.logical.connector);
+        let keep = geometry
+            .iter()
+            .zip(&self.surfaces)
+            .take_while(|(b, s)| {
+                b.rect == s.logical.rect
+                    && b.connector == s.logical.connector
+                    && std::mem::discriminant(&b.content)
+                        == std::mem::discriminant(&s.logical.content)
+            })
+            .count();
+        let rebuild = keep != geometry.len() || keep != self.surfaces.len();
         if rebuild {
-            self.clear();
-            for band in bands {
+            // Snap guides may appear/move during a captured drag. Keep unchanged
+            // edge surfaces alive so the compositor retains the pointer grab.
+            for s in self.surfaces.drain(keep..) {
+                if let Some(f) = s.fractional {
+                    f.destroy();
+                }
+                s.viewport.destroy();
+                s.layer.destroy();
+                s.surface.destroy();
+            }
+            self.state.surfaces.truncate(keep);
+            for band in &bands[keep..] {
                 self.create(band)?;
             }
             // Configuration may be deferred until the compositor's next frame. The host's
             // watchdog bounds this wait without ever blocking the editor's event loop.
             self.queue.roundtrip(&mut self.state).map_err(err)?;
-            while self
-                .state
-                .surfaces
-                .iter()
-                .any(|s| s.size.is_none() || (self.fractional.is_some() && s.scale.is_none()))
-            {
+            while self.state.surfaces.iter().any(|s| s.size.is_none()) {
                 self.check()?;
                 self.queue.blocking_dispatch(&mut self.state).map_err(err)?;
             }
             self.check()?;
         }
+        for (state, band) in self.state.surfaces.iter_mut().zip(&geometry) {
+            state.band = Some(band.clone());
+        }
         self.desired = bands.to_vec();
         self.draw()
     }
+    fn take_input(&mut self) -> Vec<Input> {
+        std::mem::take(&mut self.state.input)
+    }
     fn clear(&mut self) {
+        self.state.emit(Kind::Cancel, 0);
+        self.state.focus = None;
+        self.state.keyboard_focus = None;
+        self.state.pressed = false;
         for s in self.surfaces.drain(..) {
             if let Some(f) = s.fractional {
                 f.destroy();
@@ -522,7 +580,11 @@ impl Dispatch<WpFractionalScaleV1, Tag> for State {
         }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = e {
             if let Some(surface) = s.surfaces.get_mut(tag.index) {
-                s.changed |= surface.scale.is_some_and(|old| old != scale);
+                s.changed |= surface.scale.is_some_and(|old| old != scale)
+                    || surface
+                        .band
+                        .as_ref()
+                        .is_some_and(|b| (b.scale * 120. - f64::from(scale)).abs() > 1.);
                 surface.scale = Some(scale);
             }
         }
@@ -546,7 +608,17 @@ impl Dispatch<WlBuffer, Tag> for State {
     }
 }
 delegate_noop!(State: ignore WlCompositor);
-delegate_noop!(State: ignore WlSurface);
+impl Dispatch<WlSurface, Tag> for State {
+    fn event(
+        _: &mut Self,
+        _: &WlSurface,
+        _: wayland_client::protocol::wl_surface::Event,
+        _: &Tag,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
 delegate_noop!(State: ignore WlRegion);
 delegate_noop!(State: ignore WlShm);
 delegate_noop!(State: ignore WlShmPool);
@@ -555,3 +627,213 @@ delegate_noop!(State: ignore ZxdgOutputManagerV1);
 delegate_noop!(State: ignore WpViewporter);
 delegate_noop!(State: ignore WpViewport);
 delegate_noop!(State: ignore WpFractionalScaleManagerV1);
+
+impl State {
+    fn emit(&mut self, kind: Kind, time: u32) {
+        let tag = if matches!(kind, Kind::Escape | Kind::Delete) {
+            self.keyboard_focus.or(self.focus)
+        } else {
+            self.focus
+        };
+        let Some(tag) = tag.filter(|t| t.generation == self.generation) else {
+            return;
+        };
+        if let Some(band) = self.surfaces.get(tag.index).and_then(|s| s.band.as_ref()) {
+            self.input.push(Input::new(
+                band,
+                kind,
+                self.position,
+                1.,
+                time,
+                self.ctrl,
+                self.shift,
+            ));
+        }
+    }
+}
+impl Dispatch<WlSeat, ()> for State {
+    fn event(
+        s: &mut Self,
+        seat: &WlSeat,
+        event: wl_seat::Event,
+        _: &(),
+        _: &Connection,
+        q: &QueueHandle<Self>,
+    ) {
+        if let wl_seat::Event::Capabilities {
+            capabilities: WEnum::Value(c),
+        } = event
+        {
+            if c.contains(wl_seat::Capability::Pointer) && s.pointer.is_none() {
+                s.pointer = Some(seat.get_pointer(q, ()));
+            }
+            if c.contains(wl_seat::Capability::Keyboard) && s.keyboard.is_none() {
+                s.keyboard = Some(seat.get_keyboard(q, ()));
+            }
+            if !c.contains(wl_seat::Capability::Pointer) {
+                s.emit(Kind::Cancel, 0);
+                s.pressed = false;
+                if let Some(pointer) = s.pointer.take() {
+                    if pointer.version() >= 3 {
+                        pointer.release();
+                    }
+                }
+            }
+            if !c.contains(wl_seat::Capability::Keyboard) {
+                if let Some(keyboard) = s.keyboard.take() {
+                    if keyboard.version() >= 3 {
+                        keyboard.release();
+                    }
+                }
+                s.ctrl = false;
+                s.shift = false;
+            }
+        }
+    }
+}
+impl Dispatch<WlPointer, ()> for State {
+    fn event(
+        s: &mut Self,
+        _: &WlPointer,
+        event: wl_pointer::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            wl_pointer::Event::Enter {
+                surface,
+                surface_x,
+                surface_y,
+                ..
+            } => {
+                s.focus = surface.data::<Tag>().copied();
+                s.position = (surface_x, surface_y);
+            }
+            wl_pointer::Event::Leave { .. } => {
+                if !s.pressed {
+                    s.focus = None;
+                }
+            }
+            wl_pointer::Event::Motion {
+                time,
+                surface_x,
+                surface_y,
+            } => {
+                s.position = (surface_x, surface_y);
+                if s.pressed {
+                    s.emit(Kind::Move, time);
+                }
+            }
+            wl_pointer::Event::Button {
+                time,
+                button: 0x110,
+                state: WEnum::Value(state),
+                ..
+            } => {
+                s.pressed = state == wl_pointer::ButtonState::Pressed;
+                s.emit(
+                    if s.pressed {
+                        Kind::Press
+                    } else {
+                        Kind::Release
+                    },
+                    time,
+                );
+            }
+            wl_pointer::Event::Axis {
+                time,
+                axis: WEnum::Value(wl_pointer::Axis::VerticalScroll),
+                value,
+            } if value != 0. => {
+                s.emit(Kind::Wheel(-value.signum()), time);
+            }
+            _ => {}
+        }
+    }
+}
+impl Dispatch<WlKeyboard, ()> for State {
+    fn event(
+        s: &mut Self,
+        _: &WlKeyboard,
+        event: wl_keyboard::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            wl_keyboard::Event::Enter { surface, .. } => {
+                s.keyboard_focus = surface.data::<Tag>().copied();
+            }
+            wl_keyboard::Event::Leave { .. } => {
+                if s.pressed {
+                    s.emit(Kind::Cancel, 0);
+                }
+                s.pressed = false;
+                s.keyboard_focus = None;
+            }
+            wl_keyboard::Event::Keymap {
+                format: WEnum::Value(wl_keyboard::KeymapFormat::XkbV1),
+                fd,
+                size,
+            } => {
+                use std::os::unix::fs::FileExt;
+                // The descriptor's shared file offset may be at EOF. The protocol
+                // keymap always starts at byte zero, as with the usual mmap reader.
+                let mut bytes = vec![0; size.min(1_048_576) as usize];
+                if size <= 1_048_576 && std::fs::File::from(fd).read_exact_at(&mut bytes, 0).is_ok()
+                {
+                    if let Some(xkb) = xkbcommon_dl::xkbcommon_option() {
+                        bytes.push(0);
+                        // SAFETY: bounded NUL-terminated keymap; both XKB objects are released here.
+                        unsafe {
+                            let context = (xkb.xkb_context_new)(
+                                xkbcommon_dl::xkb_context_flags::XKB_CONTEXT_NO_FLAGS,
+                            );
+                            if !context.is_null() {
+                                let keymap=(xkb.xkb_keymap_new_from_string)(context,bytes.as_ptr().cast(),xkbcommon_dl::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,xkbcommon_dl::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS);
+                                if !keymap.is_null() {
+                                    let mask = |name: &[u8]| {
+                                        1u32.checked_shl((xkb.xkb_keymap_mod_get_index)(
+                                            keymap,
+                                            name.as_ptr().cast(),
+                                        ))
+                                        .unwrap_or(0)
+                                    };
+                                    s.ctrl_mask = mask(xkbcommon_dl::XKB_MOD_NAME_CTRL);
+                                    s.shift_mask = mask(xkbcommon_dl::XKB_MOD_NAME_SHIFT);
+                                    (xkb.xkb_keymap_unref)(keymap);
+                                }
+                                (xkb.xkb_context_unref)(context);
+                            }
+                        }
+                    }
+                }
+            }
+            wl_keyboard::Event::Modifiers {
+                mods_depressed,
+                mods_latched,
+                mods_locked,
+                ..
+            } => {
+                let mods = mods_depressed | mods_latched | mods_locked;
+                s.ctrl = mods & s.ctrl_mask != 0;
+                s.shift = mods & s.shift_mask != 0;
+                if s.pressed {
+                    s.emit(Kind::Move, 0);
+                }
+            }
+            wl_keyboard::Event::Key {
+                time,
+                key,
+                state: WEnum::Value(wl_keyboard::KeyState::Pressed),
+                ..
+            } => match key {
+                1 => s.emit(Kind::Escape, time),
+                111 => s.emit(Kind::Delete, time),
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+}

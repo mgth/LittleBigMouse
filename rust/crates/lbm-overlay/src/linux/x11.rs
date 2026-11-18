@@ -1,5 +1,6 @@
-//! ARGB override-redirect windows with server-verified geometry and empty input shapes.
+//! ARGB edge instruments with server-verified geometry and mitred input regions.
 use crate::{
+    input::{Input, Kind},
     raster,
     scene::{Band, Pixels},
     Backend,
@@ -36,6 +37,9 @@ pub(super) struct Host {
     owner: u32,
     surfaces: Vec<Surface>,
     checked: Instant,
+    input: Vec<Input>,
+    pressed: Option<u32>,
+    keys: (u8, u8),
 }
 impl Host {
     pub fn connect() -> Result<Self, String> {
@@ -46,7 +50,7 @@ impl Host {
             .reply()
             .map_err(err)?;
         if (shape.major_version, shape.minor_version) < (1, 1) {
-            return Err(err("Shape 1.1 is required for click-through."));
+            return Err(err("Shape 1.1 is required for the overlay input regions."));
         }
         let randr = conn
             .randr_query_version(1, 3)
@@ -129,6 +133,21 @@ impl Host {
         .map_err(err)?
         .check()
         .map_err(err)?;
+        let setup = conn.setup();
+        let mapping = conn
+            .get_keyboard_mapping(setup.min_keycode, setup.max_keycode - setup.min_keycode + 1)
+            .map_err(err)?
+            .reply()
+            .map_err(err)?;
+        let key = |symbol| {
+            mapping
+                .keysyms
+                .chunks(usize::from(mapping.keysyms_per_keycode))
+                .position(|s| s.contains(&symbol))
+                .map(|i| setup.min_keycode + i as u8)
+                .unwrap_or(0)
+        };
+        let keys = (key(0xff1b), key(0xffff));
         Ok(Self {
             conn,
             root,
@@ -138,6 +157,9 @@ impl Host {
             owner,
             surfaces: Vec::new(),
             checked: Instant::now(),
+            input: Vec::new(),
+            pressed: None,
+            keys,
         })
     }
     fn verify_outputs(&self, bands: &[Band]) -> Result<(), String> {
@@ -248,7 +270,14 @@ impl Host {
                 .override_redirect(1)
                 .background_pixmap(pixmap)
                 .border_pixel(0)
-                .colormap(self.colormap),
+                .colormap(self.colormap)
+                .event_mask(
+                    EventMask::BUTTON_PRESS
+                        | EventMask::BUTTON_RELEASE
+                        | EventMask::POINTER_MOTION
+                        | EventMask::KEY_PRESS
+                        | EventMask::FOCUS_CHANGE,
+                ),
         )
         .map_err(err)?
         .check()
@@ -260,7 +289,15 @@ impl Host {
             window,
             0,
             0,
-            &[],
+            &crate::input::regions(band)
+                .iter()
+                .map(|r| Rectangle {
+                    x: r.x as i16,
+                    y: r.y as i16,
+                    width: r.width as u16,
+                    height: r.height as u16,
+                })
+                .collect::<Vec<_>>(),
         )
         .map_err(err)?
         .check()
@@ -275,7 +312,8 @@ impl Host {
         .map_err(err)?
         .check()
         .map_err(err)?;
-        // ICCCM InputHint=False. We never request focus or select keyboard/pointer events.
+        // Do not acquire focus just by appearing; an explicit pointer press focuses
+        // the instrument so Escape and Delete work there.
         c.change_property32(
             PropMode::REPLACE,
             window,
@@ -305,10 +343,10 @@ impl Host {
         ) != (r.x, r.y, r.width, r.height)
             || geometry.depth != 32
             || !attributes.override_redirect
-            || !input.rectangles.is_empty()
+            || input.rectangles.is_empty() != crate::input::regions(band).is_empty()
         {
             return Err(err(
-                "The server refused overlay placement or click-through.",
+                "The server refused overlay placement or its input region.",
             ));
         }
         Ok(())
@@ -367,18 +405,30 @@ impl Host {
     }
 }
 impl Backend for Host {
+    fn take_input(&mut self) -> Vec<Input> {
+        std::mem::take(&mut self.input)
+    }
     fn present(&mut self, bands: &[Band]) -> Result<(), String> {
         super::validate(bands)?;
         self.verify_outputs(bands)?;
-        let rebuild = self.surfaces.len() != bands.len()
-            || self
-                .surfaces
-                .iter()
-                .zip(bands)
-                .any(|(s, b)| s.band.rect != b.rect || s.band.connector != b.connector);
+        let keep = self
+            .surfaces
+            .iter()
+            .zip(bands)
+            .take_while(|(s, b)| {
+                s.band.rect == b.rect
+                    && s.band.connector == b.connector
+                    && std::mem::discriminant(&s.band.content) == std::mem::discriminant(&b.content)
+            })
+            .count();
+        let rebuild = keep != bands.len() || keep != self.surfaces.len();
         if rebuild {
-            self.clear();
-            for band in bands {
+            for s in self.surfaces.drain(keep..) {
+                self.conn.destroy_window(s.window).map_err(err)?;
+                self.conn.free_gc(s.gc).map_err(err)?;
+                self.conn.free_pixmap(s.pixmap).map_err(err)?;
+            }
+            for band in &bands[keep..] {
                 self.create(band)?;
             }
         }
@@ -407,6 +457,71 @@ impl Backend for Host {
                 return Err(err(
                     "Displays changed. Reload the screens before showing overlays again.",
                 ));
+            }
+            match &event {
+                Event::ButtonPress(e) => {
+                    let kind = match e.detail {
+                        1 => Some(Kind::Press),
+                        4 => Some(Kind::Wheel(1.)),
+                        5 => Some(Kind::Wheel(-1.)),
+                        _ => None,
+                    };
+                    if let Some(kind) = kind {
+                        self.conn
+                            .set_input_focus(InputFocus::POINTER_ROOT, e.event, e.time)
+                            .map_err(err)?;
+                        if e.detail == 1 {
+                            self.pressed = Some(e.event);
+                        }
+                        self.emit(
+                            e.event,
+                            kind,
+                            (e.event_x.into(), e.event_y.into()),
+                            e.time,
+                            e.state,
+                        );
+                    }
+                }
+                Event::ButtonRelease(e) if e.detail == 1 => {
+                    self.emit(
+                        e.event,
+                        Kind::Release,
+                        (e.event_x.into(), e.event_y.into()),
+                        e.time,
+                        e.state,
+                    );
+                    self.pressed = None;
+                }
+                Event::MotionNotify(e) if self.pressed.is_some() => self.emit(
+                    e.event,
+                    Kind::Move,
+                    (e.event_x.into(), e.event_y.into()),
+                    e.time,
+                    e.state,
+                ),
+                Event::KeyPress(e) => {
+                    let kind = if e.detail == self.keys.0 {
+                        Some(Kind::Escape)
+                    } else if e.detail == self.keys.1 {
+                        Some(Kind::Delete)
+                    } else {
+                        None
+                    };
+                    if let Some(kind) = kind {
+                        self.emit(
+                            e.event,
+                            kind,
+                            (e.event_x.into(), e.event_y.into()),
+                            e.time,
+                            e.state,
+                        );
+                    }
+                }
+                Event::FocusOut(e) if self.pressed == Some(e.event) => {
+                    self.emit(e.event, Kind::Cancel, (0., 0.), 0, KeyButMask::default());
+                    self.pressed = None;
+                }
+                _ => {}
             }
             if let Event::Error(e) = event {
                 return Err(err(format!("{e:?}")));
@@ -463,5 +578,28 @@ impl Drop for Host {
         self.clear();
         let _ = self.conn.free_colormap(self.colormap);
         let _ = self.conn.flush();
+    }
+}
+
+impl Host {
+    fn emit(
+        &mut self,
+        window: u32,
+        kind: Kind,
+        point: (f64, f64),
+        time: u32,
+        modifiers: KeyButMask,
+    ) {
+        if let Some(s) = self.surfaces.iter().find(|s| s.window == window) {
+            self.input.push(Input::new(
+                &s.band,
+                kind,
+                point,
+                s.band.scale,
+                time,
+                modifiers.contains(KeyButMask::CONTROL),
+                modifiers.contains(KeyButMask::SHIFT),
+            ));
+        }
     }
 }

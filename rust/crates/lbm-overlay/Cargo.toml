@@ -4,20 +4,22 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 publish = false
-description = "Overlay surfaces for the rulers and resistance bands: placed to the pixel on a chosen screen, transparent, click-through"
+description = "Overlay surfaces for the rulers and resistance bands: placed to the pixel on a chosen screen, transparent, interactive"
 
 [[bin]]
 name = "lbm-overlay-spike"
 path = "src/main.rs"
 
 [dependencies]
+ab_glyph = "0.2"
+epaint_default_fonts = "0.36"
 lbm-layout = { path = "../lbm-layout" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
-features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader"]
+features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader"]
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -28,7 +30,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "unstable", "staging"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
-# The X11 back: a placed, override-redirect, 32-bit window with an empty input shape —
+# The X11 backend uses placed, override-redirect, 32-bit windows with shaped input —
 # and, unlike Wayland, a server that can be asked back what it granted.
 x11rb = { version = "0.14", features = ["shape", "randr", "render"] }
 libc = "0.2"
+xkbcommon-dl = "0.4"

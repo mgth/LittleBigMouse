@@ -12,6 +12,7 @@ struct State {
     pulse: bool,
     stop: bool,
     error: Option<String>,
+    input: Vec<crate::input::Input>,
 }
 type Shared = Arc<(Mutex<State>, Condvar)>;
 struct Session {
@@ -68,10 +69,26 @@ impl Session {
             let mut reader = std::io::BufReader::new(output);
             loop {
                 let mut line = Vec::new();
-                match (&mut reader).take(4097).read_until(b'\n', &mut line) {
+                match (&mut reader)
+                    .take((MAX_MESSAGE + 1) as u64)
+                    .read_until(b'\n', &mut line)
+                {
                     Ok(0) => return,
-                    Ok(n) if n <= 4096 => match serde_json::from_slice::<Reply>(&line) {
+                    Ok(n) if n <= MAX_MESSAGE => match serde_json::from_slice::<Reply>(&line) {
                         Ok(Reply::Ready) => {}
+                        Ok(Reply::Input(input)) if input.valid() => {
+                            let mut state = receive.0.lock().unwrap();
+                            if state.input.len() >= 1024 {
+                                state.error =
+                                    Some("Overlay input queue overflow; gesture cancelled.".into());
+                                return;
+                            }
+                            state.input.push(input);
+                        }
+                        Ok(Reply::Input(_)) => {
+                            receive.0.lock().unwrap().error = Some("Invalid overlay input.".into());
+                            return;
+                        }
                         Ok(Reply::Error(error)) => {
                             receive.0.lock().unwrap().error = Some(error);
                             return;
@@ -140,6 +157,12 @@ pub struct Native {
     session: Option<Session>,
 }
 impl Backend for Native {
+    fn take_input(&mut self) -> Vec<crate::input::Input> {
+        self.session
+            .as_mut()
+            .map(|s| std::mem::take(&mut s.shared.0.lock().unwrap().input))
+            .unwrap_or_default()
+    }
     fn present(&mut self, bands: &[Band]) -> Result<(), String> {
         super::validate(bands)?;
         if self.session.is_none() {
@@ -194,7 +217,7 @@ mod tests {
     fn malformed_and_oversized_responses_fail_closed() {
         for script in [
             "read line; printf '%s\\n' invalid",
-            "read line; i=0; while [ $i -lt 4100 ]; do printf x; i=$((i+1)); done; printf '\\n'",
+            "read line; i=0; while [ $i -lt 262200 ]; do printf x; i=$((i+1)); done; printf '\\n'",
         ] {
             let mut s = helper(script);
             let e = error(&mut s);

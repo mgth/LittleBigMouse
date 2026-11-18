@@ -1,4 +1,5 @@
 //! Physical-screen overlays. Geometry/raster/lifetime policy also run without a desktop.
+pub mod input;
 #[cfg(target_os = "linux")]
 pub mod linux;
 pub mod raster;
@@ -10,6 +11,9 @@ pub use scene::{Band, Mode};
 pub trait Backend {
     fn present(&mut self, bands: &[Band]) -> Result<(), String>;
     fn clear(&mut self);
+    fn take_input(&mut self) -> Vec<input::Input> {
+        Vec::new()
+    }
     fn invalidated(&mut self) -> bool {
         false
     }
@@ -53,6 +57,9 @@ impl<B: Backend> Manager<B> {
         }
         self.shown = bands.to_vec();
         Ok(())
+    }
+    pub fn take_input(&mut self) -> Vec<input::Input> {
+        self.backend.take_input()
     }
     pub fn clear(&mut self) {
         self.backend.clear();

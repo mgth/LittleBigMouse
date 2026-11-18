@@ -650,3 +650,52 @@ fn render_preview_sheet() {
         "overlay rendering differs from the inspected reference"
     );
 }
+
+#[test]
+fn native_input_regions_match_visible_mitres_and_leave_reference_lines_click_through() {
+    let bands = scene::from_layout(&layout(), Mode::Resistance, None).unwrap();
+    for b in &bands[..4] {
+        let regions = lbm_overlay::input::regions(b);
+        let image = raster::render(b).unwrap();
+        for y in 0..image.height {
+            for x in 0..image.width {
+                let hit = regions.iter().any(|r| {
+                    (x as i32) >= r.x
+                        && (x as i32) < r.x + r.width
+                        && (y as i32) >= r.y
+                        && (y as i32) < r.y + r.height
+                });
+                assert_eq!(
+                    hit,
+                    image.bgra[(y * image.width + x) * 4 + 3] > 0,
+                    "{:?} {x},{y}",
+                    b.side
+                );
+            }
+        }
+    }
+    for b in references(true, 90., scene::GuideKind::Section) {
+        if matches!(b.content, Content::Guide { .. }) {
+            assert!(lbm_overlay::input::regions(&b).is_empty());
+        }
+    }
+}
+#[test]
+fn physical_and_logical_native_input_agree_at_fractional_scale() {
+    use lbm_overlay::input::{Input, Kind};
+    let mut b = rulers()[0].clone();
+    b.scale = 1.25;
+    let logical = Input::new(&b, Kind::Move, (200., 20.), 1., 123, true, false);
+    let mut physical = b.clone();
+    physical.rect.width = (f64::from(b.rect.width) * 1.25) as i32;
+    physical.rect.height = (f64::from(b.rect.height) * 1.25) as i32;
+    let physical = Input::new(&physical, Kind::Move, (250., 25.), 1.25, 123, true, false);
+    assert_eq!(
+        (logical.at, logical.length, logical.thickness),
+        (physical.at, physical.length, physical.thickness)
+    );
+    assert_eq!(
+        serde_json::from_str::<Input>(&serde_json::to_string(&logical).unwrap()).unwrap(),
+        logical
+    );
+}

@@ -1,12 +1,14 @@
 //! Observe only the touchscreen HID collection, including apps consuming native
 //! touch without mouse promotion. INPUTSINK neither redirects nor suppresses input.
-//! Only bounded touchscreen descriptors are retained. No keyboard input is registered.
+//! Only bounded touchscreen descriptors are retained. The keyboard is registered only
+//! while a focus restoration waits, and only the fact of a report is used: its content
+//! is never read.
 use std::cell::{Cell, RefCell};
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::UI::Input::{
     GetRawInputData, GetRawInputDeviceInfoW, RegisterRawInputDevices, HRAWINPUT, RAWINPUTDEVICE,
     RAWINPUTHEADER, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE, RIDI_DEVICEINFO,
-    RID_DEVICE_INFO, RID_HEADER, RID_INPUT, RIM_TYPEHID,
+    RID_DEVICE_INFO, RID_HEADER, RID_INPUT, RIM_TYPEHID, RIM_TYPEKEYBOARD,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorInfo, GetMessageTime, KillTimer, SetTimer, CURSORINFO, CURSOR_SUPPRESSED,
@@ -36,6 +38,7 @@ thread_local! {
     static LAST_TOUCH_DEVICE: Cell<Option<isize>> = const { Cell::new(None) };
     static WINDOW: Cell<HWND> = const { Cell::new(HWND(std::ptr::null_mut())) };
     static REGISTERED: Cell<bool> = const { Cell::new(false) };
+    static KEYBOARD_WATCHED: Cell<bool> = const { Cell::new(false) };
 }
 
 pub fn devices_changed() {
@@ -55,6 +58,7 @@ pub fn attach(hwnd: HWND) {
 }
 
 pub fn detach() {
+    watch_keyboard(false);
     sync(false);
     WINDOW.with(|window| window.set(HWND::default()));
 }
@@ -74,6 +78,34 @@ pub fn sync(wanted: bool) {
         false
     };
     REGISTERED.with(|state| state.set(registered));
+}
+
+/// Be told of key events, for as long as a restoration waits. Returns whether the
+/// watch is in the requested state.
+pub fn watch_keyboard(wanted: bool) -> bool {
+    if wanted == KEYBOARD_WATCHED.with(Cell::get) {
+        return true;
+    }
+    let hwnd = WINDOW.with(Cell::get);
+    if wanted && hwnd == HWND::default() {
+        return false;
+    }
+    let device = RAWINPUTDEVICE {
+        usUsagePage: 0x01,
+        usUsage: 0x06,
+        dwFlags: if wanted {
+            RIDEV_INPUTSINK
+        } else {
+            RIDEV_REMOVE
+        },
+        hwndTarget: if wanted { hwnd } else { HWND::default() },
+    };
+    let done =
+        unsafe { RegisterRawInputDevices(&[device], size_of::<RAWINPUTDEVICE>() as u32) }.is_ok();
+    if done {
+        KEYBOARD_WATCHED.with(|watched| watched.set(wanted));
+    }
+    done
 }
 
 fn register(hwnd: HWND) -> bool {
@@ -115,7 +147,14 @@ pub fn on_input(hwnd: HWND, lparam: LPARAM) {
             size_of::<RAWINPUTHEADER>() as u32,
         )
     };
-    if read != size_of::<RAWINPUTHEADER>() as u32 || header.dwType != RIM_TYPEHID.0 {
+    if read != size_of::<RAWINPUTHEADER>() as u32 {
+        return;
+    }
+    if header.dwType == RIM_TYPEKEYBOARD.0 {
+        super::focus_restore::on_keyboard_input();
+        return;
+    }
+    if header.dwType != RIM_TYPEHID.0 {
         return;
     }
     if !is_touchscreen(header.hDevice) {

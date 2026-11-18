@@ -39,11 +39,6 @@ pub struct RestoreRequest {
 }
 
 impl RestoreRequest {
-    /// Whether the user has done something since the touch, going by the idle clock.
-    pub fn interrupted_by(&self, last_input: Option<u32>) -> bool {
-        last_input != Some(self.input_time)
-    }
-
     pub fn should_restore(
         &self,
         origin_now: Option<WindowIdentity>,
@@ -93,14 +88,6 @@ mod tests {
         for time in [None, Some(0), Some(100)] {
             assert!(!r.should_restore(Some(window(1)), Some(window(2)), time, true, 3, 4));
         }
-    }
-
-    #[test]
-    fn any_input_after_the_touch_interrupts_a_waiting_restoration() {
-        let r = request();
-        assert!(!r.interrupted_by(Some(r.input_time)));
-        assert!(r.interrupted_by(Some(r.input_time.wrapping_add(1))));
-        assert!(r.interrupted_by(None));
     }
 
     #[test]

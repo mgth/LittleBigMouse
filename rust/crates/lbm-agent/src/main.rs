@@ -290,7 +290,9 @@ fn run(options: Options) -> ExitCode {
 
         // The frontends' requests: the socket's, and the tray's.
         let (calls, calls_rx) = tokio::sync::mpsc::unbounded_channel();
-        agent = agent.with_api(calls_rx);
+        agent = agent
+            .with_api(calls_rx)
+            .with_remote_config(config_dir.clone());
 
         // The frontends' endpoint (the instance lock is held: any socket there is stale).
         #[cfg(unix)]

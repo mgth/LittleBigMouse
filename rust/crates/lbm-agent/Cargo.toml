@@ -25,13 +25,23 @@ png = "0.17"
 # The span wallpaper: decoding whatever the user picked, and writing the slices.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
 tokio = { workspace = true, features = ["io-util", "macros", "net", "process", "rt", "signal", "sync", "time"] }
+base64 = "0.22"
+aes-gcm = "0.10"
+md-5 = "0.10"
+getrandom = "0.3"
+native-tls = "0.2"
+tokio-native-tls = "0.3"
+roxmltree = "0.21"
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+reqwest = { version = "0.13", default-features = false }
+
+url = "2"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-url = "2"
-futures-util = { version = "0.3", default-features = false }
 # async-io, never tokio, for zbus and everything that forwards to it (ksni, ashpd): cargo
 # unifies features across the packages of one build, and a zbus built for tokio panics in
 # lbm-app's accessibility thread (accesskit_unix runs zbus outside any tokio runtime).

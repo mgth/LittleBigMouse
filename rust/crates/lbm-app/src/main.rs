@@ -123,6 +123,7 @@ struct App {
     show_probe: bool,
     outputs: lbm_app::displays::Displays,
     vcp: lbm_app::vcp::Controller,
+    remote: lbm_app::remote::Controller,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
     /// **In memory only, and this window writes no file.** A drag changes this copy and
@@ -503,6 +504,7 @@ impl App {
             show_probe: true,
             outputs: Default::default(),
             vcp: Default::default(),
+            remote: Default::default(),
             excluded: None,
             pattern: String::new(),
             placement: Default::default(),
@@ -551,6 +553,7 @@ impl App {
                 self.topology_pending = None;
                 self.outputs = Default::default();
                 self.vcp = Default::default();
+                self.remote = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = Some(requests);
                 self.next_id = 3;
@@ -580,6 +583,7 @@ impl App {
                 self.topology_pending = None;
                 self.outputs = Default::default();
                 self.vcp = Default::default();
+                self.remote = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.state = lbm_ui::State::default();
@@ -937,6 +941,9 @@ impl App {
             if self.topology_pending == Some(*id) {
                 self.topology_pending = None;
             }
+            if self.remote.answered(*id, result) {
+                return;
+            }
             if self.vcp.answered(*id, result) {
                 return;
             }
@@ -970,6 +977,7 @@ impl App {
             if self.refresh.observe(stamp, false, self.dirty()) {
                 self.outputs.invalidate();
                 self.vcp.select(None);
+                self.remote.select(None);
                 self.state.live = false;
                 self.previewed = None;
                 self.drag = None;
@@ -2137,6 +2145,7 @@ impl App {
                 monitor: self.selected.clone()?,
             })
         });
+        self.remote.select(key.clone());
         self.vcp.select(key);
         if self.requests.is_none() {
             ui.label("Connect to the agent to control the monitor.");
@@ -2154,7 +2163,33 @@ impl App {
             ui.label("Select a local layout to control physical monitors.");
             return;
         }
-        if self.vcp.needs_read() {
+        if self.remote.needs_read() {
+            self.remote_request(lbm_ipc::remote::Command {
+                brand: self.remote.panel.brand,
+                action: lbm_ipc::remote::Action::Info,
+            });
+        }
+        let recognized = self.remote.recognized();
+        egui::CollapsingHeader::new("Network remote")
+            .id_salt(("network-remote", self.selected.clone(), recognized))
+            .default_open(recognized)
+            .show(ui, |ui| {
+                let busy = self.remote.busy();
+                match self.remote.panel.show(
+                    ui,
+                    self.remote.state.as_ref(),
+                    busy,
+                    self.remote.error.as_deref(),
+                ) {
+                    Some(lbm_ui::remote::Did::Brand(brand)) => self.remote.switch(brand),
+                    Some(lbm_ui::remote::Did::Command(command)) => self.remote_request(command),
+                    None => {}
+                }
+            });
+        ui.separator();
+        // Smart displays can have no DDC bus at all. Network remotes never wait
+        // for a DDC probe; allow an explicit probe on these displays instead.
+        if self.vcp.needs_read() && !recognized {
             self.vcp_request(None);
         }
         ui.strong("DDC/CI controls");
@@ -2169,6 +2204,21 @@ impl App {
             Some(lbm_ui::vcp::Action::Refresh) => self.vcp_request(None),
             Some(lbm_ui::vcp::Action::Set(write)) => self.vcp_request(Some(write)),
             None => {}
+        }
+    }
+
+    fn remote_request(&mut self, command: lbm_ipc::remote::Command) {
+        let Some(requests) = &self.requests else {
+            return;
+        };
+        let id = self.next_id;
+        let Some(extra) = self.remote.request(id, command) else {
+            return;
+        };
+        self.next_id += 1;
+        if requests.send((id, "Remote", extra)).is_err() {
+            self.remote
+                .answered(id, &Err("The agent stopped listening.".into()));
         }
     }
 

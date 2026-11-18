@@ -606,7 +606,7 @@ pub fn panel(
                     ui,
                     Icon::Vcp,
                     "Enable Display Lab",
-                    "Monitor controls",
+                    "Monitor controls and network remotes",
                     &mut options.vcp_control,
                 );
                 if options.vcp_control {

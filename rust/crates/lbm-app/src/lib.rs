@@ -18,3 +18,5 @@ pub mod settings;
 pub mod wallpaper_editor;
 
 pub mod vcp;
+
+pub mod remote;

@@ -447,3 +447,5 @@ pub mod monitor_info;
 pub mod about;
 
 pub mod vcp;
+
+pub mod remote;

@@ -16,3 +16,5 @@ pub mod protocol;
 pub mod shortcut;
 
 pub mod vcp;
+
+pub mod remote;

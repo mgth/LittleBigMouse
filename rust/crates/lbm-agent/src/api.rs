@@ -72,6 +72,17 @@ pub enum Request {
     Snapshot,
     /// Connected outputs, including disabled ones. Unsupported backends return an error.
     DisplayOutputs,
+    /// Native Samsung/Hisense remote, independent from DDC/CI.
+    Remote {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "LayoutRevision")]
+        layout_revision: u64,
+        #[serde(rename = "Monitor")]
+        monitor: String,
+        #[serde(rename = "Command")]
+        command: lbm_ipc::remote::Command,
+    },
     /// Read a monitor's VCP controls, or write one previously probed value.
     Vcp {
         #[serde(rename = "LayoutId")]

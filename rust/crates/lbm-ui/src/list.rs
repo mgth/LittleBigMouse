@@ -18,19 +18,9 @@ pub fn draw(
     monitors: &[MapMonitor<'_>],
     selected: Option<&str>,
 ) {
-    draw_with_panorama(ui, available, monitors, selected, None);
-}
-
-pub fn draw_with_panorama(
-    ui: &mut egui::Ui,
-    available: egui::Rect,
-    monitors: &[MapMonitor<'_>],
-    selected: Option<&str>,
-    panorama: Option<map::Panorama<'_>>,
-) {
     if let Some(m) = monitors.iter().find(|m| Some(m.id) == selected) {
         let fit = map::fit_in(screen_rect(available), extent_of(Some(m)));
-        frame::monitor_with_panorama(
+        frame::monitor(
             ui,
             &fit.place(m),
             &Look {
@@ -41,7 +31,6 @@ pub fn draw_with_panorama(
                 details: m.details,
                 probe: m.probe,
             },
-            panorama.map(|p| p.project(&fit)),
         );
     } else {
         ui.centered_and_justified(|ui| {

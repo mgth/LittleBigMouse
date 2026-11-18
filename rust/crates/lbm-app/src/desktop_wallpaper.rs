@@ -21,11 +21,21 @@ struct Target {
     bounds: Rect,
     scale: f64,
 }
+/// Which axes a tiled picture repeats on. On a single axis, Plasma stretches it to the
+/// output along the other one. Windows only ever tiles on both.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(windows, allow(dead_code))]
+enum Repeat {
+    Both,
+    Vertically,
+    Horizontally,
+}
 #[derive(Clone, Debug, PartialEq)]
 struct Entry {
     bounds: Rect,
     path: Option<PathBuf>,
     style: Style,
+    repeat: Repeat,
     color: [u8; 4],
 }
 struct Read {
@@ -183,6 +193,15 @@ fn render(entry: &Entry, target: &Target, entries: &[Entry]) -> Result<RgbaImage
         (f64::from(source.height()) * ratio).round().max(1.) as u32,
         FilterType::CatmullRom,
     );
+    let stretched = match entry.repeat {
+        Repeat::Both => None,
+        Repeat::Vertically => Some((target_size.w as u32, source.height())),
+        Repeat::Horizontally => Some((source.width(), target_size.h as u32)),
+    };
+    let source = match stretched {
+        Some((w, h)) => image::imageops::resize(&source, w, h, FilterType::CatmullRom),
+        None => source,
+    };
     let source_size = Size {
         w: source.width() as i32,
         h: source.height() as i32,
@@ -266,12 +285,14 @@ mod tests {
                 bounds: targets[1].bounds,
                 path: None,
                 style: Style::Fill,
+                repeat: Repeat::Both,
                 color: [32, 64, 96, 255],
             },
             Entry {
                 bounds: targets[0].bounds,
                 path: Some(path.clone()),
                 style: Style::Fit,
+                repeat: Repeat::Both,
                 color: [2, 4, 6, 255],
             },
         ];
@@ -311,12 +332,47 @@ mod tests {
             bounds: target.bounds,
             path: Some(path),
             style: Style::Center,
+            repeat: Repeat::Both,
             color: [0, 0, 100, 255],
         };
         let out = render(&entry, &target, std::slice::from_ref(&entry)).unwrap();
         assert_eq!(out.dimensions(), (512, 256));
         assert_eq!(out.get_pixel(200, 128).0, [0, 0, 100, 255]);
         assert_eq!(out.get_pixel(256, 128).0, [255, 0, 0, 255]);
+    }
+    #[test]
+    fn a_picture_tiled_on_one_axis_is_stretched_along_the_other() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tile.png");
+        let (red, blue) = (Rgba([255, 0, 0, 255]), Rgba([0, 0, 255, 255]));
+        RgbaImage::from_fn(20, 10, |x, _| if x < 10 { red } else { blue })
+            .save(&path)
+            .unwrap();
+        let target = Target {
+            id: "screen".into(),
+            bounds: Rect::new(0., 0., 100., 40.),
+            scale: 1.,
+        };
+        let pixel = |repeat, x, y| {
+            let entry = Entry {
+                bounds: target.bounds,
+                path: Some(path.clone()),
+                style: Style::Tile,
+                repeat,
+                color: [0, 0, 0, 255],
+            };
+            let out = render(&entry, &target, std::slice::from_ref(&entry)).unwrap();
+            assert_eq!(out.dimensions(), (100, 40));
+            *out.get_pixel(x, y)
+        };
+        // One copy across the width, so the left half stays red all the way down.
+        assert_eq!(pixel(Repeat::Vertically, 35, 5), red);
+        assert_eq!(pixel(Repeat::Vertically, 35, 35), red);
+        assert_eq!(pixel(Repeat::Vertically, 65, 35), blue);
+        // Repeated every 20 pixels across, each copy as tall as the screen.
+        assert_eq!(pixel(Repeat::Horizontally, 25, 35), red);
+        assert_eq!(pixel(Repeat::Horizontally, 35, 35), blue);
+        assert_eq!(pixel(Repeat::Both, 35, 5), blue);
     }
     #[test]
     fn spanning_uses_desktop_coordinates_including_negative_origins() {
@@ -341,6 +397,7 @@ mod tests {
                 bounds: t.bounds,
                 path: Some(path.clone()),
                 style: Style::Span,
+                repeat: Repeat::Both,
                 color: [0, 0, 0, 255],
             })
             .collect();

@@ -1,4 +1,4 @@
-use super::{Entry, Rect, Style};
+use super::{Entry, Rect, Repeat, Style};
 use std::{path::PathBuf, process::Command};
 
 // No writes: read the live containment for each active screen, preserving its group.
@@ -47,6 +47,16 @@ fn parse(text: &str) -> Result<Vec<Entry>, String> {
                 "org.kde.color" => None,
                 _ => return None,
             };
+            // Qt's `Image.fillMode`, which is what Plasma stores.
+            let (style, repeat) = match v["fill"].as_i64().unwrap_or(2) {
+                0 => (Style::Stretch, Repeat::Both),
+                1 => (Style::Fit, Repeat::Both),
+                3 => (Style::Tile, Repeat::Both),
+                4 => (Style::Tile, Repeat::Vertically),
+                5 => (Style::Tile, Repeat::Horizontally),
+                6 => (Style::Center, Repeat::Both),
+                _ => (Style::Fill, Repeat::Both),
+            };
             Some(Entry {
                 bounds: Rect::new(
                     v["x"].as_f64()?,
@@ -55,13 +65,8 @@ fn parse(text: &str) -> Result<Vec<Entry>, String> {
                     v["height"].as_f64()?,
                 ),
                 path,
-                style: match v["fill"].as_i64().unwrap_or(2) {
-                    0 => Style::Stretch,
-                    1 => Style::Fit,
-                    3..=5 => Style::Tile,
-                    6 => Style::Center,
-                    _ => Style::Fill,
-                },
+                style,
+                repeat,
                 color: color(v["color"].as_str().unwrap_or("#000000")),
             })
         })
@@ -126,6 +131,22 @@ mod tests {
         assert_eq!(entries[0].bounds.x(), -1536.);
         assert_eq!(entries[1].color, [32, 64, 96, 255]);
         assert!(entries[1].path.is_none());
+    }
+    #[test]
+    fn qt_fill_modes_keep_the_axis_they_repeat_on() {
+        for (fill, style, repeat) in [
+            (3, Style::Tile, Repeat::Both),
+            (4, Style::Tile, Repeat::Vertically),
+            (5, Style::Tile, Repeat::Horizontally),
+            (6, Style::Center, Repeat::Both),
+        ] {
+            let entries = parse(&format!(
+                r#"[{{"x":0,"y":0,"width":10,"height":10,"plugin":"org.kde.image",
+                     "image":"/tmp/a.png","fill":{fill}}}]"#
+            ))
+            .unwrap();
+            assert_eq!((entries[0].style, entries[0].repeat), (style, repeat));
+        }
     }
     #[test]
     fn wallpaper_packages_choose_the_largest_image() {

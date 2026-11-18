@@ -1,4 +1,4 @@
-use super::{Entry, Rect, Style};
+use super::{Entry, Rect, Repeat, Style};
 use windows::{
     core::{PCWSTR, PWSTR},
     Win32::{
@@ -64,6 +64,7 @@ fn read() -> windows::core::Result<Vec<Entry>> {
                 ),
                 path: (!path.is_empty()).then(|| path.into()),
                 style,
+                repeat: Repeat::Both,
                 color,
             });
         }

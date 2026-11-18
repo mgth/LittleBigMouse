@@ -1147,43 +1147,6 @@ impl App {
             .collect()
     }
 
-    /// Re-slice the shared source using the geometry actually shown (including a drag).
-    fn panorama_for(&self, monitors: &[MapMonitor<'_>]) -> Option<map::Panorama<'_>> {
-        use lbm_store::wallpaper_settings::WallpaperMode;
-        let settings = self.wallpaper.draft.as_ref()?;
-        if settings.mode != WallpaperMode::Span {
-            return None;
-        }
-        let (path, size, texture) = self.panorama.as_ref()?;
-        if settings.span_image_path.as_ref() != Some(path) {
-            return None;
-        }
-        let layout = self.layout.as_ref()?;
-        if self
-            .wallpaper
-            .key
-            .as_ref()
-            .is_some_and(|key| key.layout != layout.id)
-        {
-            return None;
-        }
-        let bounds = lbm_layout::wallpaper::compute_bounds_mm(
-            monitors
-                .iter()
-                .filter(|m| {
-                    layout
-                        .monitor(m.id)
-                        .and_then(|screen| screen.active_source.as_deref())
-                        .and_then(|id| layout.source(id))
-                        .is_some_and(|s| s.source.attached_to_desktop)
-                })
-                .map(|m| m.mm_outside),
-        );
-        let mm =
-            lbm_wallpaper::render::panorama_rect(*size, bounds, settings.span_placement).ok()?;
-        Some(map::Panorama { texture, mm })
-    }
-
     fn probe_tick(&mut self, ctx: &egui::Context) {
         let now = std::time::Instant::now();
         let key = if self.show_probe
@@ -2635,12 +2598,11 @@ impl eframe::App for App {
                             });
                         }
 
-                        let mut gesture = map::draw_with_panorama(
+                        let mut gesture = map::draw_movable(
                             ui,
                             &shown,
                             &fit,
                             self.selected.as_deref(),
-                            self.panorama_for(&shown),
                             self.mode == lbm_ui::mode::Mode::Location,
                         );
                         let placements = shown.iter().map(|m| (m.id, fit.place(m)));
@@ -2680,13 +2642,7 @@ impl eframe::App for App {
                         (owned(gesture), held.map(|(_, total, _)| total))
                     }
                     View::List => {
-                        list::draw_with_panorama(
-                            ui,
-                            at,
-                            &monitors,
-                            self.selected.as_deref(),
-                            self.panorama_for(&monitors),
-                        );
+                        list::draw(ui, at, &monitors, self.selected.as_deref());
                         let mut picked = None;
                         let placements = monitors
                             .iter()
@@ -3352,71 +3308,6 @@ mod lifecycle_tests {
         assert_eq!(app.refresh.begin(app.dirty()), None);
         assert!(app.dirty(), "changing resolution must not discard the edit");
     }
-    #[test]
-    fn panorama_follows_drag_commit_and_undo_without_changing_its_framing() {
-        use lbm_layout::linux::{add_monitor, LinuxMonitor};
-        use lbm_store::wallpaper_settings::{
-            LayoutWallpaperSettings, SpanPlacement, WallpaperMode,
-        };
-        let ctx = egui::Context::default();
-        let mut app = App::with_config(ctx.clone(), None);
-        let mut layout = Layout::new(LayoutOptions::default());
-        for (connector, x) in [("left", 0.), ("right", 1920.)] {
-            let mut m = LinuxMonitor::fallback();
-            m.connector_name = connector.into();
-            m.logical_x = x;
-            add_monitor(&mut layout, &m);
-        }
-        let ids: Vec<_> = layout.monitors().iter().map(|m| m.id.clone()).collect();
-        layout.set_location(&ids[1], lbm_layout::geo::Point::new(600., 0.));
-        let original = layout.clone();
-        let settings = LayoutWallpaperSettings {
-            mode: WallpaperMode::Span,
-            span_image_path: Some("panorama.png".into()),
-            span_placement: Some(SpanPlacement {
-                scale: 1.2,
-                offset_x_mm: 30.,
-                offset_y_mm: -10.,
-            }),
-            ..Default::default()
-        };
-        app.wallpaper.draft = Some(settings.clone());
-        app.panorama = Some((
-            "panorama.png".into(),
-            lbm_layout::geo::Size::new(1600., 900.),
-            ctx.load_texture(
-                "source",
-                egui::ColorImage::filled([16, 9], egui::Color32::RED),
-                Default::default(),
-            ),
-        ));
-        app.mode = lbm_ui::mode::Mode::Location;
-        app.screens = screens_of(&layout, app.mode);
-        app.layout = Some(Box::new(layout));
-        let logos = HashMap::new();
-        let before = app.panorama_for(&app.monitors(&logos)).unwrap().mm;
-        let delta = Vector::new(180., -40.);
-        let dragged = {
-            let mut shown = app.monitors(&logos);
-            shown[1].mm_outside = shown[1].mm_outside.translate(delta);
-            shown[1].mm_content = shown[1].mm_content.translate(delta);
-            app.panorama_for(&shown).unwrap().mm
-        };
-        assert_ne!(
-            before, dragged,
-            "the drag must immediately reframe the source"
-        );
-        app.layout.as_mut().unwrap().offset_location(&ids[1], delta);
-        app.screens = screens_of(app.layout.as_ref().unwrap(), app.mode);
-        assert_eq!(app.panorama_for(&app.monitors(&logos)).unwrap().mm, dragged);
-        app.screens = screens_of(&original, app.mode);
-        app.layout = Some(Box::new(original));
-        assert_eq!(app.panorama_for(&app.monitors(&logos)).unwrap().mm, before);
-        assert_eq!(app.wallpaper.draft, Some(settings));
-        app.wallpaper.draft.as_mut().unwrap().mode = WallpaperMode::PerScreen;
-        assert!(app.panorama_for(&app.monitors(&logos)).is_none());
-    }
-
     #[test]
     fn desktop_wallpaper_is_visible_without_saved_settings_and_preview_stays_in_its_editor() {
         let ctx = egui::Context::default();

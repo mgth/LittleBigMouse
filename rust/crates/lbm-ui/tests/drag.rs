@@ -69,8 +69,7 @@ fn watching_with_movement<'a>(
         .with_size(egui::vec2(1200.0, 900.0))
         .build_ui(move |ui| {
             let fit = map::fit(map::extent(&screens), ui.max_rect());
-            if let Some(gesture) = map::draw_with_panorama(ui, &screens, &fit, None, None, movable)
-            {
+            if let Some(gesture) = map::draw_movable(ui, &screens, &fit, None, movable) {
                 log.borrow_mut().push(match gesture {
                     map::Gesture::Clicked(id) => Said::Clicked(id.to_owned()),
                     map::Gesture::Dragged { id, by } => Said::Dragged(id.to_owned(), by),

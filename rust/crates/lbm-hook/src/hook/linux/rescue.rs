@@ -46,6 +46,12 @@ const DESCRIPTION: &str = "Little Big Mouse: free a trapped cursor";
 /// on a fumble, short enough to feel like a rescue.
 const HOLD: Duration = Duration::from_millis(900);
 
+/// The pause before asking again a portal that could not be reached, doubled up to
+/// [`LAST_RETRY`]: one that arrives late is usually only a session still starting, and
+/// one that never comes should not cost anything.
+const FIRST_RETRY: Duration = Duration::from_secs(5);
+const LAST_RETRY: Duration = Duration::from_secs(5 * 60);
+
 /// Bumped whenever the wanted shortcut changes, so a listener that is already up
 /// knows its session is describing the wrong combination. A channel rather than a
 /// counter, so that the listener can wait for the change instead of looking for it.
@@ -88,6 +94,7 @@ pub fn shortcut_changed() {
 /// global shortcuts to offer, said once.
 async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
     let mut announced_absence = false;
+    let mut pause = FIRST_RETRY;
     loop {
         let generation = *GENERATION.borrow();
         let wanted = shared
@@ -107,6 +114,7 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
         match bound {
             Ok(session) => {
                 announced_absence = false;
+                pause = FIRST_RETRY;
                 listen(session, generation, shared, on_fire).await;
             }
             Err(error) => {
@@ -117,12 +125,35 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
                     );
                     announced_absence = true;
                 }
-                // A portal that arrives late (a session still starting) is the
-                // ordinary case; retry, quietly from here on.
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                if refused(&error) {
+                    // The portal answered, and its answer depends on who is asking:
+                    // asking again would only get the same one.
+                    superseded(generation).await;
+                } else {
+                    // A portal that arrives late is the ordinary case; retry, quietly
+                    // from here on.
+                    tokio::select! {
+                        _ = tokio::time::sleep(pause) => {}
+                        () = superseded(generation) => {}
+                    }
+                    pause = next_retry(pause);
+                }
             }
         }
     }
+}
+
+/// Whether the portal said no, rather than not being there to ask. It does for a process
+/// it can attach no application id to ("An app id is required").
+fn refused(error: &ashpd::Error) -> bool {
+    matches!(
+        error,
+        ashpd::Error::Portal(ashpd::PortalError::NotAllowed(_))
+    )
+}
+
+fn next_retry(pause: Duration) -> Duration {
+    (pause * 2).min(LAST_RETRY)
 }
 
 /// Resolves once the wanted shortcut is no longer the one `generation` describes.
@@ -243,6 +274,23 @@ mod tests {
     use super::*;
 
     const PATIENCE: Duration = Duration::from_secs(5);
+
+    #[test]
+    fn only_a_refusal_ends_the_retries() {
+        let refusal = ashpd::PortalError::NotAllowed("An app id is required".into());
+        assert!(refused(&ashpd::Error::Portal(refusal)));
+
+        let failure = ashpd::PortalError::Failed("not ready".into());
+        assert!(!refused(&ashpd::Error::Portal(failure)));
+        assert!(!refused(&ashpd::Error::NoResponse));
+    }
+
+    #[test]
+    fn retries_slow_down_to_a_limit() {
+        assert_eq!(next_retry(FIRST_RETRY), Duration::from_secs(10));
+        assert_eq!(next_retry(Duration::from_secs(200)), LAST_RETRY);
+        assert_eq!(next_retry(LAST_RETRY), LAST_RETRY);
+    }
 
     #[tokio::test]
     async fn a_listener_waits_for_the_shortcut_to_change() {

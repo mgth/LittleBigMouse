@@ -15,12 +15,20 @@ pub fn is_pen(extra: usize) -> bool {
 /// must supply positive touchscreen evidence; a large mouse delta is not enough.
 /// Keep the original anchor across a burst and let promoted events own policy
 /// when they are available. An override anywhere in a native burst cancels it.
+///
+/// Promotion only speaks for its own gesture. The hook callback can overtake the
+/// queued `WM_INPUT` of the same tap, so a promotion is paired with one raw contact,
+/// before or after it, and the next contact starts a gesture of its own.
 #[derive(Clone, Copy, Default)]
 pub struct NativeTouchResume {
     saved: Option<(i32, i32)>,
     bypass: bool,
     promoted: bool,
     contact: bool,
+    /// A raw contact began and no promotion has claimed it yet.
+    unclaimed_contact: bool,
+    /// The current promotion has been paired with its raw contact.
+    promotion_paired: bool,
 }
 
 impl NativeTouchResume {
@@ -30,6 +38,8 @@ impl NativeTouchResume {
             bypass: false,
             promoted: false,
             contact: false,
+            unclaimed_contact: false,
+            promotion_paired: false,
         }
     }
 
@@ -48,12 +58,28 @@ impl NativeTouchResume {
         }
         if contact && !self.contact {
             self.bypass = false;
+            self.begin_contact();
         }
         self.contact = contact;
         self.observe(cursor, allowed);
     }
 
+    fn begin_contact(&mut self) {
+        if self.promoted && !self.promotion_paired {
+            // The report of the tap that was already promoted, arriving late.
+            self.promotion_paired = true;
+        } else {
+            self.promoted = false;
+            self.promotion_paired = false;
+            self.unclaimed_contact = true;
+        }
+    }
+
     pub fn promoted(&mut self) {
+        if !self.promoted {
+            self.promotion_paired = self.unclaimed_contact;
+            self.unclaimed_contact = false;
+        }
         self.promoted = true;
         self.saved = None;
     }
@@ -197,6 +223,51 @@ mod tests {
             state.observe(Some((10, 20)), true);
             assert_eq!(state.target(true), None);
         }
+    }
+
+    #[test]
+    fn a_promoted_override_does_not_outlive_its_gesture() {
+        let anchor = Some((10, 20));
+        let mut state = NativeTouchResume::new();
+        // Override tap in an app that gets promoted mouse messages...
+        state.observe_contact(anchor, false, true);
+        state.promoted();
+        state.observe_contact(anchor, false, false);
+        state.promoted();
+        assert!(!state.pending());
+        // ...then a plain tap in an app consuming native touch.
+        state.observe_contact(anchor, true, true);
+        state.observe(anchor, true);
+        state.observe_contact(anchor, true, false);
+        assert_eq!(state.target(true), anchor);
+    }
+
+    #[test]
+    fn promotion_after_the_release_still_belongs_to_that_tap() {
+        let anchor = Some((10, 20));
+        let mut state = NativeTouchResume::new();
+        state.observe_contact(anchor, true, true);
+        state.observe_contact(anchor, true, false);
+        state.promoted();
+        assert!(!state.pending());
+        state.observe_contact(anchor, true, true);
+        state.observe_contact(anchor, true, false);
+        assert_eq!(state.target(true), anchor);
+    }
+
+    #[test]
+    fn a_contact_reported_after_its_promotion_is_the_same_gesture() {
+        // The hook callback can overtake the queued WM_INPUT of the same tap.
+        let anchor = Some((10, 20));
+        let mut state = NativeTouchResume::new();
+        state.promoted();
+        state.observe_contact(anchor, true, true);
+        state.observe(anchor, true);
+        state.observe_contact(anchor, true, false);
+        assert!(!state.pending());
+        state.observe_contact(anchor, true, true);
+        state.observe_contact(anchor, true, false);
+        assert_eq!(state.target(true), anchor);
     }
 
     #[test]

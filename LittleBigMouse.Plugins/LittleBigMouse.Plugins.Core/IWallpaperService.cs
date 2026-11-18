@@ -14,11 +14,17 @@ namespace LittleBigMouse.Plugins;
 /// via IDesktopWallpaper.GetMonitorRECT.
 /// </summary>
 /// <param name="ImagePath">Image to display, or null for a solid color.</param>
+/// <param name="DeviceId">
+/// The platform's own handle for this screen when the caller has one — on Windows, the
+/// display device interface path <c>IDesktopWallpaper</c> expects. The platform implementation
+/// uses it for the screens it could not pair with a shell monitor slot by rectangle.
+/// </param>
 public record ScreenWallpaper(
     Rect LogicalBounds,
     string? ImagePath,
     WallpaperStyle Style,
-    ColorRGB<double>? Color);
+    ColorRGB<double>? Color,
+    string? DeviceId = null);
 
 /// <summary>
 /// Platform seam: writes per-screen wallpapers to the desktop environment.

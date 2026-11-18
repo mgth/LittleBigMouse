@@ -4,6 +4,7 @@
 //! client, which has to be exercised against a real agent rather than a double.
 pub mod client;
 pub mod conversation;
+pub mod desktop_wallpaper;
 pub mod displays;
 pub mod image_picker;
 pub mod probe;

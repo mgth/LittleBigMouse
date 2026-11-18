@@ -156,3 +156,79 @@ fn panorama_uses_physical_screen_positions_and_supports_unicode_paths() {
         .iter()
         .all(|p| p.pixels.pixels().all(|c| c.0 == [0, 0, 0, 255])));
 }
+
+#[test]
+fn custom_panorama_framing_survives_serialization_and_pads_uncovered_screens() {
+    let d = tempfile::tempdir().unwrap();
+    let path = d.path().join("panorama.png");
+    RgbaImage::from_pixel(120, 80, Rgba([240, 30, 40, 255]))
+        .save(&path)
+        .unwrap();
+    let l = layout();
+    let settings = LayoutWallpaperSettings {
+        mode: WallpaperMode::Span,
+        span_image_path: Some(path.to_string_lossy().into()),
+        span_placement: Some(SpanPlacement {
+            scale: 0.5,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let preview = paint(&l, &settings, true).unwrap();
+    let full = paint(&l, &settings, false).unwrap();
+    for pictures in [&preview, &full] {
+        assert!(pictures
+            .iter()
+            .any(|p| p.pixels.pixels().any(|c| c.0 == [0, 0, 0, 255])));
+        assert!(pictures
+            .iter()
+            .any(|p| p.pixels.pixels().any(|c| c.0 == [240, 30, 40, 255])));
+    }
+    let store = d.path().join("wallpaper.json");
+    lbm_store::wallpaper_settings::update(&store, "test", settings.clone()).unwrap();
+    assert_eq!(
+        lbm_store::wallpaper_settings::load_checked(&store).unwrap()["test"],
+        settings
+    );
+    let mut shifted = settings;
+    shifted.span_placement.as_mut().unwrap().offset_x_mm = 2000.;
+    assert!(paint(&l, &shifted, true)
+        .unwrap()
+        .iter()
+        .all(|p| p.pixels.pixels().all(|c| c.0 == [0, 0, 0, 255])));
+    shifted.span_placement.as_mut().unwrap().scale = f64::NAN;
+    assert!(paint(&l, &shifted, true).is_err());
+}
+
+#[test]
+fn moving_a_panel_recalculates_the_saved_panorama_slices() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("gradient.png");
+    RgbaImage::from_fn(600, 400, |x, y| {
+        Rgba([(x * 255 / 600) as u8, (y * 255 / 400) as u8, 80, 255])
+    })
+    .save(&path)
+    .unwrap();
+    let mut l = layout();
+    let original = l.clone();
+    let settings = LayoutWallpaperSettings {
+        mode: WallpaperMode::Span,
+        span_image_path: Some(path.to_string_lossy().into()),
+        span_placement: Some(SpanPlacement {
+            scale: 1.3,
+            offset_x_mm: 25.,
+            offset_y_mm: -12.,
+        }),
+        ..Default::default()
+    };
+    let before = paint(&l, &settings, false).unwrap();
+    let id = l.monitors()[1].id.clone();
+    l.offset_location(&id, lbm_layout::geo::Vector::new(100., 40.));
+    let after = paint(&l, &settings, false).unwrap();
+    for (a, b) in before.iter().zip(&after) {
+        assert_eq!(a.pixels.dimensions(), b.pixels.dimensions());
+        assert_ne!(a.pixels, b.pixels);
+    }
+    let restored = paint(&original, &settings, false).unwrap();
+    assert_eq!(restored[0].pixels, before[0].pixels);
+}

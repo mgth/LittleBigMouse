@@ -22,6 +22,12 @@ pub fn panel(
     });
     let path = if settings.mode == WallpaperMode::Span {
         ui.small("One picture across the physical layout, including gaps and bezels.");
+        ui.small(
+            "Drag the picture or its handles to frame the panorama. Proportions are preserved.",
+        );
+        if ui.button("Reset panorama framing").clicked() {
+            settings.span_placement = None;
+        }
         Some(&mut settings.span_image_path)
     } else if let Some(id) = selected {
         // Merely opening the editor does not configure an otherwise untouched screen.

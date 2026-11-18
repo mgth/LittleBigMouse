@@ -7,6 +7,58 @@ use lbm_store::wallpaper_settings::{
 };
 use std::path::Path;
 
+/// Full image rectangle in physical millimetres, shared by the canvas and renderer.
+pub fn panorama_rect(
+    image: MmSize,
+    bounds: lbm_layout::geo::Rect,
+    placement: Option<lbm_store::wallpaper_settings::SpanPlacement>,
+) -> Result<lbm_layout::geo::Rect, String> {
+    let p = placement.unwrap_or_default();
+    if ![
+        image.width(),
+        image.height(),
+        bounds.width(),
+        bounds.height(),
+        p.scale,
+    ]
+    .into_iter()
+    .all(|v| v.is_finite() && v > 0.0)
+        || ![bounds.x(), bounds.y(), p.offset_x_mm, p.offset_y_mm]
+            .into_iter()
+            .all(f64::is_finite)
+        || !(0.01..=100.0).contains(&p.scale)
+    {
+        return Err("Invalid panorama dimensions or placement.".into());
+    }
+    let ratio = (bounds.width() / image.width()).max(bounds.height() / image.height()) * p.scale;
+    let (w, h) = (image.width() * ratio, image.height() * ratio);
+    Ok(lbm_layout::geo::Rect::new(
+        bounds.x() + (bounds.width() - w) / 2.0 + p.offset_x_mm,
+        bounds.y() + (bounds.height() - h) / 2.0 + p.offset_y_mm,
+        w,
+        h,
+    ))
+}
+
+/// Sample in screen space: areas outside the image stay black, never stretched.
+pub fn panorama_screen(
+    source: &RgbaImage,
+    image_mm: lbm_layout::geo::Rect,
+    screen_mm: lbm_layout::geo::Rect,
+    width: u32,
+    height: u32,
+) -> RgbaImage {
+    RgbaImage::from_fn(width, height, |x, y| {
+        let u = (screen_mm.x() + (f64::from(x) + 0.5) / f64::from(width) * screen_mm.width()
+            - image_mm.x())
+            / image_mm.width();
+        let v = (screen_mm.y() + (f64::from(y) + 0.5) / f64::from(height) * screen_mm.height()
+            - image_mm.y())
+            / image_mm.height();
+        image::imageops::sample_bilinear(source, u as f32, v as f32).unwrap_or(Rgba([0, 0, 0, 255]))
+    })
+}
+
 pub struct Painted {
     pub id: String,
     pub x: f64,
@@ -187,38 +239,47 @@ pub fn paint(
             return Err("The combined wallpaper images exceed 256 MiB.".into());
         }
         let mut pixels = if let Some(source) = &source {
-            let slices = span::compute_slices(
-                MmSize::new(source.width().into(), source.height().into()),
-                bounds,
-                &[span::ScreenInput::new(
-                    &m.id,
-                    p.bounds(),
-                    MmSize::new(width.into(), height.into()),
-                )],
-            );
-            let slice = slices
-                .first()
-                .ok_or("The panorama does not intersect this screen.")?;
-            let r = slice.source_px;
-            if r.width() < 1. || r.height() < 1. {
-                return Err("The panorama has an empty screen crop.".into());
+            if settings.span_placement.is_some() {
+                let image_mm = panorama_rect(
+                    MmSize::new(source.width().into(), source.height().into()),
+                    bounds,
+                    settings.span_placement,
+                )?;
+                panorama_screen(source, image_mm, p.bounds(), width, height)
+            } else {
+                let slices = span::compute_slices(
+                    MmSize::new(source.width().into(), source.height().into()),
+                    bounds,
+                    &[span::ScreenInput::new(
+                        &m.id,
+                        p.bounds(),
+                        MmSize::new(width.into(), height.into()),
+                    )],
+                );
+                let slice = slices
+                    .first()
+                    .ok_or("The panorama does not intersect this screen.")?;
+                let r = slice.source_px;
+                if r.width() < 1. || r.height() < 1. {
+                    return Err("The panorama has an empty screen crop.".into());
+                }
+                crate::apply(
+                    source.clone(),
+                    &[
+                        Step::Crop(Rect {
+                            x: r.x().round() as i32,
+                            y: r.y().round() as i32,
+                            w: r.width().round().max(1.) as i32,
+                            h: r.height().round().max(1.) as i32,
+                        }),
+                        Step::Resize(Size {
+                            w: width as i32,
+                            h: height as i32,
+                        }),
+                    ],
+                    Rgba([0, 0, 0, 255]),
+                )
             }
-            crate::apply(
-                source.clone(),
-                &[
-                    Step::Crop(Rect {
-                        x: r.x().round() as i32,
-                        y: r.y().round() as i32,
-                        w: r.width().round().max(1.) as i32,
-                        h: r.height().round().max(1.) as i32,
-                    }),
-                    Step::Resize(Size {
-                        w: width as i32,
-                        h: height as i32,
-                    }),
-                ],
-                Rgba([0, 0, 0, 255]),
-            )
         } else {
             let Some(wanted) = settings.per_screen.get(&m.id) else {
                 continue;

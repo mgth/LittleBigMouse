@@ -68,13 +68,13 @@ enum Found {
     WallpaperPreview {
         generation: u64,
         document: Box<lbm_store::LayoutDocument>,
-        result: Result<Vec<lbm_wallpaper::render::Painted>, String>,
+        result: Result<WallpaperPreview, String>,
     },
-    Thumbnail {
-        generation: u64,
-        screen: String,
-        picture: image::RgbaImage,
-    },
+}
+
+struct WallpaperPreview {
+    screens: Vec<lbm_wallpaper::render::Painted>,
+    panorama: Option<(String, lbm_layout::geo::Size, image::RgbaImage)>,
 }
 
 /// A screen in hand: which one, and how far the pointer has taken it.
@@ -182,17 +182,20 @@ struct App {
     icons: Catalogue,
     /// Uploaded logos, by icon path. Loaded once, on the frame that first needs one.
     textures: HashMap<String, egui::TextureHandle>,
+    desktop_wallpaper: lbm_app::desktop_wallpaper::Watcher,
+    desktop_textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded editor previews, by screen id.
     wallpapers: HashMap<String, egui::TextureHandle>,
     wallpaper: lbm_app::wallpaper_editor::Editor,
     wallpaper_preview_requested: bool,
+    panorama: Option<(String, lbm_layout::geo::Size, egui::TextureHandle)>,
+    panorama_editor: lbm_ui::panorama::Editor,
     wallpaper_picking: bool,
     /// Where Browse was pressed (view, mode, screen), while its chooser is open. Checked
     /// on every pass: any departure retires the choice, even if the user comes back.
     wallpaper_choice_context: Option<(View, bool, lbm_ui::mode::Mode, Option<String>)>,
     picker_parent: lbm_app::image_picker::Parent,
     wallpaper_preview_busy: Option<u64>,
-    wallpaper_previewed: bool,
     /// What the bottom bar shows, from what the agent says.
     state: lbm_ui::State,
     /// What to ask the agent, when there is one to ask.
@@ -434,19 +437,6 @@ fn screens_of(layout: &Layout, mode: lbm_ui::mode::Mode) -> Vec<Screen> {
         .collect()
 }
 
-/// Read-only thumbnails use the same physical rendering as the agent and editor.
-fn wallpapers(layout: &Layout) -> Vec<(String, image::RgbaImage)> {
-    let all = lbm_store::wallpaper_settings::load(&lbm_store::wallpaper_settings::settings_path());
-    let Some(settings) = all.get(&layout.id) else {
-        return Vec::new();
-    };
-    lbm_wallpaper::render::paint(layout, settings, true)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|p| (p.id, p.pixels))
-        .collect()
-}
-
 impl App {
     fn new(ctx: egui::Context) -> Self {
         Self::with_config(ctx, lbm_app::session::Config::for_session())
@@ -525,14 +515,17 @@ impl App {
             mode: lbm_ui::mode::Mode::default(),
             icons,
             textures: HashMap::new(),
+            desktop_wallpaper: Default::default(),
+            desktop_textures: HashMap::new(),
             wallpapers: HashMap::new(),
             wallpaper: Default::default(),
             wallpaper_preview_requested: false,
+            panorama: None,
+            panorama_editor: Default::default(),
             wallpaper_picking: false,
             wallpaper_choice_context: None,
             picker_parent: Default::default(),
             wallpaper_preview_busy: None,
-            wallpaper_previewed: false,
             state: lbm_ui::State::default(),
             requests: None,
             next_id: 3,
@@ -615,7 +608,6 @@ impl App {
                 waker.request_repaint();
                 return;
             };
-            let wallpaper_layout = layout.clone();
             if found
                 .send(Found::Displays {
                     generation,
@@ -631,19 +623,6 @@ impl App {
                 return;
             }
             waker.request_repaint();
-            for (screen, picture) in wallpapers(&wallpaper_layout) {
-                if found
-                    .send(Found::Thumbnail {
-                        generation,
-                        screen,
-                        picture,
-                    })
-                    .is_err()
-                {
-                    return;
-                }
-                waker.request_repaint();
-            }
         });
     }
 
@@ -1140,7 +1119,10 @@ impl App {
                 name: &s.name,
                 mm_outside: s.mm_outside,
                 mm_content: s.mm_content,
-                wallpaper: self.wallpapers.get(&s.id),
+                wallpaper: (self.mode == lbm_ui::mode::Mode::Wallpaper)
+                    .then(|| self.wallpapers.get(&s.id))
+                    .flatten()
+                    .or_else(|| self.desktop_textures.get(&s.id)),
                 logo: s
                     .logo
                     .as_ref()
@@ -1271,6 +1253,23 @@ impl App {
         }
     }
     fn sync_wallpaper(&mut self, ctx: &egui::Context) {
+        if let Some(layout) = &self.layout {
+            if let Some(pictures) = self.desktop_wallpaper.poll(layout) {
+                self.desktop_textures.clear();
+                for (id, pixels) in pictures {
+                    let size = [pixels.width() as usize, pixels.height() as usize];
+                    self.desktop_textures.insert(
+                        id.clone(),
+                        ctx.load_texture(
+                            format!("desktop-wallpaper:{id}"),
+                            egui::ColorImage::from_rgba_unmultiplied(size, &pixels),
+                            egui::TextureOptions::LINEAR,
+                        ),
+                    );
+                }
+            }
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
         if let Some(key) = self.wallpaper_key() {
             self.wallpaper.observes(&key);
             if self.requests.is_some()
@@ -1299,19 +1298,40 @@ impl App {
         self.wallpaper.preview_generation += 1;
         let generation = self.wallpaper.preview_generation;
         self.wallpaper_preview_busy = Some(generation);
-        self.wallpaper_previewed = true;
         self.wallpaper.error = None;
         let found = self.found.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let document = Box::new(lbm_store::LayoutDocument::of(&layout));
-            let result = if settings.mode == lbm_store::wallpaper_settings::WallpaperMode::PerScreen
-                && settings.per_screen.is_empty()
-            {
-                Ok(Vec::new())
-            } else {
-                lbm_wallpaper::render::paint(&layout, &settings, true)
-            };
+            let result = (|| {
+                if settings.mode == lbm_store::wallpaper_settings::WallpaperMode::Span {
+                    let path = settings
+                        .span_image_path
+                        .as_deref()
+                        .filter(|p| !p.is_empty())
+                        .ok_or("Choose a panorama image.")?;
+                    let pixels = lbm_wallpaper::render::decode(std::path::Path::new(path))?;
+                    let size =
+                        lbm_layout::geo::Size::new(pixels.width().into(), pixels.height().into());
+                    let pixels = image::DynamicImage::ImageRgba8(pixels)
+                        .thumbnail(2048, 2048)
+                        .into_rgba8();
+                    Ok(WallpaperPreview {
+                        screens: Vec::new(),
+                        panorama: Some((path.to_owned(), size, pixels)),
+                    })
+                } else {
+                    let screens = if settings.per_screen.is_empty() {
+                        Vec::new()
+                    } else {
+                        lbm_wallpaper::render::paint(&layout, &settings, true)?
+                    };
+                    Ok(WallpaperPreview {
+                        screens,
+                        panorama: None,
+                    })
+                }
+            })();
             let _ = found.send(Found::WallpaperPreview {
                 generation,
                 document,
@@ -1470,8 +1490,12 @@ impl App {
                 });
                 if *settings != before {
                     self.wallpaper.preview_generation += 1;
+                    if settings.span_image_path != before.span_image_path || settings.mode != before.mode {
+                        self.panorama_editor = Default::default();
+                        self.wallpaper_preview_requested = true;
+                    }
                     self.wallpaper.status =
-                        Some("Wallpaper edits are not applied. Preview to update the map.".into());
+                        Some("Wallpaper edits are not applied to the desktop.".into());
                 }
             }
             match action {
@@ -1481,6 +1505,7 @@ impl App {
                 }
                 Some(lbm_ui::wallpaper_editor::Action::Apply) => self.wallpaper_request(false),
                 Some(lbm_ui::wallpaper_editor::Action::Reset) => {
+                    self.panorama_editor = Default::default();
                     self.wallpaper.reset();
                     self.wallpaper_preview_requested = true;
                 }
@@ -2224,8 +2249,9 @@ impl eframe::App for App {
                         self.property_error = None;
                         self.layout = Some(layout);
                         self.excluded = excluded;
+                        self.desktop_wallpaper = Default::default();
+                        self.desktop_textures.clear();
                         self.wallpapers.clear();
-                        self.wallpaper_previewed = false;
                         self.wallpaper.preview_generation += 1;
                         self.wallpaper_preview_busy = None;
                         self.drag = None;
@@ -2255,18 +2281,41 @@ impl eframe::App for App {
                         if self.wallpaper_preview_busy == Some(generation) {
                             self.wallpaper_preview_busy = None;
                         }
-                        if generation != self.wallpaper.preview_generation
-                            || !self
+                        if generation != self.wallpaper.preview_generation {
+                            continue;
+                        }
+                        // A shared source is independent of geometry: project it against
+                        // the current layout even if a monitor moved while decoding.
+                        let shared_source = result.as_ref().is_ok_and(|p| p.panorama.is_some());
+                        if !shared_source
+                            && !self
                                 .layout
                                 .as_ref()
                                 .is_some_and(|l| lbm_store::LayoutDocument::of(l) == *document)
                         {
+                            self.wallpaper_preview_requested = true;
                             continue;
                         }
                         match result {
                             Ok(painted) => {
                                 self.wallpapers.clear();
-                                for p in painted {
+                                self.panorama = painted.panorama.map(|(path, size, pixels)| {
+                                    let image = egui::ColorImage::from_rgba_unmultiplied(
+                                        [pixels.width() as usize, pixels.height() as usize],
+                                        &pixels,
+                                    );
+                                    (
+                                        path,
+                                        size,
+                                        ctx.load_texture(
+                                            "panorama-source",
+                                            image,
+                                            egui::TextureOptions::LINEAR,
+                                        ),
+                                    )
+                                });
+                                self.panorama_editor = Default::default();
+                                for p in painted.screens {
                                     let size =
                                         [p.pixels.width() as usize, p.pixels.height() as usize];
                                     let image =
@@ -2283,28 +2332,6 @@ impl eframe::App for App {
                             }
                             Err(e) => self.wallpaper.error = Some(e),
                         }
-                    }
-                    Found::Thumbnail {
-                        generation,
-                        screen,
-                        picture,
-                    } => {
-                        if !self.refresh.accepts(generation)
-                            || self.refresh.pending()
-                            || self.wallpaper_previewed
-                        {
-                            continue;
-                        }
-                        let size = [picture.width() as usize, picture.height() as usize];
-                        let image = egui::ColorImage::from_rgba_unmultiplied(size, &picture);
-                        self.wallpapers.insert(
-                            screen.clone(),
-                            ctx.load_texture(
-                                format!("wallpaper:{screen}"),
-                                image,
-                                egui::TextureOptions::LINEAR,
-                            ),
-                        );
                     }
                 }
             }
@@ -2475,6 +2502,12 @@ impl eframe::App for App {
         let mut section_editor = std::mem::take(&mut self.resistance);
         let mut section_action = None;
         let mut inline_edits = Vec::new();
+        if self.mode != lbm_ui::mode::Mode::Wallpaper {
+            self.panorama_editor = Default::default();
+        }
+        let mut panorama_editor = std::mem::take(&mut self.panorama_editor);
+        let mut panorama_placement = self.wallpaper.draft.as_ref().and_then(|s| s.span_placement);
+        let mut panorama_changed = false;
         let acted = egui::CentralPanel::default()
             .frame(
                 egui::Frame::new()
@@ -2492,6 +2525,52 @@ impl eframe::App for App {
                 }
                 let monitors = self.monitors(&logos);
                 let at = ui.max_rect();
+                if self.mode == lbm_ui::mode::Mode::Wallpaper
+                    && self.wallpaper.draft.as_ref().is_some_and(|s| {
+                        s.mode == lbm_store::wallpaper_settings::WallpaperMode::Span
+                    })
+                {
+                    if self.wallpaper.busy() {
+                        ui.disable();
+                    }
+                    if let Some((path, size, texture)) = &self.panorama {
+                        if self
+                            .wallpaper
+                            .draft
+                            .as_ref()
+                            .and_then(|s| s.span_image_path.as_ref())
+                            == Some(path)
+                        {
+                            let attached: Vec<_> = monitors
+                                .iter()
+                                .filter(|m| {
+                                    self.layout.as_ref().is_some_and(|l| {
+                                        l.monitors()
+                                            .iter()
+                                            .find(|screen| screen.id == m.id)
+                                            .and_then(|screen| screen.active_source.as_deref())
+                                            .and_then(|id| l.source(id))
+                                            .is_some_and(|s| s.source.attached_to_desktop)
+                                    })
+                                })
+                                .cloned()
+                                .collect();
+                            panorama_changed = panorama_editor.show(
+                                ui,
+                                &attached,
+                                texture,
+                                *size,
+                                &mut panorama_placement,
+                                self.selected.as_deref(),
+                            );
+                            return (None, None);
+                        }
+                    }
+                    ui.centered_and_justified(|ui| {
+                        ui.label("Choose an image to frame the physical panorama.");
+                    });
+                    return (None, None);
+                }
                 match self.view {
                     View::Map => {
                         // **Measured before anything moves.** The Avalonia presenter asks
@@ -2598,6 +2677,15 @@ impl eframe::App for App {
             .inner;
         lbm_ui::properties::paint_measurement_highlights(&ctx);
         self.resistance = section_editor;
+        self.panorama_editor = panorama_editor;
+        if panorama_changed {
+            if let Some(settings) = &mut self.wallpaper.draft {
+                settings.span_placement = panorama_placement;
+                self.wallpaper.preview_generation += 1;
+                self.wallpaper.status =
+                    Some("Framing previewed. Apply wallpaper to update the desktop.".into());
+            }
+        }
         let options_before = self.layout.as_ref().map(|l| l.options.clone());
         let mut settings_open = self.settings_open;
         let mut settings_page = self.settings_page;
@@ -3219,6 +3307,57 @@ mod lifecycle_tests {
         assert!(app.refresh.pending());
         assert_eq!(app.refresh.begin(app.dirty()), None);
         assert!(app.dirty(), "changing resolution must not discard the edit");
+    }
+    #[test]
+    fn desktop_wallpaper_is_visible_without_saved_settings_and_preview_stays_in_its_editor() {
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        app.screens.push(Screen {
+            id: "screen".into(),
+            source_id: "output".into(),
+            name: "Monitor".into(),
+            logo: None,
+            mm_outside: Rect::new(0., 0., 600., 340.),
+            mm_content: Rect::new(0., 0., 600., 340.),
+            pixels: Rect::new(0., 0., 1920., 1080.),
+            details: vec![],
+        });
+        let texture = |name, color| {
+            ctx.load_texture(
+                name,
+                egui::ColorImage::filled([2, 2], color),
+                Default::default(),
+            )
+        };
+        let desktop = texture("desktop", egui::Color32::BLUE);
+        let preview = texture("preview", egui::Color32::RED);
+        app.desktop_textures
+            .insert("screen".into(), desktop.clone());
+        app.wallpapers.insert("screen".into(), preview.clone());
+        let logos = HashMap::new();
+        assert!(app.wallpaper.draft.is_none());
+        assert!(app.requests.is_none());
+        for mode in [
+            lbm_ui::mode::Mode::Default,
+            lbm_ui::mode::Mode::Location,
+            lbm_ui::mode::Mode::Resistance,
+        ] {
+            app.mode = mode;
+            assert_eq!(
+                app.monitors(&logos)[0].wallpaper.unwrap().id(),
+                desktop.id()
+            );
+        }
+        app.mode = lbm_ui::mode::Mode::Wallpaper;
+        assert_eq!(
+            app.monitors(&logos)[0].wallpaper.unwrap().id(),
+            preview.id()
+        );
+        app.wallpapers.clear();
+        assert_eq!(
+            app.monitors(&logos)[0].wallpaper.unwrap().id(),
+            desktop.id()
+        );
     }
     #[test]
     fn wallpaper_requests_belong_to_the_editor_and_reconnect_keeps_the_draft() {

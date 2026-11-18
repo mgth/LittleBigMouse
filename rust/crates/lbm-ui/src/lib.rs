@@ -440,6 +440,8 @@ mod tests {
     }
 }
 
+pub mod panorama;
+
 pub mod monitor_info;
 
 pub mod about;

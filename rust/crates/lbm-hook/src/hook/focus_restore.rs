@@ -34,6 +34,12 @@ pub fn drain_bounded(limit: usize, mut next: impl FnMut() -> bool) -> bool {
     (0..limit).any(|_| !next())
 }
 
+/// Whether a physical mouse move came after the touch was lifted, rather than during
+/// it. Both are stamped on the same clock, and handling order says nothing about them.
+pub fn move_follows_release(moved: u32, released: u32) -> bool {
+    !crate::hook::touch::tick_after(released, moved)
+}
+
 #[derive(Clone, Copy)]
 pub struct RestoreRequest {
     pub origin: WindowIdentity,
@@ -94,6 +100,21 @@ mod tests {
         for time in [None, Some(0), Some(100)] {
             assert!(!r.should_restore(Some(window(1)), Some(window(2)), time, true, 3, 4));
         }
+    }
+
+    #[test]
+    fn only_a_move_after_the_release_counts() {
+        assert!(move_follows_release(200, 100));
+        assert!(
+            move_follows_release(100, 100),
+            "same tick: cannot tell them apart"
+        );
+        assert!(!move_follows_release(100, 200));
+        assert!(
+            move_follows_release(5, u32::MAX - 5),
+            "across the tick wrap"
+        );
+        assert!(!move_follows_release(u32::MAX - 5, 5));
     }
 
     #[test]

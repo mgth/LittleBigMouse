@@ -1243,3 +1243,53 @@ async fn wallpaper_editor_reads_the_agents_store_and_rejects_stale_or_invalid_up
         .await;
     assert!(rejected["Error"].is_string());
 }
+
+#[tokio::test]
+async fn vcp_checks_the_current_layout_setting_and_monitor_before_hardware_access() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({"Method":"Snapshot"})).await["Result"].clone();
+    let id = state["LayoutId"].as_str().unwrap();
+    let revision = state["LayoutRevision"].as_u64().unwrap();
+    for write in [Value::Null, json!({"Token":1,"Code":16,"Value":40})] {
+        let mut request = json!({"Method":"Vcp", "LayoutId":id,"LayoutRevision":revision+1,"Monitor":"missing","Write":write});
+        let answer = frontend.ask(request.clone()).await;
+        assert!(
+            answer["Error"]
+                .as_str()
+                .unwrap()
+                .contains("displays changed"),
+            "{answer}"
+        );
+        request["LayoutRevision"] = json!(revision);
+        let answer = frontend.ask(request.clone()).await;
+        assert!(
+            answer["Error"].as_str().unwrap().contains("Enable VCP"),
+            "{answer}"
+        );
+    }
+    let answer = frontend
+        .ask(json!({"Method":"SaveOptions","Options":{"VcpControl":true}}))
+        .await;
+    assert!(answer.get("Error").is_none(), "{answer}");
+    let answer = frontend
+        .ask(json!({"Method":"Vcp", "LayoutId":id,"LayoutRevision":revision,"Monitor":"missing"}))
+        .await;
+    assert!(
+        answer["Error"]
+            .as_str()
+            .unwrap()
+            .contains("no longer connected"),
+        "{answer}"
+    );
+}

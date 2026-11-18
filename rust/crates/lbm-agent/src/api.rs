@@ -72,6 +72,17 @@ pub enum Request {
     Snapshot,
     /// Connected outputs, including disabled ones. Unsupported backends return an error.
     DisplayOutputs,
+    /// Read a monitor's VCP controls, or write one previously probed value.
+    Vcp {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "LayoutRevision")]
+        layout_revision: u64,
+        #[serde(rename = "Monitor")]
+        monitor: String,
+        #[serde(rename = "Write", default)]
+        write: Option<lbm_ipc::vcp::Write>,
+    },
     /// Change one system output after checking the editor's revision and fresh inventory.
     ChangeOutput {
         #[serde(rename = "LayoutId")]

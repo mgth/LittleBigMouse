@@ -122,6 +122,7 @@ struct App {
     probe: lbm_app::probe::Probe,
     show_probe: bool,
     outputs: lbm_app::displays::Displays,
+    vcp: lbm_app::vcp::Controller,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
     /// **In memory only, and this window writes no file.** A drag changes this copy and
@@ -501,6 +502,7 @@ impl App {
             probe: lbm_app::probe::Probe::default(),
             show_probe: true,
             outputs: Default::default(),
+            vcp: Default::default(),
             excluded: None,
             pattern: String::new(),
             placement: Default::default(),
@@ -548,6 +550,7 @@ impl App {
                 self.placement = Default::default();
                 self.topology_pending = None;
                 self.outputs = Default::default();
+                self.vcp = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = Some(requests);
                 self.next_id = 3;
@@ -576,6 +579,7 @@ impl App {
                 self.placement = Default::default();
                 self.topology_pending = None;
                 self.outputs = Default::default();
+                self.vcp = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.state = lbm_ui::State::default();
@@ -933,6 +937,9 @@ impl App {
             if self.topology_pending == Some(*id) {
                 self.topology_pending = None;
             }
+            if self.vcp.answered(*id, result) {
+                return;
+            }
             if self.wallpaper.answered(*id, result) {
                 self.wallpaper_preview_requested = self.wallpaper.error.is_none();
                 return;
@@ -962,6 +969,7 @@ impl App {
             }
             if self.refresh.observe(stamp, false, self.dirty()) {
                 self.outputs.invalidate();
+                self.vcp.select(None);
                 self.state.live = false;
                 self.previewed = None;
                 self.drag = None;
@@ -1665,6 +1673,10 @@ impl App {
     }
 
     fn monitor_properties(&mut self, ui: &mut egui::Ui) {
+        if self.mode == lbm_ui::mode::Mode::Vcp {
+            self.vcp_properties(ui);
+            return;
+        }
         let Some(layout) = &self.layout else {
             ui.label("Waiting for displays…");
             return;
@@ -2114,6 +2126,64 @@ impl App {
             self.screen_overlay.clear();
             self.screen_overlay_mode = Mode::Off;
             self.screen_overlay_error = Some(error);
+        }
+    }
+
+    fn vcp_properties(&mut self, ui: &mut egui::Ui) {
+        let key = self.wallpaper_key().and_then(|key| {
+            Some(lbm_app::vcp::Key {
+                layout: key.layout,
+                revision: key.revision,
+                monitor: self.selected.clone()?,
+            })
+        });
+        self.vcp.select(key);
+        if self.requests.is_none() {
+            ui.label("Connect to the agent to control the monitor.");
+            return;
+        }
+        if self.refresh.pending() {
+            ui.label("Reload the display layout before controlling the monitor.");
+            return;
+        }
+        if self.selected.is_none() {
+            ui.label("Select a screen to read its monitor controls.");
+            return;
+        }
+        if self.layout.as_ref().is_none_or(|l| l.is_virtual()) {
+            ui.label("Select a local layout to control physical monitors.");
+            return;
+        }
+        if self.vcp.needs_read() {
+            self.vcp_request(None);
+        }
+        ui.strong("DDC/CI controls");
+        let busy = self.vcp.busy();
+        let action = self.vcp.panel.show(
+            ui,
+            self.vcp.monitor.as_mut(),
+            busy,
+            self.vcp.error.as_deref(),
+        );
+        match action {
+            Some(lbm_ui::vcp::Action::Refresh) => self.vcp_request(None),
+            Some(lbm_ui::vcp::Action::Set(write)) => self.vcp_request(Some(write)),
+            None => {}
+        }
+    }
+
+    fn vcp_request(&mut self, write: Option<lbm_ipc::vcp::Write>) {
+        let Some(requests) = &self.requests else {
+            return;
+        };
+        let id = self.next_id;
+        let Some(extra) = self.vcp.request(id, write) else {
+            return;
+        };
+        self.next_id += 1;
+        if requests.send((id, "Vcp", extra)).is_err() {
+            self.vcp
+                .answered(id, &Err("The agent stopped listening.".into()));
         }
     }
 

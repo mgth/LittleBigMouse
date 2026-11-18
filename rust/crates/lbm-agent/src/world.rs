@@ -23,6 +23,9 @@ use crate::reconcile::{LayoutState, World};
 
 /// The world the runtime drives.
 pub trait AgentWorld: World {
+    fn vcp_target(&self, _monitor: &str) -> Result<crate::vcp::Target, String> {
+        Err("VCP controls are not available on this display backend.".into())
+    }
     /// Windows placements must not run against a live hook or preview.
     fn topology_requires_stopped_engine(&self) -> bool {
         false
@@ -320,6 +323,9 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
+    fn vcp_target(&self, monitor: &str) -> Result<crate::vcp::Target, String> {
+        crate::vcp::target(self.layout.as_ref().ok_or("No current layout.")?, monitor)
+    }
     fn wallpaper(&self) -> Vec<crate::desktop::ScreenWallpaper> {
         let (Some(paths), Some(layout)) = (self.wallpaper.as_ref(), self.layout.as_ref()) else {
             return Vec::new();

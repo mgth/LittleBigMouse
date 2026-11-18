@@ -59,7 +59,7 @@ fn what_is_not_ported_is_shown_and_disabled() {
     assert!(!disabled(Mode::Info.label()));
     assert!(!disabled(Mode::Size.label()));
     assert!(!disabled(Mode::Resistance.label()));
-    assert!(disabled(Mode::Vcp.label()), "VCP is not ported");
+    assert!(disabled(Mode::Vcp.label()), "VCP is disabled in settings");
 }
 
 #[test]
@@ -174,4 +174,22 @@ fn the_default_mode_writes_nothing_inside() {
         "the name is still there"
     );
     assert!(harness.query_by_label("at").is_none());
+}
+
+#[test]
+fn vcp_is_available_when_enabled_in_settings() {
+    let (mut harness, chosen) = bar(
+        Mode::Default,
+        Offered {
+            vcp_enabled: true,
+            ..Default::default()
+        },
+    );
+    assert!(!harness
+        .get_by_label(Mode::Vcp.label())
+        .accesskit_node()
+        .is_disabled());
+    harness.get_by_label(Mode::Vcp.label()).click();
+    harness.run();
+    assert_eq!(chosen.get(), Some(Mode::Vcp));
 }

@@ -80,6 +80,7 @@ pub struct Agent<W> {
     /// Retire prepared work when a newer request or rebuilt layout replaces it.
     wallpaper_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
     wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
+    vcp: std::sync::Arc<tokio::sync::Mutex<crate::vcp::Service>>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -111,6 +112,7 @@ impl<W: AgentWorld> Agent<W> {
             excluded: None,
             wallpaper_generation: Default::default(),
             wallpaper_lock: Default::default(),
+            vcp: Default::default(),
         }
     }
 
@@ -283,6 +285,40 @@ impl<W: AgentWorld> Agent<W> {
                             });
                             return;
                         }
+                    }
+                }
+            }
+            Request::Vcp {
+                layout_id,
+                layout_revision,
+                monitor,
+                write,
+            } => {
+                let state = self.snapshot();
+                if state.layout_id.as_deref() != Some(&layout_id)
+                    || state.layout_revision != layout_revision
+                    || state.suspended
+                {
+                    Err("The displays changed or are suspended; reload before controlling the monitor.".into())
+                } else {
+                    match self.world.vcp_target(&monitor) {
+                        Err(error) => Err(error),
+                        Ok(target) => match self.vcp.clone().try_lock_owned() {
+                            Err(_) => Err(
+                                "A monitor request is already running. Try again when it finishes."
+                                    .into(),
+                            ),
+                            Ok(mut service) => {
+                                tokio::spawn(async move {
+                                    let result =
+                                        service.execute(target, write).await.and_then(|state| {
+                                            serde_json::to_value(state).map_err(|e| e.to_string())
+                                        });
+                                    client.send(api::answer(id, result));
+                                });
+                                return;
+                            }
+                        },
                     }
                 }
             }

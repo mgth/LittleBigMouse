@@ -82,7 +82,9 @@ fn unpaired_hisense_offers_pin_setup_and_disables_navigation() {
         h.state().commands.last(),
         Some(&Command {
             brand: Brand::Hisense,
-            action: Action::RequestPin
+            action: Action::RequestPin {
+                ip_address: "192.168.1.20".into()
+            }
         })
     );
 }

@@ -200,7 +200,9 @@ impl Panel {
                             .add_enabled(saved, egui::Button::new("Request VIDAA PIN"))
                             .clicked()
                         {
-                            action = Some(Action::RequestPin);
+                            action = Some(Action::RequestPin {
+                                ip_address: self.ip.trim().to_owned(),
+                            });
                         }
                         field(ui, "PIN displayed on the screen", &mut self.pin, "4 digits");
                         if ui

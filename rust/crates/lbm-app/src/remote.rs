@@ -46,7 +46,7 @@ impl Controller {
         let key = self.key.as_ref()?;
         let load = matches!(
             command.action,
-            Action::Info | Action::Save { .. } | Action::Pair { .. } | Action::RequestPin
+            Action::Info | Action::Save { .. } | Action::Pair { .. } | Action::RequestPin { .. }
         );
         self.pending = Some((id, self.generation, load));
         self.error = None;

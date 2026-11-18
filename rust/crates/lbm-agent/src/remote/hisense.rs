@@ -67,10 +67,18 @@ pub async fn reopen(c: &Saved) -> Result<Client, String> {
     };
     Client::connect(c, &id, &user, &pass, &topics(&c.client_id, legacy(c))).await
 }
+/// Asking for a PIN is where the user says that this device is the right one, so it
+/// starts over and nothing stored goes out. Entering the PIN continues that exchange:
+/// after a lost connection it must still be the device that showed it.
+fn prepare_pairing(c: &mut Saved, request_pin: bool) {
+    if request_pin {
+        c.certificate_fingerprint.clear();
+        c.access_token.clear();
+        c.refresh_token.clear();
+    }
+}
 pub async fn begin(c: &mut Saved, request_pin: bool) -> Result<Client, String> {
-    // Pairing starts over with credentials derived on the spot, none of them a stored
-    // secret, and this is where the user says that this device is the right one.
-    c.certificate_fingerprint.clear();
+    prepare_pairing(c, request_pin);
     if c.controller_mac_address.is_empty() {
         c.controller_mac_address = network::controller_mac(&c.ip_address).await?;
     }
@@ -393,5 +401,23 @@ mod tests {
         let settings=pictures(r#"{"menu_info":[{"menu_id":2,"menu_name":"Laser Luminance","menu_value":5,"menu_value_type":"int","menu_flag":1}]}"#).unwrap();
         assert_eq!(settings[0].menu_id, 2);
         assert_eq!(settings[0].value, "5");
+    }
+    #[test]
+    fn a_pin_is_only_entered_on_the_device_that_showed_it() {
+        let saved = Saved {
+            certificate_fingerprint: "shown".into(),
+            access_token: "old".into(),
+            refresh_token: "old".into(),
+            ..Default::default()
+        };
+        let mut resumed = saved.clone();
+        prepare_pairing(&mut resumed, false);
+        assert_eq!(resumed.certificate_fingerprint, "shown");
+        assert!(network::trusted(&resumed, "shown").is_ok());
+        assert!(network::trusted(&resumed, "another").is_err());
+        let mut restarted = saved;
+        prepare_pairing(&mut restarted, true);
+        assert!(restarted.certificate_fingerprint.is_empty());
+        assert!(network::trusted(&restarted, "another").is_ok());
     }
 }

@@ -133,19 +133,22 @@ impl Service {
                 state.note = Some("Samsung paired with this monitor.".into());
                 let _ = pin;
             }
-            Action::RequestPin | Action::Pair { .. } => {
+            Action::RequestPin { .. } | Action::Pair { .. } => {
                 if brand != Brand::Hisense {
                     return Err("This remote does not use a PIN.".into());
                 }
                 network::address(&c.ip_address)?;
                 // The PIN belongs to the display the form shows, which must be the saved one.
-                if let Action::Pair { ip_address, .. } = &command.action {
-                    if network::address(ip_address)?.to_string() != c.ip_address {
-                        return Err("Save this address before pairing it.".into());
-                    }
+                let (Action::RequestPin { ip_address } | Action::Pair { ip_address, .. }) =
+                    &command.action
+                else {
+                    unreachable!("matched above");
+                };
+                if network::address(ip_address)?.to_string() != c.ip_address {
+                    return Err("Save this address before pairing it.".into());
                 }
                 c.client_certificate_path = self.certificate(&c.client_certificate_path)?;
-                let request = matches!(command.action, Action::RequestPin);
+                let request = matches!(command.action, Action::RequestPin { .. });
                 if request || !self.hisense.get(id).is_some_and(|client| client.alive()) {
                     if let Ok((d, protocol, brand)) =
                         network::probe(&c.ip_address, Brand::Hisense).await
@@ -329,16 +332,23 @@ mod tests {
                 ..Default::default()
             },
         );
-        let command = Command {
-            brand: Brand::Hisense,
-            action: Action::Pair {
+        for action in [
+            Action::RequestPin {
+                ip_address: "192.0.2.2".into(),
+            },
+            Action::Pair {
                 ip_address: "192.0.2.2".into(),
                 mac_address: String::new(),
                 pin: "1234".into(),
             },
-        };
-        let error = service.inner("screen", command).await.err().unwrap();
-        assert!(error.contains("Save this address"), "{error}");
+        ] {
+            let command = Command {
+                brand: Brand::Hisense,
+                action,
+            };
+            let error = service.inner("screen", command).await.err().unwrap();
+            assert!(error.contains("Save this address"), "{error}");
+        }
     }
     #[tokio::test]
     async fn a_failed_samsung_pairing_keeps_the_saved_association() {

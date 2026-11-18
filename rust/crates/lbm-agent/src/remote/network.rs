@@ -25,10 +25,21 @@ pub fn mac(value: &str) -> Result<String, String> {
         .join(":"))
 }
 /// Whether the device presenting `fingerprint` may receive this association's secrets.
-/// Devices have self-signed certificates, so the first one seen is the one remembered.
+///
+/// Devices have self-signed certificates, so pairing is what names the right one. A
+/// secret with no certificate on record (imported from an older file) proves nothing
+/// about whoever answers at that address now, so it waits for a new pairing.
 pub fn trusted(c: &Saved, fingerprint: &str) -> Result<(), String> {
-    if c.certificate_fingerprint.is_empty() || c.certificate_fingerprint == fingerprint {
+    let has_secret = !c.token.is_empty() || !c.access_token.is_empty();
+    if c.certificate_fingerprint == fingerprint
+        || (c.certificate_fingerprint.is_empty() && !has_secret)
+    {
         Ok(())
+    } else if c.certificate_fingerprint.is_empty() {
+        Err(format!(
+            "The device at {} has not been confirmed since this pairing was imported. Pair it again.",
+            c.ip_address
+        ))
     } else {
         Err(format!(
             "The device at {} is not the one that was paired: its certificate changed. Pair it again if you trust it.",
@@ -282,12 +293,29 @@ mod tests {
             ip_address: "192.168.1.20".into(),
             ..Default::default()
         };
-        assert!(trusted(&saved, "first").is_ok(), "nothing remembered yet");
+        assert!(trusted(&saved, "first").is_ok(), "nothing to protect yet");
         saved.certificate_fingerprint = "first".into();
         assert!(trusted(&saved, "first").is_ok());
         assert!(trusted(&saved, "other")
             .unwrap_err()
             .contains("Pair it again"));
+    }
+    #[test]
+    fn an_imported_secret_is_not_sent_to_whoever_answers_first() {
+        for secret in [
+            Saved {
+                token: "samsung".into(),
+                ..Default::default()
+            },
+            Saved {
+                access_token: "vidaa".into(),
+                ..Default::default()
+            },
+        ] {
+            assert!(trusted(&secret, "anything")
+                .unwrap_err()
+                .contains("Pair it again"));
+        }
     }
     #[test]
     fn a_detected_controller_wins_and_the_given_one_is_the_fallback() {

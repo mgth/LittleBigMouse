@@ -34,7 +34,10 @@ pub enum Action {
         mac_address: String,
         pin: String,
     },
-    RequestPin,
+    /// `ip_address` is the display the form shows, which must still be the saved one.
+    RequestPin {
+        ip_address: String,
+    },
     Key {
         key: String,
     },

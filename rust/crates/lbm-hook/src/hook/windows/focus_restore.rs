@@ -16,13 +16,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetAncestor, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
-    IsChild, IsHungAppWindow, IsIconic, IsWindow, IsWindowVisible, PeekMessageW,
-    SetForegroundWindow, WindowFromPoint, GA_ROOT, GUITHREADINFO, MSG, PM_NOREMOVE, WM_LBUTTONDOWN,
-    WM_LBUTTONUP,
+    IsChild, IsHungAppWindow, IsIconic, IsWindow, IsWindowVisible, KillTimer, PeekMessageW,
+    SetForegroundWindow, SetTimer, WindowFromPoint, GA_ROOT, GUITHREADINFO, MSG, PM_NOREMOVE,
+    WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 
 use crate::hook::focus_restore::{before_touch, FocusSnapshot, RestoreRequest, WindowIdentity};
 use crate::shared::{Shared, SHARED};
+
+/// How often the idle clock is read while a restoration waits for the mouse.
+const DEFERRED_POLL_MS: u32 = 50;
 
 static SENDER: OnceLock<mpsc::SyncSender<RestoreRequest>> = OnceLock::new();
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -37,6 +40,7 @@ thread_local! {
     static RELEASED: Cell<bool> = const { Cell::new(false) };
     static DEFERRED: Cell<Option<RestoreRequest>> = const { Cell::new(None) };
     static DEFERRED_FIRST: Cell<u64> = const { Cell::new(0) };
+    static DEFERRED_TIMER: Cell<usize> = const { Cell::new(0) };
 }
 
 #[derive(Clone, Copy)]
@@ -446,6 +450,7 @@ pub fn start(shared: &'static Shared) {
 }
 
 pub fn reset() {
+    stop_deferred_watch();
     cancel_native();
     SEQUENCE.fetch_add(1, Ordering::SeqCst);
     ORIGIN.with(|origin| origin.set(None));
@@ -458,6 +463,59 @@ pub fn reset() {
         .get()
         .is_none_or(|shared| shared.restore_keyboard_focus.load(Ordering::SeqCst));
     PREVIOUS.with(|previous| previous.set(wanted.then(focus_snapshot).flatten()));
+}
+
+/// While a restoration waits for the mouse, watch the idle clock. Nothing here sees
+/// the keyboard, and the first mouse move would hide a keystroke by updating that
+/// clock itself, so the keystroke has to be noticed before the move. Mouse input
+/// reaches [`on_physical_input`] first and ends this watch.
+fn watch_deferred() {
+    if DEFERRED_TIMER.with(Cell::get) != 0 {
+        return;
+    }
+    let timer = unsafe {
+        SetTimer(
+            HWND::default(),
+            0,
+            DEFERRED_POLL_MS,
+            Some(on_deferred_timer),
+        )
+    };
+    DEFERRED_TIMER.with(|id| id.set(timer));
+    if timer == 0 {
+        // Without the watch, a later move could undo what the user typed.
+        reset();
+    }
+}
+
+fn stop_deferred_watch() {
+    let timer = DEFERRED_TIMER.with(|id| id.replace(0));
+    if timer != 0 {
+        let _ = unsafe { KillTimer(HWND::default(), timer) };
+    }
+}
+
+unsafe extern "system" fn on_deferred_timer(_: HWND, _: u32, _: usize, _: u32) {
+    crate::hook::guard(|| check_deferred(last_input_time()));
+}
+
+fn check_deferred(last_input: Option<u32>) {
+    match DEFERRED.with(Cell::get) {
+        Some(request) if request.interrupted_by(last_input) => {
+            trace("deferred: cancelled by input after the touch");
+            reset();
+        }
+        Some(_) => {}
+        None => stop_deferred_watch(),
+    }
+}
+
+/// A hovering pen moves the idle clock without the user having done anything else.
+pub fn on_pen_hover() {
+    if let (Some(mut request), Some(input_time)) = (DEFERRED.with(Cell::get), last_input_time()) {
+        request.input_time = input_time;
+        DEFERRED.with(|pending| pending.set(Some(request)));
+    }
 }
 
 pub fn on_physical_input(shared: &Shared, is_move: bool, in_contact: bool) {
@@ -487,6 +545,7 @@ pub fn on_physical_input(shared: &Shared, is_move: bool, in_contact: bool) {
         reset();
         return;
     };
+    stop_deferred_watch();
     request.input_time = input_time;
     request.sequence = SEQUENCE.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
     DEFERRED.with(|pending| pending.set(Some(request)));
@@ -563,6 +622,7 @@ fn on_touch_window(
         if policy.on_mouse_move {
             DEFERRED_FIRST.with(|first| first.set(sequence));
             DEFERRED.with(|pending| pending.set(Some(request)));
+            watch_deferred();
             return;
         }
         LAST_REQUEST.with(|last| last.set(sequence));
@@ -589,6 +649,32 @@ mod tests {
         on_touch_window(&Shared::new(), WM_LBUTTONUP, || {
             panic!("disabled focus must not query the touched window")
         });
+    }
+
+    #[test]
+    fn a_keystroke_before_the_mouse_moves_cancels_the_waiting_restoration() {
+        let window = |handle| WindowIdentity {
+            handle,
+            process: handle as u32,
+            thread: 20,
+        };
+        let request = RestoreRequest {
+            origin: window(1),
+            control: None,
+            touched: window(2),
+            input_time: 100,
+            generation: 0,
+            sequence: 1,
+        };
+        reset();
+        DEFERRED.with(|pending| pending.set(Some(request)));
+        check_deferred(Some(100));
+        assert!(DEFERRED.with(Cell::get).is_some(), "nothing happened yet");
+        check_deferred(Some(200)); // typing in the touched app
+        assert!(DEFERRED.with(Cell::get).is_none());
+        // The next mouse move has nothing left to send.
+        on_physical_input(&Shared::new(), true, false);
+        assert_eq!(LAST_REQUEST.with(Cell::get), 0);
     }
 
     #[test]

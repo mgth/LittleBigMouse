@@ -341,6 +341,8 @@ fn on_promoted_touch_with_policy(
     // Contact movement cancels a pending focus attempt until the pen lifts.
     if !is_pen(ms.dwExtraInfo) || message != WM_MOUSEMOVE || GESTURE.with(|v| v.get().contact) {
         super::focus_restore::on_touch(shared, message, ms.pt);
+    } else {
+        super::focus_restore::on_pen_hover();
     }
     // Use the last mouse position, including LBM's border warps.
     // The OS cursor may already reflect a preceding touch message.

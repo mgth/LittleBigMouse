@@ -105,6 +105,18 @@ public class AlgorithmChoiceTests
         Assert.True(false, "Touchscreen rows did not finish updating");
     }
 
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(275, 275)]
+    [InlineData(9999, 5000)]
+    public void FocusDelayIsClampedAndMarksOptionsUnsaved(int delay, int expected)
+    {
+        var model = new LbmOptions { Saved = true };
+        model.FocusRestoreDelay = delay;
+        Assert.Equal(expected, model.FocusRestoreDelay);
+        Assert.False(model.Saved);
+    }
+
     [Fact]
     public void DisposedOptionsAndDisplayRowsAreCollectibleWithServicesStillAlive()
     {
@@ -122,6 +134,17 @@ public class AlgorithmChoiceTests
         GC.KeepAlive(agent);
         GC.KeepAlive(main);
         GC.KeepAlive(collector);
+    }
+
+    [Fact]
+    public void StylusOptInMarksOptionsUnsavedWithoutEnablingOtherFeatures()
+    {
+        var model = new LbmOptions { Saved = true };
+        Assert.False(model.StylusMouseIndependent);
+        model.StylusMouseIndependent = true;
+        Assert.False(model.Saved);
+        Assert.False(model.TouchMouseIndependent);
+        Assert.False(model.RestoreKeyboardFocus);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

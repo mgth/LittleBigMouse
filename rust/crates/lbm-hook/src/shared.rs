@@ -45,6 +45,7 @@ pub struct Shared {
     pub rescue_shortcut: Mutex<String>,
     /// Opt-in Windows touchscreen/mouse separation.
     pub touch_mouse_independent: AtomicBool,
+    pub restore_keyboard_focus: AtomicBool,
     pub touch_policy: Mutex<std::sync::Arc<crate::hook::touch_policy::TouchPolicy>>,
     /// Invalidates saved touch positions on every layout reload.
     pub touch_generation: AtomicU32,
@@ -103,6 +104,7 @@ impl Shared {
             rescue_tid: AtomicU32::new(0),
             rescue_registered: AtomicBool::new(false),
             touch_mouse_independent: AtomicBool::new(false),
+            restore_keyboard_focus: AtomicBool::new(false),
             touch_policy: Mutex::new(std::sync::Arc::new(Default::default())),
             touch_generation: AtomicU32::new(0),
             rescue_shortcut: Mutex::new(crate::shortcut::DEFAULT.to_string()),

@@ -46,6 +46,7 @@ fn cursor_position() -> Option<(i32, i32)> {
 pub fn reset() {
     super::mouse::reset_movement();
     GESTURE.with(|v| v.set(TouchGesture::new()));
+    super::focus_restore::reset();
     TOUCH.with(|state| state.set(TouchResume::new()));
     NATIVE.with(|state| state.set(NativeTouchResume::new()));
     MOUSE_POSITION.with(|position| position.set(cursor_position()));
@@ -90,9 +91,9 @@ fn observe_native(shared: &crate::shared::Shared) {
     });
 }
 
-pub fn on_native_contact(contact: bool, time: u32) {
+pub fn on_native_contact(contact: bool, time: u32) -> bool {
     let Some(shared) = SHARED.get() else {
-        return;
+        return false;
     };
     let allowed = shared
         .touch_policy
@@ -104,6 +105,35 @@ pub fn on_native_contact(contact: bool, time: u32) {
         state.observe_contact(MOUSE_POSITION.with(Cell::get), allowed, contact, time);
         cell.set(state);
     });
+    if !NATIVE.with(|v| v.get().pending()) {
+        super::focus_restore::cancel_native();
+        return false;
+    }
+    shared.restore_keyboard_focus.load(Ordering::SeqCst)
+        && super::focus_restore::native_contact(shared, contact)
+}
+
+pub fn finish_native_focus() {
+    let Some(shared) = SHARED.get() else {
+        return;
+    };
+    sync_generation(shared);
+    let point = cursor_position();
+    let allowed = shared.touch_active()
+        && NATIVE.with(|v| v.get().pending())
+        && point.is_some_and(|(x, y)| {
+            shared
+                .touch_policy
+                .try_lock()
+                .ok()
+                .is_some_and(|policy| policy.includes(x, y))
+        });
+    if allowed {
+        let (x, y) = point.unwrap();
+        super::focus_restore::finish_native(shared, POINT { x, y });
+    } else {
+        super::focus_restore::cancel_native();
+    }
 }
 
 /// An AppBar swipe can change the work area after finger-up. Routing uses full
@@ -162,14 +192,34 @@ fn process_with_shared(
         return Some(false);
     }
     if is_pen(ms.dwExtraInfo) {
-        // The pen moves the cursor for good: it becomes the position to come back to.
+        if shared
+            .touch_policy
+            .try_lock()
+            .ok()
+            .is_some_and(|policy| policy.include_stylus)
+        {
+            on_promoted_touch(shared, message, ms);
+            return Some(false);
+        }
+        // Otherwise the pen moves the cursor for good: it is the new position.
         NATIVE.with(|v| v.set(NativeTouchResume::new()));
         GESTURE.with(|v| v.set(TouchGesture::new()));
+        super::focus_restore::reset();
         TOUCH.with(|cell| cell.set(TouchResume::new()));
         MOUSE_POSITION.with(|position| position.set(Some((ms.pt.x, ms.pt.y))));
         return Some(false);
     }
+    if ms.flags & LLMHF_INJECTED == 0 {
+        super::focus_restore::cancel_native();
+    }
     // Programmatic cursor motion must not consume the pending restore.
+    if ms.flags & LLMHF_INJECTED == 0 && shared.restore_keyboard_focus.load(Ordering::SeqCst) {
+        super::focus_restore::on_physical_input(
+            shared,
+            message == WM_MOUSEMOVE,
+            GESTURE.with(|v| v.get().contact),
+        );
+    }
     if ms.flags & LLMHF_INJECTED != 0
         && (TOUCH.with(|cell| cell.get().pending()) || NATIVE.with(|cell| cell.get().pending()))
     {
@@ -267,6 +317,7 @@ fn on_promoted_touch_with_policy(
     // Otherwise our old zone/clip can pin the first tap to the mouse monitor.
     begin_touch(&shared.engine, &mut Win32Cursor);
     super::mouse::reset_movement();
+    super::focus_restore::cancel_native();
     NATIVE.with(|cell| {
         let mut state = cell.get();
         state.promoted(ms.time);
@@ -281,6 +332,7 @@ fn on_promoted_touch_with_policy(
         accepted
     });
     if !accepted {
+        super::focus_restore::reset();
         TOUCH.with(|v| v.set(TouchResume::new()));
         // A temporary override must not replace the physical mouse's anchor.
         // Unselected displays still use normal cursor ownership.
@@ -289,6 +341,11 @@ fn on_promoted_touch_with_policy(
         }
         count_event();
         return;
+    }
+    // Hover preserves mouse position but must not repeatedly steal typing focus.
+    // Contact movement cancels a pending focus attempt until the pen lifts.
+    if !is_pen(ms.dwExtraInfo) || message != WM_MOUSEMOVE || GESTURE.with(|v| v.get().contact) {
+        super::focus_restore::on_touch(shared, message, ms.pt);
     }
     // Use the last mouse position, including LBM's border warps.
     // The OS cursor may already reflect a preceding touch message.
@@ -540,17 +597,33 @@ mod tests {
     }
 
     #[test]
-    fn a_pen_replaces_the_saved_position_instead_of_being_undone() {
-        let shared = enabled();
-        let pen = MSLLHOOKSTRUCT {
-            dwExtraInfo: 0xff51_5700,
-            pt: POINT { x: 2600, y: 2500 },
-            ..Default::default()
-        };
-        for message in [WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE] {
-            assert_eq!(process_with_shared(&shared, message, &pen), Some(false));
+    fn stylus_is_opt_in_and_preserves_the_mouse_anchor_through_hover_and_contact() {
+        for include_stylus in [false, true] {
+            let shared = enabled();
+            let mut layout = crate::zones::ZonesLayout::default();
+            layout.stylus_mouse_independent = include_stylus;
+            *shared.touch_policy.lock().unwrap() =
+                std::sync::Arc::new(crate::hook::touch_policy::TouchPolicy::from_layout(&layout));
+            let pen = MSLLHOOKSTRUCT {
+                dwExtraInfo: 0xff51_5700,
+                pt: POINT { x: 2600, y: 2500 },
+                ..Default::default()
+            };
+            for message in [WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE] {
+                assert_eq!(process_with_shared(&shared, message, &pen), Some(false));
+            }
+            assert_eq!(
+                TOUCH.with(|v| v.get().resume()),
+                include_stylus.then_some((1600, 873))
+            );
+            if !include_stylus {
+                assert_eq!(MOUSE_POSITION.with(Cell::get), Some((2600, 2500)));
+            }
+            shared
+                .touch_mouse_independent
+                .store(false, Ordering::SeqCst);
+            process_with_shared(&shared, WM_MOUSEMOVE, &pen);
+            assert!(!TOUCH.with(|v| v.get().pending()));
         }
-        assert_eq!(TOUCH.with(|v| v.get().resume()), None);
-        assert_eq!(MOUSE_POSITION.with(Cell::get), Some((2600, 2500)));
     }
 }

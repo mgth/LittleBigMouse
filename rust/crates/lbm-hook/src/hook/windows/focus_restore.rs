@@ -56,6 +56,8 @@ struct NativeCapture {
     generation: u32,
     input_time: Option<u32>,
     contact: bool,
+    /// Where the cursor was when a physical move came before this touch was settled.
+    moved_at: Option<POINT>,
 }
 
 pub fn cancel_native() {
@@ -78,15 +80,38 @@ fn restores_on_mouse_move(shared: &Shared) -> bool {
         .is_some_and(|policy| policy.on_mouse_move)
 }
 
-/// Whether a lifted native touch is still settling, with the mouse as what will
-/// restore the focus. The first physical move can come in that interval: it ends the
-/// settling instead of cancelling the restoration it is meant to trigger.
-pub fn native_release_settling(shared: &Shared) -> bool {
-    active(shared)
-        && NATIVE_CAPTURE
-            .with(Cell::get)
-            .is_some_and(|capture| !capture.contact)
-        && restores_on_mouse_move(shared)
+/// Whether a physical move now is the one that should restore the focus of a native
+/// touch not settled yet: lifted and waiting for the cursor, or apparently still down
+/// because the report of its release has not been handled.
+pub fn native_capture_open(shared: &Shared) -> bool {
+    active(shared) && NATIVE_CAPTURE.with(Cell::get).is_some() && restores_on_mouse_move(shared)
+}
+
+/// Whether a physical move is waiting on this capture.
+pub fn native_move_held() -> bool {
+    NATIVE_CAPTURE
+        .with(Cell::get)
+        .is_some_and(|capture| capture.moved_at.is_some())
+}
+
+/// Keeps the capture across that move, with the cursor still on what was touched. The
+/// hook callback cannot tell a finger still down from a release not yet handled:
+/// [`release_deferred`] decides, once the queued reports have been read.
+pub fn hold_native_capture(shared: &Shared, point: POINT) {
+    let Some(mut capture) = NATIVE_CAPTURE.with(Cell::get) else {
+        return;
+    };
+    if capture.moved_at.is_none() {
+        capture.moved_at = Some(point);
+        NATIVE_CAPTURE.with(|held| held.set(Some(capture)));
+    }
+    post_release(shared);
+}
+
+fn post_release(shared: &Shared) {
+    if !DEFERRED_RELEASE_POSTED.with(|posted| posted.replace(true)) {
+        super::post_deferred_release(shared);
+    }
 }
 
 /// Capture before Windows has necessarily updated the cursor or foreground.
@@ -116,9 +141,16 @@ pub fn native_contact(shared: &Shared, contact: bool) -> bool {
             generation: shared.touch_generation.load(Ordering::SeqCst),
             input_time: last_input_time(),
             contact: true,
+            moved_at: None,
         });
         SEQUENCE.fetch_add(1, Ordering::SeqCst);
         trace("native touch: captured original focus");
+        // From here on a key press must be seen: the mouse move that restores the focus
+        // would hide it from the idle clock.
+        if restores_on_mouse_move(shared) && !super::native_touch::watch_keyboard(true) {
+            cancel_native();
+            return false;
+        }
     }
     let Some(mut capture) = capture else {
         return false;
@@ -142,12 +174,6 @@ pub fn native_contact(shared: &Shared, contact: bool) -> bool {
     capture.contact = contact;
     capture.input_time = last_input_time();
     NATIVE_CAPTURE.with(|v| v.set(Some(capture)));
-    // From the release on, a key press must be seen: the mouse may move before the
-    // settling is over, and that move would hide it from the idle clock.
-    if released && restores_on_mouse_move(shared) && !super::native_touch::watch_keyboard(true) {
-        cancel_native();
-        return false;
-    }
     released
 }
 
@@ -516,10 +542,7 @@ fn wait_for_the_mouse(request: RestoreRequest) {
 }
 
 pub fn on_keyboard_input() {
-    let settling = NATIVE_CAPTURE
-        .with(Cell::get)
-        .is_some_and(|capture| !capture.contact);
-    if settling || DEFERRED.with(Cell::get).is_some() {
+    if NATIVE_CAPTURE.with(Cell::get).is_some() || DEFERRED.with(Cell::get).is_some() {
         trace("deferred: cancelled by a key event");
         reset();
     }
@@ -535,9 +558,7 @@ pub fn on_physical_input(shared: &Shared, is_move: bool, in_contact: bool) {
     }
     // The hook callback can overtake the WM_INPUT of a key pressed just before this
     // move, so decide from the message loop, once that report has been handled.
-    if !DEFERRED_RELEASE_POSTED.with(|posted| posted.replace(true)) {
-        super::post_deferred_release(shared);
-    }
+    post_release(shared);
 }
 
 /// Pump thread, after a physical mouse move.
@@ -554,15 +575,29 @@ pub fn release_deferred(shared: &Shared) {
         }
         found
     });
+    let held = NATIVE_CAPTURE
+        .with(Cell::get)
+        .filter(|capture| capture.moved_at.is_some());
+    if !drained && (held.is_some() || DEFERRED.with(Cell::get).is_some()) {
+        // A key event or a release may still be queued: come back after the pump's
+        // other work.
+        post_release(shared);
+        return;
+    }
+    if let Some(capture) = held {
+        if capture.contact {
+            // Every report has been read and the finger is really down: the mouse
+            // took over, as a move during a contact always has.
+            reset();
+            return;
+        }
+        if let Some(point) = capture.moved_at {
+            finish_native(shared, point, true);
+        }
+    }
     let Some(mut request) = DEFERRED.with(Cell::get) else {
         return;
     };
-    if !drained {
-        // A key event may still be queued: come back after the pump's other work.
-        DEFERRED_RELEASE_POSTED.with(|posted| posted.set(true));
-        super::post_deferred_release(shared);
-        return;
-    }
     if !active(shared)
         || request.generation != shared.touch_generation.load(Ordering::SeqCst)
         || DEFERRED_FIRST
@@ -716,7 +751,7 @@ mod tests {
         }
     }
 
-    fn released_capture(contact: bool) -> NativeCapture {
+    fn capture(contact: bool) -> NativeCapture {
         NativeCapture {
             current: None,
             previous: None,
@@ -724,41 +759,77 @@ mod tests {
             generation: 0,
             input_time: None,
             contact,
+            moved_at: None,
         }
     }
 
-    #[test]
-    fn a_mouse_move_can_end_the_settling_only_when_it_is_the_trigger() {
+    fn restoring_on_mouse_move(on_mouse_move: bool) -> Shared {
         let shared = Shared::new();
         shared.touch_mouse_independent.store(true, Ordering::SeqCst);
         shared.restore_keyboard_focus.store(true, Ordering::SeqCst);
         shared.want_hook.store(true, Ordering::SeqCst);
         shared.hooked.store(true, Ordering::SeqCst);
         let mut layout = crate::zones::ZonesLayout::default();
-        layout.focus_restore_on_mouse_move = true;
+        layout.focus_restore_on_mouse_move = on_mouse_move;
         *shared.touch_policy.lock().unwrap() =
             std::sync::Arc::new(crate::hook::touch_policy::TouchPolicy::from_layout(&layout));
-
-        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(false))));
-        assert!(native_release_settling(&shared));
-        // Still touching: not released yet.
-        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(true))));
-        assert!(!native_release_settling(&shared));
-        // Restoring after a delay: a move still cancels, as it always did.
-        layout.focus_restore_on_mouse_move = false;
-        *shared.touch_policy.lock().unwrap() =
-            std::sync::Arc::new(crate::hook::touch_policy::TouchPolicy::from_layout(&layout));
-        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(false))));
-        assert!(!native_release_settling(&shared));
-        cancel_native();
+        shared
     }
 
     #[test]
-    fn a_key_event_during_the_settling_drops_the_capture() {
+    fn a_mouse_move_keeps_the_capture_only_when_it_is_the_trigger() {
         reset();
-        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(false))));
-        on_keyboard_input();
+        NATIVE_CAPTURE.with(|held| held.set(Some(capture(true))));
+        assert!(native_capture_open(&restoring_on_mouse_move(true)));
+        // Restoring after a delay: a move still cancels, as it always did.
+        assert!(!native_capture_open(&restoring_on_mouse_move(false)));
+        reset();
+        assert!(!native_capture_open(&restoring_on_mouse_move(true)));
+    }
+
+    #[test]
+    fn a_move_before_the_report_of_the_release_keeps_the_capture_for_it() {
+        let shared = restoring_on_mouse_move(true);
+        reset();
+        NATIVE_CAPTURE.with(|held| held.set(Some(capture(true))));
+        hold_native_capture(&shared, POINT { x: 10, y: 20 });
+        assert!(native_move_held());
+        // The first point stays: by the next move the cursor has been sent back.
+        hold_native_capture(&shared, POINT { x: 500, y: 500 });
+        let held = NATIVE_CAPTURE.with(Cell::get).unwrap();
+        assert_eq!(held.moved_at.map(|p| (p.x, p.y)), Some((10, 20)));
+        // The queued report of the release is handled before the decision.
+        NATIVE_CAPTURE.with(|c| {
+            c.set(Some(NativeCapture {
+                contact: false,
+                ..held
+            }))
+        });
+        release_deferred(&shared);
+        assert!(NATIVE_CAPTURE.with(Cell::get).is_none(), "it was used");
+        reset();
+    }
+
+    #[test]
+    fn a_move_during_a_contact_really_held_gives_the_capture_up() {
+        let shared = restoring_on_mouse_move(true);
+        reset();
+        NATIVE_CAPTURE.with(|held| held.set(Some(capture(true))));
+        hold_native_capture(&shared, POINT { x: 10, y: 20 });
+        release_deferred(&shared);
         assert!(NATIVE_CAPTURE.with(Cell::get).is_none());
+        assert!(DEFERRED.with(Cell::get).is_none());
+        assert_eq!(LAST_REQUEST.with(Cell::get), 0);
+    }
+
+    #[test]
+    fn a_key_event_during_a_touch_drops_the_capture() {
+        for contact in [true, false] {
+            reset();
+            NATIVE_CAPTURE.with(|held| held.set(Some(capture(contact))));
+            on_keyboard_input();
+            assert!(NATIVE_CAPTURE.with(Cell::get).is_none());
+        }
     }
 
     #[test]

@@ -73,13 +73,11 @@ fn disabling_warnings_does_not_disable_the_last_screen_guard() {
             None,
         ),
     );
-    harness.get_by_label("Detach").click();
+    // In inventory order: the selected output, then the detached one.
+    harness.get_all_by_label("Detach").next().unwrap().click();
     harness.run();
     assert!(harness.state().1.is_none());
-    assert!(harness.query_by_label("Side · HDMI-1").is_none());
-    harness.state_mut().0.selected = Some("HDMI-1".into());
-    harness.run();
-    harness.get_by_label("Attach").click();
+    harness.get_all_by_label("Attach").last().unwrap().click();
     harness.run();
     assert_eq!(
         harness.state().1,
@@ -146,4 +144,50 @@ fn selection_changes_cancel_confirmation_and_count_all_active_outputs() {
     assert!(h.query_by_label("Attach").is_none());
     assert!(h.query_by_label("Detach").is_none());
     assert!(h.state().1.is_none());
+}
+
+#[test]
+fn a_detached_output_stays_reachable_whatever_the_map_has_selected() {
+    let outputs = outputs();
+    for selected in [None, Some("DP-1")] {
+        let mut h = Harness::builder().build_ui_state(
+            |ui, state: &mut (Panel, Option<Did>)| {
+                if let Some(did) = state.0.draw(ui, Some(&outputs), None, false, true, false) {
+                    state.1 = Some(did);
+                }
+            },
+            (
+                Panel {
+                    selected: selected.map(str::to_owned),
+                    ..Default::default()
+                },
+                None,
+            ),
+        );
+        h.run();
+        assert!(h.state().0.wanted(Some(&outputs)));
+        assert!(h.query_by_label("Side · HDMI-1").is_some());
+        assert_eq!(
+            h.query_by_label("Main · DP-1").is_some(),
+            selected.is_some()
+        );
+        h.get_all_by_label("Attach").last().unwrap().click();
+        h.run();
+        h.get_by_label("Confirm change").click();
+        h.run();
+        assert_eq!(
+            h.state().1,
+            Some(Did::Change("HDMI-1".into(), Change::Attach)),
+            "selected: {selected:?}"
+        );
+    }
+}
+
+#[test]
+fn nothing_is_offered_without_a_selection_or_a_detached_output() {
+    let mut outputs = outputs();
+    outputs.outputs[1].enabled = true;
+    let panel = Panel::default();
+    assert!(!panel.wanted(Some(&outputs)));
+    assert!(!panel.wanted(None));
 }

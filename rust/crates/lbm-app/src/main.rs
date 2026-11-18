@@ -173,6 +173,7 @@ struct App {
     previewed: Option<(String, std::time::Instant)>,
     view: View,
     settings_open: bool,
+    pending_options: lbm_app::settings::PendingOptions,
     about_open: bool,
     settings_page: lbm_ui::options::Page,
     /// What every frame shows inside it — the mode bar's choice. See `lbm_ui::mode`.
@@ -516,6 +517,7 @@ impl App {
             previewed: None,
             view: View::Map,
             settings_open: false,
+            pending_options: Default::default(),
             about_open: false,
             settings_page: lbm_ui::options::Page::default(),
             mode: lbm_ui::mode::Mode::default(),
@@ -547,6 +549,7 @@ impl App {
         use lbm_app::session::Event;
         match event {
             Event::Connected { requests, snapshot } => {
+                self.pending_options.disconnected();
                 self.placement = Default::default();
                 self.topology_pending = None;
                 self.outputs = Default::default();
@@ -566,9 +569,11 @@ impl App {
                     result: Ok(snapshot),
                 });
                 self.send("SeenProcesses", serde_json::json!({}));
+                self.send_pending_options();
             }
             Event::Message(message) => self.agent_said(message),
             Event::Disconnected(why) => {
+                self.pending_options.disconnected();
                 self.wallpaper.disconnect();
                 self.wallpaper_preview_busy = None;
                 self.screen_overlay_mode = lbm_overlay::Mode::Off;
@@ -846,6 +851,7 @@ impl App {
             reference.restore(layout);
         }
         read_stored(layout);
+        self.pending_options.apply(&mut layout.options);
         self.saved = Some(lbm_app::saved::Reference::of(layout));
         self.screens = screens_of(layout, self.mode);
         self.drag = None;
@@ -914,7 +920,19 @@ impl App {
                 None
             },
         );
-        self.send(method, extra);
+        debug_assert_eq!(method, "SaveOptions");
+        self.pending_options.add(extra);
+        self.send_pending_options();
+    }
+
+    fn send_pending_options(&mut self) {
+        if self.requests.is_none() {
+            return;
+        }
+        if let Some((method, extra)) = self.pending_options.request() {
+            let id = self.send(method, extra);
+            self.pending_options.sent(id);
+        }
     }
 
     /// What the agent said, in the bar's terms.
@@ -930,6 +948,7 @@ impl App {
     /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
         if let Message::Answer { id, result } = &message {
+            self.pending_options.answered(*id);
             if self.topology_pending == Some(*id) {
                 self.topology_pending = None;
             }
@@ -1799,7 +1818,7 @@ impl App {
             self.outputs.panel.confirm = None;
         }
         self.outputs.panel.selected = selected;
-        if self.outputs.panel.selected.is_none() {
+        if !self.outputs.panel.wanted(self.outputs.outputs.as_ref()) {
             return;
         }
         ui.add_space(12.0);
@@ -2085,7 +2104,7 @@ impl eframe::App for App {
                 match found {
                     Found::Displays {
                         generation,
-                        layout,
+                        mut layout,
                         reports,
                         detected,
                         excluded,
@@ -2100,6 +2119,8 @@ impl eframe::App for App {
                                 Some("Waiting for the displays to match the agent".into());
                             continue;
                         }
+                        self.pending_options.apply(&mut layout.options);
+                        let excluded = self.pending_options.excluded().or(excluded);
                         self.saved = Some(lbm_app::saved::Reference::of(&layout));
                         self.screens = screens_of(&layout, self.mode);
                         self.reports = reports;
@@ -2497,6 +2518,12 @@ impl eframe::App for App {
                 {
                     ui.disable();
                 }
+                if self.requests.is_none() && !self.pending_options.is_empty() {
+                    ui.colored_label(
+                        lbm_ui::theme::AMBER,
+                        "Not saved yet: sent when the agent reconnects.",
+                    );
+                }
                 if page == lbm_ui::options::Page::Applications {
                     excluded_did = lbm_ui::excluded::panel(
                         ui,
@@ -2821,7 +2848,7 @@ mod lifecycle_tests {
     }
 
     #[test]
-    fn location_properties_load_outputs_but_only_show_the_selected_monitor() {
+    fn location_properties_load_outputs_and_keep_detached_ones_reachable() {
         let ctx = egui::Context::default();
         let mut app = App::with_config(ctx.clone(), None);
         let (requests, mut incoming) = tokio::sync::mpsc::unbounded_channel();
@@ -2829,7 +2856,8 @@ mod lifecycle_tests {
         let input = || egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
-                egui::vec2(1100., 800.),
+                // Tall enough that nothing is scrolled out of the painted shapes.
+                egui::vec2(1100., 2400.),
             )),
             ..Default::default()
         };
@@ -2851,6 +2879,7 @@ mod lifecycle_tests {
         app.outputs.answered(
             id,
             &Ok(json!({"Signature":"live", "Outputs":[
+                {"Connector":"DP-1", "Name":"Attached screen", "Enabled":true, "Primary":true},
                 {"Connector":"HDMI-1", "Name":"Detached screen", "Enabled":false, "Primary":false}
             ]})),
         );
@@ -2867,13 +2896,14 @@ mod lifecycle_tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(!text.contains("System display"), "{text}");
-        assert!(!text.contains("Attach"), "{text}");
+        // No monitor of the layout stands for a detached output: nothing selects it.
+        assert!(text.contains("Detached screen · HDMI-1"), "{text}");
+        assert!(!text.contains("Attached screen · DP-1"), "{text}");
         let mut layout = Layout::new(LayoutOptions::default());
         lbm_layout::linux::populate(
             &mut layout,
             &[lbm_layout::linux::LinuxMonitor {
-                connector_name: "HDMI-1".into(),
+                connector_name: "DP-1".into(),
                 ..lbm_layout::linux::LinuxMonitor::fallback()
             }],
             |_| Ok::<(), ()>(()),
@@ -2883,7 +2913,7 @@ mod lifecycle_tests {
         app.layout = Some(Box::new(layout));
         let mut output = ctx.run_ui(input(), |ui| app.properties(ui));
         output.textures_delta.clear();
-        assert_eq!(app.outputs.panel.selected.as_deref(), Some("HDMI-1"));
+        assert_eq!(app.outputs.panel.selected.as_deref(), Some("DP-1"));
         let text = output
             .shapes
             .iter()
@@ -2893,6 +2923,7 @@ mod lifecycle_tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
+        assert!(text.contains("Attached screen · DP-1"), "{text}");
         assert!(text.contains("Detached screen · HDMI-1"), "{text}");
         assert!(
             incoming.try_recv().is_err(),
@@ -2978,6 +3009,67 @@ mod lifecycle_tests {
             result: Ok(json!(null)),
         });
         assert!(!app.state.waiting);
+    }
+
+    #[test]
+    fn a_preference_changed_without_the_agent_is_replayed_and_survives_a_reload() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        layout.id = "A".into();
+        app.saved = Some(lbm_app::saved::Reference::of(&layout));
+        app.layout = Some(Box::new(layout));
+        let snapshot = json!({"LayoutId":"A", "LayoutRevision":1,
+            "DisplaySignature":"1920x1080", "Engine":"Running", "HookConnected":true});
+        let (requests, _first) = tokio::sync::mpsc::unbounded_channel();
+        app.session_event(Event::Connected {
+            requests,
+            snapshot: snapshot.clone(),
+        });
+        app.session_event(Event::Disconnected("agent restarted".into()));
+
+        let before = app.layout.as_ref().unwrap().options.clone();
+        let wanted = !before.start_minimized;
+        app.layout
+            .as_mut()
+            .unwrap()
+            .edit_options(|o| o.start_minimized = wanted);
+        app.save_options(&before, false);
+        assert!(!app.pending_options.is_empty());
+
+        // What a fresh read of the store would give back must not undo the change.
+        let mut reloaded = before.clone();
+        app.pending_options.apply(&mut reloaded);
+        assert_eq!(reloaded.start_minimized, wanted);
+
+        let saves = |receiver: &mut tokio::sync::mpsc::UnboundedReceiver<_>| {
+            let mut found = Vec::new();
+            while let Ok((id, method, extra)) = receiver.try_recv() {
+                let (id, method, extra): (u64, &str, serde_json::Value) = (id, method, extra);
+                if method == "SaveOptions" {
+                    found.push((id, extra));
+                }
+            }
+            found
+        };
+        let (requests, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        app.session_event(Event::Connected {
+            requests,
+            snapshot: snapshot.clone(),
+        });
+        let sent = saves(&mut receiver);
+        assert_eq!(sent.len(), 1);
+        let (id, extra) = &sent[0];
+        assert_eq!(extra["Options"], json!({"StartMinimized": wanted}));
+        assert!(!app.pending_options.is_empty(), "not answered yet");
+
+        app.session_event(Event::Message(Message::Answer {
+            id: *id,
+            result: Ok(serde_json::Value::Null),
+        }));
+        assert!(app.pending_options.is_empty());
+        let (requests, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        app.session_event(Event::Connected { requests, snapshot });
+        assert!(saves(&mut receiver).is_empty(), "nothing is left to replay");
     }
 
     #[test]

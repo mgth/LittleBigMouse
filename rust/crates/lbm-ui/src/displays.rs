@@ -1,4 +1,5 @@
-//! System commands for the selected monitor; guards use the entire output inventory.
+//! System commands for the selected monitor and for every detached output, which no
+//! map or selector can reach. Guards use the entire output inventory.
 use lbm_ipc::displays::{Change, Outputs};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -23,6 +24,16 @@ pub fn caption(change: Change) -> &'static str {
 }
 
 impl Panel {
+    /// A detached output is not on the map, so it stays offered without any selection.
+    pub fn wanted(&self, outputs: Option<&Outputs>) -> bool {
+        self.selected.is_some()
+            || outputs.is_some_and(|outputs| outputs.outputs.iter().any(|o| !o.enabled))
+    }
+
+    fn shows(&self, output: &lbm_ipc::displays::Output) -> bool {
+        !output.enabled || self.selected.as_ref() == Some(&output.connector)
+    }
+
     pub fn draw(
         &mut self,
         ui: &mut egui::Ui,
@@ -32,14 +43,20 @@ impl Panel {
         warn: bool,
         can_stop: bool,
     ) -> Option<Did> {
-        if self
-            .confirm
-            .as_ref()
-            .is_some_and(|(connector, _)| Some(connector) != self.selected.as_ref())
-        {
+        let confirmable = self.confirm.as_ref().is_none_or(|(connector, _)| {
+            outputs.is_some_and(|outputs| {
+                outputs
+                    .outputs
+                    .iter()
+                    .any(|o| &o.connector == connector && self.shows(o))
+            })
+        });
+        if !confirmable {
             self.confirm = None;
         }
-        let selected = self.selected.as_deref()?;
+        if !self.wanted(outputs) {
+            return None;
+        }
         let mut did = None;
         ui.heading("System display");
         ui.label("These actions change the desktop configuration immediately.");
@@ -71,11 +88,8 @@ impl Panel {
         };
         let enabled = outputs.outputs.iter().filter(|o| o.enabled).count();
         ui.vertical(|ui| {
-            for output in outputs
-                .outputs
-                .iter()
-                .filter(|output| output.connector == selected)
-            {
+            let shown: Vec<_> = outputs.outputs.iter().filter(|o| self.shows(o)).collect();
+            for output in shown {
                 ui.push_id(&output.connector, |ui| {
                     ui.group(|ui| {
                         ui.label(format!("{} · {}", output.name, output.connector));

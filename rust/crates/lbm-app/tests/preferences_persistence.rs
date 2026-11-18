@@ -129,3 +129,44 @@ fn preferences_are_autosaved_and_do_not_turn_layout_save_or_undo_on() {
         "layout options still belong to Save and Undo"
     );
 }
+
+#[test]
+fn unanswered_preferences_accumulate_and_only_the_latest_answer_clears_them() {
+    use lbm_app::settings::{save_options, PendingOptions};
+    let base = LayoutOptions::default();
+    let mut minimized = base.clone();
+    minimized.start_minimized = !base.start_minimized;
+    let mut both = minimized.clone();
+    both.load_at_startup = !base.load_at_startup;
+
+    let mut pending = PendingOptions::default();
+    assert!(pending.is_empty());
+    pending.add(save_options(&base, &minimized, None).1);
+    pending.add(save_options(&minimized, &both, Some(&["game.exe".to_owned()])).1);
+    let (method, request) = pending.request().unwrap();
+    assert_eq!(method, "SaveOptions");
+    assert_eq!(
+        request["Options"].as_object().unwrap().len(),
+        1,
+        "only what changed may be replayed: {request}"
+    );
+    assert_eq!(request["Options"]["StartMinimized"], !base.start_minimized);
+    assert_eq!(request["LoadAtStartup"], !base.load_at_startup);
+    assert_eq!(pending.excluded().unwrap(), ["game.exe"]);
+
+    // Options read again from the store get the unanswered changes back.
+    let mut reloaded = base.clone();
+    pending.apply(&mut reloaded);
+    assert_eq!(reloaded.start_minimized, both.start_minimized);
+    assert_eq!(reloaded.load_at_startup, both.load_at_startup);
+
+    pending.sent(7);
+    pending.answered(6);
+    assert!(!pending.is_empty(), "an older answer says nothing");
+    pending.disconnected();
+    pending.answered(7);
+    assert!(!pending.is_empty(), "that connection's ids are gone");
+    pending.sent(3);
+    pending.answered(3);
+    assert!(pending.is_empty());
+}

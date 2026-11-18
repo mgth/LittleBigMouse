@@ -34,6 +34,86 @@ pub fn save_options(
     ("SaveOptions", request)
 }
 
+/// Preference changes the agent has not answered yet.
+///
+/// They are outside the layout document, so nothing else remembers them: without this, a
+/// change made while disconnected would be neither sent nor marked unsaved, and the next
+/// read of the store would undo it. Only what changed is kept, so replaying it cannot
+/// overwrite what another window saved in the meantime.
+#[derive(Debug, Default)]
+pub struct PendingOptions {
+    request: Option<Value>,
+    sent: Option<u64>,
+}
+
+impl PendingOptions {
+    /// Adds the changes of one [`save_options`] request; the latest value of a field wins.
+    pub fn add(&mut self, extra: Value) {
+        let Some(request) = self.request.as_mut() else {
+            self.request = Some(extra);
+            return;
+        };
+        let Value::Object(extra) = extra else {
+            return;
+        };
+        for (key, value) in extra {
+            match (key.as_str(), value) {
+                ("Options", Value::Object(options)) => {
+                    if let Some(known) = request["Options"].as_object_mut() {
+                        known.extend(options);
+                    }
+                }
+                (_, value) => request[key] = value,
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.request.is_none()
+    }
+
+    /// Everything still unanswered, as one request.
+    pub fn request(&self) -> Option<(&'static str, Value)> {
+        Some(("SaveOptions", self.request.clone()?))
+    }
+
+    pub fn sent(&mut self, id: u64) {
+        self.sent = Some(id);
+    }
+
+    /// The connection is gone, and its ids with it: what was in flight must go again.
+    pub fn disconnected(&mut self) {
+        self.sent = None;
+    }
+
+    /// The agent answered the latest request. A refusal is final and reported like any
+    /// other, so it is not replayed; an older answer says nothing about later changes.
+    pub fn answered(&mut self, id: u64) {
+        if self.sent == Some(id) {
+            self.sent = None;
+            self.request = None;
+        }
+    }
+
+    /// Puts the unanswered changes back over options freshly read from the store.
+    pub fn apply(&self, options: &mut LayoutOptions) {
+        let Some(request) = &self.request else {
+            return;
+        };
+        if let Ok(dto) = serde_json::from_value(request["Options"].clone()) {
+            lbm_store::layout_dto_mapper::apply_global_options(options, Some(&dto));
+        }
+        if let Some(load_at_startup) = request["LoadAtStartup"].as_bool() {
+            options.load_at_startup = load_at_startup;
+        }
+    }
+
+    /// The excluded list, when an unanswered change replaced it.
+    pub fn excluded(&self) -> Option<Vec<String>> {
+        serde_json::from_value(self.request.as_ref()?.get("Excluded")?.clone()).ok()
+    }
+}
+
 /// The `SaveLayout` request for this layout — the Save button.
 ///
 /// App preferences and exclusions are saved separately and are omitted here.

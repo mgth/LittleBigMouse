@@ -60,6 +60,33 @@ struct NativeCapture {
 
 pub fn cancel_native() {
     NATIVE_CAPTURE.with(|capture| capture.set(None));
+    release_idle_keyboard_watch();
+}
+
+/// The keyboard is only listened to while a restoration may still wait for the mouse.
+fn release_idle_keyboard_watch() {
+    if DEFERRED.with(Cell::get).is_none() {
+        super::native_touch::watch_keyboard(false);
+    }
+}
+
+fn restores_on_mouse_move(shared: &Shared) -> bool {
+    shared
+        .touch_policy
+        .try_lock()
+        .ok()
+        .is_some_and(|policy| policy.on_mouse_move)
+}
+
+/// Whether a lifted native touch is still settling, with the mouse as what will
+/// restore the focus. The first physical move can come in that interval: it ends the
+/// settling instead of cancelling the restoration it is meant to trigger.
+pub fn native_release_settling(shared: &Shared) -> bool {
+    active(shared)
+        && NATIVE_CAPTURE
+            .with(Cell::get)
+            .is_some_and(|capture| !capture.contact)
+        && restores_on_mouse_move(shared)
 }
 
 /// Capture before Windows has necessarily updated the cursor or foreground.
@@ -115,22 +142,30 @@ pub fn native_contact(shared: &Shared, contact: bool) -> bool {
     capture.contact = contact;
     capture.input_time = last_input_time();
     NATIVE_CAPTURE.with(|v| v.set(Some(capture)));
+    // From the release on, a key press must be seen: the mouse may move before the
+    // settling is over, and that move would hide it from the idle clock.
+    if released && restores_on_mouse_move(shared) && !super::native_touch::watch_keyboard(true) {
+        cancel_native();
+        return false;
+    }
     released
 }
 
-/// Called after a short cursor-settling interval, on the same message-pump thread.
-pub fn finish_native(shared: &Shared, point: POINT) {
+/// Called after a short cursor-settling interval, or at the physical mouse move that
+/// ended it (`mouse_moved`, which has moved the idle clock), on the message-pump thread.
+pub fn finish_native(shared: &Shared, point: POINT, mouse_moved: bool) {
     let Some(capture) = NATIVE_CAPTURE.with(|v| v.take()) else {
         return;
     };
     if capture.contact
         || !active(shared)
         || capture.generation != shared.touch_generation.load(Ordering::SeqCst)
-        || capture.input_time != last_input_time()
+        || (!mouse_moved && capture.input_time != last_input_time())
     {
         trace(
             "native touch: cancelled before settled release (contact, state, generation, or input)",
         );
+        release_idle_keyboard_watch();
         return;
     }
     let hit = identity(unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) });
@@ -481,7 +516,10 @@ fn wait_for_the_mouse(request: RestoreRequest) {
 }
 
 pub fn on_keyboard_input() {
-    if DEFERRED.with(Cell::get).is_some() {
+    let settling = NATIVE_CAPTURE
+        .with(Cell::get)
+        .is_some_and(|capture| !capture.contact);
+    if settling || DEFERRED.with(Cell::get).is_some() {
         trace("deferred: cancelled by a key event");
         reset();
     }
@@ -676,6 +714,51 @@ mod tests {
             assert!(DEFERRED.with(Cell::get).is_none());
             assert_eq!(LAST_REQUEST.with(Cell::get), 0, "key first: {key_first}");
         }
+    }
+
+    fn released_capture(contact: bool) -> NativeCapture {
+        NativeCapture {
+            current: None,
+            previous: None,
+            touched: None,
+            generation: 0,
+            input_time: None,
+            contact,
+        }
+    }
+
+    #[test]
+    fn a_mouse_move_can_end_the_settling_only_when_it_is_the_trigger() {
+        let shared = Shared::new();
+        shared.touch_mouse_independent.store(true, Ordering::SeqCst);
+        shared.restore_keyboard_focus.store(true, Ordering::SeqCst);
+        shared.want_hook.store(true, Ordering::SeqCst);
+        shared.hooked.store(true, Ordering::SeqCst);
+        let mut layout = crate::zones::ZonesLayout::default();
+        layout.focus_restore_on_mouse_move = true;
+        *shared.touch_policy.lock().unwrap() =
+            std::sync::Arc::new(crate::hook::touch_policy::TouchPolicy::from_layout(&layout));
+
+        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(false))));
+        assert!(native_release_settling(&shared));
+        // Still touching: not released yet.
+        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(true))));
+        assert!(!native_release_settling(&shared));
+        // Restoring after a delay: a move still cancels, as it always did.
+        layout.focus_restore_on_mouse_move = false;
+        *shared.touch_policy.lock().unwrap() =
+            std::sync::Arc::new(crate::hook::touch_policy::TouchPolicy::from_layout(&layout));
+        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(false))));
+        assert!(!native_release_settling(&shared));
+        cancel_native();
+    }
+
+    #[test]
+    fn a_key_event_during_the_settling_drops_the_capture() {
+        reset();
+        NATIVE_CAPTURE.with(|capture| capture.set(Some(released_capture(false))));
+        on_keyboard_input();
+        assert!(NATIVE_CAPTURE.with(Cell::get).is_none());
     }
 
     #[test]
@@ -1040,6 +1123,7 @@ mod tests {
                 x: rect.left + 40,
                 y: rect.top + 60,
             },
+            false,
         );
         wait_for_editor();
         println!("Native touch release restored the original editor");
@@ -1070,7 +1154,7 @@ mod tests {
             value.touched = Some(request.touched);
             capture.set(Some(value));
         });
-        finish_native(shared, stale_point);
+        finish_native(shared, stale_point, false);
         wait_for_editor();
         println!("Native swipe with stale hit-testing restored the original editor");
 

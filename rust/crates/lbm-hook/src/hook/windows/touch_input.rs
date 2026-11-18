@@ -114,9 +114,12 @@ pub fn on_native_contact(contact: bool, time: u32) -> bool {
 }
 
 pub fn finish_native_focus() {
-    let Some(shared) = SHARED.get() else {
-        return;
-    };
+    if let Some(shared) = SHARED.get() {
+        settle_native_focus(shared, false);
+    }
+}
+
+fn settle_native_focus(shared: &crate::shared::Shared, mouse_moved: bool) {
     sync_generation(shared);
     let point = cursor_position();
     let allowed = shared.touch_active()
@@ -130,7 +133,7 @@ pub fn finish_native_focus() {
         });
     if allowed {
         let (x, y) = point.unwrap();
-        super::focus_restore::finish_native(shared, POINT { x, y });
+        super::focus_restore::finish_native(shared, POINT { x, y }, mouse_moved);
     } else {
         super::focus_restore::cancel_native();
     }
@@ -205,7 +208,13 @@ fn process_with_shared(
         return Some(false);
     }
     if ms.flags & LLMHF_INJECTED == 0 {
-        super::focus_restore::cancel_native();
+        if message == WM_MOUSEMOVE && super::focus_restore::native_release_settling(shared) {
+            // Read here, before this move sends the cursor back: the cursor is still
+            // on what was touched.
+            settle_native_focus(shared, true);
+        } else {
+            super::focus_restore::cancel_native();
+        }
     }
     // Programmatic cursor motion must not consume the pending restore.
     if ms.flags & LLMHF_INJECTED == 0 && shared.restore_keyboard_focus.load(Ordering::SeqCst) {

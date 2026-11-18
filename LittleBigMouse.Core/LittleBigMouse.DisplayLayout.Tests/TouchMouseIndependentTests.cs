@@ -16,6 +16,11 @@ public class TouchMouseIndependentTests
         var options = new ILayoutOptions.Design();
         LayoutDtoMapper.Apply(options, new GlobalOptionsDto());
         Assert.False(options.TouchMouseIndependent);
+        Assert.False(options.StylusMouseIndependent);
+
+        Assert.False(options.RestoreKeyboardFocus);
+        Assert.Equal(120, options.FocusRestoreDelay);
+        Assert.False(options.FocusRestoreOnMouseMove);
         Assert.True(options.TouchAllDisplays);
         Assert.Equal("None", options.TouchOverrideModifier);
     }
@@ -25,15 +30,21 @@ public class TouchMouseIndependentTests
     [InlineData(false)]
     public void SettingSurvivesPersistenceAndReachesWire(bool enabled)
     {
-        var options = new ILayoutOptions.Design { TouchMouseIndependent = enabled };
+        var options = new ILayoutOptions.Design { TouchMouseIndependent = enabled, StylusMouseIndependent = enabled, RestoreKeyboardFocus = enabled };
         var saved = LayoutDtoMapper.ToGlobalOptionsDto(options, null);
-        var restored = new ILayoutOptions.Design { TouchMouseIndependent = !enabled };
+        var restored = new ILayoutOptions.Design { TouchMouseIndependent = !enabled, RestoreKeyboardFocus = !enabled };
         LayoutDtoMapper.Apply(restored, saved);
         Assert.Equal(enabled, restored.TouchMouseIndependent);
+        Assert.Equal(enabled, restored.StylusMouseIndependent);
+        Assert.Equal(enabled, restored.RestoreKeyboardFocus);
         using var layout = new MonitorsLayout(restored);
         var zones = layout.ComputeZones();
         Assert.Equal(enabled.ToString(),
+            XDocument.Parse(zones.Serialize()).Root!.Attribute("StylusMouseIndependent")!.Value);
+        Assert.Equal(enabled.ToString(),
             XDocument.Parse(zones.Serialize()).Root!.Attribute("TouchMouseIndependent")!.Value);
+        Assert.Equal(enabled.ToString(),
+            XDocument.Parse(zones.Serialize()).Root!.Attribute("RestoreKeyboardFocus")!.Value);
     }
 
     [Fact]
@@ -41,19 +52,30 @@ public class TouchMouseIndependentTests
     {
         var options = new ILayoutOptions.Design
         {
-            TouchAllDisplays = false, TouchDisplayIds = "SRC1", TouchOverrideModifier = "Shift"
+            FocusRestoreDelay = 275, FocusRestoreOnMouseMove = true,
+            TouchAllDisplays = false, TouchDisplayIds = "SRC1",
+            TouchOverrideModifier = "Shift", FocusKeepApps = "chrome.exe\nnotepad.exe",
+            FocusRestoreApps = "control.exe"
         };
         var restored = new ILayoutOptions.Design();
         LayoutDtoMapper.Apply(restored, LayoutDtoMapper.ToGlobalOptionsDto(options, null));
+        Assert.Equal(275, restored.FocusRestoreDelay);
+        Assert.True(restored.FocusRestoreOnMouseMove);
         Assert.False(restored.TouchAllDisplays);
         Assert.Equal("SRC1", restored.TouchDisplayIds);
         Assert.Equal("Shift", restored.TouchOverrideModifier);
+        Assert.Equal(options.FocusKeepApps, restored.FocusKeepApps);
+        Assert.Equal(options.FocusRestoreApps, restored.FocusRestoreApps);
         Assert.Equal(new ILayoutOptions.Design().ExcludedList, restored.ExcludedList);
         using var layout = new MonitorsLayout(restored);
         var root = XDocument.Parse(layout.ComputeZones().Serialize()).Root!;
+        Assert.Equal("275", root.Attribute("FocusRestoreDelay")!.Value);
+        Assert.Equal("True", root.Attribute("FocusRestoreOnMouseMove")!.Value);
         Assert.Equal("False", root.Attribute("TouchAllDisplays")!.Value);
         Assert.Equal("SRC1", root.Attribute("TouchDisplayIds")!.Value);
         Assert.Equal("Shift", root.Attribute("TouchOverrideModifier")!.Value);
+        Assert.Equal("chrome.exe;notepad.exe", root.Attribute("FocusKeepApps")!.Value);
+        Assert.Equal("control.exe", root.Attribute("FocusRestoreApps")!.Value);
         Assert.Equal("", root.Attribute("TouchDisplayBounds")!.Value);
     }
 

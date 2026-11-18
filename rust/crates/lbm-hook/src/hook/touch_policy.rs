@@ -3,9 +3,14 @@ use crate::zones::ZonesLayout;
 
 #[derive(Clone, Debug)]
 pub struct TouchPolicy {
+    pub include_stylus: bool,
+    pub delay_ms: u64,
+    pub on_mouse_move: bool,
     pub all_displays: bool,
     pub bounds: Vec<[f64; 4]>,
     pub modifier: Modifier,
+    keep_apps: Vec<String>,
+    restore_apps: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,6 +54,15 @@ impl TouchGesture {
     }
 }
 
+fn apps(value: &str) -> Vec<String> {
+    value
+        .split([';', '\r', '\n'])
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect()
+}
+
 fn display_bounds(rect: &str) -> Option<[f64; 4]> {
     let mut fields = rect.split(',');
     let mut values = [0.0_f64; 4];
@@ -64,6 +78,9 @@ fn display_bounds(rect: &str) -> Option<[f64; 4]> {
 impl TouchPolicy {
     pub fn from_layout(layout: &ZonesLayout) -> Self {
         Self {
+            include_stylus: layout.stylus_mouse_independent,
+            delay_ms: layout.focus_restore_delay.clamp(0, 5000) as u64,
+            on_mouse_move: layout.focus_restore_on_mouse_move,
             all_displays: layout.touch_all_displays,
             bounds: layout
                 .touch_display_bounds
@@ -77,6 +94,8 @@ impl TouchPolicy {
                 "win" => Modifier::Win,
                 _ => Modifier::None,
             },
+            keep_apps: apps(&layout.focus_keep_apps),
+            restore_apps: apps(&layout.focus_restore_apps),
         }
     }
 
@@ -88,6 +107,27 @@ impl TouchPolicy {
                     && y as f64 >= b[1]
                     && (y as f64) < b[1] + b[3]
             })
+    }
+
+    /// Exact executable basenames, case-insensitive. Keep wins over restore.
+    /// An unresolved process is safe only when there are no app rules to enforce.
+    pub fn restores_app(&self, path: Option<&str>) -> bool {
+        if self.keep_apps.is_empty() && self.restore_apps.is_empty() {
+            return true;
+        }
+        let Some(path) = path else {
+            return false;
+        };
+        let name = path.rsplit(['\\', '/']).next().unwrap_or(path);
+        !self
+            .keep_apps
+            .iter()
+            .any(|app| app.eq_ignore_ascii_case(name))
+            && (self.restore_apps.is_empty()
+                || self
+                    .restore_apps
+                    .iter()
+                    .any(|app| app.eq_ignore_ascii_case(name)))
     }
 }
 
@@ -136,10 +176,17 @@ mod tests {
     }
 
     #[test]
-    fn by_default_every_display_counts_and_no_key_overrides() {
-        let p = TouchPolicy::from_layout(&ZonesLayout::default());
+    fn defaults_and_delay_limits() {
+        let mut layout = ZonesLayout::default();
+        let p = TouchPolicy::from_layout(&layout);
+        assert_eq!(p.delay_ms, 120);
+        assert!(!p.on_mouse_move);
         assert!(p.includes(-10000, 50));
         assert_eq!(p.modifier, Modifier::None);
+        layout.focus_restore_delay = -1;
+        assert_eq!(TouchPolicy::from_layout(&layout).delay_ms, 0);
+        layout.focus_restore_delay = 99999;
+        assert_eq!(TouchPolicy::from_layout(&layout).delay_ms, 5000);
     }
 
     #[test]
@@ -153,5 +200,25 @@ mod tests {
         assert!(p.includes(-1, 1079));
         assert!(!p.includes(0, 0));
         assert!(!p.includes(-1, 1080));
+    }
+
+    #[test]
+    fn app_rules_are_exact_and_keep_takes_precedence() {
+        let mut l = ZonesLayout::default();
+        l.focus_keep_apps = " chrome.exe ; Editor.exe".into();
+        l.focus_restore_apps = "control.exe;editor.exe".into();
+        let p = TouchPolicy::from_layout(&l);
+        assert!(p.restores_app(Some(r"C:\Tools\CONTROL.EXE")));
+        for path in [
+            None,
+            Some("editor.exe"),
+            Some("chrome.exe"),
+            Some("mycontrol.exe"),
+            Some("other.exe"),
+        ] {
+            assert!(!p.restores_app(path));
+        }
+        l.focus_restore_apps.clear();
+        assert!(TouchPolicy::from_layout(&l).restores_app(Some("other.exe")));
     }
 }

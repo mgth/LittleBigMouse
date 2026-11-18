@@ -1,20 +1,24 @@
 //! Observe only the touchscreen HID collection, including apps consuming native
 //! touch without mouse promotion. INPUTSINK neither redirects nor suppresses input.
-//! Only bounded touchscreen descriptors are retained. No keyboard input is registered.
+//! Only bounded touchscreen descriptors are retained. The keyboard is registered only
+//! while a focus restoration waits, and only the fact of a report is used: its content
+//! is never read.
 use std::cell::{Cell, RefCell};
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::UI::Input::{
     GetRawInputData, GetRawInputDeviceInfoW, RegisterRawInputDevices, HRAWINPUT, RAWINPUTDEVICE,
     RAWINPUTHEADER, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE, RIDI_DEVICEINFO,
-    RID_DEVICE_INFO, RID_HEADER, RID_INPUT, RIM_TYPEHID,
+    RID_DEVICE_INFO, RID_HEADER, RID_INPUT, RIM_TYPEHID, RIM_TYPEKEYBOARD,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorInfo, GetMessageTime, CURSORINFO, CURSOR_SUPPRESSED,
+    GetCursorInfo, GetMessageTime, KillTimer, SetTimer, CURSORINFO, CURSOR_SUPPRESSED,
 };
 
+pub const RELEASE_TIMER: usize = 0x4c424d54;
 const MAX_PACKET: usize = 65536;
 const MAX_DEVICES: usize = 8;
 const MAX_REPORTS: usize = 32;
+const CURSOR_SETTLE_MS: u32 = 50;
 
 struct Device {
     key: isize,
@@ -34,11 +38,18 @@ thread_local! {
     static LAST_TOUCH_DEVICE: Cell<Option<isize>> = const { Cell::new(None) };
     static WINDOW: Cell<HWND> = const { Cell::new(HWND(std::ptr::null_mut())) };
     static REGISTERED: Cell<bool> = const { Cell::new(false) };
+    static KEYBOARD_WATCHED: Cell<bool> = const { Cell::new(false) };
 }
 
 pub fn devices_changed() {
     LAST_TOUCH_DEVICE.with(|v| v.set(None));
     REPORTS.with(|v| *v.borrow_mut() = Reports::default());
+    super::focus_restore::cancel_native();
+}
+
+pub fn on_timer(hwnd: HWND) {
+    let _ = unsafe { KillTimer(hwnd, RELEASE_TIMER) };
+    super::touch_input::finish_native_focus();
 }
 
 /// The pump's window, which receives the reports once [`sync`] asks for them.
@@ -47,6 +58,7 @@ pub fn attach(hwnd: HWND) {
 }
 
 pub fn detach() {
+    watch_keyboard(false);
     sync(false);
     WINDOW.with(|window| window.set(HWND::default()));
 }
@@ -66,6 +78,34 @@ pub fn sync(wanted: bool) {
         false
     };
     REGISTERED.with(|state| state.set(registered));
+}
+
+/// Be told of key events, for as long as a restoration waits. Returns whether the
+/// watch is in the requested state.
+pub fn watch_keyboard(wanted: bool) -> bool {
+    if wanted == KEYBOARD_WATCHED.with(Cell::get) {
+        return true;
+    }
+    let hwnd = WINDOW.with(Cell::get);
+    if wanted && hwnd == HWND::default() {
+        return false;
+    }
+    let device = RAWINPUTDEVICE {
+        usUsagePage: 0x01,
+        usUsage: 0x06,
+        dwFlags: if wanted {
+            RIDEV_INPUTSINK
+        } else {
+            RIDEV_REMOVE
+        },
+        hwndTarget: if wanted { hwnd } else { HWND::default() },
+    };
+    let done =
+        unsafe { RegisterRawInputDevices(&[device], size_of::<RAWINPUTDEVICE>() as u32) }.is_ok();
+    if done {
+        KEYBOARD_WATCHED.with(|watched| watched.set(wanted));
+    }
+    done
 }
 
 fn register(hwnd: HWND) -> bool {
@@ -95,7 +135,7 @@ fn unregister() {
     let _ = unsafe { RegisterRawInputDevices(&[device], size_of::<RAWINPUTDEVICE>() as u32) };
 }
 
-pub fn on_input(lparam: LPARAM) {
+pub fn on_input(hwnd: HWND, lparam: LPARAM) {
     let mut header = RAWINPUTHEADER::default();
     let mut size = size_of::<RAWINPUTHEADER>() as u32;
     let read = unsafe {
@@ -107,7 +147,14 @@ pub fn on_input(lparam: LPARAM) {
             size_of::<RAWINPUTHEADER>() as u32,
         )
     };
-    if read != size_of::<RAWINPUTHEADER>() as u32 || header.dwType != RIM_TYPEHID.0 {
+    if read != size_of::<RAWINPUTHEADER>() as u32 {
+        return;
+    }
+    if header.dwType == RIM_TYPEKEYBOARD.0 {
+        super::focus_restore::on_keyboard_input();
+        return;
+    }
+    if header.dwType != RIM_TYPEHID.0 {
         return;
     }
     if !is_touchscreen(header.hDevice) {
@@ -127,13 +174,22 @@ pub fn on_input(lparam: LPARAM) {
         // Ignore idle HID reports while the mouse owns the visible cursor.
         super::touch_input::on_native_touch();
     }
-    // Contact boundaries re-arm cursor restoration after an override. Decode first:
-    // no RefCell borrow may span a call that can re-enter the mouse hook.
+    // Contact boundaries re-arm cursor restoration after an override, and time focus
+    // restoration. Decode first: no RefCell borrow may span a call that can re-enter
+    // the mouse hook.
     let contacts = REPORTS.with(|storage| storage.borrow_mut().read(lparam, &header));
     // The clock of `MSLLHOOKSTRUCT::time`, which promoted messages are stamped with.
     let time = unsafe { GetMessageTime() } as u32;
     for contact in contacts.into_iter().flatten() {
-        super::touch_input::on_native_contact(contact, time);
+        if contact {
+            let _ = unsafe { KillTimer(hwnd, RELEASE_TIMER) };
+        }
+        if super::touch_input::on_native_contact(contact, time) {
+            // Cursor relocation can arrive after the HID release.
+            unsafe {
+                SetTimer(hwnd, RELEASE_TIMER, CURSOR_SETTLE_MS, None);
+            }
+        }
     }
 }
 

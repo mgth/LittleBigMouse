@@ -61,9 +61,15 @@ public static class ZonesLayoutFactory
         zones.AdjustSpeed = layout.Options.AdjustSpeed;
 
         zones.TouchMouseIndependent = layout.Options.TouchMouseIndependent;
+        zones.StylusMouseIndependent = layout.Options.StylusMouseIndependent;
+        zones.RestoreKeyboardFocus = layout.Options.RestoreKeyboardFocus;
+        zones.FocusRestoreDelay = layout.Options.FocusRestoreDelay;
+        zones.FocusRestoreOnMouseMove = layout.Options.FocusRestoreOnMouseMove;
         zones.TouchAllDisplays = layout.Options.TouchAllDisplays;
         zones.TouchDisplayIds = layout.Options.TouchDisplayIds;
         zones.TouchOverrideModifier = layout.Options.TouchOverrideModifier;
+        zones.FocusKeepApps = layout.Options.FocusKeepApps.Replace("\r", "").Replace("\n", ";");
+        zones.FocusRestoreApps = layout.Options.FocusRestoreApps.Replace("\r", "").Replace("\n", ";");
         // Separate from cursor-routing zones: a sensor panel excluded from the layout
         // can still be a touchscreen that must not take the mouse away.
         if (!layout.Options.TouchAllDisplays)

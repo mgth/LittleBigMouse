@@ -139,6 +139,7 @@ fn register_wanted(shared: &Shared, current: Option<Shortcut>) -> Option<Shortcu
     shared.rescue_registered.store(ok, Ordering::SeqCst);
     if ok {
         eprintln!("[LittleBigMouse.Hook] rescue shortcut registered: {text}");
+        shared.report_rescue_available(&text);
         Some(shortcut)
     } else {
         // Almost always another application owning the combination. Worth saying

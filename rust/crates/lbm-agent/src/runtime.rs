@@ -41,6 +41,7 @@ fn hook_event(message: Event) -> HookEvent {
         Event::LoadFailed => HookEvent::LoadFailed,
         Event::Rescued => HookEvent::Rescued,
         Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
+        Event::ShortcutAvailable { .. } => HookEvent::ShortcutAvailable,
         // The handshake never comes through here: the connection answers it and
         // reports what it learned as `HookSignal::Greeted`. An event this version does
         // not know is one it has nothing to do about.
@@ -769,8 +770,16 @@ impl<W: AgentWorld> Agent<W> {
                     Some(HookSignal::Message(message)) => {
                         // C#: EventTrace.
                         eprintln!("[lbm-agent] hook: {}", message.name());
-                        if let Event::ShortcutUnavailable { shortcut } = &message {
-                            self.shortcut_unavailable = Some(shortcut.clone());
+                        match &message {
+                            Event::ShortcutUnavailable { shortcut } => {
+                                self.shortcut_unavailable = Some(shortcut.clone());
+                            }
+                            Event::ShortcutAvailable { shortcut }
+                                if self.shortcut_unavailable.as_ref() == Some(shortcut) =>
+                            {
+                                self.shortcut_unavailable = None;
+                            }
+                            _ => {}
                         }
                         self.forward(message.name(), &message.payload());
                         Input::Hook(hook_event(message))

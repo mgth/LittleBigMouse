@@ -385,6 +385,16 @@ async fn a_window_opened_later_learns_the_shortcut_could_not_be_armed() {
     let mut later = Frontend::connect(&api_endpoint).await;
     let state = later.ask(json!({ "Method": "Subscribe" })).await;
     assert_eq!(state["Result"]["ShortcutUnavailable"], "Ctrl+Alt+F9");
+
+    // The user gave it a key: the windows already open are told, the next ones never hear
+    // of the warning.
+    fake.broadcast(&Event::ShortcutAvailable {
+        shortcut: "Ctrl+Alt+F9".to_string(),
+    });
+    later.state(|s| s["ShortcutUnavailable"].is_null()).await;
+    let mut last = Frontend::connect(&api_endpoint).await;
+    let state = last.ask(json!({ "Method": "Subscribe" })).await;
+    assert_eq!(state["Result"]["ShortcutUnavailable"], Value::Null);
 }
 
 #[tokio::test]

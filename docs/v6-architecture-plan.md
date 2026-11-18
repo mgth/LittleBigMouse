@@ -407,7 +407,7 @@ Objectif : le hook ne connaît plus que l'agent.
   sans lui.
 - Protocole en types serde partagés : `Load` (génération, zones, options, bornes du bureau),
   `Run`, `Stop`, `Pause`/`Resume`, `Shortcut`, `Quit` ; événements Running, Stopped, RunRefused,
-  Rescued, DisplayChanged, Suspended, ShortcutUnavailable. Poignée de main versionnée : en cas
+  Rescued, DisplayChanged, Suspended, ShortcutUnavailable, ShortcutAvailable. Poignée de main versionnée : en cas
   d'écart, l'agent relance le hook de son propre dossier. `roxmltree` part.
 - Partent vers l'agent : le sondeur, la **liste** d'exclusion (D4), les statistiques `Loaded`.
   *D4 tranché : la liste vient de l'agent (`Command::Excluded`, envoyée avant toute mise en page),

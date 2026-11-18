@@ -132,6 +132,19 @@ impl Shared {
         });
     }
 
+    /// `shortcut` is armed: nothing is left to repeat, and whoever kept the warning hears
+    /// that it no longer holds. Said on every success and not only after a failure here:
+    /// the agent may still hold a verdict this hook has already forgotten.
+    pub fn report_rescue_available(&self, shortcut: &str) {
+        *self
+            .rescue_unavailable
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = None;
+        self.broadcast(&Event::ShortcutAvailable {
+            shortcut: shortcut.to_owned(),
+        });
+    }
+
     /// C++ `LittleBigMouseDaemon::Excluded` — is `path` covered by an exclusion
     /// entry (substring match, entries longer than one char)?
     ///

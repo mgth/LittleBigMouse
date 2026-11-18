@@ -114,7 +114,7 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
             Ok(session) => {
                 announced_absence = false;
                 pause = FIRST_RETRY;
-                listen(session, generation, shared, on_fire).await;
+                listen(session, &wanted, generation, shared, on_fire).await;
             }
             Err(error) => {
                 if !announced_absence {
@@ -208,8 +208,20 @@ async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::E
         .bind_shortcuts(&session, &[shortcut], None, Default::default())
         .await?
         .response()?;
-    for shortcut in bound.shortcuts() {
-        match shortcut.trigger_description() {
+    note_triggers(
+        shared,
+        wanted,
+        bound.shortcuts().iter().map(|s| s.trigger_description()),
+    );
+
+    Ok(Binding { shortcuts, session })
+}
+
+/// Reports what the desktop says the shortcut is bound to, at binding time and whenever
+/// the user changes it in the desktop's settings.
+fn note_triggers<'a>(shared: &Shared, wanted: &str, triggers: impl IntoIterator<Item = &'a str>) {
+    for trigger in triggers {
+        match trigger {
             // Registered, described, and bound to nothing. Said the same way Windows
             // says "another application owns this combination": a rescue that
             // silently does not exist is worse than none, because the user finds out
@@ -221,23 +233,26 @@ async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::E
                 );
                 shared.report_rescue_unavailable(wanted);
             }
-            trigger => eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}"),
+            trigger => {
+                eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}");
+                shared.report_rescue_available(wanted);
+            }
         }
     }
-
-    Ok(Binding { shortcuts, session })
 }
 
 /// Follow one binding until the shortcut changes under it or the portal goes away.
 async fn listen(
     binding: Binding,
+    wanted: &str,
     generation: u64,
     shared: &'static Shared,
     on_fire: fn(&'static Shared),
 ) {
-    let (Ok(mut activated), Ok(mut deactivated)) = (
+    let (Ok(mut activated), Ok(mut deactivated), Ok(mut rebound)) = (
         binding.shortcuts.receive_activated().await,
         binding.shortcuts.receive_deactivated().await,
+        binding.shortcuts.receive_shortcuts_changed().await,
     ) else {
         eprintln!("[LittleBigMouse.Hook] rescue: the portal stopped answering");
         let _ = binding.session.close().await;
@@ -272,6 +287,18 @@ async fn listen(
                     break;
                 }
             }
+            // The user gave it a key, or took it away, in the desktop's settings: what
+            // the warning says has to follow.
+            changed = rebound.next() => {
+                let Some(changed) = changed else {
+                    break;
+                };
+                note_triggers(
+                    shared,
+                    wanted,
+                    changed.shortcuts().iter().map(|s| s.trigger_description()),
+                );
+            }
             () = superseded(generation) => break,
         }
     }
@@ -285,6 +312,30 @@ mod tests {
     use lbm_ipc::protocol::Event;
 
     const PATIENCE: Duration = Duration::from_secs(5);
+
+    #[tokio::test]
+    async fn a_key_given_later_withdraws_the_warning() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let shortcut = "Ctrl+Alt+F9".to_string();
+
+        note_triggers(shared, &shortcut, ["none"]);
+        assert_eq!(
+            agent.next("the warning").await,
+            Event::ShortcutUnavailable {
+                shortcut: shortcut.clone(),
+            }
+        );
+
+        note_triggers(shared, &shortcut, ["Ctrl+Alt+F9"]);
+        assert_eq!(
+            agent.next("its withdrawal").await,
+            Event::ShortcutAvailable {
+                shortcut: shortcut.clone(),
+            }
+        );
+        assert_eq!(*shared.rescue_unavailable.lock().unwrap(), None);
+    }
 
     #[tokio::test]
     async fn a_refusal_is_told_to_the_window() {

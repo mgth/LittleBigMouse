@@ -23,11 +23,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
     PM_REMOVE, WM_INPUT, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 
-use crate::hook::focus_restore::{before_touch, FocusSnapshot, RestoreRequest, WindowIdentity};
+use crate::hook::focus_restore::{
+    before_touch, drain_bounded, FocusSnapshot, RestoreRequest, WindowIdentity,
+};
 use crate::shared::{Shared, SHARED};
 
-/// Raw input already queued when a waiting restoration is released: enough for any
-/// keystroke that came before the mouse move, without letting a flood hold the pump.
+/// Raw input handled in one go when a waiting restoration is released, so that a
+/// flood of reports cannot hold the pump.
 const MAX_QUEUED_REPORTS: usize = 64;
 
 static SENDER: OnceLock<mpsc::SyncSender<RestoreRequest>> = OnceLock::new();
@@ -506,15 +508,23 @@ pub fn release_deferred(shared: &Shared) {
         return;
     }
     let mut message = MSG::default();
-    for _ in 0..MAX_QUEUED_REPORTS {
-        if !unsafe { PeekMessageW(&mut message, None, WM_INPUT, WM_INPUT, PM_REMOVE) }.as_bool() {
-            break;
+    let drained = drain_bounded(MAX_QUEUED_REPORTS, || {
+        let found =
+            unsafe { PeekMessageW(&mut message, None, WM_INPUT, WM_INPUT, PM_REMOVE) }.as_bool();
+        if found {
+            unsafe { DispatchMessageW(&message) };
         }
-        unsafe { DispatchMessageW(&message) };
-    }
+        found
+    });
     let Some(mut request) = DEFERRED.with(Cell::get) else {
         return;
     };
+    if !drained {
+        // A key event may still be queued: come back after the pump's other work.
+        DEFERRED_RELEASE_POSTED.with(|posted| posted.set(true));
+        super::post_deferred_release(shared);
+        return;
+    }
     if !active(shared)
         || request.generation != shared.touch_generation.load(Ordering::SeqCst)
         || DEFERRED_FIRST

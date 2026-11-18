@@ -28,6 +28,12 @@ pub fn before_touch(
     }
 }
 
+/// Handle queued items through `next`, which returns false once there are none left.
+/// Returns whether the queue was seen empty: at `limit`, it may still hold anything.
+pub fn drain_bounded(limit: usize, mut next: impl FnMut() -> bool) -> bool {
+    (0..limit).any(|_| !next())
+}
+
 #[derive(Clone, Copy)]
 pub struct RestoreRequest {
     pub origin: WindowIdentity,
@@ -87,6 +93,23 @@ mod tests {
         assert!(r.should_restore(Some(window(1)), Some(window(2)), Some(u32::MAX), true, 3, 4));
         for time in [None, Some(0), Some(100)] {
             assert!(!r.should_restore(Some(window(1)), Some(window(2)), time, true, 3, 4));
+        }
+    }
+
+    #[test]
+    fn a_queue_is_only_called_empty_once_seen_empty() {
+        for (queued, drained, handled) in [(0, true, 0), (63, true, 63), (64, false, 64)] {
+            let mut left = queued;
+            let mut seen = 0;
+            let result = drain_bounded(64, || {
+                if left == 0 {
+                    return false;
+                }
+                left -= 1;
+                seen += 1;
+                true
+            });
+            assert_eq!((result, seen), (drained, handled), "{queued} queued");
         }
     }
 

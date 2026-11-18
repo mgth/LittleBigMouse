@@ -79,7 +79,7 @@ fn rulers_drag_each_axis_inversely_and_commit_only_on_release() {
             .unwrap();
         assert_eq!(settings::document(&layout), original);
         let preview = control.preview().unwrap().monitor("B").unwrap().location();
-        let delta = 40. * band.axis_mm / (band.axis_mm * 2. - 16.5);
+        let delta = 40. * band.axis_mm / (band.axis_mm * 2.);
         if side.vertical() {
             assert!((preview.y - location.y + delta).abs() < 1e-9);
             assert_eq!(preview.x, location.x);
@@ -117,7 +117,7 @@ fn ruler_wheel_scales_around_pointer_with_ctrl_and_shift_precision() {
             let mut event = input(&band, Kind::Wheel(1.), 100., 10);
             event.ctrl = ctrl;
             event.shift = shift;
-            let fraction = event.at / (event.length - 16.5);
+            let fraction = event.at / event.length;
             let mut control = Controller::default();
             let mut editor = Editor::default();
             assert!(
@@ -335,5 +335,40 @@ fn a_short_section_at_either_end_of_every_edge_can_be_selected_on_the_screen() {
                 "{side:?} [{from}, {to}]"
             );
         }
+    }
+}
+
+#[test]
+fn a_dragged_ruler_keeps_its_graduations_under_the_pointer() {
+    for side in Side::ALL {
+        let mut layout = layout();
+        let before = band(&layout, Mode::Rulers, side);
+        let (from, to) = (100., 500.);
+        let real = |kind, at: f64, time| {
+            let point = if side.vertical() {
+                (10., at)
+            } else {
+                (at, 10.)
+            };
+            Input::new(&before, kind, point, 1., time, false, false)
+        };
+        let mut control = Controller::default();
+        let mut editor = Editor::default();
+        for event in [real(Kind::Press, from, 10), real(Kind::Move, to, 20)] {
+            control.handle(&mut layout, &mut editor, event).unwrap();
+        }
+        let after = band(control.preview().unwrap(), Mode::Rulers, side);
+        let moved = scene::ticks(&before)
+            .into_iter()
+            .find_map(|old| {
+                let new = scene::ticks(&after).into_iter().find(|t| t.mm == old.mm)?;
+                Some(new.pixel - old.pixel)
+            })
+            .expect("a graduation on both sides of the drag");
+        assert!(
+            (moved - (to - from)).abs() < 1e-9,
+            "{side:?}: a graduation moved {moved} px for {} px",
+            to - from
+        );
     }
 }

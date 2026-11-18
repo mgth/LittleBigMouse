@@ -79,7 +79,7 @@ impl Controller {
                         }
                         g.preview = g.original.clone();
                         let delta = -(input.at - g.press.at) * g.press.band.axis_mm
-                            / (g.press.length - 16.5).max(1.);
+                            / g.press.length.max(1.);
                         let by = if input.band.side.vertical() {
                             Vector::new(0., delta)
                         } else {
@@ -117,7 +117,7 @@ impl Controller {
                         .depth_projection(layout.monitor(&input.band.monitor).unwrap())
                         .unwrap()
                         .bounds();
-                    let fraction = input.at / (input.length - 16.5).max(1.);
+                    let fraction = input.at / input.length.max(1.);
                     let by = if input.band.side.vertical() {
                         Vector::new(0., (bounds.height() - resized.height()) * fraction)
                     } else {

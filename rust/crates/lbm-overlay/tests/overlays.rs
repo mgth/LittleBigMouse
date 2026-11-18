@@ -699,3 +699,17 @@ fn physical_and_logical_native_input_agree_at_fractional_scale() {
         logical
     );
 }
+
+#[test]
+fn only_a_capture_lost_with_the_button_down_cancels_the_gesture() {
+    use lbm_overlay::input::{Capture, Kind};
+    let mut capture = Capture::default();
+    // What Windows sends for a plain click: the capture ends after the button came up.
+    capture.press();
+    capture.release();
+    assert_eq!(capture.lost(), None);
+    // Taken away in the middle of a gesture, and reported once.
+    capture.press();
+    assert_eq!(capture.lost(), Some(Kind::Cancel));
+    assert_eq!(capture.lost(), None);
+}

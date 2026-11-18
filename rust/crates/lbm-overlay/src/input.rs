@@ -58,6 +58,27 @@ impl Input {
             && !matches!(self.band.content, Content::Guide { .. })
     }
 }
+/// Tells a gesture cut short from the capture ending because the button came up.
+///
+/// Windows reports both as `WM_CAPTURECHANGED`, even when the window released the capture
+/// itself. Cancelling on the normal one would forget every click, and so every double click.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Capture {
+    held: bool,
+}
+impl Capture {
+    pub fn press(&mut self) {
+        self.held = true;
+    }
+    pub fn release(&mut self) {
+        self.held = false;
+    }
+    /// The capture is gone: a cancellation only if the button was still down.
+    pub fn lost(&mut self) -> Option<Kind> {
+        std::mem::take(&mut self.held).then_some(Kind::Cancel)
+    }
+}
+
 /// The same half-open diagonals as the pixels: neighbouring edge windows never
 /// consume each other's corner. Reference lines have no input region at all.
 pub fn regions(band: &Band) -> Vec<Pixels> {

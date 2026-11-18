@@ -1,6 +1,6 @@
 //! Native layered windows, owned and updated on egui's UI thread.
 use crate::{
-    input::{Input, Kind},
+    input::{Capture, Input, Kind},
     raster,
     scene::{self, Band, Binding, Pixels},
     Backend,
@@ -61,6 +61,15 @@ impl Drop for Dpi {
 thread_local! {
     static BANDS: std::cell::RefCell<std::collections::HashMap<isize,Band>> = Default::default();
     static INPUT: std::cell::RefCell<Vec<Input>> = Default::default();
+    static CAPTURE: std::cell::Cell<Capture> = Default::default();
+}
+fn capture<T>(change: impl FnOnce(&mut Capture) -> T) -> T {
+    CAPTURE.with(|cell| {
+        let mut capture = cell.get();
+        let result = change(&mut capture);
+        cell.set(capture);
+        result
+    })
 }
 unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     let band = BANDS.with(|b| b.borrow().get(&(hwnd.0 as isize)).cloned());
@@ -94,9 +103,13 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPAR
             let kind = match message {
                 WM_LBUTTONDOWN => {
                     SetCapture(hwnd);
+                    capture(Capture::press);
                     Some(Kind::Press)
                 }
-                WM_LBUTTONUP => Some(Kind::Release),
+                WM_LBUTTONUP => {
+                    capture(Capture::release);
+                    Some(Kind::Release)
+                }
                 WM_MOUSEMOVE if GetCapture() == hwnd => Some(Kind::Move),
                 WM_MOUSEWHEEL => {
                     let _ = ScreenToClient(hwnd, &mut point);
@@ -104,7 +117,7 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPAR
                 }
                 WM_KEYDOWN if w.0 == usize::from(VK_ESCAPE.0) => Some(Kind::Escape),
                 WM_KEYDOWN if w.0 == usize::from(VK_DELETE.0) => Some(Kind::Delete),
-                WM_CAPTURECHANGED => Some(Kind::Cancel),
+                WM_CAPTURECHANGED => capture(Capture::lost),
                 _ => None,
             };
             if let (Some(kind), Some(band)) = (kind, band) {

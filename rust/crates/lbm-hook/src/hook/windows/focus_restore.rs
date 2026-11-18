@@ -24,7 +24,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::hook::focus_restore::{
-    before_touch, drain_bounded, FocusSnapshot, RestoreRequest, WindowIdentity,
+    before_touch, drain_bounded, move_follows_release, FocusSnapshot, RestoreRequest,
+    WindowIdentity,
 };
 use crate::shared::{Shared, SHARED};
 
@@ -56,8 +57,11 @@ struct NativeCapture {
     generation: u32,
     input_time: Option<u32>,
     contact: bool,
-    /// Where the cursor was when a physical move came before this touch was settled.
-    moved_at: Option<POINT>,
+    /// Where the cursor was when a physical move first came before this touch was
+    /// settled, and when the latest such move happened.
+    moved_at: Option<(POINT, u32)>,
+    /// When the report of the release was stamped.
+    released_at: Option<u32>,
 }
 
 pub fn cancel_native() {
@@ -97,14 +101,14 @@ pub fn native_move_held() -> bool {
 /// Keeps the capture across that move, with the cursor still on what was touched. The
 /// hook callback cannot tell a finger still down from a release not yet handled:
 /// [`release_deferred`] decides, once the queued reports have been read.
-pub fn hold_native_capture(shared: &Shared, point: POINT) {
+pub fn hold_native_capture(shared: &Shared, point: POINT, time: u32) {
     let Some(mut capture) = NATIVE_CAPTURE.with(Cell::get) else {
         return;
     };
-    if capture.moved_at.is_none() {
-        capture.moved_at = Some(point);
-        NATIVE_CAPTURE.with(|held| held.set(Some(capture)));
-    }
+    // The first point: by the next move the cursor has been sent back.
+    let point = capture.moved_at.map_or(point, |(first, _)| first);
+    capture.moved_at = Some((point, time));
+    NATIVE_CAPTURE.with(|held| held.set(Some(capture)));
     post_release(shared);
 }
 
@@ -116,7 +120,7 @@ fn post_release(shared: &Shared) {
 
 /// Capture before Windows has necessarily updated the cursor or foreground.
 /// Returns true only on a down-to-up transition, to schedule position settling.
-pub fn native_contact(shared: &Shared, contact: bool) -> bool {
+pub fn native_contact(shared: &Shared, contact: bool, time: u32) -> bool {
     if !active(shared) {
         cancel_native();
         return false;
@@ -142,6 +146,7 @@ pub fn native_contact(shared: &Shared, contact: bool) -> bool {
             input_time: last_input_time(),
             contact: true,
             moved_at: None,
+            released_at: None,
         });
         SEQUENCE.fetch_add(1, Ordering::SeqCst);
         trace("native touch: captured original focus");
@@ -173,6 +178,9 @@ pub fn native_contact(shared: &Shared, contact: bool) -> bool {
     }
     capture.contact = contact;
     capture.input_time = last_input_time();
+    if released {
+        capture.released_at = Some(time);
+    }
     NATIVE_CAPTURE.with(|v| v.set(Some(capture)));
     released
 }
@@ -584,16 +592,21 @@ pub fn release_deferred(shared: &Shared) {
         post_release(shared);
         return;
     }
-    if let Some(capture) = held {
-        if capture.contact {
-            // Every report has been read and the finger is really down: the mouse
-            // took over, as a move during a contact always has.
+    if let Some(NativeCapture {
+        moved_at: Some((point, moved)),
+        released_at,
+        contact,
+        ..
+    }) = held
+    {
+        // The finger is really down, or was when the mouse last moved: the mouse took
+        // over, as a move during a contact always has. Only a move after the release
+        // is the one that restores the focus.
+        if contact || !released_at.is_some_and(|at| move_follows_release(moved, at)) {
             reset();
             return;
         }
-        if let Some(point) = capture.moved_at {
-            finish_native(shared, point, true);
-        }
+        finish_native(shared, point, true);
     }
     let Some(mut request) = DEFERRED.with(Cell::get) else {
         return;
@@ -760,6 +773,7 @@ mod tests {
             input_time: None,
             contact,
             moved_at: None,
+            released_at: None,
         }
     }
 
@@ -788,20 +802,22 @@ mod tests {
     }
 
     #[test]
-    fn a_move_before_the_report_of_the_release_keeps_the_capture_for_it() {
+    fn a_move_after_the_release_uses_the_capture_even_if_handled_first() {
         let shared = restoring_on_mouse_move(true);
         reset();
         NATIVE_CAPTURE.with(|held| held.set(Some(capture(true))));
-        hold_native_capture(&shared, POINT { x: 10, y: 20 });
+        hold_native_capture(&shared, POINT { x: 10, y: 20 }, 300);
         assert!(native_move_held());
         // The first point stays: by the next move the cursor has been sent back.
-        hold_native_capture(&shared, POINT { x: 500, y: 500 });
+        hold_native_capture(&shared, POINT { x: 500, y: 500 }, 310);
         let held = NATIVE_CAPTURE.with(Cell::get).unwrap();
-        assert_eq!(held.moved_at.map(|p| (p.x, p.y)), Some((10, 20)));
-        // The queued report of the release is handled before the decision.
+        let (point, moved) = held.moved_at.unwrap();
+        assert_eq!(((point.x, point.y), moved), ((10, 20), 310));
+        // The queued report of the release, stamped before the move, is read first.
         NATIVE_CAPTURE.with(|c| {
             c.set(Some(NativeCapture {
                 contact: false,
+                released_at: Some(250),
                 ..held
             }))
         });
@@ -811,11 +827,32 @@ mod tests {
     }
 
     #[test]
+    fn a_move_before_the_release_gives_the_capture_up() {
+        let shared = restoring_on_mouse_move(true);
+        reset();
+        NATIVE_CAPTURE.with(|held| held.set(Some(capture(true))));
+        hold_native_capture(&shared, POINT { x: 10, y: 20 }, 100);
+        // The finger comes up after that move, before the decision is taken.
+        let held = NATIVE_CAPTURE.with(Cell::get).unwrap();
+        NATIVE_CAPTURE.with(|c| {
+            c.set(Some(NativeCapture {
+                contact: false,
+                released_at: Some(200),
+                ..held
+            }))
+        });
+        release_deferred(&shared);
+        assert!(NATIVE_CAPTURE.with(Cell::get).is_none());
+        assert!(DEFERRED.with(Cell::get).is_none());
+        assert_eq!(LAST_REQUEST.with(Cell::get), 0);
+    }
+
+    #[test]
     fn a_move_during_a_contact_really_held_gives_the_capture_up() {
         let shared = restoring_on_mouse_move(true);
         reset();
         NATIVE_CAPTURE.with(|held| held.set(Some(capture(true))));
-        hold_native_capture(&shared, POINT { x: 10, y: 20 });
+        hold_native_capture(&shared, POINT { x: 10, y: 20 }, 100);
         release_deferred(&shared);
         assert!(NATIVE_CAPTURE.with(Cell::get).is_none());
         assert!(DEFERRED.with(Cell::get).is_none());
@@ -1172,14 +1209,14 @@ mod tests {
         layout.focus_restore_delay = 80;
         *shared.touch_policy.lock().unwrap() =
             std::sync::Arc::new(crate::hook::touch_policy::TouchPolicy::from_layout(&layout));
-        assert!(!native_contact(shared, true));
+        assert!(!native_contact(shared, true, 0));
         let queue = InputAttachment::new(request.touched.thread);
         unsafe {
             let _ = SetForegroundWindow(hwnd(request.touched));
         }
         drop(queue);
-        assert!(native_contact(shared, false));
-        assert!(!native_contact(shared, false)); // duplicate release cannot re-arm
+        assert!(native_contact(shared, false, 0));
+        assert!(!native_contact(shared, false, 0)); // duplicate release cannot re-arm
         let mut rect = windows::Win32::Foundation::RECT::default();
         unsafe {
             windows::Win32::UI::WindowsAndMessaging::GetWindowRect(
@@ -1203,13 +1240,13 @@ mod tests {
         // different panel window remains foreground. Exercise real activation
         // with deliberately stale hit-testing, not just the target selector.
         reset();
-        assert!(!native_contact(shared, true));
+        assert!(!native_contact(shared, true, 0));
         let queue = InputAttachment::new(request.touched.thread);
         unsafe {
             let _ = SetForegroundWindow(hwnd(request.touched));
         }
         drop(queue);
-        assert!(native_contact(shared, false));
+        assert!(native_contact(shared, false, 0));
         let stale_point = POINT {
             x: -30000,
             y: -30000,

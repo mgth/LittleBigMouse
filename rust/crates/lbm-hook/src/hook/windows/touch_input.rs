@@ -111,7 +111,7 @@ pub fn on_native_contact(contact: bool, time: u32) -> bool {
         return false;
     }
     shared.restore_keyboard_focus.load(Ordering::SeqCst)
-        && super::focus_restore::native_contact(shared, contact)
+        && super::focus_restore::native_contact(shared, contact, time)
 }
 
 pub fn finish_native_focus() {
@@ -140,18 +140,18 @@ fn native_focus_point(shared: &crate::shared::Shared) -> Option<POINT> {
 
 /// A physical move during an unsettled native touch. Read here, before this move sends
 /// the cursor back: the cursor is still on what was touched.
-fn hold_native_for_move(shared: &crate::shared::Shared) -> bool {
+fn hold_native_for_move(shared: &crate::shared::Shared, time: u32) -> bool {
     if !super::focus_restore::native_capture_open(shared) {
         return false;
     }
     if super::focus_restore::native_move_held() {
-        super::focus_restore::hold_native_capture(shared, POINT::default());
+        super::focus_restore::hold_native_capture(shared, POINT::default(), time);
         return true;
     }
     sync_generation(shared);
     match native_focus_point(shared) {
         Some(point) => {
-            super::focus_restore::hold_native_capture(shared, point);
+            super::focus_restore::hold_native_capture(shared, point, time);
             true
         }
         None => false,
@@ -227,7 +227,7 @@ fn process_with_shared(
         return Some(false);
     }
     let physical = ms.flags & LLMHF_INJECTED == 0;
-    let held = physical && message == WM_MOUSEMOVE && hold_native_for_move(shared);
+    let held = physical && message == WM_MOUSEMOVE && hold_native_for_move(shared, ms.time);
     if physical && !held {
         super::focus_restore::cancel_native();
     }

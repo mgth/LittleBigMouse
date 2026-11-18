@@ -88,14 +88,36 @@ impl Default for ScreenWallpaperSettings {
 }
 
 /// C# `LayoutWallpaperSettings`: what one layout asked for.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct LayoutWallpaperSettings {
     pub mode: WallpaperMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span_image_path: Option<String>,
+    /// Optional framing relative to the automatic centred cover. Older files keep
+    /// their original framing; C# readers can ignore this additional member.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span_placement: Option<SpanPlacement>,
     #[serde(default)]
     pub per_screen: BTreeMap<String, ScreenWallpaperSettings>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SpanPlacement {
+    pub offset_x_mm: f64,
+    pub offset_y_mm: f64,
+    pub scale: f64,
+}
+
+impl Default for SpanPlacement {
+    fn default() -> Self {
+        Self {
+            offset_x_mm: 0.0,
+            offset_y_mm: 0.0,
+            scale: 1.0,
+        }
+    }
 }
 
 impl LayoutWallpaperSettings {
@@ -169,6 +191,7 @@ mod tests {
         LayoutWallpaperSettings {
             mode: WallpaperMode::Span,
             span_image_path: Some("/home/u/pictures/wide.jpg".to_owned()),
+            span_placement: None,
             per_screen: BTreeMap::new(),
         }
     }

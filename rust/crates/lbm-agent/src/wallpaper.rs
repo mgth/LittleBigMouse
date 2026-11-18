@@ -278,6 +278,12 @@ fn span(
     settings: &LayoutWallpaperSettings,
     dir: &Path,
 ) -> Vec<ScreenWallpaper> {
+    if settings.span_placement.is_some() {
+        return crate::wallpaper_job::screens(layout, settings, dir).unwrap_or_else(|error| {
+            eprintln!("[lbm-agent] panorama rendering failed: {error}");
+            Vec::new()
+        });
+    }
     let Some(source) = settings
         .span_image_path
         .as_ref()
@@ -558,6 +564,7 @@ mod tests {
             mode: WallpaperMode::Span,
             span_image_path: Some(picture.to_string_lossy().into_owned()),
             per_screen: Default::default(),
+            span_placement: None,
         };
 
         let shown = screens(&layout, &settings, &dir.path().join("wallpapers"));
@@ -584,6 +591,7 @@ mod tests {
             mode: WallpaperMode::Span,
             span_image_path: Some("/gone.png".to_owned()),
             per_screen: Default::default(),
+            span_placement: None,
         };
 
         assert!(screens(&layout, &settings, dir.path()).is_empty());
@@ -601,6 +609,7 @@ mod tests {
             mode: WallpaperMode::Span,
             span_image_path: Some(picture.to_string_lossy().into_owned()),
             per_screen: Default::default(),
+            span_placement: None,
         };
 
         let once = signature(&screens(&layout, &settings, &out));

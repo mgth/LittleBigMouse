@@ -235,6 +235,24 @@ pub enum Gesture<'a> {
     Dropped { id: &'a str },
 }
 
+/// One physical image shared by all panels, reprojected with their current geometry.
+#[derive(Clone, Copy)]
+pub struct Panorama<'a> {
+    pub texture: &'a egui::TextureHandle,
+    pub mm: Rect,
+}
+impl<'a> Panorama<'a> {
+    pub fn project(self, fit: &Fit) -> (&'a egui::TextureHandle, egui::Rect) {
+        (
+            self.texture,
+            egui::Rect::from_min_max(
+                egui::pos2(fit.x(self.mm.left()), fit.y(self.mm.top())),
+                egui::pos2(fit.x(self.mm.right()), fit.y(self.mm.bottom())),
+            ),
+        )
+    }
+}
+
 /// Draws the whole map and gives back what the pointer did, if anything.
 ///
 /// The monitors are drawn in the order given and the last one wins an overlap, so a
@@ -247,15 +265,16 @@ pub fn draw<'a>(
     fit: &Fit,
     selected: Option<&str>,
 ) -> Option<Gesture<'a>> {
-    draw_movable(ui, monitors, fit, selected, true)
+    draw_with_panorama(ui, monitors, fit, selected, None, true)
 }
 
 /// `movable` enables screen dragging; selection remains available in every mode.
-pub fn draw_movable<'a>(
+pub fn draw_with_panorama<'a>(
     ui: &mut egui::Ui,
     monitors: &[MapMonitor<'a>],
     fit: &Fit,
     selected: Option<&str>,
+    panorama: Option<Panorama<'_>>,
     movable: bool,
 ) -> Option<Gesture<'a>> {
     let mut gesture = None;
@@ -279,7 +298,7 @@ pub fn draw_movable<'a>(
                 egui::Sense::click()
             },
         );
-        frame::monitor(
+        frame::monitor_with_panorama(
             ui,
             &drawn,
             &Look {
@@ -290,6 +309,7 @@ pub fn draw_movable<'a>(
                 details: m.details,
                 probe: m.probe,
             },
+            panorama.map(|p| p.project(fit)),
         );
         if response.clicked() {
             gesture = Some(Gesture::Clicked(m.id));

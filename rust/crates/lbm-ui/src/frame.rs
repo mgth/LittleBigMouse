@@ -323,6 +323,16 @@ fn reflection(painter: &egui::Painter, rect: egui::Rect, radius: f32, strength: 
 
 /// Draws one monitor. Returns the rectangle it took, so a caller can lay several out.
 pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
+    monitor_with_panorama(ui, drawn, look, None)
+}
+
+/// A shared image behind every panel, clipped before the glass reflection is drawn.
+pub fn monitor_with_panorama(
+    ui: &mut egui::Ui,
+    drawn: &Drawn,
+    look: &Look,
+    panorama: Option<(&egui::TextureHandle, egui::Rect)>,
+) -> egui::Rect {
     let Look {
         name,
         selected,
@@ -368,7 +378,17 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
         egui::Color32::from_rgb(27, 38, 46),
         ui.visuals().extreme_bg_color,
     );
-    if let Some(picture) = wallpaper {
+    if let Some((picture, image_rect)) = panorama {
+        painter.rect_filled(drawn.content, 0.0, egui::Color32::BLACK);
+        painter
+            .with_clip_rect(drawn.content.intersect(painter.clip_rect()))
+            .image(
+                picture.id(),
+                image_rect,
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+    } else if let Some(picture) = wallpaper {
         // Over the background colour and under everything else, as the frame's third
         // grid is: what is on the screen, not what is written about it.
         painter.image(

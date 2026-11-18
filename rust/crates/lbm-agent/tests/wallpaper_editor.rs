@@ -196,3 +196,33 @@ fn jobs_validate_before_persisting_and_never_replace_corrupt_settings() {
     assert!(all.contains_key("other"));
     assert!(all.contains_key("test"));
 }
+
+#[test]
+fn panorama_job_persists_and_reuses_the_custom_framing() {
+    use lbm_store::wallpaper_settings::{SpanPlacement, WallpaperMode};
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("source.png");
+    image::RgbaImage::from_pixel(8, 4, image::Rgba([220, 40, 80, 255]))
+        .save(&source)
+        .unwrap();
+    let mut task = job(dir.path());
+    task.settings.mode = WallpaperMode::Span;
+    task.settings.span_image_path = Some(source.to_string_lossy().into_owned());
+    task.settings.span_placement = Some(SpanPlacement {
+        scale: 0.5,
+        ..Default::default()
+    });
+    let layout = task.layout.clone();
+    let settings = task.settings.clone();
+    let applied = task.prepare(Arc::new(AtomicU64::new(1)), 1).unwrap();
+    let saved = wallpaper_settings::load_checked(&dir.path().join("wallpaper.json")).unwrap();
+    assert_eq!(saved["test"], settings);
+    let restored =
+        lbm_agent::wallpaper::screens(&layout, &saved["test"], &dir.path().join("images"));
+    assert_eq!(restored[0].image, applied[0].image);
+    let pixels = image::open(applied[0].image.as_ref().unwrap())
+        .unwrap()
+        .into_rgba8();
+    assert!(pixels.pixels().any(|p| p.0 == [0, 0, 0, 255]));
+    assert!(pixels.pixels().any(|p| p.0 == [220, 40, 80, 255]));
+}

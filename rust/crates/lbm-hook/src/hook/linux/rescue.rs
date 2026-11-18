@@ -26,11 +26,12 @@
 //! one. Asking is the whole point of not reading the keyboard; it also means the
 //! request can stay open for as long as the user takes to answer.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use ashpd::desktop::global_shortcuts::{GlobalShortcuts, NewShortcut};
 use futures::StreamExt;
+use tokio::sync::watch;
 
 use crate::shared::Shared;
 use lbm_ipc::protocol::Event;
@@ -46,8 +47,9 @@ const DESCRIPTION: &str = "Little Big Mouse: free a trapped cursor";
 const HOLD: Duration = Duration::from_millis(900);
 
 /// Bumped whenever the wanted shortcut changes, so a listener that is already up
-/// knows its session is describing the wrong combination.
-static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// knows its session is describing the wrong combination. A channel rather than a
+/// counter, so that the listener can wait for the change instead of looking for it.
+static GENERATION: LazyLock<watch::Sender<u64>> = LazyLock::new(|| watch::Sender::new(0));
 
 /// Start the listener on a thread of its own — as on Windows, the rescue must not
 /// depend on the loop it is rescuing the user from.
@@ -78,7 +80,7 @@ pub fn spawn(shared: &'static Shared, on_fire: fn(&'static Shared)) {
 /// The portal takes the bindings of a session once, so a different combination
 /// means a different session: there is nothing to update in place.
 pub fn shortcut_changed() {
-    GENERATION.fetch_add(1, Ordering::SeqCst);
+    GENERATION.send_modify(|generation| *generation += 1);
 }
 
 /// Bind, listen, and rebind whenever the shortcut changes — for as long as the
@@ -87,7 +89,7 @@ pub fn shortcut_changed() {
 async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
     let mut announced_absence = false;
     loop {
-        let generation = GENERATION.load(Ordering::SeqCst);
+        let generation = *GENERATION.borrow();
         let wanted = shared
             .rescue_shortcut
             .lock()
@@ -125,9 +127,14 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
 
 /// Resolves once the wanted shortcut is no longer the one `generation` describes.
 async fn superseded(generation: u64) {
-    while GENERATION.load(Ordering::SeqCst) == generation {
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
+    differs_from(GENERATION.subscribe(), generation).await;
+}
+
+/// Resolves once `current` holds anything but `generation`, at once if it already does:
+/// a change made before the wait began is not missed.
+async fn differs_from(mut current: watch::Receiver<u64>, generation: u64) {
+    // An error would mean the sender is gone, and it is a static.
+    let _ = current.wait_for(|value| *value != generation).await;
 }
 
 /// One session, holding one binding.
@@ -224,11 +231,7 @@ async fn listen(
                     break;
                 }
             }
-            _ = tokio::time::sleep(Duration::from_millis(250)) => {
-                if GENERATION.load(Ordering::SeqCst) != generation {
-                    break;
-                }
-            }
+            () = superseded(generation) => break,
         }
     }
 
@@ -238,6 +241,47 @@ async fn listen(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const PATIENCE: Duration = Duration::from_secs(5);
+
+    #[tokio::test]
+    async fn a_listener_waits_for_the_shortcut_to_change() {
+        let (generation, current) = watch::channel(7);
+        let mut waiting = tokio::spawn(differs_from(current, 7));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut waiting)
+                .await
+                .is_err(),
+            "nothing changed yet"
+        );
+
+        generation.send_modify(|value| *value += 1);
+        tokio::time::timeout(PATIENCE, waiting)
+            .await
+            .expect("the change ends the wait")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_change_made_before_the_wait_is_not_missed() {
+        let (generation, current) = watch::channel(7);
+        generation.send_modify(|value| *value += 1);
+        tokio::time::timeout(PATIENCE, differs_from(current, 7))
+            .await
+            .expect("it had already changed");
+    }
+
+    /// Only that the wait ends: other tests load layouts, which change the shortcut.
+    #[tokio::test]
+    async fn shortcut_changed_reaches_a_listener() {
+        let generation = *GENERATION.borrow();
+        let waiting = tokio::spawn(superseded(generation));
+        shortcut_changed();
+        tokio::time::timeout(PATIENCE, waiting)
+            .await
+            .expect("the change ends the wait")
+            .unwrap();
+    }
 
     /// Not run by default: it asks the running desktop for a real shortcut, and what
     /// comes back is the desktop's answer, not ours. On a session with the portal:

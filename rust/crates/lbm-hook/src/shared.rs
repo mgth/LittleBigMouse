@@ -26,9 +26,13 @@ pub struct Shared {
     /// Set from the display-state power notification; deduplicates its repeated current-state
     /// pushes (the listener window — and its registration — is recreated every hook/unhook cycle).
     pub suspended: AtomicBool,
-    /// Exit requested (`Quit`). The Linux event loops poll this; the Windows pump
+    /// Exit requested (`Quit`). The Linux event loops read this; the Windows pump
     /// exits through WM_QUIT instead and never reads it.
     pub want_quit: AtomicBool,
+    /// Signalled after `want_hook` or `want_quit` is requested, for a Linux backend
+    /// with nothing else to wait on (the Windows pump has `WM_BREAK_LOOP`).
+    #[cfg(target_os = "linux")]
+    pub wake: crate::hook::linux::wake::Wake,
     /// Thread id of the message pump, for `PostThreadMessageW`
     /// (C++ `Hooker::_currentThreadId`). Zero until the pump starts.
     pub pump_tid: AtomicU32,
@@ -85,6 +89,8 @@ impl Shared {
             paused: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             want_quit: AtomicBool::new(false),
+            #[cfg(target_os = "linux")]
+            wake: crate::hook::linux::wake::Wake::new(),
             pump_tid: AtomicU32::new(0),
             rescue_tid: AtomicU32::new(0),
             rescue_registered: AtomicBool::new(false),

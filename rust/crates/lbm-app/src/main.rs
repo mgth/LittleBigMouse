@@ -2716,6 +2716,12 @@ impl eframe::App for App {
                         &self.agent.seen,
                     );
                 } else if let Some(layout) = self.layout.as_mut() {
+                    let touch = cfg!(windows) && page == lbm_ui::options::Page::Advanced;
+                    let touch_displays = if touch {
+                        lbm_app::settings::touch_displays(layout)
+                    } else {
+                        Vec::new()
+                    };
                     layout.edit_options(|o| {
                         save_options = lbm_ui::options::panel(
                             ui,
@@ -2726,6 +2732,9 @@ impl eframe::App for App {
                             page,
                         )
                         .app;
+                        if touch {
+                            save_options |= lbm_ui::options::touch_panel(ui, o, &touch_displays);
+                        }
                     });
                 } else {
                     ui.label("Waiting for displays…");

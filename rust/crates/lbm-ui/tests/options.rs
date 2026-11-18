@@ -220,3 +220,62 @@ fn a_layout_setting_is_an_edit_and_not_a_save() {
         "an app-wide setting marked the layout unsaved, so Save would stay lit forever"
     );
 }
+
+fn touch_harness<'a>(
+    options: &'a std::cell::RefCell<LayoutOptions>,
+    saved: &'a std::cell::Cell<usize>,
+) -> Harness<'a> {
+    Harness::builder()
+        .with_size(egui::vec2(560.0, 1200.0))
+        .build_ui(move |ui| {
+            let displays = [("SRC1".to_owned(), "Display 1".to_owned())];
+            if options::touch_panel(ui, &mut options.borrow_mut(), &displays) {
+                saved.set(saved.get() + 1);
+            }
+        })
+}
+
+#[test]
+fn the_touch_settings_appear_with_the_feature_and_are_saved() {
+    let options = std::cell::RefCell::new(LayoutOptions::default());
+    let saved = std::cell::Cell::new(0);
+    let mut harness = touch_harness(&options, &saved);
+    harness.run();
+    assert!(harness
+        .query_by_role_and_label(egui::accesskit::Role::CheckBox, "Include stylus")
+        .is_none());
+    assert_eq!(saved.get(), 0);
+
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::CheckBox,
+            "Keep mouse position after touch",
+        )
+        .click();
+    harness.run();
+    assert!(options.borrow().touch_mouse_independent);
+    assert_eq!(saved.get(), 1);
+    assert!(harness
+        .query_by_role_and_label(egui::accesskit::Role::CheckBox, "Include stylus")
+        .is_some());
+    assert!(harness.query_by_label("Focus delay").is_none());
+
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::CheckBox, "Use on all displays")
+        .click();
+    harness.run();
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::CheckBox, "Display 1")
+        .click();
+    harness.run();
+    assert_eq!(options.borrow().touch_display_ids, "SRC1");
+    assert_eq!(saved.get(), 3);
+}
+
+#[test]
+fn touch_display_ids_stay_sorted_and_unique() {
+    assert_eq!(options::with_touch_display("", "B", true), "B");
+    assert_eq!(options::with_touch_display("C;A", "B", true), "A;B;C");
+    assert_eq!(options::with_touch_display("A;B", "B", true), "A;B");
+    assert_eq!(options::with_touch_display("A;B", "A", false), "B");
+}

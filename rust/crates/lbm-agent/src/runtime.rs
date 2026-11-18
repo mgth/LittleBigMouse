@@ -436,6 +436,7 @@ impl<W: AgentWorld> Agent<W> {
                 self.tell_shortcut();
                 self.tell_binding();
                 self.tell_excluded();
+                self.reload_changed_options();
                 saved.map(|()| serde_json::Value::Null)
             }
             Request::SaveWallpaper {
@@ -610,6 +611,25 @@ impl<W: AgentWorld> Agent<W> {
     ///
     /// Sent before any layout, so the first `Run` of a connection is decided against
     /// the user's list and not against an empty one.
+    /// Some options travel inside the layout the hook holds (the touchscreen ones): a
+    /// running engine only gets them with a new Load. Nothing is sent when the zones
+    /// did not change, and a stopped engine picks them up at its next Start.
+    fn reload_changed_options(&mut self) {
+        if !matches!(
+            self.reconciler.engine(),
+            EngineState::Running | EngineState::Paused
+        ) {
+            return;
+        }
+        let changed = self
+            .world
+            .zones()
+            .is_some_and(|(zones, _)| self.on_the_wire.as_ref() != Some(&zones));
+        if changed {
+            self.apply(Effect::Preview);
+        }
+    }
+
     fn tell_excluded(&mut self) {
         let Some(excluded) = self.world.excluded() else {
             return;

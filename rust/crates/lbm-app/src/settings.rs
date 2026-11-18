@@ -125,6 +125,37 @@ impl PendingOptions {
 ///
 /// The same trap as `SaveOptions`, one level deeper and easier to miss, because here the
 /// field is filled in for you.
+/// The displays the touchscreen settings can be limited to, as `(source id, label)`:
+/// the active source of each monitor on the desktop.
+pub fn touch_displays(layout: &lbm_layout::model::Layout) -> Vec<(String, String)> {
+    layout
+        .sorted_sources()
+        .into_iter()
+        .filter(|s| {
+            s.source.attached_to_desktop
+                && layout
+                    .monitor(&s.monitor)
+                    .is_some_and(|m| m.active_source.as_deref() == Some(s.source.id.as_str()))
+        })
+        .map(|s| {
+            let number = s.source.source_number.as_deref().unwrap_or("?");
+            let name = s
+                .source
+                .display_name
+                .as_deref()
+                .or(s.source.device_name.as_deref())
+                .unwrap_or(&s.source.id);
+            let bounds = s.source.in_pixel.bounds();
+            let label = format!(
+                "Display {number} — {name} ({:.0} × {:.0})",
+                bounds.width(),
+                bounds.height()
+            );
+            (s.source.id.clone(), label)
+        })
+        .collect()
+}
+
 pub fn save_layout(layout: &lbm_layout::model::Layout) -> (&'static str, Value) {
     (
         "SaveLayout",

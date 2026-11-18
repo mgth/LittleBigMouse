@@ -635,6 +635,171 @@ pub fn panel(
     what
 }
 
+/// The keys that can exempt one touch gesture, wire spelling first.
+pub const TOUCH_MODIFIERS: [(&str, &str); 5] = [
+    ("None", "No key"),
+    ("Ctrl", "Hold Ctrl"),
+    ("Alt", "Hold Alt"),
+    ("Shift", "Hold Shift"),
+    ("Win", "Hold the Windows key"),
+];
+
+/// `ids` (`;`-separated) with `id` added or removed, sorted as the C# writes them.
+pub fn with_touch_display(ids: &str, id: &str, selected: bool) -> String {
+    let mut all: Vec<&str> = ids
+        .split(';')
+        .filter(|known| !known.is_empty() && *known != id)
+        .collect();
+    if selected {
+        all.push(id);
+    }
+    all.sort_unstable();
+    all.join(";")
+}
+
+/// A line of executable names, committed when the field is left: every keystroke would
+/// otherwise be a save and a reload of the running engine.
+fn app_list(ui: &mut egui::Ui, label: &str, hint: &str, value: &mut String) -> bool {
+    ui.label(label);
+    let id = ui.id().with(label);
+    let mut text = ui
+        .data(|data| data.get_temp::<String>(id))
+        .unwrap_or_else(|| value.clone());
+    let response = ui.add(
+        egui::TextEdit::singleline(&mut text)
+            .hint_text(hint)
+            .desired_width(f32::INFINITY),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, ui.is_enabled(), label)
+    });
+    if response.has_focus() {
+        ui.data_mut(|data| data.insert_temp(id, text));
+        return false;
+    }
+    ui.data_mut(|data| data.remove::<String>(id));
+    let changed = response.lost_focus() && text != *value;
+    if changed {
+        *value = text;
+    }
+    changed
+}
+
+/// The touchscreen settings (Windows only: the caller decides). `displays` is what can
+/// be selected, as `(source id, label)`. Returns whether an app-wide setting changed.
+pub fn touch_panel(
+    ui: &mut egui::Ui,
+    options: &mut LayoutOptions,
+    displays: &[(String, String)],
+) -> bool {
+    let mut changed = false;
+    group(ui, "Touchscreen", |ui| {
+        changed |= toggle(
+            ui,
+            Icon::Mouse,
+            "Keep mouse position after touch",
+            "After using the touchscreen, move the mouse to resume from its previous position",
+            &mut options.touch_mouse_independent,
+        );
+        if !options.touch_mouse_independent {
+            return;
+        }
+        ui.separator();
+        changed |= toggle(
+            ui,
+            Icon::Mouse,
+            "Include stylus",
+            "Keep the mouse position after pen use and apply the same focus settings",
+            &mut options.stylus_mouse_independent,
+        );
+        ui.separator();
+        changed |= toggle(
+            ui,
+            Icon::Mouse,
+            "Restore keyboard focus after touch",
+            "Return typing to the previous app after touch",
+            &mut options.restore_keyboard_focus,
+        );
+        if options.restore_keyboard_focus {
+            ui.separator();
+            changed |= toggle(
+                ui,
+                Icon::Mouse,
+                "Restore when the mouse moves",
+                "Keep focus on the touched app until you move the physical mouse",
+                &mut options.focus_restore_on_mouse_move,
+            );
+            ui.separator();
+            let mut delay = f64::from(options.focus_restore_delay);
+            let moved = ui
+                .add_enabled_ui(!options.focus_restore_on_mouse_move, |ui| {
+                    number(
+                        ui,
+                        Icon::Mouse,
+                        "Focus delay",
+                        "Wait after lifting your finger",
+                        (0.0..=5000.0, 20.0, "ms"),
+                        &mut delay,
+                    )
+                })
+                .inner;
+            if moved {
+                options.focus_restore_delay = delay.round() as i32;
+                changed = true;
+            }
+            ui.separator();
+            note(
+                ui,
+                "Executable names separated by semicolons. These rules only affect focus.",
+            );
+            changed |= app_list(
+                ui,
+                "Keep focus in these touched apps",
+                "chrome.exe; notepad.exe",
+                &mut options.focus_keep_apps,
+            );
+            changed |= app_list(
+                ui,
+                "Restore focus only after touching these apps",
+                "Empty = all apps except the list above",
+                &mut options.focus_restore_apps,
+            );
+        }
+        ui.separator();
+        changed |= toggle(
+            ui,
+            Icon::Mouse,
+            "Use on all displays",
+            "Turn off to choose which displays these settings apply to",
+            &mut options.touch_all_displays,
+        );
+        if !options.touch_all_displays {
+            note(ui, "With no display selected, these settings do nothing.");
+            for (id, label) in displays {
+                let mut selected = options
+                    .touch_display_ids
+                    .split(';')
+                    .any(|known| known == id);
+                if ui.checkbox(&mut selected, label).changed() {
+                    options.touch_display_ids =
+                        with_touch_display(&options.touch_display_ids, id, selected);
+                    changed = true;
+                }
+            }
+        }
+        ui.separator();
+        changed |= choice(
+            ui,
+            Icon::Mouse,
+            "Temporary override",
+            "Hold this key before tapping to use the touched app normally for that gesture",
+            &TOUCH_MODIFIERS,
+            &mut options.touch_override_modifier,
+        );
+    });
+    changed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -271,6 +271,49 @@
 						</StackPanel>
 					</Border>
 
+					<Border Classes="SettingCard" IsVisible="{Binding TouchMouseIndependentSupported}">
+						<StackPanel>
+							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Mouse}"
+							                     Header="{loc:Tr Options.Touch.Independent.Header}"
+							                     Description="{loc:Tr Options.Touch.Independent.Description}">
+								<ToggleSwitch IsChecked="{Binding Model.TouchMouseIndependent, Mode=TwoWay, FallbackValue=false}"/>
+							</controls:SettingRow>
+							<StackPanel IsVisible="{Binding Model.TouchMouseIndependent, FallbackValue=false}">
+								<Border Classes="SettingSeparator"/>
+								<controls:SettingRow Classes="Sub"
+								                     Header="{loc:Tr Options.Touch.AllDisplays.Header}"
+								                     Description="{loc:Tr Options.Touch.AllDisplays.Description}">
+									<ToggleSwitch IsChecked="{Binding Model.TouchAllDisplays, Mode=TwoWay}"/>
+								</controls:SettingRow>
+								<StackPanel IsVisible="{Binding !Model.TouchAllDisplays}" Margin="14,0,14,12" Spacing="6">
+									<TextBlock Text="{loc:Tr Options.Touch.SelectDisplays}" TextWrapping="Wrap" FontSize="12"/>
+									<ItemsControl ItemsSource="{Binding TouchDisplays}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="options:TouchDisplayChoice">
+												<CheckBox IsChecked="{Binding Selected, Mode=TwoWay}">
+													<TextBlock Text="{Binding Label}" TextWrapping="Wrap"/>
+												</CheckBox>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+								</StackPanel>
+								<Border Classes="SettingSeparator"/>
+								<controls:SettingRow Classes="Sub"
+								                     Header="{loc:Tr Options.Touch.Override.Header}"
+								                     Description="{loc:Tr Options.Touch.Override.Description}">
+									<ComboBox ItemsSource="{Binding TouchModifierList}"
+									          SelectedItem="{Binding SelectedTouchModifier}" MinWidth="100">
+										<ComboBox.ItemTemplate>
+											<DataTemplate>
+												<TextBlock x:DataType="options:ListItem" Text="{Binding Caption}"/>
+											</DataTemplate>
+										</ComboBox.ItemTemplate>
+									</ComboBox>
+								</controls:SettingRow>
+							</StackPanel>
+						</StackPanel>
+					</Border>
+
 					<Border Classes="SettingCard" IsVisible="{Binding RescueShortcutSupported}">
 						<StackPanel>
 							<controls:SettingRow Icon="{StaticResource Lbm.Icon.Shield}"

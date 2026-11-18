@@ -78,6 +78,14 @@ pub struct GlobalOptionsDto {
     /// C# `GlobalOptionsDto.RescueShortcut`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rescue_shortcut: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub touch_mouse_independent: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub touch_all_displays: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub touch_display_ids: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub touch_override_modifier: Option<String>,
     /// C# `GlobalOptionsDto.HideTrayIcon`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hide_tray_icon: Option<bool>,

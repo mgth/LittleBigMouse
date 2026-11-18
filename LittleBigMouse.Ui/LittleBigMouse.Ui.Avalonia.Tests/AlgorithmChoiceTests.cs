@@ -67,6 +67,79 @@ public class AlgorithmChoiceTests
         Assert.Contains(new LbmOptions().Algorithm, ids);
     }
 
+
+    [Fact]
+    public async Task TouchscreenSelectionChangesTheSavedIds()
+    {
+        var model = new LbmOptions { TouchAllDisplays = false };
+        using var vm = NewOptionsViewModel();
+        vm.Model = model;
+        await WaitForRows(vm, false);
+        Assert.Single(vm.TouchDisplays);
+        Assert.False(vm.TouchDisplays[0].Selected);
+        model.Saved = true;
+        vm.TouchDisplays[0].Selected = true;
+        Assert.Equal("SRC1", model.TouchDisplayIds);
+        Assert.False(model.Saved);
+        await WaitForRows(vm, true);
+        vm.TouchDisplays[0].Selected = false;
+        Assert.Equal("", model.TouchDisplayIds);
+        await WaitForRows(vm, false);
+        model.TouchDisplayIds = "SRC1";
+        await WaitForRows(vm, true);
+        Assert.True(vm.TouchDisplays[0].Selected);
+        Assert.Equal(model.TouchOverrideModifier, vm.SelectedTouchModifier?.Id);
+        vm.SelectedTouchModifier = vm.TouchModifierList.Single(e => e.Id == "Shift");
+        Assert.Equal("Shift", model.TouchOverrideModifier);
+    }
+
+    static async Task WaitForRows(LbmOptionsViewModel vm, bool selected)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            // The production view rebuilds its collection on the UI scheduler.
+            // A headless test must await that dispatch before inspecting rows.
+            if (vm.TouchDisplays.FirstOrDefault()?.Selected == selected) return;
+            await Task.Delay(10);
+        }
+        Assert.True(false, "Touchscreen rows did not finish updating");
+    }
+
+    [Fact]
+    public void DisposedOptionsAndDisplayRowsAreCollectibleWithServicesStillAlive()
+    {
+        using var agent = new AgentClient();
+        var main = new FakeMainService();
+        var collector = new FakeProcessesCollector();
+        var references = new List<WeakReference>();
+        for (var i = 0; i < 100; i++)
+            references.AddRange(CreateAndDisposeOptions(agent, main, collector));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.All(references, reference => Assert.False(reference.IsAlive));
+        GC.KeepAlive(agent);
+        GC.KeepAlive(main);
+        GC.KeepAlive(collector);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    static WeakReference[] CreateAndDisposeOptions(AgentClient agent, FakeMainService main,
+        FakeProcessesCollector collector)
+    {
+        // No shortcut: saving one would wait on this agent, which never answers.
+        var model = new LbmOptions { RescueShortcut = "" };
+        var vm = new LbmOptionsViewModel(collector, main, agent) { Model = model };
+        Assert.True(SpinWait.SpinUntil(() => vm.TouchDisplays.Count == 1, 2000));
+        var firstRow = new WeakReference(vm.TouchDisplays[0]);
+        // Exercise replacement of row callbacks while the options remain open.
+        for (var i = 0; i < 20; i++) model.TouchDisplayIds = i % 2 == 0 ? "SRC1" : "";
+        var references = new[] { new WeakReference(vm), new WeakReference(model), firstRow };
+        vm.Dispose();
+        return references;
+    }
+
     sealed class FakeProcessesCollector : IProcessesCollector
     {
         public ObservableCollectionExtended<string> SeenProcesses { get; } = [];

@@ -424,9 +424,11 @@ impl<W: AgentWorld> Agent<W> {
                 excluded,
                 load_at_startup,
             } => {
-                let saved =
-                    self.world
-                        .save_options(options.as_ref(), excluded.as_deref(), load_at_startup);
+                let saved = self.world.save_options(
+                    options.as_deref(),
+                    excluded.as_deref(),
+                    load_at_startup,
+                );
                 // Told whatever the answer: a session autostart that could not be set
                 // up refuses the request, yet the other options were applied and stored
                 // — and the hook must run on what the store says. Each one is sent only

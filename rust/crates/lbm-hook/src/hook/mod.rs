@@ -20,6 +20,8 @@ use lbm_ipc::protocol::Event;
 /// Platform-neutral core of the per-report hot path (dedup, non-blocking route),
 /// shared by the Windows callback and exercised by `benches/mouse_hook.rs`.
 pub mod hot_path;
+pub mod touch;
+pub mod touch_policy;
 
 #[cfg(windows)]
 pub mod windows;
@@ -34,6 +36,14 @@ pub mod linux;
 pub use linux::{
     register_main_thread, request_hook, request_quit, request_unhook, run, spawn_watchdog,
 };
+
+/// A loaded layout may have changed the touchscreen options, which only Windows acts on.
+pub fn touch_options_changed(shared: &Shared) {
+    #[cfg(windows)]
+    windows::touch_options_changed(shared);
+    #[cfg(not(windows))]
+    let _ = shared;
+}
 
 /// Start the panic-shortcut listener: a global hotkey that frees a cursor trapped
 /// where no click can reach the UI. `on_fire` runs on the listener's own thread.

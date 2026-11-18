@@ -54,6 +54,10 @@ pub fn apply_global_options(o: &mut LayoutOptions, dto: Option<&GlobalOptionsDto
         &dto.show_monitor_action_warning,
     );
     keep(&mut o.border_values, &dto.border_values);
+    keep(&mut o.touch_mouse_independent, &dto.touch_mouse_independent);
+    keep(&mut o.touch_all_displays, &dto.touch_all_displays);
+    keep(&mut o.touch_display_ids, &dto.touch_display_ids);
+    keep(&mut o.touch_override_modifier, &dto.touch_override_modifier);
     keep(&mut o.rescue_shortcut, &dto.rescue_shortcut);
     keep(&mut o.hide_tray_icon, &dto.hide_tray_icon);
     keep(&mut o.bound_to_agent, &dto.bound_to_agent);
@@ -361,6 +365,10 @@ pub fn to_global_options_dto(
         vcp_control: Some(o.vcp_control),
         show_monitor_action_warning: Some(o.show_monitor_action_warning),
         border_values: Some(o.border_values.clone()),
+        touch_mouse_independent: Some(o.touch_mouse_independent),
+        touch_all_displays: Some(o.touch_all_displays),
+        touch_display_ids: Some(o.touch_display_ids.clone()),
+        touch_override_modifier: Some(o.touch_override_modifier.clone()),
         rescue_shortcut: Some(o.rescue_shortcut.clone()),
         hide_tray_icon: Some(o.hide_tray_icon),
         bound_to_agent: Some(o.bound_to_agent),

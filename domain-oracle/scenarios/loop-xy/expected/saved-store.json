@@ -107,6 +107,10 @@
     "ShowMonitorActionWarning": true,
     "BorderValues": "PerModel",
     "RescueShortcut": "Ctrl+Alt+Shift+M",
+    "TouchMouseIndependent": false,
+    "TouchAllDisplays": true,
+    "TouchDisplayIds": "",
+    "TouchOverrideModifier": "None",
     "HideTrayIcon": false,
     "BoundToAgent": false,
     "ExcludedDefaultsVersion": 2

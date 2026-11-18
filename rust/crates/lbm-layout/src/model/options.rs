@@ -27,6 +27,10 @@ pub struct LayoutOptions {
     pub adjust_speed: bool,
     /// [`PER_MODEL`] or [`PER_MONITOR`].
     pub border_values: String,
+    pub touch_mouse_independent: bool,
+    pub touch_all_displays: bool,
+    pub touch_display_ids: String,
+    pub touch_override_modifier: String,
     pub rescue_shortcut: String,
     /// The hook belongs to the agent that drives it: when their connection ends it
     /// lets go of the mice and leaves. Off by default — a hook outliving its agent is
@@ -69,6 +73,10 @@ impl Default for LayoutOptions {
             adjust_pointer: false,
             adjust_speed: false,
             border_values: PER_MODEL.to_owned(),
+            touch_mouse_independent: false,
+            touch_all_displays: true,
+            touch_display_ids: "".to_owned(),
+            touch_override_modifier: "None".to_owned(),
             rescue_shortcut: "Ctrl+Alt+Shift+M".to_owned(),
             bound_to_agent: false,
             priority: "Normal".to_owned(),

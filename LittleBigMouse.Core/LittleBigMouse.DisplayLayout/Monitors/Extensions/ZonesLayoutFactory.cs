@@ -1,4 +1,6 @@
-﻿using HLab.Geo;
+﻿using System;
+using System.Linq;
+using HLab.Geo;
 using LittleBigMouse.Zoning;
 
 namespace LittleBigMouse.DisplayLayout.Monitors.Extensions;
@@ -57,6 +59,28 @@ public static class ZonesLayoutFactory
 
         zones.AdjustPointer = layout.Options.AdjustPointer;
         zones.AdjustSpeed = layout.Options.AdjustSpeed;
+
+        zones.TouchMouseIndependent = layout.Options.TouchMouseIndependent;
+        zones.TouchAllDisplays = layout.Options.TouchAllDisplays;
+        zones.TouchDisplayIds = layout.Options.TouchDisplayIds;
+        zones.TouchOverrideModifier = layout.Options.TouchOverrideModifier;
+        // Separate from cursor-routing zones: a sensor panel excluded from the layout
+        // can still be a touchscreen that must not take the mouse away.
+        if (!layout.Options.TouchAllDisplays)
+        {
+            var selected = layout.Options.TouchDisplayIds
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.Ordinal);
+            zones.TouchDisplayBounds = string.Join(";", layout.PhysicalSources
+                .Where(s => s == s.Monitor.ActiveSource && s.Source.AttachedToDesktop
+                    && selected.Contains(s.Source.Id))
+                .Select(s =>
+                {
+                    var bounds = s.Source.InPixel.Bounds;
+                    return FormattableString.Invariant(
+                        $"{bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height}");
+                }));
+        }
 
         zones.RescueShortcut = layout.Options.RescueShortcut;
 

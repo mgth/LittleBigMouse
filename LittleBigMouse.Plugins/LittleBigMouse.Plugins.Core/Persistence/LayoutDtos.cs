@@ -29,6 +29,10 @@ public class GlobalOptionsDto
     public bool? ShowMonitorActionWarning { get; set; }
     public string? BorderValues { get; set; }
     public string? RescueShortcut { get; set; }
+    public bool? TouchMouseIndependent { get; set; }
+    public bool? TouchAllDisplays { get; set; }
+    public string? TouchDisplayIds { get; set; }
+    public string? TouchOverrideModifier { get; set; }
     public bool? HideTrayIcon { get; set; }
     public bool? BoundToAgent { get; set; }
 

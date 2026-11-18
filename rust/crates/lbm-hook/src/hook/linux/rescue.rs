@@ -29,7 +29,7 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use ashpd::desktop::global_shortcuts::{GlobalShortcuts, NewShortcut};
+use ashpd::desktop::global_shortcuts::{GlobalShortcuts, NewShortcut, Shortcut};
 use futures::StreamExt;
 use tokio::sync::watch;
 
@@ -208,36 +208,53 @@ async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::E
         .bind_shortcuts(&session, &[shortcut], None, Default::default())
         .await?
         .response()?;
-    note_triggers(
-        shared,
-        wanted,
-        bound.shortcuts().iter().map(|s| s.trigger_description()),
-    );
+    // The whole answer: a desktop can accept the request and bind nothing, and a rescue
+    // missing from it is a rescue no key will trigger.
+    note_trigger(shared, wanted, rescue_trigger(described(bound.shortcuts())));
 
     Ok(Binding { shortcuts, session })
 }
 
-/// Reports what the desktop says the shortcut is bound to, at binding time and whenever
-/// the user changes it in the desktop's settings.
-fn note_triggers<'a>(shared: &Shared, wanted: &str, triggers: impl IntoIterator<Item = &'a str>) {
-    for trigger in triggers {
-        match trigger {
-            // Registered, described, and bound to nothing. Said the same way Windows
-            // says "another application owns this combination": a rescue that
-            // silently does not exist is worse than none, because the user finds out
-            // at the moment they need it.
-            "" | "none" => {
-                eprintln!(
-                    "[LittleBigMouse.Hook] rescue: registered with no key — give it one in \
-                     the desktop's shortcut settings, under {DESCRIPTION:?}"
-                );
-                shared.report_rescue_unavailable(wanted);
-            }
-            trigger => {
-                eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}");
-                shared.report_rescue_available(wanted);
-            }
+fn described(shortcuts: &[Shortcut]) -> impl Iterator<Item = (&str, &str)> {
+    shortcuts.iter().map(|s| (s.id(), s.trigger_description()))
+}
+
+/// What the desktop says of our shortcut, among the `(id, trigger)` it lists.
+fn rescue_trigger<'a>(mut shortcuts: impl Iterator<Item = (&'a str, &'a str)>) -> Option<&'a str> {
+    shortcuts.find_map(|(id, trigger)| (id == ID).then_some(trigger))
+}
+
+/// Reports what the desktop says the shortcut is bound to: `None` when it does not list
+/// it at all.
+fn note_trigger(shared: &Shared, wanted: &str, trigger: Option<&str>) {
+    match trigger {
+        // Registered and bound to nothing, or not registered. Said the same way Windows
+        // says "another application owns this combination": a rescue that silently does
+        // not exist is worse than none, because the user finds out at the moment they
+        // need it.
+        None | Some("" | "none") => {
+            eprintln!(
+                "[LittleBigMouse.Hook] rescue: no key bound — give it one in the desktop's \
+                 shortcut settings, under {DESCRIPTION:?}"
+            );
+            shared.report_rescue_unavailable(wanted);
         }
+        Some(trigger) => {
+            eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}");
+            shared.report_rescue_available(wanted);
+        }
+    }
+}
+
+/// The desktop's settings changed some shortcuts. Unlike the answer to a binding this
+/// lists only those, so a list without ours says nothing about ours.
+fn note_change<'a>(
+    shared: &Shared,
+    wanted: &str,
+    changed: impl Iterator<Item = (&'a str, &'a str)>,
+) {
+    if let Some(trigger) = rescue_trigger(changed) {
+        note_trigger(shared, wanted, Some(trigger));
     }
 }
 
@@ -293,11 +310,7 @@ async fn listen(
                 let Some(changed) = changed else {
                     break;
                 };
-                note_triggers(
-                    shared,
-                    wanted,
-                    changed.shortcuts().iter().map(|s| s.trigger_description()),
-                );
+                note_change(shared, wanted, described(changed.shortcuts()));
             }
             () = superseded(generation) => break,
         }
@@ -319,7 +332,7 @@ mod tests {
         let mut agent = crate::testing::Listening::to(shared).await;
         let shortcut = "Ctrl+Alt+F9".to_string();
 
-        note_triggers(shared, &shortcut, ["none"]);
+        note_trigger(shared, &shortcut, Some("none"));
         assert_eq!(
             agent.next("the warning").await,
             Event::ShortcutUnavailable {
@@ -327,7 +340,7 @@ mod tests {
             }
         );
 
-        note_triggers(shared, &shortcut, ["Ctrl+Alt+F9"]);
+        note_change(shared, &shortcut, [(ID, "Ctrl+Alt+F9")].into_iter());
         assert_eq!(
             agent.next("its withdrawal").await,
             Event::ShortcutAvailable {
@@ -335,6 +348,42 @@ mod tests {
             }
         );
         assert_eq!(*shared.rescue_unavailable.lock().unwrap(), None);
+    }
+
+    /// A binding can succeed and bind nothing: the list comes back empty, or without us.
+    #[tokio::test]
+    async fn a_binding_that_leaves_the_rescue_out_is_reported() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let shortcut = "Ctrl+Alt+F9".to_string();
+        let unavailable = Event::ShortcutUnavailable {
+            shortcut: shortcut.clone(),
+        };
+
+        for listed in [vec![], vec![("something-else", "Ctrl+A")]] {
+            shared.report_rescue_available(&shortcut);
+            assert_eq!(
+                agent.next("the earlier success").await,
+                Event::ShortcutAvailable {
+                    shortcut: shortcut.clone(),
+                }
+            );
+
+            note_trigger(shared, &shortcut, rescue_trigger(listed.into_iter()));
+            assert_eq!(agent.next("the missing rescue").await, unavailable);
+        }
+    }
+
+    /// `ShortcutsChanged` names what changed, which may be nothing of ours.
+    #[tokio::test]
+    async fn a_change_that_does_not_name_the_rescue_says_nothing() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+
+        note_change(shared, "Ctrl+Alt+F9", std::iter::empty());
+        note_change(shared, "Ctrl+Alt+F9", [("other", "none")].into_iter());
+
+        agent.stays_quiet().await;
     }
 
     #[tokio::test]

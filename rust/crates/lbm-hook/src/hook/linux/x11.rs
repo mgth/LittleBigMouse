@@ -166,7 +166,7 @@ fn select_raw_motion(conn: &RustConnection, root: u32, on: bool) -> bool {
 }
 
 /// Block until the X socket is readable or `timeout_ms` elapses.
-pub(super) fn wait_readable(conn: &RustConnection, timeout_ms: i32) {
+fn wait_readable(conn: &RustConnection, timeout_ms: i32) {
     let fd = conn.stream().as_raw_fd();
     let mut pfd = libc::pollfd {
         fd,

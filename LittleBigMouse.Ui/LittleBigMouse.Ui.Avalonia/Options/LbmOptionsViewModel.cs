@@ -154,6 +154,14 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         agent.HookEventReceived += OnDaemonEvent;
         Disposer.OnDispose(() => agent.HookEventReceived -= OnDaemonEvent);
 
+        // The hook says it once, possibly before this window existed: the agent's state
+        // is what keeps it.
+        ShortcutWarning = ShortcutWarningFor(agent.State);
+        void OnAgentState(object? sender, AgentState state) =>
+            Dispatcher.UIThread.Post(() => ShortcutWarning = ShortcutWarningFor(state));
+        agent.StateChanged += OnAgentState;
+        Disposer.OnDispose(() => agent.StateChanged -= OnAgentState);
+
         // Recorded as soon as it is set, not at the next Apply: the agent writes the
         // option and tells the hook, so the answer comes back while the user is still
         // looking at the setting. Clearing the warning makes it a fresh attempt —
@@ -186,6 +194,12 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
         if (e.Event != LittleBigMouseEvent.ShortcutUnavailable) return;
         Dispatcher.UIThread.Post(() => ShortcutWarning = ShortcutUnavailableMessage(e.Payload));
     }
+
+    /// <summary>What the agent's state says about the rescue shortcut; empty when it is fine.</summary>
+    internal static string ShortcutWarningFor(AgentState? state, LbmLocalizer? localizer = null)
+        => string.IsNullOrEmpty(state?.ShortcutUnavailable)
+            ? ""
+            : ShortcutUnavailableMessage(state.ShortcutUnavailable, localizer);
 
     /// <summary>
     /// Why the rescue is not armed — and it is not the same "why" on both platforms.

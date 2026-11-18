@@ -118,6 +118,7 @@ pub enum HookEvent {
     LoadFailed,
     Rescued,
     ShortcutUnavailable,
+    ShortcutAvailable,
     /// The hook declined a Run (#609): the engine stays stopped, and Stopped is what
     /// the reconciler reasons on.
     RunRefused,

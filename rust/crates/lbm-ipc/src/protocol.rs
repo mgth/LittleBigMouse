@@ -178,6 +178,12 @@ pub enum Event {
         #[serde(rename = "Shortcut")]
         shortcut: String,
     },
+    /// The panic shortcut is armed: a key answers it. Withdraws what
+    /// [`Event::ShortcutUnavailable`] said about this shortcut.
+    ShortcutAvailable {
+        #[serde(rename = "Shortcut")]
+        shortcut: String,
+    },
     /// An event this version does not know. A newer hook must leave a client's idea
     /// of the state unchanged rather than move it to the wrong one, which is what
     /// mapping an unknown name onto a known event would do.
@@ -205,6 +211,7 @@ impl Event {
             Event::LoadFailed => "LoadFailed",
             Event::Rescued => "Rescued",
             Event::ShortcutUnavailable { .. } => "ShortcutUnavailable",
+            Event::ShortcutAvailable { .. } => "ShortcutAvailable",
             Event::Unknown => "Unknown",
         }
     }
@@ -223,7 +230,9 @@ impl Event {
                 if *virtual_layout { ", virtual" } else { "" }
             ),
             Event::LoadFailed => "the layout could not be parsed".to_owned(),
-            Event::ShortcutUnavailable { shortcut } => shortcut.clone(),
+            Event::ShortcutUnavailable { shortcut } | Event::ShortcutAvailable { shortcut } => {
+                shortcut.clone()
+            }
             _ => String::new(),
         }
     }
@@ -485,6 +494,9 @@ mod tests {
             Event::LoadFailed,
             Event::Rescued,
             Event::ShortcutUnavailable {
+                shortcut: "Ctrl+Alt+Shift+M".to_owned(),
+            },
+            Event::ShortcutAvailable {
                 shortcut: "Ctrl+Alt+Shift+M".to_owned(),
             },
         ] {

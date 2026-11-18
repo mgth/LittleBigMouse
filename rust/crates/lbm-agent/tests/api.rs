@@ -359,6 +359,44 @@ async fn a_frontend_sees_the_agent_and_drives_it() {
     .expect("the hook was told to quit");
 }
 
+/// The hook says it once, and usually with no window open: the state is what keeps it.
+#[tokio::test]
+async fn a_window_opened_later_learns_the_shortcut_could_not_be_armed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    tokio::spawn(async move {
+        let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut first = Frontend::connect(&api_endpoint).await;
+    first.ask(json!({ "Method": "Subscribe" })).await;
+    first.state(|s| s["HookConnected"] == true).await;
+    fake.broadcast(&Event::ShortcutUnavailable {
+        shortcut: "Ctrl+Alt+F9".to_string(),
+    });
+    first.hook("ShortcutUnavailable").await;
+
+    let mut later = Frontend::connect(&api_endpoint).await;
+    let state = later.ask(json!({ "Method": "Subscribe" })).await;
+    assert_eq!(state["Result"]["ShortcutUnavailable"], "Ctrl+Alt+F9");
+
+    // The user gave it a key: the windows already open are told, the next ones never hear
+    // of the warning.
+    fake.broadcast(&Event::ShortcutAvailable {
+        shortcut: "Ctrl+Alt+F9".to_string(),
+    });
+    later.state(|s| s["ShortcutUnavailable"].is_null()).await;
+    let mut last = Frontend::connect(&api_endpoint).await;
+    let state = last.ask(json!({ "Method": "Subscribe" })).await;
+    assert_eq!(state["Result"]["ShortcutUnavailable"], Value::Null);
+}
+
 #[tokio::test]
 async fn a_subscriber_hears_the_hook_and_what_it_saw() {
     let dir = tempfile::tempdir().unwrap();

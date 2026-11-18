@@ -23,14 +23,17 @@
 //!
 //! Runs on its own thread with its own X connection: the routing pumps stay
 //! untouched (see the no-blocking rule in `evdev.rs`), and `on_focus_changed`
-//! only flips atomics and broadcasts with a write timeout. The outer loop
-//! reconnects (2 s backoff) so an XWayland restart or a daemon started before
-//! the session is up just degrades, never kills the watcher.
+//! only flips atomics and broadcasts with a write timeout. The thread sleeps
+//! until the X server has something to say; a `Quit` does not need to reach it,
+//! since the process ends when the backend returns. The outer loop reconnects
+//! (2 s backoff) so an XWayland restart or a daemon started before the session
+//! is up just degrades, never kills the watcher.
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use x11rb::connection::Connection;
+use x11rb::errors::ConnectionError;
 use x11rb::protocol::xproto::{
     Atom, AtomEnum, ChangeWindowAttributesAux, ConnectionExt as _, EventMask,
 };
@@ -105,24 +108,41 @@ fn watch(shared: &'static Shared, announced: &mut bool) -> Result<(), Box<dyn st
 
     watcher.report(shared);
 
-    while !shared.want_quit.load(Ordering::SeqCst) {
-        super::x11::wait_readable(&conn, 500);
+    follow(
+        &conn,
+        root,
+        net_active_window,
+        || !shared.want_quit.load(Ordering::SeqCst),
+        || watcher.report(shared),
+    )?; // an error is the connection lost: the caller reconnects
+    Ok(())
+}
 
-        let mut changed = false;
+/// Calls `changed` for each batch of events that includes a change of `property` on
+/// `root`, sleeping in between, for as long as `running` says.
+///
+/// `wait_for_event` and not a `poll` on the socket: the requests `changed` makes read
+/// the socket, so an event that arrives meanwhile is already in the connection's queue
+/// when it returns, and the socket would stay silent about it.
+fn follow(
+    conn: &RustConnection,
+    root: u32,
+    property: Atom,
+    running: impl Fn() -> bool,
+    mut changed: impl FnMut(),
+) -> Result<(), ConnectionError> {
+    while running() {
+        let mut event = conn.wait_for_event()?;
+        let mut relevant = false;
         loop {
-            match conn.poll_for_event() {
-                Ok(Some(Event::PropertyNotify(e)))
-                    if e.window == root && e.atom == net_active_window =>
-                {
-                    changed = true;
-                }
-                Ok(Some(_)) => {}
-                Ok(None) => break,
-                Err(e) => return Err(e.into()), // connection lost: reconnect
+            relevant |= matches!(&event, Event::PropertyNotify(e) if e.window == root && e.atom == property);
+            match conn.poll_for_event()? {
+                Some(next) => event = next,
+                None => break,
             }
         }
-        if changed {
-            watcher.report(shared);
+        if relevant {
+            changed();
         }
     }
     Ok(())
@@ -218,4 +238,72 @@ fn window_property(
 
 fn intern(conn: &RustConnection, name: &str) -> Result<Atom, Box<dyn std::error::Error>> {
     Ok(conn.intern_atom(false, name.as_bytes())?.reply()?.atom)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+    use std::sync::mpsc;
+    use x11rb::protocol::xproto::PropMode;
+    use x11rb::wrapper::ConnectionExt as _;
+
+    /// Sets `property` on `root`, and returns once the server has done it.
+    fn touch(conn: &RustConnection, root: u32, property: Atom) {
+        conn.change_property32(PropMode::REPLACE, root, property, AtomEnum::CARDINAL, &[1])
+            .unwrap();
+        conn.get_input_focus().unwrap().reply().unwrap();
+    }
+
+    /// Not run by default, it needs an X server:
+    /// `xvfb-run -a cargo test -p lbm-hook --lib -- --ignored during_a_report`.
+    /// It only touches a root-window property of its own.
+    ///
+    /// The change arrives while the first one is being handled, and is read off the
+    /// socket by a request made there. Waiting on the socket would sleep through it.
+    #[ignore = "needs an X server"]
+    #[test]
+    fn a_change_during_a_report_is_not_slept_through() {
+        let (finished, has_finished) = mpsc::channel();
+        std::thread::spawn(move || {
+            let (conn, screen) = x11rb::connect(None).unwrap();
+            let (writer, _) = x11rb::connect(None).unwrap();
+            let root = conn.setup().roots[screen].root;
+            let property = intern(&conn, "_LBM_FOCUS_TEST").unwrap();
+            conn.change_window_attributes(
+                root,
+                &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+            )
+            .unwrap()
+            .check()
+            .unwrap();
+
+            let reports = Cell::new(0);
+            touch(&writer, root, property);
+            follow(
+                &conn,
+                root,
+                property,
+                || reports.get() < 2,
+                || {
+                    reports.set(reports.get() + 1);
+                    if reports.get() == 1 {
+                        touch(&writer, root, property);
+                        conn.get_input_focus().unwrap().reply().unwrap();
+                    }
+                },
+            )
+            .unwrap();
+
+            conn.delete_property(root, property)
+                .unwrap()
+                .check()
+                .unwrap();
+            let _ = finished.send(());
+        });
+
+        has_finished
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the second change was seen");
+    }
 }

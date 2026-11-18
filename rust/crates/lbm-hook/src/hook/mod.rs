@@ -56,17 +56,16 @@ pub fn spawn_rescue_key(shared: &'static Shared, on_fire: fn(&'static Shared)) {
 /// Tell the listener the desired shortcut changed. Safe to call when it never
 /// started — it is a post to a thread id that is still zero.
 pub fn rescue_shortcut_changed(shared: &Shared) {
+    // Whatever was said was about the registration being replaced. If this one fails
+    // too, the listener says so again.
+    *shared
+        .rescue_unavailable
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = None;
     #[cfg(windows)]
     windows::post_rescue_reconfigure(shared);
     #[cfg(target_os = "linux")]
-    {
-        let _ = shared;
-        linux::rescue::shortcut_changed();
-    }
-    #[cfg(not(any(windows, target_os = "linux")))]
-    {
-        let _ = shared;
-    }
+    linux::rescue::shortcut_changed();
 }
 
 /// Count of deduped mouse-move events the active backend has processed.

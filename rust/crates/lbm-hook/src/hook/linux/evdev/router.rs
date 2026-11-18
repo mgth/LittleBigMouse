@@ -115,7 +115,8 @@ pub fn run(shared: &'static Shared) -> bool {
 
         match router.as_mut() {
             Some(r) => r.pump(shared),
-            None => std::thread::sleep(Duration::from_millis(50)),
+            // Nothing is grabbed: nothing happens here until a request says so.
+            None => shared.wake.wait(),
         }
 
         let report_due = debug && last_report.elapsed() >= Duration::from_secs(2);

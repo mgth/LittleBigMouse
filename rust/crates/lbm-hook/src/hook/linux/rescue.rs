@@ -125,22 +125,37 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
                     );
                     announced_absence = true;
                 }
-                if refused(&error) {
-                    // The portal answered, and its answer depends on who is asking:
-                    // asking again would only get the same one.
-                    superseded(generation).await;
-                } else {
-                    // A portal that arrives late is the ordinary case; retry, quietly
-                    // from here on.
-                    tokio::select! {
-                        _ = tokio::time::sleep(pause) => {}
-                        () = superseded(generation) => {}
-                    }
-                    pause = next_retry(pause);
-                }
+                pause = after_failure(&error, shared, &wanted, generation, pause).await;
             }
         }
     }
+}
+
+/// Waits for the moment to ask again after `error`, and returns the next pause.
+async fn after_failure(
+    error: &ashpd::Error,
+    shared: &Shared,
+    wanted: &str,
+    generation: u64,
+    pause: Duration,
+) -> Duration {
+    if refused(error) {
+        // The portal answered, and its answer depends on who is asking: asking again
+        // would only get the same one. Said every time, not once: saving a shortcut
+        // clears the warning, and without this the window would then show a rescue
+        // that no key can trigger.
+        shared.broadcast(&Event::ShortcutUnavailable {
+            shortcut: wanted.to_string(),
+        });
+        superseded(generation).await;
+        return pause;
+    }
+    // A portal that arrives late is the ordinary case; retry, quietly from here on.
+    tokio::select! {
+        _ = tokio::time::sleep(pause) => {}
+        () = superseded(generation) => {}
+    }
+    next_retry(pause)
 }
 
 /// Whether the portal said no, rather than not being there to ask. It does for a process
@@ -274,6 +289,48 @@ mod tests {
     use super::*;
 
     const PATIENCE: Duration = Duration::from_secs(5);
+
+    #[tokio::test]
+    async fn a_refusal_is_told_to_the_window() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let generation = *GENERATION.borrow();
+
+        let waiting = tokio::spawn(async move {
+            let refusal = ashpd::PortalError::NotAllowed("An app id is required".into());
+            let error = ashpd::Error::Portal(refusal);
+            after_failure(&error, shared, "Ctrl+Alt+F9", generation, FIRST_RETRY).await
+        });
+
+        assert_eq!(
+            agent.next("the refusal").await,
+            Event::ShortcutUnavailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+        waiting.abort();
+    }
+
+    /// Absent is not refused: the portal may still come, so nothing is reported yet.
+    #[tokio::test]
+    async fn a_portal_out_of_reach_is_not_reported_and_is_retried_later() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let generation = *GENERATION.borrow();
+        let error = ashpd::Error::NoResponse;
+
+        let next = after_failure(
+            &error,
+            shared,
+            "Ctrl+Alt+F9",
+            generation,
+            Duration::from_millis(1),
+        )
+        .await;
+
+        assert_eq!(next, Duration::from_millis(2));
+        agent.stays_quiet().await;
+    }
 
     #[test]
     fn only_a_refusal_ends_the_retries() {
